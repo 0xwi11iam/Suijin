@@ -1,0 +1,45 @@
+{
+  "name": "MCP Playwright",
+  "version": "2.0",
+  "description": "Headless Chromium browser with DOM snapshots for AI-driven browsing. Navigate, snapshot interactive elements, click by index, type, screenshot, extract text, execute JS.",
+  "tools": {
+    "mcp_browser_goto": {
+      "description": "Navigate browser to a URL. Returns page title and final URL.",
+      "parameters": {"url": "Target URL", "wait_until": "load|domcontentloaded|networkidle (default networkidle)", "timeout": "Timeout in ms (default 30000)"}
+    },
+    "mcp_browser_snapshot": {
+      "description": "Get a compact list of ALL interactive page elements (buttons, links, inputs) with index numbers. Use this before clicking/typing to identify target elements. Returns: [1] BUTTON 'Log in', [2] INPUT 'Email', etc.",
+      "parameters": {"max_elements": "Max elements to return (default 60)"}
+    },
+    "mcp_browser_click": {
+      "description": "Click an element. Accepts: snapshot index like [1] or 1, CSS selector like #login-btn, or visible text like 'Log in'.",
+      "parameters": {"selector": "Index number [N], CSS selector, or visible text"}
+    },
+    "mcp_browser_type": {
+      "description": "Type text into an input field by snapshot index or CSS selector.",
+      "parameters": {"selector": "Index [N] or CSS selector", "text": "Text to type"}
+    },
+    "mcp_browser_screenshot": {
+      "description": "Capture a full-page screenshot. Saves to /tmp/medusa_screenshot.png by default.",
+      "parameters": {"filepath": "Output file path (optional)"}
+    },
+    "mcp_browser_extract": {
+      "description": "Extract visible text content from a specific element or the full page body.",
+      "parameters": {"selector": "CSS selector or 'body' for full page (default body)"}
+    },
+    "mcp_browser_exec": {
+      "description": "Execute arbitrary JavaScript in the page context. Returns JSON result.",
+      "parameters": {"js_code": "JavaScript code to execute"}
+    },
+    "mcp_browser_get_html": {
+      "description": "Get the full rendered HTML source of the current page.",
+      "parameters": {}
+    },
+    "mcp_browser_close": {
+      "description": "Close the browser instance and free resources.",
+      "parameters": {}
+    }
+  },
+  "dependencies": ["playwright"],
+  "platforms": ["linux", "macos"]
+}

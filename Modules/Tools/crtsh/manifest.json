@@ -1,0 +1,1 @@
+{"name":"crtsh","version":"1.0","description":"Certificate Transparency log search via crt.sh","tools":{"crtsh_domain":{"description":"Query crt.sh for certificates of a domain - discovers subdomains","parameters":{"domain":"Target domain name"}}},"dependencies":["requests"],"platforms":["macos","linux"]}

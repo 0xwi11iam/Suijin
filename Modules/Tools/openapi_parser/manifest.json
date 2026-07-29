@@ -1,0 +1,1 @@
+{"name":"OpenAPI Parser","version":"1.0","description":"Parse OpenAPI/Swagger specs and generate test plans","tools":{"openapi_parse":{"description":"Parse OpenAPI spec from URL or file","parameters":{"url_or_path":"URL or file path to spec"}}},"dependencies":[],"platforms":["linux","macos"]}

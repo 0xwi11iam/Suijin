@@ -1,0 +1,1 @@
+{"name":"katana","version":"1.0","description":"Headless crawler for endpoint and parameter discovery","tools":{"katana_crawl":{"description":"Crawl a URL with headless browser for JS-rendered content","parameters":{"url":"Target URL to crawl","depth":"Crawl depth (default: 3)","flags":"Additional katana flags"}}},"dependencies":["katana"],"platforms":["macos","linux"]}

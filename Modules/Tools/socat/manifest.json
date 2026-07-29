@@ -1,0 +1,1 @@
+{"name":"Socat","version":"1.0","description":"Bidirectional data relay for port forwarding, reverse shells, and TCP/UDP tunneling.","tools":{"socat_relay":{"description":"Set up a socat relay or listener.","parameters":{"cmd":"Full socat command (e.g. 'TCP-LISTEN:4444,fork EXEC:/bin/bash')"}}},"dependencies":["socat"],"platforms":["macos","linux"]}

@@ -1,0 +1,58 @@
+"""Credential store — persist discovered credentials."""
+import json, os, time
+from pathlib import Path
+
+STORE_PATH = Path(__file__).resolve().parent.parent.parent.parent / "medusa" / "medusa_agent" / "credentials.json"
+
+def _load_store():
+    if not STORE_PATH.exists():
+        return {"_schema": "medusa-credentials-v1", "credentials": []}
+    return json.loads(STORE_PATH.read_text())
+
+def _save_store(data):
+    STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    STORE_PATH.write_text(json.dumps(data, indent=2))
+
+def creds_add(service, cred_type, value, username="", notes=""):
+    if not service or not value:
+        return "Error: service and value required"
+    store = _load_store()
+    entry = {
+        "service": service,
+        "type": cred_type,
+        "value": value,
+        "username": username or "",
+        "notes": notes or "",
+        "discovered_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    # Deduplicate
+    for c in store["credentials"]:
+        if c.get("service") == service and c.get("value") == value:
+            c.update(entry)
+            _save_store(store)
+            return f"Updated existing credential: {service}"
+    store["credentials"].append(entry)
+    _save_store(store)
+    return f"Credential stored: {service} ({cred_type})"
+
+def creds_list(filter=""):
+    store = _load_store()
+    creds = store.get("credentials", [])
+    if filter:
+        f = filter.lower()
+        creds = [c for c in creds if f in c.get("service","").lower() or f in c.get("type","").lower()]
+    if not creds:
+        return "(no credentials stored)"
+    lines = []
+    for c in creds:
+        lines.append(f"[{c['type']}] {c['service']}: {c['value'][:60]}{'...' if len(c['value'])>60 else ''} (user: {c.get('username','?')})")
+    return "\n".join(lines)
+
+def creds_get(service):
+    if not service:
+        return "Error: service required"
+    store = _load_store()
+    for c in store.get("credentials", []):
+        if c.get("service") == service:
+            return json.dumps(c, indent=2)
+    return f"No credentials found for '{service}'"

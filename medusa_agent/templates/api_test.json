@@ -1,0 +1,1 @@
+{"name":"API Security Test","description":"REST + GraphQL API focused testing","ports":[80,443,3000,5000,8000,9000],"wordlists":["api-endpoints.txt"],"tools":["nmap","ffuf","sqlmap","jwt_decode","openapi_parse"],"checks":["graphql","jwt","mass_assignment","cors","rate_limit","nosql_injection"],"max_iterations":40,"headless":false}

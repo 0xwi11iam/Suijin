@@ -1,0 +1,1 @@
+{"name":"Nikto","version":"1.0","description":"Web server vulnerability scanner. Finds outdated software, misconfigurations, and known vulnerable files.","tools":{"nikto_scan":{"description":"Scan a web server for vulnerabilities.","parameters":{"url":"Target URL (http://TARGET:PORT)"}}},"dependencies":["nikto"],"platforms":["macos","linux"]}

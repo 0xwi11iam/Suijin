@@ -1,0 +1,1 @@
+{"name":"SQLMap","version":"1.0","description":"Automated SQL injection detection and exploitation.","tools":{"sqlmap_scan":{"description":"Scan a URL/parameter for SQL injection.","parameters":{"url":"Target URL with parameter (e.g. http://TARGET/page?id=1)","flags":"Extra flags (default: --batch --random-agent)"}}},"dependencies":["sqlmap"],"platforms":["macos","linux"]}

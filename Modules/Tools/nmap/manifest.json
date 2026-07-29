@@ -1,0 +1,13 @@
+{
+    "name": "Nmap Scanner",
+    "version": "1.0",
+    "description": "Port scanning and service detection.",
+    "tools": {
+        "nmap_scan": {
+            "description": "Run an nmap scan with given flags and target. Returns service/version info.",
+            "parameters": {"target": "IP or hostname", "flags": "nmap flags, e.g. -sV -sC -p- (default: -sV -sC)"}
+        }
+    },
+    "dependencies": ["nmap"],
+    "platforms": ["macos", "linux"]
+}

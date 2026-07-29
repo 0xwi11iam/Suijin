@@ -1,0 +1,1 @@
+{"name":"Burp Suite Style","description":"Methodical OWASP Top 10 coverage — like Burp Scanner","ports":[80,443,8080,8443],"wordlists":["common.txt"],"tools":["nmap","whatweb","gobuster","ffuf","sqlmap","http_request"],"checks":["sqli","xss","csrf","idor","ssrf","xxe","file_upload","cors","open_redirect","information_disclosure"],"max_iterations":35,"headless":false}

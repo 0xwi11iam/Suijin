@@ -1,0 +1,1 @@
+{"name":"SSLScan","version":"1.0","description":"SSL/TLS cipher suite assessment.","tools":{"sslscan_check":{"description":"Assess SSL/TLS configuration of a target.","parameters":{"target":"Target host:port (e.g. example.com:443)"}}},"dependencies":["sslscan"],"platforms":["macos","linux"]}

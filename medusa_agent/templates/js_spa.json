@@ -1,0 +1,1 @@
+{"name":"JavaScript SPA Test","description":"React/Remix/Next.js/Vue SPA — use browser MCP","ports":[80,443,3000],"wordlists":["api-endpoints.txt"],"tools":["nmap","whatweb","mcp_browser_goto","mcp_browser_snapshot","mcp_browser_click","mcp_browser_type"],"checks":["xss","jwt","csrf","cors","information_disclosure","prototype_pollution"],"max_iterations":50,"headless":true}

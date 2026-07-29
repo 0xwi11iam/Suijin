@@ -1,0 +1,17 @@
+{
+    "name": "Gobuster",
+    "version": "1.0",
+    "description": "Directory and file brute-forcing for web servers.",
+    "tools": {
+        "gobuster_dir": {
+            "description": "Brute-force directories and files on a web server.",
+            "parameters": {"url": "Target URL", "wordlist": "Path to wordlist", "extensions": "Comma-separated extensions (e.g. php,html,txt)", "threads": "Concurrent threads (default: 20)"}
+        },
+        "gobuster_dns": {
+            "description": "Brute-force subdomains using DNS.",
+            "parameters": {"domain": "Target domain", "wordlist": "Path to wordlist"}
+        }
+    },
+    "dependencies": ["gobuster"],
+    "platforms": ["macos", "linux"]
+}

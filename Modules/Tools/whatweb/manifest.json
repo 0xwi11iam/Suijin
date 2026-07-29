@@ -1,0 +1,1 @@
+{"name":"whatweb","version":"1.0","description":"Web technology stack fingerprinting","tools":{"whatweb_scan":{"description":"Identify technologies used by a website","parameters":{"url":"Target URL","flags":"Additional whatweb flags (default: --colour=never --no-errors)"}}},"dependencies":["whatweb"],"platforms":["macos","linux"]}

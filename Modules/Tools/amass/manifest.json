@@ -1,0 +1,1 @@
+{"name":"Amass","version":"1.0","description":"Subdomain enumeration and OSINT gathering.","tools":{"amass_enum":{"description":"Enumerate subdomains for a target domain.","parameters":{"domain":"Target domain (e.g. example.com)","flags":"Extra flags (default: -passive)"}}},"dependencies":["amass"],"platforms":["macos","linux"]}

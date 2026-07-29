@@ -1,0 +1,4 @@
+127.0.0.1 - [26/Jul/2026:00:00:01] "GET / HTTP/1.1" 200
+127.0.0.1 - [26/Jul/2026:00:00:05] "POST /login HTTP/1.1" 302
+127.0.0.1 - [26/Jul/2026:00:01:00] "GET /dashboard HTTP/1.1" 200
+SECRET: admin backup password = "DevOpsAdmin#2026!" stored in env

@@ -1,0 +1,1 @@
+{"name":"MCP Nmap","version":"1.0","description":"Structured nmap with XML output parsing","tools":{"mcp_nmap_scan":{"description":"Run nmap with structured XML output, parsed into JSON","parameters":{"target":"Target IP/hostname","flags":"Nmap flags (default: -sV -sC -T4)"}}},"dependencies":["nmap"],"platforms":["macos","linux"]}

@@ -1,0 +1,1 @@
+{"name":"subfinder","version":"1.0","description":"Passive subdomain discovery tool","tools":{"subfinder_enum":{"description":"Discover subdomains using passive sources","parameters":{"domain":"Target domain","flags":"Additional subfinder flags (default: -all -silent)"}}},"dependencies":["subfinder"],"platforms":["macos","linux"]}

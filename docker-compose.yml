@@ -1,0 +1,33 @@
+# Medusa Security — Docker Compose
+# Usage:
+#   docker compose build
+#   docker compose run --rm medusa
+#   Or with env: DEEPSEEK_API_KEY=sk-xxx docker compose run --rm medusa
+
+services:
+  medusa:
+    build: .
+    image: medusa:latest
+    container_name: medusa-agent
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./medusa_agent:/app/medusa_agent
+      - ./medusa/config.json:/app/medusa/config.json
+    environment:
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - HF_TOKEN=${HF_TOKEN:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - AMD_API_KEY=${AMD_API_KEY:-}
+      - SHODAN_API_KEY=${SHODAN_API_KEY:-}
+      - CENSYS_API_ID=${CENSYS_API_ID:-}
+      - CENSYS_SECRET=${CENSYS_SECRET:-}
+      - VT_API_KEY=${VT_API_KEY:-}
+      - NVD_API_KEY=${NVD_API_KEY:-}
+    networks:
+      - medusa-net
+
+networks:
+  medusa-net:
+    driver: bridge
