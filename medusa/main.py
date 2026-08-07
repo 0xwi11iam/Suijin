@@ -38,14 +38,18 @@ def main():
     
     console.print("[bold white]Select Operational Module:[/]")
     console.print("  [bold #ff5555]1.[/] [white]Red Team (Autonomous Agent)[/]")
-    console.print("  [bold yellow]2.[/] [white]Settings[/]")
-    console.print("  [bold white]3.[/] [dim]Exit[/]\n")
+    console.print("  [bold #58a6ff]2.[/] [white]Blue Team (Active Defense)[/]")
+    console.print("  [bold yellow]3.[/] [white]Settings[/]")
+    console.print("  [bold white]4.[/] [dim]Exit[/]\n")
     
     try:
         c = input(" ").strip()
         if c == '1':
             redteamer_main()
         elif c == '2':
+            from medusa.core.blueteamer import main as blueteam_main
+            blueteam_main()
+        elif c == '3':
             tui_settings.main()
             main()
         else:
