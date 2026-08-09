@@ -1,0 +1,14 @@
+{
+  "session_id": "1fcfd3ebf7fe",
+  "target": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target",
+  "started_at": "2026-08-08T12:44:03.574100+00:00",
+  "stats": {
+    "requests": 34,
+    "blocked": 0,
+    "deceived": 0,
+    "hotfixes": 0,
+    "watchers": 6,
+    "cost": 0.0
+  },
+  "attackers": {}
+}

@@ -1,7 +1,7 @@
 """
 medusa/core/blueteamer.py — Blue Team entry point and TUI.
 """
-import sys, os, asyncio, signal as _signal, time
+import sys, os, asyncio, signal as _signal, time, json
 from pathlib import Path
 
 _pkg_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -27,6 +27,16 @@ def main():
 
 
 async def _run_async():
+    # Load .env first
+    env_path = BASE_DIR / ".env"
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ[k.strip()] = v.strip()
+
     config = load_blue_config()
     providers = load_local_module("providers")
     provider = config.get("provider", "deepseek")
@@ -58,12 +68,41 @@ async def _run_async():
             return
     elif choice == "2":
         target_path = str(BASE_DIR / "lab" / "blue_target")
+
+        import subprocess, urllib.request
+
+        # Kill any stale process on port 5906
+        try:
+            result = subprocess.run(
+                ["lsof", "-ti", ":5906"], capture_output=True, text=True, timeout=3
+            )
+            for pid in result.stdout.strip().split("\n"):
+                pid = pid.strip()
+                if pid:
+                    os.kill(int(pid), _signal.SIGTERM)
+                    console.print(f"[dim]Killed stale process on :5906 (pid {pid})[/dim]")
+            time.sleep(0.5)
+        except Exception:
+            pass
+
         # Start the vulnerable app in background
-        import subprocess
-        subprocess.Popen([sys.executable, str(BASE_DIR / "lab" / "blue_target" / "vulnerable_app.py")],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        console.print("[dim]Vulnerable app started on port 5906[/dim]")
-        time.sleep(1)
+        subprocess.Popen(
+            [sys.executable, str(BASE_DIR / "lab" / "blue_target" / "vulnerable_app.py")],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+
+        # Wait until the app is actually listening
+        for _ in range(10):
+            time.sleep(0.3)
+            try:
+                urllib.request.urlopen("http://127.0.0.1:5906/", timeout=1)
+                console.print("[green]✓ Vulnerable app ready on port 5906[/green]")
+                break
+            except Exception:
+                pass
+        else:
+            console.print("[red]✗ Failed to start vulnerable app on port 5906[/red]")
+            return
     else:
         return
 
@@ -77,7 +116,7 @@ async def _run_async():
     session.endpoints_discovered = len(endpoints)
     console.print(f"  [green]Discovered {len(endpoints)} endpoints[/green]")
 
-    # Show endpoints
+    # Show endpoints table
     table = Table(title="Discovered Endpoints")
     table.add_column("Method", style="cyan")
     table.add_column("Path", style="white")
@@ -87,6 +126,29 @@ async def _run_async():
         table.add_row(ep.get("method", "?"), ep.get("path", "?")[:50],
                       ep.get("framework", "?"), ep.get("auth", "?"))
     console.print(table)
+
+    # Phase 1.5: Subagent deployment — one AI subagent per endpoint
+    console.print("\n[bold cyan]Phase 1.5: Deploying Endpoint Subagents[/bold cyan]")
+    from medusa.core.blue.subagent_manager import SubagentManager
+
+    subagent_mgr = SubagentManager(config, target_path)
+    deployed = subagent_mgr.deploy_all(endpoints)
+    session.subagents_deployed = len(deployed)
+    console.print(f"  [green]{len(deployed)} subagents deployed[/green] [dim](one per endpoint)[/dim]")
+
+    # Have each subagent analyze its endpoint (batched, parallel)
+    console.print("  [dim]Subagents analyzing their endpoints...[/dim]")
+    analyzed = await subagent_mgr.analyze_all_endpoints()
+    console.print(f"  [green]{len(analyzed)} endpoint analyses complete[/green]")
+
+    # Show risk summary
+    risk_summary = subagent_mgr.get_summary()
+    high_risk = risk_summary.get("high_risk", 0)
+    if high_risk > 0:
+        console.print(f"  [yellow]{high_risk} high-risk endpoints identified[/yellow]")
+    for ep_risk in risk_summary.get("by_risk", [])[:5]:
+        color = "red" if ep_risk["risk"] >= 7 else "yellow" if ep_risk["risk"] >= 4 else "dim"
+        console.print(f"    [{color}]Subagent #{ep_risk['rank']}: {ep_risk['path']} (risk {ep_risk['risk']}/10)[/{color}]")
 
     # Phase 2: Watcher deployment
     console.print("\n[bold cyan]Phase 2: Deploying Watchers[/bold cyan]")
@@ -103,7 +165,24 @@ async def _run_async():
     console.print("  [green]Threat Hunter active[/green]")
     console.print("  [green]Shift Manager monitoring watcher health[/green]")
 
-    # Main monitoring loop — live traffic feed
+    # ── Initialize AI Engine and Live Feed ──
+    from medusa.core.blue.ai_engine import BlueAIEngine
+    from medusa.core.blue.tui.feed import LiveFeed, FeedConfig
+    from medusa.core.blue.traffic.normalizer import SmartNormalizer, set_global_normalizer
+
+    ai_engine = BlueAIEngine(config)
+    ai_engine.target_path = target_path  # For code change execution
+    normalizer = SmartNormalizer()
+    set_global_normalizer(normalizer)
+
+    feed_config = FeedConfig(
+        baseline_requests=25,
+        ai_analysis_enabled=True,
+        show_all_normals=True,
+    )
+    feed = LiveFeed(ai_engine, subagent_mgr, feed_config)
+
+    # ── Main monitoring loop ──
     console.print("\n[bold #58a6ff]Live Traffic Feed[/bold #58a6ff] [dim](Ctrl+C to pause)[/dim]")
     console.print("─" * 68)
 
@@ -112,110 +191,91 @@ async def _run_async():
         _signal, '_blue_interrupted', True))
     _signal._blue_interrupted = False
 
-    # Import traffic tools
-    from medusa.core.blue.traffic.normalizer import TrafficNormalizer
-    from medusa.core.blue.traffic.scorer import score_request
-    from medusa.core.blue.traffic.classifier import classify_attack
-    from medusa.core.blue.deception.deception_engine import DeceptionEngine
-    import random as _random
+    # Tail the live traffic log
+    TRAFFIC_LOG = "/tmp/blue_defend_traffic.jsonl"
+    open(TRAFFIC_LOG, "w").close()  # clear old log
 
-    normalizer = TrafficNormalizer()
-    deception = DeceptionEngine()
-
-    # Seed normalizer with some training data
-    for _ in range(15):
-        for ep in endpoints:
-            normalizer.train([{"path": ep["path"], "method": ep["method"], "status": 200,
-                               "ip": f"192.168.1.{_random.randint(1,254)}",
-                               "user_agent": "Mozilla/5.0 (normal browser)"}])
-
-    # Traffic simulation patterns
-    NORMAL_TEMPLATES = [
-        ("GET", "/", None, "192.168.1.100"),
-        ("GET", "/login", None, "192.168.1.101"),
-        ("GET", "/api/users", None, "192.168.1.102"),
-        ("GET", "/admin", None, "192.168.1.103"),
-    ]
-    ATTACK_TEMPLATES = [
-        ("POST", "/login", {"user": "admin' OR '1'='1", "pass": "x"}, "203.0.113.42", "sqlmap/1.8#stable"),
-        ("POST", "/login", {"user": "<script>alert(1)</script>", "pass": "x"}, "198.51.100.7", "Mozilla/5.0 (XSS scanner)"),
-        ("POST", "/reset-password", {"email": "../../../etc/passwd"}, "203.0.113.99", "python-requests/2.31"),
-        ("GET", "/api/users/1 UNION SELECT 1,2,3", None, "198.51.100.7", "sqlmap/1.8#stable"),
-        ("GET", "/admin", None, "203.0.113.42", "Mozilla/5.0 (admin hunter)"),
-        ("POST", "/login", {"user": "${7*7}", "pass": "x"}, "198.51.100.7", "SSTI probe"),
-        ("GET", "/.git/HEAD", None, "203.0.113.200", "gobuster/3.6"),
-        ("POST", "/login", {"user": "admin", "pass": "admin123"}, "203.0.113.42", "Mozilla/5.0 (credential stuffer)"),
-    ]
-
-    iteration = 0
     request_count = 0
+    last_pos = 0
+    idle_ticks = 0
+
+    console.print("  [bold green]Listening on :5906[/bold green] [dim]— send requests from another terminal:[/dim]")
+    console.print("  [dim]curl http://127.0.0.1:5906/[/dim]")
+    console.print("  [dim]curl -X POST http://127.0.0.1:5906/login -d \"user=admin' OR '1'='1&pass=x\"[/dim]")
+    console.print("─" * 68)
 
     while True:
-        iteration += 1
+        # Read new lines from traffic log
+        try:
+            with open(TRAFFIC_LOG) as f:
+                f.seek(last_pos)
+                new_lines = f.readlines()
+                last_pos = f.tell()
+        except FileNotFoundError:
+            await asyncio.sleep(0.5)
+            continue
 
-        # Generate traffic mix: 70% normal, 30% attack
-        is_attack = _random.random() < 0.30
-        if is_attack:
-            method, path, data, ip, ua = _random.choice(ATTACK_TEMPLATES)
-        else:
-            method, path, data, ip = _random.choice(NORMAL_TEMPLATES)
-            ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/131.0"
+        for line in new_lines:
+            line = line.strip()
+            if not line:
+                continue
 
-        # Build request dict
-        request = {"method": method, "path": path, "body": data or {},
-                   "ip": ip, "user_agent": ua, "status": 200 if not is_attack else _random.choice([200, 403, 500])}
+            try:
+                req = json.loads(line)
+            except json.JSONDecodeError:
+                continue
 
-        # Score and classify
-        profile = normalizer.get_profile(path)
-        scored = score_request(request, profile)
-        classification = classify_attack(request) if scored["score"] >= 5 else {"type": "normal", "confidence": 1.0, "category": "clean"}
+            idle_ticks = 0
 
-        # Determine action
-        if scored["score"] >= 8:
-            action = deception.decide_response(f"ATTK-{ip.replace('.','')}", request, scored["score"])
-            action_label = action.get("action", "block")
-            session.threats_blocked += 1
-        elif scored["score"] >= 5:
-            action_label = "validate"
-            session.threats_deceived += 1
-        else:
-            action_label = "pass"
+            # Build request dict
+            request_data = {
+                "method": req.get("method", "GET"),
+                "path": req.get("path", "/"),
+                "ip": req.get("ip", "0.0.0.0"),
+                "body": req.get("body", ""),
+                "user_agent": req.get("user_agent", ""),
+                "query": req.get("query", {}),
+                "headers": req.get("headers", {}),
+                "status": 200,
+            }
 
-        request_count += 1
-        session.total_requests_processed = request_count
+            # Train normalizer during baseline phase
+            if not feed.baseline_established:
+                normalizer.train([request_data])
 
-        # Compact row display — like redteamer iterations
-        method_color = {"GET": "green", "POST": "cyan", "PUT": "yellow", "DELETE": "red"}.get(method, "white")
-        if scored["score"] >= 8:
-            sigil = "[bold red]!!![/bold red]"
-            action_text = "[bold red]BLOCKED[/bold red]"
-        elif scored["score"] >= 5:
-            sigil = "[yellow]??[/yellow]"
-            action_text = "[yellow]FLAGGED[/yellow]"
-        else:
-            sigil = "[dim]--[/dim]"
-            action_text = "[dim]passed[/dim]"
+            # Route through the live feed tier system
+            result = await feed.process_request(request_data)
 
-        payload_preview = ""
-        if data and scored["score"] >= 5:
-            pv = str(data)[:60].replace("\n", " ")
-            payload_preview = f" [dim]{pv}[/dim]"
+            request_count = feed.request_count
+            session.total_requests_processed = request_count
+            session.baseline_established = feed.baseline_established
+            session.baseline_request_count = request_count
 
-        console.print(
-            f"  [bold white]#{request_count}[/bold white] "
-            f"[{method_color}]{method:6s}[/{method_color}] "
-            f"{path[:42]:42s} "
-            f"[dim]{ip:>15s}[/dim]  "
-            f"{sigil} {action_text}"
-            f"{payload_preview}"
-        )
+            # Update session from feed stats
+            if result and result.verdict == "FLAGGED":
+                session.threats_blocked += 1
 
-        # Periodically show compact stats line
-        if request_count % 25 == 0:
-            console.print(f"  [dim]── {request_count} requests | {session.threats_blocked} blocked | {session.threats_deceived} flagged | ${session.total_cost_usd:.4f} ──[/dim]")
+            if request_count % 25 == 0 and request_count > 0:
+                stats = feed.get_stats()
+                console.print(
+                    f"  [dim]── {request_count} requests | "
+                    f"{session.threats_blocked} blocked | "
+                    f"{session.threats_deceived} flagged | "
+                    f"${stats['ai_cost']:.4f} AI cost ──[/dim]"
+                )
 
-        await asyncio.sleep(_random.uniform(0.2, 1.0))
+        if not new_lines:
+            idle_ticks += 1
+            if idle_ticks % 15 == 0:
+                if not feed.baseline_established:
+                    remaining = feed_config.baseline_requests - request_count
+                    console.print(f"  [dim]  establishing baseline... {remaining} more requests needed[/dim]")
+                else:
+                    console.print(f"  [dim]  listening on :5906 — send traffic from another terminal[/dim]")
 
+        await asyncio.sleep(0.3)
+
+        # ── Pause / Command handling ──
         if getattr(_signal, '_blue_interrupted', False):
             _signal._blue_interrupted = False
             _signal.signal(_signal.SIGINT, _signal.SIG_DFL)
@@ -230,12 +290,19 @@ async def _run_async():
                 from medusa.core.templates import print_health_check
                 print_health_check(console)
             elif cmd == "/report":
-                console.print("[dim]Blue team report generated.[/dim]")
+                stats = feed.get_stats()
+                console.print(f"  [dim]Requests: {stats['total']} | AI analyses: {stats['ai_analyses']}[/dim]")
+                console.print(f"  [dim]Subagents: {stats['subagents']['total']} | High risk: {stats['subagents']['high_risk']}[/dim]")
+                console.print(f"  [dim]AI cost: ${stats['ai_cost']:.4f}[/dim]")
             elif cmd == "/state":
+                stats = feed.get_stats()
                 console.print(f"  Endpoints: {session.endpoints_discovered}")
                 console.print(f"  Requests: {session.total_requests_processed}")
                 console.print(f"  Watchers: {session.active_watchers}")
-                console.print(f"  Cost: ${session.total_cost_usd:.4f}")
+                console.print(f"  Subagents: {stats['subagents']['total']}")
+                console.print(f"  AI Analyses: {stats['ai_analyses']}")
+                console.print(f"  Baseline: {'established' if feed.baseline_established else f'{request_count}/{feed_config.baseline_requests}'}")
+                console.print(f"  Cost: ${stats['ai_cost']:.4f}")
             _signal.signal(_signal.SIGINT, lambda sig, frame: setattr(
                 _signal, '_blue_interrupted', True))
             continue

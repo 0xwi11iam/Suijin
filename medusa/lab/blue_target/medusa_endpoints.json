@@ -3,42 +3,168 @@
     "method": "GET",
     "path": "/",
     "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
-    "line": 13,
+    "line": 147,
     "framework": "flask"
   },
   {
     "method": "GET",
-    "path": "/login",
+    "path": "/auth/register",
     "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
-    "line": 15,
+    "line": 159,
+    "framework": "flask"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/login",
+    "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
+    "line": 177,
+    "framework": "flask"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/refresh",
+    "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
+    "line": 192,
+    "framework": "flask"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/me",
+    "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
+    "line": 200,
+    "framework": "flask"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/me",
+    "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
+    "line": 208,
+    "framework": "flask"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/reset-password",
+    "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
+    "line": 224,
+    "framework": "flask"
+  },
+  {
+    "method": "GET",
+    "path": "/auth/reset-password/<token>",
+    "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
+    "line": 239,
     "framework": "flask"
   },
   {
     "method": "GET",
     "path": "/api/users",
     "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
-    "line": 23,
+    "line": 246,
     "framework": "flask"
   },
   {
     "method": "GET",
     "path": "/api/users/<int:uid>",
     "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
-    "line": 29,
+    "line": 254,
+    "framework": "flask"
+  },
+  {
+    "method": "GET",
+    "path": "/api/users/<int:uid>",
+    "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
+    "line": 262,
+    "framework": "flask"
+  },
+  {
+    "method": "GET",
+    "path": "/api/search",
+    "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
+    "line": 269,
+    "framework": "flask"
+  },
+  {
+    "method": "GET",
+    "path": "/api/documents",
+    "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
+    "line": 281,
+    "framework": "flask"
+  },
+  {
+    "method": "GET",
+    "path": "/api/documents",
+    "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
+    "line": 292,
+    "framework": "flask"
+  },
+  {
+    "method": "GET",
+    "path": "/api/documents/<int:doc_id>",
+    "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
+    "line": 307,
+    "framework": "flask"
+  },
+  {
+    "method": "GET",
+    "path": "/api/documents/<int:doc_id>/download",
+    "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
+    "line": 315,
+    "framework": "flask"
+  },
+  {
+    "method": "GET",
+    "path": "/api/export",
+    "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
+    "line": 329,
+    "framework": "flask"
+  },
+  {
+    "method": "GET",
+    "path": "/api/templates/<name>",
+    "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
+    "line": 340,
+    "framework": "flask"
+  },
+  {
+    "method": "GET",
+    "path": "/api/execute",
+    "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
+    "line": 352,
+    "framework": "flask"
+  },
+  {
+    "method": "GET",
+    "path": "/api/coupons/redeem",
+    "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
+    "line": 364,
+    "framework": "flask"
+  },
+  {
+    "method": "GET",
+    "path": "/graphql",
+    "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
+    "line": 379,
     "framework": "flask"
   },
   {
     "method": "GET",
     "path": "/admin",
     "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
-    "line": 35,
+    "line": 403,
     "framework": "flask"
   },
   {
     "method": "GET",
-    "path": "/reset-password",
+    "path": "/admin/config",
     "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
-    "line": 38,
+    "line": 415,
+    "framework": "flask"
+  },
+  {
+    "method": "GET",
+    "path": "/health",
+    "file": "/Users/williamjiang/raxaid-core/raxaid-security/medusa/lab/blue_target/vulnerable_app.py",
+    "line": 433,
     "framework": "flask"
   }
 ]

@@ -61,6 +61,14 @@ class BlueSession:
         self.active_watchers = 0
         self.total_cost_usd = 0.0
         self.attackers: dict[str, AttackerProfile] = {}
+
+        # Subagent tracking
+        self.subagents_deployed = 0
+        self.subagent_analyses = 0       # Total AI analyses run by subagents
+        self.subagent_anomalies = 0      # Anomalies flagged by subagents
+        self.baseline_established = False
+        self.baseline_request_count = 0
+
         self._lock = threading.Lock()
 
     def get_or_create_attacker(self, ip: str) -> AttackerProfile:

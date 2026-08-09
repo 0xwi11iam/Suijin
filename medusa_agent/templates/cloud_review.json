@@ -1,1 +1,0 @@
-{"name":"Cloud Security Review","description":"AWS/Azure/GCP misconfiguration testing","ports":[80,443],"wordlists":[],"tools":["nmap","sslscan","search_cve","shodan","crtsh"],"checks":["ssrf","information_disclosure","subdomain_takeover","container_escape"],"max_iterations":30,"headless":false}

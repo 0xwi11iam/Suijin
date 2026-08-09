@@ -1,1 +1,0 @@
-{"name":"Active Directory Assessment","description":"Internal AD security assessment","ports":[88,135,139,389,445,636,3268,3269,5985],"wordlists":[],"tools":["nmap","smb_check_null_session","smb_list_shares","kerberos_user_enum","kerberos_asrep_roast","hydra"],"checks":["smb_enum","kerberos","ldap_injection","linux_privesc"],"max_iterations":60,"headless":false}

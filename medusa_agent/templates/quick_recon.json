@@ -1,1 +1,0 @@
-{"name":"Quick Reconnaissance","description":"Fast recon pass — ports, tech stack, endpoints only","ports":[80,443],"wordlists":["quick.txt"],"tools":["nmap","whatweb","gobuster","httpx"],"checks":[],"max_iterations":15,"headless":false}
