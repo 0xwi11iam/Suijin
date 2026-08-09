@@ -18,9 +18,12 @@ dist/
 *.egg-info/
 
 # ── Runtime agent data (generated, never commit) ───────────────────
+medusa_agent/
+medusa/medusa_agent/
 medusa/knowledge_graph.json
 medusa/engagement_schema.json
 medusa/operation_state_recovery.json
+medusa/blue_config.json
 medusa/.notes/
 medusa_agent/reports/
 medusa_agent/audit_trails/
@@ -30,6 +33,10 @@ medusa_agent/credentials.json
 medusa_agent/SOUL.md
 medusa_agent/scripts/comprehensive_attack.py
 medusa_agent/scripts/forge_jwt_and_test.py
+
+# ── Blue Team runtime state (auto-generated) ───────────────────────
+medusa_agent/blue_state/
+medusa/lab/*/medusa_endpoints.json
 
 # ── Lab databases (auto-generated) ─────────────────────────────────
 medusa/lab/*/cloudboard.db
