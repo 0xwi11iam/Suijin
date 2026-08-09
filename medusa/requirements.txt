@@ -5,3 +5,8 @@ psutil>=5.9
 pydantic>=2.0
 langgraph>=1.0
 langgraph-checkpoint>=2.0
+
+# Lab / Blue Team runtime dependencies
+flask>=2.3
+flask_cors>=4.0
+PyJWT>=2.8
