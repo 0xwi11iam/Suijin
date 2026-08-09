@@ -204,7 +204,7 @@ python3 medusa/lab/devops_dashboard/app.py
 | **API Key** | DeepSeek, HuggingFace, Gemini, or Anthropic |
 
 ```bash
-git clone https://github.com/medusa/medusa-security.git
+git clone https://github.com/0xwi11iam/Medusa.git
 cd medusa-security
 pip install -r medusa/requirements.txt
 
@@ -368,7 +368,7 @@ python3 medusa/tests/test_agent_helpers.py
   [PASS] test_state                 [PASS] test_skill_loader
   [PASS] test_tool_registry         [PASS] test_workspace_fs
 
-                        10/10 tests passed
+                        20/20 tests passed
 ```
 
 ---
