@@ -887,12 +887,12 @@ medusa/lab/blue_target/
 <td align="center" valign="top" width="50%">
 <p align="center"><img src="assets/hamster.png" alt="Medusa Mascot" width="80"/></p>
 <b>William Jiang</b>: Creator & Lead Developer<br/><br/>
-<small>AI/ML engineer and security researcher. Designed the LangGraph state machine, subagent spawning system, supervisor pattern detector, knowledge graph integration, and 15-vulnerability CloudBoard Next lab.</small><br/><br/>
+<small>William Jiang is the creator and lead developer of Medusa, an open-source AI agentic red-teaming framework. He built the LangGraph state machine that drives the red team pipeline, the subagent spawning system for parallel attack vectors, and the zero-LLM-cost supervisor pattern detector. He also developed the persistent knowledge graph, the Blue Team architecture with 18 attack pattern detectors and AI decision engine, the per-endpoint subagent system, and the deception arsenal including tarpits, honeypots, and network blocking. He created both deliberately vulnerable labs with 23 total vulnerabilities, wrote the 85-tool toolkit, the module system, and the dual-mode red/blue framework. He also wrote the documentation and built a functional autonomous security platform that delivers working attacks and defenses in real-world scenarios.</small><br/><br/>
 <a href="https://github.com/williamjiang">GitHub</a>
 </td>
 <td align="center" valign="top" width="50%">
-<b>Roland Poon</b>: Co-Creator & Marketing<br/><br/>
-<small>Our marketing leader specializing in spreading this project to everyone who should have it.</small><br/><br/>
+<b>Roland Poon</b>: Designer and Project Manager<br/><br/>
+<small>Roland Poon served as designer and project manager on Medusa, helping architect the offensive framework and contributing to the design of the red team/blue team integration that drives the AI vulnerability discovery engine. The work drew inspiration from the Sakana Fugu system's approach to adversarial probing, combining reinforcement learning agents with fuzzing pipelines and purple-teaming feedback loops to enable automated attack chaining and exploit synthesis.</small><br/><br/>
 <a href="https://github.com/rolandpoon2011-cloud">GitHub</a>
 </td>
 </tr>
