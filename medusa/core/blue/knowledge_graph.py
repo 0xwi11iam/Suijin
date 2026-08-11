@@ -35,9 +35,9 @@ class BlueKnowledgeGraph:
         nid = hashlib.md5(f"attacker:{ip}".encode()).hexdigest()[:12]
         with self._lock:
             if nid not in self.nodes:
-                self.nodes[nid] = KGNode(nid, "attacker", {"ip": ip, "first_seen": time.time(), "flags": 0, **details})
+                self.nodes[nid] = KGNode(nid, "attacker", {"ip": ip, "first_seen": time.time(), "flags": 1, **details})
             else:
-                self.nodes[nid].data["flags"] = self.nodes[nid].data.get("flags", 0) + 1
+                self.nodes[nid].data["flags"] = self.nodes[nid].data.get("flags", 1) + 1
                 self.nodes[nid].updated_at = time.time()
         return nid
 
@@ -47,7 +47,7 @@ class BlueKnowledgeGraph:
         with self._lock:
             self.nodes[nid] = KGNode(nid, "attack", {
                 "ip": ip, "path": path, "attack_type": attack_type,
-                "score": score, "payload": payload[:200], "time": time.time(),
+                "score": score, "payload": payload, "time": time.time(),
             })
             self.edges.append((attacker_id, nid, "launched"))
         return nid

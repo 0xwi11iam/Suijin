@@ -17,8 +17,8 @@ BASE_DIR = Path(__file__).resolve().parent
 AUDIT_LOG = BASE_DIR / "audit_log.json"
 KEYS_FILE = BASE_DIR / "access_keys.json"
 
-# Admin bypass key - change this in production!
-ADMIN_KEY = "MEDUSA-ADMIN-2026"
+# Admin key — loaded from environment, never hardcoded
+ADMIN_KEY = os.environ.get("MEDUSA_ADMIN_KEY", hashlib.sha256(secrets.token_bytes(32)).hexdigest()[:16])
 
 # Default enterprise keys
 DEFAULT_KEYS = {

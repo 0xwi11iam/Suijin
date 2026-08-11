@@ -92,7 +92,10 @@ REQUEST:
   Body: {body if body else "(empty)"}
 
 ENDPOINT: {endpoint_info.get('framework', 'unknown')}, auth={endpoint_info.get('auth_required', 'unknown')}
-Handler code: {endpoint_info.get('handler_code', 'N/A')[:300]}
+Handler code:
+```
+{endpoint_info.get('handler_code', 'N/A')}
+```
 {attacker_context}
 SUBAGENT: {subagent_notes if subagent_notes else 'None'}
 
@@ -157,7 +160,7 @@ Respond ONLY with valid JSON. No markdown, no explanation outside JSON."""
             # Parse JSON from response
             parsed = self._parse_llm_response(raw_response)
 
-            result.reasoning = parsed.get("reasoning", raw_response[:500])
+            result.reasoning = parsed.get("reasoning", raw_response)
             result.attack_analysis = parsed.get("attack_analysis", "")
             result.attacker_assessment = parsed.get("attacker_assessment", "")
             result.verdict = parsed.get("verdict", "NOT FLAGGED")
@@ -179,10 +182,12 @@ Respond ONLY with valid JSON. No markdown, no explanation outside JSON."""
 
         except Exception as e:
             result.reasoning = f"AI call failed: {e}"
-            result.verdict = "NOT FLAGGED"
-            result.score = 1
-            result.action = "LOG"
-            result.attack_analysis = f"AI engine error — falling back to pattern-based defense. Error: {e}"
+            result.verdict = "FLAGGED"
+            result.score = 7
+            result.action = "REVIEW"
+            result.attack_analysis = f"AI engine unavailable — request flagged for manual review. Error: {e}"
+            result.commands_run = []
+            result.code_changes = []
 
         result.analysis_time_ms = (time.time() - t0) * 1000
 

@@ -439,5 +439,21 @@ def health():
         "upload_dir":UPLOAD_DIR,"rate_limited_ips":len(_rate_limits),
         "env_vars":{k:v for k,v in os.environ.items() if k.lower() in ("path","home","user","shell","pwd","lang")}})
 
+# Information disclosure — leaks internal state, rate limits, tarpit config
+@app.route("/debug/state", methods=["GET"])
+def debug_state():
+    tarpit_state = {}
+    if os.path.exists(TARPIT_FILE):
+        try: tarpit_state = json.loads(open(TARPIT_FILE).read())
+        except: pass
+    return jsonify({
+        "db_path": DB, "upload_dir": UPLOAD_DIR,
+        "traffic_log": TRAFFIC_LOG, "tarpit_file": TARPIT_FILE,
+        "rate_limits": {k: len(v) for k, v in _rate_limits.items()},
+        "tarpit_active": list(tarpit_state.keys()),
+        "secret_key": app.config.get("SECRET_KEY", "")[:8] + "...",
+        "jwt_algorithm": app.config.get("JWT_ALGORITHM", ""),
+    })
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5906, debug=False)

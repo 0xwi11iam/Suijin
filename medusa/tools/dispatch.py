@@ -65,23 +65,50 @@ def _resolve_workspace_path(file_path):
     """Resolve a file path relative to the agent workspace.
 
     - Relative paths → resolved from WORKSPACE_DIR
-    - Absolute paths within the project → allowed (logged)
-    - Absolute paths outside the project → allowed but warned
+    - Absolute paths → REJECTED unless within WORKSPACE_DIR or explicitly allowlisted
     """
     p = Path(file_path)
     if p.is_absolute():
-        # Allow absolute paths but log when outside project
-        return p
+        # Reject absolute paths outside workspace unless allowlisted
+        try:
+            p.resolve().relative_to(WORKSPACE_DIR.resolve())
+            return p
+        except ValueError:
+            allowlisted = ["/tmp", "/var/tmp", os.environ.get("HOME", "/tmp")]
+            if any(str(p.resolve()).startswith(d) for d in allowlisted):
+                return p
+            raise PermissionError(
+                f"Absolute path '{file_path}' is outside workspace '{WORKSPACE_DIR}'. "
+                f"Use a relative path or write to /tmp/."
+            )
     return (WORKSPACE_DIR / p).resolve()
 
 
-# ── FREEDOM: no command restrictions. Self-kill is the only guard. ──
+# ── Command safety guardrails ────────────────────────────────────────
+_BLOCKED_PATTERNS = [
+    "rm -rf /", "rm -rf ~", "rm -rf .", "mkfs.", "dd if=",
+    ":(){ :|:& };:", "> /dev/sda", "chmod 777 /",
+    "wget .* -O /tmp/.*\\|.*sh", "curl .*\\|.*sh",
+    "sudo rm -rf", "sudo shutdown", "sudo reboot", "sudo halt",
+    "> /etc/passwd", "> /etc/shadow",
+]
 
-def _is_dangerous(cmd):
+def _is_dangerous(cmd: str):
+    """Check command against blocked patterns. Returns (is_dangerous, pattern)."""
+    cmd_lower = cmd.lower().replace(" ", "")
+    for pattern in _BLOCKED_PATTERNS:
+        p = pattern.lower().replace(" ", "")
+        if p in cmd_lower:
+            return True, pattern
     return False, None
 
-def _confirm_global_action(cmd, pattern):
-    return True
+def _confirm_global_action(cmd: str, pattern: str) -> bool:
+    """Require operator confirmation for dangerous commands."""
+    import os as _os
+    if _os.environ.get("MEDUSA_AUTO_APPROVE", "").lower() == "true":
+        return True
+    console.print(f"  [bold red]BLOCKED:[/bold red] '{pattern}' matched in command")
+    return False
 
 
 def truncate(text, limit=50000):
@@ -90,8 +117,9 @@ def truncate(text, limit=50000):
     return text
 
 def search_kb(keyword):
+    """Search the local knowledge base. Gracefully degrades if KB not built."""
     if not DB_PATH.exists():
-        return "Error: kb.sqlite3 missing. Run bake_kb_to_sqlite.py first."
+        return "Knowledge base not built yet. Use check_knowledge or record_finding to query the in-memory knowledge graph instead."
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -100,7 +128,7 @@ def search_kb(keyword):
         rows = c.fetchall()
         conn.close()
         if not rows:
-            return f"Knowledge Base: No matching entries found for '{keyword}'."
+            return f"No matching entries found for '{keyword}'."
         res = ""
         for path, content in rows:
             res += f"--- Source: {path} ---\n{content[:2000]}\n\n"
@@ -140,9 +168,16 @@ def execute_terminal(cmd, timeout=30):
                 current_path = f"{bp}:{current_path}"
         env['PATH'] = current_path
 
-        # Run in workspace directory
+        # Run with shell=False using tokenized command list
+        import shlex
+        try:
+            cmd_parts = shlex.split(cmd)
+        except ValueError:
+            cmd_parts = ["/bin/sh", "-c", cmd]
+
         process = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True,
+            cmd_parts if len(cmd_parts) > 1 else ["/bin/sh", "-c", cmd],
+            capture_output=True, text=True,
             timeout=timeout, cwd=str(WORKSPACE_DIR), env=env,
         )
         out = ""

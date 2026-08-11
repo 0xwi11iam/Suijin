@@ -209,6 +209,17 @@ class LiveFeed:
         kg = get_kg()
         kg.add_attack(ip, path, pattern_names[0], effective_score, body)
 
+        # Run counter-recon on attacker IP (first time only)
+        if prev == 0:
+            try:
+                from medusa.core.blue.defense.counter_recon import recon_attacker
+                recon = recon_attacker(ip)
+                if recon.get("hostname") and recon["hostname"] != "unknown":
+                    console.print(f"  [dim]Counter-recon: {ip} -> {recon['hostname']}[/dim]")
+                    kg.add_intelligence(f"recon-{ip}", f"Hostname: {recon['hostname']}")
+            except Exception:
+                pass
+
         # Show initial panel — pattern match detected
         console.print(f"\n  [bold red]ATTACK DETECTED[/bold red] [dim]({', '.join(pattern_names)} | pattern score {effective_score}/10)[/dim]")
         result = AIAnalysisResult(
@@ -231,14 +242,14 @@ class LiveFeed:
                 # Execute whatever the AI decided
                 console.print(f"\n  [bold cyan]AI DECISION[/bold cyan] [dim](#{rid})[/dim] — {ai_result.action}")
                 self._execute_ai_decision(ai_result, ip, pattern_names, effective_score)
-                kg.add_defense(ip, ai_result.action.lower(), ai_result.reasoning[:200])
-                kg.add_intelligence(f"ai-decision-{rid}", ai_result.reasoning[:300])
+                kg.add_defense(ip, ai_result.action.lower(), ai_result.reasoning)
+                kg.add_intelligence(f"ai-decision-{rid}", ai_result.reasoning)
                 kg.save()
                 return ai_result
             elif ai_result:
                 # AI disagrees with pattern detector — log the disagreement but STILL defend
                 console.print(f"  [bold yellow]AI OVERRIDE[/bold yellow] [dim]— AI says {ai_result.verdict} (score {ai_result.score}) but pattern score is {effective_score}[/dim]")
-                console.print(f"  [dim]AI reasoning: {ai_result.reasoning[:300]}[/dim]")
+                console.print(f"  [dim]AI reasoning: {ai_result.reasoning}[/dim]")
                 console.print(f"  [bold yellow]Applying fallback defense despite AI override[/bold yellow]")
                 # NEVER add pattern-matched attacks to normal baseline
                 self._apply_tarpit(ip, effective_score, pattern_names)
@@ -256,9 +267,6 @@ class LiveFeed:
             self._apply_tarpit(ip, effective_score, pattern_names)
             kg.add_defense(ip, "tarpit", f"AI disabled, score {effective_score}")
             kg.save()
-            self._apply_tarpit(ip, effective_score, pattern_names)
-            kg.add_defense(ip, "tarpit", f"AI disabled, score {effective_score}")
-            kg.save()
 
         return result
 
@@ -266,10 +274,11 @@ class LiveFeed:
     TARPIT_FILE = "/tmp/blue_tarpit.json"
 
     def _execute_ai_decision(self, result: AIAnalysisResult, ip: str, patterns: list, score: int):
-        """Execute whatever the AI decided — commands, code changes, deception."""
+        """Execute whatever the AI decided — commands, code changes, REAL deception."""
         target_path = getattr(self.ai_engine, 'target_path', '')
+        action = (result.action or "").upper()
 
-        # Execute commands the AI requested
+        # Execute shell commands
         if result.commands_run:
             import subprocess
             console.print("  [bold white]Commands:[/bold white]")
@@ -284,7 +293,7 @@ class LiveFeed:
                 except Exception as e:
                     console.print(f"    [dim]$[/dim] {cmd} [red]ERROR: {e}[/red]")
 
-        # Apply code changes the AI requested
+        # Apply code patches
         if result.code_changes and target_path:
             from pathlib import Path
             for cc in result.code_changes:
@@ -296,22 +305,54 @@ class LiveFeed:
                         full.parent.mkdir(parents=True, exist_ok=True)
                         full.write_text(new_content)
                         console.print(f"  [green]PATCHED:[/green] {file_rel} ({len(new_content)} bytes)")
-                        console.print(f"  [dim]  {cc.get('change', '')[:120]}[/dim]")
                     except Exception as e:
                         console.print(f"  [red]PATCH FAILED:[/red] {file_rel} — {e}")
 
-        # If AI said DECEIVE or BLOCK, ensure tarpit/blocking is applied
-        action = (result.action or "").upper()
+        # ── DEPLOY REAL DECEPTION using subagent pre-built assets ──
+        if "DECEIVE" in action and target_path:
+            sa = self.subagent_manager.find_for_request(result.path)
+            if sa and sa.status == "active":
+                try:
+                    from medusa.core.blue.actions.deploy import (
+                        deploy_honeypot, deploy_patch, deploy_canary_tokens, deploy_deception_data
+                    )
+                    # Deploy honeypot endpoint
+                    hp = deploy_honeypot(target_path, sa, ip)
+                    if hp["status"] == "deployed":
+                        console.print(f"  [yellow]HONEYPOT:[/yellow] {hp['honeypot_path']} deployed in {os.path.basename(hp['file'])}")
+                    # Deploy canary tokens
+                    ct = deploy_canary_tokens(target_path, ip)
+                    if ct["status"] == "deployed":
+                        console.print(f"  [yellow]CANARIES:[/yellow] {len(ct['files'])} token files deployed")
+                    # Deploy deception data
+                    dd = deploy_deception_data(target_path, sa, ip)
+                    if dd["status"] == "deployed":
+                        console.print(f"  [yellow]DECEPTION:[/yellow] fake response data ready for {sa.endpoint.get('path','/')}")
+                except Exception as e:
+                    console.print(f"  [red]DECEPTION FAILED:[/red] {e}")
+
+        if "PATCH" in action and target_path:
+            sa = self.subagent_manager.find_for_request(result.path)
+            if sa and sa.patch_code:
+                try:
+                    from medusa.core.blue.actions.deploy import deploy_patch
+                    pt = deploy_patch(target_path, sa)
+                    if pt["status"] == "patched":
+                        console.print(f"  [green]VULN FIXED:[/green] {os.path.basename(pt['file'])} — handler patched")
+                except Exception as e:
+                    console.print(f"  [red]PATCH FAILED:[/red] {e}")
+
+        # Apply tarpit/blocking
         if "DECEIVE" in action or "TARPIT" in action:
             self._apply_tarpit(ip, score, patterns)
         if "BLOCK" in action:
             self._apply_block(ip, score)
 
-        # Show what happened
-        action_color = {"BLOCK": "red", "DECEIVE": "yellow", "PATCH": "green", "LOG": "dim"}.get(result.action.upper() if result.action else "", "white")
+        # Show action summary
+        action_color = {"BLOCK": "red", "DECEIVE": "yellow", "PATCH": "green", "LOG": "dim"}.get(action, "white")
         console.print(Panel.fit(
             f"[bold {action_color}]ACTION: {result.action}[/bold {action_color}]\n"
-            f"[dim]{result.reasoning[:400]}[/dim]",
+            f"[dim]{result.reasoning}[/dim]",
             border_style=action_color, padding=(1, 2),
         ))
 
@@ -330,14 +371,29 @@ class LiveFeed:
             console.print(f"  [red]TARPIT FAILED:[/red] {e}")
 
     def _apply_block(self, ip: str, score: int):
-        """Apply network-level block via pfctl."""
-        import subprocess
+        """Apply network-level block — pfctl on macOS, iptables on Linux."""
+        if not getattr(self, 'blocking_enabled', False):
+            console.print(f"  [dim]BLOCK LOGGED:[/dim] {ip} — blocking disabled, logged only")
+            return
+        import subprocess, platform
+        system = platform.system()
         try:
-            subprocess.run(["pfctl", "-t", "blue_blocked", "-T", "add", ip],
-                          capture_output=True, timeout=5)
-            console.print(f"  [red]BLOCKED:[/red] {ip} — pfctl rule added")
-        except Exception:
-            console.print(f"  [dim]BLOCK:[/dim] {ip} — pfctl unavailable, logged only")
+            if system == "Darwin":
+                subprocess.run(
+                    ["sudo", "pfctl", "-t", "blue_blocked", "-T", "add", ip],
+                    capture_output=True, timeout=5
+                )
+                console.print(f"  [red]BLOCKED:[/red] {ip} — pfctl table blue_blocked")
+            else:
+                subprocess.run(
+                    ["sudo", "iptables", "-A", "BLUE_BLOCKED", "-s", ip, "-j", "DROP"],
+                    capture_output=True, timeout=5
+                )
+                console.print(f"  [red]BLOCKED:[/red] {ip} — iptables BLUE_BLOCKED chain")
+        except FileNotFoundError:
+            console.print(f"  [yellow]BLOCK LOGGED:[/yellow] {ip} — pfctl/iptables not found, logged only")
+        except Exception as e:
+            console.print(f"  [yellow]BLOCK LOGGED:[/yellow] {ip} — {e}")
 
     async def _call_ai(self, request, sa, rid, path, method, ip) -> Optional[AIAnalysisResult]:
         """Call the AI engine. Returns None on failure (error already shown)."""

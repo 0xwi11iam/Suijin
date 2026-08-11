@@ -45,3 +45,8 @@ medusa/lab/*/devops.db
 
 # ── Config (has API keys) ──────────────────────────────────────────
 config.json
+
+# ── Additional secrets ─────────────────────────────────────────────
+access_keys.json
+*_state_recovery.json
+

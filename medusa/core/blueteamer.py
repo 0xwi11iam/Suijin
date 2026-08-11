@@ -61,13 +61,47 @@ async def _run_async():
         return
 
     target_path = ""
+    app_port = 5906
+    traffic_log = "/tmp/blue_defend_traffic.jsonl"
+    blocking_enabled = False
+    proxy_server = None  # Forward proxy for intercepting traffic
+
     if choice == "1":
         target_path = console.input("  Path to codebase  ").strip()
         if not target_path or not os.path.isdir(target_path):
             console.print("[red]Invalid path.[/red]")
             return
+
+        app_port = int(console.input("  What port does your app run on?  ").strip() or "0")
+        if not app_port:
+            console.print("[red]Need a port number.[/red]")
+            return
+
+        # Auto-detect a free proxy port
+        proxy_port = _find_free_port()
+        traffic_log = f"/tmp/blue_proxy_{proxy_port}.jsonl"
+
+        # Start the transparent forward proxy
+        from medusa.core.blue.proxy import start_proxy
+        try:
+            proxy_server = start_proxy(
+                listen_port=proxy_port,
+                target_port=app_port,
+                target_host="127.0.0.1",
+                log_path=traffic_log,
+            )
+            console.print(f"[green]Proxy started on :{proxy_port}[/green] [dim]→ forwarding to your app on :{app_port}[/dim]")
+            console.print(f"[bold yellow]Send ALL traffic to http://127.0.0.1:{proxy_port}[/bold yellow] [dim](not :{app_port})[/dim]")
+            console.print(f"[dim]The proxy intercepts every request, logs it for analysis, and forwards to your app.[/dim]")
+        except Exception as e:
+            console.print(f"[red]Failed to start proxy: {e}[/red]")
+            console.print("[yellow]Falling back to log-file mode — start your app with the middleware snippet.[/yellow]")
+            _print_middleware_snippet(console, traffic_log)
+            console.input("\n  [dim]Press Enter to continue...[/dim]")
     elif choice == "2":
         target_path = str(BASE_DIR / "lab" / "blue_target")
+        traffic_log = "/tmp/blue_defend_traffic.jsonl"
+        app_port = 5906
 
         import subprocess, urllib.request
 
@@ -96,18 +130,24 @@ async def _run_async():
             time.sleep(0.3)
             try:
                 urllib.request.urlopen("http://127.0.0.1:5906/", timeout=1)
-                console.print("[green]✓ Vulnerable app ready on port 5906[/green]")
+                console.print("[green]Vulnerable app ready on port 5906[/green]")
                 break
             except Exception:
                 pass
         else:
-            console.print("[red]✗ Failed to start vulnerable app on port 5906[/red]")
+            console.print("[red]Failed to start vulnerable app on port 5906[/red]")
             return
     else:
         return
 
     session = init_session(target_path)
     config["target_path"] = target_path
+
+    # Phase 0: Initialize firewall (only if blocking enabled)
+    if blocking_enabled:
+        _init_firewall(console)
+    else:
+        console.print("[dim]IP blocking disabled — toggle with /state[/dim]")
 
     # Phase 1: Codebase analysis
     console.print("\n[bold cyan]Phase 1: Codebase Analysis[/bold cyan]")
@@ -160,10 +200,22 @@ async def _run_async():
     # Phase 3: SOC activation
     console.print("\n[bold cyan]Phase 3: SOC Team Activation[/bold cyan]")
     from medusa.core.blue.soc.soc_lead import activate_soc_lead
-    await activate_soc_lead(config, asyncio.Queue())
-    console.print("  [green]SOC Lead online[/green]")
-    console.print("  [green]Threat Hunter active[/green]")
-    console.print("  [green]Shift Manager monitoring watcher health[/green]")
+    from medusa.core.blue.soc.tier1_analyst import create_tier1
+    from medusa.core.blue.soc.tier2_analyst import create_tier2
+    from medusa.core.blue.soc.threat_hunter import create_threat_hunter
+    from medusa.core.blue.soc.incident_commander import create_incident_commander
+
+    soc_lead = await activate_soc_lead(config, asyncio.Queue())
+    tier1_analysts = [create_tier1(ep["path"]) for ep in endpoints[:20]]
+    tier2 = create_tier2()
+    hunter = create_threat_hunter()
+    commander = create_incident_commander()
+
+    console.print(f"  [green]SOC Lead online[/green] [dim]({len(soc_lead.campaigns)} campaigns tracked)[/dim]")
+    console.print(f"  [green]{len(tier1_analysts)} Tier-1 Analysts deployed[/green]")
+    console.print(f"  [green]Tier-2 Analyst active[/green] [dim](cross-endpoint correlation)[/dim]")
+    console.print(f"  [green]Threat Hunter active[/green] [dim](proactive scanning)[/dim]")
+    console.print(f"  [green]Incident Commander ready[/green]")
 
     # ── Initialize AI Engine and Live Feed ──
     from medusa.core.blue.ai_engine import BlueAIEngine
@@ -181,6 +233,7 @@ async def _run_async():
         show_all_normals=True,
     )
     feed = LiveFeed(ai_engine, subagent_mgr, feed_config)
+    feed.blocking_enabled = blocking_enabled
 
     # ── Main monitoring loop ──
     console.print("\n[bold #58a6ff]Live Traffic Feed[/bold #58a6ff] [dim](Ctrl+C to pause)[/dim]")
@@ -191,23 +244,24 @@ async def _run_async():
         _signal, '_blue_interrupted', True))
     _signal._blue_interrupted = False
 
-    # Tail the live traffic log
-    TRAFFIC_LOG = "/tmp/blue_defend_traffic.jsonl"
-    open(TRAFFIC_LOG, "w").close()  # clear old log
+    # Tail the live traffic log (configurable path)
+    open(traffic_log, "w").close()  # clear old log
 
     request_count = 0
     last_pos = 0
     idle_ticks = 0
 
-    console.print("  [bold green]Listening on :5906[/bold green] [dim]— send requests from another terminal:[/dim]")
-    console.print("  [dim]curl http://127.0.0.1:5906/[/dim]")
-    console.print("  [dim]curl -X POST http://127.0.0.1:5906/login -d \"user=admin' OR '1'='1&pass=x\"[/dim]")
+    if app_port:
+        console.print(f"  [bold green]Listening on :{app_port}[/bold green] [dim]— traffic log: {traffic_log}[/dim]")
+    else:
+        console.print(f"  [bold green]Monitoring[/bold green] [dim]— traffic log: {traffic_log}[/dim]")
+    console.print(f"  [dim]Send HTTP requests to the target app. Blocking: {'ON' if blocking_enabled else 'OFF'}[/dim]")
     console.print("─" * 68)
 
     while True:
         # Read new lines from traffic log
         try:
-            with open(TRAFFIC_LOG) as f:
+            with open(traffic_log) as f:
                 f.seek(last_pos)
                 new_lines = f.readlines()
                 last_pos = f.tell()
@@ -271,7 +325,8 @@ async def _run_async():
                     remaining = feed_config.baseline_requests - request_count
                     console.print(f"  [dim]  establishing baseline... {remaining} more requests needed[/dim]")
                 else:
-                    console.print(f"  [dim]  listening on :5906 — send traffic from another terminal[/dim]")
+                    port_str = f":{app_port}" if app_port else ""
+                    console.print(f"  [dim]  listening{port_str} — send traffic from another terminal[/dim]")
 
         await asyncio.sleep(0.3)
 
@@ -302,13 +357,102 @@ async def _run_async():
                 console.print(f"  Subagents: {stats['subagents']['total']}")
                 console.print(f"  AI Analyses: {stats['ai_analyses']}")
                 console.print(f"  Baseline: {'established' if feed.baseline_established else f'{request_count}/{feed_config.baseline_requests}'}")
+                console.print(f"  Traffic log: {traffic_log}")
+                console.print(f"  Blocking: {'[green]ON[/green]' if blocking_enabled else '[red]OFF[/red]'} (toggle with /block)")
                 console.print(f"  Cost: ${stats['ai_cost']:.4f}")
+            elif cmd == "/block":
+                blocking_enabled = not blocking_enabled
+                feed.blocking_enabled = blocking_enabled
+                console.print(f"  IP blocking: {'[green]ENABLED[/green]' if blocking_enabled else '[red]DISABLED[/red]'}")
             _signal.signal(_signal.SIGINT, lambda sig, frame: setattr(
                 _signal, '_blue_interrupted', True))
             continue
 
     session.save()
+    # Shut down proxy if running
+    if proxy_server:
+        try:
+            proxy_server.stop()
+            console.print("[dim]Proxy shut down.[/dim]")
+        except Exception:
+            pass
     console.print("[dim]Blue team session ended.[/dim]")
+
+
+def _find_free_port(start: int = 8080, max_attempts: int = 20) -> int:
+    """Find a free TCP port."""
+    import socket
+    for port in range(start, start + max_attempts):
+        try:
+            s = socket.socket()
+            s.settimeout(0.1)
+            s.bind(("", port))
+            s.close()
+            return port
+        except OSError:
+            continue
+    return 8080  # fallback
+
+
+def _print_middleware_snippet(console, log_path: str):
+    """Print a Flask middleware snippet the user can add to their app."""
+    console.print(Panel.fit(f"""[bold white]Add this to your Flask app to send traffic to Medusa:[/bold white]
+
+[dim]# At the top of your app.py:[/dim]
+[bold]import json, os[/bold]
+[bold]MEDUSA_LOG = "{log_path}"[/bold]
+
+[dim]# Add before_request handler:[/dim]
+[bold]@app.before_request[/bold]
+[bold]def medusa_log_request():[/bold]
+[bold]    entry = {{[/bold]
+[bold]        "timestamp": __import__('datetime').datetime.now().isoformat(),[/bold]
+[bold]        "method": request.method,[/bold]
+[bold]        "path": request.path,[/bold]
+[bold]        "query": dict(request.args),[/bold]
+[bold]        "body": request.get_data(as_text=True)[:1000],[/bold]
+[bold]        "ip": request.remote_addr,[/bold]
+[bold]        "user_agent": str(request.user_agent),[/bold]
+[bold]        "headers": {{k: v for k, v in request.headers.items()[/bold]
+[bold]                    if k.lower() in ("content-type", "cookie", "authorization")}},[/bold]
+[bold]    }}[/bold]
+[bold]    with open(MEDUSA_LOG, "a") as f:[/bold]
+[bold]        f.write(json.dumps(entry) + "\\n")[/bold]
+
+[green]Paste this into your app, restart it, then press Enter to continue.[/green]""", border_style="green"))
+
+
+def _init_firewall(console):
+    """Create pfctl table (macOS) or iptables chain (Linux) for IP blocking."""
+    import subprocess, platform
+    system = platform.system()
+    if system == "Darwin":
+        try:
+            # Create pf anchor and table if they don't exist
+            subprocess.run(
+                ["sudo", "pfctl", "-t", "blue_blocked", "-T", "add", "255.255.255.255"],
+                capture_output=True, timeout=5
+            )
+            subprocess.run(
+                ["sudo", "pfctl", "-t", "blue_blocked", "-T", "delete", "255.255.255.255"],
+                capture_output=True, timeout=5
+            )
+            console.print("[dim]pfctl table 'blue_blocked' ready[/dim]")
+        except Exception:
+            console.print("[dim]pfctl unavailable — blocking via subprocess only[/dim]")
+    else:
+        try:
+            subprocess.run(
+                ["sudo", "iptables", "-N", "BLUE_BLOCKED"],
+                capture_output=True, timeout=5
+            )
+            subprocess.run(
+                ["sudo", "iptables", "-A", "INPUT", "-j", "BLUE_BLOCKED"],
+                capture_output=True, timeout=5
+            )
+            console.print("[dim]iptables chain 'BLUE_BLOCKED' ready[/dim]")
+        except Exception:
+            console.print("[dim]iptables unavailable — blocking via subprocess only[/dim]")
 
 
 if __name__ == "__main__":

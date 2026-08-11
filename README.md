@@ -715,6 +715,7 @@ python3 medusa/lab/blue_target/vulnerable_app.py  # Starts on :5906
 <tr><td><b>GraphQL</b></td><td><code>/graphql</code></td><td>Introspection enabled, no query depth limiting, exposes schema internals</td></tr>
 <tr><td><b>Admin</b></td><td><code>/admin</code>, <code>/admin/config</code></td><td>Auth bypass via X-Admin header, SSRF on webhook URL config</td></tr>
 <tr><td><b>Health</b></td><td><code>/health</code></td><td>Information disclosure — Python version, paths, env vars, DB size</td></tr>
+<tr><td><b>Debug</b></td><td><code>/debug/state</code></td><td>Internal state leak — DB paths, JWT secret prefix, tarpit IPs, rate limit counters</td></tr>
 <tr><td><b>Landing</b></td><td><code>/</code></td><td>Full endpoint enumeration — lists all 25 routes</td></tr>
 </table>
 
@@ -888,7 +889,7 @@ medusa/lab/blue_target/
 <p align="center"><img src="assets/hamster.png" alt="Medusa Mascot" width="80"/></p>
 <b>William Jiang</b>: Creator & Lead Developer<br/><br/>
 <small>William Jiang is the creator and lead developer of Medusa, an open-source AI agentic red-teaming framework. He built the LangGraph state machine that drives the red team pipeline, the subagent spawning system for parallel attack vectors, and the zero-LLM-cost supervisor pattern detector. He also developed the persistent knowledge graph, the Blue Team architecture with 18 attack pattern detectors and AI decision engine, the per-endpoint subagent system, and the deception arsenal including tarpits, honeypots, and network blocking. He created both deliberately vulnerable labs with 23 total vulnerabilities, wrote the 85-tool toolkit, the module system, and the dual-mode red/blue framework. He also wrote the documentation and built a functional autonomous security platform that delivers working attacks and defenses in real-world scenarios.</small><br/><br/>
-<a href="https://github.com/williamjiang">GitHub</a>
+<a href="https://github.com/williamjiang">GitHub</a>Was 
 </td>
 <td align="center" valign="top" width="50%">
 <b>Roland Poon</b>: Designer and Project Manager<br/><br/>

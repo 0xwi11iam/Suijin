@@ -16,18 +16,24 @@ from typing import Optional
 
 @dataclass
 class EndpointSubagent:
-    """A dedicated AI subagent watching a single endpoint."""
+    """A dedicated AI subagent watching a single endpoint with pre-loaded intelligence."""
     agent_id: str
     endpoint: dict
-    rank: int                      # 1-based ordering in the feed
-    risk_score: int = 1            # 1-10 risk assessment
-    vulnerability_notes: str = ""  # AI analysis of what could go wrong
-    defense_plan: str = ""         # Planned defensive measures
-    normal_patterns: list = field(default_factory=list)  # Known-safe patterns
+    rank: int
+    risk_score: int = 1
+    vulnerability_notes: str = ""
+    defense_plan: str = ""
+    normal_patterns: list = field(default_factory=list)
     anomalies_reported: int = 0
     attacks_blocked: int = 0
     last_analysis: str = ""
     status: str = "initializing"
+    # Pre-loaded engineering assets — ready to deploy when attack hits
+    handler_code: str = ""           # Full handler source code
+    honeypot_code: str = ""          # Ready-to-deploy honeypot version of endpoint
+    patch_code: str = ""             # Ready-to-deploy fix for vulnerability
+    deception_response: str = ""     # Ready-to-deploy fake response data
+    framework: str = ""              # flask, fastapi, django, express, etc.
 
 
 class SubagentManager:
@@ -40,9 +46,9 @@ class SubagentManager:
         self._lock = __import__('threading').Lock()
 
     def deploy_all(self, endpoints: list) -> list[EndpointSubagent]:
-        """Deploy one subagent per discovered endpoint."""
+        """Deploy one subagent per discovered endpoint. No artificial cap."""
         deployed = []
-        for i, ep in enumerate(endpoints[:50]):  # Cap at 50 subagents
+        for i, ep in enumerate(endpoints):
             path = ep.get("path", "/")
             agent_id = hashlib.md5(path.encode()).hexdigest()[:8]
             rank = i + 1
@@ -75,57 +81,70 @@ class SubagentManager:
         return None
 
     async def analyze_endpoint(self, sa: EndpointSubagent) -> EndpointSubagent:
-        """Have the AI analyze this endpoint for vulnerabilities and plan defense."""
+        """Deep analysis — read the ENTIRE source file, no truncation."""
         from medusa.tools.providers import generate
         from medusa.prompts.blue_system import BLUE_SYSTEM_PROMPT
 
         ep = sa.endpoint
         file_path = ep.get("file", "")
-        handler_code = ""
+        framework = ep.get("framework", "unknown")
 
-        # Read the actual handler code if available
+        # Read the ENTIRE source file — every line, no truncation
         if file_path:
             try:
-                code = Path(file_path).read_text(errors="ignore")
-                # Extract the function near the route line
-                lines = code.split("\n")
-                line_num = ep.get("line", 0)
-                start = max(0, line_num - 2)
-                end = min(len(lines), line_num + 30)
-                handler_code = "\n".join(lines[start:end])
+                handler_code = Path(file_path).read_text(errors="ignore")
             except Exception:
                 handler_code = f"File: {file_path} (could not read)"
+        else:
+            handler_code = "No source file available"
 
-        prompt = f"""ENDPOINT ANALYSIS — Subagent #{sa.rank}
+        sa.handler_code = handler_code
+        sa.framework = framework
 
-You are assigned to defend this endpoint. Analyze it thoroughly.
+        prompt = f"""ENDPOINT DEFENSE ENGINEERING — Subagent #{sa.rank}
+
+You are the autonomous defender for this endpoint. You have FULL authority to
+write code, deploy honeypots, modify the application, and deceive attackers.
 
 ENDPOINT:
   Method: {ep.get('method', 'ANY')}
   Path: {ep.get('path', '/')}
-  Framework: {ep.get('framework', 'unknown')}
+  Framework: {framework}
   File: {ep.get('file', 'unknown')}
-  Line: {ep.get('line', 'unknown')}
 
-HANDLER CODE:
+FULL HANDLER CODE:
 ```
-{handler_code[:1500]}
+{handler_code}
 ```
 
-YOUR TASKS:
-1. Identify potential vulnerabilities in this endpoint (SQLi, XSS, IDOR, auth bypass, etc.)
-2. Rate the risk level 1-10 (10 = critical, publicly accessible, handles sensitive data)
-3. Plan defensive measures specific to this endpoint
-4. Define what normal traffic looks like for this endpoint
-5. Define what anomalous traffic patterns to watch for
+YOUR ENGINEERING TASKS:
 
-Respond in JSON:
+1. VULNERABILITY ANALYSIS: What can an attacker exploit here? SQLi? XSS? IDOR?
+   Auth bypass? Command injection? Look at every line.
+
+2. HONEYPOT ENGINEERING: Write a complete fake version of this endpoint that
+   looks real but traps attackers. Include canary tokens (fake API keys,
+   fake credentials, tracking IDs). Return the FULL Python/JS code ready to
+   deploy as a new route. The honeypot should log everything the attacker does.
+
+3. PATCH: Write the fixed version of this handler. Parameterize queries,
+   add input validation, add auth checks. Return the FULL corrected code.
+
+4. DECEPTION TEMPLATES: What fake data should we return to deceive attackers?
+   Fake users, fake flags, fake tokens that trigger alerts when used.
+
+5. NORMAL PATTERNS: What does legitimate traffic look like for this endpoint?
+   Expected HTTP methods, parameter names, body structure.
+
+Respond in JSON — provide ALL code as FULL strings ready to deploy:
 {{
   "risk_score": 1-10,
-  "vulnerability_notes": "Detailed analysis of potential vulnerabilities",
-  "defense_plan": "Specific defensive measures for this endpoint",
-  "normal_patterns": ["pattern1", "pattern2"],
-  "anomaly_watchlist": ["anomaly1", "anomaly2"]
+  "vulnerability_notes": "Detailed vulnerability analysis",
+  "honeypot_code": "FULL honeypot endpoint code as a string. Include route decorator, handler function, canary tokens, and logging.",
+  "patch_code": "FULL fixed handler code as a string. The corrected version with parameterized queries, validation, auth checks.",
+  "deception_response": "JSON string of fake data to return to attackers (fake users, fake flags, canary tokens)",
+  "defense_plan": "Step-by-step plan for defending this endpoint",
+  "normal_patterns": ["expected_methods", "expected_params", "expected_body_structure"]
 }}"""
 
         messages = [
@@ -135,28 +154,49 @@ Respond in JSON:
 
         try:
             raw = await asyncio.to_thread(
-                generate,
-                messages,
-                self.config,
-                temperature=0.3,
-                max_tokens=1500,
-                retries=2,
+                generate, messages, self.config,
+                temperature=0.3, max_tokens=2500, retries=2,
             )
-
             parsed = self._parse_json(raw)
             sa.risk_score = int(parsed.get("risk_score", 1))
-            sa.vulnerability_notes = parsed.get("vulnerability_notes", raw[:500])
+            sa.vulnerability_notes = parsed.get("vulnerability_notes", raw)
             sa.defense_plan = parsed.get("defense_plan", "")
+            sa.honeypot_code = parsed.get("honeypot_code", "")
+            sa.patch_code = parsed.get("patch_code", "")
+            sa.deception_response = parsed.get("deception_response", "")
             sa.normal_patterns = parsed.get("normal_patterns", [])
             sa.status = "active"
             sa.last_analysis = time.strftime("%H:%M:%S")
-
         except Exception as e:
-            sa.vulnerability_notes = f"Analysis failed: {e}"
+            sa.vulnerability_notes = f"AI analysis unavailable: {e}"
             sa.risk_score = 5
             sa.status = "active"
+            # Fallback: basic pattern-based intelligence without AI
+            self._fallback_analysis(sa)
 
         return sa
+
+    def _fallback_analysis(self, sa: EndpointSubagent):
+        """Basic pattern-based analysis when AI is unavailable."""
+        code = sa.handler_code.lower() if sa.handler_code else ""
+        path = sa.endpoint.get("path", "/").lower()
+        vulns = []
+
+        if any(kw in code for kw in ["execute(", "f\"select", "f'select", "+ request.", "eval(", "exec("]):
+            vulns.append("SQLi or code injection risk detected")
+            sa.risk_score = max(sa.risk_score, 7)
+        if any(kw in code for kw in [".popen(", "subprocess.", "os.system(", "shell=true"]):
+            vulns.append("Command injection risk detected")
+            sa.risk_score = max(sa.risk_score, 8)
+        if any(kw in path for kw in ["admin", "config", "debug"]):
+            vulns.append("Sensitive endpoint — likely needs auth")
+            sa.risk_score = max(sa.risk_score, 6)
+        if any(kw in code for kw in ["request.args", "request.form", "request.json", "req.query", "req.body"]):
+            vulns.append("User input accepted — validate all parameters")
+
+        sa.vulnerability_notes = "; ".join(vulns) if vulns else "No obvious patterns detected — full AI analysis recommended"
+        sa.defense_plan = "Monitor all requests to this endpoint. Validate input. Apply rate limiting."
+        sa.normal_patterns = [sa.endpoint.get("method", "GET")]
 
     async def analyze_all_endpoints(self) -> list[EndpointSubagent]:
         """Analyze all deployed subagents in parallel batches."""
@@ -185,10 +225,9 @@ Respond in JSON:
         notes = f"""  Subagent #{sa.rank}: {sa.agent_id}
   Risk Score: {sa.risk_score}/10
   Status: {sa.status}
-  Vulnerabilities: {sa.vulnerability_notes[:300]}
-  Defense Plan: {sa.defense_plan[:300]}
-  Anomalies Reported: {sa.anomalies_reported}
-  Normal Patterns: {', '.join(sa.normal_patterns[:5])}"""
+  Vulnerabilities: {sa.vulnerability_notes}
+  Defense Plan: {sa.defense_plan}
+  Anomalies Reported: {sa.anomalies_reported}"""
 
         return notes
 
