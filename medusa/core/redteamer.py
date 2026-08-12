@@ -86,6 +86,9 @@ def load_config():
 
 def load_env():
     if not ENV_PATH.exists():
+        # Non-interactive mode (CI, pytest, piped stdin) — skip setup wizard
+        if not sys.stdin.isatty():
+            return
         console.print("[bold yellow][!] .env file missing.[/bold yellow]")
         console.print("[bold white]Select AI Provider:[/bold white]")
         console.print("  [bold #ff5555]1.[/] [white]Hugging Face[/]")
