@@ -11,7 +11,7 @@
 <br/>
 
 <p align="center">
-  <b>85 Tools</b> &nbsp;·&nbsp; <b>48 Modules</b> &nbsp;·&nbsp; <b>51 Attack Skills</b> &nbsp;·&nbsp; <b>Parallel Subagents</b> &nbsp;·&nbsp; <b>LLM Supervisor</b> &nbsp;·&nbsp; <b>134 Tests</b> &nbsp;·&nbsp; <b>7 Test Files</b>
+  <b>85 Tools</b> &nbsp;·&nbsp; <b>48 Modules</b> &nbsp;·&nbsp; <b>51 Attack Skills</b> &nbsp;·&nbsp; <b>Parallel Subagents</b> &nbsp;·&nbsp; <b>LLM Supervisor</b> &nbsp;·&nbsp; <b>135 Tests</b> &nbsp;·&nbsp; <b>7 Test Files</b>
   <br/>
   <b>Blue Team SOC</b> &nbsp;·&nbsp; <b>18 Attack Detectors</b> &nbsp;·&nbsp; <b>Per-Endpoint AI Subagents</b> &nbsp;·&nbsp; <b>Live Tarpit</b> &nbsp;·&nbsp; <b>25-Endpoint Lab</b> &nbsp;·&nbsp; <b>Knowledge Graph</b> &nbsp;·&nbsp; <b>Codebase Patching</b> &nbsp;·&nbsp; <b>CI/CD</b>
   <br/>

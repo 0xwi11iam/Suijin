@@ -1,8 +1,8 @@
 """Pytest configuration — shared fixtures and mocks for Medusa tests."""
 import pytest, sys, os
 
-# Ensure project root is on path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Ensure project root is on path (3 levels up: tests -> medusa -> repo root)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
 @pytest.fixture(autouse=True)

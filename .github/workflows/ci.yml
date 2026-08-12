@@ -10,6 +10,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
 
@@ -21,26 +22,42 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Debug — Python version and path
+        run: |
+          python --version
+          python -c "import sys; print('sys.path:', sys.path[:3])"
+          echo "PWD: $(pwd)"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r medusa/requirements.txt
           pip install pytest pytest-asyncio pytest-cov
 
+      - name: Verify package imports
+        run: |
+          PYTHONPATH="$PWD:$PYTHONPATH" python -c "
+          import medusa.core.state, medusa.core.agent_graph, medusa.core.supervisor, medusa.core.error_handler
+          import medusa.core.blue.config, medusa.core.blue.knowledge_graph, medusa.core.blue.ai_engine
+          import medusa.tools.guardrails, medusa.tools.workspace, medusa.core.blue.errors
+          import medusa.core.config_models, medusa.core.constants, medusa.core.paths
+          print('All imports OK')
+          "
+
       - name: Run tests with coverage
         run: |
-          python -m pytest medusa/tests/ -v --tb=short --cov=medusa --cov-report=term-missing --cov-report=xml -m "not ai"
+          PYTHONPATH="$PWD:$PYTHONPATH" python -m pytest medusa/tests/ \
+            -v --tb=short \
+            --cov=medusa --cov-report=term-missing --cov-report=xml \
+            -m "not ai" \
+            -p no:warnings
 
-      - name: Dependency audit
+      - name: Lint check (non-blocking)
+        continue-on-error: true
+        run: |
+          pip install ruff && ruff check medusa/ || true
+
+      - name: Dependency audit (non-blocking)
+        continue-on-error: true
         run: |
           pip install pip-audit && pip-audit || true
-
-      - name: Lint check
-        run: |
-          pip install ruff && ruff check medusa/ --ignore E501 || true
-
-      - name: Verify imports
-        run: |
-          python -c "import medusa.core.state, medusa.core.agent_graph, medusa.core.supervisor, medusa.core.error_handler"
-          python -c "import medusa.core.blue.config, medusa.core.blue.knowledge_graph, medusa.core.blue.ai_engine"
-          python -c "import medusa.tools.guardrails, medusa.tools.workspace, medusa.core.blue.errors"
