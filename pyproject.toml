@@ -11,6 +11,18 @@ markers = [
 ]
 asyncio_mode = "auto"
 
+[tool.coverage.run]
+source = ["medusa"]
+omit = ["medusa/lab/*", "medusa/tests/*", "medusa_agent/*"]
+
+[tool.coverage.report]
+fail_under = 20
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
+
 [tool.ruff]
 target-version = "py310"
 line-length = 120
