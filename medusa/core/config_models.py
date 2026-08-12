@@ -94,7 +94,7 @@ class RedConfig(BaseModel):
     @field_validator("cost_hard_cap_usd")
     @classmethod
     def warn_high_cap(cls, v):
-        if v > 5.0:
+        if v > 50.0:
             import warnings
             warnings.warn(f"Cost cap ${v:.2f} is high. Consider setting a lower limit.")
         return v

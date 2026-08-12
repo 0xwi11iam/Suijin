@@ -37,11 +37,10 @@ def main():
     console.print(f"\n")
     
     console.print("[bold white]Select Operational Module:[/]")
-    console.print("  [bold #ff5555]1.[/] [white]Red Team (Autonomous Agent)[/]")
+    console.print("  [bold #ff5555]1.[/] [white]Red Team (Autonomous Agent + Fugu Collective Intelligence)[/]")
     console.print("  [bold #58a6ff]2.[/] [white]Blue Team (Active Defense)[/]")
     console.print("  [bold yellow]3.[/] [white]Settings[/]")
-    console.print("  [bold magenta]4.[/] [white]Fugu (Collective Intelligence)[/] [dim]experimental[/dim]")
-    console.print("  [bold white]5.[/] [dim]Exit[/]\n")
+    console.print("  [bold white]4.[/] [dim]Exit[/]\n")
     
     try:
         c = input(" ").strip()
@@ -52,12 +51,6 @@ def main():
             blueteam_main()
         elif c == '3':
             tui_settings.main()
-            main()
-        elif c == '4':
-            console.print("[bold magenta]Fugu Collective Intelligence[/bold magenta] [dim](experimental multi-agent orchestrator)[/dim]")
-            console.print("[dim]Run via: python3 -c 'from medusa.fugu import run_fugu; run_fugu(...)'[/dim]")
-            console.print("[dim]See medusa/fugu.py for usage.[/dim]")
-            input("\n  Press Enter to return...")
             main()
         else:
             sys.exit(0)

@@ -163,6 +163,19 @@ class TestGuardrailsEdgeCases:
         # "rm -rf" pattern looks for "rm -rf" substring; "rm /tmp" shouldn't match
         assert not dangerous
 
+    def test_no_variable_shadowing(self):
+        """Regression: is_dangerous() must work across multiple calls (no shadowing bug)."""
+        from medusa.tools.guardrails import is_dangerous
+        # First call
+        d1, p1 = is_dangerous("rm -rf /")
+        assert d1
+        # Second call — must NOT fail with "cannot access local variable"
+        d2, p2 = is_dangerous("nmap -sV 127.0.0.1")
+        assert not d2
+        # Third call — still works
+        d3, p3 = is_dangerous("sudo shutdown -h now")
+        assert d3
+
 
 class TestGuardrailsConfirmGlobalAction:
     """Verification that confirm_global_action blocks by default."""

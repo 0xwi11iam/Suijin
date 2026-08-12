@@ -98,8 +98,8 @@ def execute_terminal(cmd, timeout=30):
             return f"SYSTEM OVERRIDE: Refusing to execute command. {my_pid} is the AI Agent's own Process ID. You must find the target application's PID."
 
         # Global-action gate: intercept dangerous commands
-        is_dangerous, pattern = is_dangerous(cmd)
-        if is_dangerous:
+        dangerous, pattern = is_dangerous(cmd)
+        if dangerous:
             if not confirm_global_action(cmd, pattern):
                 return f"⛔ Command denied by user (matched: {pattern}).\nCommand was: {cmd[:200]}"
             # Approved — proceed with execution
