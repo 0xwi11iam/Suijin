@@ -892,6 +892,7 @@ medusa/lab/blue_target/
 <a href="https://github.com/williamjiang">GitHub</a>Was 
 </td>
 <td align="center" valign="top" width="50%">
+<p align="center"><img src="assets/roland.png" alt="Medusa Mascot" width="80"/></p>
 <b>Roland Poon</b>: Designer and Project Manager<br/><br/>
 <small>Roland Poon served as designer and project manager on Medusa, helping architect the offensive framework and contributing to the design of the red team/blue team integration that drives the AI vulnerability discovery engine. The work drew inspiration from the Sakana Fugu system's approach to adversarial probing, combining reinforcement learning agents with fuzzing pipelines and purple-teaming feedback loops to enable automated attack chaining and exploit synthesis.</small><br/><br/>
 <a href="https://github.com/rolandpoon2011-cloud">GitHub</a>
