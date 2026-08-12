@@ -1,5 +1,6 @@
 """Tier 1 Analyst — first responder, initial triage of incoming alerts."""
 import time
+from medusa.core.constants import RISK_HIGH
 
 class Tier1Analyst:
     def __init__(self, endpoint: str):
@@ -9,7 +10,7 @@ class Tier1Analyst:
 
     def triage(self, request: dict, score: int) -> dict:
         self.triaged += 1
-        if score >= 7:
+        if score >= RISK_HIGH:
             self.escalated += 1
             return {"action": "escalate_to_tier2", "endpoint": self.endpoint,
                     "score": score, "time": time.time()}

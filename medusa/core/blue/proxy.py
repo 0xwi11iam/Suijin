@@ -7,7 +7,9 @@ No middleware needed — just point your browser/curl at the proxy port.
 
 Usage:
     from medusa.core.blue.proxy import start_proxy
-    proxy = start_proxy(listen_port=8080, target_port=5906, log_path="/tmp/blue_traffic.jsonl")
+    from medusa.core.constants import PROXY_DEFAULT_PORT, BLUE_LAB_PORT, BLUE_TRAFFIC_LOG
+    proxy = start_proxy(listen_port=PROXY_DEFAULT_PORT, target_port=BLUE_LAB_PORT,
+                        log_path=str(BLUE_TRAFFIC_LOG))
     # All traffic to :8080 gets logged then forwarded to :5906
 """
 import json, os, time, socket, threading, sys
@@ -15,13 +17,15 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 
+from medusa.core.constants import BLUE_LAB_PORT, PROXY_DEFAULT_PORT, BLUE_TRAFFIC_LOG, BLUE_TARPIT_FILE
+
 
 class ProxyHandler(BaseHTTPRequestHandler):
     """Handles incoming HTTP requests — logs them, forwards them, returns the response."""
 
     target_host = "127.0.0.1"
-    target_port = 5906
-    log_path = "/tmp/blue_defend_traffic.jsonl"
+    target_port = BLUE_LAB_PORT
+    log_path = str(BLUE_TRAFFIC_LOG)
 
     def _log_request(self, method, path, headers, body):
         """Write request to JSONL log for the blue team."""
@@ -100,7 +104,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
         # Proxy-level tarpit: check if this IP should be delayed
         try:
-            tarpit_file = "/tmp/blue_tarpit.json"
+            tarpit_file = str(BLUE_TARPIT_FILE)
             if os.path.exists(tarpit_file):
                 with open(tarpit_file) as f:
                     tarpit_state = json.loads(f.read())
@@ -132,8 +136,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
 class ProxyServer:
     """Manages the lifecycle of the forward proxy server."""
 
-    def __init__(self, listen_port: int = 8080, target_port: int = 5906,
-                 target_host: str = "127.0.0.1", log_path: str = "/tmp/blue_defend_traffic.jsonl"):
+    def __init__(self, listen_port: int = PROXY_DEFAULT_PORT, target_port: int = BLUE_LAB_PORT,
+                 target_host: str = "127.0.0.1", log_path: str = None):
+        if log_path is None:
+            log_path = str(BLUE_TRAFFIC_LOG)
         self.listen_port = listen_port
         self.target_port = target_port
         self.log_path = log_path
@@ -162,9 +168,11 @@ class ProxyServer:
         return self._server is not None
 
 
-def start_proxy(listen_port: int = 8080, target_port: int = 5906,
+def start_proxy(listen_port: int = PROXY_DEFAULT_PORT, target_port: int = BLUE_LAB_PORT,
                 target_host: str = "127.0.0.1",
-                log_path: str = "/tmp/blue_defend_traffic.jsonl") -> ProxyServer:
+                log_path: str = None) -> ProxyServer:
+    if log_path is None:
+        log_path = str(BLUE_TRAFFIC_LOG)
     """Start a forward proxy — returns the ProxyServer instance."""
     proxy = ProxyServer(listen_port, target_port, target_host, log_path)
     proxy.start()

@@ -2,7 +2,7 @@
 medusa/core/blue/knowledge_graph.py — Session-scoped shared intelligence.
 
 A lightweight in-memory graph that all subagents and the main AI share.
-Persists to /tmp/blue_kg.json during the session, wiped on new session.
+Persists to blue_kg.json during the session, wiped on new session.
 Nodes: attackers, endpoints, attacks, defenses, deceptions
 Edges: attacked, defended_by, deceived_by, related_to
 """
@@ -11,7 +11,9 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional
 
-KG_PATH = Path("/tmp/blue_kg.json")
+from medusa.core.constants import BLUE_KG_PATH
+
+KG_PATH = BLUE_KG_PATH
 
 
 @dataclass

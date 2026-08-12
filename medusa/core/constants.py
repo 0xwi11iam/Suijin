@@ -62,3 +62,8 @@ TRUNCATE_LIMIT = 50000
 # ── File paths (base tmp dir configurable via MEDUSA_TMP_DIR) ───────
 import os
 TMP_DIR = Path(os.environ.get("MEDUSA_TMP_DIR", "/tmp"))
+
+BLUE_KG_PATH = TMP_DIR / "blue_kg.json"
+BLUE_TRAFFIC_LOG = TMP_DIR / "blue_defend_traffic.jsonl"
+BLUE_TARPIT_FILE = TMP_DIR / "blue_tarpit.json"
+BLUE_HONEYPOT_FILE = TMP_DIR / "blue_honeypots.json"

@@ -8,6 +8,7 @@ from medusa.modules.loader import discover_modules, get_module_tools
 # Extracted modules — guardrails and workspace path management
 from medusa.tools.guardrails import is_dangerous, confirm_global_action, _BLOCKED_PATTERNS
 from medusa.tools.workspace import resolve_workspace_path, WORKSPACE_DIR
+from medusa.core.constants import METASPLOIT_RPC_PORT
 
 MCP_SERVERS = {}
 def get_server_for_tool(tool_name: str) -> list:
@@ -301,7 +302,7 @@ def write_file(file_path, content):
 def _msf_rpc_connect(config):
     """Connect to an msfrpcd daemon and return (proxy, token) or (None, error)."""
     host = config.get("metasploit_rpc_host", "127.0.0.1")
-    port = int(config.get("metasploit_rpc_port", 55553))
+    port = int(config.get("metasploit_rpc_port", METASPLOIT_RPC_PORT))
     password = os.environ.get("MSF_RPC_PASSWORD", "")
     if not password:
         return None, "Metasploit RPC password not set in config (metasploit_rpc_password)."
@@ -353,7 +354,7 @@ def msf_check(config):
                 f"Metasploit RPC connected.\n"
                 f"Version: {version}\n"
                 f"RPC: {config.get('metasploit_rpc_host', '127.0.0.1')}:"
-                f"{config.get('metasploit_rpc_port', 55553)}"
+                f"{config.get('metasploit_rpc_port', METASPLOIT_RPC_PORT)}"
             )
         except Exception as e:
             return f"Metasploit RPC connected but core.version failed: {e}"

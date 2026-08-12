@@ -13,6 +13,12 @@ Key improvements over legacy:
 - Hard guardrail (gov/mil/edu domain blocking)
 """
 import sys, os, asyncio, signal
+
+from medusa.core.constants import (
+    EXPERT_MODELS, SENTINEL_MODEL, SUPERVISOR_MODEL,
+    DEFAULT_MODEL, GEMINI_MODEL, METASPLOIT_RPC_PORT,
+    MAX_ITERATIONS,
+)
 import json
 import time
 from pathlib import Path
@@ -48,31 +54,25 @@ def load_config():
     if not CONFIG_PATH.exists():
         default_config = {
             "provider": "deepseek",
-            "expert_models": [
-                "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-                "zai-org/GLM-5.1",
-                "deepseek-ai/DeepSeek-V4-Pro",
-                "deepseek-ai/DeepSeek-V4-Flash",
-            ],
+            "expert_models": EXPERT_MODELS,
             "final_model_id": "deepseek-ai/DeepSeek-V4-Flash",
-            "sentinel_model_id": "Qwen/Qwen2.5-3B-Instruct",
+            "sentinel_model_id": SENTINEL_MODEL,
             "max_tokens_per_request": 8000, "temperature": 0.4,
             "use_database_framework": False, "use_local_bin_folder": False,
             "agent_workspace": "medusa_agent",
-            "metasploit_rpc_host": "127.0.0.1", "metasploit_rpc_port": 55553,
-            "metasploit_rpc_ssl": false,
-            
-            "supervisor_model_id": "Qwen/Qwen2.5-3B-Instruct",
+            "metasploit_rpc_host": "127.0.0.1", "metasploit_rpc_port": METASPLOIT_RPC_PORT,
+            "metasploit_rpc_ssl": False,
+            "supervisor_model_id": SUPERVISOR_MODEL,
             "supervisor_interval": 5, "cost_alert_usd": 0.25,
             "cost_budget_usd": 1.0, "cost_hard_cap_usd": 2.0,
-            "max_iterations": 100,
+            "max_iterations": MAX_ITERATIONS,
         }
         with open(CONFIG_PATH, "w") as f:
             json.dump(default_config, f, indent=4)
     config = json.loads(CONFIG_PATH.read_text())
-    for k, v in {"gemini_model": "gemini-2.5-flash", "deepseek_model": "deepseek-v4-flash",
-                  "supervisor_model_id": "Qwen/Qwen2.5-3B-Instruct",
-                  "supervisor_interval": 5, "max_iterations": 100}.items():
+    for k, v in {"gemini_model": GEMINI_MODEL, "deepseek_model": DEFAULT_MODEL,
+                  "supervisor_model_id": SUPERVISOR_MODEL,
+                  "supervisor_interval": 5, "max_iterations": MAX_ITERATIONS}.items():
         config.setdefault(k, v)
     # Validate with Pydantic — catch typos at startup
     try:

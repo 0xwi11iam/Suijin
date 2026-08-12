@@ -16,6 +16,7 @@ from medusa.modules.loader import load_local_module
 from medusa.core.blue.config import load_blue_config
 from medusa.core.blue.session_manager import init_session, get_session
 from medusa.core.blue.tui.dashboard import render_dashboard
+from medusa.core.constants import BLUE_LAB_PORT, PROXY_DEFAULT_PORT, BLUE_TRAFFIC_LOG
 
 console = Console()
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -53,7 +54,7 @@ async def _run_async():
     # Select target codebase
     console.print("\n[bold white]Select target codebase to defend:[/bold white]")
     console.print("  [bold]1.[/] Type path to codebase")
-    console.print("  [bold]2.[/] Use built-in lab (port 5906)")
+    console.print("  [bold]2.[/] Use built-in lab (port {})".format(BLUE_LAB_PORT))
     console.print("  [bold]3.[/] Back to menu")
     try:
         choice = console.input("\n  Choice  ").strip()
@@ -61,8 +62,8 @@ async def _run_async():
         return
 
     target_path = ""
-    app_port = 5906
-    traffic_log = "/tmp/blue_defend_traffic.jsonl"
+    app_port = BLUE_LAB_PORT
+    traffic_log = str(BLUE_TRAFFIC_LOG)
     blocking_enabled = False
     proxy_server = None  # Forward proxy for intercepting traffic
 
@@ -100,21 +101,21 @@ async def _run_async():
             console.input("\n  [dim]Press Enter to continue...[/dim]")
     elif choice == "2":
         target_path = str(BASE_DIR / "lab" / "blue_target")
-        traffic_log = "/tmp/blue_defend_traffic.jsonl"
-        app_port = 5906
+        traffic_log = str(BLUE_TRAFFIC_LOG)
+        app_port = BLUE_LAB_PORT
 
         import subprocess, urllib.request
 
         # Kill any stale process on port 5906
         try:
             result = subprocess.run(
-                ["lsof", "-ti", ":5906"], capture_output=True, text=True, timeout=3
+                ["lsof", "-ti", f":{BLUE_LAB_PORT}"], capture_output=True, text=True, timeout=3
             )
             for pid in result.stdout.strip().split("\n"):
                 pid = pid.strip()
                 if pid:
                     os.kill(int(pid), _signal.SIGTERM)
-                    console.print(f"[dim]Killed stale process on :5906 (pid {pid})[/dim]")
+                    console.print(f"[dim]Killed stale process on :{BLUE_LAB_PORT} (pid {pid})[/dim]")
             time.sleep(0.5)
         except Exception:
             pass
@@ -129,13 +130,13 @@ async def _run_async():
         for _ in range(10):
             time.sleep(0.3)
             try:
-                urllib.request.urlopen("http://127.0.0.1:5906/", timeout=1)
-                console.print("[green]Vulnerable app ready on port 5906[/green]")
+                urllib.request.urlopen(f"http://127.0.0.1:{BLUE_LAB_PORT}/", timeout=1)
+                console.print(f"[green]Vulnerable app ready on port {BLUE_LAB_PORT}[/green]")
                 break
             except Exception:
                 pass
         else:
-            console.print("[red]Failed to start vulnerable app on port 5906[/red]")
+            console.print(f"[red]Failed to start vulnerable app on port {BLUE_LAB_PORT}[/red]")
             return
     else:
         return
@@ -382,7 +383,7 @@ async def _run_async():
     console.print("[dim]Blue team session ended.[/dim]")
 
 
-def _find_free_port(start: int = 8080, max_attempts: int = 20) -> int:
+def _find_free_port(start: int = PROXY_DEFAULT_PORT, max_attempts: int = 20) -> int:
     """Find a free TCP port."""
     import socket
     for port in range(start, start + max_attempts):
@@ -394,7 +395,7 @@ def _find_free_port(start: int = 8080, max_attempts: int = 20) -> int:
             return port
         except OSError:
             continue
-    return 8080  # fallback
+    return PROXY_DEFAULT_PORT  # fallback
 
 
 def _print_middleware_snippet(console, log_path: str):

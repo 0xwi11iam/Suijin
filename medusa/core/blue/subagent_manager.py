@@ -13,6 +13,8 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional
 
+from medusa.core.constants import RISK_HIGH
+
 
 @dataclass
 class EndpointSubagent:
@@ -246,7 +248,7 @@ Respond in JSON — provide ALL code as FULL strings ready to deploy:
         return {
             "total": len(agents),
             "active": sum(1 for a in agents if a.status == "active"),
-            "high_risk": sum(1 for a in agents if a.risk_score >= 7),
+            "high_risk": sum(1 for a in agents if a.risk_score >= RISK_HIGH),
             "total_anomalies": sum(a.anomalies_reported for a in agents),
             "total_blocked": sum(a.attacks_blocked for a in agents),
             "by_risk": sorted(

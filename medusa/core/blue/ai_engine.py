@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Optional
 from dataclasses import dataclass, field
 
+from medusa.core.constants import DEFAULT_MODEL, RISK_HIGH
+
 
 @dataclass
 class AIAnalysisResult:
@@ -171,12 +173,12 @@ Respond ONLY with valid JSON. No markdown, no explanation outside JSON."""
             # Record cost
             usage = get_usage()
             result.llm_cost_usd = usage.get("est_cost_usd", 0.0)
-            result.llm_model = self.config.get("final_model_id", "deepseek-v4-flash")
+            result.llm_model = self.config.get("final_model_id", DEFAULT_MODEL)
 
         except Exception as e:
             result.reasoning = f"AI call failed: {e}"
             result.verdict = "FLAGGED"
-            result.score = 7
+            result.score = RISK_HIGH
             result.action = "REVIEW"
             result.attack_analysis = f"AI engine unavailable — request flagged for manual review. Error: {e}"
             result.commands_run = []

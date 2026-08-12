@@ -47,6 +47,8 @@
   <a href="#from-recon-to-flag--one-continuous-pipeline">Pipeline</a> &nbsp;·&nbsp;
   <a href="#deliberately-vulnerable-labs----built-in">Labs</a> &nbsp;·&nbsp;
   <a href="#quick-start">Quick Start</a> &nbsp;·&nbsp;
+  <a href="CONTRIBUTING.md">Contributing</a> &nbsp;·&nbsp;
+  <a href="docs/adr/">ADRs</a> &nbsp;·&nbsp;
   <a href="#architecture">Architecture</a> &nbsp;·&nbsp;
   <a href="#configuration">Configuration</a> &nbsp;·&nbsp;
   <a href="#supervisor----zero-cost-oversight">Supervisor</a> &nbsp;·&nbsp;

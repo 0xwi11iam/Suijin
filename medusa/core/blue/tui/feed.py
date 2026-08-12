@@ -27,6 +27,7 @@ from medusa.core.blue.tui.request_panel import (
     render_subagent_assignment,
 )
 from medusa.core.blue.knowledge_graph import get_kg
+from medusa.core.constants import PATTERN_SCORE_THRESHOLD, RISK_HIGH, BLUE_TARPIT_FILE
 
 console = Console()
 
@@ -92,7 +93,7 @@ class FeedConfig:
     baseline_requests: int = 25      # How many requests to establish baseline
     ai_analysis_enabled: bool = True # Whether to send anomalies to AI
     show_all_normals: bool = True    # Show every normal request line
-    pattern_score_threshold: int = 5 # Auto-DECEIVE/BLOCK if pattern score >= 5
+    pattern_score_threshold: int = PATTERN_SCORE_THRESHOLD # Auto-DECEIVE/BLOCK if pattern score >= threshold
     panel_width: int = 80
 
 
@@ -234,7 +235,7 @@ class LiveFeed:
             self.tier1_analysts[0].triage(request, effective_score)
 
         # SOC Tier-2 + Incident Commander: declare incident for severe/repeat attacks
-        if effective_score >= 7 and self.incident_commander:
+        if effective_score >= RISK_HIGH and self.incident_commander:
             hist = kg.get_attacker_history(ip)
             if hist.get("total_flags", 0) >= 2:
                 self.incident_commander.declare_incident(
@@ -313,7 +314,7 @@ class LiveFeed:
         return result
 
     # ── Execute AI's decision ────────────────────────────────────────
-    TARPIT_FILE = "/tmp/blue_tarpit.json"
+    TARPIT_FILE = str(BLUE_TARPIT_FILE)
 
     def _execute_ai_decision(self, result: AIAnalysisResult, ip: str, patterns: list, score: int):
         """Execute whatever the AI decided — commands, code changes, REAL deception."""

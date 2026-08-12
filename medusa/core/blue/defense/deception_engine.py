@@ -3,6 +3,7 @@ from medusa.core.blue.deception.honeypot_factory import generate_honeypot_respon
 from medusa.core.blue.deception.time_sink import TimeSink
 from medusa.core.blue.deception.shadow_redirect import redirect_to_shadow
 from medusa.core.blue.errors import DeceptionError, ErrorSeverity, ok, err
+from medusa.core.constants import SCORE_SHADOW, SCORE_DECEIVE, SCORE_SUSPICIOUS, TARPIT_DEFAULT_DELAY
 
 class DeceptionEngine:
     def __init__(self):
@@ -11,13 +12,13 @@ class DeceptionEngine:
 
     def decide_response(self, attacker_id: str, request: dict, score: int) -> dict:
         try:
-            if score >= 9:
+            if score >= SCORE_SHADOW:
                 redirect_to_shadow(request.get("ip",""))
                 return ok({"action": "shadow_redirect"})
-            if score >= 7:
+            if score >= SCORE_DECEIVE:
                 self.time_sink.tarpit(request.get("ip",""))
-                return ok({"action": "tarpit", "delay": 8.0})
-            if score >= 5:
+                return ok({"action": "tarpit", "delay": TARPIT_DEFAULT_DELAY})
+            if score >= SCORE_SUSPICIOUS:
                 return ok({"action": "honeypot", "response": generate_honeypot_response({"path": request.get("path","/")})})
             return ok({"action": "observe"})
         except Exception as e:

@@ -5,16 +5,20 @@ All notable changes to Medusa.
 ## [2.0.1] — 2026-08-12
 
 ### Added
-- **`medusa/core/constants.py`** — centralized magic strings: model IDs, default ports (5906/8080/55553), scoring thresholds (5/6/7/8/9), timeouts, limits, deception params, configurable TMP_DIR
+- **`CONTRIBUTING.md`** — developer setup guide, test/lint/type-check commands, architecture overview, code style rules, commit conventions
+- **`docs/adr/001-langgraph-over-asyncio.md`** — ADR: why LangGraph state machine instead of raw asyncio loop
+- **`docs/adr/002-json-kg-over-neo4j.md`** — ADR: why JSON knowledge graph instead of Neo4j
+- **`medusa/core/constants.py`** — centralized magic strings: model IDs, default ports (5906/8080/55553), scoring thresholds (5/6/7/8/9), timeouts, limits, deception params, blue team file paths, configurable TMP_DIR
 - **`medusa/tools/guardrails.py`** — extracted from dispatch.py: 14 blocked command patterns, `is_dangerous()`, `confirm_global_action()`
 - **`medusa/tools/workspace.py`** — extracted from dispatch.py: `resolve_workspace_path()` with symlink resolution, allowlist boundary checks
 - **`medusa/tests/test_tools.py`** — 43 behavioral tests: all 14 blocked patterns, edge cases (case insensitivity, whitespace), workspace security (symlink bypass, allowlist, traversal), constants validation (threshold ordering, TMP_DIR env var)
 - **macOS path handling** — `/private/var/tmp` added to workspace allowlist for macOS symlink resolution
 
 ### Changed
+- **Constants wired into 12 files**: proxy.py, blueteamer.py, ai_engine.py, deception_engine.py, tier1_analyst.py, escalation_policy.py, subagent_manager.py, redteamer.py, knowledge_graph.py, feed.py, capture.py, dispatch.py
 - **Test suite: 83 → 134 tests** (7 test files)
-- README updated: accurate test counts, new file structure (`constants.py`, `guardrails.py`, `workspace.py`, `errors.py`, `config_models.py`, `paths.py`, `.github/workflows/ci.yml`, `CHANGELOG.md`)
-- README testing section: `pytest` command, per-file breakdown table, CI/CD badge mention
+- README updated: accurate test counts, new file structure, pytest command, links to CONTRIBUTING.md and ADRs
+- README table of contents: added Contributing + ADRs links
 
 ## [2.0.0] — 2026-08-12
 
