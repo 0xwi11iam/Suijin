@@ -14,7 +14,8 @@ def simulate(iterations=10):
         try:
             if method == "GET": requests.get(TARGET+path, timeout=5)
             else: requests.post(TARGET+path, data=data, timeout=5)
-        except: pass
+        except Exception:
+            pass  # Lab-only, non-critical
         time.sleep(random.uniform(0.5, 2.0))
     print(f"Simulated {iterations} attacks against {TARGET}")
 if __name__ == "__main__": simulate()

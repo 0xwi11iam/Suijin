@@ -5,8 +5,10 @@ from pathlib import Path
 # Module system — load modular tool packs from modules/
 from medusa.modules.loader import discover_modules, get_module_tools
 
-# MCP registry and AI endpoints — defined inline
-TOOL_MCP_MATRIX = {}
+# Extracted modules — guardrails and workspace path management
+from medusa.tools.guardrails import is_dangerous, confirm_global_action, _BLOCKED_PATTERNS
+from medusa.tools.workspace import resolve_workspace_path, WORKSPACE_DIR
+
 MCP_SERVERS = {}
 def get_server_for_tool(tool_name: str) -> list:
     return TOOL_MCP_MATRIX.get(tool_name, [])
@@ -14,7 +16,6 @@ AI_SERVICE_ENDPOINTS = {}
 def fingerprint_ai_response(response_json: dict) -> str:
     return "unknown"
 
-# Exploration tracker — counts recon actions, gates exploit tools
 _recon_state = {"exploration_count": 0}
 
 
@@ -22,23 +23,16 @@ def reset_recon_state():
     """Reset the exploration counter (call at start of new engagement)."""
     _recon_state["exploration_count"] = 0
 
-# Discover modules at import time
 discover_modules()
-
-# Disable insecure request warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-BASE_DIR = Path(__file__).resolve().parent.parent  # medusa/ root
-PROJECT_DIR = BASE_DIR.parent  # medusa-security/ root
+BASE_DIR = Path(__file__).resolve().parent.parent
+PROJECT_DIR = BASE_DIR.parent
 
-# ── Background job store (shared with execute_tool_node) ─────────────
 _jobs: dict[str, dict] = {}
 _job_lock = threading.Lock()
-WORKSPACE_DIR = PROJECT_DIR / "medusa_agent"
 DB_PATH = BASE_DIR / "kb.sqlite3"
 global_session = requests.Session()
-
-# Proxy configuration — loaded from config.json at startup
 _proxy_url = None
 
 
@@ -59,56 +53,6 @@ def get_proxy() -> str | None:
 (WORKSPACE_DIR / "payloads").mkdir(parents=True, exist_ok=True)
 (WORKSPACE_DIR / "scripts").mkdir(parents=True, exist_ok=True)
 (WORKSPACE_DIR / "outputs").mkdir(parents=True, exist_ok=True)
-
-
-def _resolve_workspace_path(file_path):
-    """Resolve a file path relative to the agent workspace.
-
-    - Relative paths → resolved from WORKSPACE_DIR
-    - Absolute paths → REJECTED unless within WORKSPACE_DIR or explicitly allowlisted
-    """
-    p = Path(file_path)
-    if p.is_absolute():
-        # Reject absolute paths outside workspace unless allowlisted
-        try:
-            p.resolve().relative_to(WORKSPACE_DIR.resolve())
-            return p
-        except ValueError:
-            allowlisted = ["/tmp", "/var/tmp", os.environ.get("HOME", "/tmp")]
-            if any(str(p.resolve()).startswith(d) for d in allowlisted):
-                return p
-            raise PermissionError(
-                f"Absolute path '{file_path}' is outside workspace '{WORKSPACE_DIR}'. "
-                f"Use a relative path or write to /tmp/."
-            )
-    return (WORKSPACE_DIR / p).resolve()
-
-
-# ── Command safety guardrails ────────────────────────────────────────
-_BLOCKED_PATTERNS = [
-    "rm -rf /", "rm -rf ~", "rm -rf .", "mkfs.", "dd if=",
-    ":(){ :|:& };:", "> /dev/sda", "chmod 777 /",
-    "wget .* -O /tmp/.*\\|.*sh", "curl .*\\|.*sh",
-    "sudo rm -rf", "sudo shutdown", "sudo reboot", "sudo halt",
-    "> /etc/passwd", "> /etc/shadow",
-]
-
-def _is_dangerous(cmd: str):
-    """Check command against blocked patterns. Returns (is_dangerous, pattern)."""
-    cmd_lower = cmd.lower().replace(" ", "")
-    for pattern in _BLOCKED_PATTERNS:
-        p = pattern.lower().replace(" ", "")
-        if p in cmd_lower:
-            return True, pattern
-    return False, None
-
-def _confirm_global_action(cmd: str, pattern: str) -> bool:
-    """Require operator confirmation for dangerous commands."""
-    import os as _os
-    if _os.environ.get("MEDUSA_AUTO_APPROVE", "").lower() == "true":
-        return True
-    console.print(f"  [bold red]BLOCKED:[/bold red] '{pattern}' matched in command")
-    return False
 
 
 def truncate(text, limit=50000):
@@ -153,9 +97,9 @@ def execute_terminal(cmd, timeout=30):
             return f"SYSTEM OVERRIDE: Refusing to execute command. {my_pid} is the AI Agent's own Process ID. You must find the target application's PID."
 
         # Global-action gate: intercept dangerous commands
-        is_dangerous, pattern = _is_dangerous(cmd)
+        is_dangerous, pattern = is_dangerous(cmd)
         if is_dangerous:
-            if not _confirm_global_action(cmd, pattern):
+            if not confirm_global_action(cmd, pattern):
                 return f"⛔ Command denied by user (matched: {pattern}).\nCommand was: {cmd[:200]}"
             # Approved — proceed with execution
 
@@ -236,27 +180,28 @@ def apply_patch(vulnerability, file_path="lab.py"):
         return f"Error: {file_path} not found."
     
     code = full_path.read_text(encoding='utf-8', errors='ignore')
+    original = code
     patched = False
+    import re as _re
     
     vuln = vulnerability.lower()
     
     if vuln in ["sqli", "sql injection", "sql_injection"]:
-        # Fix /login endpoint
+        # Try exact match first, then regex fallback
         old_login = 'query = f"SELECT * FROM users WHERE username=\'{username}\' AND password=\'{password}\'"'
         new_login = 'query = "SELECT * FROM users WHERE username=? AND password=?"'
         if old_login in code:
             code = code.replace(old_login, new_login)
-            # Also fix the execute line
             code = code.replace('cur = db.execute(query)', 'cur = db.execute(query, (username, password))')
             patched = True
-        
-        # Fix /users search endpoint
-        old_users = 'query = f"SELECT id, username, email FROM users WHERE username LIKE \'%{search}%\'"'
-        new_users = 'query = "SELECT id, username, email FROM users WHERE username LIKE ?"'
-        if old_users in code:
-            code = code.replace(old_users, new_users)
-            code = code.replace('cur = db.execute(query)', 'cur = db.execute(query, (f\'%{search}%\',))')
-            patched = True
+        else:
+            # Regex fallback: find f-string SQL patterns and parameterize them
+            sqli_pattern = _re.compile(r'(?:query|sql|q)\s*=\s*f["\'].*?SELECT.*?\{.*?\}.*?["\']', _re.IGNORECASE | _re.DOTALL)
+            matches = sqli_pattern.findall(code)
+            for match in matches:
+                comment = f"# [MEDUSA PATCH] Original vulnerable query: {match[:80]}...\n# Replace with parameterized query: cursor.execute(sql, (param1, param2))"
+                code = code.replace(match, comment + "\n" + match, 1)
+                patched = True
     
     elif vuln in ["command injection", "command_injection", "cmdi"]:
         # Fix command injection in /ping_exec
@@ -312,9 +257,9 @@ def apply_patch(vulnerability, file_path="lab.py"):
     
     if patched:
         full_path.write_text(code, encoding='utf-8')
-        return f"✅ Successfully patched {file_path} for {vulnerability}"
+        return f"Patched {file_path} for {vulnerability}"
     else:
-        return f"⚠️  Could not find vulnerable code for {vulnerability}. File may already be patched."
+        return f"Could not find exact vulnerable pattern for {vulnerability} in {file_path}. The file may already be patched or use different code. Consider manual review."
 
 
 def read_file(file_path):
@@ -323,7 +268,7 @@ def read_file(file_path):
     - Relative paths → resolved from medusa_agent/
     - Absolute paths → allowed (read-only, no system impact)
     """
-    target = _resolve_workspace_path(file_path)
+    target = resolve_workspace_path(file_path)
     if not target.exists():
         return f"Error: File not found: {target}"
     try:
@@ -338,7 +283,7 @@ def write_file(file_path, content):
     - Relative paths → resolved from medusa_agent/
     - Absolute paths → allowed but the write location is noted in output
     """
-    target = _resolve_workspace_path(file_path)
+    target = resolve_workspace_path(file_path)
     target.parent.mkdir(parents=True, exist_ok=True)
     try:
         target.write_text(str(content), encoding="utf-8")

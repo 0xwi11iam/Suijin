@@ -1,0 +1,5 @@
+huggingface_hub==1.25.1
+pydantic==2.13.4
+pydantic_core==2.46.4
+requests==2.34.2
+rich==15.0.0

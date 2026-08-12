@@ -14,5 +14,7 @@ def map_auth(root: Path, endpoints: list) -> list:
             elif re.search(r'@public|@noauth|allow_anonymous',ctx):
                 ep["auth"]="public"
             else: ep["auth"]="none"
-        except: ep["auth"]="unknown"
+        except Exception:
+            import logging; logging.getLogger("medusa").warning("Auth mapping failed", exc_info=True)
+            ep["auth"]="unknown"
     return endpoints

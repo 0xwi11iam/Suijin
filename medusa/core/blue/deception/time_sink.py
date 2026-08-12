@@ -1,4 +1,10 @@
-"""Time sink — waste attacker time with slow responses, redirects, loops."""
+"""Time sink — waste attacker time with slow responses, redirects, loops.
+
+NOTE: This module uses synchronous time.sleep(). It is designed for use in
+threaded contexts (e.g., deception_engine.py). The blue team feed uses
+file-based tarpit (/tmp/blue_tarpit.json) read by the proxy/Flask app,
+which applies delays at the HTTP layer without blocking the event loop.
+"""
 import time, random
 
 class TimeSink:

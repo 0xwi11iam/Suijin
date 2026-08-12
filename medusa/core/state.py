@@ -29,6 +29,14 @@ GRAPH_RELATIONSHIPS = {
     "RESOLVES_TO": "RESOLVES_TO", "RUNS_ON": "RUNS_ON", "USES": "USES_TECHNOLOGY",
 }
 def build_target_query(target_name: str) -> str:
+    """DEPRECATED: Neo4j not connected. Use knowledge_graph.py instead.
+
+    Returns a Cypher query string for reference only.
+    The blue team knowledge graph (core/blue/knowledge_graph.py) and
+    red team knowledge graph (intel/knowledge_graph.py) are the active stores.
+    """
+    import warnings
+    warnings.warn("build_target_query is deprecated. Use knowledge_graph APIs.", DeprecationWarning, stacklevel=2)
     return f"MATCH (t:Target {{name: '{target_name}'}}) OPTIONAL MATCH (t)-[:EXPOSES]->(s:Service) OPTIONAL MATCH (s)-[:HAS_VULNERABILITY]->(v:Vulnerability) RETURN t, collect(DISTINCT s) as services, collect(DISTINCT v) as vulnerabilities"
 
 

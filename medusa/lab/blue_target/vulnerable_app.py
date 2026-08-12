@@ -104,9 +104,13 @@ def create_jwt(user_id: int, role: str, expires_hours: int = 24) -> str:
 
 def decode_jwt(token: str) -> dict:
     try: return pyjwt.decode(token, options={"verify_signature": False})
-    except: pass
+    except Exception:
+
+        pass  # Lab test apppass
     try: return pyjwt.decode(token, app.config['SECRET_KEY'], algorithms=[app.config['JWT_ALGORITHM']])
-    except: return {}
+    except Exception:
+
+        pass  # Lab test appreturn {}
 
 def require_role(*roles: str):
     def decorator(f):
@@ -445,7 +449,9 @@ def debug_state():
     tarpit_state = {}
     if os.path.exists(TARPIT_FILE):
         try: tarpit_state = json.loads(open(TARPIT_FILE).read())
-        except: pass
+        except Exception:
+
+            pass  # Lab test apppass
     return jsonify({
         "db_path": DB, "upload_dir": UPLOAD_DIR,
         "traffic_log": TRAFFIC_LOG, "tarpit_file": TARPIT_FILE,

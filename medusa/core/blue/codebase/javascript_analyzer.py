@@ -11,5 +11,6 @@ def extract_js_routes(root: Path) -> list:
             source = jsfile.read_text(errors="ignore")
             for m in re.finditer(r'(?:app|router)\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']', source):
                 endpoints.append({"method":m.group(1).upper(),"path":m.group(2),"file":str(jsfile),"line":source[:m.start()].count("\n")+1,"framework":"express"})
-        except: pass
+        except Exception:
+            continue
     return endpoints

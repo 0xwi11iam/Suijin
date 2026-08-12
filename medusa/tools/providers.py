@@ -133,7 +133,7 @@ def _lobstertrap_available():
     try:
         resp = req.get(LOBSTERTRAP_DASHBOARD, timeout=1)
         return resp.status_code == 200
-    except:
+    except Exception:
         return False
 
 def _call_via_lobstertrap(messages, model, temperature, max_tokens):

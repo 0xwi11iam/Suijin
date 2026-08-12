@@ -16,5 +16,6 @@ def extract_python_routes(root: Path) -> list:
                 endpoints.append({"method":m.group(1).upper(),"path":m.group(2),"file":str(pyfile),"line":source[:m.start()].count("\n")+1,"framework":"fastapi"})
             for m in re.finditer(r'path\s*\(\s*["\']([^"\']+)["\']\s*,\s*(\w+)', source):
                 endpoints.append({"method":"ANY","path":m.group(1),"file":str(pyfile),"line":source[:m.start()].count("\n")+1,"framework":"django","view":m.group(2)})
-        except: pass
+        except Exception:
+            continue
     return endpoints

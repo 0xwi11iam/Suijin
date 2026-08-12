@@ -10,5 +10,6 @@ def extract_sql_queries(root: Path) -> list:
             for m in re.finditer(r'\.execute\s*\(\s*["\']([^"\']*(?:SELECT|INSERT|UPDATE|DELETE)[^"\']*)', source, re.IGNORECASE):
                 sql = m.group(1)
                 queries.append({"file":str(pyfile),"line":source[:m.start()].count("\n")+1,"sql":sql[:200],"parameterized":"%s" in sql or "?" in sql})
-        except: pass
+        except Exception:
+            continue
     return queries

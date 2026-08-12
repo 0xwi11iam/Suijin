@@ -46,6 +46,12 @@ from medusa.skills.redos import REDOS_SKILL_PROMPT
 from medusa.skills.http_smuggling import HTTP_SMUGGLING_SKILL_PROMPT
 from medusa.skills.dns_rebinding import DNS_REBINDING_SKILL_PROMPT
 from medusa.skills.soul import SOUL_SKILL_PROMPT
+# ── Blue Team skills ──────────────────────────────────────────────────
+from medusa.skills.blue_recon import BLUE_RECON_PROMPT
+from medusa.skills.blue_monitoring import BLUE_MONITORING_PROMPT
+from medusa.skills.blue_incident import BLUE_INCIDENT_PROMPT
+from medusa.skills.blue_patching import BLUE_PATCHING_PROMPT
+from medusa.skills.blue_forensics import BLUE_FORENSICS_PROMPT
 
 SKILL_MAP = {
     # Original 8
@@ -107,6 +113,12 @@ SKILL_MAP = {
     "react": SOUL_SKILL_PROMPT, "nextjs": SOUL_SKILL_PROMPT, "remix": SOUL_SKILL_PROMPT,
     "vue": SOUL_SKILL_PROMPT, "angular": SOUL_SKILL_PROMPT, "svelte": SOUL_SKILL_PROMPT,
     "js_heavy": SOUL_SKILL_PROMPT, "javascript": SOUL_SKILL_PROMPT,
+    # ── Blue Team ──
+    "blue_recon": BLUE_RECON_PROMPT, "blue_reconnaissance": BLUE_RECON_PROMPT,
+    "blue_monitoring": BLUE_MONITORING_PROMPT, "blue_traffic": BLUE_MONITORING_PROMPT,
+    "blue_incident": BLUE_INCIDENT_PROMPT, "blue_response": BLUE_INCIDENT_PROMPT,
+    "blue_patching": BLUE_PATCHING_PROMPT, "blue_hotfix": BLUE_PATCHING_PROMPT,
+    "blue_forensics": BLUE_FORENSICS_PROMPT, "blue_investigation": BLUE_FORENSICS_PROMPT,
 }
 
 # Default recon prompt — used when no specific attack path is set

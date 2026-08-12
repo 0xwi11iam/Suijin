@@ -46,7 +46,9 @@ def init_db():
     ]
     for u, p, r in users:
         try: db.execute('INSERT INTO users (username, password_hash, role) VALUES (?,?,?)', (u, p, r))
-        except: pass
+        except Exception:
+
+            pass  # Lab test apppass
     # API keys
     keys = [
         (1, 'dk_api_4a2f8b1c9d3e', 'full_access'),
@@ -54,7 +56,9 @@ def init_db():
     ]
     for uid, k, perm in keys:
         try: db.execute('INSERT INTO api_keys (user_id, key, permissions) VALUES (?,?,?)', (uid, k, perm))
-        except: pass
+        except Exception:
+
+            pass  # Lab test apppass
     db.commit(); db.close()
 
 @app.teardown_appcontext
@@ -77,7 +81,9 @@ def login():
         # VULN: SQL injection
         q = f"SELECT * FROM users WHERE username='{username}'"
         try: user = db.execute(q).fetchone()
-        except: user = None
+        except Exception:
+
+            pass  # Lab test appuser = None
         if user:
             # VULN: SQLi bypass — password check always passes when row exists
             session['user_id'] = user['id']
@@ -97,7 +103,9 @@ def dashboard():
     # VULN: SSTI — custom_message rendered via render_template_string
     if msg and ('{{' in msg or '{%' in msg):
         try: msg = render_template_string(msg)
-        except: pass
+        except Exception:
+
+            pass  # Lab test apppass
     return RENDER('dashboard.html', user=user, message=msg)
 
 @app.route('/settings', methods=['GET', 'POST'])
@@ -203,7 +211,7 @@ def view_logs():
     log_path = os.path.join(LOG_DIR, log_file)
     try:
         content = open(log_path).read()
-    except:
+    except Exception:
         content = 'Log file not found'
     return RENDER('logs.html', content=content, log_file=log_file)
 

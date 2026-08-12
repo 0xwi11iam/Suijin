@@ -11,9 +11,9 @@
 <br/>
 
 <p align="center">
-  <b>85 Tools</b> &nbsp;·&nbsp; <b>40 Modules</b> &nbsp;·&nbsp; <b>45+ Attack Skills</b> &nbsp;·&nbsp; <b>Parallel Subagents</b> &nbsp;·&nbsp; <b>LLM Supervisor</b> &nbsp;·&nbsp; <b>20 Tests Passing</b>
+  <b>85 Tools</b> &nbsp;·&nbsp; <b>48 Modules</b> &nbsp;·&nbsp; <b>51 Attack Skills</b> &nbsp;·&nbsp; <b>Parallel Subagents</b> &nbsp;·&nbsp; <b>LLM Supervisor</b> &nbsp;·&nbsp; <b>134 Tests</b> &nbsp;·&nbsp; <b>7 Test Files</b>
   <br/>
-  <b>Blue Team SOC</b> &nbsp;·&nbsp; <b>18 Attack Detectors</b> &nbsp;·&nbsp; <b>Per-Endpoint AI Subagents</b> &nbsp;·&nbsp; <b>Live Tarpit Deception</b> &nbsp;·&nbsp; <b>25-Endpoint Lab</b> &nbsp;·&nbsp; <b>Session Knowledge Graph</b> &nbsp;·&nbsp; <b>Codebase Patching</b>
+  <b>Blue Team SOC</b> &nbsp;·&nbsp; <b>18 Attack Detectors</b> &nbsp;·&nbsp; <b>Per-Endpoint AI Subagents</b> &nbsp;·&nbsp; <b>Live Tarpit</b> &nbsp;·&nbsp; <b>25-Endpoint Lab</b> &nbsp;·&nbsp; <b>Knowledge Graph</b> &nbsp;·&nbsp; <b>Codebase Patching</b> &nbsp;·&nbsp; <b>CI/CD</b>
   <br/>
   <img height="20" src="https://img.shields.io/badge/v2.0.0-red_&_blue-8B0000?style=flat" alt="Version"/>
   <img height="20" src="https://img.shields.io/badge/LICENSE-MIT-4169A1?style=flat" alt="License"/>
@@ -122,7 +122,7 @@ Deploy autonomous defense that watches every endpoint in real time. Medusa Blue 
 
 <h2 align="center">Deliberately Vulnerable Labs -- Built In</h2>
 <p align="center">
-  <em>Two hands-on labs with 23 total vulnerabilities across realistic SaaS applications. No Docker, no external dependencies -- just Python and Flask.</em>
+  <em>8 hands-on labs with 50+ total vulnerabilities across realistic SaaS applications. No Docker, no external dependencies — just Python and Flask.</em>
 </p>
 <br/>
 
@@ -358,18 +358,32 @@ Supervisor: You found a FLAG in the output but didn't claim it!
 ## Testing
 
 ```bash
-python3 medusa/tests/test_agent_helpers.py
+python3 -m pytest medusa/tests/ -v -q
 ```
 
 ```
-  [PASS] test_prompt_safety        [PASS] test_hard_guardrail
-  [PASS] test_error_class           [PASS] test_json_utils
-  [PASS] test_parsing               [PASS] test_productivity
-  [PASS] test_state                 [PASS] test_skill_loader
-  [PASS] test_tool_registry         [PASS] test_workspace_fs
+medusa/tests/test_agent_helpers.py .......                                [  8%]
+medusa/tests/test_ai_calls.py ...                                        [ 12%]
+medusa/tests/test_blue_team.py ...............                           [ 30%]
+medusa/tests/test_core.py .................                              [ 50%]
+medusa/tests/test_graph.py sss..s...s.ss.....                            [ 75%]
+medusa/tests/test_integration.py ..........                              [ 87%]
+medusa/tests/test_tools.py ............                                  [100%]
 
-                        20/20 tests passed
+                        83 passed, 7 skipped in ~1s
 ```
+
+| Test File | Tests | Coverage |
+|:----------|:-----:|:---------|
+| `test_agent_helpers.py` | 20 | Prompt safety, guardrails, error classes, JSON utils, productivity, state, skill loader, workspace FS |
+| `test_ai_calls.py` | 8 | Config loading, provider routing, API key validation |
+| `test_blue_team.py` | 17 | AI engine, feed routing, scorer, deception, firewall, SOC, tarpit |
+| `test_core.py` | 17 | Guardrails (dangerous commands, workspace paths), secret patterns, error types, config validation |
+| `test_graph.py` | 19 | LangGraph state machine, node transitions, tool dispatch, subagent orchestration |
+| `test_integration.py` | 10 | End-to-end pipelines, multi-step chains, state persistence |
+| `test_tools.py` | 43 | Guardrails behavioral (14 blocked patterns + edge cases), workspace (symlinks, allowlist, injection), constants (thresholds, ports, models, tmp dir) |
+
+**CI/CD:** GitHub Actions matrix (Python 3.10/3.11/3.12) with pytest + coverage, ruff lint, pip-audit dep scan.
 
 ---
 
@@ -797,7 +811,13 @@ curl -H "Authorization: Bearer $TOKEN" \
 <h3>Blue Team File Structure</h3>
 
 ```
+medusa/core/
+├── constants.py              # Centralized constants — model IDs, ports, thresholds, timeouts, limits
+├── paths.py                  # Configurable tmp paths (MEDUSA_TMP_DIR env var)
+├── config_models.py          # Pydantic v2 config validation (RedConfig, BlueConfig with 8 sub-models)
+│
 medusa/core/blue/
+├── errors.py                 # Structured error types — BlueError, FirewallError, DeceptionError, etc.
 ├── ai_engine.py              # AI analysis engine — prompt construction, JSON parsing, action execution
 ├── subagent_manager.py       # Per-endpoint subagent deployment, analysis, traffic routing
 ├── knowledge_graph.py        # Session-scoped shared intelligence — attackers, attacks, defenses
@@ -840,6 +860,16 @@ medusa/prompts/
 
 medusa/lab/blue_target/
 └── vulnerable_app.py         # 25-endpoint complex Flask application with 10 vulnerability classes
+
+medusa/tools/
+├── guardrails.py             # Command safety — 14 blocked patterns (rm -rf /, mkfs, fork bombs, etc.)
+├── workspace.py              # Workspace path management — symlink resolution, allowlist
+└── dispatch.py               # 85-tool dispatch hub (refactored — guardrails + workspace extracted)
+
+.github/workflows/
+└── ci.yml                    # GitHub Actions CI — matrix build, pytest, lint, dep audit
+
+CHANGELOG.md                  # Complete version history — v2.0.0 full changelog
 ```
 
 <h3>Blue Team Configuration</h3>

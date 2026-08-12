@@ -46,7 +46,8 @@ def reload_skills(verbose: bool = False):
     try:
         if "medusa.skills.loader" in sys.modules:
             importlib.reload(sys.modules["medusa.skills.loader"])
-    except:
+    except Exception as e:
+        import logging; logging.getLogger("medusa").warning(f"Skill reload failed: {e}")
         pass
 
     if verbose and reloaded:

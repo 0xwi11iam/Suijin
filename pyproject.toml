@@ -1,0 +1,31 @@
+[tool.pytest.ini_options]
+testpaths = ["medusa/tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "ai: marks tests that need live API keys (deselect with '-m \"not ai\"')",
+    "integration: marks integration tests",
+]
+asyncio_mode = "auto"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+exclude = ["medusa/lab/", "medusa_agent/", "__pycache__/", ".git/"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "SIM", "I"]
+ignore = ["E501", "B904", "B007"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pyright]
+typeCheckingMode = "basic"
+exclude = ["medusa/lab/", "medusa_agent/", "__pycache__/"]
+reportMissingImports = false
+reportOptionalMemberAccess = false

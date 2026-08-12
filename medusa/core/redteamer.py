@@ -60,7 +60,7 @@ def load_config():
             "use_database_framework": False, "use_local_bin_folder": False,
             "agent_workspace": "medusa_agent",
             "metasploit_rpc_host": "127.0.0.1", "metasploit_rpc_port": 55553,
-            "metasploit_rpc_port": 55553,
+            "metasploit_rpc_ssl": false,
             
             "supervisor_model_id": "Qwen/Qwen2.5-3B-Instruct",
             "supervisor_interval": 5, "cost_alert_usd": 0.25,
@@ -74,6 +74,13 @@ def load_config():
                   "supervisor_model_id": "Qwen/Qwen2.5-3B-Instruct",
                   "supervisor_interval": 5, "max_iterations": 100}.items():
         config.setdefault(k, v)
+    # Validate with Pydantic — catch typos at startup
+    try:
+        from medusa.core.config_models import RedConfig
+        validated = RedConfig(**config)
+        config.update(validated.model_dump())
+    except Exception as e:
+        import logging; logging.getLogger("medusa").warning(f"Config validation failed: {e}. Using raw config.")
     return config
 
 
@@ -387,11 +394,13 @@ async def run_red_team_async(config, objective, api_key=None):
         try:
             from medusa.tools.audit_trail import end_audit
             end_audit(spend)
-        except: pass
+        except Exception:
+            import logging; logging.getLogger("medusa").warning("Agent loop error", exc_info=True)
         try:
             from medusa.tools.session_replay import save_session
             save_session(thread_id, objective, config, final_state, spend)
-        except: pass
+        except Exception as e:
+            import logging; logging.getLogger("medusa").warning(f"Session save failed: {e}")
 
     except Exception as e:
         console.print(f"[bold red]Agent error: {e}[/bold red]")

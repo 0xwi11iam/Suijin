@@ -53,7 +53,7 @@ _ATTACK_PATTERNS = [
     ("Scanner User-Agent", r"(?i)(nmap|sqlmap|nikto|dirbuster|gobuster|burpsuite|acunetix|nessus|openvas|zap|w3af)", 4),
     # New patterns
     ("Mass Assignment", r"(?:\"role\"\s*:\s*\"(?:admin|root|superuser)\"|\"is_admin\"\s*:\s*true|\"isAdmin\"\s*:\s*true)", 4),
-    ("Auth Bypass Header", r"(?:X-Admin:\s*true|X-Role:\s*admin|X-Forwarded-For:\s*127\.0\.0\.1|X-Original-URL:|X-Rewrite-URL:)", 5),
+    ("Auth Bypass Header", r"(?:X-Admin[\"':\s]*true|X-Role[\"':\s]*admin|X-Forwarded-For[\"':\s]*127\.0\.0\.1|X-Original-URL|X-Rewrite-URL)", 5),
     ("Brute Force", r"(?i)(?:password.*password|Hydra|Medusa|Ncrack|patator|crowbar)", 3),
     ("File Inclusion", r"(?i)(php://filter|php://input|data://text|expect://|file:///etc)", 5),
     ("GraphQL Attack", r"(?i)(__schema|__type|__typename|fragment|query\s*\{|mutation\s*\{)", 3),
@@ -104,6 +104,11 @@ class LiveFeed:
         ai_engine: BlueAIEngine,
         subagent_manager: SubagentManager,
         config: FeedConfig = None,
+        soc_lead=None,
+        tier1_analysts=None,
+        tier2=None,
+        threat_hunter=None,
+        incident_commander=None,
     ):
         self.ai_engine = ai_engine
         self.subagent_manager = subagent_manager
@@ -112,6 +117,13 @@ class LiveFeed:
         self.baseline_established = False
         self.pending_analyses: dict[int, asyncio.Task] = {}
         self._analysis_queue = asyncio.Queue()
+        # SOC team — actually used now
+        self.soc_lead = soc_lead
+        self.tier1_analysts = tier1_analysts or []
+        self.tier2 = tier2
+        self.threat_hunter = threat_hunter
+        self.incident_commander = incident_commander
+        self._recent_requests: list = []  # For threat hunter to scan
 
     async def process_request(self, request: dict) -> Optional[AIAnalysisResult]:
         """Process a single incoming request through the tier system.
@@ -208,6 +220,36 @@ class LiveFeed:
         # Record in knowledge graph
         kg = get_kg()
         kg.add_attack(ip, path, pattern_names[0], effective_score, body)
+
+        # SOC Tier-1: triage this attack
+        matched_t1 = None
+        for t1 in self.tier1_analysts:
+            if t1.endpoint == path or t1.endpoint == "*":
+                triage_result = t1.triage(request, effective_score)
+                if triage_result.get("action") == "escalate_to_tier2" and self.tier2:
+                    self.tier2.validate(triage_result, kg.get_attacker_history(ip))
+                matched_t1 = t1
+                break
+        if not matched_t1 and self.tier1_analysts:
+            self.tier1_analysts[0].triage(request, effective_score)
+
+        # SOC Tier-2 + Incident Commander: declare incident for severe/repeat attacks
+        if effective_score >= 7 and self.incident_commander:
+            hist = kg.get_attacker_history(ip)
+            if hist.get("total_flags", 0) >= 2:
+                self.incident_commander.declare_incident(
+                    ip, pattern_names[0], effective_score, [path])
+                if self.soc_lead:
+                    self.soc_lead.escalate(ip, f"Repeat offender — {pattern_names[0]}", effective_score)
+
+        # Threat hunter: scan recent requests for missed patterns
+        if self.threat_hunter and self.request_count % 10 == 0:
+            self.threat_hunter.hunt(self._recent_requests[-20:])
+
+        # Track for threat hunter
+        self._recent_requests.append(request)
+        if len(self._recent_requests) > 50:
+            self._recent_requests = self._recent_requests[-50:]
 
         # Run counter-recon on attacker IP (first time only)
         if prev == 0:

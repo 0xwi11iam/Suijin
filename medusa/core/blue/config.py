@@ -66,9 +66,18 @@ def load_blue_config() -> dict:
         loaded = json.loads(CONFIG_PATH.read_text())
         merged = dict(DEFAULT_BLUE_CONFIG)
         _deep_merge(merged, loaded)
+    else:
+        merged = dict(DEFAULT_BLUE_CONFIG)
+        CONFIG_PATH.write_text(json.dumps(DEFAULT_BLUE_CONFIG, indent=2))
+
+    # Validate with Pydantic model — catches typos and bad values at startup
+    try:
+        from medusa.core.config_models import BlueConfig
+        validated = BlueConfig(**merged)
+        return validated.model_dump()
+    except Exception as e:
+        import logging; logging.getLogger("medusa").warning(f"Blue config validation failed: {e}. Using raw config.")
         return merged
-    CONFIG_PATH.write_text(json.dumps(DEFAULT_BLUE_CONFIG, indent=2))
-    return dict(DEFAULT_BLUE_CONFIG)
 
 
 def save_blue_config(config: dict) -> None:

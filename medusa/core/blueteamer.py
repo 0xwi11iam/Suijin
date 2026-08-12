@@ -232,7 +232,10 @@ async def _run_async():
         ai_analysis_enabled=True,
         show_all_normals=True,
     )
-    feed = LiveFeed(ai_engine, subagent_mgr, feed_config)
+    feed = LiveFeed(ai_engine, subagent_mgr, feed_config,
+                    soc_lead=soc_lead, tier1_analysts=tier1_analysts,
+                    tier2=tier2, threat_hunter=hunter,
+                    incident_commander=commander)
     feed.blocking_enabled = blocking_enabled
 
     # ── Main monitoring loop ──

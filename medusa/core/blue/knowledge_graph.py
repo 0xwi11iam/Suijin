@@ -145,6 +145,32 @@ class BlueKnowledgeGraph:
         if KG_PATH.exists():
             KG_PATH.unlink()
 
+    def bridge_from_red_team(self):
+        """Import intelligence from the red team knowledge graph.
+
+        Reads medusa/intel/knowledge_graph.json and imports WAF rules,
+        blocked patterns, confirmed CVEs, and discovered endpoints into
+        the blue team's intelligence nodes for defensive use.
+        """
+        red_kg_path = Path(__file__).resolve().parent.parent.parent / "intel" / "knowledge_graph.json"
+        if not red_kg_path.exists():
+            return 0
+        try:
+            red_data = json.loads(red_kg_path.read_text())
+            imported = 0
+            # Import findings that are relevant for defense
+            for target, findings in red_data.items() if isinstance(red_data, dict) else []:
+                if isinstance(findings, list):
+                    for finding in findings:
+                        if isinstance(finding, dict):
+                            cve = finding.get("cve") or finding.get("vulnerability")
+                            if cve:
+                                self.add_intelligence("red_team", f"CVE: {cve} — {finding.get('description', '')}")
+                                imported += 1
+            return imported
+        except Exception:
+            return 0
+
 
 # Global singleton
 _global_kg: Optional[BlueKnowledgeGraph] = None

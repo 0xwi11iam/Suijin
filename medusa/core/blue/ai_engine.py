@@ -80,8 +80,7 @@ class BlueAIEngine:
                 for defense in hist.get("defenses", [])[-3:]:
                     attacker_context += f"  Defense deployed: {defense.get('type','?')} — {defense.get('detail','?')}\n"
         except Exception:
-            pass
-
+            import traceback; traceback.print_exc()
         prompt = f"""SECURITY ALERT — You must classify this request as FLAGGED or NOT FLAGGED.
 
 REQUEST:
@@ -168,12 +167,6 @@ Respond ONLY with valid JSON. No markdown, no explanation outside JSON."""
             result.action = parsed.get("action", "LOG")
             result.commands_run = parsed.get("commands_to_run", [])
             result.code_changes = parsed.get("code_changes", [])
-
-            # Debug: log what AI returned (first 300 chars)
-            if result.verdict == "NOT FLAGGED" and result.score <= 1:
-                import sys
-                print(f"  [dim]AI raw response ({len(raw_response)} chars): {raw_response[:300]}[/dim]", file=sys.stderr)
-                print(f"  [dim]Parsed: verdict={result.verdict} score={result.score} action={result.action}[/dim]", file=sys.stderr)
 
             # Record cost
             usage = get_usage()

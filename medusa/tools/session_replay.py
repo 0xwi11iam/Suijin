@@ -39,7 +39,8 @@ def list_sessions() -> list:
             data = json.loads(f.read_text())
             data["_file"] = str(f)
             sessions.append(data)
-        except:
+        except Exception as e:
+            import logging; logging.getLogger("medusa").warning(f"Session replay failed: {e}")
             pass
     return sessions
 

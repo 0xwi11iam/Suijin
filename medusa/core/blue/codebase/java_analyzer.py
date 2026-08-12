@@ -11,5 +11,6 @@ def extract_java_routes(root: Path) -> list:
             for m in re.finditer(r'@(Get|Post|Put|Delete|Patch)Mapping\s*\(\s*(?:"([^"]+)"|value\s*=\s*"([^"]+)")', source):
                 p = m.group(1) or m.group(2)
                 endpoints.append({"method":re.search(r'@(\w+)Mapping',source[m.start()-30:m.start()]).group(1).upper(),"path":p,"file":str(jf),"line":source[:m.start()].count("\n")+1,"framework":"spring"})
-        except: pass
+        except Exception:
+            continue
     return endpoints

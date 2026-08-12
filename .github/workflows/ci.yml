@@ -1,0 +1,46 @@
+name: Medusa CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r medusa/requirements.txt
+          pip install pytest pytest-asyncio pytest-cov
+
+      - name: Run tests with coverage
+        run: |
+          python -m pytest medusa/tests/ -v --tb=short --cov=medusa --cov-report=term-missing --cov-report=xml -m "not ai"
+
+      - name: Dependency audit
+        run: |
+          pip install pip-audit && pip-audit || true
+
+      - name: Lint check
+        run: |
+          pip install ruff && ruff check medusa/ --ignore E501 || true
+
+      - name: Verify imports
+        run: |
+          python -c "import medusa.core.state, medusa.core.agent_graph, medusa.core.supervisor, medusa.core.error_handler"
+          python -c "import medusa.core.blue.config, medusa.core.blue.knowledge_graph, medusa.core.blue.ai_engine"
+          python -c "import medusa.tools.guardrails, medusa.tools.workspace, medusa.core.blue.errors"

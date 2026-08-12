@@ -176,7 +176,7 @@ Thought -> Action -> Observation loop.
     try:
         import json
         cfg = json.loads(open("config.json").read())
-    except:
+    except Exception:
         cfg = {}
     if cfg.get("mode_hitl"):
         parts.append("""## MODE: Human-in-the-Loop (Recon Only)
