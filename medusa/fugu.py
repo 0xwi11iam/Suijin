@@ -262,14 +262,111 @@ def _role_gated_route(tool_name, args, role_def, config):
 
 def _extract_target_from_objective(objective):
     """Pull a hostname or IP from the objective string for scoping chain analysis."""
-    import re as _re
-    m = _re.search(r'(?:https?://)?([a-zA-Z0-9][-a-zA-Z0-9.]*(?:\.[a-zA-Z]{2,})?(?::\d+)?)', objective)
+    # URL first (most specific)
+    m = re.search(r'https?://([^\s/]+)', objective)
     if m:
         return m.group(1).rstrip('/')
-    m = _re.search(r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})', objective)
+    # Bare domain with TLD
+    m = re.search(r'\b([a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.[a-zA-Z]{2,})\b', objective)
+    if m:
+        return m.group(1)
+    # IPv4
+    m = re.search(r'\b(\d{1,3}(?:\.\d{1,3}){3})\b', objective)
     if m:
         return m.group(1)
     return None
+
+
+# ---- Adapters to current architecture (replaces legacy redteamer imports) ----
+
+def _ai_call(messages, config):
+    """LLM call via the shared providers module (was: redteamer.ai_call)."""
+    from medusa.modules.loader import load_local_module
+    return load_local_module("providers").generate(messages, config)
+
+
+def _extract_tool(resp):
+    """Parse a legacy-format tool block {"tool", "args"} from an LLM response.
+
+    Tolerates the modern {"action","tool_name","tool_args"} shape too.
+    """
+    if not isinstance(resp, str):
+        return None
+    from medusa.helpers.parsing import try_parse_llm_decision
+    decision, err = try_parse_llm_decision(resp)
+    if decision:
+        if decision.get("action") in ("use_tool", "plan_tools"):
+            return {"tool": decision.get("tool_name", "unknown"),
+                    "args": decision.get("tool_args", {})}
+    # Fallback: bare {"tool": ..., "args": ...} blocks (balanced-brace scan)
+    plain = re.sub(r'```(?:json)?', '', resp).strip()
+    start = plain.find('{')
+    if start != -1:
+        depth = 0
+        for i in range(start, len(plain)):
+            if plain[i] == '{':
+                depth += 1
+            elif plain[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    try:
+                        data = json.loads(plain[start:i+1])
+                        if isinstance(data, dict) and "tool" in data:
+                            return data
+                    except Exception:
+                        pass
+                    break
+    return None
+
+
+def _action_trail_context():
+    """Recent audit-trail summary for prompt context (was: get_action_trail_context)."""
+    try:
+        from medusa.tools.audit_trail import get_audit_json
+        trail = get_audit_json()
+        iters = trail.get("iterations", [])[-5:] if trail else []
+        if not iters:
+            return ""
+        lines = ["\n\n# RECENT ACTION TRAIL:"]
+        for it in iters:
+            tn = it.get("tool_name", "?")
+            ok = "✓" if it.get("success", True) else "✗"
+            out = str(it.get("tool_output", ""))[:120]
+            lines.append(f"- {ok} {tn}: {out}")
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+def _tutorial_knowledge():
+    """Tutorial knowledge snippet (was: get_tutorial_knowledge)."""
+    try:
+        tutorials = Path(__file__).parent / "tutorials"
+        if not tutorials.exists():
+            return ""
+        core = tutorials / "Core"
+        files = sorted(core.glob("*.md"))[:2] if core.exists() else []
+        if not files:
+            return ""
+        parts = ["\n\n# TUTORIAL KNOWLEDGE:"]
+        for f in files:
+            parts.append(f.read_text(encoding="utf-8", errors="ignore")[:1500])
+        return "\n".join(parts)
+    except Exception:
+        return ""
+
+
+def _host_os_directive():
+    """Host OS directive for tool syntax (was: get_host_os_directive)."""
+    import platform
+    system = platform.system()
+    if system == "Darwin":
+        return ("\n\n# HOST OS DIRECTIVE\nYou run on macOS. Use BSD tools "
+                "(nmap, curl, python3). brew paths are on PATH. No apt/yum.")
+    if system == "Linux":
+        return ("\n\n# HOST OS DIRECTIVE\nYou run on Linux. Use GNU tools "
+                "(nmap, curl, python3). Prefer python3 scripts over shell.")
+    return "\n\n# HOST OS DIRECTIVE\nYou run on an unknown OS. Use portable tools."
 
 
 def run_fugu(config, objective, generate_fn, api_key=None):
@@ -281,10 +378,12 @@ def run_fugu(config, objective, generate_fn, api_key=None):
         generate_fn: LLM generate function from providers
         api_key:     optional enterprise auth key
     """
-    from medusa import tools, providers
-    from medusa.redteamer import robust_extract_tool, ai_call, get_action_trail_context, get_tutorial_knowledge, get_host_os_directive
-    from medusa.supervisor import format_spend
+    from medusa.modules.loader import load_local_module
+    from medusa.intel.supervisor import format_spend
     from medusa.fugu_chain import ChainTracker
+
+    providers = load_local_module("providers")
+    tools = load_local_module("tools")
 
     console.print(Panel.fit("[bold cyan]🐡 Fugu Collective Intelligence Mode[/bold cyan]"))
 
@@ -345,9 +444,9 @@ def run_fugu(config, objective, generate_fn, api_key=None):
             chain_context = chainer.analyze(phase["role"], phase["objective"], target=target)
             if chain_context:
                 agent_prompt += chain_context
-            agent_prompt += f"\n\n# RECENT ACTION TRAIL:\n{get_action_trail_context()}\n"
-            agent_prompt += get_tutorial_knowledge()
-            agent_prompt += get_host_os_directive()
+            agent_prompt += f"\n\n# RECENT ACTION TRAIL:\n{_action_trail_context()}\n"
+            agent_prompt += _tutorial_knowledge()
+            agent_prompt += _host_os_directive()
 
             messages = [
                 {"role": "system", "content": agent_prompt},
@@ -361,7 +460,7 @@ def run_fugu(config, objective, generate_fn, api_key=None):
                 console.print(f"\n[bold]  🐡 Phase {phase['id']} · Turn {turn}/{max_turns}[/bold]")
 
                 try:
-                    resp = ai_call(messages, config)
+                    resp = _ai_call(messages, config)
                 except Exception as e:
                     console.print(f"[red]LLM call failed: {e}[/red]")
                     break
@@ -376,7 +475,7 @@ def run_fugu(config, objective, generate_fn, api_key=None):
                 if plain:
                     console.print(Panel(plain[:500], title=f"{role_def['name']} Log", border_style="blue"))
 
-                tool = robust_extract_tool(resp)
+                tool = _extract_tool(resp)
                 if tool:
                     t_name = tool.get("tool", "unknown")
                     t_args = tool.get("args", {})
@@ -395,7 +494,7 @@ def run_fugu(config, objective, generate_fn, api_key=None):
                     # Oracle check on anomalies
                     if t_name in ("http_request", "execute_terminal") and res and "Error" not in res[:50]:
                         try:
-                            from medusa import oracle as oracle_mod
+                            oracle_mod = load_local_module("oracle")
                             status_match = re.search(r"Status:\s*(\d{3})", res)
                             hs = int(status_match.group(1)) if status_match else None
                             anom = oracle_mod.detect_anomaly(res, status_code=hs)
@@ -419,7 +518,6 @@ def run_fugu(config, objective, generate_fn, api_key=None):
                 # Supervisor check every 5 turns
                 if turn % 5 == 0:
                     try:
-                        from medusa import supervisor as sup_mod
                         usage = providers.get_usage()
                         cost = float(usage.get("est_cost_usd", 0))
                         if cost >= float(config.get("cost_hard_cap_usd", 2.0)):
@@ -430,7 +528,7 @@ def run_fugu(config, objective, generate_fn, api_key=None):
 
                 # Heuristic: if no tool in last 2 responses, agent is stuck
                 recent = messages[-4:]
-                tool_count = sum(1 for m in recent if m["role"] == "assistant" and robust_extract_tool(m["content"]))
+                tool_count = sum(1 for m in recent if m["role"] == "assistant" and _extract_tool(m["content"]))
                 if turn > 3 and tool_count == 0:
                     console.print("[yellow]  Agent appears stuck — moving to next phase.[/yellow]")
                     break
