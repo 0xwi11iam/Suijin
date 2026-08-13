@@ -5,6 +5,7 @@ All notable changes to Medusa.
 ## [2.0.1] — 2026-08-12
 
 ### Added
+- **`medusa/tests/test_blueteamer.py`** — 19 tests for the Blue Team entry point (was 0% covered, now 73%): port finding, middleware snippet, firewall init (Darwin/Linux/failure paths), `_run_async` choice branches (back, invalid path, zero port, full proxy flow, full lab flow), env loading, main entry
 - **`medusa/core/red/` package** — red team support modules extracted from redteamer.py:
   - `config_loader.py` (100 lines) — config.json/.env management, Pydantic validation, CI-safe env wizard
   - `llm_client.py` (46 lines) — async LLM wrapper with 90s timeout + status spinner
