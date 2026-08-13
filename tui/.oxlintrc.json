@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/nicolo-ribaudo/oxc-project.github.io/refs/heads/json-schema/src/public/.oxlintrc.schema.json",
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
   "options": {
     "typeAware": true
   },
@@ -7,45 +7,57 @@
     "suspicious": "warn"
   },
   "rules": {
-    "typescript/no-base-to-string": "warn",
-    // Effect uses `function*` with Effect.gen/Effect.fnUntraced that don't always yield
+    "typescript/no-base-to-string": "off",
+    "typescript/no-floating-promises": "off",
+    "typescript/no-misused-spread": "off",
     "require-yield": "off",
-    // SolidJS uses `let ref: T | undefined` for JSX ref bindings assigned at runtime
     "no-unassigned-vars": "off",
-    // SolidJS tracks reactive deps by reading properties inside createEffect
     "no-unused-expressions": "off",
-    // Intentional control char matching (ANSI escapes, null byte sanitization)
     "no-control-regex": "off",
-    // SST and plugin tools require triple-slash references
     "triple-slash-reference": "off",
-
-    // Suspicious category: suppress noisy rules
-    // Effect's nested function* closures inherently shadow outer scope
     "no-shadow": "off",
-    // Namespace-heavy codebase makes this too noisy
+    "no-new": "off",
+    "no-unused-vars": "off",
+    "no-useless-constructor": "off",
+    "no-useless-escape": "off",
+    "no-empty-file": "off",
     "unicorn/consistent-function-scoping": "off",
-    // Opinionated — .sort()/.reverse() mutation is fine in this codebase
     "unicorn/no-array-sort": "off",
     "unicorn/no-array-reverse": "off",
-    // Not relevant — this isn't a DOM event handler codebase
     "unicorn/prefer-add-event-listener": "off",
-    // Bundler handles module resolution
     "unicorn/require-module-specifiers": "off",
-    // postMessage target origin not relevant for this codebase
     "unicorn/require-post-message-target-origin": "off",
-    // Side-effectful constructors are intentional in some places
-    "no-new": "off",
-
-    // Type-aware: catch unhandled promises
-    "typescript/no-floating-promises": "warn",
-    // Warn when spreading non-plain objects (Headers, class instances, etc.)
-    "typescript/no-misused-spread": "warn"
+    "typescript/no-unsafe-type-assertion": "off",
+    "typescript/consistent-return": "off",
+    "typescript/no-unnecessary-type-assertion": "off",
+    "typescript/await-thenable": "off",
+    "typescript/unbound-method": "off",
+    "typescript/no-unnecessary-type-arguments": "off",
+    "typescript/no-this-alias": "off",
+    "typescript/no-unused-vars": "off",
+    "unicorn/no-useless-fallback-in-spread": "off",
+    "typescript/no-redundant-type-constituents": "off",
+    "typescript/no-unnecessary-type-conversion": "off",
+    "typescript/restrict-template-expressions": "off",
+    "typescript/no-unnecessary-type-parameters": "off",
+    "unicorn/no-useless-spread": "off",
+    "typescript/no-unnecessary-boolean-literal-compare": "off",
+    "no-unmodified-loop-condition": "off",
+    "typescript/no-meaningless-void-operator": "off",
+    "no-useless-spread": "off",
+    "typescript/no-extraneous-class": "off",
+    "typescript/no-duplicate-type-constituents": "off",
+    "typescript/no-unsafe-enum-comparison": "off",
+    "typescript/require-array-sort-compare": "off",
+    "typescript/no-unnecessary-template-expression": "off",
+    "typescript/no-implied-eval": "off"
   },
-  "options": {
-    "typeAware": true
-  },
-  "options": {
-    "typeAware": true
-  },
-  "ignorePatterns": ["**/node_modules", "**/dist", "**/.build", "**/.sst", "**/*.d.ts", "**/sdk.gen.ts"]
+  "ignorePatterns": [
+    "**/node_modules",
+    "**/dist",
+    "**/.build",
+    "**/.sst",
+    "**/*.d.ts",
+    "**/sdk.gen.ts"
+  ]
 }

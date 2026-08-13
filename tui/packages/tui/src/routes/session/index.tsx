@@ -1807,6 +1807,7 @@ function GenericTool(props: ToolProps) {
   const { theme, syntax } = useTheme()
   const ctx = use()
   const output = createMemo(() => props.output?.trim() ?? "")
+  const display = createMemo(() => medusaCommand(props.tool, props.input) ?? `${props.tool} ${input(props.input)}`)
   const [expanded, setExpanded] = createSignal(false)
   const maxLines = 10
   const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6))
@@ -1820,13 +1821,13 @@ function GenericTool(props: ToolProps) {
     <Show
       when={props.output && ctx.showGenericToolOutput()}
       fallback={
-        <InlineTool icon="⚙" pending="Writing command..." complete={true} part={props.part}>
-          {props.tool} {input(props.input)}
+        <InlineTool icon="$" pending="Writing command..." complete={true} part={props.part}>
+          {display()}
         </InlineTool>
       }
     >
       <BlockTool
-        title={`# ${props.tool} ${input(props.input)}`}
+        title={`$ ${display()}`}
         part={props.part}
         onClick={collapsed().overflow ? () => setExpanded((prev) => !prev) : undefined}
       >
@@ -2639,6 +2640,80 @@ function input(input: Record<string, unknown>, omit?: string[]): string {
   })
   if (primitives.length === 0) return ""
   return `[${primitives.map(([key, value]) => `${key}=${value}`).join(", ")}]`
+}
+
+/** Render a medusa tool call as the actual CLI command it runs. */
+function medusaCommand(tool: string, toolInput: Record<string, unknown>): string | undefined {
+  const base = tool.replace(/^medusa_/, "")
+  const v = (key: string): string | undefined => {
+    const raw = toolInput[key]
+    if (typeof raw === "string" && raw !== "") return raw
+    if (typeof raw === "number" || typeof raw === "boolean") return String(raw)
+    return undefined
+  }
+  const flag = (flagName: string, value?: string) => (value ? ` ${flagName} ${value}` : "")
+  const tail = (...values: Array<string | undefined>) => {
+    const joined = values.filter(Boolean).join(" ")
+    return joined ? ` ${joined}` : ""
+  }
+  switch (base) {
+    case "nmap_scan":
+      return `nmap${tail(v("flags"), v("target"))}`
+    case "gobuster_dir":
+      return `gobuster dir${flag("-u", v("url"))}${flag("-w", v("wordlist"))}`
+    case "gobuster_dns":
+      return `gobuster dns${flag("-d", v("domain"))}${flag("-w", v("wordlist"))}`
+    case "feroxbuster_scan":
+      return `feroxbuster${flag("-u", v("url"))}${flag("-w", v("wordlist"))}`
+    case "amass_enum":
+      return `amass enum${flag("-d", v("domain"))}${v("passive") === "false" ? " -active" : ""}`
+    case "crtsh_domain":
+      return `crtsh ${v("domain") ?? ""}`.trim() || undefined
+    case "dns_enum_nameservers":
+      return `dig NS ${v("domain") ?? ""}`.trim() || undefined
+    case "dns_zone_transfer":
+      return `dig AXFR ${v("domain") ?? ""}`.trim() || undefined
+    case "sqlmap_scan":
+      return `sqlmap${flag("-u", v("url"))}${flag("--data", v("data"))}`
+    case "hydra_brute":
+      return `hydra${tail(v("target"), v("service") ?? v("protocol"))}`
+    case "john_crack":
+      return `john${tail(v("hash_file") ?? v("hashfile"), v("wordlist"))}`
+    case "sslscan_check":
+      return `sslscan${tail(v("host") ?? v("target"))}`
+    case "curl_request":
+      return `curl${flag("-X", v("method"))}${tail(v("url"))}`
+    case "http_request":
+      return `${v("method") ?? "GET"}${tail(v("url"))}`
+    case "search_cve":
+      return `search_cve${tail(v("software"), v("version"))}`
+    case "write_note":
+      return `write_note${tail(v("category"), v("engagement"))}`
+    case "record_finding":
+      return `record_finding${tail(v("target"), v("finding_type"))}`
+    case "check_knowledge":
+      return `check_knowledge${tail(v("target"), v("payload"))}`
+    case "claim_flag":
+      return `claim_flag${tail(v("flag"))}`
+    case "apply_patch":
+      return `apply_patch${tail(v("vulnerability"), v("file_path"))}`
+    case "search_kb":
+      return `search_kb${tail(v("keyword"))}`
+    case "generate_report":
+      return `generate_report${tail(v("engagement"))}`
+    case "attack_tree":
+      return `attack_tree${tail(v("trace_json"))}`
+    case "execute_terminal":
+      return v("cmd")
+    case "medusa_status":
+      return "medusa_status"
+    case "medusa_detect":
+      return `medusa_detect${tail(v("ip") ?? v("target"))}`
+    case "medusa_kg_attacker":
+      return `medusa_kg_attacker${tail(v("ip"))}`
+    default:
+      return undefined
+  }
 }
 
 function stringValue(value: unknown) {
