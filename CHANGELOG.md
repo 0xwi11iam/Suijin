@@ -5,6 +5,11 @@ All notable changes to Medusa.
 ## [2.0.1] — 2026-08-12
 
 ### Added
+- **`medusa/core/red/` package** — red team support modules extracted from redteamer.py:
+  - `config_loader.py` (100 lines) — config.json/.env management, Pydantic validation, CI-safe env wizard
+  - `llm_client.py` (46 lines) — async LLM wrapper with 90s timeout + status spinner
+  - `session_control.py` (218 lines) — runtime commands (/report, /audit, /state, /sessions, /template), attack chains, objective file loading
+- **Backwards-compatible re-exports** — `load_config`, `load_env`, `ENV_PATH`, `CONFIG_PATH`, `generate_async`, `_force_report`, etc. still importable from `medusa.core.redteamer`
 - **`CONTRIBUTING.md`** — developer setup guide, test/lint/type-check commands, architecture overview, code style rules, commit conventions
 - **`docs/adr/001-langgraph-over-asyncio.md`** — ADR: why LangGraph state machine instead of raw asyncio loop
 - **`docs/adr/002-json-kg-over-neo4j.md`** — ADR: why JSON knowledge graph instead of Neo4j

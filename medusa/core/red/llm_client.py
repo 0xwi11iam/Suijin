@@ -1,0 +1,46 @@
+"""
+medusa/core/red/llm_client.py — Async LLM wrapper with status display + timeout.
+
+Extracted from redteamer.py. Wraps provider.generate() with a Rich status
+spinner and a 90s hard timeout so slow providers never hang the TUI.
+"""
+import asyncio
+
+from rich.console import Console
+
+from medusa.core.red.config_loader import load_config
+
+console = Console()
+
+
+async def generate_async(messages, config=None):
+    """Async LLM call with live status display and hard timeout."""
+    if not config:
+        config = load_config()
+    provider = config.get("provider", "unknown")
+    model = config.get("final_model_id") or config.get(f"{provider}_model", "auto")
+    msg_count = len(messages)
+    prompt_chars = sum(len(m.get("content", "")) for m in messages)
+
+    # Limit to 90s total — prevents UI hangs from slow API/network
+    try:
+        with console.status(
+            f"[bold cyan]Thinking... ({provider}/{model}) — {msg_count} msgs, {prompt_chars//1000}k chars[/bold cyan]",
+            spinner="dots",
+        ):
+            result = await asyncio.wait_for(
+                asyncio.to_thread(_generate, messages, config),
+                timeout=90.0,
+            )
+    except asyncio.TimeoutError:
+        result = "Error: LLM request timed out after 90s. The provider may be overloaded. Retry with a shorter prompt or switch providers."
+        console.print(f"[yellow]  (LLM timed out after 90s)[/yellow]")
+
+    return result
+
+
+def _generate(messages, config):
+    """Thread-friendly wrapper that lazily resolves the providers module."""
+    from medusa.modules.loader import load_local_module
+    providers = load_local_module("providers")
+    return providers.generate(messages, config)
