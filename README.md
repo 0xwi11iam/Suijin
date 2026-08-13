@@ -12,8 +12,15 @@
 
 > **NOTE — v2.4** The experimental terminal shell has been removed. Medusa is
 > now a single Python backend with one interface: the classic Rich TUI
-> (`python3 medusa/main.py`). A one-command installer is planned to make
-> setup a single step (`curl … | bash` or `pip install medusa`). For now:
+> (`python3 medusa/main.py`). Install it in one command:
+>
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/0xwi11iam/Medusa/main/install.sh | bash
+> medusa doctor    # verify the environment
+> medusa           # launch the interface
+> ```
+>
+> Manual setup (if you prefer):
 >
 > ```bash
 > git clone https://github.com/0xwi11iam/Medusa.git && cd Medusa
