@@ -101,6 +101,12 @@ from medusa.tools.aux_tools import (
 )
 
 
+def _recon_chain_route(target, config, ports=None):
+    from medusa.tools.recon import recon_chain
+
+    return recon_chain(target, config=config, ports=ports)
+
+
 def _build_routes(config):
     routes = {
         "execute_terminal": lambda a: execute_terminal(a.get("cmd") or a.get("command"), timeout=int(a.get("timeout", 30))),
@@ -110,6 +116,8 @@ def _build_routes(config):
         "write_file": lambda a: write_file(a.get("file_path", ""), a.get("content", "")),
         "apply_patch": lambda a: apply_patch(a.get("vulnerability"), a.get("file_path", "lab.py")),
         "claim_flag": lambda a: f"OBJECTIVE MET: {a.get('flag')}",
+        # Recon orchestration
+        "recon_chain": lambda a: _recon_chain_route(a.get("target"), config, a.get("ports")),
         # Metasploit tools
         "msf_check": lambda a: msf_check(config),
         "msf_command": lambda a: msf_command(a.get("cmd") or a.get("command"), config),
@@ -245,6 +253,10 @@ def get_tool_catalog():
 - **claim_flag** — Signal objective complete.
   ```json
   {"tool": "claim_flag", "args": {"flag": "flag{...}"}}
+  ```
+- **recon_chain** — One-call recon: nmap scan + service fingerprint + version-based CVE lookup.
+  ```json
+  {"tool": "recon_chain", "args": {"target": "TARGET"}}
   ```
 
 ## Metasploit

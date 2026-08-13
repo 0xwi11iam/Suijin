@@ -7,7 +7,27 @@ duration) instead of parsing free text.
 from __future__ import annotations
 
 import subprocess
+import threading
 import time
+
+
+# Thread-local stream sink: background job runners set this so that `run_command`
+# streams each output line to the job as it arrives, instead of buffering it
+# until the process exits.
+_stream_sink = threading.local()
+
+
+def set_stream_sink(fn) -> None:
+    _stream_sink.fn = fn
+
+
+def clear_stream_sink() -> None:
+    if hasattr(_stream_sink, "fn"):
+        del _stream_sink.fn
+
+
+def _active_sink():
+    return getattr(_stream_sink, "fn", None)
 
 
 class CommandResult:
@@ -48,8 +68,15 @@ def run_command(cmd, *, timeout=300, cwd=None, env=None, shell=False, command_te
     `cmd` may be a string (with shell=True) or a list of arguments (shell=False).
     Exceptions (timeout, missing binary) are captured as a CommandResult with
     exit_code -1 so callers can format them uniformly.
+
+    When a stream sink is active on this thread, output lines are pushed to it
+    live (used by the background job system for progress).
     """
     display = command_text or (cmd if isinstance(cmd, str) else " ".join(str(p) for p in cmd))
+    sink = _active_sink()
+    if sink is not None:
+        return _run_streaming(cmd, timeout=timeout, cwd=cwd, env=env, shell=shell, display=display, sink=sink)
+
     start = time.time()
     try:
         proc = subprocess.run(
@@ -92,3 +119,48 @@ def run_command(cmd, *, timeout=300, cwd=None, env=None, shell=False, command_te
             f"execution fault: {e}",
             int((time.time() - start) * 1000),
         )
+
+
+def _run_streaming(cmd, *, timeout, cwd, env, shell, display, sink) -> CommandResult:
+    """Run with Popen, streaming each merged stdout/stderr line to `sink`."""
+    start = time.time()
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            cwd=cwd,
+            env=env,
+            shell=shell,
+        )
+    except FileNotFoundError as e:
+        return CommandResult(display, -1, "", f"command not found: {e}", int((time.time() - start) * 1000))
+    except Exception as e:
+        return CommandResult(display, -1, "", f"execution fault: {e}", int((time.time() - start) * 1000))
+
+    chunks: list[str] = []
+
+    def _read():
+        try:
+            for line in proc.stdout:
+                chunks.append(line)
+                try:
+                    sink(line)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    reader = threading.Thread(target=_read, daemon=True)
+    reader.start()
+    reader.join(timeout)
+
+    if reader.is_alive():
+        proc.kill()
+        reader.join()
+        return CommandResult(display, -1, "".join(chunks), f"timed out after {timeout}s", int((time.time() - start) * 1000))
+
+    code = proc.wait()
+    return CommandResult(display, code, "".join(chunks), "", int((time.time() - start) * 1000))

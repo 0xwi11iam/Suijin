@@ -22,6 +22,14 @@ def _spawn_background_job(tool_name: str, tool_args: dict, route_tool_fn) -> str
         }
 
     def _run():
+        from medusa.tools.result import clear_stream_sink, set_stream_sink
+
+        def sink(line: str):
+            with _job_lock:
+                if job_id in _jobs:
+                    _jobs[job_id]["output"] = (_jobs[job_id].get("output") or "") + line
+
+        set_stream_sink(sink)
         try:
             result = route_tool_fn(tool_name, tool_args, {})
             with _job_lock:
@@ -33,6 +41,8 @@ def _spawn_background_job(tool_name: str, tool_args: dict, route_tool_fn) -> str
                 if job_id in _jobs:
                     _jobs[job_id]["error"] = str(e)
                     _jobs[job_id]["status"] = "failed"
+        finally:
+            clear_stream_sink()
 
     t = threading.Thread(target=_run, daemon=True)
     t.start()

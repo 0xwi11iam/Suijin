@@ -84,3 +84,18 @@ def install_hint(binary: str) -> str:
         return _INSTALL_HINTS[binary]
     # Unknown names are most likely Python packages
     return f"pip install {binary}"
+
+
+def startup_banner() -> str | None:
+    """A short warning to print at launch when tools are unavailable.
+
+    Returns None when everything a tool needs is present.
+    """
+    missing = missing_binaries()
+    if not missing:
+        return None
+    lines = [f"{len(missing)} tool(s) unavailable (missing dependencies):"]
+    for tool, deps in sorted(missing.items())[:6]:
+        lines.append(f"  - {tool}: {', '.join(deps)}")
+    lines.append("  Run 'medusa doctor' for install hints.")
+    return "\n".join(lines)

@@ -24,6 +24,16 @@ console = Console()
 def main():
     print(chr(27) + "[2J\033[H", end="")
 
+    # Startup availability banner — warn about missing tools before the menu.
+    try:
+        from medusa.tools.availability import startup_banner
+        banner = startup_banner()
+        if banner:
+            console.print(f"[yellow]{banner}[/yellow]")
+            print("\n")
+    except Exception:
+        pass
+
     # Welcome Box
     welcome_text = Text("* Welcome to Medusa Latest", style="bold #e6b47c")
     console.print(Panel(welcome_text, border_style="#e6b47c", expand=False))

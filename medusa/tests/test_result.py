@@ -42,3 +42,52 @@ class TestRunCommand:
         assert "[COMMAND] echo structured_term_ok" in result
         assert "[EXIT]" in result
         assert "structured_term_ok" in result
+
+
+class TestStreaming:
+    def test_run_command_streams_lines_to_sink(self):
+        from medusa.tools.result import clear_stream_sink, set_stream_sink
+
+        received = []
+        set_stream_sink(received.append)
+        try:
+            r = run_command("for i in 1 2 3; do echo line$i; sleep 0.05; done", shell=True, timeout=10)
+        finally:
+            clear_stream_sink()
+        assert r.exit_code == 0
+        assert any("line1" in x for x in received)
+        assert "line3" in r.stdout
+
+    def test_run_command_streaming_timeout(self):
+        from medusa.tools.result import clear_stream_sink, set_stream_sink
+
+        received = []
+        set_stream_sink(received.append)
+        try:
+            r = run_command("sleep 30", shell=True, timeout=1)
+        finally:
+            clear_stream_sink()
+        assert r.exit_code == -1
+        assert "timed out" in r.stderr
+
+
+class TestBackgroundJobStreaming:
+    def test_spawn_background_job_streams_output(self):
+        import time
+
+        from medusa.nodes.execute_tool_node import _job_lock, _jobs, _spawn_background_job
+        from medusa.tools.result import run_command
+
+        def fake_route(tool, args, config):
+            return run_command("for i in 1 2 3; do echo jobline$i; sleep 0.05; done", shell=True).format()
+
+        jid = _spawn_background_job("execute_terminal", {"cmd": "x"}, fake_route)
+        for _ in range(100):
+            with _job_lock:
+                job = _jobs.get(jid)
+            if job and job["status"] in ("done", "failed"):
+                break
+            time.sleep(0.05)
+        assert job is not None
+        assert job["status"] == "done"
+        assert "jobline3" in job["output"]

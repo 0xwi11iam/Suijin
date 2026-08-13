@@ -1,7 +1,12 @@
 """SQLMap wrapper."""
-import subprocess, shlex
-def sqlmap_scan(url, flags="--batch --random-agent"):
-    if not url: return "Error: url required"
-    cmd = f"sqlmap -u {shlex.quote(url)} {flags}"
-    r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=600, cwd="/tmp")
-    return r.stdout or r.stderr or "(no output)"
+import shlex
+
+from medusa.tools.result import run_command
+
+
+def sqlmap_scan(url, flags="--batch --random-agent", tamper=""):
+    if not url:
+        return "Error: url required"
+    tamper_flag = f"--tamper={tamper}" if tamper else ""
+    cmd = f"sqlmap -u {shlex.quote(url)} {flags} {tamper_flag}".strip()
+    return run_command(cmd, shell=True, timeout=600, cwd="/tmp", command_text=cmd).format()

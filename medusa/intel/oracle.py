@@ -102,6 +102,52 @@ def strip_response(response_text, status_code=None, headers=None):
 # ---------------------------------------------------------------------------
 _SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2}
 
+# CVSS 3.1 vectors for each anomaly class, used to attach a numeric score to
+# every diagnosis instead of a bare low/medium/high label.
+_SIGNAL_CVSS = {
+    "backend_error": (7.5, "High", "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"),
+    "sql_error": (9.8, "Critical", "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"),
+    "command_injection": (9.8, "Critical", "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"),
+    "path_traversal": (7.5, "High", "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N"),
+    "xss": (6.1, "Medium", "AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"),
+    "ssti": (8.8, "High", "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"),
+    "waf_block": (0.0, "None", ""),
+    "rate_limit": (0.0, "None", ""),
+    "body_delta": (2.0, "Low", ""),
+    "timeout": (2.0, "Low", ""),
+    "reflection": (4.3, "Medium", "AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N"),
+}
+
+
+def _signal_cvss_class(signal: str) -> str:
+    """Classify a signal string into a CVSS bucket."""
+    if "backend_error" in signal or signal.startswith("HTTP_5"):
+        return "backend_error"
+    if "error_keywords" in signal:
+        lowered = signal.lower()
+        if any(k in lowered for k in ("sql", "mysql", "pg_query", "ora-", "syntax")):
+            return "sql_error"
+        if any(k in lowered for k in ("stack trace", "traceback", "exception", "fatal error", "call stack")):
+            return "backend_error"
+        if "mod_security" in lowered or "request denied" in lowered or "access denied" in lowered:
+            return "waf_block"
+    if "waf_or_rate_limit" in signal:
+        return "rate_limit" if "429" in signal else "waf_block"
+    if signal.startswith("body_length_delta"):
+        return "body_delta"
+    if signal.startswith("response_timeout"):
+        return "timeout"
+    if signal == "payload_reflection":
+        return "reflection"
+    return "backend_error"
+
+
+def severity_to_cvss(severity: str) -> tuple[float, str]:
+    """Map a legacy severity label to a numeric CVSS score + label."""
+    table = {"low": (2.0, "Low"), "medium": (5.0, "Medium"), "high": (8.0, "High")}
+    score, label = table.get(severity.lower(), (0.0, "None"))
+    return score, label
+
 
 def _bump_severity(current: str, new: str) -> str:
     """Raise severity only when new outranks current (fixes string-max bug)."""
@@ -165,10 +211,20 @@ def detect_anomaly(response_text, status_code=None, baseline_len=None, elapsed=N
     if not signals:
         return {"anomaly": False}
 
+    # Attach a numeric CVSS score: take the most severe signal class.
+    best_score, best_label = 0.0, "None"
+    for sig in signals:
+        cls = _signal_cvss_class(sig)
+        score, label, _vec = _SIGNAL_CVSS.get(cls, (0.0, "None", ""))
+        if score > best_score:
+            best_score, best_label = score, label
+
     return {
         "anomaly": True,
         "signals": signals,
         "severity": severity,
+        "cvss_score": best_score,
+        "cvss_severity": best_label,
     }
 
 
