@@ -50,3 +50,6 @@ config.json
 access_keys.json
 *_state_recovery.json
 
+.coverage
+coverage.xml
+htmlcov/
