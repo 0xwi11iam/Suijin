@@ -6,7 +6,7 @@
 
 Report vulnerabilities privately to the maintainers:
 
-- **Email**: [william.jiang@example.com] (primary)
+- **Email**: [jiangwilliam30@gmail.com] (primary)
 - **GitHub**: Use the "Report a vulnerability" button under the Security tab → "Private vulnerability reporting"
 
 You can expect:
