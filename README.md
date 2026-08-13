@@ -73,6 +73,16 @@
   <a href="#blue-team----autonomous-active-defense">Blue Team</a> &nbsp;·&nbsp;
   <a href="#testing">Testing</a> &nbsp;·&nbsp;
   <a href="#portability">Portability</a> &nbsp;·&nbsp;
+  <br/>
+  <a href="#new-here-start-with-the-classic-tui">Start Here (Classic TUI)</a> &nbsp;·&nbsp;
+  <a href="#dual-mode-system----complete-reference">Dual-Mode Reference</a> &nbsp;·&nbsp;
+  <a href="#terminal-shell----full-guide">Shell Guide</a> &nbsp;·&nbsp;
+  <a href="#mcp-bridge----reference">MCP Bridge</a> &nbsp;·&nbsp;
+  <a href="#walkthrough----red-team-engagement">Red Walkthrough</a> &nbsp;·&nbsp;
+  <a href="#walkthrough----blue-team-defense">Blue Walkthrough</a> &nbsp;·&nbsp;
+  <a href="#troubleshooting--faq">FAQ</a> &nbsp;·&nbsp;
+  <a href="#glossary">Glossary</a> &nbsp;·&nbsp;
+  <a href="#roadmap----v23-beta">Roadmap</a> &nbsp;·&nbsp;
   <a href="#maintainers">Maintainers</a>
 </p>
 
@@ -929,6 +939,605 @@ CHANGELOG.md                  # Complete version history — v2.0.0 full changel
     }
 }
 ```
+
+---
+
+<br/>
+
+---
+
+<h2 align="center">New Here? Start With the Classic TUI</h2>
+
+<p align="center">
+  <img height="20" src="https://img.shields.io/badge/RECOMMENDED-python3_medusa/main.py-3ddc84?style=flat" alt="Recommended entry"/>
+  <img height="20" src="https://img.shields.io/badge/no_model_config-needed-5c9cf5?style=flat" alt="No shell needed"/>
+</p>
+
+> **If you do not know what you are doing, use `python3 medusa/main.py`.** It is
+> the original, self-contained Medusa interface: a full-screen Rich TUI with
+> guided menus, mode selection, live colored output, and no external shell
+> dependencies. The terminal shell (`./medusa-tui.sh`) is the advanced path —
+> you can always come back to it after you have seen the classic interface.
+
+### Why the classic TUI first
+
+<table>
+<tr><th width="35%">Aspect</th><th>Classic TUI (`medusa/main.py`)</th></tr>
+<tr><td>Dependencies</td><td>Python backend only. Install <code>pip install -r medusa/requirements.txt</code> and go.</td></tr>
+<tr><td>Interface</td><td>Guided Rich terminal UI. You pick Red Team or Blue Team from a menu and it walks you through the engagement.</td></tr>
+<tr><td>Output</td><td>Live command output with colored panels, severity-colored findings, and a scrolling engagement log.</td></tr>
+<tr><td>Extras</td><td>No model provider signup, no session database, no MCP handshake. Everything runs in one process.</td></tr>
+</table>
+
+### Step by step
+
+```bash
+# 1. Create and activate a virtual environment
+python3 -m venv .venv
+source .venv/bin/activate            # Windows: .venv\Scripts\activate
+
+# 2. Install the backend
+pip install -r medusa/requirements.txt
+
+# 3. Start the classic interface
+python3 medusa/main.py
+```
+
+You will see the mode selection menu:
+
+<pre>
+  ┌──────────────────────────────────────────────┐
+  │                MEDUSA v2.3.0-beta            │
+  │                                              │
+  │   [1]  Red Team   — attack & exploit         │
+  │   [2]  Blue Team  — defend & deceive         │
+  │                                              │
+  │   Select a mode                              │
+  └──────────────────────────────────────────────┘
+</pre>
+
+### First Red Team engagement (classic)
+
+```bash
+python3 medusa/main.py
+# choose [1] Red Team
+# point it at the built-in lab:
+#   http://127.0.0.1:5906
+```
+
+The red team engine runs the standard chain on its own: port scan, endpoint
+discovery, directory brute-force, CVE lookup, and exploitation of the seeded
+vulnerabilities. Every step prints the command it ran and the verdict it
+reached, and findings accumulate into `.notes/` with an audit trail.
+
+### First Blue Team engagement (classic)
+
+```bash
+python3 medusa/main.py
+# choose [2] Blue Team
+```
+
+Blue Team starts the built-in vulnerable lab, watches it, and waits for the
+built-in attack simulator (or your own red team) to probe it. The SOC feed
+shows every anomalous request with a severity score, and the response ladder
+handles deception, blocking, and patching automatically.
+
+### Classic TUI troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| `ModuleNotFoundError: medusa` | Run from the repository root (`cd raxaid-security`). |
+| `No API key` | Red/Blue heuristic mode works without a key. Add `config.json` with a provider key for LLM-assisted reasoning. |
+| Menu closes instantly | Run inside a real terminal; do not pipe stdin (`echo | python3 medusa/main.py`). |
+| Port 5906 in use | `lsof -i :5906` to find the process; the lab also honors `BLUE_LAB_PORT` in `medusa/core/constants.py`. |
+
+---
+
+<h2 align="center">Dual-Mode System — Complete Reference</h2>
+
+<p>
+Medusa is one engine with two personas. Every capability below the interface —
+tools, knowledge graph, modules, audit trail — is shared. The mode you pick
+decides the doctrine, the prompts, and the direction of travel.
+</p>
+
+<table>
+<tr><th width="22%"></th><th width="39%">Red Team</th><th width="39%">Blue Team</th></tr>
+<tr><td><b>Goal</b></td><td>Discover, verify, and exploit vulnerabilities; claim flags; produce an engagement report.</td><td>Detect, deceive, block, and patch attackers; maintain a defense log and attacker profiles.</td></tr>
+<tr><td><b>Driver</b></td><td>LangGraph state machine + supervisor pattern detector + parallel subagents.</td><td>18 pre-AI attack detectors + per-endpoint AI subagents + response ladder.</td></tr>
+<tr><td><b>Tools</b></td><td>nmap, gobuster, feroxbuster, amass, sqlmap, hydra, Metasploit, john, CVE search.</td><td>tarpit, network block, canary tokens, patch engine, knowledge-graph profiling.</td></tr>
+<tr><td><b>Default agent</b></td><td><code>medusa-red</code> (red, primary mode).</td><td><code>medusa-blue</code> (blue, primary mode).</td></tr>
+<tr><td><b>Entry points</b></td><td><code>python3 medusa/main.py</code> or shell with <code>medusa-red</code>.</td><td><code>python3 medusa/main.py</code> or shell with <code>medusa-blue</code>.</td></tr>
+<tr><td><b>Output</b></td><td>Findings, flags, exploit chains, audit trail, attack tree.</td><td>Incident feed, defense log, attacker history, patches applied.</td></tr>
+</table>
+
+### Engagement lifecycle
+
+<pre>
+                 ┌──────────────────────────────┐
+                 │   MODE SELECTION             │
+                 └──────────────┬───────────────┘
+              ┌─────────────────┴──────────────────┐
+              │                                    │
+      ┌───────▼────────┐                  ┌────────▼────────┐
+      │   RED TEAM     │                  │   BLUE TEAM    │
+      └───────┬────────┘                  └────────┬───────┘
+              │                                    │
+  ┌───────────▼────────────┐            ┌──────────▼─────────────┐
+  │ recon → vuln → exploit │            │ watch → detect → act   │
+  │ → flag → report        │            │ deceive/block/patch    │
+  └───────────┬────────────┘            └──────────┬─────────────┘
+              │                                    │
+              └──────────────┬─────────────────────┘
+                             │
+              ┌──────────────▼──────────────┐
+              │   KNOWLEDGE GRAPH (shared)  │
+              │   findings · flags · patches│
+              │   attacker profiles · notes │
+              └─────────────────────────────┘
+</pre>
+
+### Which mode do I want?
+
+| Situation | Pick |
+|---|---|
+| You have a target you are allowed to test and want findings. | Red Team |
+| You own an app and want it attacked and hardened automatically. | Both: Blue runs the lab, Red attacks it. |
+| You want to watch live traffic and auto-respond to attacks. | Blue Team |
+| You want a structured pentest report with an attack chain. | Red Team |
+| You want to learn how attacks look from the SOC side. | Blue Team + the built-in attack simulator. |
+
+---
+
+<h2 align="center">Terminal Shell — Full Guide</h2>
+
+<p>
+The shell (<code>tui/</code>, a fork of opencode, MIT) is the power-user
+interface. One prompt box; every backend tool one call away; sessions persist
+to SQLite and resume later.
+</p>
+
+### Launch
+
+```bash
+./medusa-tui.sh                    # green TUI, medusa-red is the default agent
+./medusa-tui.sh mcp list           # inspect the MCP bridge
+./medusa-tui.sh agent list         # list agents
+./medusa-tui.sh run "recon 127.0.0.1:5906"   # headless one-shot
+```
+
+### Agents
+
+| Agent | Mode | Color | Purpose |
+|---|---|---|---|
+| `medusa-red` | primary (default) | red `#e06c75` | Offensive engagements: recon, exploitation, post-exploitation, reporting. |
+| `medusa-blue` | primary | blue `#5c9cf5` | SOC defense: detection, deception, blocking, patching. |
+| `build` | primary | green | Generic development agent (kept from the shell's origin). |
+| `plan` | primary | green | Read-only analysis and planning. |
+| `explore` / `general` | subagent | — | Built-in helpers for search and multistep tasks. |
+
+Switch agents with `Tab` in the session. New sessions start as `medusa-red`
+because `medusa.json` sets `default_agent`.
+
+### Commands
+
+| Command | What it does |
+|---|---|
+| `/classic-tui` | Launches the classic Rich TUI inside the shell's terminal; the agent streams it and picks up after you exit. |
+| `/lab` | Starts the vulnerable lab on :5906 in the background and confirms it is listening. |
+| `/init`, `/compact`, `/undo`, `/redo`, `/export` | Session utilities from the shell runtime. |
+
+### Key ideas
+
+- **Sessions persist.** The SQLite store (`~/.local/share/medusa/`) keeps every
+  session, message, and tool call; re-opening resumes where you left off.
+- **Tools stream into the transcript.** Each `medusa_*` call renders as
+  `$ nmap -sV -sC -T4 target` with the raw output inline and color-coded.
+- **Permissions are per-action.** `medusa.json` ships with edit/bash/webfetch
+  allowed; the shell still asks before dangerous commands.
+- **The classic TUI is never more than a command away** — `/classic-tui` or
+  `python3 medusa/main.py`.
+
+### medusa.json (project config)
+
+```json
+{
+  "$schema": "https://medusa.ai/config.json",
+  "default_agent": "medusa-red",
+  "small_model": "deepseek-v4-flash",
+  "permission": { "edit": "allow", "bash": "allow", "webfetch": "allow" },
+  "mcp": {
+    "medusa": {
+      "type": "local",
+      "command": ["python3", "medusa/mcp_server.py"],
+      "enabled": true
+    }
+  }
+}
+```
+
+Agents live in `.medusa/agents/*.md`, commands in `.medusa/commands/*.md`.
+Global configuration lives in `~/.config/medusa/`.
+
+---
+
+<h2 align="center">MCP Bridge — Reference</h2>
+
+<pre>
+   Terminal shell (TypeScript)                Python backend
+   ┌─────────────────────────┐      stdio     ┌──────────────────────┐
+   │ medusa-red / medusa-blue │  JSON-RPC 2.0  │ medusa/mcp_server.py │
+   │ session · reasoning · UI │ ──────────────▶│ 115 named tools      │
+   └─────────────────────────┘  newline-delim │ route_tool dispatch  │
+                                             └──────────────────────┘
+</pre>
+
+The sidecar (`medusa/mcp_server.py`) is zero-dependency JSON-RPC 2.0 over
+stdio. It discovers the module packs at startup and exposes **every** backend
+tool under its own name with a schema derived from the Python signature, so
+the shell shows real commands and validates arguments before dispatch.
+
+### Recon
+
+| Tool | Example call | Result |
+|---|---|---|
+| `nmap_scan` | `nmap_scan target=example.com flags="-sV -sC -T4"` | Port/service scan output |
+| `gobuster_dir` | `gobuster_dir url=http://example.com wordlist=/usr/share/wordlists/dirb/common.txt` | Discovered paths |
+| `gobuster_dns` | `gobuster_dns domain=example.com` | Subdomains |
+| `feroxbuster_scan` | `feroxbuster_scan url=http://example.com` | Recursive content discovery |
+| `amass_enum` | `amass_enum domain=example.com` | Passive/active subdomains |
+| `crtsh_domain` | `crtsh_domain domain=example.com` | Certificate transparency |
+| `dns_enum_nameservers` | `dns_enum_nameservers domain=example.com` | NS records |
+| `dns_zone_transfer` | `dns_zone_transfer domain=example.com` | AXFR attempt |
+| `sslscan_check` | `sslscan_check host=example.com` | TLS config issues |
+| `search_cve` | `search_cve software="apache" version="2.4.49"` | Matching CVEs |
+
+### Exploitation
+
+| Tool | Purpose |
+|---|---|
+| `sqlmap_scan` | SQL injection detection and exploitation |
+| `hydra_brute` | Online credential brute-force |
+| `john_crack` | Offline hash cracking |
+| `msf_run` / `msf_command` / `msf_sessions` | Metasploit module execution through the local RPC daemon |
+| `apply_patch` | Apply a remediation patch (sqli, cmdi, ssrf, ssti, xss, idor) |
+
+### Intelligence, notes, and reporting
+
+| Tool | Purpose |
+|---|---|
+| `write_note` | Append a structured note to the engagement notes |
+| `record_finding` | Record a finding into the knowledge graph |
+| `check_knowledge` | Query the knowledge graph for target/payload history |
+| `search_kb` | Search the local knowledge base |
+| `generate_report` | Render a structured engagement report |
+| `attack_tree` | Build an attack tree from a trace |
+| `claim_flag` | Claim a CTF objective |
+
+### Blue team tools
+
+| Tool | Purpose |
+|---|---|
+| `medusa_detect` | 18-pattern pre-AI attack detector on a request dict |
+| `medusa_kg_attacker` | Attacker history from the knowledge graph |
+| `execute_terminal` | Guarded shell for tarpit/firewall/service control |
+| `medusa_status` | Engine version, lab port, tool count |
+
+### Protocol notes
+
+- `initialize`, `notifications/initialized`, `ping`, `tools/list`, `tools/call`
+- Tool results are markdown: a bold `[medusa] tool:` header, the args, and a
+  fenced code block with the raw output
+- Unknown tools return `isError` rather than crashing the session
+
+---
+
+<h2 align="center">Walkthrough — Red Team Engagement</h2>
+
+```bash
+# Terminal 1: the vulnerable lab
+python3 medusa/lab/blue_target/vulnerable_app.py
+
+# Terminal 2: the shell
+./medusa-tui.sh
+```
+
+Type a single prompt and watch the chain:
+
+<pre>
+You: recon 127.0.0.1:5906 and find the SQLi
+
+medusa-red:
+  Thought: Starting with port and service discovery.
+
+  $ nmap -sV -sC -T4 127.0.0.1
+  PORT     STATE SERVICE  VERSION
+  5906/tcp open  http     Werkzeug/3.0.1
+  5907/tcp open  http     Werkzeug/3.0.1
+
+  Thought: Two HTTP services. Enumerating directories.
+
+  $ gobuster dir -u http://127.0.0.1:5906 -w /usr/share/wordlists/dirb/common.txt
+  /login                (Status: 200)
+  /admin                (Status: 403)
+  /.git/HEAD            (Status: 200)
+
+  Thought: .git exposure on the first service. Extracting credentials from
+  commit history, then testing the login for SQL injection.
+
+  $ sqlmap -u http://127.0.0.1:5906/login --data "user=admin&pass=x" --batch
+  [10:42:11] [INFO] parameter 'user' is vulnerable: boolean-based blind
+
+  Claimed flag: FLAG{sqli_login_bypass}
+  Note written: .notes/sqli_findings.md
+</pre>
+
+The session keeps a full transcript: every reasoning step, every tool call
+with its raw output, and every note. `/export` produces a JSON snapshot of
+the whole engagement.
+
+---
+
+<h2 align="center">Walkthrough — Blue Team Defense</h2>
+
+```bash
+# Terminal 1: Blue Team starts the lab and watches it
+python3 medusa/main.py     # choose [2] Blue Team
+
+# Terminal 2: the built-in attack simulator probes the lab
+python3 medusa/lab/blue_target/attack_simulator.py
+```
+
+The SOC feed lights up as the simulator attacks:
+
+<pre>
+[detect] POST /login            score 6/10   pattern SQLi
+[decide] first contact          action: tarpit  (8s per response)
+[detect] GET /.git/HEAD         score 7/10   pattern source-exposure
+[decide] repeat offender        action: block 203.0.113.7
+[detect] POST /upload           score 9/10   pattern webshell-upload
+[decide] critical               action: patch applied (upload allowlist)
+[record] attacker 203.0.113.7 -> profile saved to knowledge graph
+</pre>
+
+### The response ladder
+
+| Score | Meaning | Response |
+|---|---|---|
+| 5+ | Suspicious | Validate, tarpit candidates |
+| 7+ | Confirmed attack | Deceive (honeypot/canaries) or block |
+| 9+ | Critical or repeat offender | Block immediately + patch the vulnerable code |
+
+Deception over blocking: a blocked attacker returns with a new IP; a deceived
+attacker reveals their toolkit, which the knowledge graph stores for the next
+encounter.
+
+### Purple teaming
+
+Run both halves at once: Blue Team defends the lab while Red Team attacks it.
+The knowledge graph is shared, so every flag the red team claims and every
+defense the blue team deploys is visible to both — a complete engagement log
+of the battle.
+
+---
+
+<h2 align="center">Troubleshooting &amp; FAQ</h2>
+
+<details>
+<summary><b>The TUI exits immediately or shows "Unexpected error"</b></summary>
+Run it from a real terminal. `script`/pipes and non-TTY contexts break the
+renderer. Use `./medusa-tui.sh` from the repository root; the launcher sets the
+correct working directory for you.
+</details>
+
+<details>
+<summary><b>Tool calls return "Invalid Tool: nmap_scan"</b></summary>
+The MCP sidecar must discover the module packs at startup. Restart the TUI so a
+fresh session reconnects to the sidecar. Confirm with
+`./medusa-tui.sh mcp list` — it should show `medusa connected`.
+</details>
+
+<details>
+<summary><b>nmap/gobuster/feroxbuster are missing</b></summary>
+Install them: `brew install nmap gobuster feroxbuster john` (macOS) or
+`apt install nmap gobuster feroxbuster john` (Debian/Ubuntu). sqlmap and hydra
+are bundled as Python modules where possible.
+</details>
+
+<details>
+<summary><b>The agent keeps asking for a model</b></summary>
+`./medusa-tui.sh auth login` and pick the free Zen tier, or add a provider key
+for any supported provider. The classic `main.py` heuristic mode works without
+a model.
+</details>
+
+<details>
+<summary><b>Port 5906 is already in use</b></summary>
+`lsof -i :5906` to find the process. The lab honors `BLUE_LAB_PORT` from
+`medusa/core/constants.py` if you need a different port.
+</details>
+
+<details>
+<summary><b>Sessions do not persist between launches</b></summary>
+The shell stores sessions under `~/.local/share/medusa/`. If you delete that
+directory you lose history. Use `medusa session` to inspect what exists.
+</details>
+
+<details>
+<summary><b>Typecheck fails after editing the shell</b></summary>
+`cd tui && bun install && bun run typecheck`. The shell requires bun 1.3.x;
+node_modules must be installed per workspace.
+</details>
+
+<details>
+<summary><b>Lint reports nothing or thousands of warnings</b></summary>
+`cd tui && bun run lint`. The config is `.oxlintrc.json`; the lint script
+enumerates files explicitly because this oxlint build does not accept directory
+arguments in this tree.
+</details>
+
+<details>
+<summary><b>Is this legal to use?</b></summary>
+Only against systems you own or have explicit written permission to test. See
+the legal disclaimer at the top of this document.
+</details>
+
+<details>
+<summary><b>Can I use Medusa without any LLM?</b></summary>
+Yes. The heuristic engines, pattern detectors, and the full tool dispatch work
+without a model. The LLM adds reasoning, hypothesis generation, and reporting
+quality.
+</details>
+
+---
+
+<h2 align="center">Glossary</h2>
+
+| Term | Meaning |
+|---|---|
+| **MCP** | Model Context Protocol — the JSON-RPC bridge between the shell and the Python backend. |
+| **Sidecar** | `medusa/mcp_server.py`, the process that serves the backend to the shell. |
+| **Agent** | A prompt persona with a mode, color, permissions, and tools. |
+| **Primary mode** | An agent the user can select as the session's driver. |
+| **Subagent** | A helper agent spawned by a primary agent for a scoped task. |
+| **Knowledge graph** | Persistent store of findings, flags, patches, attacker profiles, and notes shared by both teams. |
+| **Tarpit** | A defensive countermeasure that slows an attacker with long response delays. |
+| **Canary token** | A honeypot artifact that alerts when an attacker touches it. |
+| **Response ladder** | The Blue Team escalation policy keyed by detector score. |
+| **Supervisor** | The zero-cost pattern detector that watches the red team for misses and repeats. |
+| **Module pack** | A self-contained tool bundle under `Modules/Tools` or `Modules/Mods` with a manifest. |
+| **Lab** | The built-in deliberately vulnerable Flask application on port 5906. |
+| **Engagement** | One red or blue operation, from start to report. |
+
+---
+
+<h2 align="center">Roadmap — v2.3 beta</h2>
+
+| Area | Status | Notes |
+|---|---|---|
+| Classic Rich TUI | Stable | Recommended entry point. |
+| Terminal shell | Beta | Sessioning, agents, MCP bridge, green theme. |
+| 115-tool MCP bridge | Stable | Signature-derived schemas, per-tool command display. |
+| `medusa-red` / `medusa-blue` agents | Beta | Default agent is `medusa-red`. |
+| Dual-engine CI | Active | Python matrix + bun/tsgo tui job. |
+| Known gaps | — | Zen provider still branded as the upstream service; the GitHub-agent feature needs a hosted backend. |
+
+---
+
+<h2 align="center">Configuration Reference</h2>
+
+<p>
+Two configuration surfaces exist: the backend (<code>medusa/config.json</code>)
+and the shell (<code>medusa.json</code>, <code>~/.config/medusa/</code>,
+<code>.medusa/</code>).
+</p>
+
+### Backend — `medusa/config.json`
+
+| Key | Meaning | Example |
+|---|---|---|
+| `provider` | LLM provider id | `"deepseek"` |
+| `model` | Model name | `"deepseek-v4-flash"` |
+| `api_key` | Provider API key (kept out of git) | `"sk-..."` |
+| `small_model` | Fast model for cheap tasks | `"deepseek-v4-flash"` |
+| `blue_lab_port` | Lab listen port | `5906` |
+| `proxy_port` | Blue Team interception proxy | `8080` |
+| `metasploit_rpc_port` | msfrpcd port | `55553` |
+| `max_rounds` | Supervisor round cap | `12` |
+| `cost_cap` | Hard spend ceiling in dollars | `50` |
+
+### Shell — `medusa.json`
+
+| Key | Meaning |
+|---|---|
+| `default_agent` | Agent used for new sessions (`medusa-red`) |
+| `permission` | Coarse tool permissions (`edit`, `bash`, `webfetch`) |
+| `mcp.<name>` | Local or remote MCP server registration |
+| `small_model` | Fast model for title/summary tasks |
+
+### Agent anatomy
+
+```markdown
+---
+description: Medusa Red Team — autonomous offensive security agent.
+mode: primary
+color: "#e06c75"
+temperature: 0.4
+permission:
+  edit: allow
+  bash: allow
+  webfetch: allow
+---
+# AUTONOMOUS RED TEAM AGENT — FULL CAPABILITIES
+... system prompt ...
+```
+
+- `mode: primary` — selectable as the session driver (`subagent` is spawnable
+  only, `all` is both).
+- `color` — chip color in the session UI.
+- `permission` — per-agent allow/deny map.
+- Files live in `.medusa/agents/` (project) or `~/.config/medusa/agent/` (global).
+
+### Commands anatomy
+
+```markdown
+---
+description: Start the vulnerable lab on port 5906
+---
+Start the lab with your bash tool, run it in the background, confirm :5906.
+```
+
+Files live in `.medusa/commands/` and appear as `/lab`, `/classic-tui`, etc.
+in the shell's slash menu and command palette.
+
+---
+
+<h2 align="center">Built-In Labs — Guide</h2>
+
+<p>
+Two deliberately vulnerable Flask applications ship with the repo so you can
+practice without touching anything you do not own.
+</p>
+
+<table>
+<tr><th width="25%">Lab</th><th>Launch</th><th>Contains</th></tr>
+<tr>
+<td><b>CloudBoard Next</b></td>
+<td><code>python3 medusa/lab/blue_target/vulnerable_app.py</code></td>
+<td>15 vulnerabilities across 3 services (auth, admin, uploads): SQLi, XSS, SSRF, JWT confusion, .git exposure, IDOR, command injection.</td>
+</tr>
+<tr>
+<td><b>DevOps Dashboard</b></td>
+<td>same process, second service</td>
+<td>RCE lab: unsafe input handling in pipeline config, OS command execution paths.</td>
+</tr>
+</table>
+
+### Attacking the lab (red)
+
+```bash
+./medusa-tui.sh
+# prompt: recon 127.0.0.1:5906, enumerate services, exploit the SQLi on /login
+```
+
+### Defending the lab (blue)
+
+```bash
+python3 medusa/main.py           # [2] Blue Team — starts and watches the lab
+python3 medusa/lab/blue_target/attack_simulator.py   # simulated attacker
+```
+
+---
+
+<h2 align="center">Testing &amp; Quality Gates</h2>
+
+<table>
+<tr><th width="30%">Gate</th><th>Command</th><th>What it proves</th></tr>
+<tr><td>Backend tests</td><td><code>python3 -m pytest medusa/tests/ -q</code></td><td>360 tests: graph, oracle, supervisor, tools, MCP bridge, blue team, LLM paths.</td></tr>
+<tr><td>Shell typecheck</td><td><code>cd tui && bun run typecheck</code></td><td>tsgo across 17 workspace packages.</td></tr>
+<tr><td>Shell lint</td><td><code>cd tui && bun run lint</code></td><td>oxlint, exit 0 on the vendored tree.</td></tr>
+<tr><td>CI</td><td><code>.github/workflows/ci.yml</code></td><td>Python 3.10-3.12 matrix plus the bun/tsgo tui job on every push and PR.</td></tr>
+</table>
 
 ---
 
