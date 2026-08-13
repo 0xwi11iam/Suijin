@@ -188,7 +188,6 @@ async def run_red_team_async(config, objective, api_key=None):
 
         except (KeyboardInterrupt, asyncio.CancelledError):
             _signal._medusa_interrupted = False
-            # Restore default SIGINT so console.input() works properly
             _signal.signal(_signal.SIGINT, _signal.SIG_DFL)
             try:
                 console.print("\n[bold yellow]  Paused[/bold yellow] [dim](type guidance, /report, /audit, /state, /sessions, /template, /health, or Ctrl+C to quit)[/dim]")
@@ -260,6 +259,15 @@ async def run_red_team_async(config, objective, api_key=None):
                 console.print(f"[yellow]  State update failed: {e}. Restarting...[/yellow]")
                 first_run = True
             continue  # Resume the while loop
+
+        except Exception as e:
+            # Graph crashed (bug, not operator interrupt) — report and end
+            # the engagement instead of killing the whole application.
+            console.print(f"\n[bold red]  Agent loop error: {e}[/bold red]")
+            import traceback
+            traceback.print_exc()
+            final_state = agent.get_state(thread_id) or {}
+            break
 
     #  Final report (after normal completion) 
     try:

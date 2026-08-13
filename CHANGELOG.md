@@ -2,6 +2,22 @@
 
 All notable changes to Medusa.
 
+## [2.0.2] — 2026-08-13 — STABLE
+
+### Added
+- **`SECURITY.md`** — vulnerability disclosure policy, supported versions, security model with accepted-risk table
+- **`medusa/tests/test_llm_paths.py`** — 53 tests for AI-decision paths: providers pricing/usage/generate (DeepSeek success, 401/402/429, missing key, model remap, LobsterTrap routing), AI engine parsing (markdown/brace/fallback), prompt building, fail-open on API errors, action execution (commands, timeouts, code patches), oracle anomaly signals + payload mutations + hypotheses (LLM + heuristic fallback), supervisor verdicts + heuristics + cost guardrail + LLM-skip path
+- **`medusa/tests/test_red_smoke.py`** — 6 tests for the full red team loop with a stubbed graph: happy-path completion, state dump, proxy config, usage reset, graph-crash handling, sync wrapper
+
+### Fixed
+- **oracle.py severity escalation bug** — `max("low", "high")` compared strings lexicographically ("low" > "high"), so high-severity signals (500s, SQL errors) were reported as low/medium. Added rank-based `_bump_severity()`.
+- **redteamer.py graph-crash handling** — exceptions from the agent graph propagated out of `run_red_team_async` and killed the whole app. Now caught, reported, and the engagement ends cleanly.
+
+### Changed
+- **Test suite: 286 → 345 tests** (14 files)
+- **Coverage: 35% → 40%**; CI floor raised to 35%
+- version.json → 2.0.2 stable
+
 ## [2.0.1] — 2026-08-12
 
 ### Added

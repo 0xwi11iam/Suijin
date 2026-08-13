@@ -1,6 +1,6 @@
 {
-  "version": "2.0.0",
-  "codename": "Red & Blue",
-  "release_date": "2026-08-12",
-  "description": "Dual-mode autonomous security platform. Red Team: LangGraph-powered exploitation engine. Blue Team: AI-driven SOC with proxy interception, 18 attack detectors, per-endpoint subagents, live deception, and knowledge graph."
+  "version": "2.0.2",
+  "codename": "Red & Blue — Stable",
+  "release_date": "2026-08-13",
+  "description": "Dual-mode autonomous security platform. Red Team: LangGraph-powered exploitation engine. Blue Team: AI-driven SOC with proxy interception, 18 attack detectors, per-endpoint subagents, live deception, and knowledge graph. 345 tests, CI-gated on Python 3.10-3.12."
 }

@@ -100,6 +100,14 @@ def strip_response(response_text, status_code=None, headers=None):
 # ---------------------------------------------------------------------------
 # Anomaly detection
 # ---------------------------------------------------------------------------
+_SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2}
+
+
+def _bump_severity(current: str, new: str) -> str:
+    """Raise severity only when new outranks current (fixes string-max bug)."""
+    return new if _SEVERITY_RANK.get(new, 0) > _SEVERITY_RANK.get(current, 0) else current
+
+
 def detect_anomaly(response_text, status_code=None, baseline_len=None, elapsed=None):
     """Check if a response is anomalous and needs diagnostic triage.
 
@@ -112,12 +120,12 @@ def detect_anomaly(response_text, status_code=None, baseline_len=None, elapsed=N
     # Signal 1: HTTP 500 — backend crash
     if status_code is not None and 500 <= int(status_code) <= 599:
         signals.append(f"HTTP_{status_code}_backend_error")
-        severity = "high"
+        severity = _bump_severity(severity, "high")
 
     # Signal 2: HTTP 403 / 406 — likely WAF block
     if status_code in (403, 406, 429):
         signals.append(f"HTTP_{status_code}_waf_or_rate_limit")
-        severity = "medium"
+        severity = _bump_severity(severity, "medium")
 
     # Signal 3: Response body length anomaly (>30% change from baseline)
     if baseline_len is not None and response_text:
@@ -126,12 +134,12 @@ def detect_anomaly(response_text, status_code=None, baseline_len=None, elapsed=N
             delta = abs(current_len - baseline_len) / baseline_len
             if delta > 0.30:
                 signals.append(f"body_length_delta_{delta:.0%}")
-                severity = max(severity, "medium")
+                severity = _bump_severity(severity, "medium")
 
     # Signal 4: Timeout or excessive response time
     if elapsed is not None and elapsed > 15:
         signals.append(f"response_timeout_{elapsed:.0f}s")
-        severity = max(severity, "medium")
+        severity = _bump_severity(severity, "medium")
 
     # Signal 5: Error keywords in body
     error_keywords = [
@@ -144,14 +152,14 @@ def detect_anomaly(response_text, status_code=None, baseline_len=None, elapsed=N
     matched_errors = [kw for kw in error_keywords if kw in lowered]
     if matched_errors:
         signals.append(f"error_keywords:{','.join(matched_errors[:3])}")
-        severity = max(severity, "high")
+        severity = _bump_severity(severity, "high")
 
     # Signal 6: Reflection of payload (possible XSS or template injection)
     reflection_keywords = ["<script", "{{", "}}", "{%", "%}", "${", "onerror="]
     for kw in reflection_keywords:
         if kw in (response_text or ""):
             signals.append(f"payload_reflection")
-            severity = max(severity, "medium")
+            severity = _bump_severity(severity, "medium")
             break
 
     if not signals:
