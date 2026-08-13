@@ -334,7 +334,12 @@ def get_tool_catalog():
   ```
 """
 
-    # Module tools
+    # Module tools — only advertise the ones whose binaries are present, and
+    # list the missing ones separately with install hints so the agent never
+    # wastes a turn calling a tool that cannot run.
+    from medusa.tools.availability import install_hint, missing_binaries
+
+    unavailable = missing_binaries()
     modules = get_loaded_modules()
     if modules:
         catalog += "## Module Tools\n"
@@ -348,6 +353,8 @@ def get_tool_catalog():
                     catalog += f" (requires: {', '.join(deps)})"
                 catalog += "\n"
                 for t_name, t_info in tools.items():
+                    if t_name in unavailable:
+                        continue
                     desc = t_info.get("description", "")
                     params = t_info.get("parameters", {})
                     param_example = ", ".join(f'"{p}": "..."' for p in params)
@@ -358,6 +365,12 @@ def get_tool_catalog():
                     else:
                         catalog += f'  {{"tool": "{t_name}", "args": {{}}}}\n'
                     catalog += f"  ```\n"
+
+    if unavailable:
+        catalog += "## NOT INSTALLED — install these to unlock more tools\n"
+        for t_name, missing in sorted(unavailable.items()):
+            hints = "; ".join(install_hint(b) for b in missing)
+            catalog += f"- **{t_name}** — missing: {', '.join(missing)}. {hints}\n"
 
     # Strategy reminder
     catalog += """

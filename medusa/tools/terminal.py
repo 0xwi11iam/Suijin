@@ -6,11 +6,11 @@ from __future__ import annotations
 
 import os
 import shlex
-import subprocess
 
 from medusa.tools.guardrails import is_dangerous, confirm_global_action
 from medusa.tools.workspace import WORKSPACE_DIR
 
+from .result import run_command
 from .runtime import truncate
 
 
@@ -46,24 +46,19 @@ def execute_terminal(cmd, timeout=30):
                 current_path = f"{bp}:{current_path}"
         env['PATH'] = current_path
 
-        # Run with shell=False using tokenized command list
+        # Tokenize; fall back to a shell one-liner for quoted/compound commands
         try:
             cmd_parts = shlex.split(cmd)
         except ValueError:
             cmd_parts = ["/bin/sh", "-c", cmd]
 
-        process = subprocess.run(
+        result = run_command(
             cmd_parts if len(cmd_parts) > 1 else ["/bin/sh", "-c", cmd],
-            capture_output=True, text=True,
-            timeout=timeout, cwd=str(WORKSPACE_DIR), env=env,
+            timeout=timeout,
+            cwd=str(WORKSPACE_DIR),
+            env=env,
+            command_text=cmd,
         )
-        out = ""
-        if process.stdout:
-            out += f"[STDOUT]\n{process.stdout}\n"
-        if process.stderr:
-            out += f"[STDERR]\n{process.stderr}\n"
-        return truncate(out if out else "Executed (No Output).")
-    except subprocess.TimeoutExpired:
-        return f"Error: Command timed out after {timeout} seconds (no output was received)."
+        return truncate(result.format())
     except Exception as e:
         return f"Execution Fault: {str(e)}"
