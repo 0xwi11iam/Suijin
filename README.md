@@ -11,11 +11,11 @@
 <br/>
 
 <p align="center">
-  <b>85 Tools</b> &nbsp;·&nbsp; <b>48 Modules</b> &nbsp;·&nbsp; <b>51 Attack Skills</b> &nbsp;·&nbsp; <b>Parallel Subagents</b> &nbsp;·&nbsp; <b>LLM Supervisor</b> &nbsp;·&nbsp; <b>345 Tests</b> &nbsp;·&nbsp; <b>14 Test Files</b>
+  <b>85 Tools</b> &nbsp;·&nbsp; <b>48 Modules</b> &nbsp;·&nbsp; <b>51 Attack Skills</b> &nbsp;·&nbsp; <b>Parallel Subagents</b> &nbsp;·&nbsp; <b>LLM Supervisor</b> &nbsp;·&nbsp; <b>360 Tests</b> &nbsp;·&nbsp; <b>14 Test Files</b>
   <br/>
   <b>Blue Team SOC</b> &nbsp;·&nbsp; <b>18 Attack Detectors</b> &nbsp;·&nbsp; <b>Per-Endpoint AI Subagents</b> &nbsp;·&nbsp; <b>Live Tarpit</b> &nbsp;·&nbsp; <b>25-Endpoint Lab</b> &nbsp;·&nbsp; <b>Knowledge Graph</b> &nbsp;·&nbsp; <b>Codebase Patching</b> &nbsp;·&nbsp; <b>CI/CD</b> &nbsp;·&nbsp; <b>SECURITY.md</b>
   <br/>
-  <img height="20" src="https://img.shields.io/badge/v2.0.2-stable-red_&_blue-8B0000?style=flat" alt="Version"/>
+  <img height="20" src="https://img.shields.io/badge/v2.3.0--beta-shellforge-green?style=flat" alt="Version"/>
   <img height="20" src="https://img.shields.io/badge/LICENSE-MIT-4169A1?style=flat" alt="License"/>
   <img height="20" src="https://img.shields.io/badge/PYTHON-3.10+-306998?style=flat&logo=python&logoColor=white" alt="Python"/>
   <img height="20" src="https://img.shields.io/badge/LangGraph-State%20Machine-FF6B35?style=flat&logo=langchain&logoColor=white" alt="LangGraph"/>
@@ -36,6 +36,22 @@
 </p>
 <p align="center">
   <em>Red Team: 15-step engagement — nmap >> .git leak >> JWT forge >> SSRF >> 3 flags. <code>$0.42</code> in API costs.<br/>Blue Team: 33 live requests monitored — SQLi, XSS, mass assignment, scanner recon detected and tarpitted in real time.</em>
+</p>
+
+<br/>
+
+<h2 align="center">Terminal Shell (beta)</h2>
+
+<p>
+  v2.3 adds a full terminal shell (fork of opencode, MIT) so every backend tool
+  is one prompt away. <code>./medusa-tui.sh</code> launches the shell with
+  <b>medusa-red</b> as the default agent; the MCP bridge exposes <b>115 named
+  tools</b> — <code>nmap_scan</code>, <code>gobuster_dir</code>, <code>sqlmap_scan</code>,
+  <code>write_note</code>, <code>claim_flag</code>, ... — each returning the exact
+  command run and its raw output, rendered in the session with reasoning and
+  tool-call cards. <b>medusa-blue</b> is one Tab away for the SOC side. The
+  classic Rich TUI still runs standalone (<code>python3 medusa/main.py</code>)
+  or inside the shell via the <code>/classic-tui</code> command.
 </p>
 
 <br/>

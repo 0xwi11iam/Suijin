@@ -1,0 +1,17 @@
+{
+  "$schema": "https://medusa.ai/config.json",
+  "default_agent": "medusa-red",
+  "small_model": "deepseek-v4-flash",
+  "permission": {
+    "edit": "allow",
+    "bash": "allow",
+    "webfetch": "allow"
+  },
+  "mcp": {
+    "medusa": {
+      "type": "local",
+      "command": ["python3", "medusa/mcp_server.py"],
+      "enabled": true
+    }
+  }
+}

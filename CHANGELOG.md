@@ -2,6 +2,41 @@
 
 All notable changes to Medusa.
 
+## [2.3.0-beta] — 2026-08-13 — SHELLFORGE (BETA)
+
+### Added
+- **Terminal shell (`tui/`)** — fork of opencode v1.18.18 (MIT, credited in
+  `tui/README.md`) rebranded as Medusa: green theme, MED/USA logo, `medusa.json`
+  config, `.medusa/` agent/command directories, `medusa` CLI identity.
+- **MCP bridge (`medusa/mcp_server.py`)** — zero-dependency JSON-RPC stdio
+  sidecar exposing the backend to the shell. Every backend tool is exposed under
+  its own name (115 tools) with signature-derived input schemas; each call
+  reports the tool and args used. Module packs are discovered at startup
+  (`discover_modules()`).
+- **`medusa-red` / `medusa-blue` agents** (`.medusa/agents/`) — primary modes
+  with the ported redteamer/blueteamer doctrine; `medusa-red` is the default
+  agent for new sessions (`default_agent` in `medusa.json`).
+- **Shell commands** — `/classic-tui` launches the classic Rich TUI in the
+  shell's terminal; `/lab` starts the vulnerable lab on :5906.
+- **`medusa-tui.sh`** launcher — runs the runtime from the correct cwd and
+  passes the repo root as the project directory.
+- **Dual-engine CI** — `tui` job in `.github/workflows/ci.yml` (bun install,
+  oxlint, tsgo typecheck) alongside the Python matrix.
+- **MCP tests** (`medusa/tests/test_mcp_server.py`) — 15 tests: protocol,
+  per-tool registry, named tool calls, guardrails, detection.
+
+### Fixed
+- Module tools (nmap, gobuster, sqlmap, …) were not dispatchable through the MCP
+  bridge because module discovery never ran in the sidecar — real scans now
+  execute and return raw output.
+- JSX runtime resolution for the shell (tsconfig/node_modules cwd dependence;
+  broken install after package pruning).
+
+### Changed
+- Test suite: 345 → 360 tests.
+- version.json → 2.3.0-beta (codename Shellforge).
+- TUI theme palette rebuilt: green base, blue/red accents.
+
 ## [2.0.2] — 2026-08-13 — STABLE
 
 ### Added
