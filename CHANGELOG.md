@@ -2,6 +2,25 @@
 
 All notable changes to Medusa.
 
+## [2.4.0] — 2026-08-13 — BACK TO ROOTS
+
+### Removed
+- **Terminal shell (`tui/`)** — the opencode-derived shell and all its
+  references were scrapped. Medusa is now a single Python backend with one
+  interface: the classic Rich TUI (`python3 medusa/main.py`).
+- `medusa-tui.sh`, `medusa.json`, `.medusa/` (agents/commands), and the
+  `tui` CI job (bun/oxlint/tsgo).
+
+### Changed
+- `medusa/tools/dispatch.py` split into 8 focused modules
+  (`runtime`, `terminal`, `http_tools`, `metasploit`, `intel`, `reporting`,
+  `jobs`, `aux_tools`) with a thin dispatcher and full back-compat re-exports.
+- `medusa/mcp_server.py` retained as an optional headless MCP bridge.
+- version.json → 2.4.0 (codename Back To Roots).
+
+### Removed (emojis)
+- Last emojis stripped from tool output strings per project style.
+
 ## [2.3.0-beta] — 2026-08-13 — SHELLFORGE (BETA)
 
 ### Added

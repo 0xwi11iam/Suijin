@@ -1,8 +1,9 @@
 """
 medusa/mcp_server.py — Medusa MCP sidecar (zero-dependency).
 
-Exposes the full Python Medusa backend to the Medusa TUI over the Model
-Context Protocol (stdio transport, newline-delimited JSON-RPC 2.0).
+Exposes the full Python Medusa backend to any MCP client over the Model
+Context Protocol (stdio transport, newline-delimited JSON-RPC 2.0). Optional
+headless bridge; the primary interface is the classic Rich TUI (main.py).
 
 Tools exposed:
   medusa_tool       — generic dispatch: all 85 tools via route_tool()

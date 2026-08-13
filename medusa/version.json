@@ -1,6 +1,6 @@
 {
-  "version": "2.3.0-beta",
-  "codename": "Shellforge",
+  "version": "2.4.0",
+  "codename": "Back To Roots",
   "release_date": "2026-08-13",
-  "description": "Medusa v2.3 beta: the opencode-derived terminal shell hosts the full backend over an MCP bridge (115 named tools). Default agent medusa-red; classic Rich TUI launchable in-shell via /classic-tui. 360 backend tests green."
+  "description": "Medusa v2.4: single Python backend, one interface. The terminal shell was removed; the classic Rich TUI (python3 medusa/main.py) is the primary interface, backed by the LangGraph red/blue engines, 110+ tools, knowledge graph, and MCP sidecar. 360 backend tests green."
 }
