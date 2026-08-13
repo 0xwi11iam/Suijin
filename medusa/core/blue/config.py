@@ -1,6 +1,7 @@
 """
 medusa/core/blue/config.py — Blue team operational configuration.
 """
+from __future__ import annotations
 import json, os
 from pathlib import Path
 

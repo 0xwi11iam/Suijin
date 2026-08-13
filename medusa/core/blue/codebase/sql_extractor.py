@@ -1,4 +1,5 @@
 """SQL extractor — find all SQL queries, classify parameterized vs raw."""
+from __future__ import annotations
 import re
 from pathlib import Path
 

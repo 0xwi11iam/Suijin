@@ -6,6 +6,7 @@ Provides:
 - RateLimitTracker: detect 429s, respect Retry-After, auto-throttle
 - Stealth mode: random User-Agent rotation, jitter, traffic shaping
 """
+from __future__ import annotations
 import random
 import time
 import threading

@@ -1,4 +1,5 @@
 """Goal decomposition — break complex objectives into sub-goals with tracking."""
+from __future__ import annotations
 import json, os
 from pathlib import Path
 GOAL_DIR = Path(__file__).resolve().parent.parent / "medusa_agent" / "goals"

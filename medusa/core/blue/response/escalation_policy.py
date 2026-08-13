@@ -1,4 +1,5 @@
 """Escalation policy — when to auto-block vs ask operator."""
+from __future__ import annotations
 from medusa.core.constants import SCORE_CRITICAL, SCORE_SHADOW
 
 def should_auto_block(score: int, config: dict) -> bool:

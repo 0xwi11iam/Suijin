@@ -1,4 +1,5 @@
 """Timeline visualization — Mermaid Gantt chart of engagement phases."""
+from __future__ import annotations
 def generate_timeline_gantt(trace: list) -> str:
     lines = ["```mermaid", "gantt", "    title Engagement Timeline", "    dateFormat HH:mm", "    axisFormat %H:%M"]
     phase_start = None

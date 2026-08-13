@@ -5,6 +5,7 @@ Extracted from redteamer.py. Handles report generation, audit printing,
 state summary, attack chain building, session listing, template browsing,
 and objective file loading.
 """
+from __future__ import annotations
 import os
 
 from rich.console import Console

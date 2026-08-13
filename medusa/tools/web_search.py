@@ -4,6 +4,7 @@ exploit techniques, documentation, and current attack methods.
 
 Uses DuckDuckGo HTML search (no API key needed) as a free fallback.
 """
+from __future__ import annotations
 import re
 import urllib.parse
 import requests

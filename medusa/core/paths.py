@@ -4,6 +4,7 @@ medusa/core/paths.py — Centralized, configurable path constants.
 All /tmp paths are derived from MEDUSA_TMP_DIR env var.
 Set MEDUSA_TMP_DIR to customize (default: /tmp).
 """
+from __future__ import annotations
 import os
 from pathlib import Path
 

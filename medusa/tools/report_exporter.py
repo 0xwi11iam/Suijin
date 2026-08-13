@@ -2,6 +2,7 @@
 Medusa Report Exporter — sophisticated, detailed engagement reports.
 Generates Markdown reports with Mermaid diagrams, finding tables, attack chains.
 """
+from __future__ import annotations
 import json, os, time
 from pathlib import Path
 from datetime import datetime, timezone

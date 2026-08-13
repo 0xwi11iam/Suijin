@@ -1,4 +1,5 @@
 """Canary tokens — tracking tokens that phone home when used."""
+from __future__ import annotations
 import hashlib, time
 
 class CanaryToken:

@@ -1,4 +1,5 @@
 """Shift Manager — watcher allocation, rotation, health."""
+from __future__ import annotations
 class ShiftManager:
     def __init__(self, config: dict):
         self.config = config

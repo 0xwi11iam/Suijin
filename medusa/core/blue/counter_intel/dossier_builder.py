@@ -1,4 +1,5 @@
 """Dossier builder — persistent attacker profiles across sessions."""
+from __future__ import annotations
 import json, time
 from pathlib import Path
 

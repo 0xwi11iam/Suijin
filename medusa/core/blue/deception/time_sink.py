@@ -5,6 +5,7 @@ threaded contexts (e.g., deception_engine.py). The blue team feed uses
 file-based tarpit (/tmp/blue_tarpit.json) read by the proxy/Flask app,
 which applies delays at the HTTP layer without blocking the event loop.
 """
+from __future__ import annotations
 import time, random
 
 class TimeSink:

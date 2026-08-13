@@ -1,4 +1,5 @@
 """Tier 1 Analyst — first responder, initial triage of incoming alerts."""
+from __future__ import annotations
 import time
 from medusa.core.constants import RISK_HIGH
 

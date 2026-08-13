@@ -5,6 +5,7 @@ parsing that retries on malformed JSON.
 
 Ported from redamon/agentic/orchestrator_helpers/parsing.py.
 """
+from __future__ import annotations
 import json
 import logging
 from typing import Optional

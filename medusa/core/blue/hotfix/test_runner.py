@@ -1,4 +1,5 @@
 """Test runner — verify patch doesn't break existing tests."""
+from __future__ import annotations
 import subprocess, os
 
 def run_tests(codebase_path: str) -> dict:

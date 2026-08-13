@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os, json, re, subprocess, threading, time
 import xmlrpc.client, requests, urllib3, shlex, sqlite3
 from pathlib import Path
@@ -12,7 +13,7 @@ from medusa.core.constants import METASPLOIT_RPC_PORT
 
 MCP_SERVERS = {}
 def get_server_for_tool(tool_name: str) -> list:
-    return TOOL_MCP_MATRIX.get(tool_name, [])
+    return MCP_SERVERS.get(tool_name, [])
 AI_SERVICE_ENDPOINTS = {}
 def fingerprint_ai_response(response_json: dict) -> str:
     return "unknown"

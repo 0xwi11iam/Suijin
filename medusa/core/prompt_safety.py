@@ -11,6 +11,7 @@ inside the real region.
 
 Ported from redamon/agentic/prompt_safety.py — adapted for Medusa TUI.
 """
+from __future__ import annotations
 import re
 import secrets
 

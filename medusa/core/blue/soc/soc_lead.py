@@ -1,4 +1,5 @@
 """SOC Lead — strategic decisions, attack campaign analysis, subagent coordination."""
+from __future__ import annotations
 import asyncio, time
 
 

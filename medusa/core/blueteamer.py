@@ -1,6 +1,7 @@
 """
 medusa/core/blueteamer.py — Blue Team entry point and TUI.
 """
+from __future__ import annotations
 import sys, os, asyncio, signal as _signal, time, json
 from pathlib import Path
 

@@ -6,6 +6,7 @@ Persists to blue_kg.json during the session, wiped on new session.
 Nodes: attackers, endpoints, attacks, defenses, deceptions
 Edges: attacked, defended_by, deceived_by, related_to
 """
+from __future__ import annotations
 import json, time, hashlib, threading
 from pathlib import Path
 from dataclasses import dataclass, field

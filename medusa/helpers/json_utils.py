@@ -2,6 +2,7 @@
 
 Ported from redamon/agentic/orchestrator_helpers/json_utils.py.
 """
+from __future__ import annotations
 import json
 from datetime import datetime
 from typing import Optional

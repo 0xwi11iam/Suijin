@@ -1,4 +1,5 @@
 """JS beacon deployer — track attacker's browser."""
+from __future__ import annotations
 def generate_beacon_js() -> str:
     return """
 <script>

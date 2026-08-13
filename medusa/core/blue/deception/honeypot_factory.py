@@ -1,4 +1,5 @@
 """Honeypot factory — dynamically generate realistic decoys."""
+from __future__ import annotations
 import json, random, string
 
 def generate_honeypot_response(endpoint: dict) -> dict:

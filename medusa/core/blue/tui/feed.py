@@ -11,6 +11,7 @@ spending an AI call. If the pattern detector fires, the request gets the
 full INVESTIGATED panel immediately, actual deception/blocking is deployed,
 and the action is recorded in the shared knowledge graph.
 """
+from __future__ import annotations
 import asyncio, json, time, re, os
 from typing import Optional
 from dataclasses import dataclass, field

@@ -3,6 +3,7 @@
 Catches typos, missing required fields, and type mismatches before they
 cause silent runtime failures.
 """
+from __future__ import annotations
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
 

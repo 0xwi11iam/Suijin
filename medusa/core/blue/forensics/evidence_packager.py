@@ -1,4 +1,5 @@
 """Evidence packager — bundle evidence for operator or IR."""
+from __future__ import annotations
 import json, time
 from pathlib import Path
 

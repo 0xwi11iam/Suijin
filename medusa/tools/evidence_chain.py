@@ -1,4 +1,5 @@
 """Evidence chain — links tool output → diff → KG record → note for every finding."""
+from __future__ import annotations
 import json, os, hashlib
 from datetime import datetime, timezone
 from pathlib import Path

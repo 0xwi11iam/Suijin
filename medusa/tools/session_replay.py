@@ -1,6 +1,7 @@
 """
 Session Replay — save and resume engagements from LangGraph checkpoints.
 """
+from __future__ import annotations
 import json, time
 from pathlib import Path
 from datetime import datetime, timezone

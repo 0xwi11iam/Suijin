@@ -1,4 +1,5 @@
 """Patch generator — generate fix for vulnerability type."""
+from __future__ import annotations
 def generate_patch(vulnerability: dict, source_code: str) -> str:
     vuln_type = vulnerability.get("type","sqli")
     if vuln_type == "sqli":

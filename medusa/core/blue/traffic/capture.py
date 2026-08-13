@@ -1,4 +1,5 @@
 """Live traffic capture — mitmproxy/tcpdump integration."""
+from __future__ import annotations
 import subprocess, threading, time, json
 from pathlib import Path
 

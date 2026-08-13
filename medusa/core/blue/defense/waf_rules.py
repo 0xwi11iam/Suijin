@@ -1,4 +1,5 @@
 """WAF rule generator — ModSecurity/Cloudflare rules from attack patterns."""
+from __future__ import annotations
 import re
 
 

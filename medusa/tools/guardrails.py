@@ -1,4 +1,5 @@
 """Command safety guardrails — extracted from dispatch.py for maintainability."""
+from __future__ import annotations
 import os
 
 _BLOCKED_PATTERNS = [

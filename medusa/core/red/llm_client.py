@@ -4,6 +4,7 @@ medusa/core/red/llm_client.py — Async LLM wrapper with status display + timeou
 Extracted from redteamer.py. Wraps provider.generate() with a Rich status
 spinner and a 90s hard timeout so slow providers never hang the TUI.
 """
+from __future__ import annotations
 import asyncio
 
 from rich.console import Console

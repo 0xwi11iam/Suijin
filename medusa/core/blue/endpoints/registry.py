@@ -1,4 +1,5 @@
 """Endpoint registry — master list of all discovered endpoints."""
+from __future__ import annotations
 class EndpointRegistry:
     def __init__(self):
         self.endpoints = {}

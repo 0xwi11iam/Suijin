@@ -1,4 +1,5 @@
 """Blue team orchestrator — central conductor for the entire SOC."""
+from __future__ import annotations
 import asyncio, json, logging, time
 from datetime import datetime, timezone
 from pathlib import Path

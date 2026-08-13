@@ -1,4 +1,5 @@
 """Traffic scorer — 1-10 score per request."""
+from __future__ import annotations
 from medusa.core.blue.traffic.anomaly_detector import detect_anomalies
 
 def score_request(request: dict, profile: dict, attacker_profile=None) -> dict:

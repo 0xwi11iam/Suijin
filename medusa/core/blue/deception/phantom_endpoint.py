@@ -1,4 +1,5 @@
 """Phantom endpoints — traps that look vulnerable but aren't."""
+from __future__ import annotations
 import json
 
 PHANTOM_TEMPLATES = {

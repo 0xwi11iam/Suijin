@@ -15,6 +15,7 @@ Key features:
 - Automatic checkpointing after every turn
 - Hard guardrail (gov/mil/edu domain blocking)
 """
+from __future__ import annotations
 import sys, os, asyncio, json, time
 from pathlib import Path
 

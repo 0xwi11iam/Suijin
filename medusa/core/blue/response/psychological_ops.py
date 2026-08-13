@@ -1,4 +1,5 @@
 """Psychological ops — mess with attacker's head."""
+from __future__ import annotations
 import random
 
 def gaslight_attacker(attacker_id: str, attempt_count: int) -> dict:

@@ -1,4 +1,5 @@
 """Counter-recon — passive OSINT on attacker infrastructure."""
+from __future__ import annotations
 def recon_attacker(ip: str) -> dict:
     import socket
     result = {"ip": ip}

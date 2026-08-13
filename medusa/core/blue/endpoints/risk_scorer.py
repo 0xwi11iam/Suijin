@@ -1,4 +1,5 @@
 """Endpoint risk scorer — pre-score inherent risk."""
+from __future__ import annotations
 def score_endpoint_risk(endpoint: dict) -> dict:
     score = 1
     reasons = []

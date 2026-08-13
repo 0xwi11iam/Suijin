@@ -5,6 +5,7 @@ Extracted from redteamer.py. Handles config.json creation/defaults,
 Pydantic validation, and .env provider-key loading (interactive wizard
 or non-interactive CI-safe mode).
 """
+from __future__ import annotations
 import sys, os, json
 from pathlib import Path
 

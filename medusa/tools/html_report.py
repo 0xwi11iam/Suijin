@@ -1,4 +1,5 @@
 """HTML report exporter — styled, collapsible, client-deliverable reports."""
+from __future__ import annotations
 import json, os
 from datetime import datetime, timezone
 from pathlib import Path

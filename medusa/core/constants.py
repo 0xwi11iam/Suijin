@@ -4,6 +4,7 @@ medusa/core/constants.py — Centralized constants and magic strings.
 All model IDs, default ports, scoring thresholds, and provider names
 live here. Import from this module instead of hardcoding strings.
 """
+from __future__ import annotations
 from pathlib import Path
 
 # ── Provider / Model IDs ────────────────────────────────────────────

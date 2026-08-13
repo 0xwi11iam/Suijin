@@ -1,6 +1,7 @@
 """
 medusa/tools/cvss_scorer.py — CVSS 3.1 calculator for finding severity scoring.
 """
+from __future__ import annotations
 import json
 
 

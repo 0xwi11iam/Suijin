@@ -9,6 +9,7 @@ Smart baseline learning:
 
 Global singleton available via get_global_normalizer().
 """
+from __future__ import annotations
 import json, math, hashlib
 from collections import defaultdict
 from pathlib import Path

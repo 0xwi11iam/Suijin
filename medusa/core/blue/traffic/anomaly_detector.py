@@ -1,4 +1,5 @@
 """Anomaly detector — z-score, entropy, frequency analysis."""
+from __future__ import annotations
 import re, math
 
 def detect_anomalies(request: dict, profile: dict) -> list:

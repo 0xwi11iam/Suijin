@@ -1,4 +1,5 @@
 """Tarpit — slow-loris style connection draining."""
+from __future__ import annotations
 import time, threading, logging
 from medusa.core.blue.errors import DeceptionError, ErrorSeverity, ok, err
 

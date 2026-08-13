@@ -52,6 +52,11 @@ jobs:
             -m "not ai" \
             -p no:warnings
 
+      - name: Type check (pyright)
+        continue-on-error: true
+        run: |
+          pip install pyright && pyright medusa/ || true
+
       - name: Lint check (non-blocking)
         continue-on-error: true
         run: |

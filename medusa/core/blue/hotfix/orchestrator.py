@@ -1,4 +1,5 @@
 """Hotfix orchestrator — manage patch lifecycle from detection to deployment."""
+from __future__ import annotations
 import asyncio, os, time, json
 from pathlib import Path
 

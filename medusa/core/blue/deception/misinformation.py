@@ -1,4 +1,5 @@
 """Misinformation engine — feed false data to attackers."""
+from __future__ import annotations
 import json, random
 
 def generate_fake_response(attack_type: str) -> dict:

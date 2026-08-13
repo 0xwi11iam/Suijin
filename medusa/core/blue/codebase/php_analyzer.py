@@ -1,4 +1,5 @@
 """PHP route extraction — Laravel."""
+from __future__ import annotations
 import re
 from pathlib import Path
 

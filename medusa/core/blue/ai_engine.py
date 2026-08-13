@@ -7,6 +7,7 @@ and returns structured reasoning + verdict + action decisions.
 Also manages the baseline normalization learning — benign verdicts get
 added to the normal pattern pool so future identical requests skip the AI.
 """
+from __future__ import annotations
 import json, asyncio, time, os
 from pathlib import Path
 from typing import Optional

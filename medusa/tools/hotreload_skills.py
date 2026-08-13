@@ -1,6 +1,7 @@
 """
 Hot-Reload Skills — agent can edit skill files and changes take effect immediately.
 """
+from __future__ import annotations
 import os, importlib, sys
 from pathlib import Path
 

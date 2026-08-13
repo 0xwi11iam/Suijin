@@ -1,4 +1,5 @@
 """Attack classifier — identify attack type from request."""
+from __future__ import annotations
 import re
 
 def classify_attack(request: dict) -> dict:

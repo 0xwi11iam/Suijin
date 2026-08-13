@@ -1,4 +1,5 @@
 """Blue team shared utilities."""
+from __future__ import annotations
 import hashlib, re, ipaddress
 
 def hash_request(req: dict) -> str: return hashlib.sha256(str(req).encode()).hexdigest()[:16]

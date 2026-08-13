@@ -1,4 +1,5 @@
 """Codebase scanner — walks tree, dispatches to framework analyzers."""
+from __future__ import annotations
 import json
 from pathlib import Path
 

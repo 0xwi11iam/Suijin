@@ -1,4 +1,5 @@
 """Alert panel — critical threat popups."""
+from __future__ import annotations
 from rich.console import Console
 from rich.panel import Panel
 

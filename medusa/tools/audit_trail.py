@@ -2,6 +2,7 @@
 Medusa Audit Trail — complete, zero-truncation JSON/MD logging.
 Records: what the AI saw (tool outputs), thought (reasoning), did (actions).
 """
+from __future__ import annotations
 import json, os, time
 from pathlib import Path
 from datetime import datetime, timezone

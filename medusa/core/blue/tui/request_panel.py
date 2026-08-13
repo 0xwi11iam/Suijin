@@ -6,6 +6,7 @@ Three-panel layout when a request triggers INVESTIGATED tier:
   MIDDLE: AI reasoning — full untruncated analysis
   BOTTOM: Verdict (FLAGGED / NOT FLAGGED) + action decision panel
 """
+from __future__ import annotations
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table

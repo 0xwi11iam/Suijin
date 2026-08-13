@@ -11,7 +11,7 @@
 <br/>
 
 <p align="center">
-  <b>85 Tools</b> &nbsp;·&nbsp; <b>48 Modules</b> &nbsp;·&nbsp; <b>51 Attack Skills</b> &nbsp;·&nbsp; <b>Parallel Subagents</b> &nbsp;·&nbsp; <b>LLM Supervisor</b> &nbsp;·&nbsp; <b>219 Tests</b> &nbsp;·&nbsp; <b>9 Test Files</b>
+  <b>85 Tools</b> &nbsp;·&nbsp; <b>48 Modules</b> &nbsp;·&nbsp; <b>51 Attack Skills</b> &nbsp;·&nbsp; <b>Parallel Subagents</b> &nbsp;·&nbsp; <b>LLM Supervisor</b> &nbsp;·&nbsp; <b>248 Tests</b> &nbsp;·&nbsp; <b>10 Test Files</b>
   <br/>
   <b>Blue Team SOC</b> &nbsp;·&nbsp; <b>18 Attack Detectors</b> &nbsp;·&nbsp; <b>Per-Endpoint AI Subagents</b> &nbsp;·&nbsp; <b>Live Tarpit</b> &nbsp;·&nbsp; <b>25-Endpoint Lab</b> &nbsp;·&nbsp; <b>Knowledge Graph</b> &nbsp;·&nbsp; <b>Codebase Patching</b> &nbsp;·&nbsp; <b>CI/CD</b>
   <br/>
@@ -384,10 +384,11 @@ medusa/tests/test_tools.py ............                                  [100%]
 | `test_graph.py` | 19 | LangGraph state machine, node transitions, tool dispatch, subagent orchestration |
 | `test_integration.py` | 10 | End-to-end pipelines, multi-step chains, state persistence |
 | `test_e2e_blue.py` | 4 | **Live lab integration** — boots real Flask app, fires real SQLi, asserts pattern detection → flag → tarpit → measurable delay, KG recording |
+| `test_dispatch.py` | 29 | Tool routing hub — pure helpers, self-kill protection, guardrails, file ops (workspace + allowlist), CVSS/KEV parsing, job tracking, route_tool dispatch |
 | `test_state_helpers.py` | 80 | State models (TodoItem, ExecutionStep, TargetInfo), formatting helpers, parsing (LLM decisions, token extraction, vuln classification), productivity (loop detection, axis tracking, fingerprints), error classification, hard guardrails, module loader, provider routing/cost estimation, supervisor pattern detection |
 | `test_tools.py` | 43 | Guardrails behavioral (14 blocked patterns + edge cases), workspace (symlinks, allowlist, injection), constants (thresholds, ports, models, tmp dir) |
 
-**CI/CD:** GitHub Actions matrix (Python 3.10/3.11/3.12) with pytest + coverage, ruff lint, pip-audit dep scan.
+**CI/CD:** GitHub Actions matrix (Python 3.10/3.11/3.12) with pytest + coverage (fail_under=25%), pyright type check, ruff lint, pip-audit dep scan.
 
 ---
 

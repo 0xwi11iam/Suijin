@@ -8,6 +8,7 @@ After codebase analysis, deploys one AI subagent per endpoint. Each subagent:
 - Watches traffic to its endpoint
 - Reports anomalies to the main coordinating agent
 """
+from __future__ import annotations
 import json, asyncio, time, hashlib
 from pathlib import Path
 from dataclasses import dataclass, field

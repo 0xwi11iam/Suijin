@@ -1,4 +1,5 @@
 """Breadcrumb layer — plant fake credentials and API keys as bait."""
+from __future__ import annotations
 import json, os, random, string
 from pathlib import Path
 

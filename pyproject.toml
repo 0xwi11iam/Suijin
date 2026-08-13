@@ -16,7 +16,7 @@ source = ["medusa"]
 omit = ["medusa/lab/*", "medusa/tests/*", "medusa_agent/*"]
 
 [tool.coverage.report]
-fail_under = 20
+fail_under = 25
 exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.:",

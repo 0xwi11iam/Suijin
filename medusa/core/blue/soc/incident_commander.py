@@ -1,4 +1,5 @@
 """Incident Commander — major incident response coordination."""
+from __future__ import annotations
 import time
 
 class IncidentCommander:

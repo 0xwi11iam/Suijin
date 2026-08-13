@@ -6,6 +6,7 @@ Provides:
 - Config validation on startup
 - Health check (API keys, tool availability, lab status)
 """
+from __future__ import annotations
 import json
 import os
 import sys

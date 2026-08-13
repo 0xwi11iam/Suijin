@@ -1,4 +1,5 @@
 """Result collector — aggregate findings, deduplicate."""
+from __future__ import annotations
 import hashlib, time
 
 class ResultCollector:

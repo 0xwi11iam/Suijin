@@ -1,4 +1,5 @@
 """Attack chain tracker — correlate attacker requests."""
+from __future__ import annotations
 class AttackChainTracker:
     def __init__(self):
         self.chains = {}

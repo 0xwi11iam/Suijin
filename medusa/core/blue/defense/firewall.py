@@ -1,4 +1,5 @@
 """Firewall — iptables/nftables rule management with IP validation."""
+from __future__ import annotations
 import subprocess, re, ipaddress
 
 def _validate_ip(ip: str) -> str:

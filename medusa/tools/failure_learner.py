@@ -1,4 +1,5 @@
 """Learning from failure — record blocked patterns and never repeat them."""
+from __future__ import annotations
 import json, os, hashlib
 from pathlib import Path
 from datetime import datetime, timezone

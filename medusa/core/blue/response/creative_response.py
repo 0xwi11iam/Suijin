@@ -1,4 +1,5 @@
 """Creative response — non-blocking countermeasures."""
+from __future__ import annotations
 from medusa.core.blue.deception.honeypot_factory import generate_honeypot_response
 from medusa.core.blue.deception.misinformation import generate_fake_response, generate_fake_500
 from medusa.core.blue.deception.canary_token import deploy_canary

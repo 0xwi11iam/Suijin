@@ -1,4 +1,5 @@
 """Deception engine — coordinate all deception tactics."""
+from __future__ import annotations
 from medusa.core.blue.deception.honeypot_factory import generate_honeypot_response
 from medusa.core.blue.deception.time_sink import TimeSink
 from medusa.core.blue.deception.shadow_redirect import redirect_to_shadow

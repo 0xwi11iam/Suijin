@@ -1,4 +1,5 @@
 """Attack reconstructor — rebuild attacker's full session."""
+from __future__ import annotations
 def reconstruct_timeline(ip: str, requests: list) -> list:
     timeline = []
     for req in requests:

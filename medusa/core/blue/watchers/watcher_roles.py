@@ -1,4 +1,5 @@
 """Watcher role definitions for SOC team simulation."""
+from __future__ import annotations
 TIER1_ANALYST = {"name": "Tier 1 Analyst", "level": 1, "autonomy": "rate_limit_only",
     "escalates_to": "tier2", "tools": ["classify_attack", "rate_limit", "log"]}
 TIER2_ANALYST = {"name": "Tier 2 Analyst", "level": 2, "autonomy": "deception_and_block",

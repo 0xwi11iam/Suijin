@@ -6,6 +6,7 @@ regardless of project settings. This check cannot be toggled off.
 
 Ported from redamon/agentic/orchestrator_helpers/hard_guardrail.py.
 """
+from __future__ import annotations
 import re
 
 _TLD_PATTERNS = [

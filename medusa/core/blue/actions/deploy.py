@@ -9,6 +9,7 @@ deception responses.
 Imports the subagent's pre-built assets (honeypot_code, patch_code,
 deception_response) that were generated during the analysis phase.
 """
+from __future__ import annotations
 import json, os, time, re
 from pathlib import Path
 from typing import Optional

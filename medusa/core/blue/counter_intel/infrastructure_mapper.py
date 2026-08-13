@@ -1,4 +1,5 @@
 """Infrastructure mapper — trace attacker IPs, map proxies/VPNs/botnets."""
+from __future__ import annotations
 import socket
 
 def reverse_dns(ip: str) -> str:

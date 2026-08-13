@@ -12,6 +12,7 @@ Usage:
                         log_path=str(BLUE_TRAFFIC_LOG))
     # All traffic to :8080 gets logged then forwarded to :5906
 """
+from __future__ import annotations
 import json, os, time, socket, threading, sys
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.request import Request, urlopen

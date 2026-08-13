@@ -1,4 +1,5 @@
 """Threat Hunter — proactive scanning for missed attacks in traffic."""
+from __future__ import annotations
 import time, re
 
 class ThreatHunter:

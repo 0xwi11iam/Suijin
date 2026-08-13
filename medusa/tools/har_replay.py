@@ -1,4 +1,5 @@
 """HAR file replay — load HTTP Archive and replay requests."""
+from __future__ import annotations
 import json
 from pathlib import Path
 
