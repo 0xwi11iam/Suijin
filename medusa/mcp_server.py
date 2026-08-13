@@ -172,8 +172,12 @@ def _make_route_handler(name: str):
         from medusa.tools.dispatch import route_tool
 
         result = route_tool(name, args or {}, {})
-        header = f"[medusa] tool: {name}\n[medusa] args: {json.dumps(args or {}, default=str)}\n\n"
-        return header + str(result)
+        header = (
+            f"**[medusa] tool: {name}**\n"
+            f"**[medusa] args:** `{json.dumps(args or {}, default=str)}`\n\n"
+            f"```text\n{result}\n```"
+        )
+        return header
 
     return handler
 

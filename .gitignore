@@ -53,3 +53,9 @@ access_keys.json
 .coverage
 coverage.xml
 htmlcov/
+
+# TUI shell build artifacts (tui is vendored source, not its own repo)
+tui/node_modules/
+tui/.turbo/
+tui/packages/*/node_modules/
+tui/packages/*/dist/
