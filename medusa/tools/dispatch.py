@@ -724,8 +724,8 @@ def check_knowledge(target, payload=None, config=None):
     if payload:
         result = kg.check_payload(target, payload)
         if result.get("blocked"):
-            return f"⛔ BLOCKED: {result['reason']} (confidence: {result.get('confidence', 1.0):.0%})"
-        return f"✅ Payload not in any known blocked pattern for {target}."
+            return f"BLOCKED: {result['reason']} (confidence: {result.get('confidence', 1.0):.0%})"
+        return f"Payload not in any known blocked pattern for {target}."
     else:
         return kg.summary(target)
 
@@ -751,7 +751,7 @@ def record_finding(target, finding_type, rule, evidence="", config=None):
 
     kg.add_constraint(target, finding_type, rule, evidence=evidence or "",
                       confidence=1.0)
-    return f"📝 Recorded: {target} → {finding_type} → '{rule}'"
+    return f"Recorded: {target} -> {finding_type} -> '{rule}'"
 
 
 # ----------------------------------------------------------------------
@@ -809,11 +809,10 @@ def write_note(content, success=True, category="general", engagement=None, confi
         with note_file.open("a", encoding="utf-8") as f:
             f.write(entry)
 
-    return f"📒 Note written to .notes/{filename} [{category}] — {status}"
+    return f"Note written to .notes/{filename} [{category}] - {status}"
 
 
-def route_tool(tool_name, args, config):
-    if args is None: args = {}
+def _build_routes(config):
     routes = {
         "execute_terminal": lambda a: execute_terminal(a.get("cmd") or a.get("command"), timeout=int(a.get("timeout", 30))),
         "search_kb": lambda a: search_kb(a.get("keyword")),
@@ -867,6 +866,18 @@ def route_tool(tool_name, args, config):
     # Inject module tools dynamically
     for t_name, t_func in get_module_tools().items():
         routes[t_name] = lambda a, f=t_func: f(**a)
+
+    return routes
+
+
+def list_route_tools():
+    """Return the names of every dispatchable tool (explicit + module tools)."""
+    return sorted(_build_routes(None).keys())
+
+
+def route_tool(tool_name, args, config):
+    if args is None: args = {}
+    routes = _build_routes(config)
 
     # ── FREEDOM: no phase gating. All tools always available. ──
 
