@@ -84,6 +84,7 @@ class RedConfig(BaseModel):
     provider: str = Field(default="deepseek")
     deepseek_model: str = Field(default="deepseek-v4-flash")
     zai_model: str = Field(default="glm-5.3")
+    zai_endpoint: str = Field(default="coding")
     max_iterations: int = Field(default=100, ge=1, le=10000)
     temperature: float = Field(default=0.4, ge=0.0, le=2.0)
     supervisor_interval: int = Field(default=5, ge=1)
@@ -94,6 +95,19 @@ class RedConfig(BaseModel):
     final_model_id: str = ""
     sentinel_model_id: str = ""
     max_tokens_per_request: int = Field(default=8000, ge=100)
+
+    @field_validator("zai_endpoint")
+    @classmethod
+    def validate_zai_endpoint(cls, v):
+        allowed = ("coding", "paas")
+        v = (v or "coding").strip().lower()
+        if v not in allowed and not v.startswith(("http://", "https://")):
+            raise ValueError(
+                f"zai_endpoint must be one of {allowed} (or a full base URL), got '{v}'. "
+                "'coding' = GLM Coding Plan subscription quota (default); "
+                "'paas' = pay-as-you-go per-token billing."
+            )
+        return v
 
     @field_validator("cost_hard_cap_usd")
     @classmethod

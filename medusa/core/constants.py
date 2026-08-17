@@ -21,6 +21,9 @@ SENTINEL_MODEL = "Qwen/Qwen2.5-3B-Instruct"
 SUPERVISOR_MODEL = "Qwen/Qwen2.5-3B-Instruct"
 GEMINI_MODEL = "gemini-2.5-flash"
 ZAI_MODEL = "glm-5.3"
+# "coding" = GLM Coding Plan subscription endpoint (default — burns plan
+# credits, not dollars). "paas" = pay-as-you-go endpoint (per-token USD).
+ZAI_ENDPOINT = "coding"
 
 EXPERT_MODELS = [
     "Qwen/Qwen3-Coder-480B-A35B-Instruct",

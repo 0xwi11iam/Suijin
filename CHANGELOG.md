@@ -2,6 +2,69 @@
 
 All notable changes to Medusa.
 
+## [2.7.0] — 2026-08-17 — OPERATORS CLI + KB TOOLKIT
+
+### Added
+- **KB-powered agent toolkit** (`tools/kb_tools.py`, 7 new offline tools):
+  `suggest_exploit` (fingerprint → GTFOBins privesc page + HackTricks +
+  PayloadsAllTheThings leads), `find_wordlist` (SecLists keyword search that
+  **materializes** files into `medusa_agent/wordlists/` from the cached
+  tarball — the DB copy can be truncated), `extract_payloads` (KB code
+  blocks → `medusa_agent/payloads/`, 8-16k size window), `kb_stats`
+  (inventory), `wordlist_tool` (merge/dedupe/length-filter), `mine_failures`
+  (SequenceMatcher clustering of `failure_db.json`), `anonymize_report`
+  (regex scrubber for IPs/emails/bearer tokens/api keys/JWTs/private keys →
+  `medusa_agent/reports/anonymized/`, localhost + FLAG{} preserved). Wired
+  into dispatch routes, tool catalog (KB-dependent tools gated on the build),
+  tool registry, MCP descriptions, and the HITL allowlist. 21 tests.
+- **Phrase queries in search_kb** — quoted spans become ordered FTS5
+  phrases: `'"union select"'` matches adjacent words only (`select ... union`
+  no longer matches). Unquoted keywords keep implicit-AND semantics.
+
+### Added
+- **12 new non-interactive CLI commands** — every one offline, scriptable,
+  exit 0 on healthy: `medusa status` (one-page summary), `version`, `env`
+  (API key presence, names only — values never printed), `tools` (all tools
+  with availability marks), `modules` (packs + deps), `skills`,
+  `config show` (effective config, secrets redacted), `config validate`
+  (Pydantic, exit 1 on failure), `workspace` (layout + usage + symlink
+  health), `reports` (newest-first listing), `sessions` (with objectives),
+  `labs` (real ports + launch commands, scanned live from `medusa/lab/`).
+  Bare `medusa pull` / `medusa config` now print help instead of silently
+  doing nothing. 23 new tests in `test_cli_commands.py`.
+- **Z.ai dual-endpoint selection** — `zai_endpoint` config picks the billing
+  surface: `"coding"` **(default)** = GLM Coding Plan subscription endpoint
+  (`https://api.z.ai/api/coding/paas/v4`, burns plan credits, Lite/Pro/Max
+  quotas, models glm-5.3 / glm-5-turbo / glm-4.7 with older ids auto-routed)
+  or `"paas"` = pay-as-you-go endpoint (`https://api.z.ai/api/paas/v4`,
+  per-token USD). Full custom base URLs (proxies) also accepted. Previously
+  the provider hardcoded the pay-as-you-go endpoint — Coding Plan
+  subscribers burned nothing and got errors. A plan key on the wrong surface
+  now gets a 403 message naming both endpoints and the exact fix (no blind
+  retries). Exposed in the Settings TUI (`zai_endpoint` picker, zai-only),
+  `RedConfig` validation (rejects typos like "free-tier"), constants
+  (`ZAI_ENDPOINT = "coding"`), and shown by `medusa doctor` / `medusa
+  status`. 27 tests in `test_zai_provider.py` (endpoint selection incl.
+  case-insensitivity + unknown-value fallback to coding, URL constants
+  pinned to Z.ai docs, 403 guidance, glm-5-turbo pricing, doctor row).
+- `medusa doctor` gained a `workspace` row (canonical dir + symlink health).
+
+### Fixed
+- **DeepSeek timeout fall-through** — after exhausting retries the DeepSeek
+  branch fell through to `Error: Unknown provider 'deepseek'` instead of
+  returning `Error: DeepSeek API Timeout` (regression test added).
+
+### Changed
+- **README rewritten documentation-first** — 1,429 marketing-heavy lines →
+  ~600 lines of reference: full CLI table, configuration key reference,
+  provider docs (incl. the Z.ai coding/paas explainer), KB / workspace /
+  architecture / red / blue reference sections, real labs table (the old
+  README documented a `cloudboard_next` lab that does not exist in the
+  repo — replaced with the 8 actual labs and their real ports), trimmed
+  troubleshooting/glossary, credits reduced to one line each.
+- Z.ai model pickers updated to the Coding Plan catalogue
+  (glm-5.3 / glm-5-turbo / glm-4.7 / glm-5.1 / glm-4.6).
+
 ## [2.6.0] — 2026-08-17 — FULLY INDEXED KB + ONE WORKSPACE
 
 ### Added

@@ -191,9 +191,24 @@ def _is_kev(cve):
 
 
 def _fts_match_expr(keyword: str) -> str:
-    """Turn free text into a safe FTS5 expression: quoted terms, implicit AND."""
-    terms = [t for t in keyword.replace('"', " ").split() if t]
-    return " ".join(f'"{t}"' for t in terms) or '""'
+    """Turn free text into a safe FTS5 expression.
+
+    Quoted spans become ordered PHRASE terms (FTS5 matches adjacent words in
+    order): 'sql "union select" bypass' -> '"sql" "union select" "bypass"'.
+    Unquoted words are quoted individually with implicit AND, as before.
+    """
+    exprs: list[str] = []
+    pos = 0
+    for m in re.finditer(r'"([^"]+)"', keyword):
+        for word in keyword[pos:m.start()].replace('"', " ").split():
+            exprs.append(f'"{word}"')
+        phrase = " ".join(m.group(1).split())
+        if phrase:
+            exprs.append(f'"{phrase}"')
+        pos = m.end()
+    for word in keyword[pos:].replace('"', " ").split():
+        exprs.append(f'"{word}"')
+    return " ".join(exprs) or '""'
 
 
 _SOURCE_FILTER_RE = re.compile(r"(?:^|\s)source:([A-Za-z0-9_-]+)")

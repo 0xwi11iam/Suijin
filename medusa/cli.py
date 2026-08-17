@@ -1,7 +1,23 @@
 """Medusa command-line entry point.
 
-`medusa`      -> launch the classic Rich TUI
-`medusa doctor` -> verify the environment is ready to hack
+`medusa`                 -> launch the classic Rich TUI
+`medusa doctor`          -> verify the environment is ready
+`medusa status`          -> one-page system summary
+`medusa selftest`        -> offline smoke test (no network, no keys)
+`medusa version`         -> release / python / package details
+`medusa env`             -> API key presence (names only)
+`medusa tools`           -> all agent tools + availability
+`medusa modules`         -> loaded module packs
+`medusa skills`          -> agent-editable skills
+`medusa config show`     -> effective config (secrets redacted)
+`medusa config validate` -> Pydantic validation of both configs
+`medusa workspace`       -> workspace layout + usage + symlink health
+`medusa reports`         -> engagement reports
+`medusa sessions`        -> saved sessions
+`medusa labs`            -> built-in vulnerable labs with ports
+`medusa pull kb ...`     -> build/inspect the offline knowledge base
+
+Every subcommand is non-interactive and scriptable (exit 0 = healthy).
 """
 
 import argparse
@@ -97,10 +113,14 @@ def run_doctor() -> int:
                 data = json.load(f)
             has_key = _has_any_api_key(_PKG_DIR)
             provider = data.get("provider", "unset")
+            detail = f"provider={provider}"
+            if provider == "zai":
+                endpoint = data.get("zai_endpoint") or "coding"
+                detail += f", endpoint={endpoint} ({'Coding Plan quota' if endpoint == 'coding' else 'pay-as-you-go'})"
             if has_key:
-                rows.append(_ok("config", f"provider={provider}, api key set"))
+                rows.append(_ok("config", f"{detail}, api key set"))
             else:
-                rows.append(_warn("config", f"provider={provider}, no api key (heuristic mode works)"))
+                rows.append(_warn("config", f"{detail}, no api key (heuristic mode works)"))
         except Exception as e:
             rows.append(_warn("config", f"unreadable: {e}"))
     else:
@@ -142,6 +162,19 @@ def run_doctor() -> int:
             rows.append(_warn("knowledge base", "not built — run: medusa pull kb"))
     except Exception as e:
         rows.append(_warn("knowledge base", str(e)))
+
+    # Workspace layout (canonical root dir + inner symlink)
+    try:
+        import medusa.tools.workspace as ws
+
+        ws.ensure_workspace_layout()
+        inner = ws.PROJECT_DIR / "medusa" / "medusa_agent"
+        if inner.is_symlink():
+            rows.append(_ok("workspace", f"{ws.WORKSPACE_DIR} (symlink ok)"))
+        else:
+            rows.append(_warn("workspace", "medusa/medusa_agent is not a symlink -> ../medusa_agent"))
+    except Exception as e:
+        rows.append(_warn("workspace", str(e)))
 
     # Print
     print("Medusa doctor v" + VERSION)
@@ -263,6 +296,379 @@ def run_pull_kb(args) -> int:
     return 0
 
 
+# ── Non-interactive info commands ─────────────────────────────────────
+# All offline, all safe to script: `medusa status && medusa labs` etc.
+
+ENV_KEY_NAMES = (
+    "DEEPSEEK_API_KEY",
+    "OPENAI_API_KEY",
+    "HF_TOKEN",
+    "GEMINI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "AMD_API_KEY",
+    "ZAI_API_KEY",
+    "NVD_API_KEY",  # optional — raises NVD rate limits for search_cve
+)
+
+
+def run_version() -> int:
+    """Detailed version info: release, python, platform, package location."""
+    import json
+    import platform
+
+    codename = release = ""
+    try:
+        with open(os.path.join(_PKG_DIR, "version.json")) as f:
+            vj = json.load(f)
+        codename, release = vj.get("codename", ""), vj.get("release_date", "")
+    except (OSError, ValueError):
+        pass
+    print(f"medusa {VERSION}" + (f'  "{codename}"' if codename else "") + (f"  ({release})" if release else ""))
+    print(f"python {platform.python_version()} on {platform.system()} {platform.machine()}")
+    print(f"package: {_PKG_DIR}")
+    return 0
+
+
+def run_env() -> int:
+    """Show API-key presence by name only — values are NEVER printed."""
+    file_keys = set()
+    try:
+        with open(os.path.join(_PKG_DIR, ".env")) as f:
+            for line in f:
+                name, _, value = line.partition("=")
+                if name.strip() and value.strip():
+                    file_keys.add(name.strip())
+    except OSError:
+        pass
+    print("API keys (names only — values never shown):")
+    for name in ENV_KEY_NAMES:
+        if os.environ.get(name):
+            where = "environment"
+        elif name in file_keys:
+            where = "medusa/.env"
+        else:
+            where = ""
+        print(f"  {name:20} {'SET' if where else 'not set':8}" + (f"({where})" if where else ""))
+    return 0
+
+
+def run_status() -> int:
+    """One-page system summary: provider, KB, workspace, modules, lab port."""
+    import json
+
+    print(f"medusa {VERSION}")
+    try:
+        with open(os.path.join(_PKG_DIR, "config.json")) as f:
+            cfg = json.load(f)
+        provider = cfg.get("provider", "deepseek")
+        line = f"provider:         {provider} — api key {'set' if _has_any_api_key(_PKG_DIR) else 'NOT set (heuristic mode works)'}"
+        if provider == "zai":
+            ep = cfg.get("zai_endpoint") or "coding"
+            line += f" | endpoint: {ep}"
+        print(line)
+    except OSError:
+        print("provider:         no config.json (heuristic mode works)")
+
+    try:
+        from medusa.kb import kb_status
+
+        st = kb_status()
+        if st:
+            age = f", {st['age_days']}d old" if st.get("age_days") is not None else ""
+            print(f"knowledge base:   {st['docs']:,} docs / {st['sources']} sources{age}")
+        else:
+            print("knowledge base:   NOT built — run: medusa pull kb")
+    except Exception as e:
+        print(f"knowledge base:   {e}")
+
+    try:
+        import medusa.tools.workspace as ws
+
+        ws.ensure_workspace_layout()
+        inner = ws.PROJECT_DIR / "medusa" / "medusa_agent"
+        print(f"workspace:        {ws.WORKSPACE_DIR}" + ("" if inner.is_symlink() else "  (!! symlink missing)"))
+    except Exception as e:
+        print(f"workspace:        {e}")
+
+    try:
+        from medusa.modules.loader import discover_modules, get_module_tools
+
+        discover_modules()
+        print(f"modules:          {len(get_module_tools())} module tools loaded")
+    except Exception as e:
+        print(f"modules:          load failed — {e}")
+
+    print(f"lab port:         5906 {'free' if _port_free(5906) else 'IN USE'}")
+    return 0
+
+
+def run_tools_list() -> int:
+    """Every callable agent tool, core + module, with availability marks."""
+    from medusa.tools.dispatch import list_route_tools
+
+    core = sorted(list_route_tools())
+    print(f"Core tools ({len(core)}):")
+    for t in core:
+        print(f"  {t}")
+    try:
+        from medusa.modules.loader import discover_modules, get_loaded_modules
+        from medusa.tools.availability import missing_binaries
+
+        discover_modules()
+        unavail = missing_binaries()
+        mods = get_loaded_modules() or {}
+        total = shown = 0
+        print("\nModule tools:")
+        for mod_name in sorted(mods):
+            tools = mods[mod_name].get("manifest", {}).get("tools", {})
+            for t_name in sorted(tools):
+                total += 1
+                if t_name in unavail:
+                    print(f"  {t_name:24} [missing: {', '.join(unavail[t_name])}]")
+                else:
+                    shown += 1
+                    print(f"  {t_name}")
+        print(f"\n{total} module tools ({shown} ready, {total - shown} missing binaries)")
+    except Exception as e:
+        print(f"\nModule tools: unavailable — {e}")
+    return 0
+
+
+def run_modules_list() -> int:
+    """Loaded module packs with tool counts and binary dependencies."""
+    from medusa.modules.loader import discover_modules, get_loaded_modules
+
+    discover_modules()
+    mods = get_loaded_modules() or {}
+    if not mods:
+        print("No module packs found (expected under Modules/Tools and Modules/Mods).")
+        return 1
+    total_tools = 0
+    print(f"{len(mods)} module packs:")
+    for name in sorted(mods):
+        manifest = mods[name].get("manifest", {})
+        tools = manifest.get("tools", {})
+        deps = manifest.get("dependencies", [])
+        total_tools += len(tools)
+        line = f"  {name:22} {len(tools)} tool{'s' if len(tools) != 1 else ''}"
+        if deps:
+            line += f"  (requires: {', '.join(deps)})"
+        print(line)
+    print(f"\n{total_tools} tools total")
+    return 0
+
+
+def run_skills_list() -> int:
+    """Attack/defense skills the agent can edit via the edit_skill tool."""
+    from medusa.tools.self_improve import list_available_skills
+
+    out = list_available_skills()
+    print(out)
+    return 0
+
+
+# Keys whose VALUES must never reach a terminal. config.json should not hold
+# secrets (keys live in .env), but redact defensively anyway.
+_SECRET_MARKERS = ("key", "token", "secret", "password", "credential")
+
+
+def _redact(obj):
+    if isinstance(obj, dict):
+        return {
+            k: ("***redacted***" if any(m in k.lower() for m in _SECRET_MARKERS) and v else _redact(v))
+            for k, v in obj.items()
+        }
+    if isinstance(obj, list):
+        return [_redact(x) for x in obj]
+    return obj
+
+
+def _effective_config() -> dict:
+    from medusa.core.red.config_loader import load_config
+
+    return load_config()
+
+
+def run_config_show() -> int:
+    """Effective red-team config (defaults merged), secrets redacted."""
+    import json
+
+    print(json.dumps(_redact(_effective_config()), indent=2, sort_keys=True))
+    return 0
+
+
+def run_config_validate() -> int:
+    """Pydantic-validate config.json and blue_config.json. Exit 1 on failure."""
+    import json
+
+    from medusa.core.config_models import BlueConfig, RedConfig
+
+    ok = True
+    checks = (
+        ("config.json", RedConfig),
+        ("blue_config.json", BlueConfig),
+    )
+    for fname, model in checks:
+        path = os.path.join(_PKG_DIR, fname)
+        if not os.path.exists(path):
+            print(f"[--] {fname}: not present (defaults apply)")
+            continue
+        try:
+            with open(path) as f:
+                model(**json.load(f))
+            print(f"[ok] {fname}: valid")
+        except Exception as e:
+            ok = False
+            print(f"[XX] {fname}: INVALID — {e}")
+    return 0 if ok else 1
+
+
+def _dir_stats(p) -> tuple[int, int]:
+    n = s = 0
+    for f in p.rglob("*"):
+        try:
+            if f.is_file():
+                n += 1
+                s += f.stat().st_size
+        except OSError:
+            pass
+    return n, s
+
+
+def run_workspace_status() -> int:
+    """Canonical workspace layout, per-directory usage, symlink health."""
+
+    import medusa.tools.workspace as ws
+
+    ws.ensure_workspace_layout()
+    inner = ws.PROJECT_DIR / "medusa" / "medusa_agent"
+    print(f"workspace: {ws.WORKSPACE_DIR}")
+    print(
+        f"symlink:   medusa/medusa_agent -> "
+        f"{'../medusa_agent (ok)' if inner.is_symlink() else 'MISSING — run: medusa selftest'}"
+    )
+    total = 0
+    if ws.WORKSPACE_DIR.exists():
+        for entry in sorted(ws.WORKSPACE_DIR.iterdir()):
+            if entry.is_dir():
+                n, size = _dir_stats(entry)
+                total += size
+                print(f"  {entry.name + '/':<18} {n:>5} files  {size / 1024:>9.0f} KB")
+            else:
+                size = entry.stat().st_size
+                total += size
+                print(f"  {entry.name:<18} {'':>11}  {size / 1024:>9.0f} KB")
+    print(f"  {'total':<18} {'':>11}  {total / 1024 / 1024:>9.1f} MB")
+    return 0 if inner.is_symlink() else 1
+
+
+def run_reports_list() -> int:
+    """Engagement reports in medusa_agent/reports (newest first, top 30)."""
+    from datetime import datetime
+
+    from medusa.tools.workspace import WORKSPACE_DIR
+
+    rdir = WORKSPACE_DIR / "reports"
+    files = []
+    if rdir.exists():
+        files = sorted((f for f in rdir.rglob("*") if f.is_file()), key=lambda p: p.stat().st_mtime, reverse=True)[:30]
+    if not files:
+        print("No reports yet — they land in medusa_agent/reports/ after an engagement.")
+        return 0
+    print(f"Reports in {rdir} (newest first):")
+    for f in files:
+        st = f.stat()
+        when = datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M")
+        print(f"  {when}  {st.st_size / 1024:>8.0f} KB  {f.relative_to(rdir)}")
+    return 0
+
+
+def run_sessions_list() -> int:
+    """Saved engagement sessions in medusa_agent/sessions (newest first)."""
+    import json
+    from datetime import datetime
+
+    from medusa.tools.workspace import WORKSPACE_DIR
+
+    sdir = WORKSPACE_DIR / "sessions"
+    files = []
+    if sdir.exists():
+        files = sorted(sdir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not files:
+        print("No saved sessions — medusa_agent/sessions/ fills up during engagements.")
+        return 0
+    print(f"{len(files)} saved sessions (newest first):")
+    for f in files:
+        st = f.stat()
+        when = datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M")
+        objective = ""
+        try:
+            with open(f) as fh:
+                objective = (json.load(fh).get("objective") or "")[:60]
+        except (OSError, ValueError):
+            pass
+        suffix = f"  {objective}" if objective else ""
+        print(f"  {when}  {f.name}{suffix}")
+    return 0
+
+
+def _first_docstring(path: str) -> str:
+    import re
+
+    try:
+        with open(path) as f:
+            head = f.read(4000)
+        m = re.search(r'"""(.+?)"""', head, re.DOTALL)
+        if m:
+            return " ".join(m.group(1).split())
+    except OSError:
+        pass
+    return ""
+
+
+def _lab_port(path: str) -> str:
+    """Best-effort port extraction: `port=NNNN` anywhere, else docstring hints."""
+    import re
+
+    try:
+        with open(path) as f:
+            text = f.read()
+    except OSError:
+        return "?"
+    m = re.search(r"port\s*=\s*(\d{4,5})", text)
+    if not m:
+        # docstring hints like "Port 5906" / "Port: 5700"
+        m = re.search(r"[Pp]ort[:\s]+(\d{4,5})", text[:4000])
+    return m.group(1) if m else "?"
+
+
+def run_labs_list() -> int:
+    """Built-in vulnerable labs: ports, descriptions, launch commands."""
+    lab_dir = os.path.join(_PKG_DIR, "lab")
+    found = 0
+    for name in sorted(os.listdir(lab_dir)):
+        d = os.path.join(lab_dir, name)
+        if not os.path.isdir(d) or name.startswith("__"):
+            continue
+        app = next((c for c in ("app.py", "vulnerable_app.py") if os.path.exists(os.path.join(d, c))), None)
+        if not app:
+            continue
+        found += 1
+        port = _lab_port(os.path.join(d, app))
+        suffix = ""
+        if port != "?":
+            suffix = "" if _port_free(int(port)) else "  (IN USE)"
+        print(f"  {name:18} :{port:<5} python3 medusa/lab/{name}/{app}{suffix}")
+        doc = _first_docstring(os.path.join(d, app))
+        if doc:
+            print(f"  {'':18} {doc}")
+    if not found:
+        print("No labs found under medusa/lab/.")
+        return 1
+    print("\nStart one, then point Red Team at http://127.0.0.1:<port>.")
+    return 0
+
+
 def run_selftest() -> int:
     """Offline smoke test: imports, KB gating, workspace anchors, sandbox.
 
@@ -373,12 +779,32 @@ def run_selftest() -> int:
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="medusa", description="Medusa — autonomous red & blue teaming")
+    parser = argparse.ArgumentParser(
+        prog="medusa",
+        description="Medusa — autonomous red & blue teaming. "
+        "Run bare to launch the TUI; subcommands are non-interactive.",
+    )
     parser.add_argument("--version", action="version", version=f"medusa {VERSION}")
     sub = parser.add_subparsers(dest="command")
 
-    doctor = sub.add_parser("doctor", help="verify the environment is ready")
-    doctor.set_defaults(func=lambda _a: run_doctor())
+    # Simple offline verbs — every one is scriptable and exits 0 on success.
+    SIMPLE_COMMANDS = {
+        "doctor": ("verify the environment is ready", run_doctor),
+        "selftest": ("offline smoke test — no network, no API keys", run_selftest),
+        "status": ("one-page system status summary", run_status),
+        "version": ("print version, python, and package details", run_version),
+        "env": ("show API key presence (names only, never values)", run_env),
+        "tools": ("list all agent tools with availability", run_tools_list),
+        "modules": ("list loaded module packs", run_modules_list),
+        "skills": ("list agent-editable attack skills", run_skills_list),
+        "workspace": ("workspace layout, usage, and symlink health", run_workspace_status),
+        "reports": ("list engagement reports", run_reports_list),
+        "sessions": ("list saved engagement sessions", run_sessions_list),
+        "labs": ("list built-in vulnerable labs with ports", run_labs_list),
+    }
+    for name, (help_text, fn) in SIMPLE_COMMANDS.items():
+        p = sub.add_parser(name, help=help_text)
+        p.set_defaults(func=lambda _a, _fn=fn: _fn())
 
     pull = sub.add_parser("pull", help="download resources (knowledge bases, ...)")
     pull_sub = pull.add_subparsers(dest="pull_target")
@@ -389,27 +815,28 @@ def main(argv=None):
     pull_kb.add_argument("--status", action="store_true", help="show what's indexed (offline) and exit")
     pull_kb.set_defaults(func=run_pull_kb)
 
-    selftest = sub.add_parser("selftest", help="offline smoke test — no network, no API keys")
-    selftest.set_defaults(func=lambda _a: run_selftest())
+    config = sub.add_parser("config", help="inspect and validate configuration")
+    config_sub = config.add_subparsers(dest="config_action")
+    config_show = config_sub.add_parser("show", help="effective config with secrets redacted")
+    config_show.set_defaults(func=lambda _a: run_config_show())
+    config_validate = config_sub.add_parser("validate", help="Pydantic-validate config.json + blue_config.json")
+    config_validate.set_defaults(func=lambda _a: run_config_validate())
 
     args = parser.parse_args(argv)
 
-    if args.command == "doctor":
-        sys.exit(run_doctor())
+    if args.command is None:
+        # Default: launch the classic Rich TUI
+        from medusa.main import main as tui_main
 
-    if args.command == "selftest":
-        sys.exit(run_selftest())
+        tui_main()
+        return
 
-    if args.command == "pull":
-        if getattr(args, "func", None) is None:
-            pull.print_help()
-            sys.exit(2)
-        sys.exit(args.func(args))
+    if getattr(args, "func", None) is None:
+        # `medusa pull` / `medusa config` with no action — show help.
+        sub.choices[args.command].print_help()
+        sys.exit(2)
 
-    # Default: launch the classic Rich TUI
-    from medusa.main import main as tui_main
-
-    tui_main()
+    sys.exit(args.func(args))
 
 
 if __name__ == "__main__":

@@ -22,6 +22,7 @@ from medusa.core.constants import (
     METASPLOIT_RPC_PORT,
     SENTINEL_MODEL,
     SUPERVISOR_MODEL,
+    ZAI_ENDPOINT,
     ZAI_MODEL,
 )
 
@@ -53,7 +54,7 @@ def load_config() -> dict:
             json.dump(default_config, f, indent=4)
     config = json.loads(CONFIG_PATH.read_text())
     for k, v in {"gemini_model": GEMINI_MODEL, "deepseek_model": DEFAULT_MODEL,
-                  "zai_model": ZAI_MODEL,
+                  "zai_model": ZAI_MODEL, "zai_endpoint": ZAI_ENDPOINT,
                   "supervisor_model_id": SUPERVISOR_MODEL,
                   "supervisor_interval": 5, "max_iterations": MAX_ITERATIONS}.items():
         config.setdefault(k, v)

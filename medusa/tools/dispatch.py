@@ -10,10 +10,13 @@ Layout:
   http_tools.py   http_request, apply_patch, read_file, write_file
   metasploit.py   msf_* integration
   intel.py        search_cve, search_kb, knowledge graph, write_note
+  kb_tools.py     find_wordlist, kb_stats, suggest_exploit, extract_payloads,
+                  wordlist_tool, mine_failures, anonymize_report
   reporting.py    payload/diff/rate-limit/attack-tree/report wrappers
   jobs.py         background job management
   aux_tools.py    web search, self-improvement, pip install
 """
+
 from __future__ import annotations
 
 from medusa.modules.loader import get_module_tools
@@ -49,6 +52,15 @@ from medusa.tools.jobs import (
     _job_output,
     _job_status,
     _job_wait,
+)
+from medusa.tools.kb_tools import (
+    anonymize_report,
+    extract_payloads,
+    find_wordlist,
+    kb_stats,
+    mine_failures,
+    suggest_exploit,
+    wordlist_tool,
 )
 from medusa.tools.metasploit import (
     _msf_console_fallback,
@@ -91,30 +103,83 @@ from medusa.tools.workspace import WORKSPACE_DIR, resolve_workspace_path
 
 __all__ = [
     # guardrails
-    "_BLOCKED_PATTERNS", "confirm_global_action", "is_dangerous",
+    "_BLOCKED_PATTERNS",
+    "confirm_global_action",
+    "is_dangerous",
     # workspace
-    "WORKSPACE_DIR", "resolve_workspace_path",
+    "WORKSPACE_DIR",
+    "resolve_workspace_path",
     # runtime
-    "AI_SERVICE_ENDPOINTS", "BASE_DIR", "DB_PATH", "MCP_SERVERS", "PROJECT_DIR",
-    "_job_lock", "_jobs", "_recon_state", "fingerprint_ai_response",
-    "get_proxy", "get_server_for_tool", "global_session",
-    "reset_recon_state", "set_proxy", "truncate",
+    "AI_SERVICE_ENDPOINTS",
+    "BASE_DIR",
+    "DB_PATH",
+    "MCP_SERVERS",
+    "PROJECT_DIR",
+    "_job_lock",
+    "_jobs",
+    "_recon_state",
+    "fingerprint_ai_response",
+    "get_proxy",
+    "get_server_for_tool",
+    "global_session",
+    "reset_recon_state",
+    "set_proxy",
+    "truncate",
     # terminal / http
-    "execute_terminal", "apply_patch", "http_request", "read_file", "write_file",
+    "execute_terminal",
+    "apply_patch",
+    "http_request",
+    "read_file",
+    "write_file",
     # metasploit
-    "_msf_console_fallback", "_msf_rpc_connect",
-    "msf_check", "msf_command", "msf_run", "msf_sessions",
+    "_msf_console_fallback",
+    "_msf_rpc_connect",
+    "msf_check",
+    "msf_command",
+    "msf_run",
+    "msf_sessions",
     # intel
-    "NVD_BASE", "NOTES_DIR", "_extract_cvss", "_is_kev",
-    "check_knowledge", "record_finding", "search_cve", "search_kb", "write_note",
+    "NVD_BASE",
+    "NOTES_DIR",
+    "_extract_cvss",
+    "_is_kev",
+    "check_knowledge",
+    "record_finding",
+    "search_cve",
+    "search_kb",
+    "write_note",
+    # kb toolkit
+    "anonymize_report",
+    "extract_payloads",
+    "find_wordlist",
+    "kb_stats",
+    "mine_failures",
+    "suggest_exploit",
+    "wordlist_tool",
     # jobs
-    "_job_cancel", "_job_list", "_job_output", "_job_status", "_job_wait",
+    "_job_cancel",
+    "_job_list",
+    "_job_output",
+    "_job_status",
+    "_job_wait",
     # reporting
-    "_attack_tree", "_diff_resp", "_gen_report", "_payload_gen", "_rate_all", "_rate_check",
+    "_attack_tree",
+    "_diff_resp",
+    "_gen_report",
+    "_payload_gen",
+    "_rate_all",
+    "_rate_check",
     # aux
-    "_edit_skill", "_list_own_files", "_list_skills", "_pip_install", "_web_search", "_write_tool",
+    "_edit_skill",
+    "_list_own_files",
+    "_list_skills",
+    "_pip_install",
+    "_web_search",
+    "_write_tool",
     # routing
-    "route_tool", "get_tool_catalog", "list_route_tools",
+    "route_tool",
+    "get_tool_catalog",
+    "list_route_tools",
 ]
 
 
@@ -126,8 +191,24 @@ def _recon_chain_route(target, config, ports=None):
 
 def _build_routes(config):
     routes = {
-        "execute_terminal": lambda a: execute_terminal(a.get("cmd") or a.get("command"), timeout=int(a.get("timeout", 30))),
+        "execute_terminal": lambda a: execute_terminal(
+            a.get("cmd") or a.get("command"), timeout=int(a.get("timeout", 30))
+        ),
         "search_kb": lambda a: search_kb(a.get("keyword"), limit=a.get("limit") or 5),
+        # Knowledge-base toolkit (offline)
+        "kb_stats": lambda a: kb_stats(),
+        "find_wordlist": lambda a: find_wordlist(a.get("keyword"), extract=a.get("extract", True)),
+        "suggest_exploit": lambda a: suggest_exploit(a.get("service"), a.get("version", "")),
+        "extract_payloads": lambda a: extract_payloads(a.get("keyword"), max_payloads=int(a.get("max_payloads", 10))),
+        "wordlist_tool": lambda a: wordlist_tool(
+            a.get("action"),
+            a.get("files"),
+            out=a.get("out", ""),
+            min_len=int(a.get("min_len", 1)),
+            max_len=int(a.get("max_len", 256)),
+        ),
+        "mine_failures": lambda a: mine_failures(max_clusters=int(a.get("max_clusters", 5))),
+        "anonymize_report": lambda a: anonymize_report(a.get("file_path", "")),
         "http_request": lambda a: http_request(a.get("method", "GET"), a.get("url"), a.get("headers"), a.get("body")),
         "read_file": lambda a: read_file(a.get("file_path", "")),
         "write_file": lambda a: write_file(a.get("file_path", ""), a.get("content", "")),
@@ -141,12 +222,22 @@ def _build_routes(config):
         "msf_run": lambda a: msf_run(a.get("module"), a.get("payload"), a.get("options") or {}, config),
         "msf_sessions": lambda a: msf_sessions(a.get("action", "list"), a.get("id"), config),
         # CVE / vulnerability intelligence
-        "search_cve": lambda a: search_cve(a.get("software"), config, version=a.get("version"), limit=int(a.get("limit", 5))),
+        "search_cve": lambda a: search_cve(
+            a.get("software"), config, version=a.get("version"), limit=int(a.get("limit", 5))
+        ),
         # Oracle / knowledge graph
         "check_knowledge": lambda a: check_knowledge(a.get("target"), payload=a.get("payload"), config=config),
-        "record_finding": lambda a: record_finding(a.get("target"), a.get("finding_type"), a.get("rule"), evidence=a.get("evidence", ""), config=config),
+        "record_finding": lambda a: record_finding(
+            a.get("target"), a.get("finding_type"), a.get("rule"), evidence=a.get("evidence", ""), config=config
+        ),
         # Note-taking
-        "write_note": lambda a: write_note(a.get("content", ""), success=a.get("success", True), category=a.get("category", "general"), engagement=a.get("engagement"), config=config),
+        "write_note": lambda a: write_note(
+            a.get("content", ""),
+            success=a.get("success", True),
+            category=a.get("category", "general"),
+            engagement=a.get("engagement"),
+            config=config,
+        ),
         # Web search & self-improvement
         "web_search": lambda a: _web_search(a.get("query", ""), int(a.get("max_results", 5))),
         "edit_skill": lambda a: _edit_skill(a.get("skill_name", ""), a.get("new_content", "")),
@@ -162,19 +253,23 @@ def _build_routes(config):
         "job_cancel": lambda a: _job_cancel(a.get("job_id", "")),
         # Analysis & reporting
         "payload_generate": lambda a: _payload_gen(a.get("vuln_type", ""), a.get("framework", "")),
-        "diff_response": lambda a: _diff_resp(a.get("baseline", ""), a.get("injected", ""), a.get("sensitivity", "medium")),
+        "diff_response": lambda a: _diff_resp(
+            a.get("baseline", ""), a.get("injected", ""), a.get("sensitivity", "medium")
+        ),
         "rate_limit_check": lambda a: _rate_check(a.get("endpoint", "")),
         "rate_limit_all": lambda a: _rate_all(),
         "attack_tree": lambda a: _attack_tree(a.get("trace_json", "")),
-        "generate_report": lambda a: _gen_report(a.get("engagement", ""), a.get("trace_json", ""), a.get("findings_json", "")),
+        "generate_report": lambda a: _gen_report(
+            a.get("engagement", ""), a.get("trace_json", ""), a.get("findings_json", "")
+        ),
         # deploy_subagent is an ACTION, not a tool. If the AI accidentally uses
         # it as a tool_name, show EXACTLY how to fix it so it self-corrects.
         "deploy_subagent": lambda a: (
             "WRONG FORMAT. deploy_subagent is an ACTION type, not a tool_name.\n"
-            "You used: {\"action\": \"use_tool\", \"tool_name\": \"deploy_subagent\", ...}\n"
-            "USE INSTEAD: {\"action\": \"deploy_subagent\", \"subagent_task\": \"your task\", \"thought\": \"...\"}\n"
+            'You used: {"action": "use_tool", "tool_name": "deploy_subagent", ...}\n'
+            'USE INSTEAD: {"action": "deploy_subagent", "subagent_task": "your task", "thought": "..."}\n'
             "Separate multiple tasks with || for parallel execution.\n"
-            "Example: {\"action\": \"deploy_subagent\", \"subagent_task\": \"SQLi test on /login || XSS test on /search\", \"thought\": \"parallel attacks\"}"
+            'Example: {"action": "deploy_subagent", "subagent_task": "SQLi test on /login || XSS test on /search", "thought": "parallel attacks"}'
         ),
     }
     # Inject module tools dynamically
@@ -204,8 +299,12 @@ def route_tool(tool_name, args, config):
 
     # Track recon actions (for informational purposes only)
     RECON_TOOLS = {
-        "execute_terminal", "http_request", "search_cve", "search_kb",
-        "read_file", "check_knowledge",
+        "execute_terminal",
+        "http_request",
+        "search_cve",
+        "search_kb",
+        "read_file",
+        "check_knowledge",
     }
     if tool_name in RECON_TOOLS:
         _recon_state["exploration_count"] = _recon_state.get("exploration_count", 0) + 1
@@ -270,16 +369,45 @@ def get_tool_catalog():
     # Knowledge base — feature-gated: only advertised when the operator has
     # built it with `medusa pull kb`. Otherwise listed as disabled below.
     from medusa.kb import kb_status
+
     _kb = kb_status()
     if _kb:
         per = ", ".join(f"{k} {v:,}" for k, v in sorted(_kb.get("per_source", {}).items()))
-        catalog += f"""- **search_kb** — Full-text search the local knowledge base ({_kb['docs']:,} docs: {per}). BM25-ranked results with snippets. Optional `source:<name>` filter (e.g. keyword "source:gtfobins awk sudo") and `limit` 1-20 (default 5). Prefer this over web_search for technique/payload/wordlist lookups — it is faster and offline.
+        catalog += f"""- **search_kb** — Full-text search the local knowledge base ({_kb["docs"]:,} docs: {per}). BM25-ranked results with snippets. Optional `source:<name>` filter (e.g. keyword "source:gtfobins awk sudo") and `limit` 1-20 (default 5). Prefer this over web_search for technique/payload/wordlist lookups — it is faster and offline.
   ```json
   {{"tool": "search_kb", "args": {{"keyword": "SQL injection bypass WAF", "limit": 5}}}}
   ```
+- **suggest_exploit** — Offline exploit leads for a fingerprinted service: exact GTFOBins binary page + HackTricks + PayloadsAllTheThings hits. Run right after nmap/whatweb; follow with search_cve for exact-version CVEs.
+  ```json
+  {{"tool": "suggest_exploit", "args": {{"service": "apache httpd", "version": "2.4.49"}}}}
+  ```
+- **find_wordlist** — Find SecLists wordlists by keyword AND materialize them into medusa_agent/wordlists/ for ffuf/gobuster/hydra.
+  ```json
+  {{"tool": "find_wordlist", "args": {{"keyword": "directory"}}}}
+  ```
+- **extract_payloads** — Pull runnable code blocks from matching KB docs into medusa_agent/payloads/. Review before running.
+  ```json
+  {{"tool": "extract_payloads", "args": {{"keyword": "reverse shell bash", "max_payloads": 10}}}}
+  ```
+- **kb_stats** — Knowledge base inventory: per-source doc counts, build age, failed sources.
+  ```json
+  {{"tool": "kb_stats", "args": {{}}}}
+  ```
 """
 
-    catalog += """- **apply_patch** — Patch vulnerabilities in the target lab application.
+    catalog += """- **wordlist_tool** — Merge / dedupe / length-filter wordlists into medusa_agent/wordlists/.
+  ```json
+  {"tool": "wordlist_tool", "args": {"action": "merge", "files": ["wordlists/a.txt", "wordlists/b.txt"], "out": "wordlists/merged.txt", "min_len": 4}}
+  ```
+- **mine_failures** — Cluster the failure DB so you never repeat a blocked technique/target combo.
+  ```json
+  {"tool": "mine_failures", "args": {"max_clusters": 5}}
+  ```
+- **anonymize_report** — Scrub IPs/emails/tokens/keys from a report file into medusa_agent/reports/anonymized/ before sharing.
+  ```json
+  {"tool": "anonymize_report", "args": {"file_path": "reports/eng_report.md"}}
+  ```
+- **apply_patch** — Patch vulnerabilities in the target lab application.
   ```json
   {"tool": "apply_patch", "args": {"vulnerability": "sqli"}}
   ```

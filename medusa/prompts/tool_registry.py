@@ -74,6 +74,48 @@ TOOL_REGISTRY = {
         "args_format": '"keyword": "source:gtfobins awk sudo", "limit": 5',
         "description": "**search_kb** — BM25-ranked search over the local knowledge base (kb.sqlite3). Returns ranked matches with source and snippet. Optional `source:<name>` filter scopes to one KB source; `limit` 1-20 (default 5). If not built, asks the operator to run `medusa pull kb`.",
     },
+    "suggest_exploit": {
+        "purpose": "Offline exploit leads for a fingerprinted service",
+        "when_to_use": "Immediately after nmap/whatweb/recon_chain identifies a service+version. Chains GTFOBins (privesc binary), HackTricks (service technique), PayloadsAllTheThings (payloads) — all local. Follow with search_cve for exact-version CVEs.",
+        "args_format": '"service": "apache httpd", "version": "2.4.49"',
+        "description": "**suggest_exploit** — offline exploit suggestions for a fingerprinted service. Requires the KB (`medusa pull kb`).",
+    },
+    "find_wordlist": {
+        "purpose": "Locate SecLists wordlists by keyword and materialize them on disk",
+        "when_to_use": "Before any brute-force or directory fuzzing — pick a purpose-built wordlist instead of guessing or generating one. Files land in medusa_agent/wordlists/, ready for ffuf/gobuster/hydra -w.",
+        "args_format": '"keyword": "directory", "extract": true',
+        "description": "**find_wordlist** — SecLists wordlist finder + extractor into medusa_agent/wordlists/. Requires the seclists KB source.",
+    },
+    "extract_payloads": {
+        "purpose": "Extract runnable code blocks from KB docs into payload files",
+        "when_to_use": "When you need the actual payload code (reverse shells, bypasses) rather than a description. Files land in medusa_agent/payloads/ — review before executing.",
+        "args_format": '"keyword": "reverse shell bash", "max_payloads": 10',
+        "description": "**extract_payloads** — KB code-block extractor into medusa_agent/payloads/.",
+    },
+    "kb_stats": {
+        "purpose": "Knowledge base inventory: per-source counts, age, failures",
+        "when_to_use": "At engagement start to see what references are available offline, or when search_kb reports a missing source.",
+        "args_format": "{}",
+        "description": "**kb_stats** — KB inventory (sources, doc counts, build age, failed sources).",
+    },
+    "wordlist_tool": {
+        "purpose": "Merge / dedupe / length-filter wordlists",
+        "when_to_use": "After collecting wordlists or credentials — combine, deduplicate, or trim to a length window before feeding a cracker/fuzzer.",
+        "args_format": '"action": "merge", "files": ["wordlists/a.txt"], "out": "wordlists/merged.txt"',
+        "description": "**wordlist_tool** — wordlist merge/dedupe/filter into medusa_agent/wordlists/.",
+    },
+    "mine_failures": {
+        "purpose": "Cluster past failures so blocked technique/target combos are never repeated",
+        "when_to_use": "When an attack keeps failing, or at engagement start to review what already failed on this target.",
+        "args_format": '"max_clusters": 5',
+        "description": "**mine_failures** — clusters medusa_agent/failure_db.json into technique/reason patterns to avoid.",
+    },
+    "anonymize_report": {
+        "purpose": "Scrub identifiers (IPs, emails, tokens, keys) from a report before sharing",
+        "when_to_use": "Before exporting or sharing ANY report outside the engagement — red-team outputs are full of secrets.",
+        "args_format": '"file_path": "reports/eng_report.md"',
+        "description": "**anonymize_report** — writes a redacted copy to medusa_agent/reports/anonymized/. Localhost and FLAG{} values are preserved.",
+    },
     "search_cve": {
         "purpose": "Query NVD for CVEs by software name and version",
         "when_to_use": (

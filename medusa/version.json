@@ -1,6 +1,6 @@
 {
-  "version": "2.6.0",
-  "codename": "Fully Indexed",
+  "version": "2.7.0",
+  "codename": "Operators CLI",
   "release_date": "2026-08-17",
-  "description": "Medusa v2.6: knowledge base fully indexable (GTFOBins moved to GTFOBins.github.io with path patterns + alias-stub resolution, download retries, honest per-source status via `medusa pull kb --status`). search_kb gains source:<name> filter + limit. One canonical medusa_agent/ workspace (auto-migration + symlink). New `medusa selftest` offline smoke test. 453 tests green."
+  "description": "Medusa v2.7: operators' CLI — 12 new non-interactive commands (status, version, env, tools, modules, skills, config show/validate, workspace, reports, sessions, labs) plus doctor workspace row. Z.ai provider now targets the GLM Coding Plan endpoint by default with user-selectable coding/paas billing (zai_endpoint) and 403 mismatch guidance; fixed DeepSeek timeout fall-through. README rewritten documentation-first. 500 tests green."
 }

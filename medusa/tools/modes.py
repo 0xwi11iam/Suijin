@@ -25,6 +25,7 @@ def _flag(config: dict | None, key: str) -> bool:
 # metasploit, file writes, self-modification) is blocked.
 _HITL_ALLOWED_TOOLS = {
     "search_kb", "search_cve", "check_knowledge", "record_finding",
+    "kb_stats", "suggest_exploit", "find_wordlist", "extract_payloads",
     "write_note", "web_search", "read_file", "http_request",
     "recon_chain", "msf_check", "diff_response", "rate_limit_check",
     "rate_limit_all", "attack_tree", "generate_report", "claim_flag",

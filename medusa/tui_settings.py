@@ -30,7 +30,12 @@ ALL_FIELDS = OrderedDict([
     ("deepseek_model",    ("choice", ["deepseek-chat", "deepseek-reasoner"], ["deepseek"])),
 
     # ---- Z.ai ----
-    ("zai_model",         ("choice", ["glm-5.3", "glm-5.3-flash", "glm-5.1", "glm-5.1-flash", "glm-4.7", "glm-4.7-flash"], ["zai"])),
+    # zai_endpoint: "coding" = GLM Coding Plan subscription quota (default;
+    # burns plan credits, Lite/Pro/Max). "paas" = pay-as-you-go per-token
+    # USD billing. Same ZAI_API_KEY works on both, but a plan key on paas
+    # (or a PAYG key on coding) returns 403.
+    ("zai_endpoint",      ("choice", ["coding", "paas"], ["zai"])),
+    ("zai_model",         ("choice", ["glm-5.3", "glm-5-turbo", "glm-4.7", "glm-5.1", "glm-4.6"], ["zai"])),
 
     # ---- HuggingFace ----
     ("final_model_id",    ("string", None, ["huggingface"])),
