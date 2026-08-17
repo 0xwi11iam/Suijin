@@ -2,6 +2,7 @@
 
 Scoped to the agent workspace with destructive-command guardrails.
 """
+
 from __future__ import annotations
 
 import os
@@ -38,12 +39,12 @@ def execute_terminal(cmd, timeout=30):
 
         # Build environment with homebrew paths (macOS)
         env = os.environ.copy()
-        brew_paths = ['/opt/homebrew/bin', '/usr/local/bin', '/opt/homebrew/sbin']
-        current_path = env.get('PATH', '')
+        brew_paths = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/homebrew/sbin"]
+        current_path = env.get("PATH", "")
         for bp in brew_paths:
             if bp not in current_path:
                 current_path = f"{bp}:{current_path}"
-        env['PATH'] = current_path
+        env["PATH"] = current_path
 
         # Tokenize; fall back to a shell one-liner for quoted/compound commands
         try:

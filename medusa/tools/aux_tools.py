@@ -1,29 +1,35 @@
 """Auxiliary tools: web search, self-improvement, package install."""
+
 from __future__ import annotations
 
 
 def _web_search(query: str, max_results: int = 5) -> str:
     from medusa.tools.web_search import web_search
+
     return web_search(query, max_results)
 
 
 def _edit_skill(skill_name: str, new_content: str) -> str:
     from medusa.tools.self_improve import edit_skill
+
     return edit_skill(skill_name, new_content)
 
 
 def _write_tool(tool_name: str, code: str) -> str:
     from medusa.tools.self_improve import write_tool
+
     return write_tool(tool_name, code)
 
 
 def _list_skills() -> str:
     from medusa.tools.self_improve import list_available_skills
+
     return list_available_skills()
 
 
 def _list_own_files() -> str:
     from medusa.tools.self_improve import list_own_files
+
     return list_own_files()
 
 
@@ -38,9 +44,12 @@ def _pip_install(package: str) -> str:
     try:
         import subprocess
         import sys
+
         result = subprocess.run(
             [sys.executable, "-m", "pip", "install", safe],
-            capture_output=True, text=True, timeout=120,
+            capture_output=True,
+            text=True,
+            timeout=120,
         )
         if result.returncode == 0:
             return f"Installed {safe}\n{result.stdout[-500:]}"

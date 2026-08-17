@@ -1,4 +1,5 @@
 """End-to-end integration tests for the blue team pipeline."""
+
 import json
 import os
 import sys
@@ -14,17 +15,35 @@ class TestBlueTeamPipeline:
 
     @pytest.fixture
     def temp_traffic_log(self):
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.jsonl', delete=False) as f:
-            f.write(json.dumps({
-                "method": "POST", "path": "/auth/login", "ip": "192.168.1.100",
-                "body": "admin' OR '1'='1", "user_agent": "sqlmap/1.7",
-                "query": {}, "headers": {"Content-Type": "application/json"},
-            }) + "\n")
-            f.write(json.dumps({
-                "method": "GET", "path": "/", "ip": "127.0.0.1",
-                "body": "", "user_agent": "Mozilla/5.0",
-                "query": {}, "headers": {},
-            }) + "\n")
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
+            f.write(
+                json.dumps(
+                    {
+                        "method": "POST",
+                        "path": "/auth/login",
+                        "ip": "192.168.1.100",
+                        "body": "admin' OR '1'='1",
+                        "user_agent": "sqlmap/1.7",
+                        "query": {},
+                        "headers": {"Content-Type": "application/json"},
+                    }
+                )
+                + "\n"
+            )
+            f.write(
+                json.dumps(
+                    {
+                        "method": "GET",
+                        "path": "/",
+                        "ip": "127.0.0.1",
+                        "body": "",
+                        "user_agent": "Mozilla/5.0",
+                        "query": {},
+                        "headers": {},
+                    }
+                )
+                + "\n"
+            )
             path = f.name
         yield path
         os.unlink(path)
@@ -32,16 +51,19 @@ class TestBlueTeamPipeline:
     def test_pattern_detector_finds_sqli(self, temp_traffic_log):
         """Verify attack pattern detector catches SQLi in traffic log."""
         from medusa.core.blue.tui.feed import _detect_obvious_attack
+
         with open(temp_traffic_log) as f:
             for line in f:
                 req = json.loads(line)
-                result = _detect_obvious_attack({
-                    "body": req.get("body", ""),
-                    "user_agent": req.get("user_agent", ""),
-                    "path": req.get("path", "/"),
-                    "query": str(req.get("query", {})),
-                    "headers": str(req.get("headers", {})),
-                })
+                result = _detect_obvious_attack(
+                    {
+                        "body": req.get("body", ""),
+                        "user_agent": req.get("user_agent", ""),
+                        "path": req.get("path", "/"),
+                        "query": str(req.get("query", {})),
+                        "headers": str(req.get("headers", {})),
+                    }
+                )
                 if "sqlmap" in req.get("user_agent", ""):
                     assert result["score"] >= 4  # Scanner UA detected
                 if "' OR '1'='1" in req.get("body", ""):
@@ -50,6 +72,7 @@ class TestBlueTeamPipeline:
     def test_kg_records_attack_chain(self):
         """Verify knowledge graph records full attack → defense chain."""
         from medusa.core.blue.knowledge_graph import BlueKnowledgeGraph
+
         kg = BlueKnowledgeGraph()
         kg.add_attack("10.0.0.1", "/login", "SQL Injection", 8, "payload")
         kg.add_defense("10.0.0.1", "tarpit", "5.8s delay")
@@ -65,6 +88,7 @@ class TestBlueTeamPipeline:
     def test_config_validation_roundtrip(self):
         """Verify config survives model_dump → model_validate roundtrip."""
         from medusa.core.config_models import BlueConfig, RedConfig
+
         blue = BlueConfig()
         blue2 = BlueConfig(**blue.model_dump())
         assert blue2.scorer.critical_threshold == blue.scorer.critical_threshold
@@ -82,6 +106,7 @@ class TestBlueTeamPipeline:
             err,
             ok,
         )
+
         e = FirewallError("test", severity=ErrorSeverity.CRITICAL)
         r = err(e)
         assert r["status"] == "error"
@@ -94,13 +119,16 @@ class TestBlueTeamPipeline:
     def test_fugu_importable(self):
         """Verify Fugu is no longer dead code — importable from main."""
         from medusa.fugu import run_fugu
+
         assert run_fugu is not None
         from medusa.fugu_chain import ChainTracker
+
         assert ChainTracker is not None
 
     def test_deception_engine_wired(self):
         """Verify deception engine loads and uses structured errors."""
         from medusa.core.blue.defense.deception_engine import DeceptionEngine
+
         engine = DeceptionEngine()
         r = engine.decide_response("attacker-1", {"ip": "1.2.3.4"}, 9)
         assert r["status"] == "ok"
@@ -117,6 +145,7 @@ class TestBlueTeamPipeline:
     def test_tarpit_uses_structured_errors(self):
         """Verify tarpit returns ok()/err() results."""
         from medusa.core.blue.defense.tarpit import Tarpit
+
         t = Tarpit()
         result = t.engage("10.0.0.1", delay=0.1)
         assert result["status"] == "ok"
@@ -124,17 +153,22 @@ class TestBlueTeamPipeline:
     def test_proxy_importable(self):
         """Verify proxy server is importable and configurable."""
         from medusa.core.blue.proxy import ProxyServer, start_proxy
+
         assert ProxyServer is not None
         assert start_proxy is not None
 
     def test_subagent_manager_wired(self):
         """Verify subagent manager deploy + analyze flow imports."""
         from medusa.core.blue.subagent_manager import EndpointSubagent, SubagentManager
+
         assert SubagentManager is not None
         # EndpointSubagent has all fields
         sa = EndpointSubagent(
-            agent_id="test-01", endpoint={"method": "GET", "path": "/test"},
-            rank=1, risk_score=5, handler_code="def test(): pass",
+            agent_id="test-01",
+            endpoint={"method": "GET", "path": "/test"},
+            rank=1,
+            risk_score=5,
+            handler_code="def test(): pass",
             honeypot_code="@app.route('/trap')\ndef trap(): return 'ok'",
             patch_code="def test(): return 'fixed'",
         )
@@ -149,6 +183,7 @@ class TestBlueTeamPipeline:
         from pydantic import ValidationError
 
         from medusa.core.config_models import BlueConfig, RedConfig
+
         with pytest.raises(ValidationError):
             BlueConfig(scorer={"critical_threshold": 999})  # Out of range
         # RedConfig with negative cost

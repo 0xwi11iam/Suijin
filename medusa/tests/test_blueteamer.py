@@ -4,6 +4,7 @@ Covers _find_free_port, _print_middleware_snippet, _init_firewall,
 and _run_async choice branches (with heavy mocking of LLM/subprocess
 dependencies). Was 0% covered.
 """
+
 import asyncio
 import os
 import sys
@@ -25,6 +26,7 @@ def _scripted_input(answers):
         if answers:
             return answers.pop(0)
         raise EOFError("no more scripted input")
+
     return fake_input
 
 
@@ -49,49 +51,51 @@ def blue_mocks(monkeypatch, tmp_path):
     mocks["session"] = fake_session
 
     # Codebase scanner → 1 fake endpoint
-    monkeypatch.setattr("medusa.core.blue.codebase.scanner.scan_codebase",
-                        lambda root: [{"method": "GET", "path": "/health",
-                                       "framework": "flask", "auth": "none"}])
-    mocks["endpoints"] = [{"method": "GET", "path": "/health",
-                           "framework": "flask", "auth": "none"}]
+    monkeypatch.setattr(
+        "medusa.core.blue.codebase.scanner.scan_codebase",
+        lambda root: [{"method": "GET", "path": "/health", "framework": "flask", "auth": "none"}],
+    )
+    mocks["endpoints"] = [{"method": "GET", "path": "/health", "framework": "flask", "auth": "none"}]
 
     # Watchers → async no-op
     async def fake_spawn(endpoints, config):
         return []
+
     monkeypatch.setattr("medusa.core.blue.watchers.spawner.spawn_watchers", fake_spawn)
 
     # SOC team → cheap fakes
     class FakeSOCLead:
         campaigns = {}
+
     async def fake_activate(config, queue):
         return FakeSOCLead()
+
     monkeypatch.setattr("medusa.core.blue.soc.soc_lead.activate_soc_lead", fake_activate)
-    monkeypatch.setattr("medusa.core.blue.soc.tier1_analyst.create_tier1",
-                        lambda path: types.SimpleNamespace(endpoint=path))
-    monkeypatch.setattr("medusa.core.blue.soc.tier2_analyst.create_tier2",
-                        lambda: types.SimpleNamespace())
-    monkeypatch.setattr("medusa.core.blue.soc.threat_hunter.create_threat_hunter",
-                        lambda: types.SimpleNamespace())
-    monkeypatch.setattr("medusa.core.blue.soc.incident_commander.create_incident_commander",
-                        lambda: types.SimpleNamespace())
+    monkeypatch.setattr(
+        "medusa.core.blue.soc.tier1_analyst.create_tier1", lambda path: types.SimpleNamespace(endpoint=path)
+    )
+    monkeypatch.setattr("medusa.core.blue.soc.tier2_analyst.create_tier2", lambda: types.SimpleNamespace())
+    monkeypatch.setattr("medusa.core.blue.soc.threat_hunter.create_threat_hunter", lambda: types.SimpleNamespace())
+    monkeypatch.setattr(
+        "medusa.core.blue.soc.incident_commander.create_incident_commander", lambda: types.SimpleNamespace()
+    )
 
     # Proxy → fake
     class FakeProxy:
         def stop(self):
             pass
-    monkeypatch.setattr("medusa.core.blue.proxy.start_proxy",
-                        lambda **kwargs: FakeProxy())
+
+    monkeypatch.setattr("medusa.core.blue.proxy.start_proxy", lambda **kwargs: FakeProxy())
     mocks["proxy"] = FakeProxy
 
     # Subagent analyze → empty (mock at class level)
     async def fake_analyze(self):
         return []
-    monkeypatch.setattr("medusa.core.blue.subagent_manager.SubagentManager.analyze_all_endpoints",
-                        fake_analyze)
+
+    monkeypatch.setattr("medusa.core.blue.subagent_manager.SubagentManager.analyze_all_endpoints", fake_analyze)
 
     # Isolate traffic log + lab port (don't touch real /tmp files)
-    monkeypatch.setattr(bt, "BLUE_TRAFFIC_LOG",
-                        Path(str(tmp_path)) / "traffic.jsonl")
+    monkeypatch.setattr(bt, "BLUE_TRAFFIC_LOG", Path(str(tmp_path)) / "traffic.jsonl")
     monkeypatch.setattr(bt, "BLUE_LAB_PORT", 45999)
     mocks["tmpdir"] = str(tmp_path)
 
@@ -113,6 +117,7 @@ def auto_quit_sleep(monkeypatch):
 class TestFindFreePort:
     def test_returns_bindable_port(self):
         import socket
+
         port = bt._find_free_port()
         s = socket.socket()
         try:
@@ -123,6 +128,7 @@ class TestFindFreePort:
 
     def test_custom_start(self):
         import socket
+
         # Find a free port then ask starting from it
         s = socket.socket()
         s.bind(("", 0))
@@ -156,6 +162,7 @@ class TestMiddlewareSnippet:
         import io
 
         from rich.console import Console
+
         buf = io.StringIO()
         c = Console(file=buf, force_terminal=False)
         bt._print_middleware_snippet(c, "/tmp/custom_blue.jsonl")
@@ -220,21 +227,17 @@ class TestRunAsyncBranches:
         asyncio.run(bt._run_async())
 
     def test_choice_1_zero_port(self, blue_mocks, monkeypatch, tmp_path):
-        monkeypatch.setattr(bt.console, "input",
-                            _scripted_input(["1", str(tmp_path), "0"]))
+        monkeypatch.setattr(bt.console, "input", _scripted_input(["1", str(tmp_path), "0"]))
         asyncio.run(bt._run_async())
 
-    def test_choice_1_full_flow_reaches_monitor(self, blue_mocks, monkeypatch,
-                                                auto_quit_sleep, tmp_path):
+    def test_choice_1_full_flow_reaches_monitor(self, blue_mocks, monkeypatch, auto_quit_sleep, tmp_path):
         """Choice 1 with a valid path + port → proxy starts → monitor loop → /quit."""
-        monkeypatch.setattr(bt.console, "input",
-                            _scripted_input(["1", str(tmp_path), "8001", "/quit"]))
+        monkeypatch.setattr(bt.console, "input", _scripted_input(["1", str(tmp_path), "8001", "/quit"]))
         monkeypatch.setattr(bt, "_find_free_port", lambda: 18080)
         asyncio.run(bt._run_async())
         assert blue_mocks["session"].endpoints_discovered == 1
 
-    def test_choice_2_full_flow_reaches_monitor(self, blue_mocks, monkeypatch,
-                                                auto_quit_sleep):
+    def test_choice_2_full_flow_reaches_monitor(self, blue_mocks, monkeypatch, auto_quit_sleep):
         """Choice 2 (built-in lab) → mocked lab launch → monitor loop → /quit."""
         monkeypatch.setattr(bt.console, "input", _scripted_input(["2", "/quit"]))
 
@@ -242,6 +245,7 @@ class TestRunAsyncBranches:
         class FakeProc:
             returncode = 0
             stdout = ""
+
         monkeypatch.setattr("subprocess.run", lambda *a, **k: FakeProc())
         monkeypatch.setattr("subprocess.Popen", lambda *a, **k: FakeProc())
 
@@ -249,10 +253,13 @@ class TestRunAsyncBranches:
         class FakeResp:
             def __enter__(self):
                 return self
+
             def __exit__(self, *a):
                 return False
+
             def read(self):
                 return b"ok"
+
         monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: FakeResp())
 
         asyncio.run(bt._run_async())
@@ -265,6 +272,7 @@ class TestRunAsyncBranches:
     def test_keyboard_interrupt_on_first_input(self, blue_mocks, monkeypatch):
         def raise_kb(prompt=""):
             raise KeyboardInterrupt()
+
         monkeypatch.setattr(bt.console, "input", raise_kb)
         asyncio.run(bt._run_async())
 
@@ -272,8 +280,10 @@ class TestRunAsyncBranches:
 class TestMainEntry:
     def test_main_runs_coroutine(self, monkeypatch):
         ran = []
+
         async def fake_run():
             ran.append(True)
+
         monkeypatch.setattr(bt, "_run_async", fake_run)
         bt.main()
         assert ran == [True]

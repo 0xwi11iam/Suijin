@@ -1,4 +1,5 @@
 """Blue team shared utilities."""
+
 from __future__ import annotations
 
 import hashlib
@@ -6,14 +7,22 @@ import ipaddress
 import re
 
 
-def hash_request(req: dict) -> str: return hashlib.sha256(str(req).encode()).hexdigest()[:16]
+def hash_request(req: dict) -> str:
+    return hashlib.sha256(str(req).encode()).hexdigest()[:16]
+
+
 def is_valid_ip(ip: str) -> bool:
-    try: ipaddress.ip_address(ip); return True
+    try:
+        ipaddress.ip_address(ip)
+        return True
     except Exception:
         import logging
+
         logging.getLogger("medusa").warning("blue_utils check failed", exc_info=True)
         return False
+
+
 def extract_iocs(text: str) -> dict:
-    ips = re.findall(r'\d+\.\d+\.\d+\.\d+', text)
+    ips = re.findall(r"\d+\.\d+\.\d+\.\d+", text)
     urls = re.findall(r'https?://[^\s<>"]+', text)
     return {"ips": list(set(ips)), "urls": list(set(urls))}

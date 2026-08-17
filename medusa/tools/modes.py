@@ -11,6 +11,7 @@ injection or model misread cannot bypass them:
 Both flags are read from the loaded config (values may be bools after Pydantic
 validation or strings straight from config.json, so coercion handles both).
 """
+
 from __future__ import annotations
 
 import re
@@ -24,33 +25,91 @@ def _flag(config: dict | None, key: str) -> bool:
 # Read-only / recon tools permitted in HITL mode. Everything else (exploits,
 # metasploit, file writes, self-modification) is blocked.
 _HITL_ALLOWED_TOOLS = {
-    "search_kb", "search_cve", "check_knowledge", "record_finding",
-    "kb_stats", "suggest_exploit", "find_wordlist", "extract_payloads",
-    "write_note", "web_search", "read_file", "http_request",
-    "recon_chain", "msf_check", "diff_response", "rate_limit_check",
-    "rate_limit_all", "attack_tree", "generate_report", "claim_flag",
-    "job_status", "job_wait", "job_output", "job_list", "job_cancel",
-    "list_skills", "list_own_files",
+    "search_kb",
+    "search_cve",
+    "check_knowledge",
+    "record_finding",
+    "kb_stats",
+    "suggest_exploit",
+    "find_wordlist",
+    "extract_payloads",
+    "write_note",
+    "web_search",
+    "read_file",
+    "http_request",
+    "recon_chain",
+    "msf_check",
+    "diff_response",
+    "rate_limit_check",
+    "rate_limit_all",
+    "attack_tree",
+    "generate_report",
+    "claim_flag",
+    "job_status",
+    "job_wait",
+    "job_output",
+    "job_list",
+    "job_cancel",
+    "list_skills",
+    "list_own_files",
     "execute_terminal",  # command-level allowlist applied below
 }
 
 # Recon / fingerprinting binaries + harmless local readers. Deliberately
 # excludes interpreters (python3, sh) so HITL cannot be bypassed with -c.
 _HITL_ALLOWED_BINARIES = {
-    "nmap", "masscan", "gobuster", "ffuf", "feroxbuster", "dirb", "dirsearch",
-    "nikto", "whatweb", "sslscan", "nuclei", "wafw00f",
-    "amass", "subfinder", "httpx", "katana",
-    "dig", "nslookup", "host", "whois",
-    "curl", "wget", "echo", "cat", "ls", "grep", "head", "tail", "wc",
-    "sort", "uniq",
+    "nmap",
+    "masscan",
+    "gobuster",
+    "ffuf",
+    "feroxbuster",
+    "dirb",
+    "dirsearch",
+    "nikto",
+    "whatweb",
+    "sslscan",
+    "nuclei",
+    "wafw00f",
+    "amass",
+    "subfinder",
+    "httpx",
+    "katana",
+    "dig",
+    "nslookup",
+    "host",
+    "whois",
+    "curl",
+    "wget",
+    "echo",
+    "cat",
+    "ls",
+    "grep",
+    "head",
+    "tail",
+    "wc",
+    "sort",
+    "uniq",
 }
 
 # Binaries forbidden in guardrail mode: mutate the filesystem, kill
 # processes, or alter system state.
 _GUARDRAIL_BLOCKED_BINARIES = {
-    "rm", "mv", "chmod", "chown", "kill", "pkill", "killall",
-    "shutdown", "reboot", "halt", "telinit", "systemctl", "service",
-    "mkfs", "fdisk", "dd",
+    "rm",
+    "mv",
+    "chmod",
+    "chown",
+    "kill",
+    "pkill",
+    "killall",
+    "shutdown",
+    "reboot",
+    "halt",
+    "telinit",
+    "systemctl",
+    "service",
+    "mkfs",
+    "fdisk",
+    "dd",
 }
 
 

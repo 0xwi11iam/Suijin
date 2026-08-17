@@ -45,8 +45,7 @@ class TestReconChain:
         def fake_nmap(target, flags="-sV -sC"):
             return NMAP_OUT
 
-        monkeypatch.setattr("medusa.modules.loader.get_module_tools",
-                            lambda: {"nmap_scan": fake_nmap})
+        monkeypatch.setattr("medusa.modules.loader.get_module_tools", lambda: {"nmap_scan": fake_nmap})
 
         def fake_search_cve(software, config, version=None, limit=5):
             return f"CVE for {software} {version}"

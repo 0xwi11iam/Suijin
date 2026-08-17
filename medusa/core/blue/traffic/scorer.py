@@ -1,4 +1,5 @@
 """Traffic scorer — 1-10 score per request."""
+
 from __future__ import annotations
 
 from medusa.core.blue.traffic.anomaly_detector import detect_anomalies
@@ -11,11 +12,11 @@ def score_request(request: dict, profile: dict, attacker_profile=None) -> dict:
     for name, weight, detail in signals:
         score = min(10, score + weight)
         reasons.append(f"[{name}] {detail}")
-    ip = request.get("ip","")
+    ip = request.get("ip", "")
     if ip not in profile.get("ips", set()):
         score = min(10, score + 2)
         reasons.append("[new_ip] IP never seen on this endpoint")
-    body_size = len(str(request.get("body","")))
+    body_size = len(str(request.get("body", "")))
     avg_size = profile.get("avg_body_size", 1000)
     if avg_size > 0 and body_size > avg_size * 3:
         score = min(10, score + 1)

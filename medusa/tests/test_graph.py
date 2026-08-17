@@ -1,4 +1,5 @@
 """Tests for agent_graph, think_node, and state machine."""
+
 import os
 import sys
 
@@ -13,6 +14,7 @@ class TestStateMachine:
     def test_state_imports(self):
         try:
             from medusa.core.state import MedusaState
+
             assert MedusaState is not None
         except ImportError as e:
             pytest.skip(f"State module unavailable: {e}")
@@ -20,6 +22,7 @@ class TestStateMachine:
     def test_state_defaults(self):
         try:
             from medusa.core.state import MedusaState
+
             state = MedusaState(messages=[], objective="test", target="localhost")
             assert state.phase == "informational"
         except ImportError as e:
@@ -28,6 +31,7 @@ class TestStateMachine:
     def test_state_serializable(self):
         try:
             from medusa.core.state import MedusaState
+
             state = MedusaState(messages=[], objective="test", target="localhost")
             d = state.model_dump()
             assert d["objective"] == "test"
@@ -36,10 +40,12 @@ class TestStateMachine:
 
     def test_agent_graph_imports(self):
         from medusa.core.agent_graph import MedusaAgentGraph
+
         assert MedusaAgentGraph is not None
 
     def test_supervisor_imports(self):
         from medusa.core.supervisor import analyze_trace
+
         assert analyze_trace is not None
 
 
@@ -49,12 +55,14 @@ class TestThinkNode:
     def test_think_node_imports(self):
         try:
             from medusa.nodes.think_node import think
+
             assert think is not None
         except ImportError as e:
             pytest.skip(f"Think node unavailable: {e}")
 
     def test_subagent_node_imports(self):
         from medusa.nodes.subagent_node import spawn_and_collect
+
         assert spawn_and_collect is not None
 
 
@@ -63,6 +71,7 @@ class TestEngagement:
 
     def test_session_state_imports(self):
         from medusa.core.engagement import load_session_state, save_session_state
+
         assert save_session_state is not None
         assert load_session_state is not None
 
@@ -73,6 +82,7 @@ class TestErrorHandler:
     def test_error_handler_imports(self):
         try:
             from medusa.core.error_handler import GracefulFallback, safe_call
+
             assert safe_call is not None
             assert GracefulFallback is not None
         except ImportError as e:
@@ -81,6 +91,7 @@ class TestErrorHandler:
     def test_error_class_imports(self):
         try:
             from medusa.helpers.error_class import classify_error
+
             assert classify_error is not None
         except ImportError as e:
             pytest.skip(f"Error class unavailable: {e}")
@@ -91,12 +102,14 @@ class TestPromptSafety:
 
     def test_wrap_untrusted(self):
         from medusa.core.prompt_safety import wrap_untrusted
+
         wrapped = wrap_untrusted("user input")
         assert "UNTRUSTED" in wrapped
 
     def test_hard_guardrail_blocks_gov(self):
         try:
             from medusa.helpers.hard_guardrail import check_guardrail
+
             result = check_guardrail("hack fbi.gov")
             assert result is not None
         except ImportError as e:
@@ -105,6 +118,7 @@ class TestPromptSafety:
     def test_hard_guardrail_allows_normal(self):
         try:
             from medusa.helpers.hard_guardrail import check_guardrail
+
             result = check_guardrail("scan example.com")
             assert result is None
         except ImportError as e:
@@ -116,28 +130,33 @@ class TestDeception:
 
     def test_honeypot_factory(self):
         from medusa.core.blue.deception.honeypot_factory import generate_honeypot_response
+
         resp = generate_honeypot_response({"path": "/admin"})
         assert isinstance(resp, dict)
         assert "body" in resp
 
     def test_time_sink(self):
         from medusa.core.blue.deception.time_sink import TimeSink
+
         ts = TimeSink()
         ts.tarpit("10.0.0.1", delay_seconds=0.1)
         assert ts.should_sink("10.0.0.1")
 
     def test_canary_token(self):
         from medusa.core.blue.deception.canary_token import deploy_canary
+
         token = deploy_canary("api_key", "test_canary_12345")
         assert token is not None
 
     def test_shadow_redirect(self):
         from medusa.core.blue.deception.shadow_redirect import redirect_to_shadow
+
         result = redirect_to_shadow("10.0.0.99")
         assert "10.0.0.99" in result
 
     def test_deception_engine(self):
         from medusa.core.blue.defense.deception_engine import DeceptionEngine
+
         engine = DeceptionEngine()
         resp = engine.decide_response("attacker-1", {"ip": "10.0.0.1", "path": "/login"}, 7)
         assert resp["status"] == "ok"

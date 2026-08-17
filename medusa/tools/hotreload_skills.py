@@ -1,6 +1,7 @@
 """
 Hot-Reload Skills — agent can edit skill files and changes take effect immediately.
 """
+
 from __future__ import annotations
 
 import importlib
@@ -52,6 +53,7 @@ def reload_skills(verbose: bool = False):
             importlib.reload(sys.modules["medusa.skills.loader"])
     except Exception as e:
         import logging
+
         logging.getLogger("medusa").warning(f"Skill reload failed: {e}")
         pass
 

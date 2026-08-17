@@ -1,4 +1,5 @@
 """Tests for core graph, dispatch, and think_node."""
+
 import os
 import sys
 
@@ -12,32 +13,38 @@ class TestDispatchGuardrails:
 
     def test_dangerous_rmrf_blocked(self):
         from medusa.tools.dispatch import is_dangerous
+
         dangerous, pattern = is_dangerous("rm -rf /")
         assert dangerous
         assert pattern
 
     def test_dangerous_mkfs_blocked(self):
         from medusa.tools.dispatch import is_dangerous
+
         dangerous, _ = is_dangerous("mkfs.ext4 /dev/sda")
         assert dangerous
 
     def test_dangerous_fork_bomb_blocked(self):
         from medusa.tools.dispatch import is_dangerous
+
         dangerous, _ = is_dangerous(":(){ :|:& };:")
         assert dangerous
 
     def test_dangerous_chmod_blocked(self):
         from medusa.tools.dispatch import is_dangerous
+
         dangerous, _ = is_dangerous("chmod 777 /")
         assert dangerous
 
     def test_safe_command_passes(self):
         from medusa.tools.dispatch import is_dangerous
+
         dangerous, _ = is_dangerous("nmap -sV 127.0.0.1")
         assert not dangerous
 
     def test_safe_python_passes(self):
         from medusa.tools.dispatch import is_dangerous
+
         dangerous, _ = is_dangerous("python3 -c 'print(1+1)'")
         assert not dangerous
 
@@ -46,6 +53,7 @@ class TestDispatchGuardrails:
         import os
 
         from medusa.tools.dispatch import confirm_global_action
+
         old = os.environ.pop("MEDUSA_AUTO_APPROVE", None)
         result = confirm_global_action("rm -rf /", "rm -rf /")
         if old:
@@ -54,11 +62,13 @@ class TestDispatchGuardrails:
 
     def test_workspace_path_rejects_absolute(self):
         from medusa.tools.dispatch import resolve_workspace_path
+
         with pytest.raises(PermissionError):
             resolve_workspace_path("/etc/passwd")
 
     def test_workspace_path_allows_tmp(self):
         from medusa.tools.dispatch import resolve_workspace_path
+
         result = resolve_workspace_path("/tmp/test.txt")
         assert "/tmp" in str(result)
 
@@ -70,6 +80,7 @@ class TestSecretPatterns:
         import re
 
         from medusa.security.secret_patterns import SECRET_PATTERNS
+
         # The pattern matches "AWS_ACCESS_KEY_ID=AKIA..." format or bare keys in context
         found = False
         for name, pattern in SECRET_PATTERNS.items():
@@ -87,6 +98,7 @@ class TestSecretPatterns:
         import re
 
         from medusa.security.secret_patterns import SECRET_PATTERNS
+
         found = False
         for name, pattern in SECRET_PATTERNS.items():
             if "jwt" in name.lower() and re.search(pattern, "JWT_SECRET=super-secret-key-change-me-2024"):
@@ -101,6 +113,7 @@ class TestErrorTypes:
 
     def test_blue_error_creation(self):
         from medusa.core.blue.errors import BlueError, ErrorSeverity
+
         e = BlueError("test error", severity=ErrorSeverity.WARNING, source="test")
         d = e.to_dict()
         assert d["error"] == "test error"
@@ -109,18 +122,21 @@ class TestErrorTypes:
 
     def test_firewall_error(self):
         from medusa.core.blue.errors import ErrorSeverity, FirewallError
+
         e = FirewallError("block failed", severity=ErrorSeverity.CRITICAL)
         assert e.source == "firewall"
         assert e.severity == ErrorSeverity.CRITICAL
 
     def test_ok_result(self):
         from medusa.core.blue.errors import ok
+
         r = ok("done")
         assert r["status"] == "ok"
         assert r["result"] == "done"
 
     def test_err_result(self):
         from medusa.core.blue.errors import BlueError, ErrorSeverity, err
+
         e = BlueError("failed", severity=ErrorSeverity.ERROR)
         r = err(e)
         assert r["status"] == "error"
@@ -132,6 +148,7 @@ class TestConfigValidation:
 
     def test_blue_config_defaults(self):
         from medusa.core.config_models import BlueConfig
+
         c = BlueConfig()
         assert c.scorer.critical_threshold == 8
         assert c.deception.tarpit_delay_seconds == 8.0
@@ -139,6 +156,7 @@ class TestConfigValidation:
 
     def test_red_config_defaults(self):
         from medusa.core.config_models import RedConfig
+
         c = RedConfig()
         assert c.cost_hard_cap_usd == 2.0
         assert c.max_iterations == 100
@@ -147,5 +165,6 @@ class TestConfigValidation:
         from pydantic import ValidationError
 
         from medusa.core.config_models import RedConfig
+
         with pytest.raises(ValidationError):  # Pydantic validation error
             RedConfig(cost_hard_cap_usd=-1.0)

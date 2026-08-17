@@ -2,14 +2,23 @@
 Rate Limit Detector — track response times and status codes per endpoint.
 Detects rate limiting patterns and recommends backoff strategies.
 """
+
 from __future__ import annotations
 
 import time
 from collections import defaultdict
 
-_tracker = defaultdict(lambda: {"requests": 0, "timestamps": [], "statuses": [],
-                                  "latencies_ms": [], "rate_limited": False,
-                                  "backoff_until": 0, "consecutive_429s": 0})
+_tracker = defaultdict(
+    lambda: {
+        "requests": 0,
+        "timestamps": [],
+        "statuses": [],
+        "latencies_ms": [],
+        "rate_limited": False,
+        "backoff_until": 0,
+        "consecutive_429s": 0,
+    }
+)
 
 
 def record_request(endpoint: str, status_code: int, latency_ms: float):
@@ -24,8 +33,8 @@ def record_request(endpoint: str, status_code: int, latency_ms: float):
     # Trim old entries (keep last 5 minutes)
     cutoff = now - 300
     entry["timestamps"] = [t for t in entry["timestamps"] if t > cutoff]
-    entry["statuses"] = entry["statuses"][-len(entry["timestamps"]):]
-    entry["latencies_ms"] = entry["latencies_ms"][-len(entry["timestamps"]):]
+    entry["statuses"] = entry["statuses"][-len(entry["timestamps"]) :]
+    entry["latencies_ms"] = entry["latencies_ms"][-len(entry["timestamps"]) :]
 
     if status_code == 429:
         entry["consecutive_429s"] += 1

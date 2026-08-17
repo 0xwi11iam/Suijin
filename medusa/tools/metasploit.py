@@ -1,4 +1,5 @@
 """Metasploit integration: RPC daemon and msfconsole fallback."""
+
 from __future__ import annotations
 
 import json
@@ -37,11 +38,11 @@ def _msf_rpc_connect(config):
 def _msf_console_fallback(cmd, config=None):
     """Fallback: run msfconsole -q -x with a command and return output."""
     import time
+
     out_path = BASE_DIR / f".msf_out_{int(time.time())}.txt"
     full_cmd = f"msfconsole -q -x {shlex.quote(cmd)} -o {shlex.quote(str(out_path))}"
     try:
-        subprocess.run(full_cmd, shell=True, timeout=60,
-                       capture_output=True, text=True)
+        subprocess.run(full_cmd, shell=True, timeout=60, capture_output=True, text=True)
         if out_path.exists():
             text = out_path.read_text(encoding="utf-8", errors="replace")
             out_path.unlink(missing_ok=True)
@@ -74,8 +75,7 @@ def msf_check(config):
 
     # Fallback: check if msfconsole exists
     try:
-        r = subprocess.run("which msfconsole", shell=True, capture_output=True,
-                           text=True, timeout=5)
+        r = subprocess.run("which msfconsole", shell=True, capture_output=True, text=True, timeout=5)
         if r.stdout.strip():
             return (
                 f"Metasploit available via msfconsole at: {r.stdout.strip()}\n"
@@ -84,11 +84,7 @@ def msf_check(config):
             )
     except Exception:
         pass
-    return (
-        "Metasploit NOT detected.\n"
-        "Install from: https://www.metasploit.com/\n"
-        "Or start msfrpcd for RPC access."
-    )
+    return "Metasploit NOT detected.\nInstall from: https://www.metasploit.com/\nOr start msfrpcd for RPC access."
 
 
 def msf_command(cmd, config):
@@ -105,6 +101,7 @@ def msf_command(cmd, config):
             proxy.console.write(token, cid, cmd + "\n")
             # Wait a beat then read
             import time
+
             time.sleep(1.5)
             output = proxy.console.read(token, cid)
             data = output.get("data", "")
@@ -142,9 +139,12 @@ def msf_run(module, payload, options, config):
     try:
         # Set payload if provided
         if payload:
-            proxy.module.execute(token, "auxiliary" if "/aux" in module or module.startswith("aux")
-                                 else "exploit",
-                                 module, {"PAYLOAD": payload})
+            proxy.module.execute(
+                token,
+                "auxiliary" if "/aux" in module or module.startswith("aux") else "exploit",
+                module,
+                {"PAYLOAD": payload},
+            )
 
         # Build options dict
         opts = dict(options) if isinstance(options, dict) else {}

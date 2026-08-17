@@ -5,6 +5,7 @@ and tool implementations to become more effective over time.
 CRITICAL: These tools give the agent the power to rewrite itself.
 This is intentional — a creative agent needs to be able to improve.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -77,8 +78,7 @@ def write_tool(tool_name: str, code: str) -> str:
 def list_available_skills() -> str:
     """List all attack skills the agent can edit."""
     skills_dir = BASE_DIR / "skills"
-    files = sorted(f.stem for f in skills_dir.glob("*.py")
-                   if f.stem not in ("__init__", "loader"))
+    files = sorted(f.stem for f in skills_dir.glob("*.py") if f.stem not in ("__init__", "loader"))
     return "Available skills:\n" + "\n".join(f"  - {s}" for s in files)
 
 

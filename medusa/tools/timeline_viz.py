@@ -1,4 +1,5 @@
 """Timeline visualization — Mermaid Gantt chart of engagement phases."""
+
 from __future__ import annotations
 
 

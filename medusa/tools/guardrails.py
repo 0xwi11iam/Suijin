@@ -1,14 +1,26 @@
 """Command safety guardrails — extracted from dispatch.py for maintainability."""
+
 from __future__ import annotations
 
 import os
 
 _BLOCKED_PATTERNS = [
-    "rm -rf /", "rm -rf ~", "rm -rf .", "mkfs.", "dd if=",
-    ":(){ :|:& };:", "> /dev/sda", "chmod 777 /",
-    "wget .* -O /tmp/.*\\|.*sh", "curl .*\\|.*sh",
-    "sudo rm -rf", "sudo shutdown", "sudo reboot", "sudo halt",
-    "> /etc/passwd", "> /etc/shadow",
+    "rm -rf /",
+    "rm -rf ~",
+    "rm -rf .",
+    "mkfs.",
+    "dd if=",
+    ":(){ :|:& };:",
+    "> /dev/sda",
+    "chmod 777 /",
+    "wget .* -O /tmp/.*\\|.*sh",
+    "curl .*\\|.*sh",
+    "sudo rm -rf",
+    "sudo shutdown",
+    "sudo reboot",
+    "sudo halt",
+    "> /etc/passwd",
+    "> /etc/shadow",
 ]
 
 
@@ -28,6 +40,7 @@ def confirm_global_action(cmd: str, pattern: str) -> bool:
         return True
     try:
         from rich.console import Console as _RichConsole
+
         _RichConsole(stderr=True).print(f"  [bold red]BLOCKED:[/bold red] '{pattern}' matched in command")
     except Exception:
         pass

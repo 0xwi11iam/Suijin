@@ -4,6 +4,7 @@ Every tool that shells out should return a `CommandResult` so the oracle can
 reason over machine-readable fields (command, exit code, stdout, stderr,
 duration) instead of parsing free text.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -158,7 +159,9 @@ def _run_streaming(cmd, *, timeout, cwd, env, shell, display, sink) -> CommandRe
     if reader.is_alive():
         proc.kill()
         reader.join()
-        return CommandResult(display, -1, "".join(chunks), f"timed out after {timeout}s", int((time.time() - start) * 1000))
+        return CommandResult(
+            display, -1, "".join(chunks), f"timed out after {timeout}s", int((time.time() - start) * 1000)
+        )
 
     code = proc.wait()
     return CommandResult(display, code, "".join(chunks), "", int((time.time() - start) * 1000))

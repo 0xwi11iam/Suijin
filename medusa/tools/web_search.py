@@ -4,6 +4,7 @@ exploit techniques, documentation, and current attack methods.
 
 Uses DuckDuckGo HTML search (no API key needed) as a free fallback.
 """
+
 from __future__ import annotations
 
 import re
@@ -57,13 +58,13 @@ def web_search(query: str, max_results: int = 5) -> str:
         snippets = snippet_pattern.findall(html)
 
         for i, (url, title) in enumerate(links[:max_results]):
-            title_clean = re.sub(r'<[^>]+>', '', title).strip()
+            title_clean = re.sub(r"<[^>]+>", "", title).strip()
             url_clean = urllib.parse.unquote(url.split("//")[-1].split("/uddg/")[1] if "/uddg/" in url else url)
             snippet = ""
             if i < len(snippets):
-                snippet = re.sub(r'<[^>]+>', '', snippets[i]).strip()[:300]
+                snippet = re.sub(r"<[^>]+>", "", snippets[i]).strip()[:300]
 
-            results.append(f"{i+1}. **{title_clean}**\n   {snippet}\n   {url_clean}")
+            results.append(f"{i + 1}. **{title_clean}**\n   {snippet}\n   {url_clean}")
 
         if not results:
             return f"No results found for: {query}"

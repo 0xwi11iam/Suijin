@@ -1,19 +1,20 @@
 """
 medusa/tools/cvss_scorer.py — CVSS 3.1 calculator for finding severity scoring.
 """
+
 from __future__ import annotations
 
 
 # CVSS 3.1 base metrics
 def calculate_cvss(
-    attack_vector: str = "N",       # N=Network, A=Adjacent, L=Local, P=Physical
-    attack_complexity: str = "L",    # L=Low, H=High
+    attack_vector: str = "N",  # N=Network, A=Adjacent, L=Local, P=Physical
+    attack_complexity: str = "L",  # L=Low, H=High
     privileges_required: str = "N",  # N=None, L=Low, H=High
-    user_interaction: str = "N",     # N=None, R=Required
-    scope: str = "U",                # U=Unchanged, C=Changed
-    confidentiality: str = "N",      # N=None, L=Low, H=High
-    integrity: str = "N",            # N=None, L=Low, H=High
-    availability: str = "N",         # N=None, L=Low, H=High
+    user_interaction: str = "N",  # N=None, R=Required
+    scope: str = "U",  # U=Unchanged, C=Changed
+    confidentiality: str = "N",  # N=None, L=Low, H=High
+    integrity: str = "N",  # N=None, L=Low, H=High
+    availability: str = "N",  # N=None, L=Low, H=High
 ) -> dict:
     """Calculate CVSS 3.1 base score. Returns dict with score, severity, vector."""
     # Metric weights (CVSS 3.1 spec)
@@ -35,7 +36,11 @@ def calculate_cvss(
     # Exploitability sub-score
     av = av_weights.get(attack_vector.upper(), 0.85)
     ac = ac_weights.get(attack_complexity.upper(), 0.77)
-    pr = pr_weights_u.get(privileges_required.upper(), 0.85) if scope.upper() == "U" else pr_weights_c.get(privileges_required.upper(), 0.85)
+    pr = (
+        pr_weights_u.get(privileges_required.upper(), 0.85)
+        if scope.upper() == "U"
+        else pr_weights_c.get(privileges_required.upper(), 0.85)
+    )
     ui = ui_weights.get(user_interaction.upper(), 0.85)
     exploitability = 8.22 * av * ac * pr * ui
 
@@ -50,11 +55,16 @@ def calculate_cvss(
     score = round(score, 1)
 
     # Severity rating
-    if score >= 9.0: severity = "Critical"
-    elif score >= 7.0: severity = "High"
-    elif score >= 4.0: severity = "Medium"
-    elif score >= 0.1: severity = "Low"
-    else: severity = "None"
+    if score >= 9.0:
+        severity = "Critical"
+    elif score >= 7.0:
+        severity = "High"
+    elif score >= 4.0:
+        severity = "Medium"
+    elif score >= 0.1:
+        severity = "Low"
+    else:
+        severity = "None"
 
     vector = f"CVSS:3.1/AV:{attack_vector}/AC:{attack_complexity}/PR:{privileges_required}/UI:{user_interaction}/S:{scope}/C:{confidentiality}/I:{integrity}/A:{availability}"
 

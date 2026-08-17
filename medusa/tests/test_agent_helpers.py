@@ -1,12 +1,14 @@
 """Tests for agent_helpers modules — parsing, productivity, error_class, guardrails."""
+
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
 def test_prompt_safety():
     from medusa.core.prompt_safety import wrap_untrusted
+
     result = wrap_untrusted("hello world", "TOOL_OUTPUT")
     assert "<<<UNTRUSTED_TOOL_OUTPUT id=" in result
     assert "<<<END_UNTRUSTED_TOOL_OUTPUT id=" in result
@@ -15,6 +17,7 @@ def test_prompt_safety():
 
 def test_hard_guardrail():
     from medusa.helpers.hard_guardrail import is_hard_blocked
+
     blocked, _ = is_hard_blocked("whitehouse.gov")
     assert blocked
     blocked, _ = is_hard_blocked("un.org")
@@ -27,12 +30,28 @@ def test_hard_guardrail():
 
 def test_error_class():
     from medusa.helpers.error_class import classify_error_class, is_diagnostic_failure
+
     assert classify_error_class(success=True, tool_output="ok", error_message=None, duration_ms=10) == "success"
-    assert classify_error_class(success=False, tool_output="connection refused", error_message=None, duration_ms=100) == "transport_error"
-    assert classify_error_class(success=False, tool_output="HTTP/1.1 500 Error", error_message=None, duration_ms=300) == "application_5xx_normal"
-    assert classify_error_class(success=False, tool_output="HTTP/1.1 500 Error", error_message=None, duration_ms=30) == "application_5xx_fast"
-    assert classify_error_class(success=False, tool_output="HTTP/1.1 404 Not Found", error_message=None, duration_ms=100) == "application_4xx"
-    assert classify_error_class(success=False, tool_output="command not found", error_message=None, duration_ms=10) == "tool_internal_error"
+    assert (
+        classify_error_class(success=False, tool_output="connection refused", error_message=None, duration_ms=100)
+        == "transport_error"
+    )
+    assert (
+        classify_error_class(success=False, tool_output="HTTP/1.1 500 Error", error_message=None, duration_ms=300)
+        == "application_5xx_normal"
+    )
+    assert (
+        classify_error_class(success=False, tool_output="HTTP/1.1 500 Error", error_message=None, duration_ms=30)
+        == "application_5xx_fast"
+    )
+    assert (
+        classify_error_class(success=False, tool_output="HTTP/1.1 404 Not Found", error_message=None, duration_ms=100)
+        == "application_4xx"
+    )
+    assert (
+        classify_error_class(success=False, tool_output="command not found", error_message=None, duration_ms=10)
+        == "tool_internal_error"
+    )
     assert is_diagnostic_failure("transport_error")
     assert is_diagnostic_failure("shell_parser_error")
     assert not is_diagnostic_failure("application_4xx")
@@ -41,11 +60,13 @@ def test_error_class():
 
 def test_json_utils():
     from medusa.helpers.json_utils import extract_json, json_dumps_safe, repair_trailing_json_delimiters
+
     assert extract_json('{"key": "value"}') == '{"key": "value"}'
     assert extract_json('prefix {"a":1} suffix') == '{"a":1}'
     result = repair_trailing_json_delimiters('{"a":1,"b":{"c":2}')
     assert result == '{"a":1,"b":{"c":2}}'
     from datetime import datetime, timezone
+
     d = {"ts": datetime.now(timezone.utc)}
     s = json_dumps_safe(d)
     assert "ts" in s
@@ -53,6 +74,7 @@ def test_json_utils():
 
 def test_parsing():
     from medusa.helpers.parsing import try_parse_llm_decision
+
     decision, err = try_parse_llm_decision(
         '{"action":"use_tool","thought":"test","tool_name":"nmap","tool_args":{"target":"x"}}'
     )
@@ -71,6 +93,7 @@ def test_productivity():
         record_axis_attempt,
         tier_for_score,
     )
+
     # Unproductive step detection
     step = {"productivity": {"verdict": "no_progress", "new_information_gained": False}}
     assert is_unproductive(step)
@@ -96,6 +119,7 @@ def test_productivity():
 
 def test_state():
     from medusa.core.state import ExecutionStep, TargetInfo, TodoItem, new_agent_state
+
     s = new_agent_state(original_objective="test", max_iterations=50)
     assert s["original_objective"] == "test"
     assert s["max_iterations"] == 50
@@ -118,6 +142,7 @@ def test_state():
 
 def test_skill_loader():
     from medusa.skills.loader import get_available_skills, get_skill_prompt
+
     prompt = get_skill_prompt("sql_injection")
     assert "SQL INJECTION" in prompt.upper()
     assert "UNION SELECT" in prompt
@@ -133,6 +158,7 @@ def test_tool_registry():
         get_allowed_tools_for_phase,
         is_tool_allowed_in_phase,
     )
+
     assert is_tool_allowed_in_phase("execute_terminal", "informational")
     # FREEDOM: all tools available in all phases
     assert is_tool_allowed_in_phase("msf_run", "informational")
@@ -148,6 +174,7 @@ def test_tool_registry():
 
 def test_workspace_fs():
     from medusa.infra.workspace_fs import outputs_path, payloads_path, scripts_path, workspace_path
+
     assert "medusa_agent" in workspace_path()
     assert "outputs" in outputs_path()
     assert "payloads" in payloads_path()
@@ -155,6 +182,7 @@ def test_workspace_fs():
 
 
 # ── New tests: engagement, compliance, diff engine, payload gen, supervisor ──
+
 
 def test_engagement_schema():
     from medusa.core.engagement import (
@@ -165,6 +193,7 @@ def test_engagement_schema():
         transition_phase,
         update_engagement_stats,
     )
+
     schema = load_engagement_schema()
     assert "_schema" in schema
     assert "targets" in schema
@@ -181,6 +210,7 @@ def test_engagement_schema():
     path = save_session_state(state)
     assert "operation_state_recovery.json" in path
     from medusa.core.engagement import has_recovery_state, load_session_state
+
     assert has_recovery_state()
     recovery = load_session_state()
     assert recovery["objective"] == "test_recovery"
@@ -189,6 +219,7 @@ def test_engagement_schema():
 
 def test_compliance_module():
     from medusa.security.compliance import _evaluate_controls, _risk_label, analyse_log
+
     entries = [
         {"user": "admin", "action": "scan", "target": "app1", "risk_score": 0.8, "mode": "red", "result": "OK"},
         {"user": "hacker", "action": "access", "target": "db", "risk_score": 0.9, "mode": "red", "result": "DENIED"},
@@ -209,6 +240,7 @@ def test_compliance_module():
 
 def test_diff_engine():
     from medusa.tools.diff_engine import diff_responses, quick_diff
+
     result = diff_responses("hello world", "hello WORLD", sensitivity="high")
     assert result["is_different"]
     assert result["anomaly_count"] >= 0
@@ -224,6 +256,7 @@ def test_diff_engine():
 
 def test_payload_generator():
     from medusa.tools.payload_generator import PAYLOAD_DB, generate_payloads, list_payload_types
+
     sqli = generate_payloads("sqli", framework="mysql")
     assert "OR" in sqli or "' OR" in sqli
     xss = generate_payloads("xss", framework="basic")
@@ -246,6 +279,7 @@ def test_supervisor_patterns():
         _detect_repeating_tool,
         analyze_trace,
     )
+
     # Repeating tool
     trace = [
         {"tool_name": "nmap", "thought": "scanning"},
@@ -271,6 +305,7 @@ def test_supervisor_patterns():
 
 def test_oracle_anomaly():
     from medusa.intel.oracle import detect_anomaly, strip_response
+
     # HTTP 500
     result = detect_anomaly("Internal Server Error", status_code=500)
     assert result["anomaly"]
@@ -289,14 +324,18 @@ def test_oracle_anomaly():
 
 def test_drift_analyser():
     from medusa.intel.drift_analyser import analyse_drift
-    result = analyse_drift("Find SQL injection on target.com", [
-        "nmap: scanning ports",
-        "gobuster: directory enumeration",
-        "http_request: testing /login for SQLi",
-        "sqlmap: running SQL injection scan",
-        "execute_terminal: cat /etc/passwd",
-        "http_request: exfiltrate data to external server",
-    ])
+
+    result = analyse_drift(
+        "Find SQL injection on target.com",
+        [
+            "nmap: scanning ports",
+            "gobuster: directory enumeration",
+            "http_request: testing /login for SQLi",
+            "sqlmap: running SQL injection scan",
+            "execute_terminal: cat /etc/passwd",
+            "http_request: exfiltrate data to external server",
+        ],
+    )
     assert "total_actions" in result
     assert "suggestions" in result
     # Empty actions
@@ -307,6 +346,7 @@ def test_drift_analyser():
 
 def test_error_handler():
     from medusa.core.error_handler import GracefulFallback, classify_and_handle
+
     # Connection refused
     result = classify_and_handle(ConnectionError("Connection refused"), "http_request")
     assert result["classification"] == "connection_refused"
@@ -339,6 +379,7 @@ def test_secret_patterns():
         is_likely_secret,
         suggest_tools_for_cwe,
     )
+
     assert len(SECRET_PATTERNS) >= 8
     aws_pattern = SECRET_PATTERNS["aws_access_key"]
     assert aws_pattern.search("AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE")
@@ -363,6 +404,7 @@ def test_secret_patterns():
 
 def test_report_exporter():
     from medusa.tools.report_exporter import _safe_id, generate_report
+
     path = generate_report(
         engagement_name="test_engagement",
         execution_trace=[
@@ -387,12 +429,25 @@ def test_report_exporter():
 
 def run_all():
     tests = [
-        test_prompt_safety, test_hard_guardrail, test_error_class,
-        test_json_utils, test_parsing, test_productivity,
-        test_state, test_skill_loader, test_tool_registry, test_workspace_fs,
-        test_engagement_schema, test_compliance_module, test_diff_engine,
-        test_payload_generator, test_supervisor_patterns, test_oracle_anomaly,
-        test_drift_analyser, test_error_handler, test_secret_patterns,
+        test_prompt_safety,
+        test_hard_guardrail,
+        test_error_class,
+        test_json_utils,
+        test_parsing,
+        test_productivity,
+        test_state,
+        test_skill_loader,
+        test_tool_registry,
+        test_workspace_fs,
+        test_engagement_schema,
+        test_compliance_module,
+        test_diff_engine,
+        test_payload_generator,
+        test_supervisor_patterns,
+        test_oracle_anomaly,
+        test_drift_analyser,
+        test_error_handler,
+        test_secret_patterns,
         test_report_exporter,
     ]
     passed = 0

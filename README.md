@@ -115,6 +115,11 @@ docker run -it --rm \
 | `medusa sessions` | Saved engagement sessions with objectives |
 | `medusa labs` | Built-in vulnerable labs: ports, descriptions, launch commands |
 | `medusa ui` | Launch the **web dashboard** on `127.0.0.1:7800` (see below) |
+| `medusa export` | Chain-of-custody evidence bundle: zip + SHA-256 manifest (`--with-creds`, `--verify <zip>`) |
+| `medusa debrief` | Engagement analytics from audit trails (`-v` for per-engagement detail) |
+| `medusa replay` | Step through an engagement timeline (`--list`, `--file`, `--export-md`) |
+| `medusa eval` | Replay recorded traffic through the blue detector: precision/recall/F1 + threshold sweep |
+| `medusa battle` | Purple team: scripted red vs pattern blue on the lab — live scoreboard |
 | `medusa pull kb` | Download + index the knowledge base (**enables** KB features) |
 | `medusa pull kb --status` | Offline: what's indexed, per-source counts, build age |
 | `medusa pull kb --list` | Available sources with size warnings |
@@ -127,7 +132,71 @@ Examples:
 medusa status && medusa labs
 medusa pull kb --sources hacktricks gtfobins   # skip the 300 MB SecLists pull
 medusa config validate || echo "fix config.json"
+medusa export && medusa export --verify medusa_agent/exports/<latest>.zip
+medusa battle                                   # red vs blue, live scoreboard
 ```
+
+---
+
+## Engagement Lifecycle Tools
+
+### Evidence export (`medusa export`)
+
+One command packs everything an engagement produced into a tamper-evident
+zip: reports, audit trails, sessions, blue state, dossiers, both knowledge
+graphs, and the redacted config. Every file is SHA-256-hashed in
+`manifest.json` alongside a `custody.json` chain-of-custody record (who,
+when, host, commit). `medusa export --verify <zip>` re-hashes the bundle
+and flags any mismatch, missing, or unlisted file. Credentials are excluded
+unless `--with-creds` is passed explicitly.
+
+### Debrief (`medusa debrief`)
+
+Analytics over `medusa_agent/audit_trails/*.json`: per-engagement table
+(actions, success/fail, findings, cost, duration), cross-engagement fleet
+trends (avg duration, findings per engagement, top tools), and with `-v`
+per-engagement severity/tool breakdowns including which tools keep failing.
+
+### Replay (`medusa replay`)
+
+Interactive timeline over any engagement's audit trail: space to play/pause,
+arrows to scrub (10-step jumps on up/down), +/- for speed, `q` to quit.
+Panels show the thought, the action + args, and the full observation per
+step. `--export-md OUT` writes the complete shareable transcript;
+non-TTY contexts print it directly.
+
+### Detector tuning harness (`medusa eval`)
+
+Replays recorded traffic (`--traffic`, default the live blue log) through
+the REAL production scorer, labels each entry with strong heuristic
+attack/benign rules (or your own `labels.jsonl` — `{"label": "attack",
+"any": ["substr"]} rules, first match wins), and reports
+precision/recall/F1 at the production threshold plus a full sweep:
+
+```
+@ threshold 5 (production default):  P 0.80  R 0.57  F1 0.67  (TP 4 FP 1 TN 4 FN 3)
+  thr    prec  rec   F1    TP FP TN FN
+   2   0.86  0.86  0.86   6  1  4  1
+  ...
+  best F1 at threshold 2 — tune via blue_config.json scorer.suspicious_threshold
+```
+
+This harness found and fixed real detector gaps (body-only scanning missed
+all query-string attacks; XXE bodies and X-Admin headers were never
+scanned) — production recall on battle traffic went 0.14 → 0.57 at the
+same threshold with precision held at 0.80.
+
+### Battle mode (`medusa battle`)
+
+Purple-team in one command: boots the blue_target lab, clears blue state,
+then runs a scripted red campaign (recon → auth attacks → access attacks →
+injection chain → final sweep) while an embedded blue watchdog tails the
+live traffic log, scores every request with the production scorer, and
+deploys real defenses — tarpits the lab actually enforces (measurable
+latency), network blocks that deny subsequent red requests. Live Rich
+scoreboard during the fight; markdown battle report saved to
+`medusa_agent/reports/`. Scoring: red = 100/flag + 25/attack-class,
+blue = 10/detection + 25/tarpit + 50/block.
 
 ---
 
@@ -646,6 +715,8 @@ python3 -m pytest medusa/tests/ -m "not ai" # skip live-API tests
 | `test_zai_provider.py` | Z.ai dual endpoints (coding default / paas / custom URL / 403 guidance), model remapping, retries, pricing, config validation, doctor row |
 | `test_kb_tools.py` | find_wordlist (search + tarball extraction), kb_stats, suggest_exploit (GTFOBins alias resolution), extract_payloads, wordlist_tool merge/filter, mine_failures clustering, anonymize_report scrubbing, search_kb phrase queries |
 | `test_ui_server.py` | WebUI backend: API contract, path-traversal safety, config redaction, SSE leading frame, SPA fallback vs asset 404s, traffic enrichment with the real anomaly detector |
+| `test_export_debrief_replay.py` | Evidence bundles (build/verify/tamper/extra-file/creds opt-in/redaction), debrief stats + fleet trends, replay listing/markdown/non-TTY |
+| `test_eval_battle.py` | Harness labeling (heuristic + labels.jsonl override), confusion-matrix math, threshold sweep, real-scorer replay; battle score math, watchdog detect/tarpit/block, report rendering |
 | `test_kb.py` | KB compile (FTS5, caps), path patterns + GTFOBins alias stubs, zero-doc failures, honest status, download retries + `.part` cleanup, `search_kb` filters, catalog gating |
 | `test_workspace_layout.py` | Canonical workspace merge + symlink migration, sandbox containment, CWD-independent paths |
 | `test_dispatch.py` | Tool routing, guardrails, file ops, CVSS/KEV parsing, jobs |

@@ -7,6 +7,7 @@ pipeline works end-to-end:
 
 CI-safe: random ports, temp files, mocked AI (no API key needed).
 """
+
 import asyncio
 import json
 import os
@@ -34,6 +35,7 @@ def _free_port() -> int:
 def _wait_for_server(url: str, timeout: float = 10.0) -> bool:
     """Poll until the server responds."""
     import urllib.request
+
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
@@ -63,6 +65,7 @@ def lab_server():
 
     # Start Flask in a background thread via werkzeug make_server (clean shutdown)
     from werkzeug.serving import make_server
+
     server = make_server("127.0.0.1", port, va.app, threaded=True)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -88,6 +91,7 @@ def lab_server():
     va.TRAFFIC_LOG = orig_log
     va.DB = orig_db
     import contextlib
+
     with contextlib.suppress(OSError):
         for f in os.listdir(tmpdir):
             os.unlink(os.path.join(tmpdir, f))
@@ -108,9 +112,13 @@ def blue_stack():
     # Only flags requests that actually look malicious (realistic AI behavior).
     async def mock_analyze(request, endpoint_info, subagent_notes="", request_id=0):
         text = str(request.get("body", "")) + str(request.get("user_agent", ""))
-        malicious = ("' OR '1'='1" in text or "OR 1=1" in text
-                     or "sqlmap" in text.lower() or "<script>" in text
-                     or "union select" in text.lower())
+        malicious = (
+            "' OR '1'='1" in text
+            or "OR 1=1" in text
+            or "sqlmap" in text.lower()
+            or "<script>" in text
+            or "union select" in text.lower()
+        )
         if malicious:
             return AIAnalysisResult(
                 request_id=request_id,
@@ -164,6 +172,7 @@ def _read_last_log_entry(log_path: str) -> dict:
 def isolated_tarpit_path(lab_server, monkeypatch):
     """Point the LiveFeed's class-level tarpit file at the isolated tmpdir."""
     from medusa.core.blue.tui.feed import LiveFeed
+
     monkeypatch.setattr(LiveFeed, "TARPIT_FILE", lab_server["tarpit_file"])
     yield lab_server["tarpit_file"]
 
@@ -192,9 +201,13 @@ class TestBlueTeamE2E:
         # ── Phase 1: establish baseline with clean traffic ──
         for i in range(3):
             clean = {
-                "method": "GET", "path": f"/api/users/{i}",
-                "ip": f"10.0.0.{i+1}", "body": "", "query": {},
-                "user_agent": "test-client", "headers": {},
+                "method": "GET",
+                "path": f"/api/users/{i}",
+                "ip": f"10.0.0.{i + 1}",
+                "body": "",
+                "query": {},
+                "user_agent": "test-client",
+                "headers": {},
             }
             asyncio.run(feed.process_request(clean))
         assert feed.baseline_established, "Baseline should be established after 3 requests"
@@ -249,9 +262,13 @@ class TestBlueTeamE2E:
         from medusa.core.blue.tui.feed import _detect_obvious_attack
 
         req_data = {
-            "method": "GET", "path": "/auth/login", "body": "",
+            "method": "GET",
+            "path": "/auth/login",
+            "body": "",
             "user_agent": "sqlmap/1.7.10#stable (https://sqlmap.org)",
-            "query": {}, "headers": {}, "ip": "10.9.9.9",
+            "query": {},
+            "headers": {},
+            "ip": "10.9.9.9",
         }
         check = _detect_obvious_attack(req_data)
         assert check["score"] >= 5, f"Scanner UA not detected: score {check['score']}"
@@ -262,9 +279,13 @@ class TestBlueTeamE2E:
         feed = blue_stack
         for i in range(3):
             clean = {
-                "method": "GET", "path": "/health",
-                "ip": f"10.1.1.{i+1}", "body": "", "query": {},
-                "user_agent": "test-client", "headers": {},
+                "method": "GET",
+                "path": "/health",
+                "ip": f"10.1.1.{i + 1}",
+                "body": "",
+                "query": {},
+                "user_agent": "test-client",
+                "headers": {},
             }
             result = asyncio.run(feed.process_request(clean))
             # Clean request may be None (normal) or a benign AIAnalysisResult
@@ -284,10 +305,19 @@ class TestBlueTeamE2E:
 
         # Baseline
         for i in range(3):
-            asyncio.run(feed.process_request({
-                "method": "GET", "path": "/health", "ip": f"10.2.2.{i+1}",
-                "body": "", "query": {}, "user_agent": "test", "headers": {},
-            }))
+            asyncio.run(
+                feed.process_request(
+                    {
+                        "method": "GET",
+                        "path": "/health",
+                        "ip": f"10.2.2.{i + 1}",
+                        "body": "",
+                        "query": {},
+                        "user_agent": "test",
+                        "headers": {},
+                    }
+                )
+            )
 
         # Attack
         resp = req.post(
@@ -298,13 +328,19 @@ class TestBlueTeamE2E:
         assert resp.status_code in (200, 401, 403)
 
         log_entry = _read_last_log_entry(lab_server["traffic_log"])
-        asyncio.run(feed.process_request({
-            "method": log_entry["method"], "path": log_entry["path"],
-            "body": log_entry.get("body", ""), "ip": log_entry["ip"],
-            "query": log_entry.get("query", {}),
-            "user_agent": log_entry.get("user_agent", ""),
-            "headers": log_entry.get("headers", {}),
-        }))
+        asyncio.run(
+            feed.process_request(
+                {
+                    "method": log_entry["method"],
+                    "path": log_entry["path"],
+                    "body": log_entry.get("body", ""),
+                    "ip": log_entry["ip"],
+                    "query": log_entry.get("query", {}),
+                    "user_agent": log_entry.get("user_agent", ""),
+                    "headers": log_entry.get("headers", {}),
+                }
+            )
+        )
 
         # KG should have the attacker
         history = kg.get_attacker_history(log_entry["ip"])

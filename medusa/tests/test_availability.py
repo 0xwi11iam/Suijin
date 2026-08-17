@@ -1,4 +1,5 @@
 """Tests for medusa/tools/availability.py — tool-to-binary mapping."""
+
 from medusa.modules.loader import discover_modules
 from medusa.tools.availability import (
     install_hint,

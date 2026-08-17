@@ -2,6 +2,7 @@
 Diff Engine — compare HTTP responses before/after parameter injection.
 Auto-detects anomalies: status changes, length differences, new content.
 """
+
 from __future__ import annotations
 
 import re
@@ -36,38 +37,44 @@ def diff_responses(baseline: str, injected: str, sensitivity: str = "medium") ->
     base_status = _extract_status(baseline)
     inj_status = _extract_status(injected)
     if base_status and inj_status and base_status != inj_status:
-        result["anomalies"].append({
-            "type": "status_change",
-            "baseline": base_status,
-            "injected": inj_status,
-            "detail": f"Status changed from {base_status} to {inj_status}"
-        })
+        result["anomalies"].append(
+            {
+                "type": "status_change",
+                "baseline": base_status,
+                "injected": inj_status,
+                "detail": f"Status changed from {base_status} to {inj_status}",
+            }
+        )
 
     # Check for error patterns
     error_patterns = [
-        (r'(?i)(sql|syntax|mysql|sqlite|postgresql|oracle|odbc|mysql_fetch)', "SQL Error"),
-        (r'(?i)(stack trace|traceback|exception|error at)', "Stack Trace"),
-        (r'(?i)(warning|notice|deprecated)', "Warning/Notice"),
-        (r'(?i)(admin|root|password|secret|token|key)', "Sensitive Data Leak"),
+        (r"(?i)(sql|syntax|mysql|sqlite|postgresql|oracle|odbc|mysql_fetch)", "SQL Error"),
+        (r"(?i)(stack trace|traceback|exception|error at)", "Stack Trace"),
+        (r"(?i)(warning|notice|deprecated)", "Warning/Notice"),
+        (r"(?i)(admin|root|password|secret|token|key)", "Sensitive Data Leak"),
     ]
     for pattern, label in error_patterns:
         in_base = bool(re.search(pattern, baseline))
         in_inj = bool(re.search(pattern, injected))
         if not in_base and in_inj:
-            result["anomalies"].append({
-                "type": "error_disclosure",
-                "label": label,
-                "detail": f"{label} appeared in injected response but not baseline"
-            })
+            result["anomalies"].append(
+                {
+                    "type": "error_disclosure",
+                    "label": label,
+                    "detail": f"{label} appeared in injected response but not baseline",
+                }
+            )
 
     # Significant length change
     if abs(result["length_diff_pct"]) > (threshold * 100):
         direction = "larger" if result["length_diff"] > 0 else "smaller"
-        result["anomalies"].append({
-            "type": "length_anomaly",
-            "direction": direction,
-            "detail": f"Response is {abs(result['length_diff_pct']):.1f}% {direction} than baseline"
-        })
+        result["anomalies"].append(
+            {
+                "type": "length_anomaly",
+                "direction": direction,
+                "detail": f"Response is {abs(result['length_diff_pct']):.1f}% {direction} than baseline",
+            }
+        )
 
     # Boolean comparison
     result["is_different"] = len(baseline) != len(injected) or baseline.strip() != injected.strip()
@@ -78,7 +85,7 @@ def diff_responses(baseline: str, injected: str, sensitivity: str = "medium") ->
 
 def _extract_status(response: str) -> str:
     """Extract HTTP status code from response string."""
-    m = re.search(r'(?:^|\n)(?:HTTP/[\d.]+ )?(\d{3})', response)
+    m = re.search(r"(?:^|\n)(?:HTTP/[\d.]+ )?(\d{3})", response)
     return m.group(1) if m else ""
 
 
@@ -88,14 +95,17 @@ def quick_diff(baseline_body: str, injected_body: str) -> str:
     il = injected_body.strip()
     if bl == il:
         return "No differences detected."
-    lines = [f"Baseline: {len(bl)} chars", f"Injected: {len(il)} chars",
-             f"Delta: {len(il) - len(bl)} chars ({(len(il)-len(bl))/max(len(bl),1)*100:.1f}%)"]
+    lines = [
+        f"Baseline: {len(bl)} chars",
+        f"Injected: {len(il)} chars",
+        f"Delta: {len(il) - len(bl)} chars ({(len(il) - len(bl)) / max(len(bl), 1) * 100:.1f}%)",
+    ]
     # Find first differing line
     bl_lines = bl.split("\n")
     il_lines = il.split("\n")
     for i in range(min(len(bl_lines), len(il_lines))):
         if bl_lines[i] != il_lines[i]:
-            lines.append(f"First diff at line {i+1}:")
+            lines.append(f"First diff at line {i + 1}:")
             lines.append(f"  Base: {bl_lines[i][:100]}")
             lines.append(f"  Inj:  {il_lines[i][:100]}")
             break

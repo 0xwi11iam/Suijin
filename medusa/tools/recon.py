@@ -4,6 +4,7 @@
 matching CVEs so a single call replaces the manual "scan, fingerprint, lookup"
 hop-by-hop loop.
 """
+
 from __future__ import annotations
 
 import re
@@ -18,12 +19,14 @@ def parse_services(nmap_output: str) -> list[dict]:
     services = []
     for m in _SERVICE_RE.finditer(nmap_output or ""):
         port, proto, service, rest = m.groups()
-        services.append({
-            "port": int(port),
-            "proto": proto,
-            "service": service,
-            "banner": (rest or "").strip()[:160],
-        })
+        services.append(
+            {
+                "port": int(port),
+                "proto": proto,
+                "service": service,
+                "banner": (rest or "").strip()[:160],
+            }
+        )
     return services
 
 

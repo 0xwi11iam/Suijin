@@ -6,6 +6,7 @@ Provides:
 - RateLimitTracker: detect 429s, respect Retry-After, auto-throttle
 - Stealth mode: random User-Agent rotation, jitter, traffic shaping
 """
+
 from __future__ import annotations
 
 import random
@@ -17,8 +18,10 @@ from urllib.parse import urlparse
 
 # ── Session tracking ──────────────────────────────────────────────────────────
 
+
 class SessionState:
     """Track a single target's session (cookies, tokens, auth state)."""
+
     def __init__(self, target: str):
         self.target = target
         self.cookies: dict = {}
@@ -30,6 +33,7 @@ class SessionState:
     def update_from_response(self, headers: dict, body: str = ""):
         """Extract cookies and CSRF tokens from response headers/body."""
         import re
+
         # Extract Set-Cookie
         for header_key, header_val in headers.items():
             if header_key.lower() == "set-cookie":
@@ -59,8 +63,10 @@ class SessionState:
 
 # ── Rate limit awareness ──────────────────────────────────────────────────────
 
+
 class RateLimitTracker:
     """Track rate limits per target domain and auto-throttle."""
+
     def __init__(self):
         self._lock = threading.Lock()
         self._domains: dict = {}  # domain -> {"limit": int, "remaining": int, "reset_at": float, "retry_after": float}

@@ -2,6 +2,52 @@
 
 All notable changes to Medusa.
 
+## [2.9.0] — 2026-08-18 — PURPLE ARENA
+
+### Added
+- **`medusa export`** — chain-of-custody evidence bundles
+  (`tools/export_bundle.py`): zip of reports, audit trails, sessions, blue
+  state, dossiers, both knowledge graphs + redacted config. Every file
+  SHA-256-hashed in `manifest.json`; `custody.json` records when/host/
+  commit. `--verify <zip>` re-hashes and flags mismatches, missing, or
+  unlisted files (tamper + smuggling detection). Credentials excluded
+  unless `--with-creds`.
+- **`medusa debrief`** — engagement analytics over audit trails
+  (`tools/debrief.py`): per-engagement table (actions/ok/fail/findings/
+  cost/duration), fleet trends (avg duration, findings per engagement, top
+  tools), `-v` per-engagement severity + tool-success breakdowns.
+- **`medusa replay`** — interactive engagement timeline (`tools/replay.py`):
+  Rich Live panes (thought / action+args / observation), space play-pause,
+  arrows scrub, +/- speed, up/down 10-step jumps. `--list`, `--file`,
+  `--export-md` full transcript; non-TTY prints the transcript directly.
+- **`medusa eval`** — detector tuning harness
+  (`core/blue/traffic/replay_harness.py`): replays recorded traffic
+  through the REAL production scorer, labels entries via strong heuristic
+  rules or `labels.jsonl` overrides, reports precision/recall/F1 at the
+  production threshold + full sweep + best operating point. Unlabeled
+  entries are excluded, never silently benign.
+- **`medusa battle`** — purple-team mode (`tools/battle.py`): boots the
+  blue_target lab fresh, runs a scripted red campaign (recon → auth →
+  access → injection chain → sweep; 12 attack classes, flag capture) while
+  a BlueWatchdog tails the live traffic log, scores with the production
+  scorer, and deploys real defenses — tarpits written to the file the LAB
+  enforces (measurable latency), blocks that deny later red requests.
+  Live scoreboard, markdown battle report in medusa_agent/reports/.
+  Scoring: red 100/flag + 25/class; blue 10/detect + 25/tarpit + 50/block.
+- 28 new tests across `test_export_debrief_replay.py` and
+  `test_eval_battle.py`.
+
+### Fixed — real detector gaps found by the new harness
+- `anomaly_detector.detect_anomalies` scanned ONLY the request body:
+  query-string attacks (`?data={{...}}`, `?path=../../`, GraphQL recon)
+  were invisible. Now scans body + query + path. Production recall on
+  battle traffic: 0.14 → 0.57 at threshold 5 (0.86 at threshold 2),
+  precision held ≥ 0.80.
+- XXE bodies (`<!ENTITY`) and privilege-spoofing headers (`X-Admin: true`,
+  `X-Role: admin`) were never inspected — both now signal at weight 5.
+- Battle-time effect: blue score vs the same scripted campaign went
+  35 → 135 with an actual network block landing mid-campaign.
+
 ## [2.8.0] — 2026-08-17 — ABYSS CONSOLE (WEB DASHBOARD)
 
 ### Added

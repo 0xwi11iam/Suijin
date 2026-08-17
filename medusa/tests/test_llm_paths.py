@@ -4,6 +4,7 @@ Covers the AI-decision core with fault injection: successful calls, error
 strings, fail-open behavior, usage accounting, and hypothesis generation.
 No real API calls — everything is mocked.
 """
+
 import asyncio
 import json
 import sys
@@ -16,18 +17,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 # providers.py — pricing, usage accounting, generate() paths
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestProviderPricing:
     def test_exact_model(self):
         from medusa.tools.providers import _price_for
+
         assert _price_for("deepseek-v4-flash") == (0.27, 1.10)
 
     def test_prefix_match(self):
         from medusa.tools.providers import _price_for
+
         price = _price_for("anthropic/claude-opus-4-8")
         assert price == (15.0, 75.0)
 
     def test_unknown_model_none(self):
         from medusa.tools.providers import _price_for
+
         assert _price_for("totally-unknown-model") is None
         assert _price_for(None) is None
         assert _price_for("") is None
@@ -36,6 +41,7 @@ class TestProviderPricing:
 class TestProviderUsage:
     def test_reset_and_record(self):
         from medusa.tools.providers import _record_usage, get_usage, reset_usage
+
         reset_usage()
         _record_usage("deepseek", "deepseek-v4-flash", 1000, 500)
         usage = get_usage()
@@ -48,6 +54,7 @@ class TestProviderUsage:
 
     def test_unpriced_model_uses_default_rate(self):
         from medusa.tools.providers import _record_usage, get_usage, reset_usage
+
         reset_usage()
         _record_usage("unknown", "mystery-model", 1000000, 1000000)
         usage = get_usage()
@@ -57,6 +64,7 @@ class TestProviderUsage:
 
     def test_record_usage_never_raises(self):
         from medusa.tools.providers import _record_usage, get_usage, reset_usage
+
         reset_usage()
         # Malformed token counts must be swallowed — never crash the call
         _record_usage("x", "y", None, "bad-tokens")
@@ -86,15 +94,19 @@ class TestGenerateDeepSeek:
         monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
 
         def mock_post(url, **kwargs):
-            return FakeResponse(200, {
-                "choices": [{"message": {"content": "hello from mock"}}],
-                "usage": {"prompt_tokens": 100, "completion_tokens": 50},
-            })
+            return FakeResponse(
+                200,
+                {
+                    "choices": [{"message": {"content": "hello from mock"}}],
+                    "usage": {"prompt_tokens": 100, "completion_tokens": 50},
+                },
+            )
 
         monkeypatch.setattr(p.req, "post", mock_post)
         reset_usage()
-        result = generate([{"role": "user", "content": "hi"}],
-                          {"provider": "deepseek", "deepseek_model": "deepseek-v4-flash"})
+        result = generate(
+            [{"role": "user", "content": "hi"}], {"provider": "deepseek", "deepseek_model": "deepseek-v4-flash"}
+        )
         assert result == "hello from mock"
         usage = get_usage()
         assert usage["calls"] == 1
@@ -103,49 +115,50 @@ class TestGenerateDeepSeek:
     def test_missing_key_errors_before_request(self, monkeypatch):
         import medusa.tools.providers as p
         from medusa.tools.providers import generate
+
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         called = []
         monkeypatch.setattr(p.req, "post", lambda *a, **k: called.append(True))
-        result = generate([{"role": "user", "content": "hi"}],
-                          {"provider": "deepseek"}, retries=1)
+        result = generate([{"role": "user", "content": "hi"}], {"provider": "deepseek"}, retries=1)
         assert "API key" in result
         assert called == []
 
     def test_401_invalid_key(self, monkeypatch):
         import medusa.tools.providers as p
         from medusa.tools.providers import generate
+
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "bad-key")
         monkeypatch.setattr(p.req, "post", lambda *a, **k: FakeResponse(401, {}))
-        result = generate([{"role": "user", "content": "hi"}],
-                          {"provider": "deepseek"}, retries=1)
+        result = generate([{"role": "user", "content": "hi"}], {"provider": "deepseek"}, retries=1)
         assert "Invalid DeepSeek API Key" in result
 
     def test_402_payment_required(self, monkeypatch):
         import medusa.tools.providers as p
         from medusa.tools.providers import generate
+
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
         monkeypatch.setattr(p.req, "post", lambda *a, **k: FakeResponse(402, {}))
-        result = generate([{"role": "user", "content": "hi"}],
-                          {"provider": "deepseek"}, retries=1)
+        result = generate([{"role": "user", "content": "hi"}], {"provider": "deepseek"}, retries=1)
         assert "402" in result
 
     def test_retries_exhausted_falls_through(self, monkeypatch):
         import medusa.tools.providers as p
         from medusa.tools.providers import generate
+
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
         monkeypatch.setattr(p.req, "post", lambda *a, **k: FakeResponse(500, {}))
         monkeypatch.setattr(p.time, "sleep", lambda s: None)
-        result = generate([{"role": "user", "content": "hi"}],
-                          {"provider": "deepseek"}, retries=2)
+        result = generate([{"role": "user", "content": "hi"}], {"provider": "deepseek"}, retries=2)
         assert "Error" in result
 
     def test_non_deepseek_model_remapped(self, monkeypatch):
         import medusa.tools.providers as p
         from medusa.tools.providers import generate
+
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
         sent = {}
@@ -155,27 +168,29 @@ class TestGenerateDeepSeek:
             return FakeResponse(200, {"choices": [{"message": {"content": "ok"}}]})
 
         monkeypatch.setattr(p.req, "post", mock_post)
-        generate([{"role": "user", "content": "hi"}],
-                 {"provider": "deepseek", "deepseek_model": "deepseek-v4-flash"},
-                 model_id="anthropic/claude-opus-4-8", retries=1)
+        generate(
+            [{"role": "user", "content": "hi"}],
+            {"provider": "deepseek", "deepseek_model": "deepseek-v4-flash"},
+            model_id="anthropic/claude-opus-4-8",
+            retries=1,
+        )
         assert sent["json"]["model"] == "deepseek-v4-flash"
 
     def test_unknown_provider(self, monkeypatch):
         import medusa.tools.providers as p
         from medusa.tools.providers import generate
+
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
-        result = generate([{"role": "user", "content": "hi"}],
-                          {"provider": "not-a-real-provider"})
+        result = generate([{"role": "user", "content": "hi"}], {"provider": "not-a-real-provider"})
         assert "Unknown provider" in result
 
     def test_lobstertrap_active_routes_through_proxy(self, monkeypatch):
         import medusa.tools.providers as p
         from medusa.tools.providers import generate
+
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: True)
-        monkeypatch.setattr(p, "_call_via_lobstertrap",
-                            lambda messages, model, temp, mt: "proxy result")
-        result = generate([{"role": "user", "content": "hi"}],
-                          {"provider": "deepseek"})
+        monkeypatch.setattr(p, "_call_via_lobstertrap", lambda messages, model, temp, mt: "proxy result")
+        result = generate([{"role": "user", "content": "hi"}], {"provider": "deepseek"})
         assert result == "proxy result"
 
 
@@ -183,9 +198,11 @@ class TestGenerateDeepSeek:
 # ai_engine.py — prompt building, response parsing, fail-open, actions
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestAIEngineParsing:
     def test_parse_direct_json(self):
         from medusa.core.blue.ai_engine import BlueAIEngine
+
         engine = BlueAIEngine({})
         parsed = engine._parse_llm_response('{"verdict":"FLAGGED","score":9}')
         assert parsed["verdict"] == "FLAGGED"
@@ -193,6 +210,7 @@ class TestAIEngineParsing:
 
     def test_parse_markdown_fence(self):
         from medusa.core.blue.ai_engine import BlueAIEngine
+
         engine = BlueAIEngine({})
         raw = '```json\n{"verdict":"NOT FLAGGED","score":2}\n```'
         parsed = engine._parse_llm_response(raw)
@@ -200,6 +218,7 @@ class TestAIEngineParsing:
 
     def test_parse_brace_block(self):
         from medusa.core.blue.ai_engine import BlueAIEngine
+
         engine = BlueAIEngine({})
         raw = 'text before {"verdict":"FLAGGED","score":7} text after'
         parsed = engine._parse_llm_response(raw)
@@ -207,12 +226,14 @@ class TestAIEngineParsing:
 
     def test_parse_fallback_to_reasoning(self):
         from medusa.core.blue.ai_engine import BlueAIEngine
+
         engine = BlueAIEngine({})
         parsed = engine._parse_llm_response("just plain text")
         assert parsed == {"reasoning": "just plain text"}
 
     def test_parse_empty(self):
         from medusa.core.blue.ai_engine import BlueAIEngine
+
         engine = BlueAIEngine({})
         assert engine._parse_llm_response("") == {}
 
@@ -220,10 +241,18 @@ class TestAIEngineParsing:
 class TestAIEnginePrompt:
     def test_prompt_contains_request_context(self):
         from medusa.core.blue.ai_engine import BlueAIEngine
+
         engine = BlueAIEngine({})
         prompt = engine.build_analysis_prompt(
-            {"method": "POST", "path": "/auth/login", "ip": "10.0.0.9",
-             "body": "admin' OR '1'='1", "user_agent": "curl", "query": {}, "headers": {}},
+            {
+                "method": "POST",
+                "path": "/auth/login",
+                "ip": "10.0.0.9",
+                "body": "admin' OR '1'='1",
+                "user_agent": "curl",
+                "query": {},
+                "headers": {},
+            },
             {"handler": "def login(): ..."},
         )
         assert "POST" in prompt
@@ -233,20 +262,23 @@ class TestAIEnginePrompt:
 
     def test_prompt_includes_endpoint_info(self):
         from medusa.core.blue.ai_engine import BlueAIEngine
+
         engine = BlueAIEngine({})
         prompt = engine.build_analysis_prompt(
             {"method": "GET", "path": "/x"},
-            {"framework": "flask", "auth_required": True,
-             "handler_code": "def handler(): return 'x'"},
+            {"framework": "flask", "auth_required": True, "handler_code": "def handler(): return 'x'"},
         )
         assert "def handler(): return 'x'" in prompt
         assert "flask" in prompt
 
     def test_prompt_includes_subagent_notes(self):
         from medusa.core.blue.ai_engine import BlueAIEngine
+
         engine = BlueAIEngine({})
         prompt = engine.build_analysis_prompt(
-            {"method": "GET", "path": "/x"}, {}, subagent_notes="RISK: HIGH",
+            {"method": "GET", "path": "/x"},
+            {},
+            subagent_notes="RISK: HIGH",
         )
         assert "RISK: HIGH" in prompt
 
@@ -254,20 +286,30 @@ class TestAIEnginePrompt:
 class TestAIEngineAnalyze:
     def _mock_generate_flagged(self, monkeypatch):
         def fake_generate(messages, config=None, **kwargs):
-            return json.dumps({"verdict": "FLAGGED", "score": 9, "action": "DECEIVE",
-                               "reasoning": "mocked", "attack_analysis": "sqli",
-                               "attacker_assessment": "scanner"})
+            return json.dumps(
+                {
+                    "verdict": "FLAGGED",
+                    "score": 9,
+                    "action": "DECEIVE",
+                    "reasoning": "mocked",
+                    "attack_analysis": "sqli",
+                    "attacker_assessment": "scanner",
+                }
+            )
+
         monkeypatch.setattr("medusa.tools.providers.generate", fake_generate)
 
     def test_analyze_flagged(self, monkeypatch):
         from medusa.core.blue.ai_engine import BlueAIEngine
+
         self._mock_generate_flagged(monkeypatch)
         engine = BlueAIEngine({})
-        result = asyncio.run(engine.analyze_request(
-            {"method": "POST", "path": "/login", "body": "x", "ip": "1.2.3.4",
-             "query": {}, "headers": {}},
-            {},
-        ))
+        result = asyncio.run(
+            engine.analyze_request(
+                {"method": "POST", "path": "/login", "body": "x", "ip": "1.2.3.4", "query": {}, "headers": {}},
+                {},
+            )
+        )
         assert result.verdict == "FLAGGED"
         assert result.score == 9
         assert result.action == "DECEIVE"
@@ -280,14 +322,16 @@ class TestAIEngineAnalyze:
 
         def fake_generate(messages, config=None, **kwargs):
             return "Error: DeepSeek API key not set"
+
         monkeypatch.setattr("medusa.tools.providers.generate", fake_generate)
 
         engine = BlueAIEngine({})
-        result = asyncio.run(engine.analyze_request(
-            {"method": "POST", "path": "/login", "body": "x' OR 1=1", "ip": "1.2.3.4",
-             "query": {}, "headers": {}},
-            {},
-        ))
+        result = asyncio.run(
+            engine.analyze_request(
+                {"method": "POST", "path": "/login", "body": "x' OR 1=1", "ip": "1.2.3.4", "query": {}, "headers": {}},
+                {},
+            )
+        )
         assert result.verdict == "FLAGGED"
         assert result.action == "REVIEW"
 
@@ -296,14 +340,16 @@ class TestAIEngineAnalyze:
 
         def fake_generate(messages, config=None, **kwargs):
             return "garbage that is not json"
+
         monkeypatch.setattr("medusa.tools.providers.generate", fake_generate)
 
         engine = BlueAIEngine({})
-        result = asyncio.run(engine.analyze_request(
-            {"method": "POST", "path": "/login", "body": "x", "ip": "1.2.3.4",
-             "query": {}, "headers": {}},
-            {},
-        ))
+        result = asyncio.run(
+            engine.analyze_request(
+                {"method": "POST", "path": "/login", "body": "x", "ip": "1.2.3.4", "query": {}, "headers": {}},
+                {},
+            )
+        )
         # Not-flagged fallback or flagged — but must not crash
         assert result.verdict in ("FLAGGED", "NOT FLAGGED")
 
@@ -311,17 +357,24 @@ class TestAIEngineAnalyze:
 class TestAIEngineActions:
     def test_execute_actions_commands(self, monkeypatch, tmp_path):
         from medusa.core.blue.ai_engine import AIAnalysisResult, BlueAIEngine
+
         engine = BlueAIEngine({})
 
         class FakeProc:
             returncode = 0
             stdout = "ok"
             stderr = ""
+
         monkeypatch.setattr("subprocess.run", lambda *a, **k: FakeProc())
 
         result = AIAnalysisResult(
-            request_id=1, method="GET", path="/", ip="1.2.3.4",
-            verdict="FLAGGED", score=8, action="DECEIVE",
+            request_id=1,
+            method="GET",
+            path="/",
+            ip="1.2.3.4",
+            verdict="FLAGGED",
+            score=8,
+            action="DECEIVE",
             commands_run=["echo hello"],
         )
         executed = engine.execute_actions(result, str(tmp_path))
@@ -333,15 +386,22 @@ class TestAIEngineActions:
         import subprocess
 
         from medusa.core.blue.ai_engine import AIAnalysisResult, BlueAIEngine
+
         engine = BlueAIEngine({})
 
         def fake_run(cmd, **kwargs):
             raise subprocess.TimeoutExpired(cmd, timeout=30)
+
         monkeypatch.setattr("subprocess.run", fake_run)
 
         result = AIAnalysisResult(
-            request_id=1, method="GET", path="/", ip="1.2.3.4",
-            verdict="FLAGGED", score=8, action="DECEIVE",
+            request_id=1,
+            method="GET",
+            path="/",
+            ip="1.2.3.4",
+            verdict="FLAGGED",
+            score=8,
+            action="DECEIVE",
             commands_run=["sleep 100"],
         )
         executed = engine.execute_actions(result, str(tmp_path))
@@ -349,15 +409,20 @@ class TestAIEngineActions:
 
     def test_execute_actions_code_change_written(self, monkeypatch, tmp_path):
         from medusa.core.blue.ai_engine import AIAnalysisResult, BlueAIEngine
+
         engine = BlueAIEngine({})
         target_file = tmp_path / "app.py"
         target_file.write_text("old code")
 
         result = AIAnalysisResult(
-            request_id=1, method="GET", path="/", ip="1.2.3.4",
-            verdict="FLAGGED", score=9, action="PATCH",
-            code_changes=[{"file": "app.py", "change": "parameterize",
-                           "new_content": "new secure code"}],
+            request_id=1,
+            method="GET",
+            path="/",
+            ip="1.2.3.4",
+            verdict="FLAGGED",
+            score=9,
+            action="PATCH",
+            code_changes=[{"file": "app.py", "change": "parameterize", "new_content": "new secure code"}],
         )
         executed = engine.execute_actions(result, str(tmp_path))
         assert target_file.read_text() == "new secure code"
@@ -368,43 +433,51 @@ class TestAIEngineActions:
 # oracle.py — anomaly detection, payload mutations, hypothesis generation
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestOracleDetectAnomaly:
     def test_http_500_high(self):
         from medusa.intel.oracle import detect_anomaly
+
         result = detect_anomaly("Internal Server Error", status_code=500)
         assert result["anomaly"] is True
         assert result["severity"] == "high"
 
     def test_http_403_waf(self):
         from medusa.intel.oracle import detect_anomaly
+
         result = detect_anomaly("Forbidden", status_code=403)
         assert result["anomaly"] is True
         assert result["severity"] == "medium"
 
     def test_length_delta(self):
         from medusa.intel.oracle import detect_anomaly
+
         result = detect_anomaly("a" * 500, baseline_len=100)
         assert result["anomaly"] is True
         assert any("body_length" in s for s in result["signals"])
 
     def test_elapsed_timeout(self):
         from medusa.intel.oracle import detect_anomaly
+
         result = detect_anomaly("ok", elapsed=20)
         assert result["anomaly"] is True
 
     def test_error_keywords(self):
         from medusa.intel.oracle import detect_anomaly
+
         result = detect_anomaly("SQL syntax error near SELECT")
         assert result["anomaly"] is True
         assert result["severity"] == "high"
 
     def test_payload_reflection(self):
         from medusa.intel.oracle import detect_anomaly
+
         result = detect_anomaly("echo <script>alert(1)</script>")
         assert result["anomaly"] is True
 
     def test_clean_response(self):
         from medusa.intel.oracle import detect_anomaly
+
         result = detect_anomaly("normal page content", status_code=200)
         assert result["anomaly"] is False
 
@@ -412,18 +485,21 @@ class TestOracleDetectAnomaly:
 class TestOraclePayloadMutations:
     def test_synonym_payload(self):
         from medusa.intel.oracle import _make_synonym_payload
+
         result = _make_synonym_payload("OR 1=1")
         assert isinstance(result, str)
         assert len(result) > 0
 
     def test_escaped_payload(self):
         from medusa.intel.oracle import _make_escaped_payload
+
         result = _make_escaped_payload("' OR 1=1")
         assert isinstance(result, str)
         assert "OR 1=1" in result
 
     def test_encoded_payload(self):
         from medusa.intel.oracle import _make_encoded_payload
+
         result = _make_encoded_payload("' OR 1=1")
         assert isinstance(result, str)
         assert len(result) > 0
@@ -432,6 +508,7 @@ class TestOraclePayloadMutations:
 class TestOracleHypotheses:
     def test_heuristic_fallback_returns_three(self):
         from medusa.intel.oracle import _heuristic_hypotheses
+
         hyps = _heuristic_hypotheses("HTTP_500_backend_error: SQL syntax error", "' OR 1=1")
         assert isinstance(hyps, list)
         assert len(hyps) >= 1
@@ -441,6 +518,7 @@ class TestOracleHypotheses:
 
     def test_generate_hypotheses_no_provider_uses_heuristic(self, monkeypatch):
         from medusa.intel import oracle
+
         monkeypatch.setattr(oracle, "_generate", None)
         hyps = oracle.generate_hypotheses("SQL syntax error", "payload")
         assert len(hyps) >= 1
@@ -449,11 +527,19 @@ class TestOracleHypotheses:
         from medusa.intel import oracle
 
         def fake_generate(messages, config=None, **kwargs):
-            return json.dumps([
-                {"id": "H1", "hypothesis": "WAF blocked", "confidence": 0.8,
-                 "validation_payload": "x", "expected_confirm": "403",
-                 "expected_disconfirm": "200"},
-            ])
+            return json.dumps(
+                [
+                    {
+                        "id": "H1",
+                        "hypothesis": "WAF blocked",
+                        "confidence": 0.8,
+                        "validation_payload": "x",
+                        "expected_confirm": "403",
+                        "expected_disconfirm": "200",
+                    },
+                ]
+            )
+
         monkeypatch.setattr(oracle, "_generate", fake_generate)
         hyps = oracle.generate_hypotheses("snippet", "payload", config={})
         assert len(hyps) == 1
@@ -465,6 +551,7 @@ class TestOracleHypotheses:
 
         def fake_generate(messages, config=None, **kwargs):
             return "Error: API down"
+
         monkeypatch.setattr(oracle, "_generate", fake_generate)
         hyps = oracle.generate_hypotheses("snippet", "payload", config={})
         assert len(hyps) >= 1
@@ -474,28 +561,32 @@ class TestOracleHypotheses:
 # supervisor.py — verdict parsing, heuristics, evaluate loop
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 class TestSupervisorVerdict:
     def test_parse_verdict_json(self):
         from medusa.intel.supervisor import _parse_verdict
+
         v = _parse_verdict('{"stuck":true,"reason":"loop","new_directive":"change"}')
         assert v["stuck"] is True
         assert v["reason"] == "loop"
 
     def test_parse_verdict_garbage_defaults(self):
         from medusa.intel.supervisor import _parse_verdict
+
         v = _parse_verdict("not json")
         assert v["stuck"] is False
         assert v["new_directive"] == ""
 
     def test_parse_verdict_empty(self):
         from medusa.intel.supervisor import _parse_verdict
+
         v = _parse_verdict(None)
         assert v["stuck"] is False
 
     def test_format_spend(self):
         from medusa.intel.supervisor import format_spend
-        out = format_spend({"est_cost_usd": 0.5, "input_tokens": 100,
-                            "output_tokens": 50, "calls": 3, "priced": True})
+
+        out = format_spend({"est_cost_usd": 0.5, "input_tokens": 100, "output_tokens": 50, "calls": 3, "priced": True})
         assert "0.5000" in out
         assert "3 calls" in out
 
@@ -503,33 +594,49 @@ class TestSupervisorVerdict:
 class TestSupervisorHeuristics:
     def test_repeated_action_flag(self):
         from medusa.intel.supervisor import heuristic_stuck_check
-        telemetry = {"max_repeat": 3, "error_count": 0,
-                     "drift": {"drift_detected": False},
-                     "usage": {"est_cost_usd": 0.01}}
+
+        telemetry = {
+            "max_repeat": 3,
+            "error_count": 0,
+            "drift": {"drift_detected": False},
+            "usage": {"est_cost_usd": 0.01},
+        }
         flags = heuristic_stuck_check(telemetry, {"cost_alert_usd": 0.25})
         assert "repeated_action" in flags
 
     def test_repeated_errors_flag(self):
         from medusa.intel.supervisor import heuristic_stuck_check
-        telemetry = {"max_repeat": 1, "error_count": 4,
-                     "drift": {"drift_detected": False},
-                     "usage": {"est_cost_usd": 0.01}}
+
+        telemetry = {
+            "max_repeat": 1,
+            "error_count": 4,
+            "drift": {"drift_detected": False},
+            "usage": {"est_cost_usd": 0.01},
+        }
         flags = heuristic_stuck_check(telemetry, {"cost_alert_usd": 0.25})
         assert "repeated_errors" in flags
 
     def test_cost_alert_flag(self):
         from medusa.intel.supervisor import heuristic_stuck_check
-        telemetry = {"max_repeat": 1, "error_count": 0,
-                     "drift": {"drift_detected": False},
-                     "usage": {"est_cost_usd": 0.50}}
+
+        telemetry = {
+            "max_repeat": 1,
+            "error_count": 0,
+            "drift": {"drift_detected": False},
+            "usage": {"est_cost_usd": 0.50},
+        }
         flags = heuristic_stuck_check(telemetry, {"cost_alert_usd": 0.25})
         assert "cost_alert" in flags
 
     def test_no_flags_when_healthy(self):
         from medusa.intel.supervisor import heuristic_stuck_check
-        telemetry = {"max_repeat": 1, "error_count": 0,
-                     "drift": {"drift_detected": False},
-                     "usage": {"est_cost_usd": 0.01}}
+
+        telemetry = {
+            "max_repeat": 1,
+            "error_count": 0,
+            "drift": {"drift_detected": False},
+            "usage": {"est_cost_usd": 0.01},
+        }
         flags = heuristic_stuck_check(telemetry, {"cost_alert_usd": 0.25})
         assert flags == []
 
@@ -541,23 +648,34 @@ class TestSupervisorEvaluate:
 
         def fake_generate(messages, config=None, **kwargs):
             return json.dumps({"stuck": False, "reason": "", "new_directive": ""})
+
         monkeypatch.setattr(sv, "generate", fake_generate)
 
         # Build telemetry with max_repeat >= 3
         import medusa.intel.supervisor as m
-        monkeypatch.setattr(m, "collect_telemetry", lambda *a, **k: {
-            "turn": 3, "objective": "x", "total_actions": 4,
-            "recent_actions": ["nmap: x", "nmap: x", "nmap: x"],
-            "recent_results": [], "recent_thoughts": [],
-            "drift": {"drift_detected": False, "drift_count": 0},
-            "max_repeat": 3, "error_count": 0,
-            "usage": {"est_cost_usd": 0.01},
-        })
+
+        monkeypatch.setattr(
+            m,
+            "collect_telemetry",
+            lambda *a, **k: {
+                "turn": 3,
+                "objective": "x",
+                "total_actions": 4,
+                "recent_actions": ["nmap: x", "nmap: x", "nmap: x"],
+                "recent_results": [],
+                "recent_thoughts": [],
+                "drift": {"drift_detected": False, "drift_count": 0},
+                "max_repeat": 3,
+                "error_count": 0,
+                "usage": {"est_cost_usd": 0.01},
+            },
+        )
 
         verdict, telemetry, flags = sv.evaluate(
-            [], turn=3, objective="test",
-            config={"supervisor_interval": 5, "cost_alert_usd": 0.25,
-                    "cost_budget_usd": 1.0, "cost_hard_cap_usd": 2.0},
+            [],
+            turn=3,
+            objective="test",
+            config={"supervisor_interval": 5, "cost_alert_usd": 0.25, "cost_budget_usd": 1.0, "cost_hard_cap_usd": 2.0},
         )
         assert verdict["stuck"] is True
         assert "repeated_action" in flags
@@ -567,20 +685,29 @@ class TestSupervisorEvaluate:
         from medusa.intel import supervisor as sv
 
         monkeypatch.setattr(sv, "generate", lambda *a, **k: json.dumps({}))
-        monkeypatch.setattr(m, "collect_telemetry", lambda *a, **k: {
-            "turn": 1, "objective": "x", "total_actions": 0,
-            "recent_actions": [], "recent_results": [], "recent_thoughts": [],
-            "drift": {"drift_detected": False, "drift_count": 0},
-            "max_repeat": 0, "error_count": 0,
-            "usage": {"est_cost_usd": 5.0},
-        })
+        monkeypatch.setattr(
+            m,
+            "collect_telemetry",
+            lambda *a, **k: {
+                "turn": 1,
+                "objective": "x",
+                "total_actions": 0,
+                "recent_actions": [],
+                "recent_results": [],
+                "recent_thoughts": [],
+                "drift": {"drift_detected": False, "drift_count": 0},
+                "max_repeat": 0,
+                "error_count": 0,
+                "usage": {"est_cost_usd": 5.0},
+            },
+        )
         # The cost guardrail reads the REAL providers tally — mock it too
-        monkeypatch.setattr(sv.providers, "get_usage",
-                            lambda: {"est_cost_usd": 5.0})
+        monkeypatch.setattr(sv.providers, "get_usage", lambda: {"est_cost_usd": 5.0})
         verdict, _, _ = sv.evaluate(
-            [], turn=1, objective="test",
-            config={"supervisor_interval": 5, "cost_alert_usd": 0.25,
-                    "cost_budget_usd": 1.0, "cost_hard_cap_usd": 2.0},
+            [],
+            turn=1,
+            objective="test",
+            config={"supervisor_interval": 5, "cost_alert_usd": 0.25, "cost_budget_usd": 1.0, "cost_hard_cap_usd": 2.0},
         )
         assert verdict["recommend_abort"] is True
         assert verdict["stuck"] is True
@@ -590,22 +717,33 @@ class TestSupervisorEvaluate:
         from medusa.intel import supervisor as sv
 
         called = []
+
         def fake_generate(*a, **k):
             called.append(True)
             return json.dumps({})
+
         monkeypatch.setattr(sv, "generate", fake_generate)
-        monkeypatch.setattr(m, "collect_telemetry", lambda *a, **k: {
-            "turn": 1, "objective": "x", "total_actions": 1,
-            "recent_actions": ["nmap: x"], "recent_results": [],
-            "recent_thoughts": [],
-            "drift": {"drift_detected": False, "drift_count": 0},
-            "max_repeat": 1, "error_count": 0,
-            "usage": {"est_cost_usd": 0.01},
-        })
+        monkeypatch.setattr(
+            m,
+            "collect_telemetry",
+            lambda *a, **k: {
+                "turn": 1,
+                "objective": "x",
+                "total_actions": 1,
+                "recent_actions": ["nmap: x"],
+                "recent_results": [],
+                "recent_thoughts": [],
+                "drift": {"drift_detected": False, "drift_count": 0},
+                "max_repeat": 1,
+                "error_count": 0,
+                "usage": {"est_cost_usd": 0.01},
+            },
+        )
         verdict, _, _ = sv.evaluate(
-            [], turn=1, objective="test",
-            config={"supervisor_interval": 5, "cost_alert_usd": 0.25,
-                    "cost_budget_usd": 1.0, "cost_hard_cap_usd": 2.0},
+            [],
+            turn=1,
+            objective="test",
+            config={"supervisor_interval": 5, "cost_alert_usd": 0.25, "cost_budget_usd": 1.0, "cost_hard_cap_usd": 2.0},
         )
         assert verdict.get("skipped") is True  # no LLM call, no flags
         assert called == []

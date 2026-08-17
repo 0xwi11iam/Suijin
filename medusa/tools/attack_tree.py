@@ -1,6 +1,7 @@
 """
 Attack Tree Visualizer — generates Mermaid flowcharts from execution traces.
 """
+
 from __future__ import annotations
 
 
@@ -27,15 +28,15 @@ def build_attack_tree(trace: list) -> str:
             label = f"{tn}\\n{thought}"
 
         if success:
-            lines.append(f"    {node_id}[\"{label}\"]")
+            lines.append(f'    {node_id}["{label}"]')
         else:
-            lines.append(f"    {node_id}{{\"{label}\"}}")
+            lines.append(f'    {node_id}{{"{label}"}}')
 
         node_ids[i] = node_id
 
         # Link to previous step
         if i > 0:
-            prev_id = node_ids[i-1]
+            prev_id = node_ids[i - 1]
             style = "-->|success|" if success else "-.->|failed|"
             lines.append(f"    {prev_id} {style} {node_id}")
 

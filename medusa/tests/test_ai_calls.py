@@ -2,11 +2,12 @@
 AI Call System Test — verifies provider routing, API connectivity,
 response parsing, and error handling for all configured providers.
 """
+
 import os
 import sys
 import time
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
 def test_provider_routing():
@@ -34,6 +35,7 @@ def test_provider_routing():
 def test_deepseek_specific():
     """Test DeepSeek API directly with a simple prompt."""
     import requests as req
+
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
     if not api_key:
         print("  ⏭️  DeepSeek direct: no key — skipped")
@@ -56,8 +58,10 @@ def test_deepseek_specific():
     content = data["choices"][0]["message"]["content"]
     assert len(content) > 0
     usage = data.get("usage", {})
-    print(f"  ✅ DeepSeek direct: '{content[:50]}' in {elapsed:.1f}s, "
-          f"tokens: {usage.get('prompt_tokens',0)}→{usage.get('completion_tokens',0)}")
+    print(
+        f"  ✅ DeepSeek direct: '{content[:50]}' in {elapsed:.1f}s, "
+        f"tokens: {usage.get('prompt_tokens', 0)}→{usage.get('completion_tokens', 0)}"
+    )
 
 
 def test_huggingface():
@@ -68,8 +72,13 @@ def test_huggingface():
         return
 
     from medusa.tools.providers import generate
-    config = {"provider": "huggingface", "temperature": 0.1, "max_tokens_per_request": 50,
-              "final_model_id": "Qwen/Qwen2.5-3B-Instruct"}
+
+    config = {
+        "provider": "huggingface",
+        "temperature": 0.1,
+        "max_tokens_per_request": 50,
+        "final_model_id": "Qwen/Qwen2.5-3B-Instruct",
+    }
     messages = [{"role": "user", "content": "Say hi"}]
 
     start = time.time()
@@ -126,9 +135,11 @@ def test_token_counting():
     assert USAGE["input_tokens"] > 0
     assert USAGE["output_tokens"] > 0
     assert USAGE["est_cost_usd"] > 0
-    print(f"  ✅ Token counting: {USAGE['calls']} calls, "
-          f"{USAGE['input_tokens']}→{USAGE['output_tokens']} tokens, "
-          f"${USAGE['est_cost_usd']:.6f}")
+    print(
+        f"  ✅ Token counting: {USAGE['calls']} calls, "
+        f"{USAGE['input_tokens']}→{USAGE['output_tokens']} tokens, "
+        f"${USAGE['est_cost_usd']:.6f}"
+    )
 
 
 def test_response_time():
@@ -139,6 +150,7 @@ def test_response_time():
         return
 
     from medusa.tools.providers import generate
+
     config = {"provider": "deepseek", "temperature": 0, "max_tokens_per_request": 50}
     messages = [{"role": "user", "content": "Say 'pong'"}]
 
@@ -154,6 +166,7 @@ def test_response_time():
 def test_config_loading():
     """Test that config.json is loaded correctly."""
     from medusa.core.redteamer import load_config
+
     config = load_config()
     assert "provider" in config
     assert "temperature" in config
@@ -165,6 +178,7 @@ def test_config_loading():
 def test_env_loading():
     """Test that .env vars are loaded (skips if no .env file — CI-safe)."""
     from medusa.core.redteamer import ENV_PATH, load_env
+
     # On CI / without .env, just verify ENV_PATH is a valid Path object
     if not ENV_PATH.exists():
         print("  ⏭️  No .env file — skipped")
@@ -199,13 +213,13 @@ def run_all():
             print(f"  ❌ {name}: {e}")
             failed += 1
         except Exception as e:
-            if "skipped" in str(getattr(fn, '__name__', '')).lower():
+            if "skipped" in str(getattr(fn, "__name__", "")).lower():
                 skipped += 1
             else:
                 print(f"  ❌ {name}: {type(e).__name__}: {e}")
                 failed += 1
 
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print(f"Results: {passed} passed, {failed} failed")
     if skipped:
         print(f"({skipped} skipped — set API keys to run)")

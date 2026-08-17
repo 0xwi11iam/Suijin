@@ -22,10 +22,12 @@ Every subcommand is non-interactive and scriptable (exit 0 = healthy).
 
 import argparse
 import importlib
+import json
 import os
 import shutil
 import socket
 import sys
+from pathlib import Path
 
 # Make the repo root importable so `from medusa import ...` works regardless of
 # where this script lives (source checkout or installed into ~/.medusa/repo).
@@ -616,8 +618,139 @@ def run_ui(args) -> int:
     """`medusa ui` — local-first web dashboard (127.0.0.1 only)."""
     from medusa.ui.server import run_server
 
-    return run_server(port=int(getattr(args, "port", 0) or 7800),
-                      open_browser=not getattr(args, "no_open", False))
+    return run_server(port=int(getattr(args, "port", 0) or 7800), open_browser=not getattr(args, "no_open", False))
+
+
+def run_export(args) -> int:
+    """`medusa export` — chain-of-custody evidence bundle."""
+    from medusa.tools.export_bundle import build_bundle, verify_bundle
+
+    verify = getattr(args, "verify", None)
+    if verify:
+        ok, problems = verify_bundle(Path(verify))
+        if ok:
+            print(f"[ok] {verify}: all manifest hashes verified")
+            return 0
+        for p in problems:
+            print(f"[XX] {p}")
+        return 1
+    out = build_bundle(
+        out_path=Path(args.out) if getattr(args, "out", None) else None,
+        include_credentials=bool(getattr(args, "with_creds", False)),
+    )
+    ok, problems = verify_bundle(out)
+    status = "verified" if ok else f"PROBLEM: {problems}"
+    print(f"evidence bundle: {out}")
+    print(f"  integrity: {status}")
+    print(f"  credentials: {'INCLUDED (sensitive!)' if getattr(args, 'with_creds', False) else 'excluded'}")
+    return 0 if ok else 1
+
+
+def run_debrief(args) -> int:
+    """`medusa debrief` — engagement analytics from audit trails."""
+    from medusa.tools.debrief import load_audits, render_debrief
+
+    trails = load_audits()
+    print(render_debrief(trails, verbose=bool(getattr(args, "verbose", False))))
+    return 0
+
+
+def run_replay(args) -> int:
+    """`medusa replay` — step through an engagement timeline."""
+    from medusa.tools import replay as rp
+
+    if getattr(args, "list_replays", False):
+        trails = rp.list_replays()
+        if not trails:
+            print("No replayable engagements (need iterations in audit_trails).")
+            return 1
+        for t in trails:
+            n = len(t.get("iterations", []))
+            print(f"  {t.get('_file', ''):44} {t.get('engagement', '?'):24} {n:>4} steps")
+        return 0
+
+    f = getattr(args, "file", None)
+    if f:
+        path = Path(f)
+        trail = None
+        if not path.is_absolute():
+            from medusa.tools.workspace import WORKSPACE_DIR
+
+            cand = WORKSPACE_DIR / "audit_trails" / f
+            path = cand if cand.exists() else path
+        if path.exists():
+            try:
+                trail = json.loads(path.read_text())
+                trail["_file"] = path.name
+            except ValueError:
+                print(f"error: {f} is not valid JSON")
+                return 1
+        if trail is None:
+            print(f"error: no such audit trail: {f}")
+            return 1
+    else:
+        trail = rp.pick_engagement()
+        if trail is None:
+            return 1
+
+    if getattr(args, "export_md", None):
+        md = rp.render_markdown(trail)
+        out = Path(args.export_md)
+        out.write_text(md)
+        print(f"transcript exported: {out}")
+        return 0
+
+    rp.run_replay(trail)
+    return 0
+
+
+def run_eval(args) -> int:
+    """`medusa eval` — replay recorded traffic through the blue detector."""
+    from medusa.core.blue.traffic.replay_harness import (
+        label_entries,
+        render_eval,
+        replay_scores,
+    )
+    from medusa.core.constants import BLUE_TRAFFIC_LOG
+
+    log = Path(getattr(args, "traffic", None) or BLUE_TRAFFIC_LOG)
+    if not log.exists():
+        print(f"no traffic log at {log} — run the blue lab or point --traffic at a .jsonl file")
+        return 1
+    entries = []
+    for line in log.read_text(errors="ignore").splitlines():
+        try:
+            entries.append(json.loads(line))
+        except ValueError:
+            continue
+    if len(entries) < 5:
+        print(f"only {len(entries)} entries in {log} — need at least 5 (baseline + eval)")
+        return 1
+    labels_path = Path(args.labels) if getattr(args, "labels", None) else None
+    labels = label_entries(entries, labels_path)
+    scores = replay_scores(entries)
+    print(
+        render_eval(
+            labels,
+            scores,
+            default_threshold=int(getattr(args, "threshold", 5)),
+            do_sweep=not getattr(args, "no_sweep", False),
+        )
+    )
+    return 0
+
+
+def run_battle_cmd(args) -> int:
+    """`medusa battle` — purple team: scripted red vs pattern blue, live scoreboard."""
+    from medusa.tools.battle import run_battle
+
+    result = run_battle(port=int(getattr(args, "port", 0) or 5906))
+    print(
+        f"\nred {result['red_score']} — blue {result['blue_score']} | "
+        f"flags {len(result['flags'])} | detected {result['detected']} | "
+        f"tarpits {result['tarpitted']} | blocked {result['blocked']}"
+    )
+    return 0
 
 
 def _first_docstring(path: str) -> str:
@@ -818,6 +951,33 @@ def main(argv=None):
     ui.add_argument("--port", type=int, default=7800, help="listen port (default 7800)")
     ui.add_argument("--no-open", action="store_true", help="do not auto-open the browser")
     ui.set_defaults(func=run_ui)
+
+    export = sub.add_parser("export", help="chain-of-custody evidence bundle (zip + SHA-256 manifest)")
+    export.add_argument("--out", help="output zip path (default medusa_agent/exports/<ts>.zip)")
+    export.add_argument("--with-creds", action="store_true", help="include credentials.json (sensitive)")
+    export.add_argument("--verify", metavar="ZIP", help="verify an existing bundle's hashes")
+    export.set_defaults(func=run_export)
+
+    debrief = sub.add_parser("debrief", help="engagement analytics from audit trails")
+    debrief.add_argument("-v", "--verbose", action="store_true", help="per-engagement detail")
+    debrief.set_defaults(func=run_debrief)
+
+    replay = sub.add_parser("replay", help="step through an engagement timeline")
+    replay.add_argument("--list", dest="list_replays", action="store_true", help="list replayable engagements")
+    replay.add_argument("--file", help="audit trail file (interactive picker when omitted)")
+    replay.add_argument("--export-md", metavar="OUT", help="write the full transcript to a markdown file")
+    replay.set_defaults(func=run_replay)
+
+    ev = sub.add_parser("eval", help="replay recorded traffic through the blue detector (offline)")
+    ev.add_argument("--traffic", help="traffic .jsonl (default: the live blue log)")
+    ev.add_argument("--labels", help='labels.jsonl with {"label":..., "any":[...]} rules')
+    ev.add_argument("--threshold", type=int, default=5, help="score threshold to evaluate (default 5)")
+    ev.add_argument("--no-sweep", action="store_true", help="skip the threshold sweep")
+    ev.set_defaults(func=run_eval)
+
+    battle = sub.add_parser("battle", help="purple team: scripted red vs pattern blue on the lab")
+    battle.add_argument("--port", type=int, default=5906, help="lab port (default 5906)")
+    battle.set_defaults(func=run_battle_cmd)
 
     pull = sub.add_parser("pull", help="download resources (knowledge bases, ...)")
     pull_sub = pull.add_subparsers(dest="pull_target")

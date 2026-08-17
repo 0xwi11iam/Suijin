@@ -23,7 +23,10 @@ class TestSegmentBinaries:
 
 class TestModesOff:
     def test_no_modes_allows_everything(self):
-        assert check_mode_restrictions("msf_run", {"module": "exploit/x"}, {"mode_hitl": False, "mode_guardrail": False}) is None
+        assert (
+            check_mode_restrictions("msf_run", {"module": "exploit/x"}, {"mode_hitl": False, "mode_guardrail": False})
+            is None
+        )
 
     def test_none_config(self):
         assert check_mode_restrictions("execute_terminal", {"cmd": "rm -rf /"}, None) is None
@@ -92,11 +95,13 @@ class TestRouteToolEnforcement:
 
     def test_route_tool_blocks_in_hitl(self):
         from medusa.tools.dispatch import route_tool
+
         result = route_tool("msf_run", {"module": "exploit/unix/ftp"}, {"mode_hitl": True})
         assert isinstance(result, str) and "HITL" in result
 
     def test_route_tool_allows_when_off(self):
         from medusa.tools.dispatch import route_tool
+
         # route to a tool that does no harm with empty args
         result = route_tool("search_kb", {"keyword": ""}, {"mode_hitl": False})
         assert "HITL" not in str(result)

@@ -200,7 +200,7 @@ def _fts_match_expr(keyword: str) -> str:
     exprs: list[str] = []
     pos = 0
     for m in re.finditer(r'"([^"]+)"', keyword):
-        for word in keyword[pos:m.start()].replace('"', " ").split():
+        for word in keyword[pos : m.start()].replace('"', " ").split():
             exprs.append(f'"{word}"')
         phrase = " ".join(m.group(1).split())
         if phrase:

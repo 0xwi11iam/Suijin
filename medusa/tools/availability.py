@@ -3,6 +3,7 @@
 Used by `get_tool_catalog()` so the system prompt only advertises tools that
 will actually work, and lists the missing ones with install hints.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -38,7 +39,7 @@ def tool_dependencies() -> dict[str, list[str]]:
     for _mod_name, mod_data in get_loaded_modules().items():
         manifest = mod_data.get("manifest", {})
         declared = list(manifest.get("dependencies") or [])
-        for tool_name in (manifest.get("tools") or {}):
+        for tool_name in manifest.get("tools") or {}:
             deps[tool_name] = declared
     return deps
 

@@ -4,6 +4,7 @@ Verifies the full agent loop without LLM or real tools: fake graph events
 flow through iteration display, audit logging, completion detection, and
 the final report + session save.
 """
+
 import asyncio
 import sys
 from pathlib import Path
@@ -49,25 +50,39 @@ class FakeAgent:
 
 def _happy_events():
     """Scripted events: think → execute_tool → generate_response (complete)."""
-    trace1 = [{"iteration": 1, "thought": "Scan the target",
-               "tool_name": "nmap_scan", "tool_args": {"target": "x"},
-               "reasoning": "start recon", "success": True,
-               "phase": "informational"}]
+    trace1 = [
+        {
+            "iteration": 1,
+            "thought": "Scan the target",
+            "tool_name": "nmap_scan",
+            "tool_args": {"target": "x"},
+            "reasoning": "start recon",
+            "success": True,
+            "phase": "informational",
+        }
+    ]
     return [
-        {"think": {"execution_trace": trace1, "_current_step": {},
-                   "current_phase": "informational"}},
-        {"execute_tool": {"execution_trace": trace1,
-                          "_current_step": {"tool_output": "22/tcp open",
-                                            "error_class": ""},
-                          "current_phase": "informational"}},
-        {"generate_response": {
-            "execution_trace": trace1,
-            "current_phase": "informational",
-            "completion_reason": "objective_complete",
-            "messages": [{"role": "assistant",
-                          "content": "Engagement complete. Found open ports and "
-                                     "documented findings in the final report."}],
-        }},
+        {"think": {"execution_trace": trace1, "_current_step": {}, "current_phase": "informational"}},
+        {
+            "execute_tool": {
+                "execution_trace": trace1,
+                "_current_step": {"tool_output": "22/tcp open", "error_class": ""},
+                "current_phase": "informational",
+            }
+        },
+        {
+            "generate_response": {
+                "execution_trace": trace1,
+                "current_phase": "informational",
+                "completion_reason": "objective_complete",
+                "messages": [
+                    {
+                        "role": "assistant",
+                        "content": "Engagement complete. Found open ports and documented findings in the final report.",
+                    }
+                ],
+            }
+        },
     ]
 
 
@@ -75,8 +90,7 @@ def _happy_events():
 def red_mocks(monkeypatch, tmp_path):
     """Mock the agent graph + isolate state dump file."""
     fake_agent = FakeAgent(_happy_events())
-    monkeypatch.setattr(rt, "MedusaAgentGraph",
-                        lambda **kwargs: fake_agent)
+    monkeypatch.setattr(rt, "MedusaAgentGraph", lambda **kwargs: fake_agent)
     monkeypatch.setattr(rt, "DUMP_PATH", Path(str(tmp_path)) / "recovery.json")
     return {"agent": fake_agent, "tmpdir": str(tmp_path)}
 
@@ -106,8 +120,7 @@ class TestRedTeamSmoke:
         """proxy_url in config → set_proxy called with it."""
         seen = {}
         monkeypatch.setattr(rt.tools, "set_proxy", lambda url: seen.update(url=url))
-        _run_smoke({"provider": "deepseek", "max_iterations": 5,
-                    "proxy_url": "http://proxy.local:8080"})
+        _run_smoke({"provider": "deepseek", "max_iterations": 5, "proxy_url": "http://proxy.local:8080"})
         assert seen.get("url") == "http://proxy.local:8080"
 
     def test_usage_reset_at_start(self, red_mocks, monkeypatch):
@@ -118,12 +131,15 @@ class TestRedTeamSmoke:
 
     def test_agent_error_path(self, red_mocks, monkeypatch):
         """A graph that raises inside astream is caught and reported."""
+
         class BrokenGraph:
             async def astream(self, input_state, config):
                 raise RuntimeError("graph exploded")
                 yield  # pragma: no cover — make it a generator
+
             def update_state(self, config, values):
                 pass
+
         fake = FakeAgent([])
         fake._graph = BrokenGraph()
         monkeypatch.setattr(rt, "MedusaAgentGraph", lambda **kw: fake)
@@ -134,8 +150,10 @@ class TestRedTeamSmoke:
 class TestRunRedTeamSync:
     def test_sync_wrapper(self, red_mocks, monkeypatch):
         ran = []
+
         async def fake_async(config, objective, api_key=None):
             ran.append(objective)
+
         monkeypatch.setattr(rt, "run_red_team_async", fake_async)
         rt.run_red_team({}, "sync objective")
         assert ran == ["sync objective"]

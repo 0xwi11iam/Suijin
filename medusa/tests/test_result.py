@@ -1,4 +1,5 @@
 """Tests for medusa/tools/result.py — structured command results."""
+
 from medusa.tools.result import CommandResult, run_command
 
 

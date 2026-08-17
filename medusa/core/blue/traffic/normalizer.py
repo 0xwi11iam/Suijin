@@ -9,6 +9,7 @@ Smart baseline learning:
 
 Global singleton available via get_global_normalizer().
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -34,10 +35,10 @@ class SmartNormalizer:
 
     def __init__(self):
         self.profiles: dict = {}
-        self.known_patterns: set = set()     # Set of pattern hashes
-        self.endpoint_methods: dict = {}      # endpoint -> set of known methods
-        self.endpoint_params: dict = {}       # endpoint -> set of known param keys
-        self.baseline_requests: list = []     # Store first N requests for training
+        self.known_patterns: set = set()  # Set of pattern hashes
+        self.endpoint_methods: dict = {}  # endpoint -> set of known methods
+        self.endpoint_params: dict = {}  # endpoint -> set of known param keys
+        self.baseline_requests: list = []  # Store first N requests for training
         self.samples_seen = 0
         self.training_complete = False
 
@@ -111,7 +112,8 @@ class SmartNormalizer:
 
         # Normalize path: replace numeric segments with :id
         import re
-        normalized_path = re.sub(r'/\d+', '/:id', path)
+
+        normalized_path = re.sub(r"/\d+", "/:id", path)
 
         # Normalize query params: keep keys, drop values
         query = req.get("query", {})
@@ -127,6 +129,7 @@ class SmartNormalizer:
             # Try to parse as form data
             try:
                 from urllib.parse import parse_qs
+
                 parsed = parse_qs(body)
                 body_str = "&".join(f"{k}=*" for k in sorted(parsed.keys()))
             except Exception:
@@ -189,13 +192,16 @@ class SmartNormalizer:
 
     def get_profile(self, endpoint: str) -> dict:
         """Get the traffic profile for an endpoint."""
-        return self.profiles.get(endpoint, {
-            "methods": defaultdict(int),
-            "request_count": 0,
-            "ips": set(),
-            "param_names": defaultdict(int),
-            "avg_body_size": 0,
-        })
+        return self.profiles.get(
+            endpoint,
+            {
+                "methods": defaultdict(int),
+                "request_count": 0,
+                "ips": set(),
+                "param_names": defaultdict(int),
+                "avg_body_size": 0,
+            },
+        )
 
     def is_normal(self, request: dict) -> bool:
         """Legacy method — delegates to is_known_normal."""
@@ -204,4 +210,3 @@ class SmartNormalizer:
 
 # ── Keep backward compatibility ──
 TrafficNormalizer = SmartNormalizer
-

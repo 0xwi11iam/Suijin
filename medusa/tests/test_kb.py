@@ -241,8 +241,7 @@ class TestFetchRetries:
 
         logs = []
         with pytest.raises(RuntimeError, match="failed to download"):
-            kbmod.fetch_source("payloads", cache_dir=fake_env["cache"],
-                               session=Dead(), log=logs.append)
+            kbmod.fetch_source("payloads", cache_dir=fake_env["cache"], session=Dead(), log=logs.append)
         assert not part.exists()
         assert any("stale partial" in line for line in logs)
         assert not (fake_env["cache"] / "payloads.tar.gz").exists()
