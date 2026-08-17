@@ -14,7 +14,7 @@ import uuid
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Optional
+from typing import Awaitable, Callable, Optional
 
 # Sandbox config — defined inline
 SANDBOX_CONFIG = {

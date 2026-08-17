@@ -66,12 +66,12 @@ class TestGuardrailsBlockedPatterns:
         from medusa.tools.guardrails import is_dangerous
         # Substring match: pattern "wget .* -O /tmp/.*\\|.*sh" must be in command.
         dangerous, pat = is_dangerous("wget .* -O /tmp/.* \\| .* sh")
-        assert dangerous, f"Pattern not matched"
+        assert dangerous, "Pattern not matched"
 
     def test_curl_pipe_sh(self):
         from medusa.tools.guardrails import is_dangerous
         dangerous, pat = is_dangerous("curl .* \\| .* sh")
-        assert dangerous, f"Pattern not matched"
+        assert dangerous, "Pattern not matched"
 
     def test_curl_pipe_sh_real_world(self):
         """Real-world curl|sh may not match literal .* but other patterns catch it."""
@@ -262,7 +262,7 @@ class TestWorkspacePathResolution:
 
     def test_dot_dot_traversal_rejected(self):
         """../../../etc/passwd must not escape workspace"""
-        from medusa.tools.workspace import resolve_workspace_path, WORKSPACE_DIR
+        from medusa.tools.workspace import WORKSPACE_DIR, resolve_workspace_path
         # resolve() normalizes away .. so this should land inside workspace
         result = resolve_workspace_path("../../../etc/passwd")
         # After resolve(), if it's outside workspace, it should be caught
@@ -270,7 +270,7 @@ class TestWorkspacePathResolution:
         try:
             WORKSPACE_DIR.resolve().relative_to(result)
             # If workspace is inside result, it's escaped — should not happen
-            assert False, "Path traversal escaped workspace"
+            raise AssertionError("Path traversal escaped workspace")
         except ValueError:
             # result is inside workspace — this is correct behavior
             pass
@@ -284,7 +284,6 @@ class TestWorkspaceSymlinkSafety:
     def test_resolves_symlinks(self):
         from medusa.tools.workspace import resolve_workspace_path
         # Create a temp symlink inside /tmp that points to /etc/passwd
-        import tempfile
         tmpdir = tempfile.mkdtemp()
         try:
             symlink_path = os.path.join(tmpdir, "evil_link")
@@ -297,9 +296,10 @@ class TestWorkspaceSymlinkSafety:
             os.rmdir(tmpdir)
 
     def test_symlink_to_allowed_path(self):
-        from medusa.tools.workspace import resolve_workspace_path
         # Use /tmp directly (tempfile goes to /var/folders on macOS)
         import uuid
+
+        from medusa.tools.workspace import resolve_workspace_path
         test_id = str(uuid.uuid4())[:8]
         tmpdir = os.path.join("/tmp", f"medusa_test_{test_id}")
         os.makedirs(tmpdir, exist_ok=True)
@@ -329,8 +329,10 @@ class TestConstantsExist:
 
     def test_provider_names(self):
         from medusa.core.constants import (
-            PROVIDER_DEEPSEEK, PROVIDER_HUGGINGFACE,
-            PROVIDER_GEMINI, PROVIDER_ANTHROPIC,
+            PROVIDER_ANTHROPIC,
+            PROVIDER_DEEPSEEK,
+            PROVIDER_GEMINI,
+            PROVIDER_HUGGINGFACE,
         )
         assert PROVIDER_DEEPSEEK == "deepseek"
         assert PROVIDER_HUGGINGFACE == "huggingface"
@@ -339,7 +341,10 @@ class TestConstantsExist:
 
     def test_model_ids(self):
         from medusa.core.constants import (
-            DEFAULT_MODEL, SENTINEL_MODEL, SUPERVISOR_MODEL, GEMINI_MODEL,
+            DEFAULT_MODEL,
+            GEMINI_MODEL,
+            SENTINEL_MODEL,
+            SUPERVISOR_MODEL,
         )
         assert "deepseek" in DEFAULT_MODEL
         assert "Qwen" in SENTINEL_MODEL
@@ -353,7 +358,9 @@ class TestConstantsExist:
 
     def test_default_ports(self):
         from medusa.core.constants import (
-            BLUE_LAB_PORT, PROXY_DEFAULT_PORT, METASPLOIT_RPC_PORT,
+            BLUE_LAB_PORT,
+            METASPLOIT_RPC_PORT,
+            PROXY_DEFAULT_PORT,
         )
         assert BLUE_LAB_PORT == 5906
         assert PROXY_DEFAULT_PORT == 8080
@@ -361,9 +368,14 @@ class TestConstantsExist:
 
     def test_scoring_thresholds(self):
         from medusa.core.constants import (
-            SCORE_CRITICAL, SCORE_SUSPICIOUS, SCORE_BLOCK,
-            SCORE_SHADOW, RISK_HIGH, SCORE_DECEIVE,
-            PATTERN_SCORE_THRESHOLD, BASELINE_REQUESTS,
+            BASELINE_REQUESTS,
+            PATTERN_SCORE_THRESHOLD,
+            RISK_HIGH,
+            SCORE_BLOCK,
+            SCORE_CRITICAL,
+            SCORE_DECEIVE,
+            SCORE_SHADOW,
+            SCORE_SUSPICIOUS,
         )
         assert SCORE_CRITICAL == 8
         assert SCORE_SUSPICIOUS == 5
@@ -377,14 +389,19 @@ class TestConstantsExist:
     def test_threshold_ordering(self):
         """Scores must be ordered: SUSPICIOUS < DECEIVE < HIGH < CRITICAL < SHADOW"""
         from medusa.core.constants import (
-            SCORE_SUSPICIOUS, SCORE_DECEIVE, RISK_HIGH,
-            SCORE_CRITICAL, SCORE_SHADOW,
+            RISK_HIGH,
+            SCORE_CRITICAL,
+            SCORE_DECEIVE,
+            SCORE_SHADOW,
+            SCORE_SUSPICIOUS,
         )
         assert SCORE_SUSPICIOUS < SCORE_DECEIVE < RISK_HIGH < SCORE_CRITICAL < SCORE_SHADOW
 
     def test_deception_params(self):
         from medusa.core.constants import (
-            TARPIT_MAX_DELAY, TARPIT_WINDOW_MINUTES, TARPIT_DEFAULT_DELAY,
+            TARPIT_DEFAULT_DELAY,
+            TARPIT_MAX_DELAY,
+            TARPIT_WINDOW_MINUTES,
         )
         assert TARPIT_MAX_DELAY == 15.0
         assert TARPIT_WINDOW_MINUTES == 30
@@ -392,8 +409,12 @@ class TestConstantsExist:
 
     def test_timeouts(self):
         from medusa.core.constants import (
-            LLM_TIMEOUT, TOOL_TIMEOUT, BATCH_TIMEOUT,
-            HTTP_TIMEOUT, FIREWALL_TIMEOUT, PROXY_FORWARD_TIMEOUT,
+            BATCH_TIMEOUT,
+            FIREWALL_TIMEOUT,
+            HTTP_TIMEOUT,
+            LLM_TIMEOUT,
+            PROXY_FORWARD_TIMEOUT,
+            TOOL_TIMEOUT,
         )
         assert LLM_TIMEOUT == 45
         assert TOOL_TIMEOUT == 60
@@ -404,8 +425,11 @@ class TestConstantsExist:
 
     def test_limits(self):
         from medusa.core.constants import (
-            MAX_ITERATIONS, MAX_SUBAGENTS, MAX_WATCHERS_PER_ENDPOINT,
-            MAX_RECENT_REQUESTS, TRUNCATE_LIMIT,
+            MAX_ITERATIONS,
+            MAX_RECENT_REQUESTS,
+            MAX_SUBAGENTS,
+            MAX_WATCHERS_PER_ENDPOINT,
+            TRUNCATE_LIMIT,
         )
         assert MAX_ITERATIONS == 100
         assert MAX_SUBAGENTS == 50
@@ -422,6 +446,7 @@ class TestConstantsTmpDir:
         try:
             # Force reimport
             import importlib
+
             import medusa.core.constants as c
             importlib.reload(c)
             assert str(c.TMP_DIR) == "/tmp"
@@ -434,6 +459,7 @@ class TestConstantsTmpDir:
         os.environ["MEDUSA_TMP_DIR"] = "/custom/tmp/path"
         try:
             import importlib
+
             import medusa.core.constants as c
             importlib.reload(c)
             assert str(c.TMP_DIR) == "/custom/tmp/path"
@@ -444,6 +470,7 @@ class TestConstantsTmpDir:
                 os.environ.pop("MEDUSA_TMP_DIR", None)
             # Restore default
             import importlib
+
             import medusa.core.constants as c
             os.environ.pop("MEDUSA_TMP_DIR", None)
             importlib.reload(c)

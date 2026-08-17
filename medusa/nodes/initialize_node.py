@@ -4,11 +4,12 @@ Prepares the initial AgentState with objective, phase, target info,
 and system prompt. Called once at the start of a graph invocation.
 """
 import logging
-from datetime import datetime, timezone
 
 from medusa.core.state import (
-    ConversationObjective, PhaseHistoryEntry,
-    TargetInfo, utc_now,
+    ConversationObjective,
+    PhaseHistoryEntry,
+    TargetInfo,
+    utc_now,
 )
 
 logger = logging.getLogger(__name__)

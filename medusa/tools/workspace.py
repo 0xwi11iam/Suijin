@@ -1,5 +1,6 @@
 """Workspace path management — extracted from dispatch.py for maintainability."""
 from __future__ import annotations
+
 import os
 from pathlib import Path
 

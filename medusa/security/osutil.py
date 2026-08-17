@@ -24,10 +24,10 @@ Implementation notes
 """
 
 import os
-import sys
-import signal
 import platform
+import signal
 import subprocess
+import sys
 from pathlib import Path
 
 IS_WINDOWS = platform.system() == "Windows"
@@ -73,10 +73,10 @@ def find_pids_on_port(port):
                                  text=True, timeout=10).stdout
             for line in out.splitlines():
                 parts = line.split()
-                if len(parts) >= 5 and parts[0].upper() == "TCP" \
-                        and parts[1].endswith(f":{port}") and parts[3].upper() == "LISTENING":
-                    if parts[-1].isdigit():
-                        pids.append(int(parts[-1]))
+                if (len(parts) >= 5 and parts[0].upper() == "TCP"
+                        and parts[1].endswith(f":{port}") and parts[3].upper() == "LISTENING"
+                        and parts[-1].isdigit()):
+                    pids.append(int(parts[-1]))
         else:
             out = subprocess.run(["lsof", "-i", f":{port}", "-t"],
                                  capture_output=True, text=True, timeout=10).stdout
@@ -119,7 +119,7 @@ def launch_background(cmd_list, logfile, cwd=None):
     Cross-platform replacement for ``nohup CMD > logfile 2>&1 &``.
     Returns the Popen object (use .pid).
     """
-    log = open(logfile, "w", encoding="utf-8", errors="ignore")
+    log = open(logfile, "w", encoding="utf-8", errors="ignore")  # noqa: SIM115 — fd inherited by the detached child
     kwargs = dict(stdout=log, stderr=subprocess.STDOUT)
     if cwd is not None:
         kwargs["cwd"] = str(cwd)

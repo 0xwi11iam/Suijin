@@ -3,9 +3,9 @@ Rate Limit Detector — track response times and status codes per endpoint.
 Detects rate limiting patterns and recommends backoff strategies.
 """
 from __future__ import annotations
-import time, json
+
+import time
 from collections import defaultdict
-from datetime import datetime, timezone
 
 _tracker = defaultdict(lambda: {"requests": 0, "timestamps": [], "statuses": [],
                                   "latencies_ms": [], "rate_limited": False,

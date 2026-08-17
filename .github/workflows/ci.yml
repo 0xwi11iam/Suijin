@@ -52,17 +52,16 @@ jobs:
             -m "not ai" \
             -p no:warnings
 
-      - name: Type check (pyright)
+      - name: Type check (non-blocking)
         continue-on-error: true
         run: |
-          pip install pyright && pyright medusa/ || true
+          pip install pyright && pyright medusa/
 
-      - name: Lint check (non-blocking)
-        continue-on-error: true
+      - name: Lint check
         run: |
-          pip install ruff && ruff check medusa/ || true
+          pip install ruff && ruff check medusa/
 
       - name: Dependency audit (non-blocking)
         continue-on-error: true
         run: |
-          pip install pip-audit && pip-audit || true
+          pip install pip-audit && pip-audit

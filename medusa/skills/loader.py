@@ -1,57 +1,59 @@
 """
 Skill loader — injects attack-skill-specific workflows into the system prompt.
 """
-from medusa.skills.sql_injection import SQLI_SKILL_PROMPT
-from medusa.skills.xss import XSS_SKILL_PROMPT
-from medusa.skills.rce import RCE_SKILL_PROMPT
-from medusa.skills.path_traversal import PATH_TRAVERSAL_SKILL_PROMPT
-from medusa.skills.ssrf import SSRF_SKILL_PROMPT
 from medusa.skills.access_control import ACCESS_CONTROL_SKILL_PROMPT
-from medusa.skills.cve_exploit import CVE_EXPLOIT_SKILL_PROMPT
-from medusa.skills.post_exploit import POST_EXPLOIT_SKILL_PROMPT
-# ── New skills ───────────────────────────────────────────────────────
-from medusa.skills.xxe import XXE_SKILL_PROMPT
-from medusa.skills.nosql_injection import NOSQL_SKILL_PROMPT
-from medusa.skills.jwt_attacks import JWT_SKILL_PROMPT
-from medusa.skills.file_upload import FILE_UPLOAD_SKILL_PROMPT
-from medusa.skills.mass_assignment import MASS_ASSIGNMENT_SKILL_PROMPT
-from medusa.skills.csrf import CSRF_SKILL_PROMPT
-from medusa.skills.cors import CORS_SKILL_PROMPT
-from medusa.skills.prototype_pollution import PROTOTYPE_POLLUTION_SKILL_PROMPT
-from medusa.skills.deserialization import DESERIALIZATION_SKILL_PROMPT
-from medusa.skills.graphql_attacks import GRAPHQL_SKILL_PROMPT
-from medusa.skills.race_condition import RACE_CONDITION_SKILL_PROMPT
-from medusa.skills.subdomain_takeover import SUBDOMAIN_TAKEOVER_SKILL_PROMPT
-from medusa.skills.cache_poisoning import CACHE_POISONING_SKILL_PROMPT
-from medusa.skills.host_header import HOST_HEADER_SKILL_PROMPT
-from medusa.skills.spring_boot import SPRING_BOOT_SKILL_PROMPT
-from medusa.skills.django import DJANGO_SKILL_PROMPT
-from medusa.skills.wordpress import WORDPRESS_SKILL_PROMPT
-from medusa.skills.ldap_injection import LDAP_INJECTION_SKILL_PROMPT
-from medusa.skills.crlf_injection import CRLF_SKILL_PROMPT
-from medusa.skills.parameter_pollution import PARAMETER_POLLUTION_SKILL_PROMPT
-from medusa.skills.open_redirect import OPEN_REDIRECT_SKILL_PROMPT
-from medusa.skills.information_disclosure import INFO_DISCLOSURE_SKILL_PROMPT
-from medusa.skills.linux_privesc import LINUX_PRIVESC_SKILL_PROMPT
-from medusa.skills.container_escape import CONTAINER_ESCAPE_SKILL_PROMPT
-from medusa.skills.saml import SAML_SKILL_PROMPT
-from medusa.skills.oauth import OAUTH_SKILL_PROMPT
-from medusa.skills.twofa_bypass import TWOFA_BYPASS_SKILL_PROMPT
-from medusa.skills.clickjacking import CLICKJACKING_SKILL_PROMPT
-from medusa.skills.dom_clobbering import DOM_CLOBBERING_SKILL_PROMPT
-from medusa.skills.websocket import WEBSOCKET_SKILL_PROMPT
-from medusa.skills.xpath_injection import XPATH_INJECTION_SKILL_PROMPT
-from medusa.skills.email_header import EMAIL_HEADER_SKILL_PROMPT
-from medusa.skills.redos import REDOS_SKILL_PROMPT
-from medusa.skills.http_smuggling import HTTP_SMUGGLING_SKILL_PROMPT
-from medusa.skills.dns_rebinding import DNS_REBINDING_SKILL_PROMPT
-from medusa.skills.soul import SOUL_SKILL_PROMPT
+from medusa.skills.blue_forensics import BLUE_FORENSICS_PROMPT
+from medusa.skills.blue_incident import BLUE_INCIDENT_PROMPT
+from medusa.skills.blue_monitoring import BLUE_MONITORING_PROMPT
+from medusa.skills.blue_patching import BLUE_PATCHING_PROMPT
+
 # ── Blue Team skills ──────────────────────────────────────────────────
 from medusa.skills.blue_recon import BLUE_RECON_PROMPT
-from medusa.skills.blue_monitoring import BLUE_MONITORING_PROMPT
-from medusa.skills.blue_incident import BLUE_INCIDENT_PROMPT
-from medusa.skills.blue_patching import BLUE_PATCHING_PROMPT
-from medusa.skills.blue_forensics import BLUE_FORENSICS_PROMPT
+from medusa.skills.cache_poisoning import CACHE_POISONING_SKILL_PROMPT
+from medusa.skills.clickjacking import CLICKJACKING_SKILL_PROMPT
+from medusa.skills.container_escape import CONTAINER_ESCAPE_SKILL_PROMPT
+from medusa.skills.cors import CORS_SKILL_PROMPT
+from medusa.skills.crlf_injection import CRLF_SKILL_PROMPT
+from medusa.skills.csrf import CSRF_SKILL_PROMPT
+from medusa.skills.cve_exploit import CVE_EXPLOIT_SKILL_PROMPT
+from medusa.skills.deserialization import DESERIALIZATION_SKILL_PROMPT
+from medusa.skills.django import DJANGO_SKILL_PROMPT
+from medusa.skills.dns_rebinding import DNS_REBINDING_SKILL_PROMPT
+from medusa.skills.dom_clobbering import DOM_CLOBBERING_SKILL_PROMPT
+from medusa.skills.email_header import EMAIL_HEADER_SKILL_PROMPT
+from medusa.skills.file_upload import FILE_UPLOAD_SKILL_PROMPT
+from medusa.skills.graphql_attacks import GRAPHQL_SKILL_PROMPT
+from medusa.skills.host_header import HOST_HEADER_SKILL_PROMPT
+from medusa.skills.http_smuggling import HTTP_SMUGGLING_SKILL_PROMPT
+from medusa.skills.information_disclosure import INFO_DISCLOSURE_SKILL_PROMPT
+from medusa.skills.jwt_attacks import JWT_SKILL_PROMPT
+from medusa.skills.ldap_injection import LDAP_INJECTION_SKILL_PROMPT
+from medusa.skills.linux_privesc import LINUX_PRIVESC_SKILL_PROMPT
+from medusa.skills.mass_assignment import MASS_ASSIGNMENT_SKILL_PROMPT
+from medusa.skills.nosql_injection import NOSQL_SKILL_PROMPT
+from medusa.skills.oauth import OAUTH_SKILL_PROMPT
+from medusa.skills.open_redirect import OPEN_REDIRECT_SKILL_PROMPT
+from medusa.skills.parameter_pollution import PARAMETER_POLLUTION_SKILL_PROMPT
+from medusa.skills.path_traversal import PATH_TRAVERSAL_SKILL_PROMPT
+from medusa.skills.post_exploit import POST_EXPLOIT_SKILL_PROMPT
+from medusa.skills.prototype_pollution import PROTOTYPE_POLLUTION_SKILL_PROMPT
+from medusa.skills.race_condition import RACE_CONDITION_SKILL_PROMPT
+from medusa.skills.rce import RCE_SKILL_PROMPT
+from medusa.skills.redos import REDOS_SKILL_PROMPT
+from medusa.skills.saml import SAML_SKILL_PROMPT
+from medusa.skills.soul import SOUL_SKILL_PROMPT
+from medusa.skills.spring_boot import SPRING_BOOT_SKILL_PROMPT
+from medusa.skills.sql_injection import SQLI_SKILL_PROMPT
+from medusa.skills.ssrf import SSRF_SKILL_PROMPT
+from medusa.skills.subdomain_takeover import SUBDOMAIN_TAKEOVER_SKILL_PROMPT
+from medusa.skills.twofa_bypass import TWOFA_BYPASS_SKILL_PROMPT
+from medusa.skills.websocket import WEBSOCKET_SKILL_PROMPT
+from medusa.skills.wordpress import WORDPRESS_SKILL_PROMPT
+from medusa.skills.xpath_injection import XPATH_INJECTION_SKILL_PROMPT
+from medusa.skills.xss import XSS_SKILL_PROMPT
+
+# ── New skills ───────────────────────────────────────────────────────
+from medusa.skills.xxe import XXE_SKILL_PROMPT
 
 SKILL_MAP = {
     # Original 8

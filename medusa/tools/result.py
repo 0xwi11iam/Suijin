@@ -6,10 +6,10 @@ duration) instead of parsing free text.
 """
 from __future__ import annotations
 
+import contextlib
 import subprocess
 import threading
 import time
-
 
 # Thread-local stream sink: background job runners set this so that `run_command`
 # streams each output line to the job as it arrives, instead of buffering it
@@ -146,10 +146,8 @@ def _run_streaming(cmd, *, timeout, cwd, env, shell, display, sink) -> CommandRe
         try:
             for line in proc.stdout:
                 chunks.append(line)
-                try:
+                with contextlib.suppress(Exception):
                     sink(line)
-                except Exception:
-                    pass
         except Exception:
             pass
 

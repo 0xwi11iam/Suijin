@@ -1,5 +1,4 @@
 """Tests for medusa/tools/recon.py — recon chaining and version-to-CVE."""
-import json
 
 from medusa.tools.recon import parse_services, recon_chain, version_to_cves
 

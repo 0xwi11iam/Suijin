@@ -1,5 +1,9 @@
 """Tests for core graph, dispatch, and think_node."""
-import pytest, sys, os, json
+import os
+import sys
+
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
@@ -38,9 +42,10 @@ class TestDispatchGuardrails:
         assert not dangerous
 
     def testconfirm_global_action_blocks_by_default(self):
-        from medusa.tools.dispatch import confirm_global_action
         # Should block unless MEDUSA_AUTO_APPROVE=true
         import os
+
+        from medusa.tools.dispatch import confirm_global_action
         old = os.environ.pop("MEDUSA_AUTO_APPROVE", None)
         result = confirm_global_action("rm -rf /", "rm -rf /")
         if old:
@@ -49,7 +54,6 @@ class TestDispatchGuardrails:
 
     def test_workspace_path_rejects_absolute(self):
         from medusa.tools.dispatch import resolve_workspace_path
-        import pytest
         with pytest.raises(PermissionError):
             resolve_workspace_path("/etc/passwd")
 
@@ -63,8 +67,9 @@ class TestSecretPatterns:
     """Verify credential detection patterns."""
 
     def test_aws_key_detected(self):
-        from medusa.security.secret_patterns import SECRET_PATTERNS
         import re
+
+        from medusa.security.secret_patterns import SECRET_PATTERNS
         # The pattern matches "AWS_ACCESS_KEY_ID=AKIA..." format or bare keys in context
         found = False
         for name, pattern in SECRET_PATTERNS.items():
@@ -75,18 +80,19 @@ class TestSecretPatterns:
                 if re.search(pattern, "AKIAIOSFODNN7EXAMPLE"):
                     found = True
                     break
-        # At minimum, AWS key pattern exists
+        assert found, "no AWS pattern matched the example access key"
         assert any("aws" in name.lower() for name in SECRET_PATTERNS)
 
     def test_jwt_detected(self):
-        from medusa.security.secret_patterns import SECRET_PATTERNS
         import re
+
+        from medusa.security.secret_patterns import SECRET_PATTERNS
         found = False
         for name, pattern in SECRET_PATTERNS.items():
-            if "jwt" in name.lower():
-                if re.search(pattern, "JWT_SECRET=super-secret-key-change-me-2024"):
-                    found = True
-                    break
+            if "jwt" in name.lower() and re.search(pattern, "JWT_SECRET=super-secret-key-change-me-2024"):
+                found = True
+                break
+        assert found, "no JWT pattern matched the example secret"
         assert any("jwt" in name.lower() for name in SECRET_PATTERNS)
 
 
@@ -102,7 +108,7 @@ class TestErrorTypes:
         assert d["recoverable"] is True
 
     def test_firewall_error(self):
-        from medusa.core.blue.errors import FirewallError, ErrorSeverity
+        from medusa.core.blue.errors import ErrorSeverity, FirewallError
         e = FirewallError("block failed", severity=ErrorSeverity.CRITICAL)
         assert e.source == "firewall"
         assert e.severity == ErrorSeverity.CRITICAL
@@ -138,7 +144,8 @@ class TestConfigValidation:
         assert c.max_iterations == 100
 
     def test_red_config_rejects_negative_cost(self):
+        from pydantic import ValidationError
+
         from medusa.core.config_models import RedConfig
-        import pytest
-        with pytest.raises(Exception):  # Pydantic validation error
+        with pytest.raises(ValidationError):  # Pydantic validation error
             RedConfig(cost_hard_cap_usd=-1.0)

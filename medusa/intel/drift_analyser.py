@@ -7,11 +7,6 @@ the `analyse_drift()` function supervisor.py expects, using the new
 productivity heuristics under the hood.
 """
 from datetime import datetime
-from medusa.helpers.productivity import (
-    is_unproductive,
-    priority_order_jaccard,
-    compute_productivity_score,
-)
 
 
 def analyse_drift(original_goal: str, actions: list) -> dict:

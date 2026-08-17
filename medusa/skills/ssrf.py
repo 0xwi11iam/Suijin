@@ -4,7 +4,7 @@ SSRF Attack Skill Prompt.
 SSRF_SKILL_PROMPT = """
 ## ATTACK SKILL: SERVER-SIDE REQUEST FORGERY (SSRF)
 
-**CRITICAL: Target has URL-fetching functionality (webhooks, link previews, 
+**CRITICAL: Target has URL-fetching functionality (webhooks, link previews,
 importers, proxy endpoints, file fetchers). Follow this SSRF workflow.**
 
 ---
@@ -79,7 +79,7 @@ If HTTP-only SSRF, try protocol smuggling for RCE:
 
 If direct requests are blocked:
 - DNS rebinding: use a domain that resolves to 127.0.0.1
-- URL parser confusion: `http://127.0.0.1:80@evil.com/` 
+- URL parser confusion: `http://127.0.0.1:80@evil.com/`
 - Double-encoding: `http://127.0.0.1:%38%30/`
 - Redirect chains: have your server 302-redirect to internal IPs
 - IPv6/IPv4 mix: `http://[::ffff:127.0.0.1]/`

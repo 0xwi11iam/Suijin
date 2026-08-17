@@ -1,10 +1,12 @@
 """Blue team orchestrator — central conductor for the entire SOC."""
 from __future__ import annotations
-import asyncio, json, logging, time
-from datetime import datetime, timezone
+
+import asyncio
+import logging
 from pathlib import Path
+
 from medusa.core.blue.config import load_blue_config
-from medusa.core.blue.session_manager import get_session, init_session
+from medusa.core.blue.session_manager import init_session
 
 logger = logging.getLogger(__name__)
 

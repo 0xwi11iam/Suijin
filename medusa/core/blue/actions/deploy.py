@@ -10,9 +10,12 @@ Imports the subagent's pre-built assets (honeypot_code, patch_code,
 deception_response) that were generated during the analysis phase.
 """
 from __future__ import annotations
-import json, os, time, re
+
+import json
+import os
+import re
+import time
 from pathlib import Path
-from typing import Optional
 
 
 def deploy_honeypot(target_path: str, subagent, attacker_ip: str) -> dict:
@@ -53,7 +56,7 @@ def deploy_honeypot(target_path: str, subagent, attacker_ip: str) -> dict:
         with open(file_path, "a") as f:
             f.write(f"\n# Medusa honeypot deployed {time.strftime('%Y-%m-%d %H:%M:%S')} — attacker {attacker_ip}\n")
             f.write(route_code)
-            f.write(f"\n# End honeypot\n")
+            f.write("\n# End honeypot\n")
 
         return {
             "status": "deployed",
@@ -93,7 +96,7 @@ def deploy_patch(target_path: str, subagent) -> dict:
             # Can't find exact handler — append the patch as a comment and note
             with open(file_path, "a") as f:
                 f.write(f"\n# === MEDUSA PATCH for {ep.get('path','/')} ===\n")
-                f.write(f"# Original handler was vulnerable. Patch code:\n")
+                f.write("# Original handler was vulnerable. Patch code:\n")
                 f.write(f"# {subagent.patch_code[:500]}\n")
             return {"status": "noted", "file": file_path, "reason": "Handler not found for exact replacement — patch appended as comment"}
     except Exception as e:
@@ -196,7 +199,6 @@ async def honeypot_{path.replace('/', '_').replace('-', '_')}():
 
 def _wrap_express_honeypot(code: str, path: str) -> str:
     """Wrap honeypot code in an Express.js route."""
-    safe_name = path.replace('/', '_').replace('-', '_').replace(':', '')
     return f"""
 // === MEDUSA HONEYPOT ===
 app.all('{path}', (req, res) => {{

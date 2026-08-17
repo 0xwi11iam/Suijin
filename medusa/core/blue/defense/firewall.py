@@ -1,6 +1,9 @@
 """Firewall — iptables/nftables rule management with IP validation."""
 from __future__ import annotations
-import subprocess, re, ipaddress
+
+import ipaddress
+import subprocess
+
 
 def _validate_ip(ip: str) -> str:
     """Validate and sanitize an IP address. Raises ValueError if invalid."""
@@ -18,7 +21,8 @@ def block_ip(ip: str) -> str:
     except ValueError as e:
         return f"Invalid IP: {e}"
     except Exception as e:
-        import logging; logging.getLogger("medusa").warning(f"Firewall block failed for {ip}: {e}")
+        import logging
+        logging.getLogger("medusa").warning(f"Firewall block failed for {ip}: {e}")
         return f"Failed to block {ip}: {e}"
 
 def unblock_ip(ip: str) -> str:
@@ -29,13 +33,15 @@ def unblock_ip(ip: str) -> str:
     except ValueError as e:
         return f"Invalid IP: {e}"
     except Exception as e:
-        import logging; logging.getLogger("medusa").warning(f"Firewall unblock failed for {ip}: {e}")
+        import logging
+        logging.getLogger("medusa").warning(f"Firewall unblock failed for {ip}: {e}")
         return f"Failed to unblock {ip}: {e}"
 
 def list_blocks() -> list:
     try:
         r = subprocess.run(["sudo","iptables","-L","INPUT","-n"], capture_output=True, text=True, timeout=5)
-        return [l for l in r.stdout.split("\n") if "DROP" in l]
+        return [line for line in r.stdout.split("\n") if "DROP" in line]
     except Exception as e:
-        import logging; logging.getLogger("medusa").warning(f"Firewall list failed: {e}")
+        import logging
+        logging.getLogger("medusa").warning(f"Firewall list failed: {e}")
         return []

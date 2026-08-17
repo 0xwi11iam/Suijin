@@ -12,23 +12,28 @@ full INVESTIGATED panel immediately, actual deception/blocking is deployed,
 and the action is recorded in the shared knowledge graph.
 """
 from __future__ import annotations
-import asyncio, json, time, re, os
+
+import asyncio
+import json
+import os
+import re
+import time
+from dataclasses import dataclass
 from typing import Optional
-from dataclasses import dataclass, field
 
 from rich.console import Console
 from rich.panel import Panel
 
-from medusa.core.blue.ai_engine import BlueAIEngine, AIAnalysisResult
+from medusa.core.blue.ai_engine import AIAnalysisResult, BlueAIEngine
+from medusa.core.blue.knowledge_graph import get_kg
 from medusa.core.blue.subagent_manager import SubagentManager
 from medusa.core.blue.tui.request_panel import (
-    render_normal_line,
     render_anomalous_line,
     render_investigated_request,
+    render_normal_line,
     render_subagent_assignment,
 )
-from medusa.core.blue.knowledge_graph import get_kg
-from medusa.core.constants import PATTERN_SCORE_THRESHOLD, RISK_HIGH, BLUE_TARPIT_FILE
+from medusa.core.constants import BLUE_TARPIT_FILE, PATTERN_SCORE_THRESHOLD, RISK_HIGH
 
 console = Console()
 
@@ -151,7 +156,7 @@ class LiveFeed:
             if rid >= self.config.baseline_requests:
                 self.baseline_established = True
                 console.print(f"\n  [bold green]BASELINE ESTABLISHED[/bold green] [dim]({rid} requests)[/dim]")
-                console.print(f"  [dim]AI analysis now active for anomalous requests[/dim]\n")
+                console.print("  [dim]AI analysis now active for anomalous requests[/dim]\n")
             else:
                 if self.config.show_all_normals:
                     if sa:
@@ -294,7 +299,7 @@ class LiveFeed:
                 # AI disagrees with pattern detector — log the disagreement but STILL defend
                 console.print(f"  [bold yellow]AI OVERRIDE[/bold yellow] [dim]— AI says {ai_result.verdict} (score {ai_result.score}) but pattern score is {effective_score}[/dim]")
                 console.print(f"  [dim]AI reasoning: {ai_result.reasoning}[/dim]")
-                console.print(f"  [bold yellow]Applying fallback defense despite AI override[/bold yellow]")
+                console.print("  [bold yellow]Applying fallback defense despite AI override[/bold yellow]")
                 # NEVER add pattern-matched attacks to normal baseline
                 self._apply_tarpit(ip, effective_score, pattern_names)
                 kg.add_defense(ip, "tarpit", f"Fallback — AI said {ai_result.verdict} but pattern score {effective_score}")
@@ -330,7 +335,7 @@ class LiveFeed:
                 try:
                     proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30, cwd=target_path or None)
                     ok = proc.returncode == 0
-                    status = f"[green]OK[/green]" if ok else f"[red]FAIL({proc.returncode})[/red]"
+                    status = "[green]OK[/green]" if ok else f"[red]FAIL({proc.returncode})[/red]"
                     console.print(f"    [dim]$[/dim] {cmd} {status}")
                     if proc.stdout.strip():
                         console.print(f"    [dim]  {proc.stdout.strip()[:200]}[/dim]")
@@ -358,7 +363,10 @@ class LiveFeed:
             if sa and sa.status == "active":
                 try:
                     from medusa.core.blue.actions.deploy import (
-                        deploy_honeypot, deploy_patch, deploy_canary_tokens, deploy_deception_data
+                        deploy_canary_tokens,
+                        deploy_deception_data,
+                        deploy_honeypot,
+                        deploy_patch,
                     )
                     # Deploy honeypot endpoint
                     hp = deploy_honeypot(target_path, sa, ip)
@@ -405,7 +413,8 @@ class LiveFeed:
         try:
             state = {}
             if os.path.exists(self.TARPIT_FILE):
-                state = json.loads(open(self.TARPIT_FILE).read())
+                with open(self.TARPIT_FILE) as f:
+                    state = json.loads(f.read())
             state[ip] = {"delay": min(8.0, 1.0 + score * 0.8), "since": time.time(),
                          "patterns": patterns}
             with open(self.TARPIT_FILE, "w") as f:
@@ -419,7 +428,8 @@ class LiveFeed:
         if not getattr(self, 'blocking_enabled', False):
             console.print(f"  [dim]BLOCK LOGGED:[/dim] {ip} — blocking disabled, logged only")
             return
-        import subprocess, platform
+        import platform
+        import subprocess
         system = platform.system()
         try:
             if system == "Darwin":
@@ -454,7 +464,7 @@ class LiveFeed:
         except Exception as e:
             console.print(f"  [bold red]AI ANALYSIS FAILED[/bold red] [dim]— {e}[/dim]")
             console.print(f"  [dim]  Request #{rid} {method} {path} could not be analyzed.[/dim]")
-            console.print(f"  [dim]  Check API key, network, and provider config in medusa/.env[/dim]")
+            console.print("  [dim]  Check API key, network, and provider config in medusa/.env[/dim]")
             return None
 
     def get_stats(self) -> dict:

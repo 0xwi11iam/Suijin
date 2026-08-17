@@ -1,18 +1,12 @@
 """
 Base prompt builder — autonomous agent system prompt.
 """
-from medusa.prompts.tool_registry import build_tool_catalog_prompt
-from medusa.skills.loader import get_skill_prompt
 from medusa.core.prompt_safety import UNTRUSTED_OUTPUT_GUIDANCE
+from medusa.prompts.tool_registry import build_tool_catalog_prompt
 
 # Secret patterns, credential classification, and CVE mapping are now
 # defined inline in medusa/security/secret_patterns.py
-from medusa.security.secret_patterns import (
-    SECRET_PATTERNS, calculate_entropy, is_likely_secret,
-    classify_credential, assess_credential_risk, CredentialClass,
-    CVE_ATTACK_MAP, SEVERITY_CVSS, TECH_VULN_MAP, suggest_tools_for_cwe,
-)
-
+from medusa.skills.loader import get_skill_prompt
 
 base_prompt = """
 ##  AUTONOMOUS SECURITY AGENT — FULL CAPABILITIES
@@ -102,7 +96,7 @@ You have a full Chromium browser via Playwright MCP tools. USE THEM for:
 ###  Bundled Wordlists (at ~/wordlists/)
 Wordlists are at `~/wordlists/`. Use the full path in gobuster:
 - `~/wordlists/common.txt` — 200+ common web paths
-- `~/wordlists/api-endpoints.txt` — 100+ API-specific paths  
+- `~/wordlists/api-endpoints.txt` — 100+ API-specific paths
 - `~/wordlists/quick.txt` — 50 high-value paths for fast scans
 Usage: `gobuster dir -u URL -w ~/wordlists/common.txt -t 40 -b 404`
 The tilde expands correctly in shell commands. Always include the full `~/wordlists/` path.
@@ -175,7 +169,11 @@ Thought -> Action -> Observation loop.
     # 1.5. Operational mode constraints
     try:
         import json
-        cfg = json.loads(open("config.json").read())
+        from pathlib import Path
+        # config.json lives in the medusa/ package dir — never CWD-relative,
+        # or the mode flags silently vanish when launched from elsewhere.
+        cfg_path = Path(__file__).resolve().parent.parent / "config.json"
+        cfg = json.loads(cfg_path.read_text())
     except Exception:
         cfg = {}
     if cfg.get("mode_hitl"):
@@ -229,7 +227,7 @@ NEVER run sequential scans when you could deploy subagents instead.
 
     # 4. Tool catalog
     parts.append(build_tool_catalog_prompt(phase))
-    
+
     # 5. Module skill docs
     from medusa.modules.loader import get_module_skills
     ms = get_module_skills()

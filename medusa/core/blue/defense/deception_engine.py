@@ -1,10 +1,12 @@
 """Deception engine — coordinate all deception tactics."""
 from __future__ import annotations
+
 from medusa.core.blue.deception.honeypot_factory import generate_honeypot_response
-from medusa.core.blue.deception.time_sink import TimeSink
 from medusa.core.blue.deception.shadow_redirect import redirect_to_shadow
-from medusa.core.blue.errors import DeceptionError, ErrorSeverity, ok, err
-from medusa.core.constants import SCORE_SHADOW, SCORE_DECEIVE, SCORE_SUSPICIOUS, TARPIT_DEFAULT_DELAY
+from medusa.core.blue.deception.time_sink import TimeSink
+from medusa.core.blue.errors import DeceptionError, ErrorSeverity, err, ok
+from medusa.core.constants import SCORE_DECEIVE, SCORE_SHADOW, SCORE_SUSPICIOUS, TARPIT_DEFAULT_DELAY
+
 
 class DeceptionEngine:
     def __init__(self):
@@ -23,5 +25,6 @@ class DeceptionEngine:
                 return ok({"action": "honeypot", "response": generate_honeypot_response({"path": request.get("path","/")})})
             return ok({"action": "observe"})
         except Exception as e:
-            import logging; logging.getLogger("medusa").warning(f"Deception failed: {e}")
+            import logging
+            logging.getLogger("medusa").warning(f"Deception failed: {e}")
             return err(DeceptionError(f"Deception response failed: {e}", severity=ErrorSeverity.WARNING))

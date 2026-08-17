@@ -6,7 +6,9 @@ file-based tarpit (/tmp/blue_tarpit.json) read by the proxy/Flask app,
 which applies delays at the HTTP layer without blocking the event loop.
 """
 from __future__ import annotations
-import time, random
+
+import time
+
 
 class TimeSink:
     def __init__(self):

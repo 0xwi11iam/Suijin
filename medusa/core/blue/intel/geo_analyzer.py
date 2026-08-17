@@ -1,6 +1,9 @@
 """Geo analyzer — GeoIP lookup via free API."""
 from __future__ import annotations
-import json, urllib.request, socket
+
+import json
+import socket
+import urllib.request
 
 
 def get_geo(ip: str) -> dict:

@@ -12,11 +12,12 @@ flask>=2.3,<4.0
 flask_cors>=4.0,<5.0
 PyJWT>=2.8,<3.0
 
-# Testing & Dev
-pytest>=8.0,<9.0
-pytest-asyncio>=0.23,<1.0
-pytest-cov>=5.0,<6.0
+# Module packs (Modules/Tools/google_dork)
+duckduckgo-search>=6.0
 
 # Optional providers (uncomment to enable)
 # google-genai>=1.0  # Gemini
 # anthropic>=0.30    # Anthropic
+
+# Testing & dev deps (pytest, pytest-asyncio, pytest-cov) are installed
+# separately — see .github/workflows/ci.yml. They do not ship with the app.

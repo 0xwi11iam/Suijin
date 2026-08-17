@@ -4,8 +4,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 SERVER = REPO_ROOT / "medusa" / "mcp_server.py"
 
@@ -14,7 +12,7 @@ def _call_server(lines):
     """Run the MCP server with scripted JSON-RPC input, return responses."""
     proc = subprocess.run(
         [sys.executable, str(SERVER)],
-        input="\n".join(json.dumps(l) for l in lines) + "\n",
+        input="\n".join(json.dumps(msg) for msg in lines) + "\n",
         capture_output=True, text=True, timeout=60,
         cwd=str(REPO_ROOT),
     )

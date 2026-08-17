@@ -7,6 +7,7 @@ for problematic patterns and silently injects corrective guidance.
 Pattern-based (no LLM calls) — zero cost, instant execution.
 """
 from __future__ import annotations
+
 import logging
 from typing import Optional
 

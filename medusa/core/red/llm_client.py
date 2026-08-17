@@ -5,6 +5,7 @@ Extracted from redteamer.py. Wraps provider.generate() with a Rich status
 spinner and a 90s hard timeout so slow providers never hang the TUI.
 """
 from __future__ import annotations
+
 import asyncio
 
 from rich.console import Console
@@ -35,7 +36,7 @@ async def generate_async(messages, config=None):
             )
     except asyncio.TimeoutError:
         result = "Error: LLM request timed out after 90s. The provider may be overloaded. Retry with a shorter prompt or switch providers."
-        console.print(f"[yellow]  (LLM timed out after 90s)[/yellow]")
+        console.print("[yellow]  (LLM timed out after 90s)[/yellow]")
 
     return result
 

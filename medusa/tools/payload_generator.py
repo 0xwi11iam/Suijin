@@ -3,6 +3,7 @@ Payload Generator — context-aware payloads from discovered tech stack.
 Generates SQLi maps, XSS cheatsheets, SSTI payloads per framework.
 """
 from __future__ import annotations
+
 import json
 
 PAYLOAD_DB = {

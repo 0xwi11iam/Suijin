@@ -2,7 +2,13 @@
 medusa/core/blueteamer.py — Blue Team entry point and TUI.
 """
 from __future__ import annotations
-import sys, os, asyncio, signal as _signal, time, json
+
+import asyncio
+import json
+import os
+import signal as _signal
+import sys
+import time
 from pathlib import Path
 
 _pkg_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -13,11 +19,10 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from medusa.modules.loader import load_local_module
 from medusa.core.blue.config import load_blue_config
-from medusa.core.blue.session_manager import init_session, get_session
-from medusa.core.blue.tui.dashboard import render_dashboard
-from medusa.core.constants import BLUE_LAB_PORT, PROXY_DEFAULT_PORT, BLUE_TRAFFIC_LOG
+from medusa.core.blue.session_manager import init_session
+from medusa.core.constants import BLUE_LAB_PORT, BLUE_TRAFFIC_LOG, PROXY_DEFAULT_PORT
+from medusa.modules.loader import load_local_module
 
 console = Console()
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -40,7 +45,7 @@ async def _run_async():
                     os.environ[k.strip()] = v.strip()
 
     config = load_blue_config()
-    providers = load_local_module("providers")
+    load_local_module("providers")  # module-level registration side effects
     provider = config.get("provider", "deepseek")
     key_var = f"{provider.upper()}_API_KEY"
     if not os.environ.get(key_var) and not os.environ.get("HF_TOKEN"):
@@ -94,7 +99,7 @@ async def _run_async():
             )
             console.print(f"[green]Proxy started on :{proxy_port}[/green] [dim]→ forwarding to your app on :{app_port}[/dim]")
             console.print(f"[bold yellow]Send ALL traffic to http://127.0.0.1:{proxy_port}[/bold yellow] [dim](not :{app_port})[/dim]")
-            console.print(f"[dim]The proxy intercepts every request, logs it for analysis, and forwards to your app.[/dim]")
+            console.print("[dim]The proxy intercepts every request, logs it for analysis, and forwards to your app.[/dim]")
         except Exception as e:
             console.print(f"[red]Failed to start proxy: {e}[/red]")
             console.print("[yellow]Falling back to log-file mode — start your app with the middleware snippet.[/yellow]")
@@ -105,7 +110,8 @@ async def _run_async():
         traffic_log = str(BLUE_TRAFFIC_LOG)
         app_port = BLUE_LAB_PORT
 
-        import subprocess, urllib.request
+        import subprocess
+        import urllib.request
 
         # Kill any stale process on port 5906
         try:
@@ -201,11 +207,11 @@ async def _run_async():
 
     # Phase 3: SOC activation
     console.print("\n[bold cyan]Phase 3: SOC Team Activation[/bold cyan]")
+    from medusa.core.blue.soc.incident_commander import create_incident_commander
     from medusa.core.blue.soc.soc_lead import activate_soc_lead
+    from medusa.core.blue.soc.threat_hunter import create_threat_hunter
     from medusa.core.blue.soc.tier1_analyst import create_tier1
     from medusa.core.blue.soc.tier2_analyst import create_tier2
-    from medusa.core.blue.soc.threat_hunter import create_threat_hunter
-    from medusa.core.blue.soc.incident_commander import create_incident_commander
 
     soc_lead = await activate_soc_lead(config, asyncio.Queue())
     tier1_analysts = [create_tier1(ep["path"]) for ep in endpoints[:20]]
@@ -215,14 +221,14 @@ async def _run_async():
 
     console.print(f"  [green]SOC Lead online[/green] [dim]({len(soc_lead.campaigns)} campaigns tracked)[/dim]")
     console.print(f"  [green]{len(tier1_analysts)} Tier-1 Analysts deployed[/green]")
-    console.print(f"  [green]Tier-2 Analyst active[/green] [dim](cross-endpoint correlation)[/dim]")
-    console.print(f"  [green]Threat Hunter active[/green] [dim](proactive scanning)[/dim]")
-    console.print(f"  [green]Incident Commander ready[/green]")
+    console.print("  [green]Tier-2 Analyst active[/green] [dim](cross-endpoint correlation)[/dim]")
+    console.print("  [green]Threat Hunter active[/green] [dim](proactive scanning)[/dim]")
+    console.print("  [green]Incident Commander ready[/green]")
 
     # ── Initialize AI Engine and Live Feed ──
     from medusa.core.blue.ai_engine import BlueAIEngine
-    from medusa.core.blue.tui.feed import LiveFeed, FeedConfig
     from medusa.core.blue.traffic.normalizer import SmartNormalizer, set_global_normalizer
+    from medusa.core.blue.tui.feed import FeedConfig, LiveFeed
 
     ai_engine = BlueAIEngine(config)
     ai_engine.target_path = target_path  # For code change execution
@@ -429,7 +435,8 @@ def _print_middleware_snippet(console, log_path: str):
 
 def _init_firewall(console):
     """Create pfctl table (macOS) or iptables chain (Linux) for IP blocking."""
-    import subprocess, platform
+    import platform
+    import subprocess
     system = platform.system()
     if system == "Darwin":
         try:

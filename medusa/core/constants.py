@@ -5,6 +5,7 @@ All model IDs, default ports, scoring thresholds, and provider names
 live here. Import from this module instead of hardcoding strings.
 """
 from __future__ import annotations
+
 from pathlib import Path
 
 # ── Provider / Model IDs ────────────────────────────────────────────
@@ -62,6 +63,7 @@ TRUNCATE_LIMIT = 50000
 
 # ── File paths (base tmp dir configurable via MEDUSA_TMP_DIR) ───────
 import os
+
 TMP_DIR = Path(os.environ.get("MEDUSA_TMP_DIR", "/tmp"))
 
 BLUE_KG_PATH = TMP_DIR / "blue_kg.json"

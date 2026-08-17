@@ -2,7 +2,8 @@
 medusa/core/blue/config.py — Blue team operational configuration.
 """
 from __future__ import annotations
-import json, os
+
+import json
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -77,7 +78,8 @@ def load_blue_config() -> dict:
         validated = BlueConfig(**merged)
         return validated.model_dump()
     except Exception as e:
-        import logging; logging.getLogger("medusa").warning(f"Blue config validation failed: {e}. Using raw config.")
+        import logging
+        logging.getLogger("medusa").warning(f"Blue config validation failed: {e}. Using raw config.")
         return merged
 
 

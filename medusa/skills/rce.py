@@ -26,7 +26,7 @@ A parameter is a CANDIDATE for command injection if:
 For each candidate parameter:
 1. Send baseline value — note normal output
 2. Append command separators with a harmless command:
-   - `; id` 
+   - `; id`
    - `| id`
    - `|| id`
    - `& id` (URL-encode as `%26`)

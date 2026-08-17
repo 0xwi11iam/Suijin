@@ -16,19 +16,27 @@ Key features:
 - Hard guardrail (gov/mil/edu domain blocking)
 """
 from __future__ import annotations
-import sys, os, asyncio, json, time
-from pathlib import Path
+
+import asyncio
+import json
+import time
 
 from rich.console import Console
 from rich.panel import Panel
 
-from medusa.modules.loader import load_local_module, discover_modules
+from medusa.core.red import session_control as sc
 
-from medusa.core.red.config_loader import (
-    load_config, load_env, BASE_DIR, ENV_PATH, CONFIG_PATH,
+# ENV_PATH / CONFIG_PATH re-exported for callers and tests that still import
+# them from redteamer (their real home is config_loader).
+from medusa.core.red.config_loader import (  # noqa: F401 — deliberate re-exports
+    BASE_DIR,
+    CONFIG_PATH,
+    ENV_PATH,
+    load_config,
+    load_env,
 )
 from medusa.core.red.llm_client import generate_async
-from medusa.core.red import session_control as sc
+from medusa.modules.loader import discover_modules, load_local_module
 
 # Centralized force-load — shares ONE instance per module
 providers = load_local_module("providers")
@@ -47,7 +55,7 @@ console = Console()
 DUMP_PATH = BASE_DIR / "operation_state_recovery.json"
 
 
-#  Main agent loop 
+#  Main agent loop
 
 async def run_red_team_async(config, objective, api_key=None):
 
@@ -71,7 +79,7 @@ async def run_red_team_async(config, objective, api_key=None):
 
     provider_name = config.get('provider', 'unknown')
     model_name = config.get('final_model_id') or config.get(f'{provider_name}_model', 'auto')
-    console.print(f"\n[bold #e6b47c] Launching Agent[/bold #e6b47c] [dim](Ctrl+C to guide)[/dim]")
+    console.print("\n[bold #e6b47c] Launching Agent[/bold #e6b47c] [dim](Ctrl+C to guide)[/dim]")
     console.print(f"[dim]{objective}[/dim]")
     console.print(f"[dim]{provider_name} / {model_name}[/dim]\n")
 
@@ -105,10 +113,10 @@ async def run_red_team_async(config, objective, api_key=None):
                     raise KeyboardInterrupt()
                 node_name = list(event.keys())[0]
                 node_output = event[node_name]
-                
+
                 trace = node_output.get("execution_trace", [])
                 step = node_output.get("_current_step", {})
-                
+
                 # Show output from execute_tool_node (background spawn, blocked, etc.)
                 if node_name == "execute_tool" and step.get("tool_output"):
                     ec = step.get("error_class", "")
@@ -127,13 +135,13 @@ async def run_red_team_async(config, objective, api_key=None):
                             {"messages": [{"role": "user", "content": f"OPERATOR ANSWER: {answer}"}],
                              "_ask_operator": False}
                         )
-                        console.print(f"[dim]Answer sent. Resuming...[/dim]\n")
+                        console.print("[dim]Answer sent. Resuming...[/dim]\n")
                         continue
                     else:
                         prefix = "[bold red]BLOCKED[/bold red]" if "duplicate" in ec else "[dim]output[/dim]"
                         display = out[:2000] + (f"... [+{len(out)-2000} chars]" if len(out) > 2000 else "")
                         console.print(f"  {prefix} {display}", markup=True)
-                
+
                 if trace:
                     latest = trace[-1]
                     iteration = latest.get("iteration", 0)
@@ -145,16 +153,16 @@ async def run_red_team_async(config, objective, api_key=None):
                         reasoning = latest.get("reasoning", "")
                         success = latest.get("success", True)
                         phase = latest.get("phase", node_output.get("current_phase", "?"))
-                        
+
                         console.print(f"\n[bold white]#{iteration}[/bold white] "
                                       f"[{'green' if success else 'red'}]{'+' if success else '!'}[/{'green' if success else 'red'}] "
                                       f"[dim]{phase}[/dim]")
-                        
+
                         if thought:
                             console.print(f"  [cyan]  {thought[:500]}[/cyan]")
-                        
+
                         if tool_name:
-                            cmd = str(tool_args.get("cmd") or tool_args.get("command") or 
+                            cmd = str(tool_args.get("cmd") or tool_args.get("command") or
                                       tool_args.get("url") or str(tool_args))[:200]
                             console.print(f"  [yellow]> {tool_name}[/yellow] [dim]{cmd}[/dim]")
 
@@ -175,7 +183,7 @@ async def run_red_team_async(config, objective, api_key=None):
                             )
                         except Exception:
                             pass
-                
+
                 # Check completion
                 if node_output.get("completion_reason"):
                     final_state = node_output
@@ -254,7 +262,7 @@ async def run_red_team_async(config, objective, api_key=None):
                     {"messages": [{"role": "user", "content": f"OPERATOR GUIDANCE: {guidance}"}],
                      "completion_reason": None},
                 )
-                console.print(f"[dim]  Guidance sent. Resuming...[/dim]\n")
+                console.print("[dim]  Guidance sent. Resuming...[/dim]\n")
             except Exception as e:
                 console.print(f"[yellow]  State update failed: {e}. Restarting...[/yellow]")
                 first_run = True
@@ -269,7 +277,7 @@ async def run_red_team_async(config, objective, api_key=None):
             final_state = agent.get_state(thread_id) or {}
             break
 
-    #  Final report (after normal completion) 
+    #  Final report (after normal completion)
     try:
         messages = final_state.get("messages", [])
         for msg in reversed(messages):
@@ -277,7 +285,7 @@ async def run_red_team_async(config, objective, api_key=None):
                 console.print(Panel(msg["content"][:5000], title=" Report", border_style="green"))
                 break
 
-        #  Summary 
+        #  Summary
         trace = final_state.get("execution_trace", [])
         total = len(trace)
         ok = sum(1 for s in trace if s.get("success", True))
@@ -299,12 +307,14 @@ async def run_red_team_async(config, objective, api_key=None):
             from medusa.tools.audit_trail import end_audit
             end_audit(spend)
         except Exception:
-            import logging; logging.getLogger("medusa").warning("Agent loop error", exc_info=True)
+            import logging
+            logging.getLogger("medusa").warning("Agent loop error", exc_info=True)
         try:
             from medusa.tools.session_replay import save_session
             save_session(thread_id, objective, config, final_state, spend)
         except Exception as e:
-            import logging; logging.getLogger("medusa").warning(f"Session save failed: {e}")
+            import logging
+            logging.getLogger("medusa").warning(f"Session save failed: {e}")
 
     except Exception as e:
         console.print(f"[bold red]Agent error: {e}[/bold red]")
@@ -312,7 +322,7 @@ async def run_red_team_async(config, objective, api_key=None):
         traceback.print_exc()
 
 
-#  Helper functions — re-exported from session_control for backwards compat 
+#  Helper functions — re-exported from session_control for backwards compat
 
 def _force_report(agent, thread_id, final_state, objective, config):
     return sc.force_report(agent, thread_id, final_state, objective, config)
@@ -368,7 +378,7 @@ def main():
 No restrictions. No limits. Pure freedom.
 """)
 
-    #  Objective input: type or upload 
+    #  Objective input: type or upload
     print()
     console.print("[bold white]Load Objective:[/]")
     console.print("  [bold #ff5555]1.[/] [white]Type manually[/]")

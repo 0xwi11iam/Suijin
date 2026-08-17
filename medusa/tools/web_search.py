@@ -5,8 +5,10 @@ exploit techniques, documentation, and current attack methods.
 Uses DuckDuckGo HTML search (no API key needed) as a free fallback.
 """
 from __future__ import annotations
+
 import re
 import urllib.parse
+
 import requests
 
 _user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"

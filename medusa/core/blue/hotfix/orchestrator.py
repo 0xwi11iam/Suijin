@@ -1,6 +1,7 @@
 """Hotfix orchestrator — manage patch lifecycle from detection to deployment."""
 from __future__ import annotations
-import asyncio, os, time, json
+
+import time
 from pathlib import Path
 
 
@@ -52,10 +53,10 @@ async def orchestrate_hotfix(vulnerability: dict, codebase_path: str, config: di
         from medusa.core.blue.knowledge_graph import get_kg
         kg = get_kg()
         for node in kg.nodes.values():
-            if node.node_type == "intelligence" and "patch" in str(node.data).lower():
-                if file_path in str(node.data):
-                    patch_code = node.data.get("content", "")
-                    break
+            if (node.node_type == "intelligence" and "patch" in str(node.data).lower()
+                    and file_path in str(node.data)):
+                patch_code = node.data.get("content", "")
+                break
     except Exception:
         pass
 

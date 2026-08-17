@@ -18,7 +18,8 @@ from __future__ import annotations
 DEPLOY_ENV = {"is_macos": True, "is_linux": False, "is_docker": False, "is_dev": True}
 MIN_REQUIREMENTS = {"python_version": (3, 10), "ram_mb": 2048, "disk_mb": 5120, "cpu_cores": 2}
 def check_min_requirements() -> dict:
-    import sys, platform
+    import platform
+    import sys
     return {"python_ok": sys.version_info >= (3, 10), "python_version": f"{sys.version_info.major}.{sys.version_info.minor}", "platform": platform.platform()}
 def get_deploy_port(service: str) -> int:
     ports = {"lab_cloudboard_main": 5800, "lab_devops_dashboard": 5700}
@@ -84,9 +85,7 @@ def is_unproductive(step: dict) -> bool:
         return False
     if p.get("verdict") in ("no_progress", "duplicate", "blocked"):
         return True
-    if p.get("new_information_gained") is False:
-        return True
-    return False
+    return p.get("new_information_gained") is False
 
 
 def audit_productivity_claim(

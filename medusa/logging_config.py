@@ -4,7 +4,9 @@ medusa/logging_config.py — Centralized logging configuration.
 Replaces scattered print() calls with structured logging.
 Import and call setup_logging() at startup.
 """
-import logging, sys, os
+import logging
+import os
+import sys
 from pathlib import Path
 
 LOG_DIR = Path(os.environ.get("MEDUSA_LOG_DIR", "/tmp/medusa_logs"))

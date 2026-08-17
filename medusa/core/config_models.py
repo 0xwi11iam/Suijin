@@ -4,8 +4,10 @@ Catches typos, missing required fields, and type mismatches before they
 cause silent runtime failures.
 """
 from __future__ import annotations
+
+from typing import List
+
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional, List
 
 
 class ScorerConfig(BaseModel):
@@ -97,5 +99,5 @@ class RedConfig(BaseModel):
     def warn_high_cap(cls, v):
         if v > 50.0:
             import warnings
-            warnings.warn(f"Cost cap ${v:.2f} is high. Consider setting a lower limit.")
+            warnings.warn(f"Cost cap ${v:.2f} is high. Consider setting a lower limit.", stacklevel=2)
         return v

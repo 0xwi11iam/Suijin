@@ -1,6 +1,6 @@
 """Shadow redirect — transparently proxy attacker to isolated environment."""
 from __future__ import annotations
-import threading
+
 
 class ShadowEnvironment:
     def __init__(self):

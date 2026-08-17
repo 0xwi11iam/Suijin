@@ -3,9 +3,10 @@ Medusa Report Exporter — sophisticated, detailed engagement reports.
 Generates Markdown reports with Mermaid diagrams, finding tables, attack chains.
 """
 from __future__ import annotations
-import json, os, time
-from pathlib import Path
+
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 REPORTS_DIR = Path(__file__).resolve().parent.parent / "medusa_agent" / "reports"
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -36,18 +37,18 @@ def generate_report(engagement_name: str, execution_trace: list, findings: list,
 
     # Build Markdown report
     lines = [
-        f"# Medusa Engagement Report",
-        f"",
+        "# Medusa Engagement Report",
+        "",
         f"**Engagement**: {engagement_name}",
         f"**Generated**: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}",
         f"**Completion**: {completion_reason or 'In progress'}",
         f"**Total Cost**: ${cost_usd:.4f}",
         f"**Total Steps**: {len(execution_trace)}",
-        f"",
-        f"---",
-        f"",
-        f"## Executive Summary",
-        f"",
+        "",
+        "---",
+        "",
+        "## Executive Summary",
+        "",
     ]
 
     # Summary stats
@@ -102,7 +103,7 @@ def generate_report(engagement_name: str, execution_trace: list, findings: list,
             lines.append(f"**Args**: `{json.dumps(args)[:200]}`")
         output = step.get("tool_output", "")
         if output:
-            lines.append(f"**Output**:")
+            lines.append("**Output**:")
             lines.append("```")
             lines.append(output[:3000])
             lines.append("```")

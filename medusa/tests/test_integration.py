@@ -1,5 +1,11 @@
 """End-to-end integration tests for the blue team pipeline."""
-import pytest, sys, os, json, tempfile
+import json
+import os
+import sys
+import tempfile
+
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
@@ -71,8 +77,10 @@ class TestBlueTeamPipeline:
     def test_errors_module_wired(self):
         """Verify structured error types are importable and functional."""
         from medusa.core.blue.errors import (
-            BlueError, FirewallError, AIEngineError, ProxyError, PatchError,
-            ErrorSeverity, ok, err
+            ErrorSeverity,
+            FirewallError,
+            err,
+            ok,
         )
         e = FirewallError("test", severity=ErrorSeverity.CRITICAL)
         r = err(e)
@@ -121,7 +129,7 @@ class TestBlueTeamPipeline:
 
     def test_subagent_manager_wired(self):
         """Verify subagent manager deploy + analyze flow imports."""
-        from medusa.core.blue.subagent_manager import SubagentManager, EndpointSubagent
+        from medusa.core.blue.subagent_manager import EndpointSubagent, SubagentManager
         assert SubagentManager is not None
         # EndpointSubagent has all fields
         sa = EndpointSubagent(
@@ -135,11 +143,14 @@ class TestBlueTeamPipeline:
 
     def test_config_models_validated_at_startup(self):
         """Verify config validation catches bad values."""
-        from medusa.core.config_models import BlueConfig, RedConfig
         import pytest
+
         # BlueConfig with invalid scorer weight
-        with pytest.raises(Exception):
+        from pydantic import ValidationError
+
+        from medusa.core.config_models import BlueConfig, RedConfig
+        with pytest.raises(ValidationError):
             BlueConfig(scorer={"critical_threshold": 999})  # Out of range
         # RedConfig with negative cost
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             RedConfig(cost_hard_cap_usd=-5.0)

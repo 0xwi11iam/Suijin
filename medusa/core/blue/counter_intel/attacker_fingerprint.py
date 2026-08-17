@@ -1,5 +1,7 @@
 """Attacker fingerprint — browser, TLS, TCP stack."""
 from __future__ import annotations
+
+
 def fingerprint_request(request: dict) -> dict:
     ua = request.get("user_agent","")
     fp = {"browser": "unknown", "os": "unknown", "tools": []}

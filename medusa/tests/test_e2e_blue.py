@@ -15,7 +15,6 @@ import sys
 import tempfile
 import threading
 import time
-import uuid
 from pathlib import Path
 
 import pytest
@@ -88,23 +87,20 @@ def lab_server():
     va.TARPIT_FILE = orig_tarpit
     va.TRAFFIC_LOG = orig_log
     va.DB = orig_db
-    for f in os.listdir(tmpdir):
-        try:
+    import contextlib
+    with contextlib.suppress(OSError):
+        for f in os.listdir(tmpdir):
             os.unlink(os.path.join(tmpdir, f))
-        except OSError:
-            pass
-    try:
+    with contextlib.suppress(OSError):
         os.rmdir(tmpdir)
-    except OSError:
-        pass
 
 
 @pytest.fixture
 def blue_stack():
     """Build a LiveFeed stack with a mocked AI engine (no API keys needed)."""
-    from medusa.core.blue.ai_engine import BlueAIEngine, AIAnalysisResult
+    from medusa.core.blue.ai_engine import AIAnalysisResult, BlueAIEngine
     from medusa.core.blue.subagent_manager import SubagentManager
-    from medusa.core.blue.tui.feed import LiveFeed, FeedConfig
+    from medusa.core.blue.tui.feed import FeedConfig, LiveFeed
 
     engine = BlueAIEngine(config={})
 
@@ -278,6 +274,7 @@ class TestBlueTeamE2E:
     def test_kg_records_attack(self, lab_server, blue_stack, isolated_tarpit_path):
         """The knowledge graph must record the attack for cross-session tracking."""
         import requests as req
+
         from medusa.core.blue.knowledge_graph import get_kg
 
         feed = blue_stack

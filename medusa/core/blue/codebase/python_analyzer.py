@@ -1,7 +1,9 @@
 """Python route extraction — Flask, Django, FastAPI."""
 from __future__ import annotations
+
 import re
 from pathlib import Path
+
 
 def extract_python_routes(root: Path) -> list:
     endpoints = []

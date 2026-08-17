@@ -2,7 +2,9 @@
 AI Call System Test — verifies provider routing, API connectivity,
 response parsing, and error handling for all configured providers.
 """
-import sys, os, json, time
+import os
+import sys
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
@@ -10,19 +12,19 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 def test_provider_routing():
     """Verify the generate() function routes to the correct provider."""
     from medusa.tools.providers import generate
-    
+
     config = {"provider": "deepseek", "temperature": 0.1, "max_tokens_per_request": 100}
     messages = [{"role": "user", "content": "Say 'hello' and nothing else."}]
-    
+
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
     if not api_key:
         print("  ⏭️  DeepSeek: no DEEPSEEK_API_KEY set — skipped")
         return
-    
+
     start = time.time()
     result = generate(messages, config)
     elapsed = time.time() - start
-    
+
     assert result is not None, "generate() returned None"
     assert not result.startswith("Error:"), f"API error: {result[:200]}"
     assert len(result) > 0, "Empty response"
@@ -36,7 +38,7 @@ def test_deepseek_specific():
     if not api_key:
         print("  ⏭️  DeepSeek direct: no key — skipped")
         return
-    
+
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     payload = {
         "model": "deepseek-v4-flash",
@@ -44,11 +46,11 @@ def test_deepseek_specific():
         "max_tokens": 50,
         "temperature": 0,
     }
-    
+
     start = time.time()
     resp = req.post("https://api.deepseek.com/v1/chat/completions", headers=headers, json=payload, timeout=30)
     elapsed = time.time() - start
-    
+
     assert resp.status_code == 200, f"HTTP {resp.status_code}: {resp.text[:200]}"
     data = resp.json()
     content = data["choices"][0]["message"]["content"]
@@ -64,16 +66,16 @@ def test_huggingface():
     if not token:
         print("  ⏭️  HuggingFace: no HF_TOKEN — skipped")
         return
-    
+
     from medusa.tools.providers import generate
     config = {"provider": "huggingface", "temperature": 0.1, "max_tokens_per_request": 50,
               "final_model_id": "Qwen/Qwen2.5-3B-Instruct"}
     messages = [{"role": "user", "content": "Say hi"}]
-    
+
     start = time.time()
     result = generate(messages, config)
     elapsed = time.time() - start
-    
+
     if result.startswith("Error:"):
         print(f"  ⚠️  HuggingFace: {result[:100]}")
     else:
@@ -83,14 +85,14 @@ def test_huggingface():
 def test_error_handling():
     """Test that invalid configs produce proper errors."""
     from medusa.tools.providers import generate
-    
+
     # Invalid provider
     config = {"provider": "nonexistent", "temperature": 0}
     messages = [{"role": "user", "content": "test"}]
     result = generate(messages, config)
     assert "Unknown provider" in result or "Error" in result
     print(f"  ✅ Unknown provider: '{result[:60]}'")
-    
+
     # Missing API key — should error, not crash
     orig_key = os.environ.pop("DEEPSEEK_API_KEY", None)
     try:
@@ -105,20 +107,20 @@ def test_error_handling():
 
 def test_token_counting():
     """Verify USAGE dict is updated after calls."""
-    from medusa.tools.providers import generate, USAGE, reset_usage
-    
+    from medusa.tools.providers import USAGE, generate, reset_usage
+
     reset_usage()
     assert USAGE["calls"] == 0
     assert USAGE["est_cost_usd"] == 0.0
-    
+
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
     if not api_key:
         print("  ⏭️  Token counting: no key — skipped")
         return
-    
+
     config = {"provider": "deepseek", "temperature": 0, "max_tokens_per_request": 50}
     messages = [{"role": "user", "content": "Say hello"}]
-    
+
     generate(messages, config)
     assert USAGE["calls"] >= 1
     assert USAGE["input_tokens"] > 0
@@ -135,15 +137,15 @@ def test_response_time():
     if not api_key:
         print("  ⏭️  Response time: no key — skipped")
         return
-    
+
     from medusa.tools.providers import generate
     config = {"provider": "deepseek", "temperature": 0, "max_tokens_per_request": 50}
     messages = [{"role": "user", "content": "Say 'pong'"}]
-    
+
     start = time.time()
     result = generate(messages, config)
     elapsed = time.time() - start
-    
+
     assert elapsed < 30, f"Response took {elapsed:.1f}s — too slow!"
     assert "pong" in result.lower() or "PONG" in result.upper() or len(result) > 0
     print(f"  ✅ Response time: {elapsed:.1f}s (limit: 30s)")
@@ -162,7 +164,7 @@ def test_config_loading():
 
 def test_env_loading():
     """Test that .env vars are loaded (skips if no .env file — CI-safe)."""
-    from medusa.core.redteamer import load_env, ENV_PATH
+    from medusa.core.redteamer import ENV_PATH, load_env
     # On CI / without .env, just verify ENV_PATH is a valid Path object
     if not ENV_PATH.exists():
         print("  ⏭️  No .env file — skipped")
@@ -184,11 +186,11 @@ def run_all():
         ("Token counting", test_token_counting),
         ("Response time", test_response_time),
     ]
-    
+
     passed = 0
     skipped = 0
     failed = 0
-    
+
     for name, fn in tests:
         try:
             fn()
@@ -202,7 +204,7 @@ def run_all():
             else:
                 print(f"  ❌ {name}: {type(e).__name__}: {e}")
                 failed += 1
-    
+
     print(f"\n{'='*50}")
     print(f"Results: {passed} passed, {failed} failed")
     if skipped:

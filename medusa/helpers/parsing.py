@@ -6,14 +6,16 @@ parsing that retries on malformed JSON.
 Ported from redamon/agentic/orchestrator_helpers/parsing.py.
 """
 from __future__ import annotations
+
 import json
 import logging
+
+# Token patterns and vuln classification — defined inline
+import re as _re
 from typing import Optional
 
 from .json_utils import extract_json, repair_trailing_json_delimiters
 
-# Token patterns and vuln classification — defined inline
-import re as _re
 TOKEN_PATTERNS = {
     "jwt": _re.compile(r"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}", _re.IGNORECASE),
     "api_key": _re.compile(r"(?:api[_-]?key|apikey)[:=]\s*['\"]?([A-Za-z0-9_-]{20,})['\"]?", _re.IGNORECASE),
@@ -100,9 +102,8 @@ def try_parse_llm_decision(response_text: str) -> tuple[Optional[dict], Optional
             return None, f"Unknown action: '{action}'. Must be one of {valid_actions}"
 
         # If use_tool or plan_tools, require tool_name
-        if action in ("use_tool", "plan_tools"):
-            if action == "use_tool" and not data.get("tool_name"):
-                return None, "action=use_tool requires 'tool_name'"
+        if action == "use_tool" and not data.get("tool_name"):
+            return None, "action=use_tool requires 'tool_name'"
 
         return data, None
 

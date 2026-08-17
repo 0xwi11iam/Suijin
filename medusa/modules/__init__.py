@@ -1,5 +1,8 @@
 """Plugin module loader."""
 from medusa.modules.loader import (
-    load_local_module, discover_modules,
-    get_module_tools, get_module_skills, get_loaded_modules,
+    discover_modules,
+    get_loaded_modules,
+    get_module_skills,
+    get_module_tools,
+    load_local_module,
 )

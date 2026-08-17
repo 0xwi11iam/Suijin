@@ -1,6 +1,7 @@
 """IP reputation — threat intelligence scoring."""
 from __future__ import annotations
-import os, json, time
+
+import time
 
 KNOWN_SCANNERS = ["shodan.io", "censys.io", "binaryedge.io", "onyphe.io",
                   "stretchoid.com", "shadowserver.org", "internet-census.org"]

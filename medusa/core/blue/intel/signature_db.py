@@ -1,5 +1,6 @@
 """Attack signature database."""
 from __future__ import annotations
+
 SIGNATURES = {
     "sqli": ["' OR '1'='1", "UNION SELECT", "1' AND SLEEP(5)", "admin'--", "'; DROP TABLE"],
     "xss": ["<script>alert(1)</script>", "<img src=x onerror=alert(1)>", "javascript:alert(1)"],

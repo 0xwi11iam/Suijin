@@ -1,5 +1,6 @@
 """Watcher communication protocol."""
 from __future__ import annotations
+
 TIER1_ESCALATE = "TIER1_ESCALATE"
 TIER2_VALIDATE = "TIER2_VALIDATE"
 TIER2_DECEPTION = "TIER2_DECEPTION"

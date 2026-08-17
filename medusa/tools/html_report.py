@@ -1,8 +1,9 @@
 """HTML report exporter — styled, collapsible, client-deliverable reports."""
 from __future__ import annotations
-import json, os
+
 from datetime import datetime, timezone
 from pathlib import Path
+
 
 def export_html(findings: list, engagement_name: str, cost_usd: float = 0.0, trace_count: int = 0, output_path: str = None) -> str:
     path = output_path or f"medusa_agent/reports/{engagement_name.replace(' ','_')}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.html"

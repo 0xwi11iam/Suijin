@@ -36,7 +36,8 @@ def _pip_install(package: str) -> str:
     if safe.lower() in dangerous:
         return f"Cannot install system module: {safe}"
     try:
-        import subprocess, sys
+        import subprocess
+        import sys
         result = subprocess.run(
             [sys.executable, "-m", "pip", "install", safe],
             capture_output=True, text=True, timeout=120,

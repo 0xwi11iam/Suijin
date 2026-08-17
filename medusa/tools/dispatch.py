@@ -16,26 +16,57 @@ Layout:
 """
 from __future__ import annotations
 
-import json
-import os
-import re
-import shlex
-import sqlite3
-import subprocess
-import threading
-import time
-import xmlrpc.client
-from pathlib import Path
-
-import requests
-import urllib3
-
 from medusa.modules.loader import get_module_tools
+from medusa.tools.aux_tools import (
+    _edit_skill,
+    _list_own_files,
+    _list_skills,
+    _pip_install,
+    _web_search,
+    _write_tool,
+)
 
 # Re-exported for backwards compatibility — these names lived on dispatch.py
 # before the split and external callers still import them from here.
+# Everything listed in __all__ below is a deliberate re-export: ruff must
+# not prune these "unused" imports.
 from medusa.tools.guardrails import _BLOCKED_PATTERNS, confirm_global_action, is_dangerous
-from medusa.tools.workspace import WORKSPACE_DIR, resolve_workspace_path
+from medusa.tools.http_tools import apply_patch, http_request, read_file, write_file
+from medusa.tools.intel import (
+    NOTES_DIR,
+    NVD_BASE,
+    _extract_cvss,
+    _is_kev,
+    check_knowledge,
+    record_finding,
+    search_cve,
+    search_kb,
+    write_note,
+)
+from medusa.tools.jobs import (
+    _job_cancel,
+    _job_list,
+    _job_output,
+    _job_status,
+    _job_wait,
+)
+from medusa.tools.metasploit import (
+    _msf_console_fallback,
+    _msf_rpc_connect,
+    msf_check,
+    msf_command,
+    msf_run,
+    msf_sessions,
+)
+from medusa.tools.modes import check_mode_restrictions
+from medusa.tools.reporting import (
+    _attack_tree,
+    _diff_resp,
+    _gen_report,
+    _payload_gen,
+    _rate_all,
+    _rate_check,
+)
 
 # ── Re-export the public tool surface ─────────────────────────────────
 from medusa.tools.runtime import (
@@ -56,49 +87,35 @@ from medusa.tools.runtime import (
     truncate,
 )
 from medusa.tools.terminal import execute_terminal
-from medusa.tools.http_tools import apply_patch, http_request, read_file, write_file
-from medusa.tools.metasploit import (
-    _msf_console_fallback,
-    _msf_rpc_connect,
-    msf_check,
-    msf_command,
-    msf_run,
-    msf_sessions,
-)
-from medusa.tools.intel import (
-    NVD_BASE,
-    NOTES_DIR,
-    _extract_cvss,
-    _is_kev,
-    check_knowledge,
-    record_finding,
-    search_cve,
-    search_kb,
-    write_note,
-)
-from medusa.tools.reporting import (
-    _attack_tree,
-    _diff_resp,
-    _gen_report,
-    _payload_gen,
-    _rate_all,
-    _rate_check,
-)
-from medusa.tools.jobs import (
-    _job_cancel,
-    _job_list,
-    _job_output,
-    _job_status,
-    _job_wait,
-)
-from medusa.tools.aux_tools import (
-    _edit_skill,
-    _list_own_files,
-    _list_skills,
-    _pip_install,
-    _web_search,
-    _write_tool,
-)
+from medusa.tools.workspace import WORKSPACE_DIR, resolve_workspace_path
+
+__all__ = [
+    # guardrails
+    "_BLOCKED_PATTERNS", "confirm_global_action", "is_dangerous",
+    # workspace
+    "WORKSPACE_DIR", "resolve_workspace_path",
+    # runtime
+    "AI_SERVICE_ENDPOINTS", "BASE_DIR", "DB_PATH", "MCP_SERVERS", "PROJECT_DIR",
+    "_job_lock", "_jobs", "_recon_state", "fingerprint_ai_response",
+    "get_proxy", "get_server_for_tool", "global_session",
+    "reset_recon_state", "set_proxy", "truncate",
+    # terminal / http
+    "execute_terminal", "apply_patch", "http_request", "read_file", "write_file",
+    # metasploit
+    "_msf_console_fallback", "_msf_rpc_connect",
+    "msf_check", "msf_command", "msf_run", "msf_sessions",
+    # intel
+    "NVD_BASE", "NOTES_DIR", "_extract_cvss", "_is_kev",
+    "check_knowledge", "record_finding", "search_cve", "search_kb", "write_note",
+    # jobs
+    "_job_cancel", "_job_list", "_job_output", "_job_status", "_job_wait",
+    # reporting
+    "_attack_tree", "_diff_resp", "_gen_report", "_payload_gen", "_rate_all", "_rate_check",
+    # aux
+    "_edit_skill", "_list_own_files", "_list_skills", "_pip_install", "_web_search", "_write_tool",
+    # routing
+    "route_tool", "get_tool_catalog", "list_route_tools",
+]
 
 
 def _recon_chain_route(target, config, ports=None):
@@ -176,6 +193,12 @@ def route_tool(tool_name, args, config):
     if args is None:
         args = {}
     routes = _build_routes(config)
+
+    # Safety-mode backstop (mode_hitl / mode_guardrail). The modes are also
+    # described in the system prompt; this makes them impossible to bypass.
+    blocked = check_mode_restrictions(tool_name, args, config)
+    if blocked:
+        return blocked
 
     # ── FREEDOM: no phase gating. All tools always available. ──
 
@@ -371,12 +394,12 @@ def get_tool_catalog():
                     params = t_info.get("parameters", {})
                     param_example = ", ".join(f'"{p}": "..."' for p in params)
                     catalog += f"- **{t_name}** — {desc}\n"
-                    catalog += f"  ```json\n"
+                    catalog += "  ```json\n"
                     if param_example:
                         catalog += f'  {{"tool": "{t_name}", "args": {{{param_example}}}}}\n'
                     else:
                         catalog += f'  {{"tool": "{t_name}", "args": {{}}}}\n'
-                    catalog += f"  ```\n"
+                    catalog += "  ```\n"
 
     if unavailable:
         catalog += "## NOT INSTALLED — install these to unlock more tools\n"

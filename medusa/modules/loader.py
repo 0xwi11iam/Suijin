@@ -1,19 +1,20 @@
 """
-medusa/module_loader.py
+medusa/modules/loader.py
 ========================
-Scans modules/ subdirectories for modular tool packs.
+Scans the repo-root Modules/ directory (Modules/Tools/, Modules/Mods/) for
+modular tool packs.
 
 Each module is a folder containing:
   manifest.json — metadata (name, version, tools, dependencies)
-  <module>.py   — tool implementations (auto-imported)
+  main.py       — tool implementations (auto-imported)
   skill.md      — AI usage instructions (auto-injected into system prompt)
 
-The loader discovers all modules at import time and makes their tools
+The loader discovers all modules via discover_modules() and makes their tools
 available via get_module_tools() and their skills via get_module_skills().
 """
 
-import json
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -35,9 +36,9 @@ DNS_RECON_RECORDS = ["A", "AAAA", "CNAME", "MX", "NS", "TXT", "SOA", "PTR", "SRV
 SUBDOMAIN_TIERS = {"tier1_always": ["www", "mail", "ftp", "admin", "api", "dev", "staging"]}
 
 # Loaded module registry
-_loaded_modules = {}      
-_module_tools = {}         
-_module_skills = []        
+_loaded_modules = {}
+_module_tools = {}
+_module_skills = []
 _verbose = False  # Silent by default — redteamer.main() enables on startup
 
 
@@ -108,7 +109,6 @@ def discover_modules():
             except Exception:
                 continue
 
-            name = manifest.get("name", folder.name)
             key = f"{category.name}/{folder.name}"
             _loaded_modules[key] = {"manifest": manifest, "tools": {}, "skill": ""}
 

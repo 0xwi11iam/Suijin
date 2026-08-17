@@ -1,7 +1,12 @@
 """Tarpit — slow-loris style connection draining."""
 from __future__ import annotations
-import time, threading, logging
-from medusa.core.blue.errors import DeceptionError, ErrorSeverity, ok, err
+
+import logging
+import threading
+import time
+
+from medusa.core.blue.errors import DeceptionError, ErrorSeverity, err, ok
+
 
 class Tarpit:
     def __init__(self):

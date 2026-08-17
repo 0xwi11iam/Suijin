@@ -7,9 +7,13 @@ Nodes: attackers, endpoints, attacks, defenses, deceptions
 Edges: attacked, defended_by, deceived_by, related_to
 """
 from __future__ import annotations
-import json, time, hashlib, threading
-from pathlib import Path
+
+import hashlib
+import json
+import threading
+import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 from medusa.core.constants import BLUE_KG_PATH

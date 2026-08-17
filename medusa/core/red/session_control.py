@@ -6,6 +6,7 @@ state summary, attack chain building, session listing, template browsing,
 and objective file loading.
 """
 from __future__ import annotations
+
 import os
 
 from rich.console import Console
@@ -15,9 +16,9 @@ console = Console()
 
 def force_report(agent, thread_id, final_state, objective, config):
     """Generate a full engagement report on demand."""
-    from medusa.tools.report_exporter import generate_report
-    from medusa.tools.audit_trail import get_audit_json
     from medusa.modules.loader import load_local_module
+    from medusa.tools.audit_trail import get_audit_json
+    from medusa.tools.report_exporter import generate_report
     providers = load_local_module("providers")
     state = final_state or agent.get_state(thread_id) or {}
     trace = state.get("execution_trace", [])
@@ -34,8 +35,8 @@ def force_report(agent, thread_id, final_state, objective, config):
     )
     console.print(f"[green]Report saved: {path}[/green]")
     # Also end audit trail
-    from medusa.tools.audit_trail import end_audit
     from medusa.modules.loader import load_local_module as _llm
+    from medusa.tools.audit_trail import end_audit
     end_audit(_llm("providers").USAGE.get("est_cost_usd", 0))
 
 

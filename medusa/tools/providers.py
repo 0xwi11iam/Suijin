@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import os
-import re
-import time
 import json
+import os
+import time
+
 import requests as req
-from rich.console import Console
 from huggingface_hub import InferenceClient
+from rich.console import Console
 
 console = Console()
 
@@ -162,7 +162,7 @@ def _call_via_lobstertrap(messages, model, temperature, max_tokens):
             return f"Error: LobsterTrap DENIED — {resp.json().get('message', 'Policy violation')}"
         else:
             return None
-    except Exception as e:
+    except Exception:
         return None
 
 # ----------------------------------------------------------------------

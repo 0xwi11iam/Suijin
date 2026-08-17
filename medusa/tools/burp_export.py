@@ -1,8 +1,10 @@
 """Burp Suite XML export — generate Burp-compatible finding reports."""
 from __future__ import annotations
+
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
+
 
 def export_burp_xml(findings: list, output_path: str = None) -> str:
     root = ET.Element("issues")

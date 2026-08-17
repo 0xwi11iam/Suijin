@@ -4,8 +4,9 @@ Each watcher is a lightweight monitoring agent assigned to a single endpoint.
 It tracks request counts, anomaly rates, and reports health via heartbeat.
 """
 from __future__ import annotations
-import asyncio, time, threading, uuid
-from collections import defaultdict
+
+import threading
+import time
 
 
 class EndpointWatcher:

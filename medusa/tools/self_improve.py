@@ -6,9 +6,8 @@ CRITICAL: These tools give the agent the power to rewrite itself.
 This is intentional — a creative agent needs to be able to improve.
 """
 from __future__ import annotations
-import os
+
 from pathlib import Path
-from datetime import datetime, timezone
 
 BASE_DIR = Path(__file__).resolve().parent.parent  # medusa/ root
 

@@ -6,15 +6,22 @@ Pydantic validation, and .env provider-key loading (interactive wizard
 or non-interactive CI-safe mode).
 """
 from __future__ import annotations
-import sys, os, json
+
+import json
+import os
+import sys
 from pathlib import Path
 
 from rich.console import Console
 
 from medusa.core.constants import (
-    EXPERT_MODELS, SENTINEL_MODEL, SUPERVISOR_MODEL,
-    DEFAULT_MODEL, GEMINI_MODEL, METASPLOIT_RPC_PORT,
+    DEFAULT_MODEL,
+    EXPERT_MODELS,
+    GEMINI_MODEL,
     MAX_ITERATIONS,
+    METASPLOIT_RPC_PORT,
+    SENTINEL_MODEL,
+    SUPERVISOR_MODEL,
 )
 
 console = Console()
@@ -54,7 +61,8 @@ def load_config() -> dict:
         validated = RedConfig(**config)
         config.update(validated.model_dump())
     except Exception as e:
-        import logging; logging.getLogger("medusa").warning(f"Config validation failed: {e}. Using raw config.")
+        import logging
+        logging.getLogger("medusa").warning(f"Config validation failed: {e}. Using raw config.")
     return config
 
 

@@ -18,8 +18,9 @@ def _diff_resp(baseline: str, injected: str, sensitivity: str = "medium") -> str
 
 
 def _rate_check(endpoint: str) -> str:
-    from medusa.tools.rate_limit_detector import check_rate_limit
     import json
+
+    from medusa.tools.rate_limit_detector import check_rate_limit
     return json.dumps(check_rate_limit(endpoint), indent=2)
 
 
@@ -29,15 +30,17 @@ def _rate_all() -> str:
 
 
 def _attack_tree(trace_json: str) -> str:
-    from medusa.tools.attack_tree import build_attack_tree
     import json
+
+    from medusa.tools.attack_tree import build_attack_tree
     trace = json.loads(trace_json) if trace_json else []
     return build_attack_tree(trace)
 
 
 def _gen_report(engagement: str, trace_json: str, findings_json: str) -> str:
-    from medusa.tools.report_exporter import generate_report
     import json
+
+    from medusa.tools.report_exporter import generate_report
     trace = json.loads(trace_json) if trace_json else []
     findings = json.loads(findings_json) if findings_json else []
     return generate_report(engagement, trace, findings, {}, [], 0)

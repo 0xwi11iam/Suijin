@@ -1,5 +1,7 @@
 """Confidence scoring for agent decisions — prevents chasing false positives."""
 from __future__ import annotations
+
+
 def score_confidence(finding_type: str, evidence_quality: str, diff_verified: bool, reproduction_count: int) -> dict:
     base = {"sqli": 0.7, "xss": 0.6, "ssti": 0.5, "rce": 0.9, "ssrf": 0.7, "idor": 0.8, "open_redirect": 0.85, "info_disclosure": 0.9}
     score = base.get(finding_type, 0.5)

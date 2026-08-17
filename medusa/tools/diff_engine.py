@@ -3,7 +3,8 @@ Diff Engine — compare HTTP responses before/after parameter injection.
 Auto-detects anomalies: status changes, length differences, new content.
 """
 from __future__ import annotations
-import json, re
+
+import re
 
 
 def diff_responses(baseline: str, injected: str, sensitivity: str = "medium") -> dict:

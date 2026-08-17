@@ -7,17 +7,15 @@ Supports JSON and plain-text export.
 """
 
 import json
-import os
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from collections import defaultdict
 
 # Try rich — graceful fallback if not installed
 try:
     from rich.console import Console
-    from rich.table import Table
     from rich.panel import Panel
-    from rich.text import Text
+    from rich.table import Table
     RICH = True
 except ImportError:
     RICH = False

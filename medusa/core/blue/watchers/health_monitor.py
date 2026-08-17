@@ -1,6 +1,8 @@
 """Watcher health monitor — heartbeat checks, auto-respawn."""
 from __future__ import annotations
-import asyncio, time
+
+import time
+
 
 class HealthMonitor:
     def __init__(self):

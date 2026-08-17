@@ -5,7 +5,6 @@ and route_tool dispatch with mocked execution.
 """
 import os
 import sys
-import json
 from pathlib import Path
 
 import pytest
@@ -44,7 +43,7 @@ class TestPureHelpers:
         assert isinstance(result2, list)
 
     def test_proxy_state_management(self):
-        from medusa.tools.dispatch import reset_recon_state, set_proxy, get_proxy
+        from medusa.tools.dispatch import get_proxy, reset_recon_state, set_proxy
         set_proxy("http://proxy.example:8080")
         assert get_proxy() == "http://proxy.example:8080"
         reset_recon_state()
@@ -77,6 +76,7 @@ class TestExecuteTerminalSafety:
     def test_safe_command_executes(self, monkeypatch):
         """Safe command runs via mocked subprocess."""
         import medusa.tools.dispatch as d
+        import medusa.tools.result as result_mod
         calls = {}
 
         class FakeResult:
@@ -88,20 +88,23 @@ class TestExecuteTerminalSafety:
             calls["cmd"] = cmd
             return FakeResult()
 
-        monkeypatch.setattr(d.subprocess, "run", mock_run)
+        # execute_terminal shells out through tools/result.run_command
+        monkeypatch.setattr(result_mod.subprocess, "run", mock_run)
         result = d.execute_terminal("echo hello")
         assert "test output" in result
         assert "cmd" in calls
 
     def test_command_timeout_handled(self, monkeypatch):
         """Timeout errors surface as error messages, not crashes."""
-        import medusa.tools.dispatch as d
         import subprocess as sp
+
+        import medusa.tools.dispatch as d
+        import medusa.tools.result as result_mod
 
         def mock_run(cmd, **kwargs):
             raise sp.TimeoutExpired(cmd, timeout=1)
 
-        monkeypatch.setattr(d.subprocess, "run", mock_run)
+        monkeypatch.setattr(result_mod.subprocess, "run", mock_run)
         result = d.execute_terminal("sleep 100", timeout=1)
         assert "timed out" in result.lower()
 
@@ -122,8 +125,9 @@ class TestFileOps:
 
     def test_write_and_read_roundtrip_tmp(self):
         """Write to /tmp (allowlisted) and read it back."""
-        from medusa.tools.dispatch import write_file, read_file
         import uuid
+
+        from medusa.tools.dispatch import read_file, write_file
         path = f"/tmp/medusa_test_{uuid.uuid4().hex[:8]}.txt"
         try:
             result = write_file(path, "test content 123")
@@ -136,8 +140,9 @@ class TestFileOps:
 
     def test_write_file_relative_workspace(self):
         """Relative paths resolve into the agent workspace."""
-        from medusa.tools.dispatch import write_file, read_file
         import uuid
+
+        from medusa.tools.dispatch import read_file, write_file
         rel = f"outputs/test_{uuid.uuid4().hex[:8]}.txt"
         try:
             result = write_file(rel, "workspace content")

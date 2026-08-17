@@ -3,9 +3,10 @@
 Boosts coverage for: state.py, parsing.py, productivity.py, json_utils.py,
 error_class.py, hard_guardrail.py, modules/loader.py
 """
-import sys, os, json, uuid
-from pathlib import Path
+import os
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
@@ -138,7 +139,6 @@ class TestNewAgentState:
     def test_generates_session_id(self):
         from medusa.core.state import new_agent_state
         s1 = new_agent_state()
-        s2 = new_agent_state()
         # Session IDs are empty unless provided
         assert s1["session_id"] == ""
 
@@ -381,7 +381,7 @@ class TestProductivity:
         assert "nmap" in k
 
     def test_axis_unproductive_count(self):
-        from medusa.helpers.productivity import record_axis_attempt, axis_unproductive_count, axis_key
+        from medusa.helpers.productivity import axis_key, axis_unproductive_count, record_axis_attempt
         k = axis_key("nmap", {"target": "x"})
         axes = {}
         axes = record_axis_attempt(axes, k, False)

@@ -2,7 +2,6 @@
 Attack Tree Visualizer — generates Mermaid flowcharts from execution traces.
 """
 from __future__ import annotations
-import json
 
 
 def build_attack_tree(trace: list) -> str:
@@ -16,7 +15,6 @@ def build_attack_tree(trace: list) -> str:
 
     lines = ["graph TD"]
     node_ids = {}
-    last_success_node = None
 
     for i, step in enumerate(trace):
         tn = step.get("tool_name", "unknown")

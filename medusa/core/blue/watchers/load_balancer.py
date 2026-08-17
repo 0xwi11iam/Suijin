@@ -1,5 +1,7 @@
 """Load balancer — distribute watchers by traffic volume."""
 from __future__ import annotations
+
+
 def balance_watchers(endpoints: list, traffic_stats: dict, max_per: int = 3) -> dict:
     allocation = {}
     sorted_eps = sorted(endpoints, key=lambda e: traffic_stats.get(e.get("path","/"), 0), reverse=True)

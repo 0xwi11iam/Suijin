@@ -20,8 +20,8 @@ This keeps it cheap, fast, and deterministic.
 """
 
 import json
-import re
 from pathlib import Path
+
 from rich.console import Console
 
 console = Console()
@@ -290,11 +290,10 @@ class ChainTracker:
                 # Check if this pattern applies to the finding
                 trigger_match = any(t in combined_text for t in pattern["triggers"])
                 type_match = finding["type"] in pattern["constraint_types"]
-                if trigger_match and type_match:
-                    if pattern["name"] not in self._chain_history:
-                        self._chain_history.append(pattern["name"])
-                        suggestions.append(pattern["suggestion"])
-                        break  # one suggestion per finding
+                if trigger_match and type_match and pattern["name"] not in self._chain_history:
+                    self._chain_history.append(pattern["name"])
+                    suggestions.append(pattern["suggestion"])
+                    break  # one suggestion per finding
 
         if not suggestions:
             return ""

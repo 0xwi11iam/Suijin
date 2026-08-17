@@ -2,7 +2,10 @@
 medusa/core/blue/session_manager.py — Blue team session state.
 """
 from __future__ import annotations
-import json, os, hashlib, threading
+
+import hashlib
+import json
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional

@@ -16,7 +16,10 @@ _pkg_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _pkg_parent not in sys.path:
     sys.path.insert(0, _pkg_parent)
 
-VERSION = "2.4.0"
+# Single source of truth: medusa/version.json (via the package __init__).
+from medusa import __version__ as VERSION
+
+_PKG_DIR = os.path.dirname(os.path.abspath(__file__))
 
 REQUIRED_BINARIES = ["nmap", "gobuster", "feroxbuster", "john", "curl"]
 OPTIONAL_BINARIES = [
@@ -73,13 +76,14 @@ def run_doctor() -> int:
         p = shutil.which(b)
         rows.append(_ok(f"bin/{b}", p) if p else _warn(f"bin/{b}", "not installed (optional)"))
 
-    # Config
-    cfg = os.path.join(_pkg_parent, "config.json")
+    # Config — lives inside the medusa/ package dir, not the repo root.
+    cfg = os.path.join(_PKG_DIR, "config.json")
     if os.path.exists(cfg):
         try:
             import json
-            data = json.load(open(cfg))
-            has_key = bool(data.get("api_key")) or bool(os.environ.get("DEEPSEEK_API_KEY")) or bool(os.environ.get("OPENAI_API_KEY"))
+            with open(cfg) as f:
+                data = json.load(f)
+            has_key = _has_any_api_key(_PKG_DIR)
             provider = data.get("provider", "unset")
             if has_key:
                 rows.append(_ok("config", f"provider={provider}, api key set"))
@@ -118,6 +122,29 @@ def run_doctor() -> int:
         return 1
     print("\nReady. Run 'medusa' to start the interface.")
     return 0
+
+
+def _has_any_api_key(pkg_dir: str) -> bool:
+    """True if any supported provider key is set (env var or medusa/.env).
+
+    API keys live in .env / environment variables — never in config.json.
+    """
+    env_names = (
+        "DEEPSEEK_API_KEY", "OPENAI_API_KEY", "HF_TOKEN", "GEMINI_API_KEY",
+        "ANTHROPIC_API_KEY", "AMD_API_KEY",
+    )
+    if any(os.environ.get(n) for n in env_names):
+        return True
+    env_file = os.path.join(pkg_dir, ".env")
+    try:
+        with open(env_file) as f:
+            for line in f:
+                name, _, value = line.partition("=")
+                if name.strip() in env_names and value.strip():
+                    return True
+    except OSError:
+        pass
+    return False
 
 
 def _importable(name: str) -> bool:

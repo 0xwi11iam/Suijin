@@ -8,10 +8,12 @@ Also manages the baseline normalization learning — benign verdicts get
 added to the normal pattern pool so future identical requests skip the AI.
 """
 from __future__ import annotations
-import json, asyncio, time, os
-from pathlib import Path
-from typing import Optional
+
+import asyncio
+import json
+import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from medusa.core.constants import DEFAULT_MODEL, RISK_HIGH
 
@@ -83,7 +85,8 @@ class BlueAIEngine:
                 for defense in hist.get("defenses", [])[-3:]:
                     attacker_context += f"  Defense deployed: {defense.get('type','?')} — {defense.get('detail','?')}\n"
         except Exception:
-            import traceback; traceback.print_exc()
+            import traceback
+            traceback.print_exc()
         prompt = f"""SECURITY ALERT — You must classify this request as FLAGGED or NOT FLAGGED.
 
 REQUEST:
@@ -122,8 +125,8 @@ Respond ONLY with valid JSON. No markdown, no explanation outside JSON."""
         request_id: int = 0,
     ) -> AIAnalysisResult:
         """Send an anomalous request to the LLM for deep analysis."""
-        from medusa.tools.providers import generate, get_usage
         from medusa.prompts.blue_system import BLUE_SYSTEM_PROMPT
+        from medusa.tools.providers import generate, get_usage
 
         t0 = time.time()
 

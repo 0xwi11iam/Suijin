@@ -1,7 +1,9 @@
 """JavaScript route extraction — Express, Next.js, Remix."""
 from __future__ import annotations
+
 import re
 from pathlib import Path
+
 
 def extract_js_routes(root: Path) -> list:
     endpoints = []

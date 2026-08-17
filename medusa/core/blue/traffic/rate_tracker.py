@@ -1,7 +1,10 @@
 """Rate tracker — per-IP, per-endpoint sliding window tracking."""
 from __future__ import annotations
-import time, threading
+
+import threading
+import time
 from collections import defaultdict
+
 
 class RateTracker:
     def __init__(self, window_seconds: int = 60):

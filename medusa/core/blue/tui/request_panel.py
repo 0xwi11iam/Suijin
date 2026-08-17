@@ -7,13 +7,12 @@ Three-panel layout when a request triggers INVESTIGATED tier:
   BOTTOM: Verdict (FLAGGED / NOT FLAGGED) + action decision panel
 """
 from __future__ import annotations
+
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-from rich import box
-from rich.layout import Layout
-import json
 
 console = Console()
 
@@ -89,7 +88,7 @@ def render_investigated_request(result) -> None:
         verdict_icon = "[bold green]NOT FLAGGED[/bold green]"
 
     verdict_content = Text()
-    verdict_content.append(f"Verdict: ", style="bold white")
+    verdict_content.append("Verdict: ", style="bold white")
     verdict_content.append(f"{result.verdict}\n", style=verdict_style)
     verdict_content.append(f"Score: {result.score}/10\n", style="dim")
     verdict_content.append(f"Action: {result.action}\n", style="bold white")

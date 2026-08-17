@@ -2,9 +2,10 @@
 Session Replay — save and resume engagements from LangGraph checkpoints.
 """
 from __future__ import annotations
-import json, time
-from pathlib import Path
+
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 REPLAY_DIR = Path(__file__).resolve().parent.parent / "medusa_agent" / "sessions"
 REPLAY_DIR.mkdir(parents=True, exist_ok=True)
@@ -41,7 +42,8 @@ def list_sessions() -> list:
             data["_file"] = str(f)
             sessions.append(data)
         except Exception as e:
-            import logging; logging.getLogger("medusa").warning(f"Session replay failed: {e}")
+            import logging
+            logging.getLogger("medusa").warning(f"Session replay failed: {e}")
             pass
     return sessions
 

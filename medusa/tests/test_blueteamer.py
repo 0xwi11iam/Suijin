@@ -154,6 +154,7 @@ class TestMiddlewareSnippet:
 
     def test_contains_log_path(self):
         import io
+
         from rich.console import Console
         buf = io.StringIO()
         c = Console(file=buf, force_terminal=False)

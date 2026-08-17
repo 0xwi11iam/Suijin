@@ -9,9 +9,13 @@ After codebase analysis, deploys one AI subagent per endpoint. Each subagent:
 - Reports anomalies to the main coordinating agent
 """
 from __future__ import annotations
-import json, asyncio, time, hashlib
-from pathlib import Path
+
+import asyncio
+import hashlib
+import json
+import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
 from medusa.core.constants import RISK_HIGH
@@ -85,8 +89,8 @@ class SubagentManager:
 
     async def analyze_endpoint(self, sa: EndpointSubagent) -> EndpointSubagent:
         """Deep analysis — read the ENTIRE source file, no truncation."""
-        from medusa.tools.providers import generate
         from medusa.prompts.blue_system import BLUE_SYSTEM_PROMPT
+        from medusa.tools.providers import generate
 
         ep = sa.endpoint
         file_path = ep.get("file", "")

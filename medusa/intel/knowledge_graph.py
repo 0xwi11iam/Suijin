@@ -11,9 +11,8 @@ Storage: JSON file at medusa/knowledge_graph.json (human-readable, git-friendly)
 """
 
 import json
-import os
-from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 GRAPH_PATH = BASE_DIR / "knowledge_graph.json"
@@ -104,10 +103,7 @@ def check_cve(target, cve_id):
     """Check if a CVE has already been verified for this target."""
     constraints = get_constraints(target)
     verified = constraints.get("verified_cve", [])
-    for c in verified:
-        if c.get("rule") == cve_id:
-            return True
-    return False
+    return any(c.get("rule") == cve_id for c in verified)
 
 
 def get_bypass_strategies(target):

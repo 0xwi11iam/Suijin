@@ -1,7 +1,10 @@
 """Evidence packager — bundle evidence for operator or IR."""
 from __future__ import annotations
-import json, time
+
+import json
+import time
 from pathlib import Path
+
 
 def package_evidence(incident_id: str, timeline: list, attacker_profile: dict, logs: list) -> str:
     pkg = {"incident_id": incident_id, "packaged_at": time.time(), "timeline": timeline,

@@ -14,11 +14,11 @@ Flow:
 NO hypothesis is accepted as fact without a confirming tool call.
 """
 
-import re
 import json
+import re
 import time
 from pathlib import Path
-from datetime import datetime, timezone
+
 from rich.console import Console
 
 from medusa.modules.loader import load_local_module
@@ -204,7 +204,7 @@ def detect_anomaly(response_text, status_code=None, baseline_len=None, elapsed=N
     reflection_keywords = ["<script", "{{", "}}", "{%", "%}", "${", "onerror="]
     for kw in reflection_keywords:
         if kw in (response_text or ""):
-            signals.append(f"payload_reflection")
+            signals.append("payload_reflection")
             severity = _bump_severity(severity, "medium")
             break
 
@@ -310,10 +310,7 @@ def generate_hypotheses(diagnostic_snippet, original_payload="", config=None):
     # Parse JSON
     try:
         m = re.search(r"\[[\s\S]*\]", resp)
-        if m:
-            hypotheses = json.loads(m.group(0))
-        else:
-            hypotheses = json.loads(resp)
+        hypotheses = json.loads(m.group(0)) if m else json.loads(resp)
         if not isinstance(hypotheses, list):
             return _heuristic_hypotheses(diagnostic_snippet, original_payload)
         # Normalize and validate
@@ -514,20 +511,17 @@ def _check_evidence(result, confirm_clue, disconfirm_clue, payload):
         return False
 
     # If confirm clue is very specific, check it
-    if confirm_clue and len(confirm_clue) > 5:
-        if confirm_clue.lower() in result_lower:
-            return True
+    if confirm_clue and len(confirm_clue) > 5 and confirm_clue.lower() in result_lower:
+        return True
 
     # If disconfirm clue is present, strong signal against
-    if disconfirm_clue and len(disconfirm_clue) > 5:
-        if disconfirm_clue.lower() in result_lower:
-            return False
+    if disconfirm_clue and len(disconfirm_clue) > 5 and disconfirm_clue.lower() in result_lower:
+        return False
 
     # Heuristic: did the status change?
     if "status: 2" in result_lower and "status: 5" not in result_lower:
         return True  # response normalized
-    if "status: 4" not in result_lower and "status: 5" not in result_lower:
-        return True  # no error or block
+    return "status: 4" not in result_lower and "status: 5" not in result_lower  # no error or block
 
     # If nothing is conclusive, lean on the safe side: NOT verified
     return False
@@ -631,7 +625,7 @@ def diagnose(response_text, status_code, original_payload, target_url, config,
         )
         console.print("[bold red][Oracle] All hypotheses disproven — false positive (?) flagged.[/bold red]")
 
-    verdict_lines.append(f"\n[ORACLE END]")
+    verdict_lines.append("\n[ORACLE END]")
     verdict_str = "\n".join(verdict_lines)
 
     return verdict_str, knowledge_added

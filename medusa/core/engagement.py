@@ -10,11 +10,10 @@ Handles:
 from __future__ import annotations
 
 import json
-import os
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 

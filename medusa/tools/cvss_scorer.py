@@ -2,7 +2,6 @@
 medusa/tools/cvss_scorer.py — CVSS 3.1 calculator for finding severity scoring.
 """
 from __future__ import annotations
-import json
 
 
 # CVSS 3.1 base metrics
@@ -30,11 +29,8 @@ def calculate_cvss(
     i_val = cia_weights.get(integrity.upper(), 0)
     a_val = cia_weights.get(availability.upper(), 0)
     iss = 1 - ((1 - c_val) * (1 - i_val) * (1 - a_val))
-    
-    if scope.upper() == "C":
-        impact = 7.52 * (iss - 0.029) - 3.25 * pow(iss - 0.02, 15)
-    else:
-        impact = 6.42 * iss
+
+    impact = 7.52 * (iss - 0.029) - 3.25 * pow(iss - 0.02, 15) if scope.upper() == "C" else 6.42 * iss
 
     # Exploitability sub-score
     av = av_weights.get(attack_vector.upper(), 0.85)

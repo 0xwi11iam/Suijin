@@ -15,10 +15,10 @@ Tools exposed:
 No third-party MCP package required — the protocol surface used here
 (initialize / tools/list / tools/call / ping) is small and stable.
 """
-import json
-import sys
-import os
 import inspect
+import json
+import os
+import sys
 
 # Ensure repo root is importable regardless of launch cwd (same pattern as main.py)
 _pkg_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -286,8 +286,8 @@ def tool_medusa_kg_attacker(args):
 
 
 def tool_medusa_status(args):
-    from medusa.tools.dispatch import list_route_tools
     from medusa.core.constants import BLUE_LAB_PORT, PROXY_DEFAULT_PORT
+    from medusa.tools.dispatch import list_route_tools
 
     tools = list_route_tools()
     return json.dumps({

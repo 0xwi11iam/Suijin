@@ -17,17 +17,17 @@ Architecture:
 """
 from __future__ import annotations
 
-import asyncio
 import logging
-from typing import Any, Callable, Optional, Annotated
+from datetime import datetime, timezone
+from typing import Annotated, Callable, Optional
 
-from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
 
-from medusa.nodes.initialize_node import initialize_node
-from medusa.nodes.think_node import think_node
 from medusa.nodes.execute_tool_node import execute_tool_node
 from medusa.nodes.generate_response_node import generate_response_node
+from medusa.nodes.initialize_node import initialize_node
+from medusa.nodes.think_node import think_node
 
 logger = logging.getLogger(__name__)
 
@@ -290,8 +290,11 @@ class MedusaAgentGraph:
 
         # Initialize engagement schema and recovery
         from medusa.core.engagement import (
-            load_engagement_schema, save_engagement_schema,
-            load_session_state, has_recovery_state, clear_recovery_state
+            clear_recovery_state,
+            has_recovery_state,
+            load_engagement_schema,
+            load_session_state,
+            save_engagement_schema,
         )
 
         initial_state = {
@@ -341,7 +344,7 @@ class MedusaAgentGraph:
 
         try:
             final_state = await self._graph.ainvoke(initial_state, config)
-        except Exception as e:
+        except Exception:
             logger.exception("Agent graph crashed — saving recovery state")
             try:
                 from medusa.core.engagement import save_session_state

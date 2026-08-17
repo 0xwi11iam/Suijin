@@ -4,7 +4,8 @@ Replace raw string error returns with typed error objects that the
 supervisor and SOC can reason about programmatically.
 """
 from __future__ import annotations
-from dataclasses import dataclass, field
+
+from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 

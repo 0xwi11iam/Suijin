@@ -8,10 +8,7 @@ Ported and simplified from redamon/agentic/workspace_fs.py.
 """
 from __future__ import annotations
 
-import os
-import shutil
 from pathlib import Path
-from datetime import datetime, timezone
 
 WORKSPACE_ROOT = Path(__file__).resolve().parent.parent / "medusa_agent"
 

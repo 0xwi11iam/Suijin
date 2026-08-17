@@ -1,8 +1,11 @@
 """Learning from failure — record blocked patterns and never repeat them."""
 from __future__ import annotations
-import json, os, hashlib
-from pathlib import Path
+
+import hashlib
+import json
 from datetime import datetime, timezone
+from pathlib import Path
+
 FAILURE_DB = Path(__file__).resolve().parent.parent / "medusa_agent" / "failure_db.json"
 
 def record_failure(target: str, technique: str, payload: str, reason: str):
@@ -23,10 +26,7 @@ def record_failure(target: str, technique: str, payload: str, reason: str):
 def should_skip(target: str, technique: str) -> bool:
     if not FAILURE_DB.exists(): return False
     failures = json.loads(FAILURE_DB.read_text())
-    for f in failures:
-        if f["target"] == target and f["technique"] == technique and f.get("times_seen", 0) >= 3:
-            return True
-    return False
+    return any(f["target"] == target and f["technique"] == technique and f.get("times_seen", 0) >= 3 for f in failures)
 
 def get_learned_patterns(target: str) -> list:
     if not FAILURE_DB.exists(): return []

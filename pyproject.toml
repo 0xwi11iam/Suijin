@@ -16,7 +16,7 @@ source = ["medusa"]
 omit = ["medusa/lab/*", "medusa/tests/*", "medusa_agent/*"]
 
 [tool.coverage.report]
-fail_under = 35
+fail_under = 40
 exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.:",
@@ -30,7 +30,15 @@ exclude = ["medusa/lab/", "medusa_agent/", "__pycache__/", ".git/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "B", "SIM", "I"]
-ignore = ["E501", "B904", "B007"]
+# E401/E701/E702 — the codebase deliberately uses compact one-line imports
+#   and statements; enforcing the expansion would churn every file.
+# E402 — entry-point scripts (cli.py, main.py) must import AFTER inserting
+#   the repo root into sys.path, so not-at-top imports are intentional there.
+ignore = ["E501", "B904", "B007", "E401", "E701", "E702", "E402"]
+
+[tool.ruff.lint.per-file-ignores]
+# Package __init__ files re-export via star imports by design.
+"**/__init__.py" = ["F403", "F401", "F405"]
 
 [tool.ruff.format]
 quote-style = "double"

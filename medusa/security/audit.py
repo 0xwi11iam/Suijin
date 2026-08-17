@@ -6,9 +6,9 @@ Logs every agent action with timestamp, user, target, and result.
 Includes admin bypass key for testing.
 """
 
+import hashlib
 import json
 import os
-import hashlib
 import secrets
 from datetime import datetime
 from pathlib import Path

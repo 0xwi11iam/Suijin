@@ -6,8 +6,8 @@ output_offload) can import the contextvars without pulling in langchain
 or other heavy deps.
 """
 from __future__ import annotations
+
 from contextvars import ContextVar
-from typing import Optional
 
 current_user_id: ContextVar[str] = ContextVar("current_user_id", default="")
 current_project_id: ContextVar[str] = ContextVar("current_project_id", default="")

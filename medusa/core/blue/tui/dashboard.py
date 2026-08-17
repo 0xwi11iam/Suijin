@@ -1,9 +1,8 @@
 """Blue team dashboard — main TUI."""
 from __future__ import annotations
+
 from rich.console import Console
 from rich.panel import Panel
-from rich.layout import Layout
-from rich.table import Table
 
 console = Console()
 

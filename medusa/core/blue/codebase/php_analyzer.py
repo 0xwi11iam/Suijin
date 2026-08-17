@@ -1,7 +1,9 @@
 """PHP route extraction — Laravel."""
 from __future__ import annotations
+
 import re
 from pathlib import Path
+
 
 def extract_php_routes(root: Path) -> list:
     endpoints = []

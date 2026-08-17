@@ -12,8 +12,11 @@ Architecture:
   FuguAgent:    Runs a single phase with role-gated tools, writes to KG
 """
 
-import json, re, time, os
+import json
+import re
+import time
 from pathlib import Path
+
 from rich.console import Console
 from rich.panel import Panel
 
@@ -238,12 +241,12 @@ def _build_agent_prompt(role_def, phase, task_graph_summary):
         f"\n# TASK GRAPH STATUS\n{task_graph_summary}\n"
         f"\n# AVAILABLE TOOLS (only these):\n"
         + "".join(f"- {t}\n" for t in sorted(role_def["tools"]))
-        + f"\n# RULES\n"
-        f"1. You are ONLY authorized to use the tools listed above.\n"
-        f"2. Consult the Knowledge Graph (check_knowledge) for findings from previous phases.\n"
-        f"3. Record ALL findings with record_finding and write_note.\n"
-        f"4. When the success criteria are met, write a final note and wait for the next phase.\n"
-        f"5. End each response with exactly ONE JSON tool block.\n"
+        + "\n# RULES\n"
+        "1. You are ONLY authorized to use the tools listed above.\n"
+        "2. Consult the Knowledge Graph (check_knowledge) for findings from previous phases.\n"
+        "3. Record ALL findings with record_finding and write_note.\n"
+        "4. When the success criteria are met, write a final note and wait for the next phase.\n"
+        "5. End each response with exactly ONE JSON tool block.\n"
     )
 
 
@@ -294,10 +297,9 @@ def _extract_tool(resp):
         return None
     from medusa.helpers.parsing import try_parse_llm_decision
     decision, err = try_parse_llm_decision(resp)
-    if decision:
-        if decision.get("action") in ("use_tool", "plan_tools"):
-            return {"tool": decision.get("tool_name", "unknown"),
-                    "args": decision.get("tool_args", {})}
+    if decision and decision.get("action") in ("use_tool", "plan_tools"):
+        return {"tool": decision.get("tool_name", "unknown"),
+                "args": decision.get("tool_args", {})}
     # Fallback: bare {"tool": ..., "args": ...} blocks (balanced-brace scan)
     plain = re.sub(r'```(?:json)?', '', resp).strip()
     start = plain.find('{')
@@ -378,9 +380,9 @@ def run_fugu(config, objective, generate_fn, api_key=None):
         generate_fn: LLM generate function from providers
         api_key:     optional enterprise auth key
     """
-    from medusa.modules.loader import load_local_module
-    from medusa.intel.supervisor import format_spend
     from medusa.fugu_chain import ChainTracker
+    from medusa.intel.supervisor import format_spend
+    from medusa.modules.loader import load_local_module
 
     providers = load_local_module("providers")
     tools = load_local_module("tools")
@@ -551,7 +553,7 @@ def run_fugu(config, objective, generate_fn, api_key=None):
     console.print(Panel(task_graph.summary(), title="Final Phase Status"))
     console.print(Panel(chainer.get_chain_summary(), title="Attack Chains"))
     if flag_captured:
-        console.print(f"[bold green]🐡 Fugu mission complete — flag captured.[/bold green]")
+        console.print("[bold green]🐡 Fugu mission complete — flag captured.[/bold green]")
     else:
-        console.print(f"[bold yellow]🐡 Fugu mission ended — flag not captured.[/bold yellow]")
+        console.print("[bold yellow]🐡 Fugu mission ended — flag not captured.[/bold yellow]")
     console.print(f"[dim]{format_spend(providers.get_usage())}[/dim]")

@@ -7,7 +7,7 @@ from __future__ import annotations
 import os
 import shlex
 
-from medusa.tools.guardrails import is_dangerous, confirm_global_action
+from medusa.tools.guardrails import confirm_global_action, is_dangerous
 from medusa.tools.workspace import WORKSPACE_DIR
 
 from .result import run_command
@@ -32,10 +32,9 @@ def execute_terminal(cmd, timeout=30):
 
         # Global-action gate: intercept dangerous commands
         dangerous, pattern = is_dangerous(cmd)
-        if dangerous:
-            if not confirm_global_action(cmd, pattern):
-                return f"Command denied by user (matched: {pattern}).\nCommand was: {cmd[:200]}"
-            # Approved — proceed with execution
+        if dangerous and not confirm_global_action(cmd, pattern):
+            return f"Command denied by user (matched: {pattern}).\nCommand was: {cmd[:200]}"
+        # Approved (or not dangerous) — proceed with execution
 
         # Build environment with homebrew paths (macOS)
         env = os.environ.copy()

@@ -1,7 +1,12 @@
 """Breadcrumb layer — plant fake credentials and API keys as bait."""
 from __future__ import annotations
-import json, os, random, string
+
+import json
+import os
+import random
+import string
 from pathlib import Path
+
 
 def plant_breadcrumbs(target_dir: str) -> list:
     crumbs = []
@@ -40,7 +45,8 @@ def check_canary_triggered(canary_key: str) -> bool:
     trigger_log = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "canary_triggers.json")
     try:
         if os.path.exists(trigger_log):
-            triggers = json.loads(open(trigger_log).read())
+            with open(trigger_log) as f:
+                triggers = json.loads(f.read())
             if canary_key in triggers:
                 return True
     except Exception:

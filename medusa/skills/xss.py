@@ -35,7 +35,7 @@ Determine WHERE your input appears in the response:
 - `<body onload=alert(1)>` — body event
 
 **Attribute breakout (when inside tag attributes):**
-- `" autofocus onfocus=alert(1) x="` 
+- `" autofocus onfocus=alert(1) x="`
 - `' onfocus=alert(1) autofocus='`
 - `` onclick=alert(1) `` (no quotes needed sometimes)
 

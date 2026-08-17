@@ -7,26 +7,26 @@ updates state for the next graph transition.
 Adapted from redamon/agentic/orchestrator_helpers/nodes/think_node.py.
 """
 import asyncio
-import json
 import logging
-import time
 from uuid import uuid4
 
+from medusa.core.agent_context import set_phase_context, set_tenant_context
 from medusa.core.state import (
-    ExecutionStep, TodoItem, PhaseHistoryEntry, utc_now,
-    format_chain_context, format_todo_list, format_qa_history,
-    format_objective_history,
+    ExecutionStep,
+    PhaseHistoryEntry,
+    format_chain_context,
+    format_qa_history,
+    format_todo_list,
 )
-from medusa.helpers.json_utils import json_dumps_safe, normalize_content
+from medusa.helpers.json_utils import json_dumps_safe
 from medusa.helpers.parsing import try_parse_llm_decision
 from medusa.helpers.productivity import (
-    is_unproductive, compute_productivity_score, tier_for_score,
-    update_stall_counters, detect_state_growth, record_axis_attempt,
-    extract_axis, audit_productivity_claim, downgrade_verdict_to_no_progress,
+    audit_productivity_claim,
+    detect_state_growth,
+    downgrade_verdict_to_no_progress,
+    extract_axis,
+    update_stall_counters,
 )
-from medusa.helpers.hard_guardrail import is_hard_blocked
-from medusa.core.prompt_safety import UNTRUSTED_OUTPUT_GUIDANCE, wrap_untrusted
-from medusa.core.agent_context import set_tenant_context, set_phase_context
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +149,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         action_log += f"  [{succ}] {tn} {ta}\n"
         if thought:
             action_log += f"    thought: {thought}\n"
-    
+
     context_block = f"""
 ## CURRENT STATE
 - **Phase**: {phase}
@@ -264,8 +264,6 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
     # ── Chain findings ──────────────────────────────────────────────
     chain_findings = output_analysis.get("chain_findings") or []
     prev_findings = state.get("chain_findings_memory", [])
-    findings_grew = len(chain_findings) > 0 and len(prev_findings) != len(prev_findings + chain_findings)
-
     # ── Todo updates ────────────────────────────────────────────────
     todo_updates = decision.get("todo_updates") or []
     current_todos = state.get("todo_list", [])
@@ -447,7 +445,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
                 tasks = [subagent_task.strip()]
             if len(tasks) > 5:
                 tasks = tasks[:5]  # cap at 5
-            
+
             # Set _current_step for TUI display only — do NOT set tool_name
             # (subagent execution is inline, must NOT route to execute_tool)
             updates["_current_step"] = {
@@ -457,16 +455,16 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
                 "thought": thought, "reasoning": reasoning,
                 "tool_output": f"Deploying {len(tasks)} subagent(s)...",
             }
-            
+
             updates["messages"].append({
                 "role": "user",
                 "content": f"DEPLOYING {len(tasks)} SUBAGENT(S):\n" + "\n".join(f"  - {t[:200]}" for t in tasks),
             })
-            
+
             try:
                 from medusa.nodes.subagent_node import spawn_and_collect
-                from medusa.tools.dispatch import route_tool, get_tool_catalog
-                
+                from medusa.tools.dispatch import get_tool_catalog, route_tool
+
                 # 65s total timeout (60s batch + 5s buffer) prevents main agent hang
                 results = await asyncio.wait_for(
                     spawn_and_collect(
@@ -477,7 +475,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
                     ),
                     timeout=65.0,
                 )
-                
+
                 summary_parts = []
                 for r in results:
                     status = "OK" if r.success else ("TIMEOUT" if getattr(r, 'partial', False) else "PARTIAL")
@@ -505,10 +503,10 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
                             "role": "user",
                             "content": "ACTION: Subagent timed out. Check partial findings above. If useful, incorporate. Otherwise, run the task yourself.",
                         })
-                
+
                 updates["_current_step"]["tool_output"] = "Subagents done:\n" + "\n".join(summary_parts)
                 updates["_current_step"]["success"] = any(r.success for r in results) if results else False
-                
+
             except asyncio.TimeoutError:
                 logger.warning("Subagent deployment timed out after 65s")
                 updates["_current_step"]["tool_output"] = "TIMEOUT: Subagents did not complete within 65s."

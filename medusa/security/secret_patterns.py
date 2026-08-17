@@ -5,10 +5,9 @@ Merges functionality previously spread across redamon bridge modules:
 - Credential classification (trufflehog_scan)
 - CVE-to-attack mapping (gvm_scan)
 """
-import re
 import math
+import re
 from enum import Enum
-
 
 # ── Secret Detection Patterns ─────────────────────────────────────────────────
 

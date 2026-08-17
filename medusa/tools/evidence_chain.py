@@ -1,8 +1,11 @@
 """Evidence chain — links tool output → diff → KG record → note for every finding."""
 from __future__ import annotations
-import json, os, hashlib
+
+import hashlib
+import json
 from datetime import datetime, timezone
 from pathlib import Path
+
 CHAIN_DIR = Path(__file__).resolve().parent.parent / "medusa_agent" / "evidence_chains"
 CHAIN_DIR.mkdir(parents=True, exist_ok=True)
 

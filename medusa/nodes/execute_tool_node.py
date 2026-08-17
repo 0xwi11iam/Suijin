@@ -1,10 +1,13 @@
 """Execute tool node — AI chooses sync or background (\"background\": true)."""
-import asyncio, logging, time as _time, threading, uuid
+import logging
+import threading
+import time as _time
+import uuid
 
-from medusa.helpers.error_class import classify_error_class
-from medusa.core.agent_context import set_tenant_context, set_phase_context
-from medusa.infra.output_offload import maybe_offload
+from medusa.core.agent_context import set_phase_context, set_tenant_context
 from medusa.core.prompt_safety import wrap_untrusted
+from medusa.helpers.error_class import classify_error_class
+from medusa.infra.output_offload import maybe_offload
 
 logger = logging.getLogger(__name__)
 

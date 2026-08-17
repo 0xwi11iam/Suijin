@@ -4,9 +4,9 @@ When a tool returns more than OFFLOAD_THRESHOLD characters, the output
 is moved to a file so the LLM context window isn't flooded. The LLM
 sees a summary + file path instead.
 """
-import os
-from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
+
 from .tool_offload_policy import OFFLOAD_THRESHOLD, get_offload_mode
 
 WORKSPACE_DIR = Path(__file__).resolve().parent.parent / "medusa_agent"

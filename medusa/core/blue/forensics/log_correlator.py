@@ -1,5 +1,7 @@
 """Log correlator — cross-reference across endpoints."""
 from __future__ import annotations
+
+
 def correlate_sessions(ip: str, log_paths: list) -> list:
     results = []
     from medusa.core.blue.forensics.log_reader import filter_by_ip

@@ -28,10 +28,10 @@ Design notes
   ``drift_analyser.analyse_drift`` rather than reinvented.
 """
 
-import os
-import re
 import json
+import re
 from pathlib import Path
+
 from rich.console import Console
 from rich.panel import Panel
 
@@ -247,8 +247,8 @@ def supervisor_review(objective, config, telemetry, flags):
         f"HEURISTIC FLAGS: {', '.join(flags) or 'none'}\n"
         f"DRIFT: {telemetry['drift'].get('drift_count', 0)} event(s)\n\n"
         f"RECENT REASONING:\n- " + "\n- ".join(telemetry["recent_thoughts"][-3:] or ["(none)"]) + "\n\n"
-        f"RECENT ACTIONS:\n- " + "\n- ".join(telemetry["recent_actions"] or ["(none)"]) + "\n\n"
-        f"RECENT RESULTS (truncated):\n- " + "\n- ".join(telemetry["recent_results"] or ["(none)"]) + "\n\n"
+        "RECENT ACTIONS:\n- " + "\n- ".join(telemetry["recent_actions"] or ["(none)"]) + "\n\n"
+        "RECENT RESULTS (truncated):\n- " + "\n- ".join(telemetry["recent_results"] or ["(none)"]) + "\n\n"
         "Return your JSON verdict now."
     )
     messages = [

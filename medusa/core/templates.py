@@ -7,11 +7,12 @@ Provides:
 - Health check (API keys, tool availability, lab status)
 """
 from __future__ import annotations
+
 import json
 import os
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -162,10 +163,7 @@ def run_health_check() -> dict:
 
     # 2. API key
     config_path = BASE_DIR / "config.json"
-    if config_path.exists():
-        config = json.loads(config_path.read_text())
-    else:
-        config = {}
+    config = json.loads(config_path.read_text()) if config_path.exists() else {}
     provider = config.get("provider", "deepseek")
     key_var = f"{provider.upper()}_API_KEY"
     has_key = bool(os.environ.get(key_var) or os.environ.get("HF_TOKEN"))
@@ -184,10 +182,10 @@ def run_health_check() -> dict:
         results["checks"][f"tool_{tool}"] = {"ok": found, "detail": shutil.which(tool) or "not found"}
 
     # 5. Playwright
-    try:
-        from playwright.sync_api import sync_playwright
+    import importlib.util
+    if importlib.util.find_spec("playwright") is not None:
         results["checks"]["playwright"] = {"ok": True, "detail": "installed"}
-    except ImportError:
+    else:
         results["checks"]["playwright"] = {"ok": False, "detail": "not installed — run: pip install playwright && playwright install chromium"}
 
     # 6. Lab status (check if lab ports are already in use)

@@ -1,9 +1,8 @@
 """Live traffic capture — mitmproxy/tcpdump integration."""
 from __future__ import annotations
-import subprocess, threading, time, json
-from pathlib import Path
 
 from medusa.core.constants import PROXY_DEFAULT_PORT
+
 
 class TrafficCapture:
     def __init__(self, port: int = PROXY_DEFAULT_PORT):

@@ -3,8 +3,10 @@
 Ported and simplified from redamon/agentic/orchestrator_helpers/nodes/generate_response_node.py.
 """
 import logging
+
 from medusa.core.state import (
-    format_execution_trace, format_todo_list,
+    format_execution_trace,
+    format_todo_list,
 )
 from medusa.helpers.json_utils import json_dumps_safe
 

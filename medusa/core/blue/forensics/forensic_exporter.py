@@ -1,6 +1,10 @@
 """Forensic exporter — export timeline as JSON/CSV."""
 from __future__ import annotations
-import json, csv, io
+
+import csv
+import io
+import json
+
 
 def export_json(timeline: list) -> str:
     return json.dumps(timeline, indent=2, default=str)

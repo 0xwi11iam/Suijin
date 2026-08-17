@@ -1,6 +1,9 @@
 """Result collector — aggregate findings, deduplicate."""
 from __future__ import annotations
-import hashlib, time
+
+import hashlib
+import time
+
 
 class ResultCollector:
     def __init__(self):

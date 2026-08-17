@@ -1,6 +1,7 @@
 """Tests for agent_helpers modules — parsing, productivity, error_class, guardrails."""
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 
@@ -39,7 +40,7 @@ def test_error_class():
 
 
 def test_json_utils():
-    from medusa.helpers.json_utils import extract_json, repair_trailing_json_delimiters, json_dumps_safe
+    from medusa.helpers.json_utils import extract_json, json_dumps_safe, repair_trailing_json_delimiters
     assert extract_json('{"key": "value"}') == '{"key": "value"}'
     assert extract_json('prefix {"a":1} suffix') == '{"a":1}'
     result = repair_trailing_json_delimiters('{"a":1,"b":{"c":2}')
@@ -63,8 +64,12 @@ def test_parsing():
 
 def test_productivity():
     from medusa.helpers.productivity import (
-        is_unproductive, axis_key, record_axis_attempt, axis_unproductive_count,
-        compute_productivity_score, tier_for_score,
+        axis_key,
+        axis_unproductive_count,
+        compute_productivity_score,
+        is_unproductive,
+        record_axis_attempt,
+        tier_for_score,
     )
     # Unproductive step detection
     step = {"productivity": {"verdict": "no_progress", "new_information_gained": False}}
@@ -90,7 +95,7 @@ def test_productivity():
 
 
 def test_state():
-    from medusa.core.state import new_agent_state, ExecutionStep, TodoItem, TargetInfo, LLMDecision
+    from medusa.core.state import ExecutionStep, TargetInfo, TodoItem, new_agent_state
     s = new_agent_state(original_objective="test", max_iterations=50)
     assert s["original_objective"] == "test"
     assert s["max_iterations"] == 50
@@ -112,7 +117,7 @@ def test_state():
 
 
 def test_skill_loader():
-    from medusa.skills.loader import get_skill_prompt, get_available_skills
+    from medusa.skills.loader import get_available_skills, get_skill_prompt
     prompt = get_skill_prompt("sql_injection")
     assert "SQL INJECTION" in prompt.upper()
     assert "UNION SELECT" in prompt
@@ -124,7 +129,9 @@ def test_skill_loader():
 
 def test_tool_registry():
     from medusa.prompts.tool_registry import (
-        is_tool_allowed_in_phase, get_allowed_tools_for_phase, build_tool_catalog_prompt,
+        build_tool_catalog_prompt,
+        get_allowed_tools_for_phase,
+        is_tool_allowed_in_phase,
     )
     assert is_tool_allowed_in_phase("execute_terminal", "informational")
     # FREEDOM: all tools available in all phases
@@ -140,7 +147,7 @@ def test_tool_registry():
 
 
 def test_workspace_fs():
-    from medusa.infra.workspace_fs import workspace_path, outputs_path, payloads_path, scripts_path
+    from medusa.infra.workspace_fs import outputs_path, payloads_path, scripts_path, workspace_path
     assert "medusa_agent" in workspace_path()
     assert "outputs" in outputs_path()
     assert "payloads" in payloads_path()
@@ -151,9 +158,12 @@ def test_workspace_fs():
 
 def test_engagement_schema():
     from medusa.core.engagement import (
-        load_engagement_schema, save_engagement_schema,
-        update_engagement_stats, add_finding_to_schema,
-        transition_phase, save_session_state, clear_recovery_state,
+        add_finding_to_schema,
+        clear_recovery_state,
+        load_engagement_schema,
+        save_session_state,
+        transition_phase,
+        update_engagement_stats,
     )
     schema = load_engagement_schema()
     assert "_schema" in schema
@@ -170,7 +180,7 @@ def test_engagement_schema():
     state = {"original_objective": "test_recovery", "current_phase": "recon", "current_iteration": 5}
     path = save_session_state(state)
     assert "operation_state_recovery.json" in path
-    from medusa.core.engagement import load_session_state, has_recovery_state
+    from medusa.core.engagement import has_recovery_state, load_session_state
     assert has_recovery_state()
     recovery = load_session_state()
     assert recovery["objective"] == "test_recovery"
@@ -178,7 +188,7 @@ def test_engagement_schema():
 
 
 def test_compliance_module():
-    from medusa.security.compliance import analyse_log, _evaluate_controls, _risk_label
+    from medusa.security.compliance import _evaluate_controls, _risk_label, analyse_log
     entries = [
         {"user": "admin", "action": "scan", "target": "app1", "risk_score": 0.8, "mode": "red", "result": "OK"},
         {"user": "hacker", "action": "access", "target": "db", "risk_score": 0.9, "mode": "red", "result": "DENIED"},
@@ -213,7 +223,7 @@ def test_diff_engine():
 
 
 def test_payload_generator():
-    from medusa.tools.payload_generator import generate_payloads, list_payload_types, PAYLOAD_DB
+    from medusa.tools.payload_generator import PAYLOAD_DB, generate_payloads, list_payload_types
     sqli = generate_payloads("sqli", framework="mysql")
     assert "OR" in sqli or "' OR" in sqli
     xss = generate_payloads("xss", framework="basic")
@@ -231,9 +241,10 @@ def test_payload_generator():
 
 def test_supervisor_patterns():
     from medusa.core.supervisor import (
-        _detect_repeating_tool, _detect_bookkeeping_loop,
-        _detect_missed_flag, _detect_no_progress,
-        _detect_found_but_not_exploited, analyze_trace,
+        _detect_bookkeeping_loop,
+        _detect_missed_flag,
+        _detect_repeating_tool,
+        analyze_trace,
     )
     # Repeating tool
     trace = [
@@ -295,7 +306,7 @@ def test_drift_analyser():
 
 
 def test_error_handler():
-    from medusa.core.error_handler import classify_and_handle, GracefulFallback
+    from medusa.core.error_handler import GracefulFallback, classify_and_handle
     # Connection refused
     result = classify_and_handle(ConnectionError("Connection refused"), "http_request")
     assert result["classification"] == "connection_refused"
@@ -318,9 +329,15 @@ def test_error_handler():
 
 def test_secret_patterns():
     from medusa.security.secret_patterns import (
-        SECRET_PATTERNS, calculate_entropy, is_likely_secret,
-        classify_credential, assess_credential_risk, CredentialClass,
-        CVE_ATTACK_MAP, SEVERITY_CVSS, TECH_VULN_MAP, suggest_tools_for_cwe,
+        CVE_ATTACK_MAP,
+        SECRET_PATTERNS,
+        TECH_VULN_MAP,
+        CredentialClass,
+        assess_credential_risk,
+        calculate_entropy,
+        classify_credential,
+        is_likely_secret,
+        suggest_tools_for_cwe,
     )
     assert len(SECRET_PATTERNS) >= 8
     aws_pattern = SECRET_PATTERNS["aws_access_key"]
@@ -345,7 +362,7 @@ def test_secret_patterns():
 
 
 def test_report_exporter():
-    from medusa.tools.report_exporter import generate_report, _safe_id
+    from medusa.tools.report_exporter import _safe_id, generate_report
     path = generate_report(
         engagement_name="test_engagement",
         execution_trace=[
@@ -359,7 +376,8 @@ def test_report_exporter():
     )
     assert path.endswith(".md")
     assert os.path.exists(path)
-    content = open(path).read()
+    with open(path) as f:
+        content = f.read()
     assert "test_engagement" in content
     assert "SQL injection" in content
     assert "nmap" in content

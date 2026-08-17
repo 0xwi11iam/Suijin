@@ -1,7 +1,8 @@
 """Real-time metrics — traffic rate, blocks, watcher health."""
 from __future__ import annotations
+
 import time
-from collections import defaultdict
+
 
 class BlueMetrics:
     def __init__(self):

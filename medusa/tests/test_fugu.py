@@ -6,8 +6,6 @@ and the adapters that replaced the legacy redteamer imports.
 import sys
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 
@@ -137,8 +135,8 @@ class TestAdapters:
         assert isinstance(result, str)
 
     def test_host_os_directive_mentions_os(self):
+
         from medusa.fugu import _host_os_directive
-        import platform
         result = _host_os_directive()
         assert isinstance(result, str)
         assert len(result) > 0
@@ -163,11 +161,11 @@ class TestAdapters:
 
 class TestRoleGating:
     def test_unauthorized_tool_gated(self):
-        from medusa.fugu import _role_gated_route, ROLES
+        from medusa.fugu import ROLES, _role_gated_route
         result = _role_gated_route("msf_run", {}, ROLES["recon"], {})
         assert "TOOL GATED" in result
 
     def test_authorized_tool_routes(self):
-        from medusa.fugu import _role_gated_route, ROLES
+        from medusa.fugu import ROLES, _role_gated_route
         result = _role_gated_route("write_note", {"content": "test"}, ROLES["report"], {})
         assert isinstance(result, str)

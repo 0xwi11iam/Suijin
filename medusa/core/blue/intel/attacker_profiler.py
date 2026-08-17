@@ -1,6 +1,8 @@
 """Attacker profiler — psychological and technical profile."""
 from __future__ import annotations
+
 import time
+
 
 class AttackerProfiler:
     def __init__(self):

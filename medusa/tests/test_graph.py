@@ -1,5 +1,9 @@
 """Tests for agent_graph, think_node, and state machine."""
-import pytest, sys, os, json
+import os
+import sys
+
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
@@ -58,7 +62,7 @@ class TestEngagement:
     """Verify engagement state save/restore."""
 
     def test_session_state_imports(self):
-        from medusa.core.engagement import save_session_state, load_session_state
+        from medusa.core.engagement import load_session_state, save_session_state
         assert save_session_state is not None
         assert load_session_state is not None
 
@@ -68,7 +72,7 @@ class TestErrorHandler:
 
     def test_error_handler_imports(self):
         try:
-            from medusa.core.error_handler import safe_call, GracefulFallback
+            from medusa.core.error_handler import GracefulFallback, safe_call
             assert safe_call is not None
             assert GracefulFallback is not None
         except ImportError as e:

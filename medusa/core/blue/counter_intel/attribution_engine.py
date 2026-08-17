@@ -1,7 +1,5 @@
 """Attribution engine — attempt to attribute attacks."""
 from __future__ import annotations
-import json
-from pathlib import Path
 
 SIGNATURES = {"sqlmap": ["sqlmap/1.","sqlmap#"], "nmap": ["nmap scripting engine"], "nikto": ["nikto/"], "burp": ["burpsuite"]}
 

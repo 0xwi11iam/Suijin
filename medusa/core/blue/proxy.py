@@ -13,12 +13,17 @@ Usage:
     # All traffic to :8080 gets logged then forwarded to :5906
 """
 from __future__ import annotations
-import json, os, time, socket, threading, sys
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.request import Request, urlopen
-from urllib.error import URLError
 
-from medusa.core.constants import BLUE_LAB_PORT, PROXY_DEFAULT_PORT, BLUE_TRAFFIC_LOG, BLUE_TARPIT_FILE
+import json
+import os
+import socket
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.error import URLError
+from urllib.request import Request, urlopen
+
+from medusa.core.constants import BLUE_LAB_PORT, BLUE_TARPIT_FILE, BLUE_TRAFFIC_LOG, PROXY_DEFAULT_PORT
 
 
 class ProxyHandler(BaseHTTPRequestHandler):

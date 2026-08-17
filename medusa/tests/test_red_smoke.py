@@ -5,9 +5,7 @@ flow through iteration display, audit logging, completion detection, and
 the final report + session save.
 """
 import asyncio
-import os
 import sys
-import types
 from pathlib import Path
 
 import pytest

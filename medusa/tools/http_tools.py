@@ -1,7 +1,7 @@
 """HTTP request engine, file I/O, and vulnerability patching tools."""
 from __future__ import annotations
 
-from medusa.tools.workspace import resolve_workspace_path, WORKSPACE_DIR
+from medusa.tools.workspace import WORKSPACE_DIR, resolve_workspace_path
 
 from .runtime import BASE_DIR, global_session, truncate
 
@@ -10,7 +10,7 @@ def http_request(method, url, headers=None, body=""):
     """Advanced Browser Mimicry Engine with session awareness and rate limiting."""
     try:
         # Rate limit check
-        from medusa.tools.session_aware import is_rate_limited, record_response, get_session, jitter
+        from medusa.tools.session_aware import get_session, is_rate_limited, record_response
         if is_rate_limited(url):
             return f"RATE LIMITED: Target {url} is throttling requests. Wait and retry with jitter."
 
@@ -53,7 +53,6 @@ def apply_patch(vulnerability, file_path="lab.py"):
         return f"Error: {file_path} not found."
 
     code = full_path.read_text(encoding='utf-8', errors='ignore')
-    original = code
     patched = False
     import re as _re
 

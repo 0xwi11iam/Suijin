@@ -6,11 +6,8 @@ No real API calls — everything is mocked.
 """
 import asyncio
 import json
-import os
 import sys
 from pathlib import Path
-
-import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
@@ -38,7 +35,7 @@ class TestProviderPricing:
 
 class TestProviderUsage:
     def test_reset_and_record(self):
-        from medusa.tools.providers import reset_usage, _record_usage, get_usage
+        from medusa.tools.providers import _record_usage, get_usage, reset_usage
         reset_usage()
         _record_usage("deepseek", "deepseek-v4-flash", 1000, 500)
         usage = get_usage()
@@ -50,7 +47,7 @@ class TestProviderUsage:
         assert abs(usage["est_cost_usd"] - expected_cost) < 1e-9
 
     def test_unpriced_model_uses_default_rate(self):
-        from medusa.tools.providers import reset_usage, _record_usage, get_usage
+        from medusa.tools.providers import _record_usage, get_usage, reset_usage
         reset_usage()
         _record_usage("unknown", "mystery-model", 1000000, 1000000)
         usage = get_usage()
@@ -59,7 +56,7 @@ class TestProviderUsage:
         assert abs(usage["est_cost_usd"] - expected_cost) < 1e-9
 
     def test_record_usage_never_raises(self):
-        from medusa.tools.providers import reset_usage, _record_usage, get_usage
+        from medusa.tools.providers import _record_usage, get_usage, reset_usage
         reset_usage()
         # Malformed token counts must be swallowed — never crash the call
         _record_usage("x", "y", None, "bad-tokens")
@@ -82,8 +79,8 @@ class FakeResponse:
 
 class TestGenerateDeepSeek:
     def test_success_returns_content_and_records_usage(self, monkeypatch):
-        from medusa.tools.providers import generate, reset_usage, get_usage
         import medusa.tools.providers as p
+        from medusa.tools.providers import generate, get_usage, reset_usage
 
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
@@ -104,8 +101,8 @@ class TestGenerateDeepSeek:
         assert usage["input_tokens"] == 100
 
     def test_missing_key_errors_before_request(self, monkeypatch):
-        from medusa.tools.providers import generate
         import medusa.tools.providers as p
+        from medusa.tools.providers import generate
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         called = []
@@ -116,8 +113,8 @@ class TestGenerateDeepSeek:
         assert called == []
 
     def test_401_invalid_key(self, monkeypatch):
-        from medusa.tools.providers import generate
         import medusa.tools.providers as p
+        from medusa.tools.providers import generate
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "bad-key")
         monkeypatch.setattr(p.req, "post", lambda *a, **k: FakeResponse(401, {}))
@@ -126,8 +123,8 @@ class TestGenerateDeepSeek:
         assert "Invalid DeepSeek API Key" in result
 
     def test_402_payment_required(self, monkeypatch):
-        from medusa.tools.providers import generate
         import medusa.tools.providers as p
+        from medusa.tools.providers import generate
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
         monkeypatch.setattr(p.req, "post", lambda *a, **k: FakeResponse(402, {}))
@@ -136,8 +133,8 @@ class TestGenerateDeepSeek:
         assert "402" in result
 
     def test_retries_exhausted_falls_through(self, monkeypatch):
-        from medusa.tools.providers import generate
         import medusa.tools.providers as p
+        from medusa.tools.providers import generate
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
         monkeypatch.setattr(p.req, "post", lambda *a, **k: FakeResponse(500, {}))
@@ -147,8 +144,8 @@ class TestGenerateDeepSeek:
         assert "Error" in result
 
     def test_non_deepseek_model_remapped(self, monkeypatch):
-        from medusa.tools.providers import generate
         import medusa.tools.providers as p
+        from medusa.tools.providers import generate
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
         sent = {}
@@ -164,16 +161,16 @@ class TestGenerateDeepSeek:
         assert sent["json"]["model"] == "deepseek-v4-flash"
 
     def test_unknown_provider(self, monkeypatch):
-        from medusa.tools.providers import generate
         import medusa.tools.providers as p
+        from medusa.tools.providers import generate
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         result = generate([{"role": "user", "content": "hi"}],
                           {"provider": "not-a-real-provider"})
         assert "Unknown provider" in result
 
     def test_lobstertrap_active_routes_through_proxy(self, monkeypatch):
-        from medusa.tools.providers import generate
         import medusa.tools.providers as p
+        from medusa.tools.providers import generate
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: True)
         monkeypatch.setattr(p, "_call_via_lobstertrap",
                             lambda messages, model, temp, mt: "proxy result")
@@ -313,7 +310,7 @@ class TestAIEngineAnalyze:
 
 class TestAIEngineActions:
     def test_execute_actions_commands(self, monkeypatch, tmp_path):
-        from medusa.core.blue.ai_engine import BlueAIEngine, AIAnalysisResult
+        from medusa.core.blue.ai_engine import AIAnalysisResult, BlueAIEngine
         engine = BlueAIEngine({})
 
         class FakeProc:
@@ -333,8 +330,9 @@ class TestAIEngineActions:
         assert executed[0]["exit_code"] == 0
 
     def test_execute_actions_command_timeout(self, monkeypatch, tmp_path):
-        from medusa.core.blue.ai_engine import BlueAIEngine, AIAnalysisResult
         import subprocess
+
+        from medusa.core.blue.ai_engine import AIAnalysisResult, BlueAIEngine
         engine = BlueAIEngine({})
 
         def fake_run(cmd, **kwargs):
@@ -350,7 +348,7 @@ class TestAIEngineActions:
         assert executed[0]["error"] == "Timeout after 30s"
 
     def test_execute_actions_code_change_written(self, monkeypatch, tmp_path):
-        from medusa.core.blue.ai_engine import BlueAIEngine, AIAnalysisResult
+        from medusa.core.blue.ai_engine import AIAnalysisResult, BlueAIEngine
         engine = BlueAIEngine({})
         target_file = tmp_path / "app.py"
         target_file.write_text("old code")
@@ -565,8 +563,8 @@ class TestSupervisorEvaluate:
         assert "repeated_action" in flags
 
     def test_cost_hard_cap_recommends_abort(self, monkeypatch):
-        from medusa.intel import supervisor as sv
         import medusa.intel.supervisor as m
+        from medusa.intel import supervisor as sv
 
         monkeypatch.setattr(sv, "generate", lambda *a, **k: json.dumps({}))
         monkeypatch.setattr(m, "collect_telemetry", lambda *a, **k: {
@@ -588,8 +586,8 @@ class TestSupervisorEvaluate:
         assert verdict["stuck"] is True
 
     def test_evaluate_skips_llm_when_healthy(self, monkeypatch):
-        from medusa.intel import supervisor as sv
         import medusa.intel.supervisor as m
+        from medusa.intel import supervisor as sv
 
         called = []
         def fake_generate(*a, **k):

@@ -1,7 +1,9 @@
 """Java route extraction — Spring Boot."""
 from __future__ import annotations
+
 import re
 from pathlib import Path
+
 
 def extract_java_routes(root: Path) -> list:
     endpoints = []

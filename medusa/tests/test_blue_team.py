@@ -1,5 +1,7 @@
 """Tests for blue team core — AI engine, knowledge graph, normalizer, attack patterns."""
-import pytest, sys, os, json
+import os
+import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
@@ -73,6 +75,7 @@ class TestAttackPatterns:
 
     def test_all_18_patterns_compile(self):
         import re
+
         from medusa.core.blue.tui.feed import _ATTACK_PATTERNS
         assert len(_ATTACK_PATTERNS) == 18
         for name, pattern, weight in _ATTACK_PATTERNS:

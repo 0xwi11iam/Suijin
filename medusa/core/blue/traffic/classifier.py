@@ -1,10 +1,11 @@
 """Attack classifier — identify attack type from request."""
 from __future__ import annotations
+
 import re
+
 
 def classify_attack(request: dict) -> dict:
     body = str(request.get("body","")) + " " + str(request.get("url",""))
-    lowered = body.lower()
     if re.search(r"(?i)(union\s+select|'\s*or\s+'1|\bselect\b.*\bfrom\b.*where)", body):
         return {"type": "SQL Injection", "confidence": 0.9, "category": "injection"}
     if re.search(r"(?i)(<script|onerror\s*=|javascript:|<img[^>]+onerror)", body):

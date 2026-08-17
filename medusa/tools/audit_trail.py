@@ -3,9 +3,10 @@ Medusa Audit Trail — complete, zero-truncation JSON/MD logging.
 Records: what the AI saw (tool outputs), thought (reasoning), did (actions).
 """
 from __future__ import annotations
-import json, os, time
-from pathlib import Path
+
+import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 AUDIT_DIR = Path(__file__).resolve().parent.parent / "medusa_agent" / "audit_trails"
 AUDIT_DIR.mkdir(parents=True, exist_ok=True)
@@ -16,7 +17,6 @@ _current_engagement = "unknown"
 def start_audit(engagement_name: str):
     global _current_trail, _current_engagement
     _current_engagement = engagement_name or "unnamed"
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     _current_trail = {
         "engagement": _current_engagement,
         "started": datetime.now(timezone.utc).isoformat(),
@@ -99,14 +99,14 @@ def _export_markdown() -> str:
     t = _current_trail
     lines = [
         f"# Medusa Audit Trail — {t['engagement']}",
-        f"",
+        "",
         f"**Started**: {t['started']}",
         f"**Ended**: {t['ended']}",
         f"**Actions**: {t['total_actions']} total ({t['successful_actions']} success, {t['failed_actions']} failed)",
         f"**Cost**: ${t['cost_usd']:.4f}",
         f"**Findings**: {len(t['findings'])}",
-        f"",
-        f"## Findings",
+        "",
+        "## Findings",
     ]
     for f in t.get("findings", []):
         lines.append(f"- **{f['severity'].upper()}** [{f['type']}] {f['endpoint']}: {f['description']}")

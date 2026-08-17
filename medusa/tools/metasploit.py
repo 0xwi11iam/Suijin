@@ -36,7 +36,7 @@ def _msf_rpc_connect(config):
 
 def _msf_console_fallback(cmd, config=None):
     """Fallback: run msfconsole -q -x with a command and return output."""
-    import tempfile, time
+    import time
     out_path = BASE_DIR / f".msf_out_{int(time.time())}.txt"
     full_cmd = f"msfconsole -q -x {shlex.quote(cmd)} -o {shlex.quote(str(out_path))}"
     try:

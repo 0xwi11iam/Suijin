@@ -10,9 +10,10 @@ Smart baseline learning:
 Global singleton available via get_global_normalizer().
 """
 from __future__ import annotations
-import json, math, hashlib
+
+import hashlib
+import json
 from collections import defaultdict
-from pathlib import Path
 from typing import Optional
 
 # ── Global singleton for cross-module access ──
@@ -132,10 +133,7 @@ class SmartNormalizer:
                 # For JSON bodies, just note it's JSON and its top-level keys
                 try:
                     parsed = json.loads(body)
-                    if isinstance(parsed, dict):
-                        body_str = "json:" + ",".join(sorted(parsed.keys()))
-                    else:
-                        body_str = "json:array"
+                    body_str = "json:" + ",".join(sorted(parsed.keys())) if isinstance(parsed, dict) else "json:array"
                 except (json.JSONDecodeError, TypeError):
                     body_str = f"raw:{len(body)}"
         else:
