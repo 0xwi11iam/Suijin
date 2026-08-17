@@ -1,6 +1,6 @@
 {
-  "version": "2.7.0",
-  "codename": "Operators CLI",
+  "version": "2.8.0",
+  "codename": "Abyss Console",
   "release_date": "2026-08-17",
-  "description": "Medusa v2.7: operators' CLI — 12 new non-interactive commands (status, version, env, tools, modules, skills, config show/validate, workspace, reports, sessions, labs) plus doctor workspace row. Z.ai provider now targets the GLM Coding Plan endpoint by default with user-selectable coding/paas billing (zai_endpoint) and 403 mismatch guidance; fixed DeepSeek timeout fall-through. README rewritten documentation-first. 500 tests green."
+  "description": "Medusa v2.8: `medusa ui` — local-first web dashboard (React+TS, Abyss dark theme) with live SSE snapshots, attack map, three-tier traffic monitor scored by the real blue detector, force-directed knowledge graph, pipeline viz, reports browser. Zero new Python deps; loopback-only. Plus the offline KB agent toolkit (suggest_exploit, find_wordlist, extract_payloads, kb_stats, wordlist_tool, mine_failures, anonymize_report) and search_kb phrase queries. 531 tests green."
 }

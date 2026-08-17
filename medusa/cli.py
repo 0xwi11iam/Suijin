@@ -612,6 +612,14 @@ def run_sessions_list() -> int:
     return 0
 
 
+def run_ui(args) -> int:
+    """`medusa ui` — local-first web dashboard (127.0.0.1 only)."""
+    from medusa.ui.server import run_server
+
+    return run_server(port=int(getattr(args, "port", 0) or 7800),
+                      open_browser=not getattr(args, "no_open", False))
+
+
 def _first_docstring(path: str) -> str:
     import re
 
@@ -805,6 +813,11 @@ def main(argv=None):
     for name, (help_text, fn) in SIMPLE_COMMANDS.items():
         p = sub.add_parser(name, help=help_text)
         p.set_defaults(func=lambda _a, _fn=fn: _fn())
+
+    ui = sub.add_parser("ui", help="launch the local web dashboard (127.0.0.1)")
+    ui.add_argument("--port", type=int, default=7800, help="listen port (default 7800)")
+    ui.add_argument("--no-open", action="store_true", help="do not auto-open the browser")
+    ui.set_defaults(func=run_ui)
 
     pull = sub.add_parser("pull", help="download resources (knowledge bases, ...)")
     pull_sub = pull.add_subparsers(dest="pull_target")

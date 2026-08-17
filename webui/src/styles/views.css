@@ -1,0 +1,68 @@
+.feed { max-height: 420px; overflow-y: auto; margin-top: 12px; }
+.feed-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13px;
+  animation: fadeIn var(--dur) var(--ease);
+}
+.feed-item:hover { background: rgba(255,255,255,0.02); }
+.feed .dim { color: var(--text-tertiary); }
+
+.hero-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+
+/* stats bars */
+.bars { display: flex; align-items: flex-end; gap: 4px; height: 120px; }
+.bar {
+  flex: 1; border-radius: 4px 4px 0 0; min-height: 3px;
+  background: linear-gradient(180deg, var(--accent), rgba(0,255,136,0.25));
+  transition: height var(--dur-slow) var(--ease);
+}
+
+/* detector grid */
+.det-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.det-card {
+  border: 1px solid var(--border-subtle); border-radius: 10px;
+  padding: 14px 16px; transition: all var(--dur) var(--ease);
+}
+.det-card.hit { border-color: rgba(255,51,102,0.5); box-shadow: 0 0 20px var(--red-glow); }
+.det-card .det-name { font-size: 13px; font-weight: 600; }
+.det-card .det-count { font-family: var(--font-display); font-style: italic; font-size: 28px; }
+
+/* tool cards */
+.tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.tool-chip {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  border: 1px solid var(--border-subtle); border-radius: 8px;
+  padding: 8px 12px; font-family: var(--font-mono); font-size: 12px;
+}
+
+/* tarpit sliders */
+.tarpit-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 8px 0; border-bottom: 1px solid var(--border-subtle);
+}
+input[type="range"] {
+  flex: 1; accent-color: var(--accent); height: 3px;
+}
+
+/* code viewer */
+.md-body {
+  font-size: 14px; line-height: 1.7; color: var(--text-secondary);
+  white-space: pre-wrap; word-break: break-word;
+  font-family: var(--font-mono); font-size: 13px;
+}
+
+.report-list-item { cursor: pointer; }
+
+.kv-table td:first-child { color: var(--text-tertiary); width: 40%; }
+
+.session-detail { max-height: 480px; overflow: auto; }
+
+/* settings */
+.settings-section { margin-bottom: 28px; }
+.swatch-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.swatch {
+  width: 46px; height: 46px; border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+}

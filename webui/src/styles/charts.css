@@ -1,0 +1,59 @@
+.pipeline { display: flex; align-items: center; gap: 0; padding: 8px 0 4px; overflow-x: auto; }
+.pipe-wrap { display: flex; align-items: center; position: relative; flex: 1; min-width: 0; }
+
+.pipe-node {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 10px 18px;
+  color: var(--text-secondary);
+  font-family: var(--font-primary);
+  font-weight: 600; font-size: 14px;
+  cursor: pointer;
+  transition: all var(--dur) var(--ease);
+  white-space: nowrap;
+}
+.pipe-node.done { border-color: rgba(0,255,136,0.35); color: var(--accent); }
+.pipe-node.done .pipe-dot { background: var(--accent); }
+.pipe-node.active {
+  border-color: var(--red); color: #fff;
+  box-shadow: 0 0 24px var(--red-glow);
+}
+.pipe-node.active .pipe-dot { background: var(--red); animation: pulse 1.4s infinite; }
+.pipe-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-tertiary); }
+.pipe-idx { font-size: 11px; color: var(--text-tertiary); }
+
+.pipe-link {
+  flex: 1; height: 1px; margin: 0 8px; min-width: 18px;
+  background: var(--border-subtle); position: relative; overflow: hidden;
+}
+.pipe-link.flow { background: rgba(0,255,136,0.4); }
+.pipe-link.flow::after {
+  content: ""; position: absolute; left: 0; top: -1px; width: 12px; height: 3px;
+  background: var(--accent); border-radius: 3px;
+  animation: dash 1.2s linear infinite;
+}
+
+.pipe-detail {
+  position: absolute; top: calc(100% + 8px); left: 0; z-index: 5;
+  background: var(--bg-tertiary); border: 1px solid var(--border-subtle);
+  border-radius: 8px; padding: 8px 12px; color: var(--text-secondary);
+  white-space: nowrap; font-size: 11px;
+}
+
+/* ForceGraph helpers */
+.graph-tip {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--text-primary);
+  pointer-events: none;
+  z-index: 5;
+}
+.graph-legend {
+  position: absolute; top: 8px; right: 12px;
+  display: flex; gap: 14px; flex-wrap: wrap;
+}

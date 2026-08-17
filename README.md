@@ -114,6 +114,7 @@ docker run -it --rm \
 | `medusa reports` | Engagement reports in `medusa_agent/reports/` (newest first) |
 | `medusa sessions` | Saved engagement sessions with objectives |
 | `medusa labs` | Built-in vulnerable labs: ports, descriptions, launch commands |
+| `medusa ui` | Launch the **web dashboard** on `127.0.0.1:7800` (see below) |
 | `medusa pull kb` | Download + index the knowledge base (**enables** KB features) |
 | `medusa pull kb --status` | Offline: what's indexed, per-source counts, build age |
 | `medusa pull kb --list` | Available sources with size warnings |
@@ -127,6 +128,62 @@ medusa status && medusa labs
 medusa pull kb --sources hacktricks gtfobins   # skip the 300 MB SecLists pull
 medusa config validate || echo "fix config.json"
 ```
+
+---
+
+## Web Dashboard (`medusa ui`)
+
+```bash
+medusa ui                # http://127.0.0.1:7800 — browser opens automatically
+medusa ui --port 8080    # custom port
+medusa ui --no-open      # don't auto-open the browser
+```
+
+A local-first, read-only operator console: React + TypeScript single-page app
+("Abyss" dark theme — glass morphism, neon accents, Instrument Serif display
+stats, JetBrains Mono terminals) served by a Flask backend with zero new
+Python dependencies. **Bound to 127.0.0.1 only** — it is an operator console,
+not a public service.
+
+### Views
+
+| View | What it shows |
+|:-----|:--------------|
+| **Dashboard** | Hero stats (requests monitored, suspect requests, findings, API cost), canvas attack map with animated vectors spawned by suspect traffic, attack-pattern radar, real-time activity feed, lab fleet liveness |
+| **Red Team** | Attack-pipeline flow (Recon → Exploit → Escalate → Flag → Report, stage derived from the newest audit trail), engagement log + findings tabs, tool arsenal with availability, subagent/supervisor/KB/failure-memory stat cards |
+| **Blue Team** | Three-tier traffic monitor (NORMAL / ANOMALOUS / INVESTIGATED — entries scored with the *real* `anomaly_detector`, same as the TUI), 18-detector grid that lights up on matching KG attacks, tarpit controls + live tarpitted-IP table, session KG summary |
+| **Knowledge Graph** | Interactive force-directed graph (hand-rolled physics, no JS deps) of the blue session KG or persistent red constraints; click nodes for details |
+| **Labs** | Fleet table with live port probes, copy-to-clipboard attack commands for blue_target |
+| **Reports** | Audit summaries (actions/success/findings/cost per engagement) + report file browser with viewer |
+| **Settings** | Effective config (secrets redacted), KB inventory per source, design tokens |
+
+### Live data
+
+- **SSE stream** (`/api/events`) pushes a full snapshot every 3 s — no
+  refresh, no WebSocket server needed. A leading snapshot fires on connect so
+  first paint has data; keepalives hold proxies open.
+- REST surface: `/api/overview`, `/api/kb/search`, `/api/report`,
+  `/api/session`, `/api/config` (redacted).
+- Traffic entries are enriched server-side with `medusa.core.blue.traffic.
+  anomaly_detector` so dashboard tiers match TUI scoring exactly.
+- Path safety: report/session reads are workspace-confined (traversal
+  rejected), config values matching key/token/secret/password are redacted.
+
+### Frontend development
+
+Sources live in `webui/` (Vite + React 18 + TypeScript; the built bundle is
+committed at `medusa/ui/dist/` so `medusa ui` works without Node).
+
+```bash
+cd webui
+npm install
+npm run dev      # :5173 with hot reload, proxying /api to :7800
+npm run build    # rebuilds medusa/ui/dist (commit the result)
+```
+
+Fonts: Gotham Medium is commercial — the theme loads Montserrat as its
+stand-in (with Gotham used first when installed locally), plus Instrument
+Serif and JetBrains Mono from Google Fonts.
 
 ---
 
@@ -588,6 +645,7 @@ python3 -m pytest medusa/tests/ -m "not ai" # skip live-API tests
 | `test_cli_commands.py` | All non-interactive CLI verbs: status/version/env/tools/modules/skills/labs/workspace, config show redaction + validate, reports/sessions listings, doctor workspace row |
 | `test_zai_provider.py` | Z.ai dual endpoints (coding default / paas / custom URL / 403 guidance), model remapping, retries, pricing, config validation, doctor row |
 | `test_kb_tools.py` | find_wordlist (search + tarball extraction), kb_stats, suggest_exploit (GTFOBins alias resolution), extract_payloads, wordlist_tool merge/filter, mine_failures clustering, anonymize_report scrubbing, search_kb phrase queries |
+| `test_ui_server.py` | WebUI backend: API contract, path-traversal safety, config redaction, SSE leading frame, SPA fallback vs asset 404s, traffic enrichment with the real anomaly detector |
 | `test_kb.py` | KB compile (FTS5, caps), path patterns + GTFOBins alias stubs, zero-doc failures, honest status, download retries + `.part` cleanup, `search_kb` filters, catalog gating |
 | `test_workspace_layout.py` | Canonical workspace merge + symlink migration, sandbox containment, CWD-independent paths |
 | `test_dispatch.py` | Tool routing, guardrails, file ops, CVSS/KEV parsing, jobs |

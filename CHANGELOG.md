@@ -2,6 +2,45 @@
 
 All notable changes to Medusa.
 
+## [2.8.0] — 2026-08-17 — ABYSS CONSOLE (WEB DASHBOARD)
+
+### Added
+- **`medusa ui`** — local-first web dashboard for the operator:
+  - **Frontend**: React 18 + TypeScript + Vite single-page app in `webui/`
+    (sources) built to `medusa/ui/dist/` (committed — works without Node).
+    "Abyss" design system: glass-morphism cards, neon-accent interactions,
+    no shadows/eyebrow-lines, Gotham Medium (Montserrat stand-in — Gotham is
+    commercial), Instrument Serif display stats, JetBrains Mono terminals.
+    Dark theme only, responsive (12-col → 2-col → 1-col).
+  - **Views**: Dashboard (hero stats, canvas attack map with animated
+    vectors spawned by suspect traffic, attack-pattern radar, live activity
+    feed, lab fleet liveness), Red Team (stage-derived pipeline flow,
+    engagement log/findings, tool arsenal with availability, stat cards),
+    Blue Team (three-tier traffic monitor, 18-detector grid, tarpit
+    controls + tarpitted-IP table, KG summary), Knowledge Graph (hand-rolled
+    force-directed physics, blue/red sources, node inspector), Labs (live
+    port probes + copy-to-clipboard attack commands), Reports (audit
+    summaries + file browser), Settings (redacted config, KB inventory,
+    design tokens).
+  - **Backend** (`medusa/ui/server.py`): Flask + SSE, zero new Python deps.
+    `/api/events` pushes full snapshots every 3 s (leading frame on
+    connect, keepalives); REST: overview, kb/search, report, session,
+    config. Traffic entries enriched server-side with the REAL
+    `anomaly_detector` so tiers match the TUI exactly. Report/session reads
+    are workspace-confined (traversal 404s); config values matching
+    key/token/secret/password redacted. Bound to 127.0.0.1 ONLY.
+    CLI: `medusa ui [--port] [--no-open]`; `npm run dev` in `webui/` proxies
+    `/api` for hot-reload development.
+  - 17 backend tests (`test_ui_server.py`).
+- KB agent toolkit + phrase queries (landed earlier in the 2.8 window):
+  suggest_exploit, find_wordlist, extract_payloads, kb_stats, wordlist_tool,
+  mine_failures, anonymize_report; `'"union select"'` ordered-phrase FTS5.
+
+### Fixed
+- WebUI snapshot resolved `medusa/` paths from the repo root (labs list,
+  provider config, red KG all silently empty) — PKG_DIR now anchored to the
+  package dir. SPA fallback no longer masks missing assets with index.html.
+
 ## [2.7.0] — 2026-08-17 — OPERATORS CLI + KB TOOLKIT
 
 ### Added

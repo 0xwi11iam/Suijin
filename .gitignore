@@ -58,3 +58,8 @@ access_keys.json
 coverage.xml
 htmlcov/
 .vscode/
+
+# ── WebUI (React sources in webui/; built bundle IS committed at medusa/ui/dist) ──
+webui/node_modules/
+webui/*.tsbuildinfo
+webui/dist/
