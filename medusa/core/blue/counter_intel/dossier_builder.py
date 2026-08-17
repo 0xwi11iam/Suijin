@@ -1,16 +1,20 @@
 """Dossier builder — persistent attacker profiles across sessions."""
+
 from __future__ import annotations
 
 import json
 import time
-from pathlib import Path
 
-DOSSIER_DIR = Path(__file__).resolve().parent.parent.parent.parent / "medusa_agent" / "dossiers"
+from medusa.tools.workspace import WORKSPACE_DIR
+
+DOSSIER_DIR = WORKSPACE_DIR / "dossiers"
 DOSSIER_DIR.mkdir(parents=True, exist_ok=True)
+
 
 def build_dossier(attacker_id: str, data: dict):
     dossier = {"id": attacker_id, "updated": time.time(), "history": [], **data}
     (DOSSIER_DIR / f"{attacker_id}.json").write_text(json.dumps(dossier, indent=2))
+
 
 def load_dossier(attacker_id: str) -> dict:
     path = DOSSIER_DIR / f"{attacker_id}.json"

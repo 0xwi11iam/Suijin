@@ -2,17 +2,20 @@
 Medusa Audit Trail — complete, zero-truncation JSON/MD logging.
 Records: what the AI saw (tool outputs), thought (reasoning), did (actions).
 """
+
 from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 
-AUDIT_DIR = Path(__file__).resolve().parent.parent / "medusa_agent" / "audit_trails"
+from medusa.tools.workspace import WORKSPACE_DIR
+
+AUDIT_DIR = WORKSPACE_DIR / "audit_trails"
 AUDIT_DIR.mkdir(parents=True, exist_ok=True)
 
 _current_trail = None
 _current_engagement = "unknown"
+
 
 def start_audit(engagement_name: str):
     global _current_trail, _current_engagement
@@ -30,9 +33,19 @@ def start_audit(engagement_name: str):
     }
     _save()
 
-def log_iteration(iteration: int, thought: str, reasoning: str, tool_name: str,
-                  tool_args: dict, tool_output: str, success: bool, phase: str,
-                  completion_reason: str = "", chain_context: str = ""):
+
+def log_iteration(
+    iteration: int,
+    thought: str,
+    reasoning: str,
+    tool_name: str,
+    tool_args: dict,
+    tool_output: str,
+    success: bool,
+    phase: str,
+    completion_reason: str = "",
+    chain_context: str = "",
+):
     global _current_trail
     if _current_trail is None:
         return
@@ -59,19 +72,23 @@ def log_iteration(iteration: int, thought: str, reasoning: str, tool_name: str,
         _current_trail["failed_actions"] += 1
     _save()
 
+
 def log_finding(finding_type: str, severity: str, endpoint: str, description: str, evidence: str):
     global _current_trail
     if _current_trail is None:
         return
-    _current_trail["findings"].append({
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "type": finding_type,
-        "severity": severity,
-        "endpoint": endpoint,
-        "description": description,
-        "evidence": evidence,
-    })
+    _current_trail["findings"].append(
+        {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "type": finding_type,
+            "severity": severity,
+            "endpoint": endpoint,
+            "description": description,
+            "evidence": evidence,
+        }
+    )
     _save()
+
 
 def end_audit(cost_usd: float = 0.0):
     global _current_trail
@@ -84,12 +101,14 @@ def end_audit(cost_usd: float = 0.0):
     _current_trail = None
     return path
 
+
 def _save():
     if _current_trail is None:
         return
     fname = _current_engagement.replace("/", "_").replace(" ", "_").replace(":", "_")[:60]
     path = AUDIT_DIR / f"{fname}.json"
     path.write_text(json.dumps(_current_trail, indent=2, default=str))
+
 
 def _export_markdown() -> str:
     if _current_trail is None:
@@ -126,12 +145,13 @@ def _export_markdown() -> str:
         lines.append("")
         lines.append("**Full Output**:")
         lines.append("```")
-        lines.append(it['observation'][:10000])  # Cap per-iteration at 10K in MD
+        lines.append(it["observation"][:10000])  # Cap per-iteration at 10K in MD
         lines.append("```")
         lines.append("")
 
     path.write_text("\n".join(lines))
     return str(path)
+
 
 def get_audit_json() -> dict:
     return _current_trail or {}

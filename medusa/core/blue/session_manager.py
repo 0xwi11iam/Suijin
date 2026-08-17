@@ -1,16 +1,18 @@
 """
 medusa/core/blue/session_manager.py — Blue team session state.
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 import threading
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional
 
-STATE_DIR = Path(__file__).resolve().parent.parent.parent / "medusa_agent" / "blue_state"
+from medusa.tools.workspace import WORKSPACE_DIR
+
+STATE_DIR = WORKSPACE_DIR / "blue_state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -54,7 +56,9 @@ class AttackerProfile:
 
 class BlueSession:
     def __init__(self, target_codebase: str):
-        self.session_id = hashlib.sha256(f"{target_codebase}:{datetime.now(timezone.utc).isoformat()}".encode()).hexdigest()[:12]
+        self.session_id = hashlib.sha256(
+            f"{target_codebase}:{datetime.now(timezone.utc).isoformat()}".encode()
+        ).hexdigest()[:12]
         self.target_codebase = target_codebase
         self.started_at = datetime.now(timezone.utc)
         self.endpoints_discovered = 0
@@ -68,8 +72,8 @@ class BlueSession:
 
         # Subagent tracking
         self.subagents_deployed = 0
-        self.subagent_analyses = 0       # Total AI analyses run by subagents
-        self.subagent_anomalies = 0      # Anomalies flagged by subagents
+        self.subagent_analyses = 0  # Total AI analyses run by subagents
+        self.subagent_anomalies = 0  # Anomalies flagged by subagents
         self.baseline_established = False
         self.baseline_request_count = 0
 
@@ -80,27 +84,33 @@ class BlueSession:
             for aid, profile in self.attackers.items():
                 if ip in profile.ips:
                     return profile
-            aid = f"ATTK-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{len(self.attackers)+1:04d}"
+            aid = f"ATTK-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{len(self.attackers) + 1:04d}"
             profile = AttackerProfile(aid, ip)
             self.attackers[aid] = profile
             return profile
 
     def save(self):
         path = STATE_DIR / f"session_{self.session_id}.json"
-        path.write_text(json.dumps({
-            "session_id": self.session_id,
-            "target": self.target_codebase,
-            "started_at": self.started_at.isoformat(),
-            "stats": {
-                "requests": self.total_requests_processed,
-                "blocked": self.threats_blocked,
-                "deceived": self.threats_deceived,
-                "hotfixes": self.hotfixes_deployed,
-                "watchers": self.active_watchers,
-                "cost": self.total_cost_usd,
-            },
-            "attackers": {k: v.to_dict() for k, v in self.attackers.items()},
-        }, indent=2, default=str))
+        path.write_text(
+            json.dumps(
+                {
+                    "session_id": self.session_id,
+                    "target": self.target_codebase,
+                    "started_at": self.started_at.isoformat(),
+                    "stats": {
+                        "requests": self.total_requests_processed,
+                        "blocked": self.threats_blocked,
+                        "deceived": self.threats_deceived,
+                        "hotfixes": self.hotfixes_deployed,
+                        "watchers": self.active_watchers,
+                        "cost": self.total_cost_usd,
+                    },
+                    "attackers": {k: v.to_dict() for k, v in self.attackers.items()},
+                },
+                indent=2,
+                default=str,
+            )
+        )
 
 
 _global_session: Optional[BlueSession] = None

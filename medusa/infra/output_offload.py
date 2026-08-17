@@ -4,12 +4,12 @@ When a tool returns more than OFFLOAD_THRESHOLD characters, the output
 is moved to a file so the LLM context window isn't flooded. The LLM
 sees a summary + file path instead.
 """
+
 from datetime import datetime, timezone
-from pathlib import Path
+
+from medusa.tools.workspace import WORKSPACE_DIR
 
 from .tool_offload_policy import OFFLOAD_THRESHOLD, get_offload_mode
-
-WORKSPACE_DIR = Path(__file__).resolve().parent.parent / "medusa_agent"
 
 
 def maybe_offload(tool_name: str, output: str) -> tuple[str, bool]:
@@ -36,8 +36,5 @@ def maybe_offload(tool_name: str, output: str) -> tuple[str, bool]:
     filepath.write_text(output, encoding="utf-8", errors="ignore")
 
     preview = output[:500] + ("…" if len(output) > 500 else "")
-    summary = (
-        f"[OUTPUT OFFLOADED: {len(output)} chars → {filepath}]\n"
-        f"Preview:\n{preview}"
-    )
+    summary = f"[OUTPUT OFFLOADED: {len(output)} chars → {filepath}]\nPreview:\n{preview}"
     return summary, True

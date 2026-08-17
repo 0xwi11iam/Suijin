@@ -127,7 +127,7 @@ def _recon_chain_route(target, config, ports=None):
 def _build_routes(config):
     routes = {
         "execute_terminal": lambda a: execute_terminal(a.get("cmd") or a.get("command"), timeout=int(a.get("timeout", 30))),
-        "search_kb": lambda a: search_kb(a.get("keyword")),
+        "search_kb": lambda a: search_kb(a.get("keyword"), limit=a.get("limit") or 5),
         "http_request": lambda a: http_request(a.get("method", "GET"), a.get("url"), a.get("headers"), a.get("body")),
         "read_file": lambda a: read_file(a.get("file_path", "")),
         "write_file": lambda a: write_file(a.get("file_path", ""), a.get("content", "")),
@@ -265,11 +265,21 @@ def get_tool_catalog():
   ```json
   {"tool": "write_file", "args": {"file_path": "scripts/exploit.py", "content": "#!/usr/bin/env python3\\n..."}}
   ```
-- **search_kb** — Search the local knowledge base.
+"""
+
+    # Knowledge base — feature-gated: only advertised when the operator has
+    # built it with `medusa pull kb`. Otherwise listed as disabled below.
+    from medusa.kb import kb_status
+    _kb = kb_status()
+    if _kb:
+        per = ", ".join(f"{k} {v:,}" for k, v in sorted(_kb.get("per_source", {}).items()))
+        catalog += f"""- **search_kb** — Full-text search the local knowledge base ({_kb['docs']:,} docs: {per}). BM25-ranked results with snippets. Optional `source:<name>` filter (e.g. keyword "source:gtfobins awk sudo") and `limit` 1-20 (default 5). Prefer this over web_search for technique/payload/wordlist lookups — it is faster and offline.
   ```json
-  {"tool": "search_kb", "args": {"keyword": "SQL injection"}}
+  {{"tool": "search_kb", "args": {{"keyword": "SQL injection bypass WAF", "limit": 5}}}}
   ```
-- **apply_patch** — Patch vulnerabilities in the target lab application.
+"""
+
+    catalog += """- **apply_patch** — Patch vulnerabilities in the target lab application.
   ```json
   {"tool": "apply_patch", "args": {"vulnerability": "sqli"}}
   ```
@@ -407,14 +417,23 @@ def get_tool_catalog():
             hints = "; ".join(install_hint(b) for b in missing)
             catalog += f"- **{t_name}** — missing: {', '.join(missing)}. {hints}\n"
 
+    if _kb is None:
+        catalog += (
+            "## DISABLED — knowledge base not built\n"
+            "- **search_kb** — offline security KB (HackTricks, PayloadsAllTheThings, GTFOBins, "
+            "LOLBAS, OWASP, SecLists). The operator enables it with `medusa pull kb`. "
+            "Use web_search until then.\n"
+        )
+
     # Strategy reminder
     catalog += """
 ## Attack Strategy (MUST FOLLOW)
 1. **Recon first** — Always start with `execute_terminal` running gobuster/nmap/nikto before manual testing. Never start with raw curl.
-2. **CVE before exploit** — `search_cve` after fingerprinting a service. Don't guess.
-3. **Knowledge graph before payload** — `check_knowledge` before every new payload.
-4. **Verify before claiming** — Confirm exploits with tool-call evidence. No hallucinations.
-5. **Log everything** — `write_note` after every significant finding.
-6. **Module tools** — Use loaded module tools (above) when applicable instead of reinventing.
+2. **Knowledge base before attacking** — `search_kb` BEFORE every new attack technique, payload class, privesc path, or wordlist choice. It contains HackTricks, PayloadsAllTheThings, GTFOBins, LOLBAS, OWASP and SecLists — offline, instant, richer than web_search. If it says the KB is not built, tell the operator to run `medusa pull kb`.
+3. **CVE before exploit** — `search_cve` after fingerprinting a service. Don't guess.
+4. **Knowledge graph before payload** — `check_knowledge` before every new payload.
+5. **Verify before claiming** — Confirm exploits with tool-call evidence. No hallucinations.
+6. **Log everything** — `write_note` after every significant finding.
+7. **Module tools** — Use loaded module tools (above) when applicable instead of reinventing.
 """
     return catalog

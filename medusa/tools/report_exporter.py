@@ -2,19 +2,28 @@
 Medusa Report Exporter — sophisticated, detailed engagement reports.
 Generates Markdown reports with Mermaid diagrams, finding tables, attack chains.
 """
+
 from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from pathlib import Path
 
-REPORTS_DIR = Path(__file__).resolve().parent.parent / "medusa_agent" / "reports"
+from medusa.tools.workspace import WORKSPACE_DIR
+
+REPORTS_DIR = WORKSPACE_DIR / "reports"
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def generate_report(engagement_name: str, execution_trace: list, findings: list,
-                    target_info: dict, messages: list, cost_usd: float = 0.0,
-                    completion_reason: str = "", attack_chains: list = None) -> str:
+def generate_report(
+    engagement_name: str,
+    execution_trace: list,
+    findings: list,
+    target_info: dict,
+    messages: list,
+    cost_usd: float = 0.0,
+    completion_reason: str = "",
+    attack_chains: list = None,
+) -> str:
     """Generate a comprehensive engagement report in Markdown with Mermaid diagrams."""
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     fname = engagement_name.replace("/", "_").replace(" ", "_").replace(":", "_")[:60]
@@ -24,16 +33,22 @@ def generate_report(engagement_name: str, execution_trace: list, findings: list,
     json_path = report_dir / f"data_{ts}.json"
 
     # Save full JSON data
-    json_path.write_text(json.dumps({
-        "engagement": engagement_name,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "execution_trace": [dict(t) if hasattr(t, 'items') else str(t) for t in execution_trace],
-        "findings": findings,
-        "target_info": target_info,
-        "messages": messages,
-        "cost_usd": cost_usd,
-        "completion_reason": completion_reason,
-    }, indent=2, default=str))
+    json_path.write_text(
+        json.dumps(
+            {
+                "engagement": engagement_name,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "execution_trace": [dict(t) if hasattr(t, "items") else str(t) for t in execution_trace],
+                "findings": findings,
+                "target_info": target_info,
+                "messages": messages,
+                "cost_usd": cost_usd,
+                "completion_reason": completion_reason,
+            },
+            indent=2,
+            default=str,
+        )
+    )
 
     # Build Markdown report
     lines = [
@@ -82,7 +97,7 @@ def generate_report(engagement_name: str, execution_trace: list, findings: list,
         for chain in attack_chains:
             steps = chain.get("steps", [])
             for j in range(len(steps) - 1):
-                lines.append(f"    {_safe_id(steps[j])} --> {_safe_id(steps[j+1])}")
+                lines.append(f"    {_safe_id(steps[j])} --> {_safe_id(steps[j + 1])}")
         lines.append("```")
         lines.append("")
 

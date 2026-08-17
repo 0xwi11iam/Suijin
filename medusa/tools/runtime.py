@@ -5,6 +5,7 @@ session, proxy, recon counter, knowledge-base path, and a handful of small
 helpers. Importing this module performs one-time initialization
 (module discovery, TLS warning suppression, workspace directories).
 """
+
 from __future__ import annotations
 
 import threading
@@ -13,8 +14,9 @@ from pathlib import Path
 import requests
 import urllib3
 
+from medusa.kb import DB_PATH  # noqa: F401 — deliberate re-export; kb.py owns the path
 from medusa.modules.loader import discover_modules
-from medusa.tools.workspace import WORKSPACE_DIR
+from medusa.tools.workspace import WORKSPACE_DIR, ensure_workspace_layout
 
 # ── Module packs: discover once at import (idempotent) ────────────────
 discover_modules()
@@ -22,7 +24,6 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PROJECT_DIR = BASE_DIR.parent
-DB_PATH = BASE_DIR / "kb.sqlite3"
 
 MCP_SERVERS: dict[str, list] = {}
 
@@ -66,6 +67,10 @@ def set_proxy(url: str | None):
 def get_proxy() -> str | None:
     return _proxy_url
 
+
+# Workspace layout: merge any legacy medusa/medusa_agent real dir into the
+# canonical root workspace and replace it with a symlink (idempotent).
+ensure_workspace_layout()
 
 # Ensure workspace subdirectories exist
 (WORKSPACE_DIR / "payloads").mkdir(parents=True, exist_ok=True)

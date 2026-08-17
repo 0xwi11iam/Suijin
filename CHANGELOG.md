@@ -2,6 +2,107 @@
 
 All notable changes to Medusa.
 
+## [2.6.0] — 2026-08-17 — FULLY INDEXED KB + ONE WORKSPACE
+
+### Added
+- **GTFOBins fixed — KB fully indexable.** The old `GTFOBins/GTFOBins` repo is
+  deleted from GitHub (codeload 404 — the source silently indexed 0 docs).
+  Source now points at `GTFOBins/GTFOBins.github.io` with path-scoped patterns
+  (`_gtfobins/*`); pattern matching runs against both repo-relative path and
+  basename. Verified live: 478 docs indexed, `awk`/`sudo`/`shell` queries hit.
+- **Alias-stub resolution (GTFOBins)** — ~20 entries are one-line stubs
+  (`---\nalias: mawk\n...`); stubs are indexed with their target's full
+  content + `[alias of X]` note so `source:gtfobins awk sudo` finds `awk`.
+- **`search_kb` source filter + limit** — `source:<name>` in the keyword
+  scopes results to one KB source (unknown sources report what's available);
+  `limit` arg clamps 1-20 (default 5). Works in FTS5 and LIKE fallback.
+  Documented in the tool catalog, tool registry, and MCP descriptions.
+- **`medusa pull kb --status`** — offline: per-source doc counts, build date,
+  age, DB size, FTS5/LIKE mode, failed sources with retry commands, and the
+  ENABLED/DISABLED verdict. Pull output now ends with an explicit
+  `Knowledge base ENABLED` (or `PARTIALLY ENABLED`) line.
+- **`medusa selftest`** — offline smoke test (no network, no API keys):
+  core imports, KB gating consistency in built+disabled states, workspace
+  anchor + symlink invariant, sandbox containment, path boundary guard,
+  module loading. Exits non-zero on failure.
+- **Stale-KB nag** — `doctor` and `pull kb --status` warn when the build is
+  older than 30 days, with the refresh command.
+
+### Changed
+- **Honest KB status** — `kb_status()` counts only sources that actually
+  indexed docs (`per_source` map + `failed` map + `size_bytes` + `age_days`);
+  previously it echoed the *requested* source list, hiding failures.
+- **0-doc downloads are failures** — a source that downloads fine but matches
+  0 files aborts with a patterns hint instead of silently shipping nothing.
+  `doctor` shows the per-source doc breakdown in the KB row.
+- **Resilient downloads** — 3 attempts per ref with backoff (404s skip to the
+  next ref), 600 s timeout, progress logging every 50 MB, stale `.part`
+  files discarded before/after every attempt (never resumed). Large sources
+  (SecLists ~300 MB) log a size warning before starting; `--list` shows it.
+- **One canonical `medusa_agent/` workspace** — new
+  `ensure_workspace_layout()` in `tools/workspace.py` (wired into
+  `tools/runtime.py` import): merges legacy real `medusa/medusa_agent/` up
+  into the root workspace (legacy live data wins collisions) and replaces
+  the inner path with a symlink `-> ../medusa_agent`. All 16 hard-coded
+  path sites (session_replay, evidence_chain, report_exporter, audit_trail,
+  goal_decomposer, failure_learner, burp_export, html_report,
+  infra/workspace_fs, infra/job_runner, infra/output_offload, blue-team
+  session/dossier/evidence modules, redteamer SOUL, credential_store) now
+  import `WORKSPACE_DIR` from one place. Sandbox moved from
+  `~/medusa_agent/sandbox` ($HOME!) to `medusa_agent/sandbox`.
+  KB artifacts stay strictly in `medusa/` — never inside the workspace.
+- `install.sh` and the Dockerfile create the root workspace + symlink.
+- `tools/runtime.py` re-exports `DB_PATH` from `medusa/kb.py` (single owner).
+
+### Fixed
+- 190 MB stale `kb_cache/seclists.tar.part` from an aborted download —
+  partials are now always cleaned up; download can never resume corrupt data.
+- `burp_export`/`html_report` wrote CWD-relative paths — now anchored to
+  `WORKSPACE_DIR/reports/` regardless of where medusa was launched from.
+
+## [2.5.0] — 2026-08-17 — OFFLINE KNOWLEDGE BASE
+
+### Added
+- **`medusa pull kb`** — downloads pure-markdown/text security knowledge bases
+  (HackTricks, PayloadsAllTheThings, GTFOBins, LOLBAS, OWASP Cheat Sheets,
+  SecLists) as GitHub tarballs and compiles them into `medusa/kb.sqlite3`
+  (FTS5, porter tokenizer, BM25 ranking). The KB never ships with the repo —
+  users build it on demand. Flags: `--force`, `--sources`, `--list`.
+  Tarballs cache in `medusa/kb_cache/`; a failed source is skipped and
+  reported (never kills the pull); compile is atomic (tmp-file replace).
+- **`search_kb` upgrade** — BM25-ranked top-5 with source attribution and
+  FTS5 snippets (was `LIKE '%kw%'` LIMIT 3). LIKE fallback when FTS5 is
+  unavailable. Feature-gated: until the KB is built the tool reports
+  DISABLED and the agent catalog lists it under a disabled section.
+- **Z.ai provider** — OpenAI-compatible endpoint
+  (`api.z.ai/api/paas/v4`), `ZAI_API_KEY`, default model `glm-5.3`
+  (+ flash/4.7 tiers in pricing, wizard choice 5, Settings dropdown,
+  `zai_model` config field). `amd` was also added to the Settings dropdown.
+- **Dispatch-level safety modes** — `mode_hitl` / `mode_guardrail` are now
+  enforced at the `route_tool` chokepoint (`tools/modes.py`), not just in
+  the system prompt: HITL blocks non-recon tools and non-recon shell
+  binaries (compound-command segments checked individually); guardrail
+  blocks rm/mv/chmod/kill/etc. 20 new tests.
+- Doctor: `knowledge base` row (doc count / sources / build date or build hint).
+
+### Fixed
+- `prompts/base.py` read `config.json` from CWD — safety modes silently
+  no-op'd when launched outside `medusa/`. Now package-dir anchored.
+- `cli.py doctor` checked the wrong config path and an impossible
+  `api_key` field; keys are detected from env / `medusa/.env` (incl. `ZAI_API_KEY`).
+- `agent_graph.py` NameError (`datetime`/`timezone` unimported) on the
+  crash-recovery path.
+- Version drift (`__init__` 1.35.0 vs cli 2.4.0) — version.json is now the
+  single source, read by `medusa/__init__.py` and `cli.py`.
+
+### Changed
+- ruff: 883 -> 0 errors; CI lint is now blocking; coverage floor 35 -> 40%.
+- Test deps removed from runtime `requirements.txt`;
+  `duckduckgo-search` added (google_dork module dep).
+- `blue_config.json` untracked (auto-generated; defaults live in code);
+  `.dockerignore` no longer bakes `medusa/.env` / `config.json` into images.
+- `medusa/kb.sqlite3` + `medusa/kb_cache/` are gitignored (KB never prepackaged).
+- Tests: 360 -> 427 passing.
 ## [2.4.0] — 2026-08-13 — BACK TO ROOTS
 
 ### Removed

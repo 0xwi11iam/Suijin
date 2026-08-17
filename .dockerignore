@@ -27,6 +27,10 @@ access_keys.json
 medusa/operation_state_recovery.json
 medusa/engagement_schema.json
 
+# Knowledge base — built on demand inside the container via `medusa pull kb`
+medusa/kb.sqlite3
+medusa/kb_cache/
+
 # Large third-party (not needed in container)
 redamon/
 

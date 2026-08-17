@@ -37,6 +37,7 @@ from medusa.core.red.config_loader import (  # noqa: F401 — deliberate re-expo
 )
 from medusa.core.red.llm_client import generate_async
 from medusa.modules.loader import discover_modules, load_local_module
+from medusa.tools.workspace import WORKSPACE_DIR
 
 # Centralized force-load — shares ONE instance per module
 providers = load_local_module("providers")
@@ -370,7 +371,7 @@ def main():
     set_verbose(False)  # Silence for rest of run
 
     # Write SOUL.md to workspace if missing
-    soul_path = BASE_DIR.parent / "medusa_agent" / "SOUL.md"
+    soul_path = WORKSPACE_DIR / "SOUL.md"
     if not soul_path.exists():
         soul_path.parent.mkdir(parents=True, exist_ok=True)
         soul_path.write_text("""# Medusa Agent — SOUL

@@ -69,10 +69,10 @@ TOOL_REGISTRY = {
 
     # ===== Knowledge & Intelligence =====
     "search_kb": {
-        "purpose": "Search the local knowledge base for techniques and references",
-        "when_to_use": "Look up exploitation techniques, CVE details, tool usage examples, cheat sheets before attempting an attack.",
-        "args_format": '"keyword": "SQL injection bypass techniques"',
-        "description": "**search_kb** — searches kb.sqlite3. Returns up to 3 matching knowledge base entries.",
+        "purpose": "Full-text search the local security knowledge base (HackTricks, PayloadsAllTheThings, GTFOBins, LOLBAS, OWASP cheat sheets, SecLists)",
+        "when_to_use": "Look up exploitation techniques, payload syntax, living-off-the-land binaries, wordlist names, cheat sheets BEFORE attempting an attack — this is faster and richer than web_search.",
+        "args_format": '"keyword": "source:gtfobins awk sudo", "limit": 5',
+        "description": "**search_kb** — BM25-ranked search over the local knowledge base (kb.sqlite3). Returns ranked matches with source and snippet. Optional `source:<name>` filter scopes to one KB source; `limit` 1-20 (default 5). If not built, asks the operator to run `medusa pull kb`.",
     },
     "search_cve": {
         "purpose": "Query NVD for CVEs by software name and version",

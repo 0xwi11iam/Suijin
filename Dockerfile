@@ -46,7 +46,10 @@ RUN pip install --no-cache-dir -r /app/medusa-requirements.txt && \
 COPY . /app/
 
 # ── Agent workspace ──────────────────────────────────────────────────
-RUN mkdir -p /app/medusa_agent/outputs /app/medusa_agent/payloads /app/medusa_agent/scripts
+# Canonical workspace: /app/medusa_agent (volume-mount point), with
+# /app/medusa/medusa_agent symlinked to it for legacy path references.
+RUN mkdir -p /app/medusa_agent/outputs /app/medusa_agent/payloads /app/medusa_agent/scripts \
+    && ln -sfn ../medusa_agent /app/medusa/medusa_agent
 
 # ── Entrypoint ───────────────────────────────────────────────────────
 WORKDIR /app/medusa

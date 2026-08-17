@@ -46,6 +46,10 @@ medusa/lab/*/devops.db
 # ── Config (has API keys) ──────────────────────────────────────────
 config.json
 
+# ── Knowledge base (built on demand via `medusa pull kb`) ──────────
+medusa/kb.sqlite3
+medusa/kb_cache/
+
 # ── Additional secrets ─────────────────────────────────────────────
 access_keys.json
 *_state_recovery.json

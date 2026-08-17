@@ -24,10 +24,13 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 
 ALL_FIELDS = OrderedDict([
     # ---- Provider ----
-    ("provider",          ("choice", ["deepseek", "huggingface", "gemini", "anthropic"])),
+    ("provider",          ("choice", ["deepseek", "huggingface", "gemini", "anthropic", "amd", "zai"])),
 
     # ---- DeepSeek ----
     ("deepseek_model",    ("choice", ["deepseek-chat", "deepseek-reasoner"], ["deepseek"])),
+
+    # ---- Z.ai ----
+    ("zai_model",         ("choice", ["glm-5.3", "glm-5.3-flash", "glm-5.1", "glm-5.1-flash", "glm-4.7", "glm-4.7-flash"], ["zai"])),
 
     # ---- HuggingFace ----
     ("final_model_id",    ("string", None, ["huggingface"])),

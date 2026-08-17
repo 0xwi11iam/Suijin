@@ -22,6 +22,7 @@ from medusa.core.constants import (
     METASPLOIT_RPC_PORT,
     SENTINEL_MODEL,
     SUPERVISOR_MODEL,
+    ZAI_MODEL,
 )
 
 console = Console()
@@ -52,6 +53,7 @@ def load_config() -> dict:
             json.dump(default_config, f, indent=4)
     config = json.loads(CONFIG_PATH.read_text())
     for k, v in {"gemini_model": GEMINI_MODEL, "deepseek_model": DEFAULT_MODEL,
+                  "zai_model": ZAI_MODEL,
                   "supervisor_model_id": SUPERVISOR_MODEL,
                   "supervisor_interval": 5, "max_iterations": MAX_ITERATIONS}.items():
         config.setdefault(k, v)
@@ -78,7 +80,8 @@ def load_env():
         console.print("  [bold #5555ff]2.[/] [white]AMD Cloud[/]")
         console.print("  [bold #e6b47c]3.[/] [white]Gemini[/]")
         console.print("  [bold #58a6ff]4.[/] [white]DeepSeek[/]")
-        choice = input("Choice [1/2/3/4]: ").strip()
+        console.print("  [bold #c586c0]5.[/] [white]Z.ai (GLM)[/]")
+        choice = input("Choice [1-5]: ").strip()
         config = load_config()
         if choice == "2":
             config["provider"] = "amd"
@@ -98,6 +101,12 @@ def load_env():
             key = input("Enter DEEPSEEK_API_KEY: ").strip()
             ENV_PATH.write_text(f"DEEPSEEK_API_KEY={key}\n")
             os.environ["DEEPSEEK_API_KEY"] = key
+        elif choice == "5":
+            config["provider"] = "zai"
+            with open(CONFIG_PATH, "w") as f: json.dump(config, f, indent=4)
+            key = input("Enter ZAI_API_KEY: ").strip()
+            ENV_PATH.write_text(f"ZAI_API_KEY={key}\n")
+            os.environ["ZAI_API_KEY"] = key
         else:
             token = input("Enter HF_TOKEN: ").strip()
             ENV_PATH.write_text(f"HF_TOKEN={token}\n")

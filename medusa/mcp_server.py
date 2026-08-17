@@ -58,7 +58,7 @@ TOOL_DESCRIPTIONS = {
     "check_knowledge": "Check the knowledge graph for what is known about a target or payload.",
     "claim_flag": "Claim a capture-the-flag objective.",
     "apply_patch": "Apply a remediation patch for a vulnerability class.",
-    "search_kb": "Search the local knowledge base for prior findings.",
+    "search_kb": "BM25 full-text search the local security knowledge base (HackTricks, PayloadsAllTheThings, GTFOBins, LOLBAS, OWASP, SecLists). Optional 'source:<name>' in the keyword scopes to one source (e.g. 'source:gtfobins awk sudo'); 'limit' 1-20. Use before attacking: techniques, payload syntax, living-off-the-land binaries, wordlist names.",
     "generate_report": "Generate a structured engagement report from the trace.",
     "attack_tree": "Analyze an attack trace JSON into an attack tree.",
     "job_status": "Check a background job's status.",

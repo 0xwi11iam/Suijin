@@ -17,6 +17,7 @@
 > ```bash
 > curl -fsSL https://raw.githubusercontent.com/0xwi11iam/Medusa/main/install.sh | bash
 > medusa doctor    # verify the environment
+> medusa selftest   # offline smoke test (no network, no API keys)
 > medusa           # launch the interface
 > ```
 >
@@ -36,7 +37,7 @@
   <br/>
   <b>Blue Team SOC</b> &nbsp;·&nbsp; <b>18 Attack Detectors</b> &nbsp;·&nbsp; <b>Per-Endpoint AI Subagents</b> &nbsp;·&nbsp; <b>Live Tarpit</b> &nbsp;·&nbsp; <b>25-Endpoint Lab</b> &nbsp;·&nbsp; <b>Knowledge Graph</b> &nbsp;·&nbsp; <b>Codebase Patching</b> &nbsp;·&nbsp; <b>CI/CD</b> &nbsp;·&nbsp; <b>SECURITY.md</b>
   <br/>
-  <img height="20" src="https://img.shields.io/badge/v2.4.0-back_to_roots-green?style=flat" alt="Version"/>
+  <img height="20" src="https://img.shields.io/badge/v2.5.0-offline_kb-green?style=flat" alt="Version"/>
   <img height="20" src="https://img.shields.io/badge/LICENSE-MIT-4169A1?style=flat" alt="License"/>
   <img height="20" src="https://img.shields.io/badge/PYTHON-3.10+-306998?style=flat&logo=python&logoColor=white" alt="Python"/>
   <img height="20" src="https://img.shields.io/badge/LangGraph-State%20Machine-FF6B35?style=flat&logo=langchain&logoColor=white" alt="LangGraph"/>
@@ -234,7 +235,7 @@ python3 medusa/lab/devops_dashboard/app.py
 |:------------|:--------|
 | **Python** | 3.10+ |
 | **OS** | macOS, Linux, Windows |
-| **API Key** | DeepSeek, HuggingFace, Gemini, or Anthropic |
+| **API Key** | DeepSeek, HuggingFace, Gemini, Anthropic, or Z.ai |
 
 ```bash
 git clone https://github.com/0xwi11iam/Medusa.git
@@ -327,6 +328,38 @@ graph TB
 | **HuggingFace** | Qwen, GLM, DeepSeek via TGI | `HF_API_KEY` |
 | **Gemini** | `gemini-2.5-pro`, `gemini-2.5-flash` | `GEMINI_API_KEY` |
 | **Anthropic** | `claude-opus-4-7`, `claude-sonnet-4-6` | `ANTHROPIC_API_KEY` |
+| **Z.ai** | `glm-5.3` (default), `glm-5.3-flash`, `glm-4.7` | `ZAI_API_KEY` |
+
+---
+
+## Knowledge Base -- Offline Attack Reference (`medusa pull kb`)
+
+Medusa ships **without** the knowledge base. `medusa pull kb` **downloads and
+indexes** it into a single SQLite database — that act **enables** all knowledge
+base features. Until you run it, they stay **disabled**. Build it on demand:
+
+```bash
+medusa pull kb              # download all sources and compile to SQLite FTS5
+medusa pull kb --list       # show available sources (incl. size warnings)
+medusa pull kb --status     # offline: what's indexed, per-source counts, build age
+medusa pull kb --sources hacktricks gtfobins   # subset (replaces the DB with just these)
+medusa pull kb --force      # ignore cached tarballs
+```
+
+| | |
+|:--|:--|
+| **Sources** | HackTricks, PayloadsAllTheThings, GTFOBins (`GTFOBins.github.io` — path-pattern matched under `_gtfobins/`, alias stubs like `awk -> mawk` resolved), LOLBAS, OWASP Cheat Sheets, SecLists (`~300 MB`, warned before download) |
+| **Storage** | `medusa/kb.sqlite3` (FTS5, BM25-ranked) + `medusa/kb_cache/` tarballs — always inside the repo, never bundled |
+| **Agent tool** | `search_kb` -- ranked results with source + snippet, offline. Optional `source:<name>` filter (e.g. keyword `"source:gtfobins awk sudo"`) and `limit` 1-20 (default 5) |
+| **Disabled until built** | Without the DB, `search_kb` reports DISABLED, the tool catalog lists it under a disabled section, and the agent is told to ask the operator to run `medusa pull kb` |
+| **Honest status** | `kb_status` counts only sources that actually indexed docs; a source that downloads but indexes 0 files is a **failure** (pattern hint shown), never a silent gap |
+| **Resilient pulls** | 3 download attempts per ref with backoff, stale `.part` files discarded (never resumed), progress logging every 50 MB, 600 s timeout |
+
+The agent prompt mandates a KB-first rhythm: *fingerprint -> search_kb -> search_cve -> attack*.
+One dead source never kills a pull -- failed sources are skipped, reported, and can be retried
+with `medusa pull kb --sources <name>` (a subset pull rebuilds the DB with just those sources).
+`medusa doctor` shows the KB row with per-source doc counts, build date, and a STALE warning
+when the build is older than 30 days.
 
 ---
 
@@ -418,6 +451,8 @@ medusa/tests/test_tools.py ............                                  [100%]
 | `test_dispatch.py` | 29 | Tool routing hub — pure helpers, self-kill protection, guardrails, file ops (workspace + allowlist), CVSS/KEV parsing, job tracking, route_tool dispatch |
 | `test_state_helpers.py` | 80 | State models (TodoItem, ExecutionStep, TargetInfo), formatting helpers, parsing (LLM decisions, token extraction, vuln classification), productivity (loop detection, axis tracking, fingerprints), error classification, hard guardrails, module loader, provider routing/cost estimation, supervisor pattern detection |
 | `test_tools.py` | 43 | Guardrails behavioral (14 blocked patterns + edge cases), workspace (symlinks, allowlist, injection), constants (thresholds, ports, models, tmp dir) |
+| `test_kb.py` | 38 | KB compile (FTS5, caps, idempotent), path-scoped patterns + GTFOBins alias stubs, zero-doc failure, honest per-source status, download retries + `.part` cleanup, `search_kb` source filter/limit, catalog gating, repo-anchored paths, workspace integrity |
+| `test_workspace_layout.py` | 8 | Canonical workspace: merge + symlink migration, idempotency, nested-dir merge, sandbox containment, CWD-independent report paths |
 
 **CI/CD:** GitHub Actions matrix (Python 3.10/3.11/3.12) with pytest + coverage (fail_under=30%), pyright type check, ruff lint, pip-audit dep scan.
 
@@ -434,6 +469,26 @@ medusa/tools/dispatch.py >> Path(__file__).resolve().parent.parent
 ```
 
 Requirements: `medusa/` and `Modules/` at same level, `medusa_agent/` at project root, symlink `medusa/medusa_agent >> ../medusa_agent`
+
+### One Canonical Workspace (`medusa_agent/`)
+
+All agent artifacts live in **one** root-level `medusa_agent/` — reports,
+audit trails, sessions, blue-team state, payloads, sandbox, credentials. Since
+v2.6 the layout is **self-repairing**: on startup, `ensure_workspace_layout()`
+(`medusa/tools/workspace.py`) merges any legacy real `medusa/medusa_agent/`
+directory up into the root workspace (legacy live data wins collisions) and
+replaces the inner path with a symlink `-> ../medusa_agent`. Every module that
+writes agent artifacts imports `WORKSPACE_DIR` from one place — no more
+split-brain paths, nothing escapes to `$HOME`, and the sandbox now lives at
+`medusa_agent/sandbox` instead of `~/medusa_agent/sandbox`.
+
+```bash
+medusa selftest   # offline smoke test: imports, KB gating, workspace anchors, sandbox
+```
+
+`medusa selftest` verifies the contract in seconds with no network and no API
+keys: catalog gating in both KB states, the symlink invariant, sandbox
+containment inside the workspace, and the absolute-path boundary guard.
 
 ---
 

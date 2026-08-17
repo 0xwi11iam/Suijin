@@ -1,17 +1,27 @@
 """Credential store — persist discovered credentials."""
-import json, os, time
+
+import json
+import time
 from pathlib import Path
 
-STORE_PATH = Path(__file__).resolve().parent.parent.parent.parent / "medusa" / "medusa_agent" / "credentials.json"
+try:
+    from medusa.tools.workspace import WORKSPACE_DIR
+except Exception:  # loaded outside the medusa process — same layout by convention
+    WORKSPACE_DIR = Path(__file__).resolve().parent.parent.parent.parent / "medusa_agent"
+
+STORE_PATH = WORKSPACE_DIR / "credentials.json"
+
 
 def _load_store():
     if not STORE_PATH.exists():
         return {"_schema": "medusa-credentials-v1", "credentials": []}
     return json.loads(STORE_PATH.read_text())
 
+
 def _save_store(data):
     STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
     STORE_PATH.write_text(json.dumps(data, indent=2))
+
 
 def creds_add(service, cred_type, value, username="", notes=""):
     if not service or not value:
@@ -35,18 +45,22 @@ def creds_add(service, cred_type, value, username="", notes=""):
     _save_store(store)
     return f"Credential stored: {service} ({cred_type})"
 
+
 def creds_list(filter=""):
     store = _load_store()
     creds = store.get("credentials", [])
     if filter:
         f = filter.lower()
-        creds = [c for c in creds if f in c.get("service","").lower() or f in c.get("type","").lower()]
+        creds = [c for c in creds if f in c.get("service", "").lower() or f in c.get("type", "").lower()]
     if not creds:
         return "(no credentials stored)"
     lines = []
     for c in creds:
-        lines.append(f"[{c['type']}] {c['service']}: {c['value'][:60]}{'...' if len(c['value'])>60 else ''} (user: {c.get('username','?')})")
+        lines.append(
+            f"[{c['type']}] {c['service']}: {c['value'][:60]}{'...' if len(c['value']) > 60 else ''} (user: {c.get('username', '?')})"
+        )
     return "\n".join(lines)
+
 
 def creds_get(service):
     if not service:

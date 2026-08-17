@@ -6,11 +6,14 @@ outside the workspace.
 
 Ported and simplified from redamon/agentic/workspace_fs.py.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
 
-WORKSPACE_ROOT = Path(__file__).resolve().parent.parent / "medusa_agent"
+from medusa.tools.workspace import WORKSPACE_DIR
+
+WORKSPACE_ROOT = WORKSPACE_DIR
 
 
 def _resolve_safe(file_path: str) -> Path:

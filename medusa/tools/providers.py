@@ -49,6 +49,13 @@ MODEL_PRICING = {
     "deepseek-ai/DeepSeek-V3": (0.30, 0.90),
     "deepseek-v4-flash": (0.27, 1.10),
     "deepseek-v4-pro": (0.55, 2.19),
+    # Z.ai GLM (estimates — adjust when official pricing changes)
+    "glm-5.3": (0.80, 2.60),
+    "glm-5.3-flash": (0.14, 0.70),
+    "glm-5.1": (0.60, 2.20),
+    "glm-5.1-flash": (0.11, 0.58),
+    "glm-4.7": (0.60, 2.20),
+    "glm-4.7-flash": (0.11, 0.58),
     # Legacy
     "deepseek-chat": (0.27, 1.10),
     "deepseek-reasoner": (0.55, 2.19),
@@ -512,5 +519,58 @@ def generate(
                 console.print(f"[yellow]DeepSeek attempt {attempt+1} failed: {e}[/yellow]")
             if attempt < retries - 1:
                 time.sleep(2 * (2 ** attempt))  # 2s, 4s, 8s backoff
+
+    # ---------- Z.ai (GLM) ----------
+    if provider == "zai":
+        api_key = os.environ.get("ZAI_API_KEY", "")
+        if not api_key:
+            return "Error: Z.ai API key not set. Use Settings to add your key, or export ZAI_API_KEY."
+        # Z.ai serves glm-* model ids; HF-style ids like "zai-org/GLM-5.3" map to "glm-5.3".
+        raw_model = model_id or config.get("zai_model", "glm-5.3")
+        if "/" in raw_model:
+            raw_model = raw_model.rsplit("/", 1)[-1].lower()
+        zai_model = raw_model if raw_model.lower().startswith("glm") else config.get("zai_model", "glm-5.3")
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": zai_model,
+            "messages": messages,
+            "max_tokens": mtokens,
+            "temperature": temp,
+        }
+        for attempt in range(retries):
+            try:
+                resp = req.post(
+                    "https://api.z.ai/api/paas/v4/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=45,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    try:
+                        u = data.get("usage") or {}
+                        _record_usage("zai", zai_model,
+                                      u.get("prompt_tokens", 0),
+                                      u.get("completion_tokens", 0))
+                    except Exception:
+                        pass
+                    msg = data["choices"][0]["message"]
+                    return msg.get("content") or msg.get("reasoning_content", "") or "(empty response)"
+                elif resp.status_code == 401:
+                    return "Error: Invalid Z.ai API Key"
+                elif resp.status_code == 402:
+                    return "Error: 402 (insufficient Z.ai credits)"
+                elif resp.status_code == 429:
+                    console.print("[bold red]Z.ai rate-limited.[/bold red]")
+                else:
+                    console.print(f"[yellow]Z.ai error {resp.status_code}: {resp.text[:200]}[/yellow]")
+            except Exception as e:
+                console.print(f"[yellow]Z.ai attempt {attempt+1} failed: {e}[/yellow]")
+            if attempt < retries - 1:
+                time.sleep(2 * (2 ** attempt))  # 2s, 4s, 8s backoff
+        return "Error: Z.ai API Timeout"
 
     return f"Error: Unknown provider '{provider}'"

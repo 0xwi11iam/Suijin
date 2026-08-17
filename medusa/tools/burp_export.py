@@ -1,9 +1,12 @@
 """Burp Suite XML export — generate Burp-compatible finding reports."""
+
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
+
+from medusa.tools.workspace import WORKSPACE_DIR
 
 
 def export_burp_xml(findings: list, output_path: str = None) -> str:
@@ -20,7 +23,9 @@ def export_burp_xml(findings: list, output_path: str = None) -> str:
         ET.SubElement(issue, "issueDetail").text = str(f.get("detail", f.get("evidence", "")))[:2000]
         ET.SubElement(issue, "remediationBackground").text = str(f.get("remediation", ""))[:1000]
     tree = ET.ElementTree(root)
-    path = output_path or f"medusa_agent/reports/burp_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.xml"
+    path = output_path or str(
+        WORKSPACE_DIR / "reports" / f"burp_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.xml"
+    )
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     tree.write(path, encoding="utf-8", xml_declaration=True)
     return path

@@ -13,11 +13,14 @@ PROVIDER_DEEPSEEK = "deepseek"
 PROVIDER_HUGGINGFACE = "huggingface"
 PROVIDER_GEMINI = "gemini"
 PROVIDER_ANTHROPIC = "anthropic"
+PROVIDER_AMD = "amd"
+PROVIDER_ZAI = "zai"
 
 DEFAULT_MODEL = "deepseek-v4-flash"
 SENTINEL_MODEL = "Qwen/Qwen2.5-3B-Instruct"
 SUPERVISOR_MODEL = "Qwen/Qwen2.5-3B-Instruct"
 GEMINI_MODEL = "gemini-2.5-flash"
+ZAI_MODEL = "glm-5.3"
 
 EXPERT_MODELS = [
     "Qwen/Qwen3-Coder-480B-A35B-Instruct",

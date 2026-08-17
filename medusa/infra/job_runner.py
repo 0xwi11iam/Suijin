@@ -5,6 +5,7 @@ Each job's stdout is tee'd to medusa_agent/outputs/<job_id>.log.
 
 Ported and simplified from redamon/agentic/job_runner.py.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -13,31 +14,64 @@ import logging
 import uuid
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Awaitable, Callable, Optional
+
+from medusa.tools.workspace import WORKSPACE_DIR
 
 # Sandbox config — defined inline
 SANDBOX_CONFIG = {
-    "blocked_commands": ["shutdown", "reboot", "halt", "poweroff", "init", "systemctl", "service", "crontab", "at", "batch", "mount", "umount", "mkfs", "fdisk", "parted", "iptables", "nftables", "ufw", "firewall-cmd"],
+    "blocked_commands": [
+        "shutdown",
+        "reboot",
+        "halt",
+        "poweroff",
+        "init",
+        "systemctl",
+        "service",
+        "crontab",
+        "at",
+        "batch",
+        "mount",
+        "umount",
+        "mkfs",
+        "fdisk",
+        "parted",
+        "iptables",
+        "nftables",
+        "ufw",
+        "firewall-cmd",
+    ],
     "writable_paths": ["/tmp/medusa_sandbox", "/var/tmp/medusa"],
 }
-SANDBOX_RESOURCE_LIMITS = {"max_runtime_seconds": 300, "max_memory_mb": 512, "max_cpu_percent": 50, "max_disk_write_mb": 100, "max_processes": 10, "max_open_files": 64}
+SANDBOX_RESOURCE_LIMITS = {
+    "max_runtime_seconds": 300,
+    "max_memory_mb": 512,
+    "max_cpu_percent": 50,
+    "max_disk_write_mb": 100,
+    "max_processes": 10,
+    "max_open_files": 64,
+}
+
+
 def is_command_allowed(command: str) -> bool:
     cmd_parts = command.strip().split()
     if not cmd_parts:
         return False
     return cmd_parts[0].split("/")[-1] not in SANDBOX_CONFIG["blocked_commands"]
+
+
 def get_sandbox_workdir() -> str:
-    import os
-    workdir = os.path.expanduser("~/medusa_agent/sandbox")
-    os.makedirs(workdir, exist_ok=True)
-    return workdir
+    workdir = WORKSPACE_DIR / "sandbox"
+    workdir.mkdir(parents=True, exist_ok=True)
+    return str(workdir)
+
+
 REPORT_CONFIG = {"default_format": "markdown", "include_mermaid_diagrams": True}
 WEB_API_CONFIG = {"cors_origins": ["http://localhost:3000"], "rate_limit_per_minute": 60}
 
 logger = logging.getLogger(__name__)
 
-WORKSPACE_ROOT = Path(__file__).resolve().parent.parent / "medusa_agent"
+WORKSPACE_ROOT = WORKSPACE_DIR
 
 
 def _utc_now_str() -> str:

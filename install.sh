@@ -55,6 +55,16 @@ else
   git clone --depth 1 "$REPO_URL" "$REPO_DIR"
 fi
 
+# ── Agent workspace layout ──────────────────────────────────────────────
+# Canonical workspace is <repo>/medusa_agent/; medusa/medusa_agent is a
+# symlink -> ../medusa_agent. Merge any legacy real dir up, then link.
+mkdir -p "$REPO_DIR/medusa_agent"
+if [ -d "$REPO_DIR/medusa/medusa_agent" ] && [ ! -L "$REPO_DIR/medusa/medusa_agent" ]; then
+  cp -R "$REPO_DIR/medusa/medusa_agent/." "$REPO_DIR/medusa_agent/" 2>/dev/null || true
+  rm -rf "$REPO_DIR/medusa/medusa_agent"
+fi
+ln -sfn ../medusa_agent "$REPO_DIR/medusa/medusa_agent"
+
 # ── Virtualenv + dependencies ───────────────────────────────────────────
 VENV="$INSTALL_DIR/venv"
 if [ ! -x "$VENV/bin/python" ]; then

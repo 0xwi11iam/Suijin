@@ -1,4 +1,5 @@
 """Intelligence tools: NVD CVE search, knowledge base, knowledge graph, notes."""
+
 from __future__ import annotations
 
 import os
@@ -29,18 +30,18 @@ def search_cve(software, config, version=None, limit=5):
         try:
             resp = requests.get(NVD_BASE, params=params, headers=headers, timeout=30)
             if resp.status_code != 200:
-                return {"vulnerabilities": [], "totalResults": 0,
-                        "_error": f"NVD API returned HTTP {resp.status_code}"}
+                return {"vulnerabilities": [], "totalResults": 0, "_error": f"NVD API returned HTTP {resp.status_code}"}
             return resp.json()
         except requests.exceptions.Timeout:
-            return {"vulnerabilities": [], "totalResults": 0,
-                    "_error": "NVD API request timed out (30s)."}
+            return {"vulnerabilities": [], "totalResults": 0, "_error": "NVD API request timed out (30s)."}
         except requests.exceptions.ConnectionError:
-            return {"vulnerabilities": [], "totalResults": 0,
-                    "_error": "Cannot reach NVD (services.nvd.nist.gov). Check network."}
+            return {
+                "vulnerabilities": [],
+                "totalResults": 0,
+                "_error": "Cannot reach NVD (services.nvd.nist.gov). Check network.",
+            }
         except Exception as e:
-            return {"vulnerabilities": [], "totalResults": 0,
-                    "_error": f"NVD API request failed — {e}"}
+            return {"vulnerabilities": [], "totalResults": 0, "_error": f"NVD API request failed — {e}"}
 
     data = None
     error = None
@@ -120,7 +121,7 @@ def search_cve(software, config, version=None, limit=5):
         for r in cve.get("references", []):
             url = r.get("url", "")
             source = r.get("source", "")
-            for tag in (r.get("tags") or []):
+            for tag in r.get("tags") or []:
                 tag_lower = tag.lower()
                 if "exploit" in tag_lower or "patch" in tag_lower or "vendor" in tag_lower:
                     refs.append(f"  [{tag}] {url} ({source})")
@@ -135,10 +136,7 @@ def search_cve(software, config, version=None, limit=5):
                     weaknesses.append(val)
         cwe_str = ", ".join(weaknesses[:3])
 
-        entry = (
-            f"[{cve_id}] {severity} ({score})\n"
-            f"  {desc_text[:300]}\n"
-        )
+        entry = f"[{cve_id}] {severity} ({score})\n  {desc_text[:300]}\n"
         if cwe_str:
             entry += f"  CWE: {cwe_str}\n"
         if kev:
@@ -191,23 +189,100 @@ def _is_kev(cve):
 
 # ── Knowledge base & knowledge graph ─────────────────────────────────
 
-def search_kb(keyword):
-    """Search the local knowledge base. Gracefully degrades if KB not built."""
+
+def _fts_match_expr(keyword: str) -> str:
+    """Turn free text into a safe FTS5 expression: quoted terms, implicit AND."""
+    terms = [t for t in keyword.replace('"', " ").split() if t]
+    return " ".join(f'"{t}"' for t in terms) or '""'
+
+
+_SOURCE_FILTER_RE = re.compile(r"(?:^|\s)source:([A-Za-z0-9_-]+)")
+
+
+def search_kb(keyword, limit=5):
+    """Search the local knowledge base (FTS5 BM25, LIKE fallback).
+
+    The KB is built by the operator via `medusa pull kb` — it contains
+    HackTricks, PayloadsAllTheThings, GTFOBins, LOLBAS, OWASP cheat sheets
+    and SecLists wordlists. Degrades gracefully if not built.
+
+    - `source:<name>` in the keyword restricts the search to one KB source
+      (e.g. "source:gtfobins awk sudo"); unknown sources are reported.
+    - `limit` clamps to 1-20 results (default 5).
+    """
     if not DB_PATH.exists():
-        return "Knowledge base not built yet. Use check_knowledge or record_finding to query the in-memory knowledge graph instead."
+        return (
+            "Knowledge base DISABLED. The operator must run 'medusa pull kb' to download and "
+            "index HackTricks, PayloadsAllTheThings, GTFOBins, LOLBAS, OWASP, SecLists. "
+            "Tell them in your final report. Meanwhile use web_search, or check_knowledge "
+            "for engagement-specific memory."
+        )
+    keyword = (keyword or "").strip()
     try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        query = f"%{keyword}%"
-        c.execute("SELECT path, content FROM kb_files WHERE content LIKE ? OR path LIKE ? LIMIT 3", (query, query))
-        rows = c.fetchall()
-        conn.close()
-        if not rows:
-            return f"No matching entries found for '{keyword}'."
-        res = ""
-        for path, content in rows:
-            res += f"--- Source: {path} ---\n{content[:2000]}\n\n"
-        return truncate(res)
+        limit = max(1, min(int(limit or 5), 20))
+    except (TypeError, ValueError):
+        limit = 5
+
+    source_filter = None
+    m = _SOURCE_FILTER_RE.search(keyword)
+    if m:
+        source_filter = m.group(1)
+        keyword = _SOURCE_FILTER_RE.sub(" ", keyword).strip()
+
+    try:
+        conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+        try:
+            c = conn.cursor()
+            if source_filter:
+                avail = {r[0] for r in c.execute("SELECT DISTINCT source FROM kb_files")}
+                if source_filter not in avail:
+                    return (
+                        f"KB source '{source_filter}' has no docs in this build "
+                        f"(available: {', '.join(sorted(avail))})."
+                    )
+            rows = None
+            # FTS5 ranked search (preferred)
+            try:
+                sql = (
+                    "SELECT kb_files.source, kb_files.path, kb_files.title, "
+                    "snippet(kb_fts, 2, '', '', ' … ', 18) "
+                    "FROM kb_fts JOIN kb_files ON kb_files.id = kb_fts.rowid "
+                    "WHERE kb_fts MATCH ?"
+                )
+                params: list = [_fts_match_expr(keyword)]
+                if source_filter:
+                    sql += " AND kb_files.source = ?"
+                    params.append(source_filter)
+                sql += " ORDER BY rank LIMIT ?"
+                params.append(limit)
+                c.execute(sql, params)
+                rows = c.fetchall()
+            except sqlite3.OperationalError:
+                rows = None
+            # LIKE fallback (FTS unavailable or query syntax rejected)
+            if rows is None:
+                q = f"%{keyword}%"
+                sql = (
+                    "SELECT source, path, title, substr(content, 1, 400) "
+                    "FROM kb_files WHERE content LIKE ? OR path LIKE ? OR title LIKE ?"
+                )
+                params = [q, q, q]
+                if source_filter:
+                    sql += " AND source = ?"
+                    params.append(source_filter)
+                sql += " LIMIT ?"
+                params.append(limit)
+                c.execute(sql, params)
+                rows = c.fetchall()
+            if not rows:
+                hint = f" (source: {source_filter})" if source_filter else ""
+                return f"No matching knowledge base entries for '{keyword}'{hint}. Try broader terms or web_search."
+            res = ""
+            for source, path, title, snip in rows:
+                res += f"--- [{source}] {title or path}\n    path: {path}\n    {snip}\n\n"
+            return truncate(res)
+        finally:
+            conn.close()
     except Exception as e:
         return f"KB Error: {str(e)}"
 
@@ -215,6 +290,7 @@ def search_kb(keyword):
 def check_knowledge(target, payload=None, config=None):
     """Query the knowledge graph for constraints on a target."""
     from medusa.modules.loader import load_local_module
+
     kg = load_local_module("knowledge_graph")
 
     if payload:
@@ -229,15 +305,14 @@ def check_knowledge(target, payload=None, config=None):
 def record_finding(target, finding_type, rule, evidence="", config=None):
     """Record a verified finding to the knowledge graph."""
     from medusa.modules.loader import load_local_module
+
     kg = load_local_module("knowledge_graph")
 
-    valid_types = ("blocks", "rate_limit", "waf", "verified_cve",
-                   "false_positive", "behavior", "bypass")
+    valid_types = ("blocks", "rate_limit", "waf", "verified_cve", "false_positive", "behavior", "bypass")
     if finding_type not in valid_types:
         return f"Invalid finding_type. Use one of: {', '.join(valid_types)}"
 
-    kg.add_constraint(target, finding_type, rule, evidence=evidence or "",
-                      confidence=1.0)
+    kg.add_constraint(target, finding_type, rule, evidence=evidence or "", confidence=1.0)
     return f"Recorded: {target} -> {finding_type} -> '{rule}'"
 
 
@@ -248,6 +323,7 @@ NOTES_DIR = BASE_DIR / ".notes"
 def write_note(content, success=True, category="general", engagement=None, config=None):
     """Write a timestamped note to a per-engagement log file."""
     import datetime
+
     NOTES_DIR.mkdir(parents=True, exist_ok=True)
 
     now = datetime.datetime.now()
@@ -263,19 +339,11 @@ def write_note(content, success=True, category="general", engagement=None, confi
 
     note_file = NOTES_DIR / filename
 
-    header = (
-        f"\n---\n"
-        f"### {timestamp} — {status}\n"
-        f"**Category:** {category}\n\n"
-    )
+    header = f"\n---\n### {timestamp} — {status}\n**Category:** {category}\n\n"
     entry = header + content.strip() + "\n"
 
     if not note_file.exists():
-        head = (
-            f"# Medusa Engagement Notes — {filename.replace('_notes.md','')}\n"
-            f"Started: {timestamp}\n"
-            f"---\n"
-        )
+        head = f"# Medusa Engagement Notes — {filename.replace('_notes.md', '')}\nStarted: {timestamp}\n---\n"
         note_file.write_text(head + entry, encoding="utf-8")
     else:
         with note_file.open("a", encoding="utf-8") as f:
