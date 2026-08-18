@@ -1,4 +1,5 @@
 """Tier 2 Analyst — validates threats, correlates across endpoints."""
+
 from __future__ import annotations
 
 import time

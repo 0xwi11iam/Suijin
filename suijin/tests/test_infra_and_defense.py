@@ -3,7 +3,6 @@ defense, hotfix patch generators, traffic-log tailing, and Metasploit
 availability probing (all subprocesses mocked — nothing leaves the box).
 """
 
-
 import pytest
 
 from suijin.infra import output_offload as oo
@@ -60,8 +59,7 @@ class TestFirewall:
         from suijin.core.blue.defense import firewall as fw
 
         calls = []
-        monkeypatch.setattr(fw.subprocess, "run",
-                            lambda *a, **k: calls.append(a) or None)
+        monkeypatch.setattr(fw.subprocess, "run", lambda *a, **k: calls.append(a) or None)
         out = fw.block_ip("999.999.999.999")
         assert out.startswith("Invalid IP")
         assert calls == []  # validation happens BEFORE any subprocess call
@@ -74,8 +72,10 @@ class TestFirewall:
         def fake_run(cmd, **kw):
             calls.append(cmd)
             if "10.0.0.9" in cmd:
+
                 class R:
                     returncode = 0
+
                 return R()
             raise OSError("no iptables")
 
@@ -89,8 +89,7 @@ class TestFirewall:
         from suijin.core.blue.defense import firewall as fw
 
         calls = []
-        monkeypatch.setattr(fw.subprocess, "run",
-                            lambda cmd, **kw: calls.append(cmd))
+        monkeypatch.setattr(fw.subprocess, "run", lambda cmd, **kw: calls.append(cmd))
         fw.unblock_ip("172.16.0.4")
         # ["sudo", "iptables", "-D", "INPUT", ...] — index 2 is the rule op
         assert calls[0][2] == "-D" and "172.16.0.4" in calls[0]
@@ -168,7 +167,6 @@ class TestMsfCheck:
                 def version(token):
                     return "6.3.0"
 
-        monkeypatch.setattr(msf, "_msf_rpc_connect",
-                            lambda cfg: (Proxy(), "tok"))
+        monkeypatch.setattr(msf, "_msf_rpc_connect", lambda cfg: (Proxy(), "tok"))
         out = msf.msf_check({})
         assert "6.3.0" in out and "RPC connected" in out

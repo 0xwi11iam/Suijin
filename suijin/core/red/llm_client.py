@@ -4,6 +4,7 @@ suijin/core/red/llm_client.py — Async LLM wrapper with status display + timeou
 Extracted from redteamer.py. Wraps provider.generate() with a Rich status
 spinner and a 90s hard timeout so slow providers never hang the TUI.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -27,7 +28,7 @@ async def generate_async(messages, config=None):
     # Limit to 90s total — prevents UI hangs from slow API/network
     try:
         with console.status(
-            f"[bold cyan]Thinking... ({provider}/{model}) — {msg_count} msgs, {prompt_chars//1000}k chars[/bold cyan]",
+            f"[bold cyan]Thinking... ({provider}/{model}) — {msg_count} msgs, {prompt_chars // 1000}k chars[/bold cyan]",
             spinner="dots",
         ):
             result = await asyncio.wait_for(
@@ -44,6 +45,7 @@ async def generate_async(messages, config=None):
 def _generate(messages, config):
     """Thread-friendly wrapper that lazily resolves the providers module."""
     from suijin.modules.loader import load_local_module
+
     providers = load_local_module("providers")
     fn = getattr(providers, "generate_with_failover", None)
     # honor config['fallback_providers'] when configured; plain generate otherwise

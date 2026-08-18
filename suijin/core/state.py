@@ -7,6 +7,7 @@ so state can be checkpointed (MemorySaver) and recovered.
 
 Ported and simplified from redamon/agentic/state.py.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -17,16 +18,28 @@ from pydantic import BaseModel, Field, field_validator
 
 # Knowledge graph labels and DB schema — defined inline
 GRAPH_LABELS = {
-    "TARGET": "Target", "SERVICE": "Service", "VULNERABILITY": "Vulnerability",
-    "EXPLOIT": "Exploit", "CREDENTIAL": "Credential", "FLAG": "Flag",
-    "SUBDOMAIN": "Subdomain", "ENDPOINT": "Endpoint", "PORT": "Port",
+    "TARGET": "Target",
+    "SERVICE": "Service",
+    "VULNERABILITY": "Vulnerability",
+    "EXPLOIT": "Exploit",
+    "CREDENTIAL": "Credential",
+    "FLAG": "Flag",
+    "SUBDOMAIN": "Subdomain",
+    "ENDPOINT": "Endpoint",
+    "PORT": "Port",
     "TECHNOLOGY": "Technology",
 }
 GRAPH_RELATIONSHIPS = {
-    "EXPOSES": "EXPOSES", "HAS_VULN": "HAS_VULNERABILITY",
-    "EXPLOITED_BY": "EXPLOITED_BY", "PROVIDES_ACCESS": "PROVIDES_ACCESS_TO",
-    "RESOLVES_TO": "RESOLVES_TO", "RUNS_ON": "RUNS_ON", "USES": "USES_TECHNOLOGY",
+    "EXPOSES": "EXPOSES",
+    "HAS_VULN": "HAS_VULNERABILITY",
+    "EXPLOITED_BY": "EXPLOITED_BY",
+    "PROVIDES_ACCESS": "PROVIDES_ACCESS_TO",
+    "RESOLVES_TO": "RESOLVES_TO",
+    "RUNS_ON": "RUNS_ON",
+    "USES": "USES_TECHNOLOGY",
 }
+
+
 def build_target_query(target_name: str) -> str:
     """DEPRECATED: Neo4j not connected. Use knowledge_graph.py instead.
 
@@ -35,6 +48,7 @@ def build_target_query(target_name: str) -> str:
     red team knowledge graph (intel/knowledge_graph.py) are the active stores.
     """
     import warnings
+
     warnings.warn("build_target_query is deprecated. Use knowledge_graph APIs.", DeprecationWarning, stacklevel=2)
     return f"MATCH (t:Target {{name: '{target_name}'}}) OPTIONAL MATCH (t)-[:EXPOSES]->(s:Service) OPTIONAL MATCH (s)-[:HAS_VULNERABILITY]->(v:Vulnerability) RETURN t, collect(DISTINCT s) as services, collect(DISTINCT v) as vulnerabilities"
 
@@ -51,8 +65,13 @@ Phase = Literal["informational", "exploitation", "post_exploitation"]
 TodoStatus = Literal["pending", "in_progress", "completed", "blocked"]
 Priority = Literal["high", "medium", "low"]
 ActionType = Literal[
-    "use_tool", "plan_tools", "transition_phase", "complete",
-    "ask_user", "deploy_subagent", "switch_skill",
+    "use_tool",
+    "plan_tools",
+    "transition_phase",
+    "complete",
+    "ask_user",
+    "deploy_subagent",
+    "switch_skill",
 ]
 
 _PRIORITY_SYNONYMS = {"info": "low", "critical": "high", "urgent": "high"}
@@ -68,8 +87,10 @@ def _coerce_priority(value):
 # CORE STATE MODELS
 # =============================================================================
 
+
 class TodoItem(BaseModel):
     """LLM-managed task item for tracking progress."""
+
     id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
     description: str
     status: TodoStatus = "pending"
@@ -86,6 +107,7 @@ class TodoItem(BaseModel):
 
 class ExecutionStep(BaseModel):
     """Single step in the Thought-Tool-Output execution trace."""
+
     step_id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
     iteration: int
     timestamp: datetime = Field(default_factory=utc_now)
@@ -115,6 +137,7 @@ class ExecutionStep(BaseModel):
 
 class TargetInfo(BaseModel):
     """Accumulated intelligence about the target."""
+
     primary_target: Optional[str] = None
     target_type: Optional[Literal["ip", "hostname", "domain", "url"]] = None
     ports: List[int] = Field(default_factory=list)
@@ -133,9 +156,7 @@ class TargetInfo(BaseModel):
             services=list(set(self.services + other.services)),
             technologies=list(set(self.technologies + other.technologies)),
             vulnerabilities=list(set(self.vulnerabilities + other.vulnerabilities)),
-            credentials=self.credentials + [
-                c for c in other.credentials if c not in self.credentials
-            ],
+            credentials=self.credentials + [c for c in other.credentials if c not in self.credentials],
             subdomains=list(set(self.subdomains + other.subdomains)),
             endpoints=list(set(self.endpoints + other.endpoints)),
         )
@@ -143,6 +164,7 @@ class TargetInfo(BaseModel):
 
 class PhaseHistoryEntry(BaseModel):
     """Record of a phase transition."""
+
     phase: Phase
     entered_at: datetime = Field(default_factory=utc_now)
     exited_at: Optional[datetime] = None
@@ -150,6 +172,7 @@ class PhaseHistoryEntry(BaseModel):
 
 class ConversationObjective(BaseModel):
     """Single objective within a continuous conversation."""
+
     objective_id: str = Field(default_factory=lambda: str(uuid.uuid4())[:8])
     content: str
     created_at: datetime = Field(default_factory=utc_now)
@@ -160,6 +183,7 @@ class ConversationObjective(BaseModel):
 
 class PhaseTransitionDecision(BaseModel):
     """Phase transition from LLM decision."""
+
     to_phase: Phase
     reason: str = ""
     planned_actions: List[str] = Field(default_factory=list)
@@ -170,8 +194,10 @@ class PhaseTransitionDecision(BaseModel):
 # LLM DECISION MODEL — what the think_node expects the LLM to return
 # =============================================================================
 
+
 class LLMDecision(BaseModel):
     """Structured decision from the LLM think step."""
+
     action: ActionType = "use_tool"
     thought: str = ""
     reasoning: str = ""
@@ -215,6 +241,7 @@ class LLMDecision(BaseModel):
 # =============================================================================
 # LangGraph uses plain dicts or TypedDicts for state. All internal scratchpad
 # fields use underscore prefix — these are NOT Pydantic fields, just dict keys.
+
 
 # Default factory for a fresh state dict
 def new_agent_state(
@@ -280,6 +307,7 @@ def new_agent_state(
 # FORMATTING HELPERS — build prompt sections from state
 # =============================================================================
 
+
 def _truncate(text: str, max_len: int = 500) -> str:
     if not text:
         return ""
@@ -312,8 +340,7 @@ def format_execution_trace(
         verdict = prod.get("verdict", "") if isinstance(prod, dict) else ""
 
         lines.append(
-            f"Step {step.get('iteration', '?')}: {status} {tn} "
-            f"({verdict or ec or 'ok'}) → {_truncate(str(ta), 100)}"
+            f"Step {step.get('iteration', '?')}: {status} {tn} ({verdict or ec or 'ok'}) → {_truncate(str(ta), 100)}"
         )
         if to:
             lines.append(f"  Output: {_truncate(to, 300)}")
@@ -328,8 +355,10 @@ def format_todo_list(todo_list: list) -> str:
 
     lines = []
     status_icons = {
-        "pending": "⬜", "in_progress": "🔄",
-        "completed": "✅", "blocked": "🚫",
+        "pending": "⬜",
+        "in_progress": "🔄",
+        "completed": "✅",
+        "blocked": "🚫",
     }
     for item in todo_list:
         if not isinstance(item, dict):
@@ -375,10 +404,7 @@ def format_chain_context(
         for f in recent_f:
             if isinstance(f, dict):
                 ec = f.get("error_class", "unknown")
-                parts.append(
-                    f"- [{ec}] {f.get('tool_name', '?')}: "
-                    f"{_truncate(f.get('error_message', ''), 120)}"
-                )
+                parts.append(f"- [{ec}] {f.get('tool_name', '?')}: {_truncate(f.get('error_message', ''), 120)}")
 
     # Recent execution trace with productivity
     if execution_trace:
@@ -419,8 +445,5 @@ def format_objective_history(objective_history: list) -> str:
     lines = ["## Completed Objectives"]
     for obj in objective_history[-5:]:
         if isinstance(obj, dict):
-            lines.append(
-                f"- [{obj.get('success', True) and '✓' or '✗'}] "
-                f"{_truncate(obj.get('content', ''), 150)}"
-            )
+            lines.append(f"- [{obj.get('success', True) and '✓' or '✗'}] {_truncate(obj.get('content', ''), 150)}")
     return "\n".join(lines)

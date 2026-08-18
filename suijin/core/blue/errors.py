@@ -3,6 +3,7 @@
 Replace raw string error returns with typed error objects that the
 supervisor and SOC can reason about programmatically.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -21,6 +22,7 @@ class ErrorSeverity(Enum):
 @dataclass
 class BlueError:
     """Base error type for blue team operations."""
+
     message: str
     severity: ErrorSeverity = ErrorSeverity.ERROR
     source: str = "unknown"
@@ -44,18 +46,22 @@ class BlueError:
 class FirewallError(BlueError):
     source: str = "firewall"
 
+
 @dataclass
 class DeceptionError(BlueError):
     source: str = "deception"
+
 
 @dataclass
 class AIEngineError(BlueError):
     source: str = "ai_engine"
     raw_response: Optional[str] = None
 
+
 @dataclass
 class ProxyError(BlueError):
     source: str = "proxy"
+
 
 @dataclass
 class PatchError(BlueError):

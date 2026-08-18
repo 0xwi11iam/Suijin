@@ -1,4 +1,5 @@
 """Incident Commander — major incident response coordination."""
+
 from __future__ import annotations
 
 import time
@@ -11,10 +12,13 @@ class IncidentCommander:
 
     def declare_incident(self, ip: str, attack_type: str, score: int, affected_endpoints: list) -> dict:
         incident = {
-            "id": f"INC-{len(self.active_incidents)+1:04d}",
-            "ip": ip, "type": attack_type, "score": score,
+            "id": f"INC-{len(self.active_incidents) + 1:04d}",
+            "ip": ip,
+            "type": attack_type,
+            "score": score,
             "endpoints": affected_endpoints,
-            "declared_at": time.time(), "status": "active",
+            "declared_at": time.time(),
+            "status": "active",
         }
         self.active_incidents.append(incident)
         return incident

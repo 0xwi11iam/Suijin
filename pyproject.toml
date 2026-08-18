@@ -70,7 +70,7 @@ source = ["suijin"]
 omit = ["suijin/lab/*", "suijin/tests/*", "suijin_agent/*"]
 
 [tool.coverage.report]
-fail_under = 48
+fail_under = 56
 exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.:",

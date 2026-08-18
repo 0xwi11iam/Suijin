@@ -80,6 +80,19 @@ suijin            # launch the interface
 The installer clones into `~/.suijin/repo`, creates an isolated virtualenv, and
 drops a `suijin` launcher on your PATH. Environment overrides:
 `SUIJIN_INSTALL_DIR`, `SUIJIN_BIN_DIR`, `SUIJIN_REPO`, `SUIJIN_NO_PATH_EDIT`.
+A Medusa-era `~/.medusa` installation is migrated automatically on first
+install, and the old `MEDUSA_*` overrides still work.
+
+### pipx / uv (installable package)
+
+```bash
+pipx install suijin        # or: uv tool install suijin
+suijin doctor
+```
+
+The wheel ships every core tool, the prompts/skills assets, and the built
+web console. The optional module packs under `Modules/` need a repo
+checkout — clone the repo and run from source for the full toolkit.
 
 ### Manual
 
@@ -144,6 +157,8 @@ docker run -it --rm \
 | `suijin skills` | Skill list + versioning: `history` / `diff` / `rollback` (snapshots on every agent edit) |
 | `suijin notify` | Operator notifications: `send 'msg'` / `test` (file/command/macOS channels; battle fires on flags & blocks) |
 | `suijin compliance [eng]` | Map engagement findings to CWE / OWASP Top-10 / MITRE ATT&CK (newest engagement by default) |
+| `suijin approvals` | HITL console: `list` blocked actions, `approve`/`deny <id>` for the session, `clear` resets verdicts |
+| `suijin panic` | Kill every Suijin process + clear live state NOW (`--dry-run` previews) |
 | `suijin pull kb` | Download + index the knowledge base (**enables** KB features) |
 | `suijin pull kb --status` | Offline: what's indexed, per-source counts, build age |
 | `suijin pull kb --list` | Available sources with size warnings |

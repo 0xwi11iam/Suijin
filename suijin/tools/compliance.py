@@ -4,6 +4,7 @@ A pure lookup over finding types + description keywords. Deliberately
 standalone (`suijin compliance [engagement]`): no changes to the report
 pipeline, no state, no hot paths — a table and two functions.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -15,35 +16,35 @@ from suijin.tools.workspace import WORKSPACE_DIR
 # match wins, so order matters (specific before generic).
 MAPPING: list[tuple[str, str, str, str, str]] = [
     # keyword              CWE              OWASP 2021                     ATT&CK
-    ("sql injection", "CWE-89",  "A03 Injection",                        "T1190"),
-    ("sqli",           "CWE-89",  "A03 Injection",                        "T1190"),
-    ("blind sqli",     "CWE-89",  "A03 Injection",                        "T1190"),
-    ("xss",            "CWE-79",  "A03 Injection",                        "T1189"),
-    ("ssti",           "CWE-1336", "A03 Injection",                       "T1059"),
-    ("command injection", "CWE-78", "A03 Injection",                      "T1059"),
-    ("xxe",            "CWE-611", "A05 Security Misconfiguration",        "T1055"),
-    ("deserial",       "CWE-502", "A08 Software and Data Integrity",      "T1203"),
-    ("path traversal", "CWE-22",  "A01 Broken Access Control",            "T1083"),
-    ("file inclusion", "CWE-98",  "A03 Injection",                        "T1105"),
-    ("lfi",            "CWE-98",  "A03 Injection",                        "T1105"),
-    ("ssrf",           "CWE-918", "A10 Server-Side Request Forgery",      "T1190"),
-    ("idor",           "CWE-639", "A01 Broken Access Control",            "T1210"),
-    ("auth bypass",    "CWE-287", "A07 Identification and Authentication", "T1550"),
-    ("jwt",            "CWE-347", "A07 Identification and Authentication", "T1550"),
-    ("mass assignment", "CWE-915", "A04 Insecure Design",                  "T1550"),
-    ("race condition", "CWE-362", "A04 Insecure Design",                  "T1068"),
-    ("rate limit",     "CWE-770", "A04 Insecure Design",                  "T1499"),
-    ("info disclosure", "CWE-200", "A05 Security Misconfiguration",       "T1592"),
-    ("info leak",      "CWE-200", "A05 Security Misconfiguration",        "T1592"),
-    ("waf",            "CWE-693", "A05 Security Misconfiguration",        "T1590"),
-    ("misconfigur",    "CWE-16",  "A05 Security Misconfiguration",        "T1584"),
-    ("upload bypass",  "CWE-434", "A04 Insecure Design",                  "T1105"),
-    ("file upload",    "CWE-434", "A04 Insecure Design",                  "T1105"),
-    ("csrf",           "CWE-352", "A01 Broken Access Control",            "T1185"),
-    ("privilege escalation", "CWE-269", "A01 Broken Access Control",      "T1548"),
-    ("privesc",        "CWE-269", "A01 Broken Access Control",            "T1548"),
-    ("credential",     "CWE-798", "A07 Identification and Authentication", "T1552"),
-    ("secret",         "CWE-798", "A07 Identification and Authentication", "T1552"),
+    ("sql injection", "CWE-89", "A03 Injection", "T1190"),
+    ("sqli", "CWE-89", "A03 Injection", "T1190"),
+    ("blind sqli", "CWE-89", "A03 Injection", "T1190"),
+    ("xss", "CWE-79", "A03 Injection", "T1189"),
+    ("ssti", "CWE-1336", "A03 Injection", "T1059"),
+    ("command injection", "CWE-78", "A03 Injection", "T1059"),
+    ("xxe", "CWE-611", "A05 Security Misconfiguration", "T1055"),
+    ("deserial", "CWE-502", "A08 Software and Data Integrity", "T1203"),
+    ("path traversal", "CWE-22", "A01 Broken Access Control", "T1083"),
+    ("file inclusion", "CWE-98", "A03 Injection", "T1105"),
+    ("lfi", "CWE-98", "A03 Injection", "T1105"),
+    ("ssrf", "CWE-918", "A10 Server-Side Request Forgery", "T1190"),
+    ("idor", "CWE-639", "A01 Broken Access Control", "T1210"),
+    ("auth bypass", "CWE-287", "A07 Identification and Authentication", "T1550"),
+    ("jwt", "CWE-347", "A07 Identification and Authentication", "T1550"),
+    ("mass assignment", "CWE-915", "A04 Insecure Design", "T1550"),
+    ("race condition", "CWE-362", "A04 Insecure Design", "T1068"),
+    ("rate limit", "CWE-770", "A04 Insecure Design", "T1499"),
+    ("info disclosure", "CWE-200", "A05 Security Misconfiguration", "T1592"),
+    ("info leak", "CWE-200", "A05 Security Misconfiguration", "T1592"),
+    ("waf", "CWE-693", "A05 Security Misconfiguration", "T1590"),
+    ("misconfigur", "CWE-16", "A05 Security Misconfiguration", "T1584"),
+    ("upload bypass", "CWE-434", "A04 Insecure Design", "T1105"),
+    ("file upload", "CWE-434", "A04 Insecure Design", "T1105"),
+    ("csrf", "CWE-352", "A01 Broken Access Control", "T1185"),
+    ("privilege escalation", "CWE-269", "A01 Broken Access Control", "T1548"),
+    ("privesc", "CWE-269", "A01 Broken Access Control", "T1548"),
+    ("credential", "CWE-798", "A07 Identification and Authentication", "T1552"),
+    ("secret", "CWE-798", "A07 Identification and Authentication", "T1552"),
 ]
 _FALLBACK = ("CWE-693", "A05 Security Misconfiguration", "T1595")  # unmapped → generic
 
@@ -79,12 +80,10 @@ def summarize(mapped: list[dict]) -> dict:
     return counts
 
 
-def load_findings(engagement: str | None = None,
-                  workspace: Path | None = None) -> list[dict]:
+def load_findings(engagement: str | None = None, workspace: Path | None = None) -> list[dict]:
     """Findings from audit trails; newest engagement when name omitted."""
     ws = Path(workspace) if workspace else WORKSPACE_DIR / "audit_trails"
-    trails = sorted(ws.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True) \
-        if ws.is_dir() else []
+    trails = sorted(ws.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True) if ws.is_dir() else []
     if engagement:
         needle = engagement.lower().replace(" ", "_")
         trails = [t for t in trails if needle in t.stem.lower()] or trails
@@ -104,8 +103,10 @@ def load_findings(engagement: str | None = None,
 
 def render(mapped: list[dict]) -> str:
     if not mapped:
-        return ("No findings recorded — compliance map is empty. "
-                "Findings land in suijin_agent/audit_trails/ during engagements.")
+        return (
+            "No findings recorded — compliance map is empty. "
+            "Findings land in suijin_agent/audit_trails/ during engagements."
+        )
     s = summarize(mapped)
     lines = [
         f"Compliance map — {len(mapped)} finding(s)",
@@ -114,8 +115,7 @@ def render(mapped: list[dict]) -> str:
     ]
     for f in mapped:
         desc = (f.get("description") or f.get("type") or "?")[:28]
-        lines.append(f"  {desc:28} {str(f.get('severity', '?'))[:8]:8} "
-                     f"{f['cwe']:10} {f['owasp']:38} {f['attack']}")
+        lines.append(f"  {desc:28} {str(f.get('severity', '?'))[:8]:8} {f['cwe']:10} {f['owasp']:38} {f['attack']}")
     lines.append("")
     lines.append("By OWASP Top-10 2021:")
     for cat, n in sorted(s["owasp"].items(), key=lambda x: -x[1]):

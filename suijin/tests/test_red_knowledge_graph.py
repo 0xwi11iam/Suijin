@@ -35,7 +35,7 @@ class TestAddConstraint:
         entries = data["t"]["blocks"]
         assert len(entries) == 1  # deduplicated, not appended
         assert entries[0]["evidence"] == "second"  # updated
-        assert entries[0]["confidence"] == 0.9     # max-merged
+        assert entries[0]["confidence"] == 0.9  # max-merged
 
     def test_confidence_never_lowers(self, kg_file):
         kg.add_constraint("t", "waf", "cloudflare", confidence=1.0)
@@ -108,8 +108,8 @@ class TestSummary:
         assert "Knowledge Graph • t" in out
         assert "' OR 1=1" in out
         assert "cloudflare" in out
-        assert "[60%]" in out          # partial confidence shown
-        assert "[100%]" not in out     # full confidence not annotated
+        assert "[60%]" in out  # partial confidence shown
+        assert "[100%]" not in out  # full confidence not annotated
 
 
 class TestResilience:

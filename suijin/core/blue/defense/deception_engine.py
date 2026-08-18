@@ -1,4 +1,5 @@
 """Deception engine — coordinate all deception tactics."""
+
 from __future__ import annotations
 
 from suijin.core.blue.deception.honeypot_factory import generate_honeypot_response
@@ -16,15 +17,18 @@ class DeceptionEngine:
     def decide_response(self, attacker_id: str, request: dict, score: int) -> dict:
         try:
             if score >= SCORE_SHADOW:
-                redirect_to_shadow(request.get("ip",""))
+                redirect_to_shadow(request.get("ip", ""))
                 return ok({"action": "shadow_redirect"})
             if score >= SCORE_DECEIVE:
-                self.time_sink.tarpit(request.get("ip",""))
+                self.time_sink.tarpit(request.get("ip", ""))
                 return ok({"action": "tarpit", "delay": TARPIT_DEFAULT_DELAY})
             if score >= SCORE_SUSPICIOUS:
-                return ok({"action": "honeypot", "response": generate_honeypot_response({"path": request.get("path","/")})})
+                return ok(
+                    {"action": "honeypot", "response": generate_honeypot_response({"path": request.get("path", "/")})}
+                )
             return ok({"action": "observe"})
         except Exception as e:
             import logging
+
             logging.getLogger("suijin").warning(f"Deception failed: {e}")
             return err(DeceptionError(f"Deception response failed: {e}", severity=ErrorSeverity.WARNING))

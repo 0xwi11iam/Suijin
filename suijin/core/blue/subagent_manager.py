@@ -8,6 +8,7 @@ After codebase analysis, deploys one AI subagent per endpoint. Each subagent:
 - Watches traffic to its endpoint
 - Reports anomalies to the main coordinating agent
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -24,6 +25,7 @@ from suijin.core.constants import RISK_HIGH
 @dataclass
 class EndpointSubagent:
     """A dedicated AI subagent watching a single endpoint with pre-loaded intelligence."""
+
     agent_id: str
     endpoint: dict
     rank: int
@@ -36,11 +38,11 @@ class EndpointSubagent:
     last_analysis: str = ""
     status: str = "initializing"
     # Pre-loaded engineering assets — ready to deploy when attack hits
-    handler_code: str = ""           # Full handler source code
-    honeypot_code: str = ""          # Ready-to-deploy honeypot version of endpoint
-    patch_code: str = ""             # Ready-to-deploy fix for vulnerability
-    deception_response: str = ""     # Ready-to-deploy fake response data
-    framework: str = ""              # flask, fastapi, django, express, etc.
+    handler_code: str = ""  # Full handler source code
+    honeypot_code: str = ""  # Ready-to-deploy honeypot version of endpoint
+    patch_code: str = ""  # Ready-to-deploy fix for vulnerability
+    deception_response: str = ""  # Ready-to-deploy fake response data
+    framework: str = ""  # flask, fastapi, django, express, etc.
 
 
 class SubagentManager:
@@ -50,7 +52,7 @@ class SubagentManager:
         self.config = config
         self.target_path = target_path
         self.subagents: dict[str, EndpointSubagent] = {}
-        self._lock = __import__('threading').Lock()
+        self._lock = __import__("threading").Lock()
 
     def deploy_all(self, endpoints: list) -> list[EndpointSubagent]:
         """Deploy one subagent per discovered endpoint. No artificial cap."""
@@ -114,10 +116,10 @@ You are the autonomous defender for this endpoint. You have FULL authority to
 write code, deploy honeypots, modify the application, and deceive attackers.
 
 ENDPOINT:
-  Method: {ep.get('method', 'ANY')}
-  Path: {ep.get('path', '/')}
+  Method: {ep.get("method", "ANY")}
+  Path: {ep.get("path", "/")}
   Framework: {framework}
-  File: {ep.get('file', 'unknown')}
+  File: {ep.get("file", "unknown")}
 
 FULL HANDLER CODE:
 ```
@@ -161,8 +163,12 @@ Respond in JSON — provide ALL code as FULL strings ready to deploy:
 
         try:
             raw = await asyncio.to_thread(
-                generate, messages, self.config,
-                temperature=0.3, max_tokens=2500, retries=2,
+                generate,
+                messages,
+                self.config,
+                temperature=0.3,
+                max_tokens=2500,
+                retries=2,
             )
             parsed = self._parse_json(raw)
             sa.risk_score = int(parsed.get("risk_score", 1))
@@ -189,7 +195,7 @@ Respond in JSON — provide ALL code as FULL strings ready to deploy:
         path = sa.endpoint.get("path", "/").lower()
         vulns = []
 
-        if any(kw in code for kw in ["execute(", "f\"select", "f'select", "+ request.", "eval(", "exec("]):
+        if any(kw in code for kw in ["execute(", 'f"select', "f'select", "+ request.", "eval(", "exec("]):
             vulns.append("SQLi or code injection risk detected")
             sa.risk_score = max(sa.risk_score, 7)
         if any(kw in code for kw in [".popen(", "subprocess.", "os.system(", "shell=true"]):
@@ -201,7 +207,9 @@ Respond in JSON — provide ALL code as FULL strings ready to deploy:
         if any(kw in code for kw in ["request.args", "request.form", "request.json", "req.query", "req.body"]):
             vulns.append("User input accepted — validate all parameters")
 
-        sa.vulnerability_notes = "; ".join(vulns) if vulns else "No obvious patterns detected — full AI analysis recommended"
+        sa.vulnerability_notes = (
+            "; ".join(vulns) if vulns else "No obvious patterns detected — full AI analysis recommended"
+        )
         sa.defense_plan = "Monitor all requests to this endpoint. Validate input. Apply rate limiting."
         sa.normal_patterns = [sa.endpoint.get("method", "GET")]
 
@@ -212,7 +220,7 @@ Respond in JSON — provide ALL code as FULL strings ready to deploy:
         results = []
 
         for i in range(0, len(agents), batch_size):
-            batch = agents[i:i + batch_size]
+            batch = agents[i : i + batch_size]
             tasks = [self.analyze_endpoint(sa) for sa in batch]
             batch_results = await asyncio.gather(*tasks, return_exceptions=True)
             for r in batch_results:
@@ -257,10 +265,17 @@ Respond in JSON — provide ALL code as FULL strings ready to deploy:
             "total_anomalies": sum(a.anomalies_reported for a in agents),
             "total_blocked": sum(a.attacks_blocked for a in agents),
             "by_risk": sorted(
-                [{"rank": a.rank, "path": a.endpoint.get("path", "/"),
-                  "risk": a.risk_score, "anomalies": a.anomalies_reported}
-                 for a in agents],
-                key=lambda x: x["risk"], reverse=True,
+                [
+                    {
+                        "rank": a.rank,
+                        "path": a.endpoint.get("path", "/"),
+                        "risk": a.risk_score,
+                        "anomalies": a.anomalies_reported,
+                    }
+                    for a in agents
+                ],
+                key=lambda x: x["risk"],
+                reverse=True,
             ),
         }
 
@@ -274,7 +289,8 @@ Respond in JSON — provide ALL code as FULL strings ready to deploy:
         except json.JSONDecodeError:
             pass
         import re
-        m = re.search(r'\{.*\}', raw, re.DOTALL)
+
+        m = re.search(r"\{.*\}", raw, re.DOTALL)
         if m:
             try:
                 return json.loads(m.group(0))

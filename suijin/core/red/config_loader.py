@@ -5,6 +5,7 @@ Extracted from redteamer.py. Handles config.json creation/defaults,
 Pydantic validation, and .env provider-key loading (interactive wizard
 or non-interactive CI-safe mode).
 """
+
 from __future__ import annotations
 
 import json
@@ -44,6 +45,8 @@ def active_model(config: dict | None) -> str:
     if provider == "huggingface":
         return cfg.get("final_model_id") or "auto"
     return cfg.get(f"{provider}_model") or "auto"
+
+
 CONFIG_PATH = BASE_DIR / "config.json"
 
 
@@ -55,29 +58,40 @@ def load_config() -> dict:
             "expert_models": EXPERT_MODELS,
             "final_model_id": "deepseek-ai/DeepSeek-V4-Flash",
             "sentinel_model_id": SENTINEL_MODEL,
-            "max_tokens_per_request": 8000, "temperature": 0.4,
-            "metasploit_rpc_host": "127.0.0.1", "metasploit_rpc_port": METASPLOIT_RPC_PORT,
+            "max_tokens_per_request": 8000,
+            "temperature": 0.4,
+            "metasploit_rpc_host": "127.0.0.1",
+            "metasploit_rpc_port": METASPLOIT_RPC_PORT,
             "metasploit_rpc_ssl": False,
             "supervisor_model_id": SUPERVISOR_MODEL,
-            "supervisor_interval": 5, "cost_alert_usd": 0.25,
-            "cost_budget_usd": 1.0, "cost_hard_cap_usd": 2.0,
+            "supervisor_interval": 5,
+            "cost_alert_usd": 0.25,
+            "cost_budget_usd": 1.0,
+            "cost_hard_cap_usd": 2.0,
             "max_iterations": MAX_ITERATIONS,
         }
         with open(CONFIG_PATH, "w") as f:
             json.dump(default_config, f, indent=4)
     config = json.loads(CONFIG_PATH.read_text())
-    for k, v in {"gemini_model": GEMINI_MODEL, "deepseek_model": DEFAULT_MODEL,
-                  "zai_model": ZAI_MODEL, "zai_endpoint": ZAI_ENDPOINT,
-                  "supervisor_model_id": SUPERVISOR_MODEL,
-                  "supervisor_interval": 5, "max_iterations": MAX_ITERATIONS}.items():
+    for k, v in {
+        "gemini_model": GEMINI_MODEL,
+        "deepseek_model": DEFAULT_MODEL,
+        "zai_model": ZAI_MODEL,
+        "zai_endpoint": ZAI_ENDPOINT,
+        "supervisor_model_id": SUPERVISOR_MODEL,
+        "supervisor_interval": 5,
+        "max_iterations": MAX_ITERATIONS,
+    }.items():
         config.setdefault(k, v)
     # Validate with Pydantic — catch typos at startup
     try:
         from suijin.core.config_models import RedConfig
+
         validated = RedConfig(**config)
         config.update(validated.model_dump())
     except Exception as e:
         import logging
+
         logging.getLogger("suijin").warning(f"Config validation failed: {e}. Using raw config.")
     return config
 
@@ -99,25 +113,29 @@ def load_env():
         config = load_config()
         if choice == "2":
             config["provider"] = "amd"
-            with open(CONFIG_PATH, "w") as f: json.dump(config, f, indent=4)
+            with open(CONFIG_PATH, "w") as f:
+                json.dump(config, f, indent=4)
             key = input("Enter AMD_API_KEY: ").strip()
             ENV_PATH.write_text(f"AMD_API_KEY={key}\n")
             os.environ["AMD_API_KEY"] = key
         elif choice == "3":
             config["provider"] = "gemini"
-            with open(CONFIG_PATH, "w") as f: json.dump(config, f, indent=4)
+            with open(CONFIG_PATH, "w") as f:
+                json.dump(config, f, indent=4)
             key = input("Enter GEMINI_API_KEY: ").strip()
             ENV_PATH.write_text(f"GEMINI_API_KEY={key}\n")
             os.environ["GEMINI_API_KEY"] = key
         elif choice == "4":
             config["provider"] = "deepseek"
-            with open(CONFIG_PATH, "w") as f: json.dump(config, f, indent=4)
+            with open(CONFIG_PATH, "w") as f:
+                json.dump(config, f, indent=4)
             key = input("Enter DEEPSEEK_API_KEY: ").strip()
             ENV_PATH.write_text(f"DEEPSEEK_API_KEY={key}\n")
             os.environ["DEEPSEEK_API_KEY"] = key
         elif choice == "5":
             config["provider"] = "zai"
-            with open(CONFIG_PATH, "w") as f: json.dump(config, f, indent=4)
+            with open(CONFIG_PATH, "w") as f:
+                json.dump(config, f, indent=4)
             key = input("Enter ZAI_API_KEY: ").strip()
             ENV_PATH.write_text(f"ZAI_API_KEY={key}\n")
             os.environ["ZAI_API_KEY"] = key

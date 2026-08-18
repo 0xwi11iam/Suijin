@@ -1,4 +1,5 @@
 """Codebase scanner — walks tree, dispatches to framework analyzers."""
+
 from __future__ import annotations
 
 import json
@@ -12,6 +13,7 @@ def scan_codebase(root_path: str) -> list:
     from suijin.core.blue.codebase.javascript_analyzer import extract_js_routes
     from suijin.core.blue.codebase.php_analyzer import extract_php_routes
     from suijin.core.blue.codebase.python_analyzer import extract_python_routes
+
     endpoints.extend(extract_python_routes(root))
     endpoints.extend(extract_js_routes(root))
     endpoints.extend(extract_java_routes(root))

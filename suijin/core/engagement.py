@@ -7,6 +7,7 @@ Handles:
 - Auto-save every N iterations
 - Restore from checkpoint on startup
 """
+
 from __future__ import annotations
 
 import json
@@ -106,11 +107,13 @@ def transition_phase(new_phase: str) -> None:
     """Record a phase transition in the engagement schema."""
     schema = load_engagement_schema()
     old_phase = schema.get("phases", {}).get("current", "recon")
-    schema.setdefault("phases", {})["history"].append({
-        "from": old_phase,
-        "to": new_phase,
-        "at": _utc_now(),
-    })
+    schema.setdefault("phases", {})["history"].append(
+        {
+            "from": old_phase,
+            "to": new_phase,
+            "at": _utc_now(),
+        }
+    )
     schema["phases"]["current"] = new_phase
     if old_phase not in schema["phases"].get("completed", []):
         schema["phases"].setdefault("completed", []).append(old_phase)
@@ -118,6 +121,7 @@ def transition_phase(new_phase: str) -> None:
 
 
 # ── Session Recovery ────────────────────────────────────────────────────────
+
 
 def save_session_state(state: dict) -> str:
     """Save full agent state for crash recovery. Returns the file path."""
@@ -156,7 +160,9 @@ def load_session_state() -> Optional[dict]:
         return None
     logger.info(
         "Recovery state found: phase=%s iteration=%s saved=%s",
-        data.get("phase"), data.get("iteration"), data.get("saved_at"),
+        data.get("phase"),
+        data.get("iteration"),
+        data.get("saved_at"),
     )
     return data
 
@@ -174,6 +180,7 @@ def has_recovery_state() -> bool:
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
 
 def _serialize_trace(trace: list) -> list:
     """Convert execution trace entries to JSON-serializable dicts."""

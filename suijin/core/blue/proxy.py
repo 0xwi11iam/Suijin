@@ -12,6 +12,7 @@ Usage:
                         log_path=str(BLUE_TRAFFIC_LOG))
     # All traffic to :8080 gets logged then forwarded to :5906
 """
+
 from __future__ import annotations
 
 import json
@@ -43,17 +44,20 @@ class ProxyHandler(BaseHTTPRequestHandler):
             "body": body if body else "",
             "ip": self.client_address[0],
             "user_agent": headers.get("User-Agent", ""),
-            "headers": {k: v for k, v in headers.items()
-                        if k.lower() in ("content-type", "cookie", "authorization",
-                                         "x-forwarded-for", "x-admin", "origin", "referer")},
+            "headers": {
+                k: v
+                for k, v in headers.items()
+                if k.lower()
+                in ("content-type", "cookie", "authorization", "x-forwarded-for", "x-admin", "origin", "referer")
+            },
         }
         # Parse query string from path
         if "?" in path:
             from urllib.parse import parse_qs
+
             path_part, qs = path.split("?", 1)
             entry["path"] = path_part
-            entry["query"] = {k: v[0] if len(v) == 1 else v
-                              for k, v in parse_qs(qs).items()}
+            entry["query"] = {k: v[0] if len(v) == 1 else v for k, v in parse_qs(qs).items()}
 
         try:
             with open(self.log_path, "a") as f:
@@ -64,9 +68,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
     def _forward(self, method, path, headers, body):
         """Forward request to target app using thread pool to avoid blocking."""
         from concurrent.futures import ThreadPoolExecutor
+
         target_url = f"http://{self.target_host}:{self.target_port}{path}"
-        req_headers = {k: v for k, v in headers.items()
-                       if k.lower() not in ("host", "content-length")}
+        req_headers = {k: v for k, v in headers.items() if k.lower() not in ("host", "content-length")}
         req_headers["Host"] = f"{self.target_host}:{self.target_port}"
         req_headers["Connection"] = "close"
         data = body.encode("utf-8") if body else None
@@ -126,13 +130,26 @@ class ProxyHandler(BaseHTTPRequestHandler):
         # Forward to target
         self._forward(method, path, dict(self.headers), body)
 
-    def do_GET(self): self._handle("GET")
-    def do_POST(self): self._handle("POST")
-    def do_PUT(self): self._handle("PUT")
-    def do_DELETE(self): self._handle("DELETE")
-    def do_PATCH(self): self._handle("PATCH")
-    def do_HEAD(self): self._handle("HEAD")
-    def do_OPTIONS(self): self._handle("OPTIONS")
+    def do_GET(self):
+        self._handle("GET")
+
+    def do_POST(self):
+        self._handle("POST")
+
+    def do_PUT(self):
+        self._handle("PUT")
+
+    def do_DELETE(self):
+        self._handle("DELETE")
+
+    def do_PATCH(self):
+        self._handle("PATCH")
+
+    def do_HEAD(self):
+        self._handle("HEAD")
+
+    def do_OPTIONS(self):
+        self._handle("OPTIONS")
 
     # Suppress HTTP server log noise
     def log_message(self, format, *args):
@@ -142,8 +159,13 @@ class ProxyHandler(BaseHTTPRequestHandler):
 class ProxyServer:
     """Manages the lifecycle of the forward proxy server."""
 
-    def __init__(self, listen_port: int = PROXY_DEFAULT_PORT, target_port: int = BLUE_LAB_PORT,
-                 target_host: str = "127.0.0.1", log_path: str = None):
+    def __init__(
+        self,
+        listen_port: int = PROXY_DEFAULT_PORT,
+        target_port: int = BLUE_LAB_PORT,
+        target_host: str = "127.0.0.1",
+        log_path: str = None,
+    ):
         if log_path is None:
             log_path = str(BLUE_TRAFFIC_LOG)
         self.listen_port = listen_port
@@ -174,9 +196,12 @@ class ProxyServer:
         return self._server is not None
 
 
-def start_proxy(listen_port: int = PROXY_DEFAULT_PORT, target_port: int = BLUE_LAB_PORT,
-                target_host: str = "127.0.0.1",
-                log_path: str = None) -> ProxyServer:
+def start_proxy(
+    listen_port: int = PROXY_DEFAULT_PORT,
+    target_port: int = BLUE_LAB_PORT,
+    target_host: str = "127.0.0.1",
+    log_path: str = None,
+) -> ProxyServer:
     if log_path is None:
         log_path = str(BLUE_TRAFFIC_LOG)
     """Start a forward proxy — returns the ProxyServer instance."""

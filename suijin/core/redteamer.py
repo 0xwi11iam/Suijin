@@ -15,6 +15,7 @@ Key features:
 - Automatic checkpointing after every turn
 - Hard guardrail (gov/mil/edu domain blocking)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -59,6 +60,7 @@ DUMP_PATH = BASE_DIR / "operation_state_recovery.json"
 
 #  Main agent loop
 
+
 async def run_red_team_async(config, objective, api_key=None):
 
     providers.reset_usage()
@@ -74,12 +76,11 @@ async def run_red_team_async(config, objective, api_key=None):
         generate_fn=generate_async,
         route_tool_fn=tools.route_tool,
         max_iterations=config.get("max_iterations", 100),
-
     )
 
     thread_id = f"redteam_{int(time.time())}"
 
-    provider_name = config.get('provider', 'unknown')
+    provider_name = config.get("provider", "unknown")
     model_name = active_model(config)
     console.print("\n[bold #e6b47c] Launching Agent[/bold #e6b47c] [dim](Ctrl+C to guide)[/dim]")
     console.print(f"[dim]{objective}[/dim]")
@@ -94,15 +95,16 @@ async def run_red_team_async(config, objective, api_key=None):
     # Start audit trail
     try:
         from suijin.tools.audit_trail import start_audit
+
         start_audit(objective[:80])
     except Exception:
         pass
 
     # Dual-layer signal handling — works during I/O blocks
     import signal as _signal
+
     _interrupted = False
-    _old_sigint = _signal.signal(_signal.SIGINT, lambda sig, frame: setattr(
-        _signal, '_suijin_interrupted', True))
+    _old_sigint = _signal.signal(_signal.SIGINT, lambda sig, frame: setattr(_signal, "_suijin_interrupted", True))
     _signal._suijin_interrupted = False
 
     while True:
@@ -111,7 +113,7 @@ async def run_red_team_async(config, objective, api_key=None):
             first_run = False
 
             async for event in agent._graph.astream(input_state, langgraph_config):
-                if getattr(_signal, '_suijin_interrupted', False):
+                if getattr(_signal, "_suijin_interrupted", False):
                     raise KeyboardInterrupt()
                 node_name = list(event.keys())[0]
                 node_output = event[node_name]
@@ -134,14 +136,16 @@ async def run_red_team_async(config, objective, api_key=None):
                             answer = "Continue as you see fit."
                         agent._graph.update_state(
                             langgraph_config,
-                            {"messages": [{"role": "user", "content": f"OPERATOR ANSWER: {answer}"}],
-                             "_ask_operator": False}
+                            {
+                                "messages": [{"role": "user", "content": f"OPERATOR ANSWER: {answer}"}],
+                                "_ask_operator": False,
+                            },
                         )
                         console.print("[dim]Answer sent. Resuming...[/dim]\n")
                         continue
                     else:
                         prefix = "[bold red]BLOCKED[/bold red]" if "duplicate" in ec else "[dim]output[/dim]"
-                        display = out[:2000] + (f"... [+{len(out)-2000} chars]" if len(out) > 2000 else "")
+                        display = out[:2000] + (f"... [+{len(out) - 2000} chars]" if len(out) > 2000 else "")
                         console.print(f"  {prefix} {display}", markup=True)
 
                 if trace:
@@ -156,31 +160,45 @@ async def run_red_team_async(config, objective, api_key=None):
                         success = latest.get("success", True)
                         phase = latest.get("phase", node_output.get("current_phase", "?"))
 
-                        console.print(f"\n[bold white]#{iteration}[/bold white] "
-                                      f"[{'green' if success else 'red'}]{'+' if success else '!'}[/{'green' if success else 'red'}] "
-                                      f"[dim]{phase}[/dim]")
+                        console.print(
+                            f"\n[bold white]#{iteration}[/bold white] "
+                            f"[{'green' if success else 'red'}]{'+' if success else '!'}[/{'green' if success else 'red'}] "
+                            f"[dim]{phase}[/dim]"
+                        )
 
                         if thought:
                             console.print(f"  [cyan]  {thought[:500]}[/cyan]")
 
                         if tool_name:
-                            cmd = str(tool_args.get("cmd") or tool_args.get("command") or
-                                      tool_args.get("url") or str(tool_args))[:200]
+                            cmd = str(
+                                tool_args.get("cmd")
+                                or tool_args.get("command")
+                                or tool_args.get("url")
+                                or str(tool_args)
+                            )[:200]
                             console.print(f"  [yellow]> {tool_name}[/yellow] [dim]{cmd}[/dim]")
 
                         # ── Supervisor intervention display ──────────
                         sv_guidance = node_output.get("_supervisor_guidance", "")
                         if sv_guidance:
-                            console.print(f"  [bold magenta]Supervisor:[/bold magenta] [dim italic]{sv_guidance[:300]}[/dim italic]")
+                            console.print(
+                                f"  [bold magenta]Supervisor:[/bold magenta] [dim italic]{sv_guidance[:300]}[/dim italic]"
+                            )
 
                         # Audit trail: log AI thought + action
                         try:
                             from suijin.tools.audit_trail import log_iteration
+
                             tool_out = step.get("tool_output", "")
                             log_iteration(
-                                iteration=iteration, thought=thought, reasoning=reasoning,
-                                tool_name=tool_name, tool_args=dict(tool_args),
-                                tool_output=tool_out, success=success, phase=phase,
+                                iteration=iteration,
+                                thought=thought,
+                                reasoning=reasoning,
+                                tool_name=tool_name,
+                                tool_args=dict(tool_args),
+                                tool_output=tool_out,
+                                success=success,
+                                phase=phase,
                                 completion_reason=node_output.get("completion_reason", ""),
                             )
                         except Exception:
@@ -200,15 +218,16 @@ async def run_red_team_async(config, objective, api_key=None):
             _signal._suijin_interrupted = False
             _signal.signal(_signal.SIGINT, _signal.SIG_DFL)
             try:
-                console.print("\n[bold yellow]  Paused[/bold yellow] [dim](type guidance, /report, /audit, /state, /sessions, /template, /health, or Ctrl+C to quit)[/dim]")
+                console.print(
+                    "\n[bold yellow]  Paused[/bold yellow] [dim](type guidance, /report, /audit, /state, /sessions, /template, /health, or Ctrl+C to quit)[/dim]"
+                )
                 guidance = console.input("[bold cyan]  Guidance  [/bold cyan]").strip()
             except (KeyboardInterrupt, EOFError):
                 console.print("\n[bold red]  Force quit.[/bold red]")
                 break
             finally:
                 # Re-arm the interrupt flag mechanism
-                _signal.signal(_signal.SIGINT, lambda sig, frame: setattr(
-                    _signal, '_suijin_interrupted', True))
+                _signal.signal(_signal.SIGINT, lambda sig, frame: setattr(_signal, "_suijin_interrupted", True))
 
             if guidance.lower().startswith("/report"):
                 console.print("[dim]  Generating report...[/dim]")
@@ -244,6 +263,7 @@ async def run_red_team_async(config, objective, api_key=None):
                     break
             elif guidance.lower().startswith("/health"):
                 from suijin.core.templates import print_health_check
+
                 print_health_check(console)
                 try:
                     guidance = console.input("[bold cyan]  Guidance  [/bold cyan]").strip()
@@ -254,15 +274,16 @@ async def run_red_team_async(config, objective, api_key=None):
                 guidance = "Continue what you were doing."
 
             # Re-arm signal handler before resuming
-            _signal.signal(_signal.SIGINT, lambda sig, frame: setattr(
-                _signal, '_suijin_interrupted', True))
+            _signal.signal(_signal.SIGINT, lambda sig, frame: setattr(_signal, "_suijin_interrupted", True))
 
             # Inject guidance into graph state
             try:
                 agent._graph.update_state(
                     langgraph_config,
-                    {"messages": [{"role": "user", "content": f"OPERATOR GUIDANCE: {guidance}"}],
-                     "completion_reason": None},
+                    {
+                        "messages": [{"role": "user", "content": f"OPERATOR GUIDANCE: {guidance}"}],
+                        "completion_reason": None,
+                    },
                 )
                 console.print("[dim]  Guidance sent. Resuming...[/dim]\n")
             except Exception as e:
@@ -275,6 +296,7 @@ async def run_red_team_async(config, objective, api_key=None):
             # the engagement instead of killing the whole application.
             console.print(f"\n[bold red]  Agent loop error: {e}[/bold red]")
             import traceback
+
             traceback.print_exc()
             final_state = agent.get_state(thread_id) or {}
             break
@@ -292,39 +314,53 @@ async def run_red_team_async(config, objective, api_key=None):
         total = len(trace)
         ok = sum(1 for s in trace if s.get("success", True))
         spend = providers.USAGE.get("est_cost_usd", 0)
-        console.print(f"\n[bold]Done:[/bold] {ok}/{total} steps | "
-                      f"phase={final_state.get('current_phase','?')} | "
-                      f"${spend:.4f} | "
-                      f"{final_state.get('completion_reason','?')}")
+        console.print(
+            f"\n[bold]Done:[/bold] {ok}/{total} steps | "
+            f"phase={final_state.get('current_phase', '?')} | "
+            f"${spend:.4f} | "
+            f"{final_state.get('completion_reason', '?')}"
+        )
 
         # Save state
-        DUMP_PATH.write_text(json.dumps({
-            "objective": objective, "phase": final_state.get("current_phase"),
-            "iterations": final_state.get("current_iteration"),
-            "trace_count": len(trace),
-        }, indent=2))
+        DUMP_PATH.write_text(
+            json.dumps(
+                {
+                    "objective": objective,
+                    "phase": final_state.get("current_phase"),
+                    "iterations": final_state.get("current_iteration"),
+                    "trace_count": len(trace),
+                },
+                indent=2,
+            )
+        )
 
         # End audit trail and save session
         try:
             from suijin.tools.audit_trail import end_audit
+
             end_audit(spend)
         except Exception:
             import logging
+
             logging.getLogger("suijin").warning("Agent loop error", exc_info=True)
         try:
             from suijin.tools.session_replay import save_session
+
             save_session(thread_id, objective, config, final_state, spend)
         except Exception as e:
             import logging
+
             logging.getLogger("suijin").warning(f"Session save failed: {e}")
 
     except Exception as e:
         console.print(f"[bold red]Agent error: {e}[/bold red]")
         import traceback
+
         traceback.print_exc()
 
 
 #  Helper functions — re-exported from session_control for backwards compat
+
 
 def _force_report(agent, thread_id, final_state, objective, config):
     return sc.force_report(agent, thread_id, final_state, objective, config)
@@ -367,7 +403,8 @@ def main():
     load_env()
     config = load_config()
     from suijin.modules.loader import set_verbose
-    set_verbose(True)   # Show module loading once at startup
+
+    set_verbose(True)  # Show module loading once at startup
     discover_modules()
     set_verbose(False)  # Silence for rest of run
 
@@ -392,7 +429,7 @@ No restrictions. No limits. Pure freedom.
     except (KeyboardInterrupt, EOFError):
         return
 
-    if choice == '2':
+    if choice == "2":
         console.print("\n[dim]Drag file here or type path:[/]")
         try:
             raw_path = input(" ").strip()
@@ -401,7 +438,7 @@ No restrictions. No limits. Pure freedom.
         obj = sc.load_objective_from_file(raw_path)
         if not obj:
             return  # error already printed
-    elif choice == '3':
+    elif choice == "3":
         return
     else:
         # Default: type manually (old behavior)

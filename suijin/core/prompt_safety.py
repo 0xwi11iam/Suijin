@@ -11,6 +11,7 @@ inside the real region.
 
 Ported from redamon/agentic/prompt_safety.py — adapted for Suijin TUI.
 """
+
 from __future__ import annotations
 
 import re
@@ -18,31 +19,57 @@ import secrets
 
 # Embedding config and test fixtures — defined inline
 EMBEDDING_DIMS = {
-    "openai_ada_002": 1536, "openai_text_embedding_3_small": 1536,
-    "openai_text_embedding_3_large": 3072, "bge_large_en": 1024,
-    "e5_large_v2": 1024, "minilm_l6": 384,
+    "openai_ada_002": 1536,
+    "openai_text_embedding_3_small": 1536,
+    "openai_text_embedding_3_large": 3072,
+    "bge_large_en": 1024,
+    "e5_large_v2": 1024,
+    "minilm_l6": 384,
 }
-CHUNK_CONFIG = {"chunk_size": 512, "chunk_overlap": 64, "separators": ["\n\n", "\n", ". ", " ", ""], "min_chunk_size": 100, "max_chunk_size": 1024}
-KB_CATEGORIES = {"vulnerability": "Known vulnerabilities", "exploit": "Exploit techniques", "recon": "Recon findings", "credential": "Discovered credentials", "configuration": "Target configs", "defense": "WAF and security controls", "technique": "Attack techniques", "note": "General notes"}
+CHUNK_CONFIG = {
+    "chunk_size": 512,
+    "chunk_overlap": 64,
+    "separators": ["\n\n", "\n", ". ", " ", ""],
+    "min_chunk_size": 100,
+    "max_chunk_size": 1024,
+}
+KB_CATEGORIES = {
+    "vulnerability": "Known vulnerabilities",
+    "exploit": "Exploit techniques",
+    "recon": "Recon findings",
+    "credential": "Discovered credentials",
+    "configuration": "Target configs",
+    "defense": "WAF and security controls",
+    "technique": "Attack techniques",
+    "note": "General notes",
+}
+
+
 def generate_content_hash(content: str) -> str:
     import hashlib
+
     return hashlib.sha256(content.encode()).hexdigest()[:16]
+
+
 def validate_embedding_dim(model: str, vector: list) -> bool:
     expected = EMBEDDING_DIMS.get(model)
     return expected is None or len(vector) == expected
+
+
 TEST_TARGETS = []
 TEST_CREDENTIALS = []
+
+
 def get_test_fixture(name: str) -> dict:
     return {}
+
 
 _MARKER_PREFIX_RE = re.compile(r"<<<\s*(END_)?UNTRUSTED_", re.IGNORECASE)
 _ZWSP = "\u200b"  # zero-width space
 
 
 def _neutralize_markers(text: str) -> str:
-    return _MARKER_PREFIX_RE.sub(
-        lambda m: f"<{_ZWSP}<{_ZWSP}<" + (m.group(1) or "") + "UNTRUSTED_", text
-    )
+    return _MARKER_PREFIX_RE.sub(lambda m: f"<{_ZWSP}<{_ZWSP}<" + (m.group(1) or "") + "UNTRUSTED_", text)
 
 
 def wrap_untrusted(text, label: str = "TOOL_OUTPUT") -> str:
@@ -53,11 +80,7 @@ def wrap_untrusted(text, label: str = "TOOL_OUTPUT") -> str:
         text = str(text)
     nonce = secrets.token_hex(8)
     body = _neutralize_markers(text)
-    return (
-        f"<<<UNTRUSTED_{label} id={nonce}>>>\n"
-        f"{body}\n"
-        f"<<<END_UNTRUSTED_{label} id={nonce}>>>"
-    )
+    return f"<<<UNTRUSTED_{label} id={nonce}>>>\n{body}\n<<<END_UNTRUSTED_{label} id={nonce}>>>"
 
 
 UNTRUSTED_OUTPUT_GUIDANCE = """\

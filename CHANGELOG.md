@@ -6,6 +6,64 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## [3.0.0] — 2026-08-18 — THE RENAME RELEASE
+
+### Added — packaging
+- **Installable Python package**: `[project]` table with pinned deps, a
+  `suijin` console script (`suijin.cli:main`), and package-data for every
+  runtime asset (version/config/prompts/skills/tutorials/ui dist). `pipx
+  install suijin` / `uv tool install suijin` now work; the wheel is
+  verified complete by tests (no tests shipped, entry point live).
+  Packaging guards lock pyproject↔version.json (the 2.3.0-beta drift
+  class), verify every package-data glob matches real files (caught a
+  stale templates/* on day one), and require requirements.txt deps to be
+  declared.
+
+### Added — safety & resilience (from the core feature spec)
+- **HITL approvals console** (`suijin approvals list/approve/deny/clear`):
+  blocked HITL tool calls are recorded as pending requests; approving
+  allows that tool for the session (honored inside modes.py), denying
+  hard-blocks it with an explicit message; latest decision wins; the
+  request log survives `clear`. File-based, no daemons, no TTL races.
+- **Panic button** (`suijin panic`): kills Suijin-owned processes
+  (TUI/web/labs/scanners via narrow pkill patterns) and clears blue-team
+  live state in /tmp. Best-effort by design — a panic command must never
+  itself fail. `--dry-run` previews.
+- **DNS-pinned scope enforcement**: a hostname in the allowed scopes must
+  ALSO resolve to in-scope IPs — `example.com` scoped while its DNS
+  points elsewhere is now blocked, with the offending IPs named.
+  Unresolvable hosts fail CLOSED unless the policy sets
+  `allow_unresolvable`. Resolution is memoized per host.
+- **Self-healing tool execution**: route_tool retries network-shaped
+  failures (timeout/connection/5xx) up to twice with backoff — the same
+  call unchanged, because those errors are environmental. Logical errors
+  return immediately so the agent adjusts next turn instead of burning
+  the clock on guaranteed-failing retries.
+- **Output normalizer** (`normalize_output` agent tool): compact JSON
+  from the two noisiest outputs — nmap service tables (port/proto/
+  service/product/version) and directory brute-force lists (path/status,
+  2xx-3xx only). Auto-detects which parser fits.
+
+### Fixed — bugs found by the new tests
+- Codebase scanners excluded files by SUBSTRING over the whole path:
+  any project under a directory containing `test_` (pytest tmp dirs,
+  `contest_app`) silently lost every route. Now matches path parts /
+  filename prefixes (python, JS, and PHP analyzers).
+- install.sh migration block called `info` before the function existed
+  (found by the migration E2E); block moved below the helper defs.
+
+### Added — tests & coverage
+- 49 new tests (safety/resilience, coverage push on subagent_manager,
+  codebase scanners, session_control; packaging guards; Medusa→Suijin
+  migration E2E incl. a full install.sh run against a fake $HOME with a
+  legacy ~/.medusa — marked `slow`, CI runs it).
+- Coverage 54% → **60%**; gate raised 48 → 56.
+
+### Not built (asset/liability filter — see 2.11.0's list)
+- Per-tool output parsers beyond nmap/dirs (LLM reads text fine; offload
+  handles size), rollback manager, team sync, post-exploit cleanup
+  orchestrator — each would add state machines with no current consumer.
+
 ## [2.12.0] — 2026-08-18 — SUIJIN (FULL PRODUCT RENAME)
 
 ### Changed — Medusa is now Suijin, everywhere

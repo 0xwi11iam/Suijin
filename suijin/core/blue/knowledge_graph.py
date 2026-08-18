@@ -6,6 +6,7 @@ Persists to blue_kg.json during the session, wiped on new session.
 Nodes: attackers, endpoints, attacks, defenses, deceptions
 Edges: attacked, defended_by, deceived_by, related_to
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -52,19 +53,34 @@ class BlueKnowledgeGraph:
         attacker_id = self.add_attacker(ip)
         nid = hashlib.md5(f"attack:{ip}:{path}:{attack_type}:{time.time()}".encode()).hexdigest()[:12]
         with self._lock:
-            self.nodes[nid] = KGNode(nid, "attack", {
-                "ip": ip, "path": path, "attack_type": attack_type,
-                "score": score, "payload": payload, "time": time.time(),
-            })
+            self.nodes[nid] = KGNode(
+                nid,
+                "attack",
+                {
+                    "ip": ip,
+                    "path": path,
+                    "attack_type": attack_type,
+                    "score": score,
+                    "payload": payload,
+                    "time": time.time(),
+                },
+            )
             self.edges.append((attacker_id, nid, "launched"))
         return nid
 
     def add_defense(self, ip: str, defense_type: str, detail: str = "") -> str:
         nid = hashlib.md5(f"defense:{ip}:{defense_type}:{time.time()}".encode()).hexdigest()[:12]
         with self._lock:
-            self.nodes[nid] = KGNode(nid, "defense", {
-                "ip": ip, "type": defense_type, "detail": detail, "time": time.time(),
-            })
+            self.nodes[nid] = KGNode(
+                nid,
+                "defense",
+                {
+                    "ip": ip,
+                    "type": defense_type,
+                    "detail": detail,
+                    "time": time.time(),
+                },
+            )
             # Link to attacker if known
             attacker_id = hashlib.md5(f"attacker:{ip}".encode()).hexdigest()[:12]
             if attacker_id in self.nodes:
@@ -74,9 +90,15 @@ class BlueKnowledgeGraph:
     def add_intelligence(self, source: str, content: str) -> str:
         nid = hashlib.md5(f"intel:{source}:{content}:{time.time()}".encode()).hexdigest()[:12]
         with self._lock:
-            self.nodes[nid] = KGNode(nid, "intelligence", {
-                "source": source, "content": content, "time": time.time(),
-            })
+            self.nodes[nid] = KGNode(
+                nid,
+                "intelligence",
+                {
+                    "source": source,
+                    "content": content,
+                    "time": time.time(),
+                },
+            )
         return nid
 
     def get_attacker_history(self, ip: str) -> dict:
@@ -112,21 +134,26 @@ class BlueKnowledgeGraph:
                 "total_attacks": len(attacks),
                 "total_defenses": len(defenses),
                 "top_attackers": sorted(
-                    [{"ip": a.data["ip"], "flags": a.data.get("flags", 0)}
-                     for a in attackers],
-                    key=lambda x: x["flags"], reverse=True,
+                    [{"ip": a.data["ip"], "flags": a.data.get("flags", 0)} for a in attackers],
+                    key=lambda x: x["flags"],
+                    reverse=True,
                 )[:5],
-                "recent_attacks": sorted(
-                    [a.data for a in attacks], key=lambda x: x.get("time", 0), reverse=True
-                )[:10],
+                "recent_attacks": sorted([a.data for a in attacks], key=lambda x: x.get("time", 0), reverse=True)[:10],
             }
 
     def save(self):
         with self._lock:
             data = {
-                "nodes": {k: {"id": v.node_id, "type": v.node_type, "data": v.data,
-                              "created": v.created_at, "updated": v.updated_at}
-                          for k, v in self.nodes.items()},
+                "nodes": {
+                    k: {
+                        "id": v.node_id,
+                        "type": v.node_type,
+                        "data": v.data,
+                        "created": v.created_at,
+                        "updated": v.updated_at,
+                    }
+                    for k, v in self.nodes.items()
+                },
                 "edges": self.edges,
             }
             KG_PATH.write_text(json.dumps(data, indent=2, default=str))
@@ -138,9 +165,9 @@ class BlueKnowledgeGraph:
             data = json.loads(KG_PATH.read_text())
             with self._lock:
                 for k, v in data.get("nodes", {}).items():
-                    self.nodes[k] = KGNode(v["id"], v["type"], v["data"],
-                                           v.get("created", time.time()),
-                                           v.get("updated", time.time()))
+                    self.nodes[k] = KGNode(
+                        v["id"], v["type"], v["data"], v.get("created", time.time()), v.get("updated", time.time())
+                    )
                 self.edges = data.get("edges", [])
         except Exception:
             pass
@@ -182,12 +209,14 @@ class BlueKnowledgeGraph:
 # Global singleton
 _global_kg: Optional[BlueKnowledgeGraph] = None
 
+
 def get_kg() -> BlueKnowledgeGraph:
     global _global_kg
     if _global_kg is None:
         _global_kg = BlueKnowledgeGraph()
         _global_kg.load()
     return _global_kg
+
 
 def reset_kg():
     global _global_kg

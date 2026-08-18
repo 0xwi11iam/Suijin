@@ -3,6 +3,7 @@
 Catches typos, missing required fields, and type mismatches before they
 cause silent runtime failures.
 """
+
 from __future__ import annotations
 
 from typing import List
@@ -68,6 +69,7 @@ class CostConfig(BaseModel):
 
 class BlueConfig(BaseModel):
     """Validates blue_config.json at load time."""
+
     traffic_normalization_turns: int = Field(default=25, ge=5, le=500)
     scorer: ScorerConfig = Field(default_factory=ScorerConfig)
     watchers: WatcherConfig = Field(default_factory=WatcherConfig)
@@ -81,6 +83,7 @@ class BlueConfig(BaseModel):
 
 class RedConfig(BaseModel):
     """Validates config.json at load time."""
+
     provider: str = Field(default="deepseek")
     deepseek_model: str = Field(default="deepseek-v4-flash")
     zai_model: str = Field(default="glm-5.3")
@@ -114,5 +117,6 @@ class RedConfig(BaseModel):
     def warn_high_cap(cls, v):
         if v > 50.0:
             import warnings
+
             warnings.warn(f"Cost cap ${v:.2f} is high. Consider setting a lower limit.", stacklevel=2)
         return v

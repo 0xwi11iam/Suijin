@@ -150,6 +150,44 @@ def validate_policy(path: Path | None = None) -> list[str]:
     return problems
 
 
+_DNS_CACHE: dict[str, list[str]] = {}
+
+
+def _resolve_host(host: str) -> list[str]:
+    """Resolved IPs for a hostname (memoized). Raises OSError on DNS failure."""
+    import socket
+
+    if host not in _DNS_CACHE:
+        infos = socket.getaddrinfo(host, None)
+        _DNS_CACHE[host] = sorted({i[4][0] for i in infos})
+    return _DNS_CACHE[host]
+
+
+def _target_in_scope(host: str, scopes: list[str], policy: dict) -> tuple[bool, str]:
+    """Scope check with DNS pinning: a hostname in scope must ALSO resolve
+    only to in-scope IPs — otherwise 'example.com' could be scoped while its
+    DNS points the agent at an arbitrary production box. Unresolvable names
+    fail CLOSED unless the policy sets allow_unresolvable (offline labs)."""
+    import ipaddress
+
+    try:
+        ipaddress.ip_address(host)
+        return _ip_in_scope(host, scopes), ""
+    except ValueError:
+        if not _ip_in_scope(host, scopes):
+            return False, ""
+        try:
+            ips = _resolve_host(host)
+        except OSError:
+            if policy.get("allow_unresolvable"):
+                return True, ""
+            return False, f"'{host}' does not resolve (DNS) and allow_unresolvable is not set"
+        bad = [ip for ip in ips if not _ip_in_scope(ip, scopes)]
+        if bad:
+            return False, f"'{host}' resolves to out-of-scope IP(s): {', '.join(bad)}"
+        return True, ""
+
+
 def _ip_in_scope(host: str, scopes: list[str]) -> bool:
     import ipaddress
 
@@ -215,13 +253,12 @@ def check_policy(tool: str, args: dict, policy: dict | None = None) -> tuple[boo
         if m:
             return False, f"policy: args match blocked pattern '{pat}'"
     host = extract_target(args or {})
-    if (
-        host
-        and tool not in _SCOPE_EXEMPT
-        and pol.get("allowed_target_scopes")
-        and not _ip_in_scope(host, pol["allowed_target_scopes"])
-    ):
-        return False, (
-            f"policy: target '{host}' is outside allowed scopes ({len(pol['allowed_target_scopes'])} configured)"
-        )
+    if host and tool not in _SCOPE_EXEMPT and pol.get("allowed_target_scopes"):
+        ok, why = _target_in_scope(host, pol["allowed_target_scopes"], pol)
+        if not ok:
+            detail = f" — {why}" if why else ""
+            return False, (
+                f"policy: target '{host}' is outside allowed scopes "
+                f"({len(pol['allowed_target_scopes'])} configured){detail}"
+            )
     return True, ""

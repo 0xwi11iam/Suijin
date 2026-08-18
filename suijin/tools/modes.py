@@ -146,11 +146,25 @@ def _segment_binaries(cmd: str) -> list[str]:
 
 
 def _hitl_check(tool_name: str, args: dict) -> str | None:
+    # Session verdicts from `suijin approvals approve/deny` (file-based).
+    from suijin.tools.approvals import decision_for, record_pending
+
+    verdict = decision_for(tool_name)
+    if verdict == "denied":
+        return (
+            f"BLOCKED by HITL mode: the operator DENIED '{tool_name}' for this session. "
+            "Do not attempt it again; ask the operator to reconsider via 'suijin approvals'."
+        )
+    if verdict == "approved":
+        return None  # operator explicitly allowed this tool
+
     if tool_name not in _HITL_ALLOWED_TOOLS:
+        record_pending(tool_name, args)  # surfaced via `suijin approvals list`
         return (
             f"BLOCKED by HITL mode (recon only): tool '{tool_name}' is not read-only. "
-            "Do NOT execute exploits. Write detailed exploitation instructions for the "
-            "human operator instead (exact command, expected output, risk level)."
+            "The operator was notified (suijin approvals). Do NOT execute exploits. "
+            "Write detailed exploitation instructions for the human operator instead "
+            "(exact command, expected output, risk level)."
         )
     if tool_name == "execute_terminal":
         cmd = str(args.get("cmd") or args.get("command") or "")

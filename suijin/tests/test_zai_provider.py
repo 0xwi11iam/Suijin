@@ -306,14 +306,12 @@ class TestActiveModelResolution:
     def test_huggingface_keeps_final_model_id(self):
         from suijin.core.red.config_loader import active_model
 
-        assert active_model({**self.DEFAULT_CFG, "provider": "huggingface"}) \
-            == "deepseek-ai/DeepSeek-V4-Flash"
+        assert active_model({**self.DEFAULT_CFG, "provider": "huggingface"}) == "deepseek-ai/DeepSeek-V4-Flash"
 
     def test_zai_endpoint_variant_shows_model(self):
         from suijin.core.red.config_loader import active_model
 
-        cfg = {**self.DEFAULT_CFG, "provider": "zai", "zai_model": "glm-5-turbo",
-               "zai_endpoint": "paas"}
+        cfg = {**self.DEFAULT_CFG, "provider": "zai", "zai_model": "glm-5-turbo", "zai_endpoint": "paas"}
         assert active_model(cfg) == "glm-5-turbo"
 
     def test_missing_everything_is_auto(self):
@@ -328,17 +326,16 @@ class TestActiveModelResolution:
 
         from suijin.core.red import llm_client
 
-        monkeypatch.setattr(
-            llm_client, "_generate", lambda msgs, cfg: "ok"
-        )
+        monkeypatch.setattr(llm_client, "_generate", lambda msgs, cfg: "ok")
         labels = []
         monkeypatch.setattr(
-            llm_client.console, "status",
+            llm_client.console,
+            "status",
             lambda label, **_k: labels.append(label) or _NullCtx(),
         )
-        out = asyncio.run(llm_client.generate_async(
-            [{"role": "user", "content": "hi"}],
-            {**self.DEFAULT_CFG, "provider": "zai"}))
+        out = asyncio.run(
+            llm_client.generate_async([{"role": "user", "content": "hi"}], {**self.DEFAULT_CFG, "provider": "zai"})
+        )
         assert out == "ok"
         assert "zai/glm-5.3" in labels[0]
         assert "DeepSeek" not in labels[0]

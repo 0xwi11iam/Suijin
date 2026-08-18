@@ -1304,6 +1304,34 @@ def run_notify(args) -> int:
     return 1
 
 
+def run_approvals(args) -> int:
+    from suijin.tools import approvals as ap
+
+    action = getattr(args, "approvals_action", "list")
+    if action == "list":
+        print(ap.render_list())
+        return 0
+    if action == "clear":
+        print(ap.clear_session())
+        return 0
+    item_id = getattr(args, "id", None)
+    if item_id is None:
+        print("error: approval id required (see: suijin approvals list)")
+        return 2
+    if action == "approve":
+        print(ap.decide(int(item_id), approve=True))
+    elif action == "deny":
+        print(ap.decide(int(item_id), approve=False))
+    return 0
+
+
+def run_panic(args) -> int:
+    from suijin.tools.panic import panic
+
+    print(panic(dry_run=bool(getattr(args, "dry_run", False))))
+    return 0
+
+
 def run_compliance(args) -> int:
     from suijin.tools.compliance import load_findings, map_findings, render
 
@@ -1494,6 +1522,24 @@ def main(argv=None):
     compliance.add_argument("engagement", nargs="?", default=None,
                             help="engagement name (default: newest audit trail)")
     compliance.set_defaults(func=run_compliance)
+
+    approvals = sub.add_parser("approvals", help="HITL approval console: list/approve/deny/clear")
+    approvals_sub = approvals.add_subparsers(dest="approvals_action")
+    approvals_sub.add_parser("list", help="list approval requests") \
+        .set_defaults(func=run_approvals)
+    a_ok = approvals_sub.add_parser("approve", help="allow a tool for this session")
+    a_ok.add_argument("id", type=int, help="approval request id")
+    a_ok.set_defaults(func=run_approvals)
+    a_no = approvals_sub.add_parser("deny", help="hard-block a tool for this session")
+    a_no.add_argument("id", type=int, help="approval request id")
+    a_no.set_defaults(func=run_approvals)
+    approvals_sub.add_parser("clear", help="reset session verdicts (keep the log)") \
+        .set_defaults(func=run_approvals)
+    approvals.set_defaults(func=lambda _a: run_approvals(argparse.Namespace(approvals_action="list")))
+
+    panic_cmd = sub.add_parser("panic", help="stop all Suijin processes + clear live state NOW")
+    panic_cmd.add_argument("--dry-run", action="store_true", help="report what would happen")
+    panic_cmd.set_defaults(func=run_panic)
 
     config = sub.add_parser("config", help="inspect and validate configuration")
     config_sub = config.add_subparsers(dest="config_action")

@@ -6,6 +6,7 @@ Decorators and context managers that:
 - Classify errors for intelligent retry/fallback decisions
 - Provide safe defaults when operations fail
 """
+
 from __future__ import annotations
 
 import functools
@@ -25,6 +26,7 @@ def safe_call(default_return=None, log_level: int = logging.WARNING):
         @safe_call(default_return=[])
         def might_fail(): ...
     """
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -37,12 +39,15 @@ def safe_call(default_return=None, log_level: int = logging.WARNING):
                     exc_info=(log_level <= logging.DEBUG),
                 )
                 return default_return() if callable(default_return) else default_return
+
         return wrapper
+
     return decorator
 
 
 def safe_async(default_return=None, log_level: int = logging.WARNING):
     """Async version of safe_call."""
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
@@ -55,7 +60,9 @@ def safe_async(default_return=None, log_level: int = logging.WARNING):
                     exc_info=(log_level <= logging.DEBUG),
                 )
                 return default_return() if callable(default_return) else default_return
+
         return wrapper
+
     return decorator
 
 
@@ -67,6 +74,7 @@ class GracefulFallback:
             result.value = risky_operation()
         # result.value is "safe_value" if risky_operation() raised
     """
+
     def __init__(self, default=None, log_level: int = logging.WARNING):
         self.default = default
         self.log_level = log_level
@@ -107,7 +115,9 @@ def classify_and_handle(error: Exception, context: str = "") -> dict:
             guidance = "Connection refused. Target may be down or blocking requests. Verify target is accessible."
         elif "timeout" in error_msg.lower():
             classification = "timeout"
-            guidance = "Request timed out. Target may be slow or unreachable. Increase timeout or try a lighter request."
+            guidance = (
+                "Request timed out. Target may be slow or unreachable. Increase timeout or try a lighter request."
+            )
         else:
             classification = "network_error"
             guidance = "Network error. Check connectivity and retry with backoff."

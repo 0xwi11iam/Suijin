@@ -11,6 +11,7 @@ spending an AI call. If the pattern detector fires, the request gets the
 full INVESTIGATED panel immediately, actual deception/blocking is deployed,
 and the action is recorded in the shared knowledge graph.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -45,12 +46,24 @@ console = Console()
 
 _ATTACK_PATTERNS = [
     # (name, regex, weight)
-    ("SQL Injection", r"(?i)(union\s+select|'\s*or\s+'[^']*'\s*=\s*'|'\s*or\s+\d+\s*=\s*\d+|'\s*--|;\s*drop\s+table|\bselect\b.*\bfrom\b.*\bwhere\b)", 5),
+    (
+        "SQL Injection",
+        r"(?i)(union\s+select|'\s*or\s+'[^']*'\s*=\s*'|'\s*or\s+\d+\s*=\s*\d+|'\s*--|;\s*drop\s+table|\bselect\b.*\bfrom\b.*\bwhere\b)",
+        5,
+    ),
     ("SQL Injection (blind)", r"(?i)('\s*or\s+sleep\s*\(|'\s*and\s+sleep\s*\(|benchmark\s*\(|'\s*or\s+pg_sleep)", 5),
-    ("XSS", r"(?i)(<script[^>]*>|onerror\s*=|javascript\s*:|<img[^>]+onerror|<svg[^>]+onload|alert\s*\(|prompt\s*\()", 5),
+    (
+        "XSS",
+        r"(?i)(<script[^>]*>|onerror\s*=|javascript\s*:|<img[^>]+onerror|<svg[^>]+onload|alert\s*\(|prompt\s*\()",
+        5,
+    ),
     ("Path Traversal", r"(?:\.\./|\.\.\\|/etc/passwd|/etc/shadow|C:\\Windows\\|/winnt/|boot\.ini)", 4),
     ("SSRF", r"(?:169\.254\.169\.254|metadata\.google\.internal|100\.64\.0\.\d+|\.cloud/metadata)", 5),
-    ("Command Injection", r"(?i)(;\s*(id|whoami|uname|cat\s+/etc|ls\s+-la|pwd|wget\s+|curl\s+)\b|\|\s*(id|whoami|cat)|`[^`]{2,}`|\$\([^)]{2,}\))", 5),
+    (
+        "Command Injection",
+        r"(?i)(;\s*(id|whoami|uname|cat\s+/etc|ls\s+-la|pwd|wget\s+|curl\s+)\b|\|\s*(id|whoami|cat)|`[^`]{2,}`|\$\([^)]{2,}\))",
+        5,
+    ),
     ("SSTI", r"(?i)(\{\{.*\}\}|\$\{.*\}|<%=.*%>|#\{.*\}|\{\%.*\%\})", 4),
     ("XXE", r"(?i)(<!ENTITY\s+\w+\s+SYSTEM|<!DOCTYPE\s+\w+\s+\[)", 5),
     ("JWT Attack", r"(?i)(eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})", 3),
@@ -59,8 +72,16 @@ _ATTACK_PATTERNS = [
     ("NoSQL Injection", r"(?i)(\$\s*(ne|gt|lt|gte|lte|in|nin|regex|where|or|and)\s*:)", 4),
     ("Scanner User-Agent", r"(?i)(nmap|sqlmap|nikto|dirbuster|gobuster|burpsuite|acunetix|nessus|openvas|zap|w3af)", 4),
     # New patterns
-    ("Mass Assignment", r"(?:\"role\"\s*:\s*\"(?:admin|root|superuser)\"|\"is_admin\"\s*:\s*true|\"isAdmin\"\s*:\s*true)", 4),
-    ("Auth Bypass Header", r"(?:X-Admin[\"':\s]*true|X-Role[\"':\s]*admin|X-Forwarded-For[\"':\s]*127\.0\.0\.1|X-Original-URL|X-Rewrite-URL)", 5),
+    (
+        "Mass Assignment",
+        r"(?:\"role\"\s*:\s*\"(?:admin|root|superuser)\"|\"is_admin\"\s*:\s*true|\"isAdmin\"\s*:\s*true)",
+        4,
+    ),
+    (
+        "Auth Bypass Header",
+        r"(?:X-Admin[\"':\s]*true|X-Role[\"':\s]*admin|X-Forwarded-For[\"':\s]*127\.0\.0\.1|X-Original-URL|X-Rewrite-URL)",
+        5,
+    ),
     ("Brute Force", r"(?i)(?:password.*password|Hydra|Suijin|Ncrack|patator|crowbar)", 3),
     ("File Inclusion", r"(?i)(php://filter|php://input|data://text|expect://|file:///etc)", 5),
     ("GraphQL Attack", r"(?i)(__schema|__type|__typename|fragment|query\s*\{|mutation\s*\{)", 3),
@@ -96,10 +117,11 @@ def _detect_obvious_attack(request: dict) -> dict:
 @dataclass
 class FeedConfig:
     """Configuration for the live feed behavior."""
-    baseline_requests: int = 25      # How many requests to establish baseline
-    ai_analysis_enabled: bool = True # Whether to send anomalies to AI
-    show_all_normals: bool = True    # Show every normal request line
-    pattern_score_threshold: int = PATTERN_SCORE_THRESHOLD # Auto-DECEIVE/BLOCK if pattern score >= threshold
+
+    baseline_requests: int = 25  # How many requests to establish baseline
+    ai_analysis_enabled: bool = True  # Whether to send anomalies to AI
+    show_all_normals: bool = True  # Show every normal request line
+    pattern_score_threshold: int = PATTERN_SCORE_THRESHOLD  # Auto-DECEIVE/BLOCK if pattern score >= threshold
     panel_width: int = 80
 
 
@@ -166,6 +188,7 @@ class LiveFeed:
 
         # ── AFTER BASELINE: check if this is a known normal ──
         from suijin.core.blue.traffic.normalizer import get_global_normalizer
+
         normalizer = get_global_normalizer()
 
         if normalizer and normalizer.is_known_normal(request):
@@ -182,8 +205,7 @@ class LiveFeed:
             render_subagent_assignment(rid, path, sa.rank, sa.agent_id)
 
         if attack_check["score"] >= self.config.pattern_score_threshold:
-            return await self._handle_attack_detected(
-                request, attack_check, sa, rid, path, method, ip, normalizer)
+            return await self._handle_attack_detected(request, attack_check, sa, rid, path, method, ip, normalizer)
 
         # ── NO PATTERN MATCH: send to AI for analysis ──
         if not self.config.ai_analysis_enabled:
@@ -244,8 +266,7 @@ class LiveFeed:
         if effective_score >= RISK_HIGH and self.incident_commander:
             hist = kg.get_attacker_history(ip)
             if hist.get("total_flags", 0) >= 2:
-                self.incident_commander.declare_incident(
-                    ip, pattern_names[0], effective_score, [path])
+                self.incident_commander.declare_incident(ip, pattern_names[0], effective_score, [path])
                 if self.soc_lead:
                     self.soc_lead.escalate(ip, f"Repeat offender — {pattern_names[0]}", effective_score)
 
@@ -262,6 +283,7 @@ class LiveFeed:
         if prev == 0:
             try:
                 from suijin.core.blue.defense.counter_recon import recon_attacker
+
                 recon = recon_attacker(ip)
                 if recon.get("hostname") and recon["hostname"] != "unknown":
                     console.print(f"  [dim]Counter-recon: {ip} -> {recon['hostname']}[/dim]")
@@ -270,15 +292,23 @@ class LiveFeed:
                 pass
 
         # Show initial panel — pattern match detected
-        console.print(f"\n  [bold red]ATTACK DETECTED[/bold red] [dim]({', '.join(pattern_names)} | pattern score {effective_score}/10)[/dim]")
+        console.print(
+            f"\n  [bold red]ATTACK DETECTED[/bold red] [dim]({', '.join(pattern_names)} | pattern score {effective_score}/10)[/dim]"
+        )
         result = AIAnalysisResult(
-            request_id=rid, method=method, path=path, ip=ip,
-            body=body, headers=request.get("headers", {}), query=request.get("query", {}),
+            request_id=rid,
+            method=method,
+            path=path,
+            ip=ip,
+            body=body,
+            headers=request.get("headers", {}),
+            query=request.get("query", {}),
             reasoning=f"Pattern match: {', '.join(pattern_names)}. Awaiting AI decision.",
             attack_analysis=f"Pattern detector found: {', '.join(pattern_names)}. "
-                           f"IP flagged {prev + 1} time(s). Effective score: {effective_score}/10.",
+            f"IP flagged {prev + 1} time(s). Effective score: {effective_score}/10.",
             attacker_assessment=f"IP {ip} — {prev + 1} flags. Patterns: {', '.join(pattern_names)}.",
-            verdict="FLAGGED", score=effective_score,
+            verdict="FLAGGED",
+            score=effective_score,
             action="ANALYZING",
         )
         self.subagent_manager.record_anomaly(path, "FLAGGED")
@@ -297,12 +327,16 @@ class LiveFeed:
                 return ai_result
             elif ai_result:
                 # AI disagrees with pattern detector — log the disagreement but STILL defend
-                console.print(f"  [bold yellow]AI OVERRIDE[/bold yellow] [dim]— AI says {ai_result.verdict} (score {ai_result.score}) but pattern score is {effective_score}[/dim]")
+                console.print(
+                    f"  [bold yellow]AI OVERRIDE[/bold yellow] [dim]— AI says {ai_result.verdict} (score {ai_result.score}) but pattern score is {effective_score}[/dim]"
+                )
                 console.print(f"  [dim]AI reasoning: {ai_result.reasoning}[/dim]")
                 console.print("  [bold yellow]Applying fallback defense despite AI override[/bold yellow]")
                 # NEVER add pattern-matched attacks to normal baseline
                 self._apply_tarpit(ip, effective_score, pattern_names)
-                kg.add_defense(ip, "tarpit", f"Fallback — AI said {ai_result.verdict} but pattern score {effective_score}")
+                kg.add_defense(
+                    ip, "tarpit", f"Fallback — AI said {ai_result.verdict} but pattern score {effective_score}"
+                )
                 kg.save()
                 return result
             else:
@@ -324,16 +358,19 @@ class LiveFeed:
 
     def _execute_ai_decision(self, result: AIAnalysisResult, ip: str, patterns: list, score: int):
         """Execute whatever the AI decided — commands, code changes, REAL deception."""
-        target_path = getattr(self.ai_engine, 'target_path', '')
+        target_path = getattr(self.ai_engine, "target_path", "")
         action = (result.action or "").upper()
 
         # Execute shell commands
         if result.commands_run:
             import subprocess
+
             console.print("  [bold white]Commands:[/bold white]")
             for cmd in result.commands_run:
                 try:
-                    proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30, cwd=target_path or None)
+                    proc = subprocess.run(
+                        cmd, shell=True, capture_output=True, text=True, timeout=30, cwd=target_path or None
+                    )
                     ok = proc.returncode == 0
                     status = "[green]OK[/green]" if ok else f"[red]FAIL({proc.returncode})[/red]"
                     console.print(f"    [dim]$[/dim] {cmd} {status}")
@@ -345,6 +382,7 @@ class LiveFeed:
         # Apply code patches
         if result.code_changes and target_path:
             from pathlib import Path
+
             for cc in result.code_changes:
                 file_rel = cc.get("file", "")
                 new_content = cc.get("new_content", "")
@@ -368,10 +406,13 @@ class LiveFeed:
                         deploy_honeypot,
                         deploy_patch,
                     )
+
                     # Deploy honeypot endpoint
                     hp = deploy_honeypot(target_path, sa, ip)
                     if hp["status"] == "deployed":
-                        console.print(f"  [yellow]HONEYPOT:[/yellow] {hp['honeypot_path']} deployed in {os.path.basename(hp['file'])}")
+                        console.print(
+                            f"  [yellow]HONEYPOT:[/yellow] {hp['honeypot_path']} deployed in {os.path.basename(hp['file'])}"
+                        )
                     # Deploy canary tokens
                     ct = deploy_canary_tokens(target_path, ip)
                     if ct["status"] == "deployed":
@@ -379,7 +420,9 @@ class LiveFeed:
                     # Deploy deception data
                     dd = deploy_deception_data(target_path, sa, ip)
                     if dd["status"] == "deployed":
-                        console.print(f"  [yellow]DECEPTION:[/yellow] fake response data ready for {sa.endpoint.get('path','/')}")
+                        console.print(
+                            f"  [yellow]DECEPTION:[/yellow] fake response data ready for {sa.endpoint.get('path', '/')}"
+                        )
                 except Exception as e:
                     console.print(f"  [red]DECEPTION FAILED:[/red] {e}")
 
@@ -388,6 +431,7 @@ class LiveFeed:
             if sa and sa.patch_code:
                 try:
                     from suijin.core.blue.actions.deploy import deploy_patch
+
                     pt = deploy_patch(target_path, sa)
                     if pt["status"] == "patched":
                         console.print(f"  [green]VULN FIXED:[/green] {os.path.basename(pt['file'])} — handler patched")
@@ -402,11 +446,13 @@ class LiveFeed:
 
         # Show action summary
         action_color = {"BLOCK": "red", "DECEIVE": "yellow", "PATCH": "green", "LOG": "dim"}.get(action, "white")
-        console.print(Panel.fit(
-            f"[bold {action_color}]ACTION: {result.action}[/bold {action_color}]\n"
-            f"[dim]{result.reasoning}[/dim]",
-            border_style=action_color, padding=(1, 2),
-        ))
+        console.print(
+            Panel.fit(
+                f"[bold {action_color}]ACTION: {result.action}[/bold {action_color}]\n[dim]{result.reasoning}[/dim]",
+                border_style=action_color,
+                padding=(1, 2),
+            )
+        )
 
     def _apply_tarpit(self, ip: str, score: int, patterns: list):
         """Apply tarpit — write state file Flask checks on each request."""
@@ -415,8 +461,7 @@ class LiveFeed:
             if os.path.exists(self.TARPIT_FILE):
                 with open(self.TARPIT_FILE) as f:
                     state = json.loads(f.read())
-            state[ip] = {"delay": min(8.0, 1.0 + score * 0.8), "since": time.time(),
-                         "patterns": patterns}
+            state[ip] = {"delay": min(8.0, 1.0 + score * 0.8), "since": time.time(), "patterns": patterns}
             with open(self.TARPIT_FILE, "w") as f:
                 json.dump(state, f)
             console.print(f"  [yellow]TARPIT:[/yellow] {ip} — {state[ip]['delay']:.1f}s delay per request")
@@ -425,23 +470,20 @@ class LiveFeed:
 
     def _apply_block(self, ip: str, score: int):
         """Apply network-level block — pfctl on macOS, iptables on Linux."""
-        if not getattr(self, 'blocking_enabled', False):
+        if not getattr(self, "blocking_enabled", False):
             console.print(f"  [dim]BLOCK LOGGED:[/dim] {ip} — blocking disabled, logged only")
             return
         import platform
         import subprocess
+
         system = platform.system()
         try:
             if system == "Darwin":
-                subprocess.run(
-                    ["sudo", "pfctl", "-t", "blue_blocked", "-T", "add", ip],
-                    capture_output=True, timeout=5
-                )
+                subprocess.run(["sudo", "pfctl", "-t", "blue_blocked", "-T", "add", ip], capture_output=True, timeout=5)
                 console.print(f"  [red]BLOCKED:[/red] {ip} — pfctl table blue_blocked")
             else:
                 subprocess.run(
-                    ["sudo", "iptables", "-A", "BLUE_BLOCKED", "-s", ip, "-j", "DROP"],
-                    capture_output=True, timeout=5
+                    ["sudo", "iptables", "-A", "BLUE_BLOCKED", "-s", ip, "-j", "DROP"], capture_output=True, timeout=5
                 )
                 console.print(f"  [red]BLOCKED:[/red] {ip} — iptables BLUE_BLOCKED chain")
         except FileNotFoundError:

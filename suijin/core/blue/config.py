@@ -1,6 +1,7 @@
 """
 suijin/core/blue/config.py — Blue team operational configuration.
 """
+
 from __future__ import annotations
 
 import json
@@ -75,10 +76,12 @@ def load_blue_config() -> dict:
     # Validate with Pydantic model — catches typos and bad values at startup
     try:
         from suijin.core.config_models import BlueConfig
+
         validated = BlueConfig(**merged)
         return validated.model_dump()
     except Exception as e:
         import logging
+
         logging.getLogger("suijin").warning(f"Blue config validation failed: {e}. Using raw config.")
         return merged
 

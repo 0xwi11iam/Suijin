@@ -63,6 +63,7 @@ from suijin.tools.kb_tools import (
     suggest_exploit,
     wordlist_tool,
 )
+from suijin.tools.output_normalizer import normalize_output
 from suijin.tools.wordlist_mutator import cewl_words, mutate_wordlist
 
 
@@ -211,6 +212,7 @@ def _build_routes(config):
         ),
         "search_kb": lambda a: search_kb(a.get("keyword"), limit=a.get("limit") or 5),
         "kb_read": lambda a: _kb_read_tool(a.get("path", "")),
+        "normalize_output": lambda a: normalize_output(a.get("output", ""), kind=a.get("kind", "auto")),
         "target_dossier": lambda a: _target_dossier_tool(a.get("target", "")),
         "mutate_wordlist": lambda a: mutate_wordlist(
             a.get("seeds"),
@@ -311,6 +313,49 @@ def list_route_tools():
     return sorted(_build_routes(None).keys())
 
 
+# ── Self-healing execution (transient failures only) ──────────────────
+# Network-shaped failures (timeouts, connection resets, DNS blips) get a
+# short backoff retry — the same call, unchanged: these errors are
+# environmental, not behavioral. Everything else (bad args, auth, logic)
+# returns immediately so the agent can adjust on its next turn — blindly
+# retrying a logical error would just burn the engagement clock.
+_TRANSIENT_MARKERS = (
+    "timeout",
+    "timed out",
+    "connection",
+    "connectionerror",
+    "connection reset",
+    "temporarily unavailable",
+    "rate limited by provider",
+    "502",
+    "503",
+    "504",
+)
+_RETRY_BACKOFF_S = (1.0, 3.0)  # two retries max, then report
+
+
+def _is_transient(exc: Exception) -> bool:
+    text = f"{type(exc).__name__} {exc}".lower()
+    return any(m in text for m in _TRANSIENT_MARKERS)
+
+
+def _execute_with_healing(fn, args: dict, tool_name: str):
+    """Run a tool route with transient-failure retry. Never raises."""
+    import time as _time
+
+    attempts = 1 + len(_RETRY_BACKOFF_S)
+    for i in range(attempts):
+        try:
+            return fn(args)
+        except Exception as e:
+            transient = _is_transient(e)
+            if not transient or i == attempts - 1:
+                label = "transient failure persisted" if transient else "error"
+                return f"Tool Error ({tool_name}): {e} [{label}, attempt {i + 1}/{attempts}]"
+            _time.sleep(_RETRY_BACKOFF_S[i])
+    return f"Tool Error ({tool_name}): unreachable"
+
+
 def route_tool(tool_name, args, config):
     if args is None:
         args = {}
@@ -345,10 +390,7 @@ def route_tool(tool_name, args, config):
         _recon_state["exploration_count"] = _recon_state.get("exploration_count", 0) + 1
 
     if tool_name in routes:
-        try:
-            return routes[tool_name](args)
-        except Exception as e:
-            return f"Routing Error: {str(e)}"
+        return _execute_with_healing(routes[tool_name], args, tool_name)
     return f"Invalid Tool: {tool_name}"
 
 

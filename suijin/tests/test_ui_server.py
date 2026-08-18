@@ -138,9 +138,17 @@ class TestDossierEndpoint:
     def test_dossier_shape(self, client, monkeypatch):
         from suijin.tools import dossier as dos
 
-        monkeypatch.setattr(dos, "build_dossier", lambda t: {
-            "target": t, "constraints": {"blocks": ["x OR 1=1"]},
-            "failures": [], "engagements": [], "reports": []})
+        monkeypatch.setattr(
+            dos,
+            "build_dossier",
+            lambda t: {
+                "target": t,
+                "constraints": {"blocks": ["x OR 1=1"]},
+                "failures": [],
+                "engagements": [],
+                "reports": [],
+            },
+        )
         d = client.get("/api/dossier?target=10.0.0.5").get_json()
         assert d["target"] == "10.0.0.5"
         assert d["constraints"]["blocks"] == ["x OR 1=1"]
@@ -159,8 +167,11 @@ class TestTimelineEndpoint:
     def test_events_listed(self, client, monkeypatch):
         from suijin.tools import housekeeping as hk
 
-        monkeypatch.setattr(hk, "build_timeline", lambda limit=60: [
-            {"ts": "2026-08-18 01:00:00", "kind": "engagement start", "detail": "x"}])
+        monkeypatch.setattr(
+            hk,
+            "build_timeline",
+            lambda limit=60: [{"ts": "2026-08-18 01:00:00", "kind": "engagement start", "detail": "x"}],
+        )
         d = client.get("/api/timeline").get_json()
         assert d["events"][0]["kind"] == "engagement start"
 

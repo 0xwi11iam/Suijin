@@ -9,6 +9,7 @@ deception responses.
 Imports the subagent's pre-built assets (honeypot_code, patch_code,
 deception_response) that were generated during the analysis phase.
 """
+
 from __future__ import annotations
 
 import json
@@ -95,10 +96,14 @@ def deploy_patch(target_path: str, subagent) -> dict:
         else:
             # Can't find exact handler — append the patch as a comment and note
             with open(file_path, "a") as f:
-                f.write(f"\n# === SUIJIN PATCH for {ep.get('path','/')} ===\n")
+                f.write(f"\n# === SUIJIN PATCH for {ep.get('path', '/')} ===\n")
                 f.write("# Original handler was vulnerable. Patch code:\n")
                 f.write(f"# {subagent.patch_code[:500]}\n")
-            return {"status": "noted", "file": file_path, "reason": "Handler not found for exact replacement — patch appended as comment"}
+            return {
+                "status": "noted",
+                "file": file_path,
+                "reason": "Handler not found for exact replacement — patch appended as comment",
+            }
     except Exception as e:
         return {"status": "failed", "error": str(e)}
 
@@ -110,17 +115,21 @@ def deploy_canary_tokens(target_path: str, attacker_ip: str) -> dict:
     reads them and tries to use the credentials, we know.
     """
     import uuid
+
     tokens = {
         ".env.canary": f"# CANARY TOKEN — deployed {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-                        f"AWS_ACCESS_KEY_ID=AKIA_CANARY_{uuid.uuid4().hex[:8]}\n"
-                        f"AWS_SECRET_ACCESS_KEY=canary_{uuid.uuid4().hex[:16]}\n"
-                        f"DATABASE_URL=postgres://admin:canary_{uuid.uuid4().hex[:8]}@localhost/canary_db\n",
-        "api_keys.json": json.dumps({
-            "_canary": True,
-            "deployed_for": attacker_ip,
-            "stripe_key": f"sk_live_canary_{uuid.uuid4().hex[:12]}",
-            "github_token": f"ghp_canary_{uuid.uuid4().hex[:16]}",
-        }, indent=2),
+        f"AWS_ACCESS_KEY_ID=AKIA_CANARY_{uuid.uuid4().hex[:8]}\n"
+        f"AWS_SECRET_ACCESS_KEY=canary_{uuid.uuid4().hex[:16]}\n"
+        f"DATABASE_URL=postgres://admin:canary_{uuid.uuid4().hex[:8]}@localhost/canary_db\n",
+        "api_keys.json": json.dumps(
+            {
+                "_canary": True,
+                "deployed_for": attacker_ip,
+                "stripe_key": f"sk_live_canary_{uuid.uuid4().hex[:12]}",
+                "github_token": f"ghp_canary_{uuid.uuid4().hex[:16]}",
+            },
+            indent=2,
+        ),
     }
 
     deployed = []
@@ -161,7 +170,7 @@ def deploy_deception_data(target_path: str, subagent, attacker_ip: str) -> dict:
 def _make_honeypot_path(original: str) -> str:
     """Generate a honeypot route path from the original endpoint."""
     # Strip Flask/Express pattern variables
-    clean = re.sub(r'<[^>]+>', 'data', original)
+    clean = re.sub(r"<[^>]+>", "data", original)
     # Add honeypot suffix
     if clean.endswith("/"):
         return clean + "_backup"
@@ -172,15 +181,21 @@ def _wrap_flask_honeypot(code: str, path: str) -> str:
     """Wrap honeypot code in a Flask route decorator."""
     # If code already has @app.route, use as-is
     if "@app.route" in code or "@route" in code:
-        return code.replace(
-            re.findall(r'@\w*route\s*\(\s*["\'][^"\']+["\']', code)[0] if re.findall(r'@\w*route\s*\(\s*["\'][^"\']+["\']', code) else "",
-            f'@app.route("{path}")',
-            1
-        ) if re.findall(r'@\w*route\s*\(\s*["\'][^"\']+["\']', code) else f'@app.route("{path}")\n{code}'
+        return (
+            code.replace(
+                re.findall(r'@\w*route\s*\(\s*["\'][^"\']+["\']', code)[0]
+                if re.findall(r'@\w*route\s*\(\s*["\'][^"\']+["\']', code)
+                else "",
+                f'@app.route("{path}")',
+                1,
+            )
+            if re.findall(r'@\w*route\s*\(\s*["\'][^"\']+["\']', code)
+            else f'@app.route("{path}")\n{code}'
+        )
     # Otherwise wrap it
     return f"""
 @app.route("{path}", methods=["GET", "POST"])
-def honeypot_{path.replace('/', '_').replace('-', '_')}():
+def honeypot_{path.replace("/", "_").replace("-", "_")}():
     {code}
     return {{"status": "ok"}}
 """
@@ -191,7 +206,7 @@ def _wrap_fastapi_honeypot(code: str, path: str) -> str:
     return f"""
 @app.get("{path}")
 @app.post("{path}")
-async def honeypot_{path.replace('/', '_').replace('-', '_')}():
+async def honeypot_{path.replace("/", "_").replace("-", "_")}():
     {code}
     return {{"status": "ok"}}
 """

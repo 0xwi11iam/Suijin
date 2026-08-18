@@ -6,6 +6,7 @@ Three-panel layout when a request triggers INVESTIGATED tier:
   MIDDLE: AI reasoning — full untruncated analysis
   BOTTOM: Verdict (FLAGGED / NOT FLAGGED) + action decision panel
 """
+
 from __future__ import annotations
 
 from rich import box
@@ -37,7 +38,9 @@ def render_investigated_request(result) -> None:
 
     # Request ID and basic info
     request_table.add_row("Request #", str(result.request_id))
-    request_table.add_row("Method", f"[bold {_method_color(result.method)}]{result.method}[/bold {_method_color(result.method)}]")
+    request_table.add_row(
+        "Method", f"[bold {_method_color(result.method)}]{result.method}[/bold {_method_color(result.method)}]"
+    )
     request_table.add_row("Path", result.path)
     request_table.add_row("Source IP", result.ip)
 
@@ -61,21 +64,25 @@ def render_investigated_request(result) -> None:
     request_table.add_row("Analysis Time", f"{result.analysis_time_ms:.0f}ms via {result.llm_model}")
 
     console.print("")
-    console.print(Panel(
-        request_table,
-        title="[bold white]REQUEST DETAILS[/bold white]",
-        border_style="#58a6ff",
-        padding=(1, 2),
-    ))
+    console.print(
+        Panel(
+            request_table,
+            title="[bold white]REQUEST DETAILS[/bold white]",
+            border_style="#58a6ff",
+            padding=(1, 2),
+        )
+    )
 
     # ── MIDDLE PANEL: AI Reasoning (full, untruncated) ──
     reasoning_text = _build_reasoning_panel(result)
-    console.print(Panel(
-        reasoning_text,
-        title="[bold white]AI REASONING[/bold white]",
-        border_style="#d2991d",
-        padding=(1, 2),
-    ))
+    console.print(
+        Panel(
+            reasoning_text,
+            title="[bold white]AI REASONING[/bold white]",
+            border_style="#d2991d",
+            padding=(1, 2),
+        )
+    )
 
     # ── BOTTOM PANEL: Verdict ──
     if result.verdict == "FLAGGED":
@@ -93,12 +100,14 @@ def render_investigated_request(result) -> None:
     verdict_content.append(f"Score: {result.score}/10\n", style="dim")
     verdict_content.append(f"Action: {result.action}\n", style="bold white")
 
-    console.print(Panel(
-        verdict_content,
-        title=f"{verdict_icon}",
-        border_style=verdict_border,
-        padding=(1, 2),
-    ))
+    console.print(
+        Panel(
+            verdict_content,
+            title=f"{verdict_icon}",
+            border_style=verdict_border,
+            padding=(1, 2),
+        )
+    )
 
     # ── ACTION DECISION PANEL (if flagged) ──
     if result.verdict == "FLAGGED":
@@ -118,20 +127,19 @@ def render_investigated_request(result) -> None:
 
         if result.code_changes:
             for cc in result.code_changes:
-                action_table.add_row(
-                    "Code Change",
-                    f"{cc.get('file', '?')}\n  {cc.get('change', '')}"
-                )
+                action_table.add_row("Code Change", f"{cc.get('file', '?')}\n  {cc.get('change', '')}")
 
         if not result.commands_run and not result.code_changes:
             action_table.add_row("Note", f"Action recommended: {result.action}")
 
-        console.print(Panel(
-            action_table,
-            title="[bold red]ACTION DECISION[/bold red]",
-            border_style="#ff5555",
-            padding=(1, 2),
-        ))
+        console.print(
+            Panel(
+                action_table,
+                title="[bold red]ACTION DECISION[/bold red]",
+                border_style="#ff5555",
+                padding=(1, 2),
+            )
+        )
 
     # Separator
     console.print("")
@@ -149,8 +157,7 @@ def render_normal_line(request_id: int, method: str, path: str, ip: str) -> None
     )
 
 
-def render_anomalous_line(request_id: int, method: str, path: str, ip: str,
-                          score: int, flagged: bool = False) -> None:
+def render_anomalous_line(request_id: int, method: str, path: str, ip: str, score: int, flagged: bool = False) -> None:
     """Render a one-line anomalous request entry."""
     mc = _method_color(method)
     sigil = "[yellow]??[/yellow]" if not flagged else "[bold red]!![/bold red]"
@@ -164,12 +171,9 @@ def render_anomalous_line(request_id: int, method: str, path: str, ip: str,
     )
 
 
-def render_subagent_assignment(request_id: int, path: str, agent_rank: int,
-                               agent_id: str) -> None:
+def render_subagent_assignment(request_id: int, path: str, agent_rank: int, agent_id: str) -> None:
     """Render which subagent handled a request."""
-    console.print(
-        f"  [dim]        -> routed to Subagent #{agent_rank} ({agent_id}) for {path}[/dim]"
-    )
+    console.print(f"  [dim]        -> routed to Subagent #{agent_rank} ({agent_id}) for {path}[/dim]")
 
 
 def _method_color(method: str) -> str:

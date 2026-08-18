@@ -14,8 +14,7 @@ EXCLUDE = {"tests", "lab", "__pycache__", "kb_cache", "ui"}
 
 
 def _live_files():
-    return [p for p in PKG.rglob("*.py")
-            if not any(part in EXCLUDE for part in p.parts)]
+    return [p for p in PKG.rglob("*.py") if not any(part in EXCLUDE for part in p.parts)]
 
 
 def _module_targets(m: str) -> set[Path]:
@@ -71,23 +70,31 @@ def test_entry_points_importable():
 def test_blue_tree_only_contains_live_modules():
     """The packages pruned in v2.11.2 stay pruned."""
     gone = [
-        "counter_intel", "endpoints", "forensics", "hotfix", "intel",
-        "response", "orchestrator.py",
+        "counter_intel",
+        "endpoints",
+        "forensics",
+        "hotfix",
+        "intel",
+        "response",
+        "orchestrator.py",
     ]
     for g in gone:
         assert not (PKG / "core" / "blue" / g).exists(), g
 
 
-@pytest.mark.parametrize("module", [
-    "suijin.core.blue.traffic.anomaly_detector",
-    "suijin.core.blue.traffic.scorer",
-    "suijin.core.blue.traffic.replay_harness",
-    "suijin.core.blue.defense.firewall",
-    "suijin.core.blue.ai_engine",
-    "suijin.core.blue.knowledge_graph",
-    "suijin.core.blue.subagent_manager",
-    "suijin.prompts.blue_system",
-])
+@pytest.mark.parametrize(
+    "module",
+    [
+        "suijin.core.blue.traffic.anomaly_detector",
+        "suijin.core.blue.traffic.scorer",
+        "suijin.core.blue.traffic.replay_harness",
+        "suijin.core.blue.defense.firewall",
+        "suijin.core.blue.ai_engine",
+        "suijin.core.blue.knowledge_graph",
+        "suijin.core.blue.subagent_manager",
+        "suijin.prompts.blue_system",
+    ],
+)
 def test_kept_blue_modules_importable(module):
     import importlib
 

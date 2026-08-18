@@ -111,7 +111,7 @@ class TestRenameMigration:
 
         assert ws.ensure_workspace_layout(base_dir=base, workspace_dir=root) is True
 
-        assert not legacy.exists()               # renamed away
+        assert not legacy.exists()  # renamed away
         assert (root / "reports" / "r.md").read_text() == "old engagement"
         assert (base / "suijin_agent").is_symlink()
 
@@ -128,8 +128,8 @@ class TestRenameMigration:
         ws.ensure_workspace_layout(base_dir=base, workspace_dir=root)
 
         assert not legacy.exists()
-        assert (root / "sessions" / "new.json").exists()   # kept
-        assert (root / "reports" / "old.md").exists()      # merged in
+        assert (root / "sessions" / "new.json").exists()  # kept
+        assert (root / "reports" / "old.md").exists()  # merged in
 
     def test_stale_legacy_inner_symlink_removed(self, tmp_path):
         base = tmp_path / "suijin"
@@ -141,8 +141,8 @@ class TestRenameMigration:
 
         assert ws.ensure_workspace_layout(base_dir=base, workspace_dir=root) is True
 
-        assert not stale.exists()                       # cleaned
-        assert (base / "suijin_agent").is_symlink()     # correct one created
+        assert not stale.exists()  # cleaned
+        assert (base / "suijin_agent").is_symlink()  # correct one created
 
     def test_legacy_inner_real_dir_merged(self, tmp_path):
         base = tmp_path / "suijin"

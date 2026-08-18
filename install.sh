@@ -25,15 +25,15 @@ INSTALL_DIR="${SUIJIN_INSTALL_DIR:-${MEDUSA_INSTALL_DIR:-$HOME/.suijin}}"
 BIN_DIR="${SUIJIN_BIN_DIR:-${MEDUSA_BIN_DIR:-$HOME/.local/bin}}"
 export SUIJIN_NO_PATH_EDIT="${SUIJIN_NO_PATH_EDIT:-${MEDUSA_NO_PATH_EDIT:-0}}"
 
+info()  { printf "\033[32m[suijin]\033[0m %s\n" "$*"; }
+warn()  { printf "\033[33m[suijin]\033[0m %s\n" "$*"; }
+error() { printf "\033[31m[suijin]\033[0m %s\n" "$*"; exit 1; }
+
 # Migrate a Medusa-era installation directory when Suijin's doesn't exist
 if [ ! -d "$INSTALL_DIR" ] && [ -d "$HOME/.medusa" ]; then
   info "Migrating legacy ~/.medusa -> $INSTALL_DIR"
   mv "$HOME/.medusa" "$INSTALL_DIR"
 fi
-
-info()  { printf "\033[32m[suijin]\033[0m %s\n" "$*"; }
-warn()  { printf "\033[33m[suijin]\033[0m %s\n" "$*"; }
-error() { printf "\033[31m[suijin]\033[0m %s\n" "$*"; exit 1; }
 
 # ── Platform ────────────────────────────────────────────────────────────
 OS="$(uname -s)"

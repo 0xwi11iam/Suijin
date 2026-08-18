@@ -81,8 +81,6 @@ def test_dependencies_pinned_like_requirements():
         for line in (PKG / "requirements.txt").read_text().splitlines()
         if line.strip() and not line.startswith("#")
     }
-    declared = " ".join(
-        tomllib.loads((REPO / "pyproject.toml").read_text())["project"]["dependencies"]
-    )
+    declared = " ".join(tomllib.loads((REPO / "pyproject.toml").read_text())["project"]["dependencies"])
     missing = [r for r in reqs if r.split(">=")[0].strip().lower() not in declared.lower()]
     assert not missing, f"requirements.txt deps missing from pyproject: {missing}"

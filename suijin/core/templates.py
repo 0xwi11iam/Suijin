@@ -6,6 +6,7 @@ Provides:
 - Config validation on startup
 - Health check (API keys, tool availability, lab status)
 """
+
 from __future__ import annotations
 
 import json
@@ -101,6 +102,7 @@ def save_template(name: str, config: dict) -> str:
 
 # ── Health check ──────────────────────────────────────────────────────────────
 
+
 def run_health_check() -> dict:
     """Run a comprehensive health check. Returns status dict."""
     results = {
@@ -113,7 +115,7 @@ def run_health_check() -> dict:
     py_ok = sys.version_info >= (3, 10)
     results["checks"]["python_version"] = {
         "ok": py_ok,
-        "detail": f"Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        "detail": f"Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
     }
 
     # 2. API key
@@ -133,25 +135,39 @@ def run_health_check() -> dict:
     tools_to_check = ["nmap", "curl", "python3"]
     for tool in tools_to_check:
         import shutil
+
         found = shutil.which(tool) is not None
         results["checks"][f"tool_{tool}"] = {"ok": found, "detail": shutil.which(tool) or "not found"}
 
     # 5. Playwright
     import importlib.util
+
     if importlib.util.find_spec("playwright") is not None:
         results["checks"]["playwright"] = {"ok": True, "detail": "installed"}
     else:
-        results["checks"]["playwright"] = {"ok": False, "detail": "not installed — run: pip install playwright && playwright install chromium"}
+        results["checks"]["playwright"] = {
+            "ok": False,
+            "detail": "not installed — run: pip install playwright && playwright install chromium",
+        }
 
     # 6. Lab status (check if lab ports are already in use)
     import socket
-    lab_ports = {5700: "DevOps Dashboard", 5800: "CloudBoard Next (main)", 5801: "CloudBoard Next (internal)", 5802: "CloudBoard Next (legacy)"}
+
+    lab_ports = {
+        5700: "DevOps Dashboard",
+        5800: "CloudBoard Next (main)",
+        5801: "CloudBoard Next (internal)",
+        5802: "CloudBoard Next (legacy)",
+    }
     for port, name in lab_ports.items():
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(1)
         result = sock.connect_ex(("127.0.0.1", port))
         sock.close()
-        results["checks"][f"lab_{name}"] = {"ok": result != 0, "detail": f"Port {port}: {'free' if result != 0 else 'IN USE'}"}
+        results["checks"][f"lab_{name}"] = {
+            "ok": result != 0,
+            "detail": f"Port {port}: {'free' if result != 0 else 'IN USE'}",
+        }
 
     # Aggregate
     results["all_ok"] = all(c["ok"] for c in results["checks"].values())
@@ -162,8 +178,10 @@ def print_health_check(console=None):
     """Pretty-print health check results to Rich console."""
     if console is None:
         from rich.console import Console
+
         console = Console()
     from rich.table import Table
+
     results = run_health_check()
     table = Table(title="Suijin Health Check")
     table.add_column("Check", style="cyan")

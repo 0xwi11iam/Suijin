@@ -49,14 +49,12 @@ class TestRateLimitTracker:
         import time as _time
 
         t = RateLimitTracker()
-        t._domains["x.example"] = {"limit": 100, "remaining": 100,
-                                   "reset_at": _time.time() - 1, "retry_after": 0}
+        t._domains["x.example"] = {"limit": 100, "remaining": 100, "reset_at": _time.time() - 1, "retry_after": 0}
         assert t.should_throttle("http://x.example/") == 0.0
 
     def test_low_remaining_throttles(self):
         t = RateLimitTracker()
-        t.update("http://y.example/", 200,
-                 {"X-RateLimit-Remaining": "2", "X-RateLimit-Limit": "100"})
+        t.update("http://y.example/", 200, {"X-RateLimit-Remaining": "2", "X-RateLimit-Limit": "100"})
         assert t.should_throttle("http://y.example/") >= 1.0
 
     def test_domains_are_isolated(self):

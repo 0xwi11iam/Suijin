@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "codename": "Suijin",
+  "codename": "The Rename Release",
   "release_date": "2026-08-18",
-  "description": "Suijin v3.0.0: the rename release. Medusa is now Suijin everywhere — installable Python package (pipx/uv: `suijin` console command), automatic workspace and installer migration, WebUI/Suijin branding. Same engine: 744+ tests, offline knowledge base, purple-team battle mode, Abyss web console."
+  "description": "Suijin v3.0.0: installable Python package (pipx/uv, console command, complete wheel) with packaging-drift guards; HITL approvals console; panic button; DNS-pinned scope enforcement (fail-closed); self-healing dispatch (transient-only retries); output normalizer for nmap/dir-brute. Medusa->Suijin migration E2E (installer + workspace). Coverage 54->60%. 792 tests green."
 }

@@ -6,6 +6,7 @@ for problematic patterns and silently injects corrective guidance.
 
 Pattern-based (no LLM calls) — zero cost, instant execution.
 """
+
 from __future__ import annotations
 
 import logging
@@ -17,13 +18,29 @@ PHASE_TRANSITIONS = {
     "scan_to_exploit": {"min_vulns_found": 1, "min_high_severity": 0, "max_scan_iterations": 20},
     "exploit_to_post": {"min_successful_exploits": 1, "min_flags_captured": 0, "max_exploit_iterations": 30},
 }
-PARALLEL_LIMITS = {"max_concurrent_scans": 4, "max_concurrent_exploits": 2, "max_concurrent_subagents": 3, "max_background_jobs": 8, "queue_timeout_seconds": 300}
-RETRY_POLICY = {"max_retries": 3, "base_delay_seconds": 2, "max_delay_seconds": 60, "backoff_multiplier": 2.0, "jitter": True, "retry_on_status": [429, 500, 502, 503, 504]}
+PARALLEL_LIMITS = {
+    "max_concurrent_scans": 4,
+    "max_concurrent_exploits": 2,
+    "max_concurrent_subagents": 3,
+    "max_background_jobs": 8,
+    "queue_timeout_seconds": 300,
+}
+RETRY_POLICY = {
+    "max_retries": 3,
+    "base_delay_seconds": 2,
+    "max_delay_seconds": 60,
+    "backoff_multiplier": 2.0,
+    "jitter": True,
+    "retry_on_status": [429, 500, 502, 503, 504],
+}
+
+
 def get_phase_config(phase: str) -> dict:
     for key, config in PHASE_TRANSITIONS.items():
         if phase.lower() in key:
             return config
     return {}
+
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +67,23 @@ def _detect_found_but_not_exploited(trace: list) -> Optional[str]:
     """Detect if a vulnerability was found but not followed up."""
     if len(trace) < 3:
         return None
-    finding_keywords = ["SQLi", "SSTI", "XSS", "RCE", "SSRF", "IDOR", "injection",
-                        "vulnerability", "exposed", "leaked", "bypass", "flag",
-                        "command injection", "path traversal", "deserialization"]
+    finding_keywords = [
+        "SQLi",
+        "SSTI",
+        "XSS",
+        "RCE",
+        "SSRF",
+        "IDOR",
+        "injection",
+        "vulnerability",
+        "exposed",
+        "leaked",
+        "bypass",
+        "flag",
+        "command injection",
+        "path traversal",
+        "deserialization",
+    ]
     # Find the index of the most recent finding
     finding_idx = -1
     for i in range(len(trace) - 1, -1, -1):
@@ -64,7 +95,7 @@ def _detect_found_but_not_exploited(trace: list) -> Optional[str]:
         return None
     # Check if tools AFTER the finding are exploitation tools
     exploit_tools = {"http_request", "execute_terminal", "sqlmap_scan", "deploy_subagent"}
-    after_finding = trace[finding_idx + 1:]
+    after_finding = trace[finding_idx + 1 :]
     if not after_finding:
         return None  # just found it this turn, give the agent a chance
     recent_after = [s.get("tool_name", "") for s in after_finding[-3:]]
@@ -82,9 +113,19 @@ def _detect_bookkeeping_loop(trace: list, threshold: int = 4) -> Optional[str]:
     if len(trace) < threshold:
         return None
     recent_tools = [s.get("tool_name", "") for s in trace[-threshold:]]
-    bookkeeping = {"write_note", "creds_add", "job_list", "job_status", "job_output",
-                   "check_knowledge", "record_finding", "read_file", "web_search",
-                   "write_file", "search_cve"}
+    bookkeeping = {
+        "write_note",
+        "creds_add",
+        "job_list",
+        "job_status",
+        "job_output",
+        "check_knowledge",
+        "record_finding",
+        "read_file",
+        "web_search",
+        "write_file",
+        "search_cve",
+    }
     if all(t in bookkeeping for t in recent_tools if t):
         return (
             f"You've spent {threshold} turns on bookkeeping without making progress. "
@@ -122,7 +163,9 @@ def _detect_subagents_failing(trace: list, threshold: int = 3) -> Optional[str]:
     subagent_attempts = 0
     for s in trace[-6:]:
         thought = s.get("thought", "")
-        if "subagent" in thought.lower() and ("returned no" in thought.lower() or "failed" in thought.lower() or "partial" in thought.lower()):
+        if "subagent" in thought.lower() and (
+            "returned no" in thought.lower() or "failed" in thought.lower() or "partial" in thought.lower()
+        ):
             subagent_attempts += 1
     if subagent_attempts >= threshold:
         return (
@@ -157,17 +200,41 @@ def _detect_phase_stall(trace: list, threshold: int = 20) -> Optional[str]:
     if len(trace) < threshold:
         return None
     recent = trace[-threshold:]
-    recon_tools = {"nmap", "gobuster", "ffuf", "feroxbuster", "amass", "whatweb",
-                   "subfinder", "httpx", "nikto", "sslscan", "shodan", "crtsh",
-                   "google_dork", "read_file", "web_search", "curl"}
-    exploit_tools = {"http_request", "sqlmap_scan", "hydra", "execute_terminal",
-                     "deploy_subagent", "mcp_browser_goto", "msf_run"}
+    recon_tools = {
+        "nmap",
+        "gobuster",
+        "ffuf",
+        "feroxbuster",
+        "amass",
+        "whatweb",
+        "subfinder",
+        "httpx",
+        "nikto",
+        "sslscan",
+        "shodan",
+        "crtsh",
+        "google_dork",
+        "read_file",
+        "web_search",
+        "curl",
+    }
+    exploit_tools = {
+        "http_request",
+        "sqlmap_scan",
+        "hydra",
+        "execute_terminal",
+        "deploy_subagent",
+        "mcp_browser_goto",
+        "msf_run",
+    }
     recon_count = sum(1 for s in recent if s.get("tool_name", "") in recon_tools)
     exploit_count = sum(1 for s in recent if s.get("tool_name", "") in exploit_tools)
     if recon_count > 15 and exploit_count < 3:
-        return ("FORCE EXPLOITATION: 15+ recon turns, <3 exploit attempts. "
-                "You have enough data. TEST vulnerabilities NOW with http_request, "
-                "mcp_browser_goto, or deploy_subagent with exploit tasks.")
+        return (
+            "FORCE EXPLOITATION: 15+ recon turns, <3 exploit attempts. "
+            "You have enough data. TEST vulnerabilities NOW with http_request, "
+            "mcp_browser_goto, or deploy_subagent with exploit tasks."
+        )
     return None
 
 
@@ -177,7 +244,11 @@ def _detect_subagent_addiction(trace: list, threshold: int = 5) -> Optional[str]
         return None
     recent_actions = [s.get("tool_name", "") for s in trace[-threshold:]]
     spawns = sum(1 for t in recent_actions if t == "deploy_subagent")
-    direct = sum(1 for t in recent_actions if t not in ("deploy_subagent", "write_note", "job_list", "job_status", "job_output", "check_knowledge"))
+    direct = sum(
+        1
+        for t in recent_actions
+        if t not in ("deploy_subagent", "write_note", "job_list", "job_status", "job_output", "check_knowledge")
+    )
     if spawns >= 3 and direct < 2:
         return f"You spawned {spawns} subagents in {threshold} turns but did almost nothing yourself. Execute tools DIRECTLY."
     return None
@@ -198,6 +269,7 @@ def _detect_unverified_claim(trace: list) -> Optional[str]:
 
 
 # ── Main supervisor ───────────────────────────────────────────────────
+
 
 def analyze_trace(trace: list, **extra_kw) -> Optional[str]:
     """Analyze recent execution trace and return guidance if intervention needed.

@@ -5,6 +5,7 @@ Lives in its own module so lightweight callers (workspace_fs, job_runner,
 output_offload) can import the contextvars without pulling in langchain
 or other heavy deps.
 """
+
 from __future__ import annotations
 
 from contextvars import ContextVar

@@ -1,6 +1,7 @@
 """
 suijin/core/blueteamer.py — Blue Team entry point and TUI.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -51,11 +52,13 @@ async def _run_async():
     if not os.environ.get(key_var) and not os.environ.get("HF_TOKEN"):
         console.print(f"[yellow]No {key_var} in environment. Set it in suijin/.env[/yellow]")
 
-    console.print(Panel.fit(
-        "[bold #58a6ff]BLUE TEAM — Active Defense[/bold #58a6ff]\n"
-        "[dim]Autonomous SOC. Codebase analysis, traffic monitoring, deception, hotfix.[/dim]",
-        border_style="#58a6ff"
-    ))
+    console.print(
+        Panel.fit(
+            "[bold #58a6ff]BLUE TEAM — Active Defense[/bold #58a6ff]\n"
+            "[dim]Autonomous SOC. Codebase analysis, traffic monitoring, deception, hotfix.[/dim]",
+            border_style="#58a6ff",
+        )
+    )
 
     # Select target codebase
     console.print("\n[bold white]Select target codebase to defend:[/bold white]")
@@ -90,6 +93,7 @@ async def _run_async():
 
         # Start the transparent forward proxy
         from suijin.core.blue.proxy import start_proxy
+
         try:
             proxy_server = start_proxy(
                 listen_port=proxy_port,
@@ -97,12 +101,20 @@ async def _run_async():
                 target_host="127.0.0.1",
                 log_path=traffic_log,
             )
-            console.print(f"[green]Proxy started on :{proxy_port}[/green] [dim]→ forwarding to your app on :{app_port}[/dim]")
-            console.print(f"[bold yellow]Send ALL traffic to http://127.0.0.1:{proxy_port}[/bold yellow] [dim](not :{app_port})[/dim]")
-            console.print("[dim]The proxy intercepts every request, logs it for analysis, and forwards to your app.[/dim]")
+            console.print(
+                f"[green]Proxy started on :{proxy_port}[/green] [dim]→ forwarding to your app on :{app_port}[/dim]"
+            )
+            console.print(
+                f"[bold yellow]Send ALL traffic to http://127.0.0.1:{proxy_port}[/bold yellow] [dim](not :{app_port})[/dim]"
+            )
+            console.print(
+                "[dim]The proxy intercepts every request, logs it for analysis, and forwards to your app.[/dim]"
+            )
         except Exception as e:
             console.print(f"[red]Failed to start proxy: {e}[/red]")
-            console.print("[yellow]Falling back to log-file mode — start your app with the middleware snippet.[/yellow]")
+            console.print(
+                "[yellow]Falling back to log-file mode — start your app with the middleware snippet.[/yellow]"
+            )
             _print_middleware_snippet(console, traffic_log)
             console.input("\n  [dim]Press Enter to continue...[/dim]")
     elif choice == "2":
@@ -115,9 +127,7 @@ async def _run_async():
 
         # Kill any stale process on port 5906
         try:
-            result = subprocess.run(
-                ["lsof", "-ti", f":{BLUE_LAB_PORT}"], capture_output=True, text=True, timeout=3
-            )
+            result = subprocess.run(["lsof", "-ti", f":{BLUE_LAB_PORT}"], capture_output=True, text=True, timeout=3)
             for pid in result.stdout.strip().split("\n"):
                 pid = pid.strip()
                 if pid:
@@ -130,7 +140,8 @@ async def _run_async():
         # Start the vulnerable app in background
         subprocess.Popen(
             [sys.executable, str(BASE_DIR / "lab" / "blue_target" / "vulnerable_app.py")],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
 
         # Wait until the app is actually listening
@@ -160,6 +171,7 @@ async def _run_async():
     # Phase 1: Codebase analysis
     console.print("\n[bold cyan]Phase 1: Codebase Analysis[/bold cyan]")
     from suijin.core.blue.codebase.scanner import scan_codebase
+
     endpoints = scan_codebase(target_path)
     session.endpoints_discovered = len(endpoints)
     console.print(f"  [green]Discovered {len(endpoints)} endpoints[/green]")
@@ -171,8 +183,7 @@ async def _run_async():
     table.add_column("Framework", style="dim")
     table.add_column("Auth", style="yellow")
     for ep in endpoints[:20]:
-        table.add_row(ep.get("method", "?"), ep.get("path", "?")[:50],
-                      ep.get("framework", "?"), ep.get("auth", "?"))
+        table.add_row(ep.get("method", "?"), ep.get("path", "?")[:50], ep.get("framework", "?"), ep.get("auth", "?"))
     console.print(table)
 
     # Phase 1.5: Subagent deployment — one AI subagent per endpoint
@@ -196,11 +207,14 @@ async def _run_async():
         console.print(f"  [yellow]{high_risk} high-risk endpoints identified[/yellow]")
     for ep_risk in risk_summary.get("by_risk", [])[:5]:
         color = "red" if ep_risk["risk"] >= 7 else "yellow" if ep_risk["risk"] >= 4 else "dim"
-        console.print(f"    [{color}]Subagent #{ep_risk['rank']}: {ep_risk['path']} (risk {ep_risk['risk']}/10)[/{color}]")
+        console.print(
+            f"    [{color}]Subagent #{ep_risk['rank']}: {ep_risk['path']} (risk {ep_risk['risk']}/10)[/{color}]"
+        )
 
     # Phase 2: Watcher deployment
     console.print("\n[bold cyan]Phase 2: Deploying Watchers[/bold cyan]")
     from suijin.core.blue.watchers.spawner import spawn_watchers
+
     watchers = await spawn_watchers(endpoints, config)
     session.active_watchers = len(watchers)
     console.print(f"  [green]{len(watchers)} watchers deployed across {len(endpoints)} endpoints[/green]")
@@ -240,10 +254,16 @@ async def _run_async():
         ai_analysis_enabled=True,
         show_all_normals=True,
     )
-    feed = LiveFeed(ai_engine, subagent_mgr, feed_config,
-                    soc_lead=soc_lead, tier1_analysts=tier1_analysts,
-                    tier2=tier2, threat_hunter=hunter,
-                    incident_commander=commander)
+    feed = LiveFeed(
+        ai_engine,
+        subagent_mgr,
+        feed_config,
+        soc_lead=soc_lead,
+        tier1_analysts=tier1_analysts,
+        tier2=tier2,
+        threat_hunter=hunter,
+        incident_commander=commander,
+    )
     feed.blocking_enabled = blocking_enabled
 
     # ── Main monitoring loop ──
@@ -251,8 +271,7 @@ async def _run_async():
     console.print("─" * 68)
 
     # Signal handling
-    _signal.signal(_signal.SIGINT, lambda sig, frame: setattr(
-        _signal, '_blue_interrupted', True))
+    _signal.signal(_signal.SIGINT, lambda sig, frame: setattr(_signal, "_blue_interrupted", True))
     _signal._blue_interrupted = False
 
     # Tail the live traffic log (configurable path)
@@ -342,7 +361,7 @@ async def _run_async():
         await asyncio.sleep(0.3)
 
         # ── Pause / Command handling ──
-        if getattr(_signal, '_blue_interrupted', False):
+        if getattr(_signal, "_blue_interrupted", False):
             _signal._blue_interrupted = False
             _signal.signal(_signal.SIGINT, _signal.SIG_DFL)
             try:
@@ -354,11 +373,14 @@ async def _run_async():
                 break
             elif cmd == "/health":
                 from suijin.core.templates import print_health_check
+
                 print_health_check(console)
             elif cmd == "/report":
                 stats = feed.get_stats()
                 console.print(f"  [dim]Requests: {stats['total']} | AI analyses: {stats['ai_analyses']}[/dim]")
-                console.print(f"  [dim]Subagents: {stats['subagents']['total']} | High risk: {stats['subagents']['high_risk']}[/dim]")
+                console.print(
+                    f"  [dim]Subagents: {stats['subagents']['total']} | High risk: {stats['subagents']['high_risk']}[/dim]"
+                )
                 console.print(f"  [dim]AI cost: ${stats['ai_cost']:.4f}[/dim]")
             elif cmd == "/state":
                 stats = feed.get_stats()
@@ -367,16 +389,21 @@ async def _run_async():
                 console.print(f"  Watchers: {session.active_watchers}")
                 console.print(f"  Subagents: {stats['subagents']['total']}")
                 console.print(f"  AI Analyses: {stats['ai_analyses']}")
-                console.print(f"  Baseline: {'established' if feed.baseline_established else f'{request_count}/{feed_config.baseline_requests}'}")
+                console.print(
+                    f"  Baseline: {'established' if feed.baseline_established else f'{request_count}/{feed_config.baseline_requests}'}"
+                )
                 console.print(f"  Traffic log: {traffic_log}")
-                console.print(f"  Blocking: {'[green]ON[/green]' if blocking_enabled else '[red]OFF[/red]'} (toggle with /block)")
+                console.print(
+                    f"  Blocking: {'[green]ON[/green]' if blocking_enabled else '[red]OFF[/red]'} (toggle with /block)"
+                )
                 console.print(f"  Cost: ${stats['ai_cost']:.4f}")
             elif cmd == "/block":
                 blocking_enabled = not blocking_enabled
                 feed.blocking_enabled = blocking_enabled
-                console.print(f"  IP blocking: {'[green]ENABLED[/green]' if blocking_enabled else '[red]DISABLED[/red]'}")
-            _signal.signal(_signal.SIGINT, lambda sig, frame: setattr(
-                _signal, '_blue_interrupted', True))
+                console.print(
+                    f"  IP blocking: {'[green]ENABLED[/green]' if blocking_enabled else '[red]DISABLED[/red]'}"
+                )
+            _signal.signal(_signal.SIGINT, lambda sig, frame: setattr(_signal, "_blue_interrupted", True))
             continue
 
     session.save()
@@ -393,6 +420,7 @@ async def _run_async():
 def _find_free_port(start: int = PROXY_DEFAULT_PORT, max_attempts: int = 20) -> int:
     """Find a free TCP port."""
     import socket
+
     for port in range(start, start + max_attempts):
         try:
             s = socket.socket()
@@ -407,7 +435,9 @@ def _find_free_port(start: int = PROXY_DEFAULT_PORT, max_attempts: int = 20) -> 
 
 def _print_middleware_snippet(console, log_path: str):
     """Print a Flask middleware snippet the user can add to their app."""
-    console.print(Panel.fit(f"""[bold white]Add this to your Flask app to send traffic to Suijin:[/bold white]
+    console.print(
+        Panel.fit(
+            f"""[bold white]Add this to your Flask app to send traffic to Suijin:[/bold white]
 
 [dim]# At the top of your app.py:[/dim]
 [bold]import json, os[/bold]
@@ -430,38 +460,36 @@ def _print_middleware_snippet(console, log_path: str):
 [bold]    with open(SUIJIN_LOG, "a") as f:[/bold]
 [bold]        f.write(json.dumps(entry) + "\\n")[/bold]
 
-[green]Paste this into your app, restart it, then press Enter to continue.[/green]""", border_style="green"))
+[green]Paste this into your app, restart it, then press Enter to continue.[/green]""",
+            border_style="green",
+        )
+    )
 
 
 def _init_firewall(console):
     """Create pfctl table (macOS) or iptables chain (Linux) for IP blocking."""
     import platform
     import subprocess
+
     system = platform.system()
     if system == "Darwin":
         try:
             # Create pf anchor and table if they don't exist
             subprocess.run(
-                ["sudo", "pfctl", "-t", "blue_blocked", "-T", "add", "255.255.255.255"],
-                capture_output=True, timeout=5
+                ["sudo", "pfctl", "-t", "blue_blocked", "-T", "add", "255.255.255.255"], capture_output=True, timeout=5
             )
             subprocess.run(
                 ["sudo", "pfctl", "-t", "blue_blocked", "-T", "delete", "255.255.255.255"],
-                capture_output=True, timeout=5
+                capture_output=True,
+                timeout=5,
             )
             console.print("[dim]pfctl table 'blue_blocked' ready[/dim]")
         except Exception:
             console.print("[dim]pfctl unavailable — blocking via subprocess only[/dim]")
     else:
         try:
-            subprocess.run(
-                ["sudo", "iptables", "-N", "BLUE_BLOCKED"],
-                capture_output=True, timeout=5
-            )
-            subprocess.run(
-                ["sudo", "iptables", "-A", "INPUT", "-j", "BLUE_BLOCKED"],
-                capture_output=True, timeout=5
-            )
+            subprocess.run(["sudo", "iptables", "-N", "BLUE_BLOCKED"], capture_output=True, timeout=5)
+            subprocess.run(["sudo", "iptables", "-A", "INPUT", "-j", "BLUE_BLOCKED"], capture_output=True, timeout=5)
             console.print("[dim]iptables chain 'BLUE_BLOCKED' ready[/dim]")
         except Exception:
             console.print("[dim]iptables unavailable — blocking via subprocess only[/dim]")
