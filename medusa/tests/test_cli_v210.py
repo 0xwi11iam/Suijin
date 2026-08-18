@@ -149,10 +149,9 @@ class TestCreds:
         run_cli(["creds", "add", "--service", "api", "--value", "sk-live-9"])
         code, out = run_cli(["creds", "export"])
         assert code == 0 and "REDACTED" in out
-        exported = tmp_path.parent / "reports" / "vault_export.json"
         # default export lands in the real workspace reports dir — verify via
         # the returned message instead of touching the real workspace
-        assert "vault_export.json" in out or "exported" in out
+        assert "exported" in out
 
 
 class TestDossier:
@@ -285,10 +284,8 @@ class TestRulesPolicy:
 
 class TestProvidersProbe:
     def test_skip_without_key(self, monkeypatch):
-        import os
 
         from medusa.core.red import config_loader
-        from medusa.tools import providers
 
         monkeypatch.setattr(config_loader, "load_config", lambda: {"provider": "zai"})
         monkeypatch.delenv("ZAI_API_KEY", raising=False)
@@ -296,7 +293,6 @@ class TestProvidersProbe:
         assert code == 1 and "SKIP" in out
 
     def test_ok_with_mocked_generate(self, monkeypatch):
-        import os
 
         from medusa.core.red import config_loader
         from medusa.tools import providers
@@ -308,7 +304,6 @@ class TestProvidersProbe:
         assert code == 0 and "ok" in out and "1/1" in out
 
     def test_failure_reported(self, monkeypatch):
-        import os
 
         from medusa.core.red import config_loader
         from medusa.tools import providers
