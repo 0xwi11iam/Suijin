@@ -34,10 +34,12 @@ class TestConsoleModule:
 
         ctx, _ = controller.boot(module_roots=[MODULES], workspace=tmp_path, quiet=True)
         hooks = ctx.service("console_hooks")
-        hooks.register_menu("redteam", label="Red Team", order=10)
-        hooks.register_menu("blueteam", label="Blue Team", order=20)
+        hooks.register_menu("zz-manual", label="Manual", order=5)
         entries = hooks.menu()
-        assert [e["id"] for e in entries] == ["redteam", "blueteam"]  # order honored
+        ids = [e["id"] for e in entries]
+        # order honored AND boot-time entries (mode modules) present
+        assert ids[0] == "zz-manual"  # order 5 beats everything
+        assert {"redteam", "blueteam"} <= set(ids)  # from Phase 3 modules
         ctx.shutdown()
 
     def test_verb_registration(self, tmp_path):

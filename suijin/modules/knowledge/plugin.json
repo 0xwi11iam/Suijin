@@ -1,0 +1,10 @@
+{
+  "id": "knowledge",
+  "version": "1.0.0",
+  "tier": "recommended",
+  "requires": ["platform"],
+  "provides": ["kb", "kev"],
+  "entry": "suijin.modules.knowledge:KnowledgeModule",
+  "permissions": ["filesystem", "network"],
+  "description": "Offline knowledge base (HackTricks/GTFOBins/...) + CISA KEV mirror"
+}

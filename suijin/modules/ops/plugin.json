@@ -1,0 +1,10 @@
+{
+  "id": "ops",
+  "version": "1.0.0",
+  "tier": "recommended",
+  "requires": ["platform"],
+  "provides": ["ops"],
+  "entry": "suijin.modules.ops:OpsModule",
+  "permissions": ["filesystem", "shell"],
+  "description": "Operator tooling: export, debrief, replay, dossier, timeline, battle, approvals, panic, scope"
+}

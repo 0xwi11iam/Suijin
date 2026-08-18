@@ -1,0 +1,10 @@
+{
+  "id": "blueteam",
+  "version": "1.0.0",
+  "tier": "recommended",
+  "requires": ["providers"],
+  "provides": ["mode.blue"],
+  "entry": "suijin.modules.blueteam:BlueTeamModule",
+  "permissions": ["network", "shell", "events.listen", "events.emit"],
+  "description": "Autonomous defense: traffic monitoring, detectors, subagents, deception arsenal"
+}

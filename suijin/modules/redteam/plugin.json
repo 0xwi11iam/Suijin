@@ -1,0 +1,10 @@
+{
+  "id": "redteam",
+  "version": "1.0.0",
+  "tier": "recommended",
+  "requires": ["agent", "providers"],
+  "provides": ["mode.red"],
+  "entry": "suijin.modules.redteam:RedTeamModule",
+  "permissions": ["network", "shell", "events.emit"],
+  "description": "Autonomous offensive agent: redteamer loop, run-command box, prompts, skills, intel hooks"
+}

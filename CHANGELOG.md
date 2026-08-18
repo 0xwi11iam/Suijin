@@ -6,6 +6,27 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## [3.10.0] — 2026-08-18 — FULL STACK BOOT (PHASE 3: RECOMMENDED TIER)
+
+- **providers**: LLM abstraction on the Context — llm.generate,
+  llm.failover, llm.usage; supersedes platform's migration-era llm
+  service (later registration wins; one module object, one accumulator).
+- **redteam / blueteam**: the mode modules register their console
+  surface via hooks — menu entries (order 10/20) and launch verbs owned
+  by module id.
+- **knowledge**: kb.status/compile + kev.status services; journals
+  whether the KB is built.
+- **ops**: the operator verbs (export/debrief/replay/dossier/timeline/
+  battle/approvals/panic/scope/clean/notify) + Operator Tools menu.
+- **Tier-level disable=disappear PROVEN**: deleting redteam's manifest
+  from the tree removes its menu entry, verb, and services while the
+  other 11 modules boot untouched — the test that makes the architecture
+  real, not cosmetic.
+- Full boot: 12 modules topological (agent.graph, agent.memory,
+  agent.nodes, platform, knowledge, ops, providers, tools, agent,
+  blueteam, console, redteam), menu = [redteam, blueteam, ops],
+  124 tools + 31 services, quiet when healthy.
+
 ## [3.9.0] — 2026-08-18 — CORE TIER COMPLETE (PHASE 2)
 
 All four core modules ride the kernel; `controller.boot()` composes the

@@ -1,6 +1,6 @@
 {
-  "version": "3.9.0",
-  "codename": "Core Tier Complete",
+  "version": "3.10.0",
+  "codename": "Full Stack Boot",
   "release_date": "2026-08-18",
-  "description": "Suijin v3.9.0: PHASE 2 CORE TIER COMPLETE \u2014 platform, tools (124 tools bridged onto the Context), agent (NESTED: graph/nodes/memory sub-modules as first-class dotted-id DAG units), console (feature-blind surfaces with the ConsoleHooks registry: register_menu/register_verb/unregister_owner \u2014 disable means disappear). Full boot: 7 modules in dependency order, 12 services. Registry now recurses one level with dotted-id validation. 980 tests green, 115 kernel."
+  "description": "Suijin v3.10.0: PHASE 3 RECOMMENDED TIER \u2014 providers, redteam, blueteam, knowledge, ops ride the kernel. Full OS boot: 12 modules topological, console menu driven by module hooks (redteam/blueteam/ops), 124 tools + 31 services on the Context. Disable-means-disappear proven at tier level: removing redteam's manifest removes its menu entry, verb, and services while everything else boots. Quiet boot held. 986 green (121 kernel)."
 }

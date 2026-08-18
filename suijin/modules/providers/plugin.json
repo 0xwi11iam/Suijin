@@ -1,0 +1,10 @@
+{
+  "id": "providers",
+  "version": "1.0.0",
+  "tier": "recommended",
+  "requires": ["platform"],
+  "provides": ["llm.generate", "llm.failover"],
+  "entry": "suijin.modules.providers:ProvidersModule",
+  "permissions": ["provider"],
+  "description": "LLM abstraction: generate() across DeepSeek/Z.ai/Gemini/Anthropic/AMD/HF with failover chain"
+}
