@@ -1,4 +1,5 @@
 //! suijin-core — the compiled heart of the Suijin kernel.
+#![allow(clippy::useless_conversion)] // pyo3 0.22 macro codegen false positive
 //!
 //! Exactly TWO functions cross the Python boundary, both pure
 //! data-in/data-out (JSON string -> JSON string): no Python objects, no
@@ -107,19 +108,14 @@ fn resolve_dag_impl(manifests: &[ManifestIn]) -> DagReport {
                 winner = cand;
                 report.overridden.push(id.clone());
             } else {
-                report
-                    .collisions
-                    .push((id.clone(), cand.tier.clone()));
+                report.collisions.push((id.clone(), cand.tier.clone()));
             }
         }
         winners.insert(id.clone(), winner);
     }
 
     // 3. cycle detection (DFS coloring, cycle members recorded by name)
-    let mut color: HashMap<&str, u8> = winners
-        .iter()
-        .map(|(k, _)| (k.as_str(), 0u8))
-        .collect();
+    let mut color: HashMap<&str, u8> = winners.keys().map(|k| (k.as_str(), 0u8)).collect();
     let mut in_cycle: BTreeSet<String> = BTreeSet::new();
     let mut cycle_desc: BTreeMap<String, String> = BTreeMap::new();
 
@@ -192,9 +188,11 @@ fn resolve_dag_impl(manifests: &[ManifestIn]) -> DagReport {
                 .filter(|d| !winners.contains_key(d.as_str()))
                 .collect();
             if !missing.is_empty() {
-                let names: Vec<String> =
-                    missing.iter().map(|m| m.to_string()).collect();
-                skipped.insert(pid.clone(), format!("missing dependency: {}", names.join(", ")));
+                let names: Vec<String> = missing.iter().map(|m| m.to_string()).collect();
+                skipped.insert(
+                    pid.clone(),
+                    format!("missing dependency: {}", names.join(", ")),
+                );
                 pending.remove(&pid);
                 changed = true;
                 continue;
@@ -219,7 +217,10 @@ fn resolve_dag_impl(manifests: &[ManifestIn]) -> DagReport {
             .filter(|d| !bootable.contains(d.as_str()))
             .collect();
         let names: Vec<String> = blocked.iter().map(|b| b.to_string()).collect();
-        skipped.insert(pid.clone(), format!("dependencies unavailable: {}", names.join(", ")));
+        skipped.insert(
+            pid.clone(),
+            format!("dependencies unavailable: {}", names.join(", ")),
+        );
     }
 
     // 5. core-missing aborts
@@ -235,8 +236,7 @@ fn resolve_dag_impl(manifests: &[ManifestIn]) -> DagReport {
             .iter()
             .map(|id| format!("{} ({})", id, skipped[id]))
             .collect();
-        report.abort_reason =
-            format!("core module(s) unavailable: {}", details.join("; "));
+        report.abort_reason = format!("core module(s) unavailable: {}", details.join("; "));
         report.skipped = skipped;
         return report;
     }
@@ -320,8 +320,7 @@ fn check_paths_impl(input: &PathsIn) -> BTreeMap<String, bool> {
         } else {
             normalize(&format!("{}/{}", root, raw))
         };
-        let allowed = is_within(&joined, &root)
-            || allow.iter().any(|a| is_within(&joined, a));
+        let allowed = is_within(&joined, &root) || allow.iter().any(|a| is_within(&joined, a));
         out.insert(raw.clone(), allowed);
     }
     out
@@ -334,8 +333,7 @@ fn resolve_dag(manifests_json: String) -> PyResult<String> {
     let manifests: Vec<ManifestIn> = serde_json::from_str(&manifests_json)
         .map_err(|e| PyValueError::new_err(format!("invalid manifests json: {}", e)))?;
     let report = resolve_dag_impl(&manifests);
-    serde_json::to_string(&report)
-        .map_err(|e| PyValueError::new_err(format!("serialize: {}", e)))
+    serde_json::to_string(&report).map_err(|e| PyValueError::new_err(format!("serialize: {}", e)))
 }
 
 #[pyfunction]
@@ -343,8 +341,7 @@ fn check_paths(paths_json: String) -> PyResult<String> {
     let input: PathsIn = serde_json::from_str(&paths_json)
         .map_err(|e| PyValueError::new_err(format!("invalid paths json: {}", e)))?;
     let verdicts = check_paths_impl(&input);
-    serde_json::to_string(&verdicts)
-        .map_err(|e| PyValueError::new_err(format!("serialize: {}", e)))
+    serde_json::to_string(&verdicts).map_err(|e| PyValueError::new_err(format!("serialize: {}", e)))
 }
 
 #[pymodule]
@@ -373,7 +370,11 @@ mod tests {
 
     #[test]
     fn healthy_order() {
-        let ms = vec![m("agent", "core", &["tools"]), m("tools", "core", &["platform"]), m("platform", "core", &[])];
+        let ms = vec![
+            m("agent", "core", &["tools"]),
+            m("tools", "core", &["platform"]),
+            m("platform", "core", &[]),
+        ];
         let r = resolve_dag_impl(&ms);
         assert_eq!(r.boot_order, vec!["platform", "tools", "agent"]);
         assert!(!r.aborted);
