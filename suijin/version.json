@@ -1,6 +1,6 @@
 {
-  "version": "3.3.0",
+  "version": "3.4.0",
   "codename": "OS Groundwork",
   "release_date": "2026-08-18",
-  "description": "Suijin v3.3.0: Suijin OS Phase 0 begun \u2014 god-import split (tools package is lazy), import-time side effects moved behind init_runtime(), split-brain module loader fixed (one instance per file; fugu crash fixed). 851 tests green. Full OS architecture (kernel + tiers + Rust core + Module Manager) documented in README."
+  "description": "Suijin v3.4.0: Phase 0 COMPLETE \u2014 one job registry (dead twin removed, auto-bg promotion routed through it), all 8 tools\u2192core inversions eliminated via the services seam (proto-Context), import-time mkdirs made lazy. 865 tests green. Kernel (Phase 1) is next."
 }

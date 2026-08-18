@@ -16,13 +16,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 def _imported_modules(snippet: str) -> set[str]:
     """Run snippet in a clean interpreter; return loaded suijin* modules."""
-    code = (
-        "import sys\n"
-        + snippet
-        + "\nprint('\\n'.join(m for m in sys.modules if m.startswith('suijin')))"
-    )
-    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
-                       cwd=str(REPO_ROOT))
+    code = "import sys\n" + snippet + "\nprint('\\n'.join(m for m in sys.modules if m.startswith('suijin')))"
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=str(REPO_ROOT))
     assert r.returncode == 0, r.stderr
     return set(r.stdout.splitlines())
 
@@ -32,8 +27,13 @@ class TestImportPurity:
         mods = _imported_modules("import suijin.tools.workspace")
         assert "suijin.tools.workspace" in mods
         # the god-import chain must not fire
-        for banned in ("suijin.tools.dispatch", "suijin.tools.providers",
-                       "suijin.modules.loader", "suijin.kb", "huggingface_hub"):
+        for banned in (
+            "suijin.tools.dispatch",
+            "suijin.tools.providers",
+            "suijin.modules.loader",
+            "suijin.kb",
+            "huggingface_hub",
+        ):
             assert banned not in mods, f"workspace import dragged in {banned}"
 
     def test_guardrails_is_leaf(self):
@@ -93,8 +93,15 @@ class TestCompatFacade:
         (lazy) — external code and tests rely on them."""
         from suijin import tools
 
-        for name in ("route_tool", "get_tool_catalog", "generate", "get_usage",
-                     "set_proxy", "get_proxy", "reset_usage"):
+        for name in (
+            "route_tool",
+            "get_tool_catalog",
+            "generate",
+            "get_usage",
+            "set_proxy",
+            "get_proxy",
+            "reset_usage",
+        ):
             assert hasattr(tools, name), name
         # USAGE (a mutable dict) is deliberately NOT lazily re-exported: a
         # snapshot copy would silently diverge from the live accumulator.

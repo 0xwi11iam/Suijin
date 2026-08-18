@@ -22,7 +22,15 @@ from rich.console import Console
 from rich.live import Live
 from rich.table import Table
 
-from suijin.core.blue.traffic.scorer import score_request
+from suijin.tools.services import get as _service
+
+
+def score_request(req, profile, **kw):
+    """Blue scorer via the service seam (no tools→core import)."""
+    fn = _service("traffic_scorer")
+    return fn(req, profile, **kw)
+
+
 from suijin.core.constants import BLUE_KG_PATH, BLUE_LAB_PORT, BLUE_TARPIT_FILE, BLUE_TRAFFIC_LOG
 
 console = Console()

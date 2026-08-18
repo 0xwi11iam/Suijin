@@ -124,8 +124,7 @@ def load_local_module(mod_name: str):
             raise
         return mod
     raise ModuleNotFoundError(
-        f"suijin module '{mod_name}' not found in any search dir "
-        f"({', '.join(str(d.name) for d in SEARCH_DIRS)})"
+        f"suijin module '{mod_name}' not found in any search dir ({', '.join(str(d.name) for d in SEARCH_DIRS)})"
     )
 
 

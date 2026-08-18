@@ -86,6 +86,8 @@ def _target_dossier_tool(target: str) -> str:
         return f"Error: {e}"
 
 
+# ── Re-export the public tool surface ─────────────────────────────────
+from suijin.tools.job_registry import _job_lock, _jobs  # noqa: F401 — re-exports (THE registry)
 from suijin.tools.metasploit import (
     _msf_console_fallback,
     _msf_rpc_connect,
@@ -103,14 +105,10 @@ from suijin.tools.reporting import (
     _rate_all,
     _rate_check,
 )
-
-# ── Re-export the public tool surface ─────────────────────────────────
 from suijin.tools.runtime import (
     BASE_DIR,
     DB_PATH,
     PROJECT_DIR,
-    _job_lock,
-    _jobs,
     _recon_state,
     get_proxy,
     global_session,

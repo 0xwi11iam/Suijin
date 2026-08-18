@@ -148,9 +148,9 @@ def _default_handlers(box: RunBox) -> dict:
         )
 
     def audit(_args):
-        from suijin.core.red.session_control import print_audit_trail
+        from suijin.tools.services import get as _service
 
-        print_audit_trail()
+        _service("red_audit_printer")()
 
     def note(args):
         from suijin.tools.intel import write_note
@@ -174,16 +174,16 @@ def _default_handlers(box: RunBox) -> dict:
         box._out.print(f"[dim]{first}[/dim]")
 
     def report(_args):
-        from suijin.core.red.session_control import force_report
+        from suijin.tools.services import get as _service
 
         st = (box._get_state or (lambda: {}))() or {}
-        force_report(None, box._thread_id, st, "live /report", box._config)
+        _service("red_force_report")(None, box._thread_id, st, "live /report", box._config)
         box._out.print("[dim]  ▸ report saved (run continues)[/dim]")
 
     def sessions(_args):
-        from suijin.core.red.session_control import list_sessions
+        from suijin.tools.services import get as _service
 
-        list_sessions()
+        _service("red_list_sessions")()
 
     def cost(_args):
         from suijin.tools.providers import get_usage

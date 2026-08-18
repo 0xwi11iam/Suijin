@@ -6,6 +6,31 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## [3.4.0] — 2026-08-18 — PHASE 0 COMPLETE
+
+Suijin OS groundwork finished — the tree is de-coupled and kernel-ready.
+Behavior identical throughout; 865 tests green.
+
+- **One job registry** (`tools/job_registry.py`): two registries existed —
+  runtime.py's was dead weight (exported, never populated) while the real
+  one lived as privates in nodes/execute_tool_node.py, which tools/jobs.py
+  reached into. The registry is now a proper module (spawn/get/status/
+  wait/output/list/cancel, capped at 200 tracked jobs); the node spawns
+  through it, the job tools read through it, and the sync→background
+  auto-promotion path adopts its thread into it (a ruff-caught dangling
+  uuid reference exposed that path was still hand-rolling entries).
+- **All 8 tools→core inversions eliminated** via `tools/services.py` — a
+  stdlib service seam (proto-Context): core registers lazy producers at
+  runtime-init; battle/housekeeping (blue scorer), providers (config
+  loader, active model), and run_commands (audit/report/sessions) now
+  import only the seam. Enforced by `test_no_core_inversions.py`, which
+  AST-fails on any future tools→core import beyond core.constants.
+- **Import-time mkdirs made lazy**: audit_trail and report_exporter now
+  create their directories on first write; session_manager documents why
+  its module-init mkdir is its documented purpose (it IS the state owner).
+- mcp_server tool registry builds lazily; purity tests derive the repo
+  root from `__file__` (was a hardcoded local path — CI failure class).
+
 ## [3.3.0] — 2026-08-18 — OS GROUNDWORK (PHASE 0)
 
 First structural commit of the Suijin OS refactor — behavior identical,

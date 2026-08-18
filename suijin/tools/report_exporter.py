@@ -11,7 +11,11 @@ from datetime import datetime, timezone
 from suijin.tools.workspace import WORKSPACE_DIR
 
 REPORTS_DIR = WORKSPACE_DIR / "reports"
-REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _ensure_dir() -> None:
+    """Create the reports dir on first write (no import-time side effects)."""
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def generate_report(
@@ -28,6 +32,7 @@ def generate_report(
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     fname = engagement_name.replace("/", "_").replace(" ", "_").replace(":", "_")[:60]
     path = REPORTS_DIR / f"{fname}_report_{ts}.md"
+    _ensure_dir()
     report_dir = REPORTS_DIR / fname
     report_dir.mkdir(parents=True, exist_ok=True)
     json_path = report_dir / f"data_{ts}.json"

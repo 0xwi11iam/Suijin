@@ -11,7 +11,12 @@ from datetime import datetime, timezone
 from suijin.tools.workspace import WORKSPACE_DIR
 
 AUDIT_DIR = WORKSPACE_DIR / "audit_trails"
-AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _ensure_dir() -> None:
+    """Create the audit dir on first write (no import-time side effects)."""
+    AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+
 
 _current_trail = None
 _current_engagement = "unknown"
@@ -106,6 +111,7 @@ def _save():
     if _current_trail is None:
         return
     fname = _current_engagement.replace("/", "_").replace(" ", "_").replace(":", "_")[:60]
+    _ensure_dir()
     path = AUDIT_DIR / f"{fname}.json"
     path.write_text(json.dumps(_current_trail, indent=2, default=str))
 
@@ -113,6 +119,7 @@ def _save():
 def _export_markdown() -> str:
     if _current_trail is None:
         return ""
+    _ensure_dir()
     fname = _current_engagement.replace("/", "_").replace(" ", "_").replace(":", "_")[:60]
     path = AUDIT_DIR / f"{fname}.md"
     t = _current_trail

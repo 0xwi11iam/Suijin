@@ -3,61 +3,25 @@
 import logging
 import threading
 import time as _time
-import uuid
 
 from suijin.core.agent_context import set_phase_context, set_tenant_context
 from suijin.core.prompt_safety import wrap_untrusted
 from suijin.helpers.error_class import classify_error_class
 from suijin.infra.output_offload import maybe_offload
+from suijin.tools.job_registry import _job_lock, _jobs
+from suijin.tools.job_registry import spawn as _registry_spawn
 
 logger = logging.getLogger(__name__)
 
-_jobs: dict[str, dict] = {}
-_job_lock = threading.Lock()
+# THE job registry lives in tools/job_registry.py (Phase 0, item 4).
+# These aliases keep older references working — they are the SAME objects.
+_jobs = _jobs
+_job_lock = _job_lock
 
 
 def _spawn_background_job(tool_name: str, tool_args: dict, route_tool_fn) -> str:
     """Spawn a tool as a background thread. Returns job_id immediately."""
-    job_id = uuid.uuid4().hex[:8]
-    with _job_lock:
-        _jobs[job_id] = {
-            "job_id": job_id,
-            "tool_name": tool_name,
-            "tool_args": dict(tool_args),
-            "status": "running",
-            "started_at": _time.time(),
-            "output": "",
-            "error": None,
-        }
-
-    def _run():
-        from suijin.tools.result import clear_stream_sink, set_stream_sink
-
-        def sink(line: str):
-            with _job_lock:
-                if job_id in _jobs:
-                    _jobs[job_id]["output"] = (_jobs[job_id].get("output") or "") + line
-
-        set_stream_sink(sink)
-        try:
-            result = route_tool_fn(tool_name, tool_args, {})
-            with _job_lock:
-                if job_id in _jobs:
-                    _jobs[job_id]["output"] = str(result)
-                    _jobs[job_id]["status"] = "done"
-        except Exception as e:
-            with _job_lock:
-                if job_id in _jobs:
-                    _jobs[job_id]["error"] = str(e)
-                    _jobs[job_id]["status"] = "failed"
-        finally:
-            clear_stream_sink()
-
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
-    with _job_lock:
-        _jobs[job_id]["_thread"] = t
-    return job_id
+    return _registry_spawn(tool_name, tool_args, route_tool_fn)
 
 
 async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
@@ -132,15 +96,10 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
                         break
             done_event.set()
 
-    t0 = _time.monotonic()
-    t = threading.Thread(target=_run_tool, daemon=True)
-    t.start()
-    t.join(timeout=AUTO_BG_TIMEOUT)
-
-    if t.is_alive():
-        # Still running — promote to background job
-        job_id = uuid.uuid4().hex[:8]
+    def _adopt() -> str:
+        """Adopt the still-running thread into THE registry (no orphan)."""
         with _job_lock:
+            job_id = __import__("uuid").uuid4().hex[:8]
             _jobs[job_id] = {
                 "job_id": job_id,
                 "tool_name": tool_name,
@@ -149,8 +108,22 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
                 "started_at": _time.time(),
                 "output": "",
                 "error": None,
+                "_adopted": True,
                 "_thread": t,
+                # completion signal: the waiter above resolves status when
+                # the adopted thread finishes
+                "_done_event": done_event,
             }
+        return job_id
+
+    t0 = _time.monotonic()
+    t = threading.Thread(target=_run_tool, daemon=True)
+    t.start()
+    t.join(timeout=AUTO_BG_TIMEOUT)
+
+    if t.is_alive():
+        # Still running — promote to background job via the registry
+        job_id = _adopt()
         cmd = str(tool_args.get("cmd", tool_args.get("command", str(tool_args))))[:150]
         output = f"AUTO-BG {job_id}: {tool_name} (>{AUTO_BG_TIMEOUT}s)\n{cmd}\nCheck: job_status {job_id} | job_wait {job_id}"
         step_data.update(

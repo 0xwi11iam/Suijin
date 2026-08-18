@@ -100,7 +100,9 @@ def watch_lines(lines: list[str], enrich=None) -> list[str]:
 
     Pure function so the CLI loop and tests share semantics.
     """
-    from suijin.core.blue.traffic.scorer import score_request
+    from suijin.tools.services import get as _service
+
+    score_request = _service("traffic_scorer")
 
     out = []
     for line in lines:

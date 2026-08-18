@@ -13,7 +13,14 @@ from typing import Optional
 from suijin.tools.workspace import WORKSPACE_DIR
 
 STATE_DIR = WORKSPACE_DIR / "blue_state"
-STATE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _ensure_dir() -> None:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+_ensure_dir()  # module init: this module IS the state manager — creating
+# its own dir on import is its documented purpose
 
 
 class AttackerProfile:

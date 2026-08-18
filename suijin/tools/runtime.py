@@ -48,6 +48,40 @@ def init_runtime(force: bool = False) -> None:
 
         discover_modules()
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        # Service seam (Phase 0, item 5): core capabilities registered as
+        # LAZY producers — nothing imports suijin.core from tools directly.
+        from suijin.tools import services as _services
+
+        _services.register(
+            "traffic_scorer",
+            lambda: __import__("suijin.core.blue.traffic.scorer", fromlist=["score_request"]).score_request,
+        )
+        _services.register(
+            "traffic_anomaly_detector",
+            lambda: (
+                __import__("suijin.core.blue.traffic.anomaly_detector", fromlist=["detect_anomalies"]).detect_anomalies
+            ),
+        )
+        _services.register(
+            "red_config",
+            lambda: __import__("suijin.core.red.config_loader", fromlist=["load_config"]).load_config(),
+        )
+        _services.register(
+            "red_active_model",
+            lambda: __import__("suijin.core.red.config_loader", fromlist=["active_model"]).active_model,
+        )
+        _services.register(
+            "red_audit_printer",
+            lambda: __import__("suijin.core.red.session_control", fromlist=["print_audit_trail"]).print_audit_trail,
+        )
+        _services.register(
+            "red_force_report",
+            lambda: __import__("suijin.core.red.session_control", fromlist=["force_report"]).force_report,
+        )
+        _services.register(
+            "red_list_sessions",
+            lambda: __import__("suijin.core.red.session_control", fromlist=["list_sessions"]).list_sessions,
+        )
         # Workspace layout: merge any legacy suijin/suijin_agent real dir
         # into the canonical root workspace and symlink the inner path.
         ensure_workspace_layout()
@@ -76,8 +110,9 @@ def reset_recon_state():
     _recon_state["exploration_count"] = 0
 
 
-_jobs: dict[str, dict] = {}
-_job_lock = threading.Lock()
+# NOTE (Phase 0, item 4): the dead _jobs/_job_lock that used to live here
+# never held a single job — the real registry is tools/job_registry.py,
+# re-exported by dispatch for compatibility.
 
 _session: requests.Session | None = None
 _session_lock = threading.Lock()
