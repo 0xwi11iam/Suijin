@@ -67,7 +67,6 @@ ALL_FIELDS = OrderedDict([
     ("mode_guardrail",        ("bool",)),
     ("mode_deploy_subagent",   ("bool",)),
     ("mode_audit_trail",      ("bool",)),
-    ("mode_hotreload_skills", ("bool",)),
     ("subagent_count",        ("int", (1, 5))),
 
     # ---- Workspace & integrations ----

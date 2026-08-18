@@ -2,6 +2,49 @@
 
 All notable changes to Medusa.
 
+## [2.11.2] — 2026-08-18 — DEAD-CODE SWEEP (73 MODULES)
+
+### Removed
+Deleted only what an AST import-graph proved unreachable from every entry
+point (main, cli, mcp_server, kb, ui/server) AND every test. Dynamic
+string references audited separately (module-loader scans Modules/ only;
+`blue_hotfix` in skills/loader is a dict key bound to the live
+skills/blue_patching prompt; tutorials .md files are read by path).
+
+- **6 whole blue packages** (all modules dead):
+  `core/blue/counter_intel/` (5), `endpoints/` (3), `forensics/` (5),
+  `hotfix/` (3, after 2.11.1's two), `intel/` (6), `response/` (5) —
+  marketing-tree stubs never wired into the pipeline.
+- **Dead files in live blue packages**: deception (breadcrumb_layer,
+  misinformation, phantom_endpoint), defense (misinformation,
+  rate_limiter, session_revoker, waf_rules), soc/shift_manager, traffic
+  (capture, classifier, rate_tracker), tui (alert_panel, dashboard,
+  metrics), watchers (health_monitor, load_balancer, result_collector,
+  watcher_protocol, watcher_roles), core/blue/orchestrator.py.
+- **4 stub blueteam nodes** (nodes/blueteam_*.py — 200-byte no-ops;
+  the blue graph never registered them).
+- **4 dead blue prompts** (blue_base, blue_hotfix, blue_tool_registry,
+  blue_watcher; blue_system is the live one).
+- **9 orphaned tools**: blue_utils, confidence, cvss_scorer,
+  evidence_chain, failure_learner (never dispatched — failure_db.json had
+  no writer), goal_decomposer, har_replay, hotreload_skills,
+  timeline_viz.
+- **Duplicates**: core/paths.py (MEDUSA_TMP_DIR logic lives in
+  constants.py), logging_config.py, tutorials/__init__.py (markdown
+  tutorials stay, read by path).
+- **`mode_hotreload_skills` config flag** — its only implementing module
+  was dead; removed from Settings TUI, config.json, README.
+
+### Added
+- **`test_import_graph.py`** — regression guard: parses every live
+  file's imports (including relative-import level semantics) and fails
+  on any dangling `medusa.*` reference; entry points asserted
+  importable; pruned packages asserted gone. Caught and fixed its own
+  resolver bug during development (level handling for package inits).
+
+740 tests green; ruff clean; entry points, doctor, selftest, status all
+smoke-verified post-sweep.
+
 ## [2.11.1] — 2026-08-18 — DEEP-TEST PASS
 
 ### Added — 50 tests over live low-coverage modules

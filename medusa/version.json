@@ -1,6 +1,6 @@
 {
-  "version": "2.11.1",
+  "version": "2.11.2",
   "codename": "Trust But Verify",
   "release_date": "2026-08-18",
-  "description": "Medusa v2.11.1: deep-test pass on live low-coverage modules — red knowledge graph (dedupe/confidence-merge/block checks/corruption recovery), output offloading, firewall defense (validation-before-exec), traffic-log tailing, msf availability probing, session-awareness + http_request. Two real bugs found and fixed: SessionState replayed cookie ATTRIBUTES (Path/Domain) as cookies on every subsequent request; hotfix patch_generator/silent_patch were orphaned and emitted syntactically-broken patches (deleted). 729 tests green."
+  "description": "Medusa v2.11.2: dead-code sweep — 73 unreachable modules (67 KB) removed via AST import-graph reachability from entry points + tests: 6 whole blue-team packages (counter_intel, endpoints, forensics, hotfix, intel, response), 20 blue files in live packages, 4 stub blueteam nodes, 4 dead blue prompts, 9 orphaned tools (incl. the never-wired failure_learner/hotreload_skills), core/paths + logging_config duplicates. mode_hotreload_skills flag removed (no consumer). New import-graph guard test prevents dangling-import regressions. 740 tests green."
 }

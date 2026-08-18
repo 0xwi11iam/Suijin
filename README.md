@@ -379,7 +379,6 @@ environment variables — **never in config.json**. Validate with
 | `mode_guardrail` | `false` | Blocks destructive shell commands (rm/mv/chmod/kill) |
 | `mode_deploy_subagent` | `true` | Allow parallel subagents |
 | `mode_audit_trail` | `true` | Zero-truncation JSON/MD audit logging |
-| `mode_hotreload_skills` | `true` | Skills reload on edit |
 | `subagent_count` | `2` | Max parallel subagents (1–5) |
 | `proxy_url` | — | Outbound proxy for all tool HTTP traffic |
 | `metasploit_rpc_host` / `_port` / `_ssl` | `127.0.0.1` / `55553` / `false` | msfrpcd connection |
@@ -781,6 +780,7 @@ python3 -m pytest medusa/tests/ -m "not ai" # skip live-API tests
 | `test_red_knowledge_graph.py` | The agent's persistent memory: constraint dedupe + confidence merging, payload-block checks, CVE/bypass queries, corrupt-JSON recovery, record_finding→check_knowledge roundtrip |
 | `test_infra_and_defense.py` | Output offloading (thresholds, previews), firewall (validate-before-exec, rule ops, DROP filtering), traffic-log tailing (append/rotation), msf availability probing |
 | `test_http_session_tools.py` | Session state (cookies/CSRF/auth), rate-limit tracking (429, Retry-After, domain isolation), UA rotation, http_request with mocked transport |
+| `test_import_graph.py` | Import-graph guard: every `medusa.*` import resolves to a real file, entry points importable, pruned packages stay pruned |
 | `test_v210_features.py` | Credential vault (roundtrip/tamper/shred/redaction), dossiers, notify channels, rules + policy (opt-in semantics, scope exemptions, dispatch enforcement), module SDK, provider failover, skill versioning, campaign/watch/timeline/clean, recon hook |
 | `test_kb.py` | KB compile (FTS5, caps), path patterns + GTFOBins alias stubs, zero-doc failures, honest status, download retries + `.part` cleanup, `search_kb` filters, catalog gating |
 | `test_workspace_layout.py` | Canonical workspace merge + symlink migration, sandbox containment, CWD-independent paths |

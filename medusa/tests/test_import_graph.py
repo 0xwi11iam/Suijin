@@ -1,0 +1,94 @@
+"""Import-graph guard — every medusa.* import in live code must resolve to
+a file that exists. Prevents 'deleted a module, broke an import' regressions
+(the exact failure class this dead-code sweep guards against).
+"""
+
+import ast
+from pathlib import Path
+
+import pytest
+
+REPO = Path(__file__).resolve().parents[2]
+PKG = REPO / "medusa"
+EXCLUDE = {"tests", "lab", "__pycache__", "kb_cache", "ui"}
+
+
+def _live_files():
+    return [p for p in PKG.rglob("*.py")
+            if not any(part in EXCLUDE for part in p.parts)]
+
+
+def _module_targets(m: str) -> set[Path]:
+    """File paths a module string can refer to."""
+    rel = m.replace(".", "/")
+    return {PKG.parent / (rel + ".py"), PKG.parent / rel / "__init__.py"}
+
+
+def _collect_imports(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(errors="ignore"))
+    mods = set()
+    rel_parts = list(path.relative_to(PKG.parent).with_suffix("").parts)
+    is_init = rel_parts[-1] == "__init__"
+    if is_init:
+        rel_parts = rel_parts[:-1]
+    me = ".".join(rel_parts)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            mods.update(a.name for a in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            base = node.module or ""
+            if node.level:
+                # level 1 = current package; each extra level goes up one more.
+                # A plain module's package is me-minus-1; an __init__ IS me.
+                drop = node.level if not is_init else node.level - 1
+                pkg_parts = me.split(".")[: len(me.split(".")) - drop] if drop else me.split(".")
+                pkg = ".".join(pkg_parts)
+                base = f"{pkg}.{base}" if base else pkg
+            if base:
+                mods.add(base)
+    return mods
+
+
+def test_no_dangling_medusa_imports():
+    dangling = []
+    for f in _live_files():
+        for m in _collect_imports(f):
+            if not m.startswith("medusa"):
+                continue
+            targets = _module_targets(m)
+            if not any(t.exists() for t in targets):
+                dangling.append(f"{f.relative_to(REPO)} imports missing {m}")
+    assert not dangling, "dangling imports:\n" + "\n".join(dangling)
+
+
+def test_entry_points_importable():
+    import importlib
+
+    for mod in ("medusa.main", "medusa.cli", "medusa.kb", "medusa.ui.server"):
+        importlib.import_module(mod)
+
+
+def test_blue_tree_only_contains_live_modules():
+    """The packages pruned in v2.11.2 stay pruned."""
+    gone = [
+        "counter_intel", "endpoints", "forensics", "hotfix", "intel",
+        "response", "orchestrator.py",
+    ]
+    for g in gone:
+        assert not (PKG / "core" / "blue" / g).exists(), g
+
+
+@pytest.mark.parametrize("module", [
+    "medusa.core.blue.traffic.anomaly_detector",
+    "medusa.core.blue.traffic.scorer",
+    "medusa.core.blue.traffic.replay_harness",
+    "medusa.core.blue.defense.firewall",
+    "medusa.core.blue.ai_engine",
+    "medusa.core.blue.knowledge_graph",
+    "medusa.core.blue.subagent_manager",
+    "medusa.prompts.blue_system",
+])
+def test_kept_blue_modules_importable(module):
+    import importlib
+
+    importlib.import_module(module)
