@@ -40,7 +40,7 @@ jobs:
           import medusa.core.state, medusa.core.agent_graph, medusa.core.supervisor, medusa.core.error_handler
           import medusa.core.blue.config, medusa.core.blue.knowledge_graph, medusa.core.blue.ai_engine
           import medusa.tools.guardrails, medusa.tools.workspace, medusa.core.blue.errors
-          import medusa.core.config_models, medusa.core.constants, medusa.core.paths
+          import medusa.core.config_models, medusa.core.constants
           print('All imports OK')
           "
 
