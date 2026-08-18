@@ -65,3 +65,28 @@ jobs:
         continue-on-error: true
         run: |
           pip install pip-audit && pip-audit
+
+  webui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build frontend
+        run: |
+          cd webui
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Committed bundle must be fresh
+        run: |
+          # The build just regenerated medusa/ui/dist. If git sees changes,
+          # the committed bundle is stale — rebuild locally and commit it.
+          if ! git diff --quiet -- medusa/ui/dist; then
+            echo "::error::medusa/ui/dist is stale — run: cd webui && npm run build"
+            git diff --stat -- medusa/ui/dist
+            exit 1
+          fi

@@ -1248,8 +1248,10 @@ def run_watch(args) -> int:
     print(f"watching {path} (Ctrl+C to stop)")
     signal.signal(signal.SIGINT, signal.default_int_handler)
     try:
+        # _enrich_traffic is list-based; watch_lines wants a per-entry fn
+        per_entry = lambda e: _enrich_traffic([e])[0]  # noqa: E731
         for line in tail_file(path):
-            for out in watch_lines([line], enrich=_enrich_traffic):
+            for out in watch_lines([line], enrich=per_entry):
                 print(out)
     except KeyboardInterrupt:
         print("\nstopped")
