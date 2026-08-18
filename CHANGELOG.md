@@ -2,6 +2,53 @@
 
 All notable changes to Medusa.
 
+## [2.9.2] — 2026-08-18 — DEAD-CODE SWEEP + WEBUI OVERHAUL
+
+### Fixed — WebUI bugs
+- **Activity feed flooded with duplicates** — every 3 s SSE snapshot
+  re-appended the same tail entries forever. Feed is now delta-based:
+  first paint seeds the tail once, then only genuinely new entries append
+  (capped at 100).
+- **ForceGraph re-render storm** — the physics effect depended on hover
+  state, so every mousemove tore down and restarted the simulation, and
+  setHover inside the rAF loop caused re-render loops. All interaction
+  state now lives in refs; tooltips draw directly on the canvas; the
+  effect runs once. Node radius now scales with graph degree.
+- **Detector grid never lit up** — labels ("SQL Injection") were matched
+  against KG attack types ("sql_injection"): space vs underscore, always
+  false. Detectors now declare explicit signal keys and count real hits
+  from a new `signal_counts` snapshot field (live traffic signals) merged
+  with `blue_kg.attack_type_counts`.
+- **Radar was placeholder data** — axes now derive from actual detector
+  signal counts + blue-KG attack types.
+- **Mobile nav was unreachable** — sidebar was display:none under 768px
+  with no way to open it. Hamburger button + slide-in drawer with
+  backdrop; nav links close it on tap.
+- Polish: severity-railed traffic rows (red/amber/green left edges),
+  hero-card accent underlines, path overflow ellipsis, traffic rows show
+  triggering signals, rate sparkline on the monitored-requests card.
+
+### Removed — dead code (the class of bug behind the 2.3.0-beta drift)
+- `mcp_server.SERVER_VERSION` hardcoded "2.3.0-beta" (five releases of
+  drift) — now sourced from version.json like everything else.
+- `tools/runtime.py`: dead `MCP_SERVERS` / `get_server_for_tool` /
+  `AI_SERVICE_ENDPOINTS` / `fingerprint_ai_response` stubs and their
+  dispatch re-exports + tests (dispatch still re-exports the live ones).
+- `tools/providers.py`: dead `_get_config_path`/`_load_config` (generated()
+  with no config now uses the canonical config_loader).
+- `core/templates.py`: unused `validate_config` + REQUIRED/OPTIONAL_KEYS
+  tables (Pydantic RedConfig has been the real validator since 2.5).
+- Zombie config keys with zero consumers: `use_database_framework`,
+  `use_local_bin_folder`, `agent_workspace`, `report_auto_export`,
+  `report_format` — removed from default config, Settings TUI, and docs.
+- `intel/oracle.py`: unreachable code after return (the intended
+  "lean safe" default was dead); B007/B904 lint batch across 9 files.
+
+### Added
+- `signal_counts` + `blue_kg.attack_type_counts` in the UI snapshot
+  (aggregated detector signals across the traffic window — works with or
+  without an active blue session). 2 new backend tests; 565 total.
+
 ## [2.9.1] — 2026-08-18 — PROVIDER-AWARE MODEL DISPLAY
 
 ### Fixed

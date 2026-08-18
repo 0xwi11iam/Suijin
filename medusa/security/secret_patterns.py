@@ -147,7 +147,7 @@ TECH_VULN_MAP = {
 
 
 def suggest_tools_for_cwe(cwe_id: str) -> list:
-    for category, info in CVE_ATTACK_MAP.items():
+    for _category, info in CVE_ATTACK_MAP.items():
         if cwe_id in info.get("cwe_ids", []):
             return info.get("tools", [])
     return []

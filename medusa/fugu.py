@@ -418,7 +418,7 @@ def run_fugu(config, objective, generate_fn, api_key=None):
     tools.reset_recon_state()
     flag_captured = False
 
-    for iteration in range(20):  # safety cap
+    for _iteration in range(20):  # safety cap
         ready = task_graph.ready_phases()
         if not ready:
             pending = [p for p in task_graph.phases if p["status"] == "pending"]

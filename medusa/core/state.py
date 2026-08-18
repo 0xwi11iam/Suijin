@@ -299,7 +299,7 @@ def format_execution_trace(
         return "No steps executed yet."
 
     lines = []
-    for i, step in enumerate(execution_trace[-20:]):  # last 20 steps
+    for _i, step in enumerate(execution_trace[-20:]):  # last 20 steps
         if not isinstance(step, dict):
             continue
         tn = step.get("tool_name", "?")

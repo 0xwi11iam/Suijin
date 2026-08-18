@@ -35,6 +35,54 @@ class TestOverview:
         d = client.get("/api/overview").get_json()
         assert d["provider"]["name"]  # something is always reported
 
+    def test_signal_counts_from_traffic(self, client, monkeypatch, tmp_path):
+
+        log = tmp_path / "traffic.jsonl"
+        log.write_text(
+            "\n".join(
+                json.dumps(e)
+                for e in [
+                    {"method": "GET", "path": "/", "body": ""},
+                    {
+                        "method": "POST",
+                        "path": "/auth/login",
+                        "body": "{\"u\":\"admin' OR '1'='1\"}",
+                        "ip": "127.0.0.1",
+                    },
+                ]
+            )
+        )
+        monkeypatch.setattr(uis, "BLUE_TRAFFIC_LOG", str(log))
+        d = uis.build_snapshot()
+        assert d["signal_counts"].get("sql_injection", 0) >= 1
+
+    def test_attack_type_counts_from_blue_kg(self, client, monkeypatch, tmp_path):
+        kg = tmp_path / "blue_kg.json"
+        kg.write_text(
+            json.dumps(
+                {
+                    "nodes": {
+                        "a1": {
+                            "id": "a1",
+                            "type": "attack",
+                            "data": {"attack_type": "sql_injection", "path": "/login"},
+                        },
+                        "a2": {
+                            "id": "a2",
+                            "type": "attack",
+                            "data": {"attack_type": "sql_injection", "path": "/search"},
+                        },
+                        "d1": {"id": "d1", "type": "defense", "data": {}},
+                    },
+                    "edges": [],
+                }
+            )
+        )
+        monkeypatch.setattr(uis, "BLUE_KG_PATH", str(kg))
+        d = uis.build_snapshot()
+        assert d["blue_kg"]["attack_type_counts"]["sql_injection"] == 2
+        assert d["blue_kg"]["node_counts"]["defense"] == 1
+
 
 class TestPathSafety:
     def test_report_traversal_blocked(self, client):

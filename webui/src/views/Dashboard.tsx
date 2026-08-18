@@ -5,44 +5,55 @@ import Radar from "../charts/Radar"
 import Sparkline from "../charts/Sparkline"
 import type { TrafficEntry } from "../types"
 
+function trafficScore(t: TrafficEntry): number {
+  return Number((t as { ui_score?: number }).ui_score ?? 0)
+}
+
+function trafficKey(t: TrafficEntry, i: number): string {
+  return `${t.timestamp ?? ""}|${t.method ?? ""}|${t.path ?? ""}|${i}`
+}
+
 function HeroStat({ label, value, sub, spark, color }: {
   label: string; value: string; sub?: string; spark?: number[]; color?: string
 }) {
   return (
-    <div className="card">
+    <div className="card hero-card">
       <div className="card-title">{label}</div>
       <div className="hero-row">
         <div>
           <div className="display-stat" style={{ color: color ?? "var(--text-primary)" }}>{value}</div>
           {sub && <div className="small" style={{ marginTop: 4 }}>{sub}</div>}
         </div>
-        {spark && <Sparkline data={spark} color={color ?? "var(--accent)"} />}
+        {spark && spark.length > 1 && <Sparkline data={spark} color={color ?? "var(--accent)"} />}
       </div>
     </div>
   )
-}
-
-function trafficScore(t: TrafficEntry): number {
-  return Number((t as { ui_score?: number }).ui_score ?? 0)
 }
 
 export default function Dashboard() {
   const { snap, live } = useStore()
   const [spikes, setSpikes] = useState(0)
   const [feed, setFeed] = useState<TrafficEntry[]>([])
-  const trafficCountRef = useRef(0)
-  const feedRef = useRef<HTMLDivElement>(null)
+  const [rateHistory, setRateHistory] = useState<number[]>([])
+  const countRef = useRef(0)
+  const firstPaint = useRef(true)
 
   useEffect(() => {
     if (!snap) return
-    if (snap.traffic_count > trafficCountRef.current) {
-      const delta = snap.traffic_count - trafficCountRef.current
-      if (trafficCountRef.current > 0 && delta > 0 && snap.traffic_recent.some((t) => trafficScore(t) >= 4)) {
-        setSpikes((s) => s + delta)
-      }
-      trafficCountRef.current = snap.traffic_count
-      setFeed((f) => [...snap.traffic_recent.slice(-40), ...f].slice(0, 80))
+    const count = snap.traffic_count
+    const prev = countRef.current
+    if (firstPaint.current) {
+      // seed once with the tail — no spiking on first paint
+      setFeed(snap.traffic_recent.slice(-15))
+      firstPaint.current = false
+    } else if (count > prev) {
+      const delta = Math.min(count - prev, snap.traffic_recent.length)
+      const fresh = snap.traffic_recent.slice(-delta)
+      setFeed((f) => [...f, ...fresh].slice(-100))
+      if (fresh.some((t) => trafficScore(t) >= 4)) setSpikes((s) => s + delta)
     }
+    countRef.current = count
+    setRateHistory((r) => [...r.slice(-19), count])
   }, [snap])
 
   if (!snap) {
@@ -57,20 +68,28 @@ export default function Dashboard() {
   const totalActions = audits.reduce((a, x) => a + x.actions, 0)
   const totalFindings = audits.reduce((a, x) => a + x.findings, 0)
   const totalCost = audits.reduce((a, x) => a + x.cost_usd, 0)
-  const attacked = (snap.traffic_recent ?? []).filter((t) => trafficScore(t) >= 4).length
+  const suspect = (snap.traffic_recent ?? []).filter((t) => trafficScore(t) >= 4).length
   const kbDocs = snap.kb.built ? (snap.kb.docs ?? 0) : 0
 
-  // radar categories derived from blue KG node counts
-  const nc = snap.blue_kg?.node_counts ?? {}
-  const radarData = [
-    { label: "SQLi", value: nc.attack ? 0.9 : 0.1 },
-    { label: "XSS", value: nc.attack ? 0.6 : 0.05 },
-    { label: "CmdInj", value: nc.attack ? 0.5 : 0.05 },
-    { label: "Traversal", value: nc.attack ? 0.4 : 0.05 },
-    { label: "Recon", value: nc.attacker ? 0.8 : 0.05 },
-    { label: "Deception", value: (snap.tarpit && Object.keys(snap.tarpit).length) ? 0.7 : 0.05 },
-    { label: "Blocked", value: nc.defense ? 0.6 : 0.05 },
+  // radar from REAL detector signals (traffic window) + blue KG attack types
+  const sig = snap.signal_counts ?? {}
+  const atk = snap.blue_kg?.attack_type_counts ?? {}
+  const radarAxes = [
+    { label: "SQLi", keys: ["sql_injection", "sqli"] },
+    { label: "XSS", keys: ["xss_attempt", "xss"] },
+    { label: "CmdInj", keys: ["command_injection", "rce"] },
+    { label: "Traversal", keys: ["path_traversal", "traversal"] },
+    { label: "SSTI", keys: ["ssti_attempt", "ssti"] },
+    { label: "XXE", keys: ["xxe_attempt", "xxe"] },
+    { label: "Recon", keys: ["scanner_ua", "unusual_method", "recon"] },
+    { label: "Bypass", keys: ["auth_bypass_header", "mass_assignment"] },
   ]
+  const maxSig = Math.max(1, ...radarAxes.flatMap((a) => a.keys.map((k) => (sig[k] ?? 0) + (atk[k] ?? 0))))
+  const radarData = radarAxes.map((a) => ({
+    label: a.label,
+    value: Math.min(1, 0.05 + a.keys.reduce((s, k) => s + (sig[k] ?? 0) + (atk[k] ?? 0), 0) / maxSig),
+  }))
+  const hasSignals = Object.keys(sig).length > 0 || Object.keys(atk).length > 0
 
   return (
     <div className="grid" style={{ gap: 24 }}>
@@ -80,10 +99,11 @@ export default function Dashboard() {
           label="Requests Monitored"
           value={snap.traffic_count.toLocaleString()}
           sub={live ? "live SSE stream" : "stream offline"}
+          spark={rateHistory}
         />
         <HeroStat
           label="Suspect Requests"
-          value={String(attacked)}
+          value={String(suspect)}
           sub="attack signal in recent window"
           color="var(--red)"
         />
@@ -96,6 +116,7 @@ export default function Dashboard() {
           label="API Cost (audits)"
           value={`$${totalCost.toFixed(2)}`}
           sub={`KB ${kbDocs.toLocaleString()} docs · ${snap.tools.module_tool_count} tools`}
+          color="var(--accent)"
         />
       </div>
 
@@ -110,7 +131,8 @@ export default function Dashboard() {
           </div>
           <AttackMap spikes={spikes} />
           <div className="small" style={{ padding: "0 24px 16px" }}>
-            Vectors spawn when attack signals arrive on the blue-team feed.
+            Vectors spawn when attack signals arrive on the blue-team feed — fire attacks at a lab
+            (<span className="mono">medusa labs</span>) or run <span className="mono">medusa battle</span>.
           </div>
         </div>
 
@@ -118,7 +140,9 @@ export default function Dashboard() {
           <div className="card-title">Attack Pattern Radar</div>
           <Radar data={radarData} />
           <div className="small">
-            Derived from the live blue knowledge graph{snap.blue_kg ? "" : " (no session active — start Blue Team)"}.
+            {hasSignals
+              ? "Live detector signals from the traffic window + blue KG."
+              : "No attack signals yet — start a lab and probe it, or run medusa battle."}
           </div>
         </div>
       </div>
@@ -127,23 +151,24 @@ export default function Dashboard() {
       <div className="grid g2">
         <div className="card" style={{ padding: 0 }}>
           <div className="card-title" style={{ padding: "20px 24px 0" }}>Real-time Activity</div>
-          <div className="feed" ref={feedRef}>
+          <div className="feed">
             {feed.length === 0 && (
               <div className="small" style={{ padding: 24 }}>
                 No live traffic yet. Start the blue team (<span className="mono">medusa</span> → Blue Team)
                 and probe the lab — events appear here in real time.
               </div>
             )}
-            {feed.map((t, i) => {
+            {feed.slice().reverse().map((t, i) => {
               const sc = trafficScore(t)
               const cls = sc >= 4 ? "badge-red" : sc >= 1 ? "badge-amber" : "badge-grey"
+              const tier = sc >= 4 ? "SUSPECT" : sc >= 1 ? "ANOMALY" : "OK"
               return (
-                <div className="feed-item" key={i}>
-                  <span className="mono dim">{String(t.timestamp ?? "").slice(11, 19)}</span>
-                  <span className={`badge ${cls}`}>{cls === "badge-red" ? "SUSPECT" : cls === "badge-amber" ? "ANOMALY" : "OK"}</span>
-                  <span className="mono">{String(t.method ?? "?").padEnd(5, " ")}</span>
-                  <span className="mono" style={{ color: "var(--text-primary)" }}>{String(t.path ?? "?")}</span>
-                  <span className="mono dim" style={{ marginLeft: "auto" }}>{String(t.ip ?? "")}</span>
+                <div className={`feed-item sev-${tier.toLowerCase()}`} key={trafficKey(t, i)}>
+                  <span className="badge mono-dim">{String(t.timestamp ?? "").slice(11, 19)}</span>
+                  <span className={`badge ${cls}`}>{tier}</span>
+                  <span className="mono">{String(t.method ?? "?")}</span>
+                  <span className="mono path">{String(t.path ?? "?")}</span>
+                  <span className="mono dim ip">{String(t.ip ?? "")}</span>
                 </div>
               )
             })}
@@ -170,6 +195,9 @@ export default function Dashboard() {
               ))}
             </tbody>
           </table>
+          <div className="small" style={{ marginTop: 12 }}>
+            Probe ports update every 3s via SSE.
+          </div>
         </div>
       </div>
     </div>

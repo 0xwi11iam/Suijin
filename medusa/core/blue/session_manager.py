@@ -81,7 +81,7 @@ class BlueSession:
 
     def get_or_create_attacker(self, ip: str) -> AttackerProfile:
         with self._lock:
-            for aid, profile in self.attackers.items():
+            for _aid, profile in self.attackers.items():
                 if ip in profile.ips:
                     return profile
             aid = f"ATTK-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{len(self.attackers) + 1:04d}"

@@ -166,7 +166,7 @@ class BlueKnowledgeGraph:
             red_data = json.loads(red_kg_path.read_text())
             imported = 0
             # Import findings that are relevant for defense
-            for target, findings in red_data.items() if isinstance(red_data, dict) else []:
+            for _target, findings in red_data.items() if isinstance(red_data, dict) else []:
                 if isinstance(findings, list):
                     for finding in findings:
                         if isinstance(finding, dict):

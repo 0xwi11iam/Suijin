@@ -218,9 +218,9 @@ not a public service.
 
 | View | What it shows |
 |:-----|:--------------|
-| **Dashboard** | Hero stats (requests monitored, suspect requests, findings, API cost), canvas attack map with animated vectors spawned by suspect traffic, attack-pattern radar, real-time activity feed, lab fleet liveness |
+| **Dashboard** | Hero stats with rate sparkline, canvas attack map (vectors spawn from live attack signals), attack-pattern radar driven by **real detector counts**, delta-based activity feed (no duplicates), lab fleet liveness |
 | **Red Team** | Attack-pipeline flow (Recon → Exploit → Escalate → Flag → Report, stage derived from the newest audit trail), engagement log + findings tabs, tool arsenal with availability, subagent/supervisor/KB/failure-memory stat cards |
-| **Blue Team** | Three-tier traffic monitor (NORMAL / ANOMALOUS / INVESTIGATED — entries scored with the *real* `anomaly_detector`, same as the TUI), 18-detector grid that lights up on matching KG attacks, tarpit controls + live tarpitted-IP table, session KG summary |
+| **Blue Team** | Three-tier traffic monitor with severity rails + triggering signals (scored with the *real* `anomaly_detector`), 18-detector grid counting live hits, tarpit controls + live tarpitted-IP table, session KG summary |
 | **Knowledge Graph** | Interactive force-directed graph (hand-rolled physics, no JS deps) of the blue session KG or persistent red constraints; click nodes for details |
 | **Labs** | Fleet table with live port probes, copy-to-clipboard attack commands for blue_target |
 | **Reports** | Audit summaries (actions/success/findings/cost per engagement) + report file browser with viewer |
@@ -324,10 +324,11 @@ environment variables — **never in config.json**. Validate with
 | `mode_audit_trail` | `true` | Zero-truncation JSON/MD audit logging |
 | `mode_hotreload_skills` | `true` | Skills reload on edit |
 | `subagent_count` | `2` | Max parallel subagents (1–5) |
-| `report_auto_export` / `report_format` | `true` / `"markdown"` | Report generation |
 | `proxy_url` | — | Outbound proxy for all tool HTTP traffic |
 | `metasploit_rpc_host` / `_port` / `_ssl` | `127.0.0.1` / `55553` / `false` | msfrpcd connection |
-| `agent_workspace` | `"medusa_agent"` | Workspace folder name (see [Workspace](#agent-workspace)) |
+
+The launcher banner and Thinking spinner resolve the display model per
+provider (`<provider>_model`; HuggingFace uses `final_model_id`).
 
 Unknown keys are caught at startup by Pydantic validation; `zai_endpoint`
 accepts only `coding`, `paas`, or a full custom base URL.

@@ -1,13 +1,14 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 
 /**
  * Force-directed knowledge-graph — simple physics in rAF, no deps.
- * Nodes: attacker(red) attack(amber) defense(blue) endpoint(cyan) other(grey).
+ * All interaction state lives in refs; the rAF loop never calls setState
+ * (the first version restarted physics on every mousemove — janky).
  */
 export interface GNode { id: string; type: string; label: string; flags?: number }
 export interface GEdge { from: string; to: string }
 
-interface Sim extends GNode { x: number; y: number; vx: number; vy: number }
+interface Sim extends GNode { x: number; y: number; vx: number; vy: number; deg: number; r?: number }
 
 const COLORS: Record<string, string> = {
   attacker: "#ff3366",
@@ -25,48 +26,53 @@ const TYPE_LABELS: Record<string, string> = {
 export default function ForceGraph({ nodes, edges, height = 460, onPick }: {
   nodes: GNode[]; edges: GEdge[]; height?: number; onPick?: (n: GNode) => void
 }) {
-  const ref = useRef<HTMLCanvasElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const simsRef = useRef<Sim[]>([])
-  const [hover, setHover] = useState<{ x: number; y: number; label: string } | null>(null)
+  const hoverRef = useRef<{ x: number; y: number } | null>(null)
   const pickedRef = useRef<string | null>(null)
+  const propsRef = useRef({ nodes, edges })
+  propsRef.current = { nodes, edges }
 
   // reconcile sim nodes when props change (preserve positions)
-  const prevIds = new Set(simsRef.current.map((s) => s.id))
-  const next: Sim[] = nodes.map((n) => {
-    const old = simsRef.current.find((s) => s.id === n.id)
+  const prev = simsRef.current
+  simsRef.current = nodes.map((n) => {
+    const old = prev.find((s) => s.id === n.id)
     return old
       ? { ...old, ...n }
-      : { ...n, x: (Math.random() - 0.5) * 200 + 300, y: (Math.random() - 0.5) * 200 + 200, vx: 0, vy: 0 }
+      : { ...n, x: 260 + (Math.random() - 0.5) * 220, y: height / 2 + (Math.random() - 0.5) * 220, vx: 0, vy: 0, deg: 0 }
   })
-  simsRef.current = next
-  const ids = new Set(next.map((n) => n.id))
-  const edgesFiltered = edges.filter((e) => ids.has(e.from) && ids.has(e.to))
-  prevIds.clear()
+  const deg: Record<string, number> = {}
+  const ids = new Set(simsRef.current.map((s) => s.id))
+  for (const e of edges) {
+    if (ids.has(e.from)) deg[e.from] = (deg[e.from] ?? 0) + 1
+    if (ids.has(e.to)) deg[e.to] = (deg[e.to] ?? 0) + 1
+  }
+  for (const s of simsRef.current) s.deg = deg[s.id] ?? 0
 
   useEffect(() => {
-    const cv = ref.current!
+    const cv = canvasRef.current!
     const ctx = cv.getContext("2d")!
     let stop = false
     let iter = 0
+    let raf = 0
 
     const tick = () => {
       if (stop) return
       const w = cv.clientWidth
-      const h = height
-      if (cv.width !== w * devicePixelRatio) {
+      if (cv.width !== w * devicePixelRatio || cv.height !== height * devicePixelRatio) {
         cv.width = w * devicePixelRatio
-        cv.height = h * devicePixelRatio
+        cv.height = height * devicePixelRatio
       }
       ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0)
-      ctx.clearRect(0, 0, w, h)
+      ctx.clearRect(0, 0, w, height)
       const sims = simsRef.current
-      if (sims.length === 0) {
-        raf = requestAnimationFrame(tick)
-        return
-      }
+      if (sims.length === 0) { raf = requestAnimationFrame(tick); return }
 
-      // physics — run harder for the first 300 frames, then relax
-      const k = iter < 300 ? 1 : 0.15
+      const { edges: es } = propsRef.current
+      const liveEdges = es.filter((e) => ids.has(e.from) && ids.has(e.to))
+
+      // physics — hot for the first 300 frames, then relax
+      const k = iter < 300 ? 1 : 0.12
       iter++
       for (let i = 0; i < sims.length; i++) {
         for (let j = i + 1; j < sims.length; j++) {
@@ -74,111 +80,108 @@ export default function ForceGraph({ nodes, edges, height = 460, onPick }: {
           let dx = b.x - a.x, dy = b.y - a.y
           let d2 = dx * dx + dy * dy
           if (d2 < 1) { d2 = 1; dx = Math.random(); dy = Math.random() }
-          const f = (1400 / d2) * k
           const d = Math.sqrt(d2)
-          const fx = (dx / d) * f, fy = (dy / d) * f
-          a.vx -= fx; a.vy -= fy
-          b.vx += fx; b.vy += fy
+          const f = (1600 / d2) * k
+          a.vx -= (dx / d) * f; a.vy -= (dy / d) * f
+          b.vx += (dx / d) * f; b.vy += (dy / d) * f
         }
       }
-      for (const e of edgesFiltered) {
+      for (const e of liveEdges) {
         const a = sims.find((s) => s.id === e.from)
         const b = sims.find((s) => s.id === e.to)
         if (!a || !b) continue
         const dx = b.x - a.x, dy = b.y - a.y
         const d = Math.sqrt(dx * dx + dy * dy) || 1
-        const f = ((d - 120) * 0.004) * k
-        a.vx += (dx / d) * f * 10; a.vy += (dy / d) * f * 10
-        b.vx -= (dx / d) * f * 10; b.vy -= (dy / d) * f * 10
+        const f = (d - 130) * 0.05 * k
+        a.vx += (dx / d) * f; a.vy += (dy / d) * f
+        b.vx -= (dx / d) * f; b.vy -= (dy / d) * f
       }
       for (const s of sims) {
-        // centering + damping
-        s.vx += (w / 2 - s.x) * 0.0009
-        s.vy += (height / 2 - s.y) * 0.0009
+        s.vx += (w / 2 - s.x) * 0.001
+        s.vy += (height / 2 - s.y) * 0.001
         s.vx *= 0.82; s.vy *= 0.82
-        s.x += Math.max(-6, Math.min(6, s.vx))
-        s.y += Math.max(-6, Math.min(6, s.vy))
-        s.x = Math.max(24, Math.min(w - 24, s.x))
-        s.y = Math.max(24, Math.min(height - 24, s.y))
+        s.x = Math.max(26, Math.min(w - 26, s.x + Math.max(-6, Math.min(6, s.vx))))
+        s.y = Math.max(26, Math.min(height - 26, s.y + Math.max(-6, Math.min(6, s.vy))))
       }
 
       // edges
-      for (const e of edgesFiltered) {
+      ctx.lineWidth = 1
+      for (const e of liveEdges) {
         const a = sims.find((s) => s.id === e.from)
         const b = sims.find((s) => s.id === e.to)
         if (!a || !b) continue
         ctx.strokeStyle = "rgba(136,153,187,0.18)"
-        ctx.lineWidth = 1
-        ctx.beginPath()
-        ctx.moveTo(a.x, a.y)
-        ctx.lineTo(b.x, b.y)
-        ctx.stroke()
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
       }
 
-      // nodes
-      let hoverTarget: { x: number; y: number; label: string } | null = null
+      // nodes + hover/picked highlight
+      const hover = hoverRef.current
+      let hovered: Sim | null = null
       for (const s of sims) {
-        const r = Math.min(14, 4 + (s.flags ?? 0))
+        const r = Math.min(15, 4 + s.deg * 2 + (s.flags ?? 0) / 2)
+        s.r = r
         const col = COLORS[s.type] ?? "#8899bb"
         const isPicked = pickedRef.current === s.id
+        if (hover && Math.hypot(hover.x - s.x, hover.y - s.y) < r + 6) hovered = s
         ctx.fillStyle = col
-        ctx.beginPath()
-        ctx.arc(s.x, s.y, r, 0, Math.PI * 2)
-        ctx.fill()
-        if (isPicked) {
-          ctx.strokeStyle = "rgba(0,255,136,0.8)"
+        ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2); ctx.fill()
+        if (isPicked || hovered === s) {
+          ctx.strokeStyle = isPicked ? "rgba(0,255,136,0.9)" : "rgba(255,255,255,0.5)"
           ctx.lineWidth = 2
-          ctx.beginPath()
-          ctx.arc(s.x, s.y, r + 5, 0, Math.PI * 2)
-          ctx.stroke()
+          ctx.beginPath(); ctx.arc(s.x, s.y, r + 5, 0, Math.PI * 2); ctx.stroke()
         }
-        if (hover && Math.abs(hover.x - s.x) < 14 && Math.abs(hover.y - s.y) < 14) {
-          hoverTarget = { x: s.x, y: s.y - r - 10, label: `${s.label} · ${TYPE_LABELS[s.type] ?? s.type}` }
-        }
-        // label for larger nodes
-        if (r >= 7 || isPicked) {
-          ctx.fillStyle = "rgba(255,255,255,0.75)"
+        // labels for hubs + picked
+        if (r >= 8 || isPicked) {
+          ctx.fillStyle = "rgba(255,255,255,0.8)"
           ctx.font = "10px 'JetBrains Mono', monospace"
           ctx.textAlign = "center"
-          ctx.fillText(s.label, s.x, s.y + r + 12)
+          ctx.fillText(s.label, s.x, s.y + r + 13)
         }
       }
-      if (hoverTarget) setHover(hoverTarget)
-      else if (hover) setHover(null)
+
+      // tooltip drawn on canvas — no React state, no re-render
+      if (hovered) {
+        const label = `${hovered.label} · ${TYPE_LABELS[hovered.type] ?? hovered.type}`
+        ctx.font = "11px 'JetBrains Mono', monospace"
+        const tw = ctx.measureText(label).width
+        let tx = hovered.x + 14, ty = hovered.y - 10
+        if (tx + tw + 16 > w) tx = hovered.x - tw - 26
+        ctx.fillStyle = "rgba(26,35,50,0.95)"
+        ctx.strokeStyle = "rgba(255,255,255,0.12)"
+        ctx.beginPath()
+        ctx.roundRect(tx, ty, tw + 16, 22, 5)
+        ctx.fill(); ctx.stroke()
+        ctx.fillStyle = "#fff"
+        ctx.textAlign = "left"
+        ctx.fillText(label, tx + 8, ty + 15)
+      }
 
       raf = requestAnimationFrame(tick)
     }
-    let raf = requestAnimationFrame(tick)
+    raf = requestAnimationFrame(tick)
     return () => { stop = true; cancelAnimationFrame(raf) }
-  }, [height, nodes, edges, hover])
+  }, [height])
+
+  const locate = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top }
+  }
 
   return (
     <div style={{ position: "relative" }}>
       <canvas
-        ref={ref}
-        style={{ width: "100%", height, cursor: "pointer" }}
-        onMouseMove={(e) => {
-          const rect = (e.target as HTMLCanvasElement).getBoundingClientRect()
-          setHover({ x: e.clientX - rect.left, y: e.clientY - rect.top, label: "" })
-        }}
+        ref={canvasRef}
+        style={{ width: "100%", height, cursor: "pointer", display: "block" }}
+        onMouseMove={(e) => { hoverRef.current = locate(e) }}
+        onMouseLeave={() => { hoverRef.current = null }}
         onClick={(e) => {
-          const rect = (e.target as HTMLCanvasElement).getBoundingClientRect()
-          const mx = e.clientX - rect.left
-          const my = e.clientY - rect.top
-          const hit = simsRef.current.find((s) => Math.hypot(s.x - mx, s.y - my) < 16)
+          const m = locate(e)
+          const hit = simsRef.current.find((s) => Math.hypot(s.x - m.x, s.y - m.y) < (s.r ?? 8) + 6)
           pickedRef.current = hit?.id ?? null
           if (hit && onPick) onPick(hit)
         }}
         aria-label="knowledge graph"
       />
-      {hover?.label && (
-        <div
-          className="graph-tip mono"
-          style={{ position: "absolute", left: hover.x + 12, top: hover.y - 6 }}
-        >
-          {hover.label}
-        </div>
-      )}
       <div className="graph-legend small">
         {Object.entries(COLORS).map(([t, c]) => (
           <span key={t} style={{ color: c }}>● {TYPE_LABELS[t] ?? t}</span>

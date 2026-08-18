@@ -134,7 +134,7 @@ def _export_markdown() -> str:
 
     lines.append("")
     lines.append("## Full Iteration Log")
-    for i, it in enumerate(t.get("iterations", []), 1):
+    for _i, it in enumerate(t.get("iterations", []), 1):
         lines.append(f"### #{it['iteration']} [{it['phase']}] {it['action']['tool']}")
         lines.append(f"**Thought**: {it['thought']}")
         lines.append(f"**Reasoning**: {it['reasoning']}")

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import time
 
@@ -218,19 +217,6 @@ def _call_via_lobstertrap(messages, model, temperature, max_tokens):
 
 
 # ----------------------------------------------------------------------
-# Helper: load config from the standard path
-# ----------------------------------------------------------------------
-def _get_config_path():
-    """Return the absolute path to config.json."""
-    return os.path.join(os.path.dirname(__file__), "config.json")
-
-
-def _load_config():
-    with open(_get_config_path(), "r") as f:
-        return json.load(f)
-
-
-# ----------------------------------------------------------------------
 # Gemini setup
 # ----------------------------------------------------------------------
 def _init_gemini(config):
@@ -270,7 +256,9 @@ def generate(
     retries=3,
 ):
     if config is None:
-        config = _load_config()
+        from medusa.core.red.config_loader import load_config
+
+        config = load_config()
 
     provider = config.get("provider", "deepseek").lower()
     temp = temperature if temperature is not None else config.get("temperature", 0.4)

@@ -99,51 +99,6 @@ def save_template(name: str, config: dict) -> str:
     return str(path)
 
 
-# ── Config validation ─────────────────────────────────────────────────────────
-
-REQUIRED_KEYS = ["provider", "deepseek_model", "max_iterations", "temperature"]
-OPTIONAL_KEYS = {
-    "supervisor_interval": 5,
-    "cost_alert_usd": 0.25,
-    "cost_budget_usd": 1.0,
-    "cost_hard_cap_usd": 500.0,
-    "max_tokens_per_request": 8000,
-    "subagent_count": 2,
-    "mode_deploy_subagent": True,
-    "mode_audit_trail": True,
-    "mode_hotreload_skills": True,
-    "report_auto_export": True,
-    "report_format": "markdown",
-}
-
-
-def validate_config(config: dict) -> dict:
-    """Validate config.json — returns {"ok": True/False, "warnings": [...], "errors": [...]}."""
-    errors = []
-    warnings = []
-
-    # Check required keys
-    for key in REQUIRED_KEYS:
-        if key not in config:
-            errors.append(f"Missing required key: {key}")
-
-    # Check optional keys and fill defaults
-    for key, default in OPTIONAL_KEYS.items():
-        if key not in config:
-            config[key] = default
-            warnings.append(f"Added default for missing key: {key} = {default}")
-
-    # Validate specific values
-    if config.get("max_iterations", 0) < 1:
-        errors.append("max_iterations must be >= 1")
-    if config.get("temperature", 0) < 0 or config.get("temperature", 0) > 2:
-        errors.append("temperature must be between 0 and 2")
-    if config.get("cost_budget_usd", 0) < 0:
-        errors.append("cost_budget_usd must be >= 0")
-
-    return {"ok": len(errors) == 0, "errors": errors, "warnings": warnings}
-
-
 # ── Health check ──────────────────────────────────────────────────────────────
 
 def run_health_check() -> dict:

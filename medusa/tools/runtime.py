@@ -25,20 +25,6 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 BASE_DIR = Path(__file__).resolve().parent.parent
 PROJECT_DIR = BASE_DIR.parent
 
-MCP_SERVERS: dict[str, list] = {}
-
-
-def get_server_for_tool(tool_name: str) -> list:
-    return MCP_SERVERS.get(tool_name, [])
-
-
-AI_SERVICE_ENDPOINTS: dict = {}
-
-
-def fingerprint_ai_response(response_json: dict) -> str:
-    return "unknown"
-
-
 _recon_state = {"exploration_count": 0}
 
 

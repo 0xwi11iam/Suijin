@@ -521,10 +521,8 @@ def _check_evidence(result, confirm_clue, disconfirm_clue, payload):
     # Heuristic: did the status change?
     if "status: 2" in result_lower and "status: 5" not in result_lower:
         return True  # response normalized
-    return "status: 4" not in result_lower and "status: 5" not in result_lower  # no error or block
-
-    # If nothing is conclusive, lean on the safe side: NOT verified
-    return False
+    # Nothing conclusive — lean on the safe side: NOT verified.
+    return "status: 4" not in result_lower and "status: 5" not in result_lower
 
 
 # ---------------------------------------------------------------------------

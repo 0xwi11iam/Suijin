@@ -3,13 +3,38 @@
   display: flex; align-items: center; gap: 12px;
   padding: 8px 24px;
   border-bottom: 1px solid var(--border-subtle);
+  border-left: 3px solid transparent;
   font-size: 13px;
   animation: fadeIn var(--dur) var(--ease);
+  min-width: 0;
 }
 .feed-item:hover { background: rgba(255,255,255,0.02); }
 .feed .dim { color: var(--text-tertiary); }
+/* severity rails — red/amber/green left edge on traffic rows */
+.feed-item.sev-investigated { border-left-color: var(--red); }
+.feed-item.sev-suspect { border-left-color: var(--red); }
+.feed-item.sev-anomaly, .feed-item.sev-anomalous { border-left-color: var(--amber); }
+.feed-item.sev-normal, .feed-item.sev-ok { border-left-color: rgba(0,255,136,0.35); }
+
+.feed-item .path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 42%;
+}
+.feed-item .ip { flex-shrink: 0; }
+.feed-item .signal { font-size: 11px; }
+.mono-dim { font-family: var(--font-mono); color: var(--text-tertiary); font-size: 12px; }
 
 .hero-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.hero-card { position: relative; overflow: hidden; }
+.hero-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(0,255,136,0.35), transparent);
+  opacity: 0.6;
+}
 
 /* stats bars */
 .bars { display: flex; align-items: flex-end; gap: 4px; height: 120px; }

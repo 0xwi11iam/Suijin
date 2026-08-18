@@ -38,6 +38,7 @@ export interface KgEdge { from: string; to: string; rel?: string; [k: string]: u
 
 export interface BlueKg {
   node_counts: Record<string, number>
+  attack_type_counts: Record<string, number>
   nodes: KgNode[]
   edges: KgEdge[]
 }
@@ -52,6 +53,7 @@ export interface Snapshot {
   tarpit: Record<string, { delay?: number; [k: string]: unknown }>
   traffic_count: number
   traffic_recent: TrafficEntry[]
+  signal_counts: Record<string, number>
   blue_kg: BlueKg | null
   red_kg: Record<string, Record<string, unknown>>
   reports: ReportFile[]

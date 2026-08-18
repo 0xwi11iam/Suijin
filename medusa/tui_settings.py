@@ -68,13 +68,9 @@ ALL_FIELDS = OrderedDict([
     ("mode_deploy_subagent",   ("bool",)),
     ("mode_audit_trail",      ("bool",)),
     ("mode_hotreload_skills", ("bool",)),
-    ("report_auto_export",    ("bool",)),
-    ("report_format",         ("choice", ["markdown", "json", "both"])),
     ("subagent_count",        ("int", (1, 5))),
 
     # ---- Workspace & integrations ----
-    ("use_database_framework", ("bool",)),
-    ("agent_workspace",        ("string",)),
     ("metasploit_rpc_host",    ("string",)),
     ("metasploit_rpc_port",    ("int", (1, 65535))),
 ])
@@ -114,7 +110,6 @@ def run(stdscr):
 
     config = load_config()
     # Ensure defaults
-    config.setdefault("use_database_framework", False)
     config.setdefault("provider", "deepseek")
 
     # Build visible field list based on provider

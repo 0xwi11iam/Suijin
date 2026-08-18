@@ -79,8 +79,8 @@ def try_parse_llm_decision(response_text: str) -> tuple[Optional[dict], Optional
                 raise
             try:
                 data = json.loads(repaired_json)
-            except json.JSONDecodeError:
-                raise original_error
+            except json.JSONDecodeError as repair_error:
+                raise original_error from repair_error
             logger.warning(
                 "Recovered LLM JSON by appending %d trailing delimiter(s)",
                 len(repaired_json) - len(json_str),

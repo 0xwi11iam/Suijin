@@ -27,7 +27,9 @@ if _pkg_parent not in sys.path:
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "medusa"
-SERVER_VERSION = "2.3.0-beta"
+# Single source of truth: medusa/version.json (via the package __init__).
+# This used to be a hardcoded "2.3.0-beta" that drifted for five releases.
+from medusa import __version__ as SERVER_VERSION  # noqa: E402 — after sys.path setup
 
 # Load the module packs (Modules/Tools, Modules/Mods) so every backend tool
 # is dispatchable. Idempotent; must run before building the tool registry.

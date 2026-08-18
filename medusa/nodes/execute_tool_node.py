@@ -102,7 +102,7 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
             # If this thread was promoted to a bg job, update the job entry
             me = threading.current_thread()
             with _job_lock:
-                for jid, job in list(_jobs.items()):
+                for _jid, job in list(_jobs.items()):
                     if job.get("_thread") is me:
                         res = str(result_container.get("result", ""))
                         job["output"] = res

@@ -31,23 +31,6 @@ class TestPureHelpers:
 
         assert truncate("") == ""
 
-    def test_fingerprint_ai_response(self):
-        from medusa.tools.dispatch import fingerprint_ai_response
-
-        fp1 = fingerprint_ai_response({"action": "use_tool", "tool_name": "nmap"})
-        fp2 = fingerprint_ai_response({"action": "use_tool", "tool_name": "nmap"})
-        assert isinstance(fp1, str)
-        assert fp1 == fp2
-
-    def test_get_server_for_tool_no_crash(self):
-        """Regression: get_server_for_tool must not NameError (TOOL_MCP_MATRIX bug)."""
-        from medusa.tools.dispatch import get_server_for_tool
-
-        result = get_server_for_tool("msf_run")
-        assert isinstance(result, list)
-        result2 = get_server_for_tool("unknown_tool_xyz")
-        assert isinstance(result2, list)
-
     def test_proxy_state_management(self):
         from medusa.tools.dispatch import get_proxy, reset_recon_state, set_proxy
 

@@ -117,7 +117,31 @@
 
 .view-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
 .view-head .sub { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
-.view-actions { display: flex; gap: 10px; }
+.view-actions { display: flex; gap: 10px; align-items: center; }
+
+/* ── Mobile drawer ───────────────────────────────────────────── */
+.hamburger {
+  display: none;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 16px;
+  width: 38px;
+  height: 34px;
+  cursor: pointer;
+  transition: all var(--dur) var(--ease);
+}
+.hamburger:hover { color: var(--accent); border-color: var(--border-active); }
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(2px);
+  z-index: 19;
+  animation: fadeIn var(--dur) var(--ease);
+}
 
 /* scanline sweep for threat panels */
 .scan-frame { position: relative; overflow: hidden; }
@@ -133,5 +157,15 @@
 }
 
 @media (max-width: 767px) {
-  .sidebar { display: none; }
+  .sidebar {
+    position: fixed;
+    left: 0; top: 0; bottom: 0;
+    transform: translateX(-100%);
+    transition: transform var(--dur) var(--ease);
+    z-index: 20;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .hamburger { display: inline-flex; align-items: center; justify-content: center; }
+  .content { padding: 16px; }
+  .crumbs { display: none; }
 }

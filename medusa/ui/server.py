@@ -182,14 +182,27 @@ def build_snapshot() -> dict:
     traffic = _tail_jsonl(Path(BLUE_TRAFFIC_LOG), 200)
     snap["traffic_count"] = len(traffic)
     snap["traffic_recent"] = traffic[-25:]
+    # aggregate detector signals across the whole tailed window (works with
+    # or without an active blue session — the KG only fills during one)
+    signal_counts: dict[str, int] = {}
+    for e in traffic:
+        for sig in e.get("ui_signals", []) or []:
+            signal_counts[sig] = signal_counts.get(sig, 0) + 1
+    snap["signal_counts"] = signal_counts
     kg = _read_json(Path(BLUE_KG_PATH), None)
     if kg:
         nodes = kg.get("nodes", {})
         by_type: dict[str, int] = {}
+        attack_types: dict[str, int] = {}
         for n in nodes.values():
-            by_type[n.get("type", "?")] = by_type.get(n.get("type", "?"), 0) + 1
+            ntype = n.get("type", "?")
+            by_type[ntype] = by_type.get(ntype, 0) + 1
+            if ntype == "attack":
+                atk = str(n.get("data", {}).get("attack_type", "unknown"))
+                attack_types[atk] = attack_types.get(atk, 0) + 1
         snap["blue_kg"] = {
             "node_counts": by_type,
+            "attack_type_counts": attack_types,
             "nodes": [
                 {"id": v.get("id"), "type": v.get("type"), "data": v.get("data", {})}
                 for v in list(nodes.values())[:200]

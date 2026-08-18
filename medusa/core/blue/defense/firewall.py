@@ -10,8 +10,8 @@ def _validate_ip(ip: str) -> str:
     try:
         parsed = ipaddress.ip_address(ip.strip())
         return str(parsed)
-    except ValueError:
-        raise ValueError(f"Invalid IP address: {ip}")
+    except ValueError as e:
+        raise ValueError(f"Invalid IP address: {ip}") from e
 
 def block_ip(ip: str) -> str:
     try:

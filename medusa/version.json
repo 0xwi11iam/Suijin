@@ -1,6 +1,6 @@
 {
-  "version": "2.9.1",
+  "version": "2.9.2",
   "codename": "Purple Arena",
   "release_date": "2026-08-18",
-  "description": "Medusa v2.9.1: provider-aware model display — selecting Z.ai no longer shows 'zai / deepseek-ai/DeepSeek-V4-Flash' in the launcher/Thinking spinner (final_model_id was hardcoded as a cross-provider default; now every surface resolves <provider>_model, HF keeps final_model_id). 565 tests green."
+  "description": "Medusa v2.9.2: dead-code sweep (stale mcp 2.3.0-beta version drift, dead runtime plumbing, unused config keys, oracle unreachable code) + WebUI overhaul — duplicate-feed flood fixed, ForceGraph re-render storm fixed, detector grid now lights up from real signal counts, radar plots live data, mobile hamburger drawer, severity-railed traffic rows. 565 tests green."
 }

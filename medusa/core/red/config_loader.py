@@ -56,8 +56,6 @@ def load_config() -> dict:
             "final_model_id": "deepseek-ai/DeepSeek-V4-Flash",
             "sentinel_model_id": SENTINEL_MODEL,
             "max_tokens_per_request": 8000, "temperature": 0.4,
-            "use_database_framework": False, "use_local_bin_folder": False,
-            "agent_workspace": "medusa_agent",
             "metasploit_rpc_host": "127.0.0.1", "metasploit_rpc_port": METASPLOIT_RPC_PORT,
             "metasploit_rpc_ssl": False,
             "supervisor_model_id": SUPERVISOR_MODEL,
