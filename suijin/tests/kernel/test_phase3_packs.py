@@ -61,7 +61,7 @@ class TestPacksBoot:
         from suijin.modules.pack_converter import convert_tree
 
         packs = tmp_path / "packs"
-        result = convert_tree(MODULES_ROOT, packs)
+        convert_tree(MODULES_ROOT, packs)
         reg = Registry()
         found_packs = reg.scan(packs)
         assert len(found_packs) >= 40
