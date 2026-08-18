@@ -9,6 +9,9 @@ that class of coupling impossible to reintroduce.
 
 import subprocess
 import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _imported_modules(snippet: str) -> set[str]:
@@ -19,7 +22,7 @@ def _imported_modules(snippet: str) -> set[str]:
         + "\nprint('\\n'.join(m for m in sys.modules if m.startswith('suijin')))"
     )
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
-                       cwd="/Users/williamjiang/suijin")
+                       cwd=str(REPO_ROOT))
     assert r.returncode == 0, r.stderr
     return set(r.stdout.splitlines())
 
