@@ -1,6 +1,7 @@
 """
 DNS Rebinding Attack Skill Prompt.
 """
+
 DNS_REBINDING_SKILL_PROMPT = """
 ## ATTACK SKILL: DNS REBINDING
 

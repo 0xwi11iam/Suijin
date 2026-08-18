@@ -1,6 +1,7 @@
 """
 GraphQL Attack Skill Prompt.
 """
+
 GRAPHQL_SKILL_PROMPT = """
 ## ATTACK SKILL: GRAPHQL ATTACKS
 

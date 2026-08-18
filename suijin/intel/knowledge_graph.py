@@ -35,6 +35,7 @@ def _save(data):
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def add_constraint(target, constraint_type, rule, evidence="", confidence=1.0):
     """Add a verified constraint to the knowledge graph.
 
@@ -57,13 +58,15 @@ def add_constraint(target, constraint_type, rule, evidence="", confidence=1.0):
         existing[0]["confidence"] = max(existing[0].get("confidence", 0), confidence)
         existing[0]["last_seen"] = datetime.now(timezone.utc).isoformat()
     else:
-        category.append({
-            "rule": rule,
-            "evidence": evidence,
-            "confidence": confidence,
-            "verified_at": datetime.now(timezone.utc).isoformat(),
-            "last_seen": datetime.now(timezone.utc).isoformat(),
-        })
+        category.append(
+            {
+                "rule": rule,
+                "evidence": evidence,
+                "confidence": confidence,
+                "verified_at": datetime.now(timezone.utc).isoformat(),
+                "last_seen": datetime.now(timezone.utc).isoformat(),
+            }
+        )
 
     # Update global metadata
     entry["_updated"] = datetime.now(timezone.utc).isoformat()
@@ -139,6 +142,6 @@ def summary(target):
             continue
         lines.append(f"  {ctype}:")
         for item in items:
-            conf = f" [{item.get('confidence', 1.0):.0%}]" if item.get('confidence', 1.0) < 1.0 else ""
+            conf = f" [{item.get('confidence', 1.0):.0%}]" if item.get("confidence", 1.0) < 1.0 else ""
             lines.append(f"    • {item.get('rule', '?')}{conf}")
     return "\n".join(lines)

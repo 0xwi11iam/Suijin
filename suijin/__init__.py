@@ -1,4 +1,5 @@
 """Suijin - Autonomous Cyber Reasoning System"""
+
 import json as _json
 from pathlib import Path as _Path
 

@@ -1,6 +1,7 @@
 """
 HTTP Request Smuggling Attack Skill Prompt.
 """
+
 HTTP_SMUGGLING_SKILL_PROMPT = """
 ## ATTACK SKILL: HTTP REQUEST SMUGGLING
 

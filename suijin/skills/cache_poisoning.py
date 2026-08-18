@@ -1,6 +1,7 @@
 """
 Web Cache Poisoning Attack Skill Prompt.
 """
+
 CACHE_POISONING_SKILL_PROMPT = """
 ## ATTACK SKILL: WEB CACHE POISONING
 

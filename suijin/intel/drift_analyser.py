@@ -6,6 +6,7 @@ was deprecated in favor of agent_helpers/productivity.py, this file provides
 the `analyse_drift()` function supervisor.py expects, using the new
 productivity heuristics under the hood.
 """
+
 from datetime import datetime
 
 
@@ -58,11 +59,13 @@ def analyse_drift(original_goal: str, actions: list) -> dict:
                 break
 
         if patterns_hit:
-            drift_causes.append({
-                "action_index": i,
-                "action": action[:100],
-                "patterns": patterns_hit,
-            })
+            drift_causes.append(
+                {
+                    "action_index": i,
+                    "action": action[:100],
+                    "patterns": patterns_hit,
+                }
+            )
 
     drift_detected = len(drift_causes) > 0
 

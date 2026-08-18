@@ -23,15 +23,41 @@ MODULES_DIR = BASE_DIR.parent / "Modules"
 
 # Recon profiles, container images, DNS records — defined inline
 RECON_PROFILES = {
-    "balanced": {"nmap_flags": "-sV -sC -T4", "gobuster_threads": 40, "ffuf_rate": 50, "delay_between_requests_ms": 200, "max_parallel_scans": 4},
-    "stealth": {"nmap_flags": "-sS -T2 --max-retries 1", "gobuster_threads": 10, "ffuf_rate": 5, "delay_between_requests_ms": 2000, "max_parallel_scans": 1},
-    "aggressive": {"nmap_flags": "-sV -sC -T5 --min-rate 1000", "gobuster_threads": 80, "ffuf_rate": 200, "delay_between_requests_ms": 50, "max_parallel_scans": 8},
+    "balanced": {
+        "nmap_flags": "-sV -sC -T4",
+        "gobuster_threads": 40,
+        "ffuf_rate": 50,
+        "delay_between_requests_ms": 200,
+        "max_parallel_scans": 4,
+    },
+    "stealth": {
+        "nmap_flags": "-sS -T2 --max-retries 1",
+        "gobuster_threads": 10,
+        "ffuf_rate": 5,
+        "delay_between_requests_ms": 2000,
+        "max_parallel_scans": 1,
+    },
+    "aggressive": {
+        "nmap_flags": "-sV -sC -T5 --min-rate 1000",
+        "gobuster_threads": 80,
+        "ffuf_rate": 200,
+        "delay_between_requests_ms": 50,
+        "max_parallel_scans": 8,
+    },
 }
+
+
 def get_profile(profile_name: str = "balanced") -> dict:
     return RECON_PROFILES.get(profile_name, RECON_PROFILES["balanced"])
+
+
 TOOL_IMAGES = {}
+
+
 def get_tool_image(tool_name: str) -> str:
     return TOOL_IMAGES.get(tool_name)
+
+
 DNS_RECON_RECORDS = ["A", "AAAA", "CNAME", "MX", "NS", "TXT", "SOA", "PTR", "SRV"]
 SUBDOMAIN_TIERS = {"tier1_always": ["www", "mail", "ftp", "admin", "api", "dev", "staging"]}
 
@@ -52,6 +78,7 @@ def set_verbose(v: bool):
 # installed package. This single helper replaces the 6 duplicate copies
 # of importlib.util.spec_from_file_location scattered across the codebase.
 
+
 def load_local_module(mod_name: str):
     """Import a sibling .py file by name, searching suijin/ root and subdirs.
 
@@ -59,10 +86,9 @@ def load_local_module(mod_name: str):
     suijin/security/, suijin/intel/, suijin/core/.
     """
     import importlib.util
+
     # Search order: root first, then subdirs
-    search_dirs = [BASE_DIR] + [
-        BASE_DIR / d for d in ("tools", "security", "intel", "core", "infra")
-    ]
+    search_dirs = [BASE_DIR] + [BASE_DIR / d for d in ("tools", "security", "intel", "core", "infra")]
     for search in search_dirs:
         path = search / f"{mod_name}.py"
         if path.exists():
@@ -118,7 +144,7 @@ def discover_modules():
             if py_file.exists():
                 try:
                     mod = _force_load_module(f"suijin_modules.{category.name}.{folder.name}", str(py_file))
-                    for tool_name in (manifest.get("tools") or {}):
+                    for tool_name in manifest.get("tools") or {}:
                         func = getattr(mod, tool_name, None)
                         if callable(func):
                             _module_tools[tool_name] = func

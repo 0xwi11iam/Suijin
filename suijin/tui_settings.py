@@ -5,6 +5,7 @@ Suijin Settings TUI (curses)
 Arrow keys navigate, Enter edits, 'q' saves, Esc cancels.
 Dynamically shows fields relevant to the selected provider.
 """
+
 import curses
 import json
 import os
@@ -22,57 +23,52 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 # Fields can have an optional third element: provider filter.
 # If set, this field only shows when the listed provider(s) are selected.
 
-ALL_FIELDS = OrderedDict([
-    # ---- Provider ----
-    ("provider",          ("choice", ["deepseek", "huggingface", "gemini", "anthropic", "amd", "zai"])),
-
-    # ---- DeepSeek ----
-    ("deepseek_model",    ("choice", ["deepseek-chat", "deepseek-reasoner"], ["deepseek"])),
-
-    # ---- Z.ai ----
-    # zai_endpoint: "coding" = GLM Coding Plan subscription quota (default;
-    # burns plan credits, Lite/Pro/Max). "paas" = pay-as-you-go per-token
-    # USD billing. Same ZAI_API_KEY works on both, but a plan key on paas
-    # (or a PAYG key on coding) returns 403.
-    ("zai_endpoint",      ("choice", ["coding", "paas"], ["zai"])),
-    ("zai_model",         ("choice", ["glm-5.3", "glm-5-turbo", "glm-4.7", "glm-5.1", "glm-4.6"], ["zai"])),
-
-    # ---- HuggingFace ----
-    ("final_model_id",    ("string", None, ["huggingface"])),
-    ("sentinel_model_id", ("string", None, ["huggingface"])),
-
-    # ---- Gemini ----
-    ("gemini_model",      ("choice", ["gemini-2.5-pro", "gemini-2.5-flash"], ["gemini"])),
-
-    # ---- Anthropic ----
-    ("anthropic_model",   ("choice", ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"], ["anthropic"])),
-
-    # ---- Universal fields (all providers) ----
-    ("temperature",            ("float", (0.0, 2.0))),
-    ("max_tokens_per_request", ("int", (1, 128000))),
-    ("max_iterations",         ("int", (1, 500))),
-    ("supervisor_model_id",    ("string",)),
-    ("supervisor_interval",    ("int", (1, 100))),
-
-    # ---- Cost guardrails ----
-    ("cost_alert_usd",    ("float", (0.0, 1000.0))),
-    ("cost_budget_usd",   ("float", (0.0, 1000.0))),
-    ("cost_hard_cap_usd", ("float", (0.0, 1000.0))),
-
-    # ---- Proxy ----
-    ("proxy_url",         ("string",)),
-
-    # ---- Operational Modes ----
-    ("mode_hitl",             ("bool",)),
-    ("mode_guardrail",        ("bool",)),
-    ("mode_deploy_subagent",   ("bool",)),
-    ("mode_audit_trail",      ("bool",)),
-    ("subagent_count",        ("int", (1, 5))),
-
-    # ---- Workspace & integrations ----
-    ("metasploit_rpc_host",    ("string",)),
-    ("metasploit_rpc_port",    ("int", (1, 65535))),
-])
+ALL_FIELDS = OrderedDict(
+    [
+        # ---- Provider ----
+        ("provider", ("choice", ["deepseek", "huggingface", "gemini", "anthropic", "amd", "zai"])),
+        # ---- DeepSeek ----
+        ("deepseek_model", ("choice", ["deepseek-chat", "deepseek-reasoner"], ["deepseek"])),
+        # ---- Z.ai ----
+        # zai_endpoint: "coding" = GLM Coding Plan subscription quota (default;
+        # burns plan credits, Lite/Pro/Max). "paas" = pay-as-you-go per-token
+        # USD billing. Same ZAI_API_KEY works on both, but a plan key on paas
+        # (or a PAYG key on coding) returns 403.
+        ("zai_endpoint", ("choice", ["coding", "paas"], ["zai"])),
+        ("zai_model", ("choice", ["glm-5.3", "glm-5-turbo", "glm-4.7", "glm-5.1", "glm-4.6"], ["zai"])),
+        # ---- HuggingFace ----
+        ("final_model_id", ("string", None, ["huggingface"])),
+        ("sentinel_model_id", ("string", None, ["huggingface"])),
+        # ---- Gemini ----
+        ("gemini_model", ("choice", ["gemini-2.5-pro", "gemini-2.5-flash"], ["gemini"])),
+        # ---- Anthropic ----
+        (
+            "anthropic_model",
+            ("choice", ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"], ["anthropic"]),
+        ),
+        # ---- Universal fields (all providers) ----
+        ("temperature", ("float", (0.0, 2.0))),
+        ("max_tokens_per_request", ("int", (1, 128000))),
+        ("max_iterations", ("int", (1, 500))),
+        ("supervisor_model_id", ("string",)),
+        ("supervisor_interval", ("int", (1, 100))),
+        # ---- Cost guardrails ----
+        ("cost_alert_usd", ("float", (0.0, 1000.0))),
+        ("cost_budget_usd", ("float", (0.0, 1000.0))),
+        ("cost_hard_cap_usd", ("float", (0.0, 1000.0))),
+        # ---- Proxy ----
+        ("proxy_url", ("string",)),
+        # ---- Operational Modes ----
+        ("mode_hitl", ("bool",)),
+        ("mode_guardrail", ("bool",)),
+        ("mode_deploy_subagent", ("bool",)),
+        ("mode_audit_trail", ("bool",)),
+        ("subagent_count", ("int", (1, 5))),
+        # ---- Workspace & integrations ----
+        ("metasploit_rpc_host", ("string",)),
+        ("metasploit_rpc_port", ("int", (1, 65535))),
+    ]
+)
 
 
 def _visible_fields(config):
@@ -93,19 +89,21 @@ def load_config():
     with open(CONFIG_PATH, "r") as f:
         return json.load(f)
 
+
 def save_config(config):
     with open(CONFIG_PATH, "w") as f:
         json.dump(config, f, indent=4)
+
 
 def run(stdscr):
     curses.curs_set(0)
     stdscr.nodelay(0)
     stdscr.keypad(1)
     curses.start_color()
-    curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)   # highlight
-    curses.init_pair(2, curses.COLOR_YELLOW, curses.COLOR_BLACK) # title
+    curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)  # highlight
+    curses.init_pair(2, curses.COLOR_YELLOW, curses.COLOR_BLACK)  # title
     curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_BLACK)  # edit mode
-    curses.init_pair(4, curses.COLOR_RED, curses.COLOR_BLACK)    # sensitive
+    curses.init_pair(4, curses.COLOR_RED, curses.COLOR_BLACK)  # sensitive
 
     config = load_config()
     # Ensure defaults
@@ -156,7 +154,7 @@ def run(stdscr):
             y += 1
 
         if status:
-            stdscr.addstr(h - 2, 2, status[:w - 4], curses.A_BOLD)
+            stdscr.addstr(h - 2, 2, status[: w - 4], curses.A_BOLD)
         stdscr.refresh()
 
     while True:
@@ -220,8 +218,10 @@ def run(stdscr):
                         # If provider changed, rebuild visible fields
                         if sel_key == "provider":
                             keys_new, fields_new = rebuild_fields()
-                            keys.clear(); keys.extend(keys_new)
-                            fields.clear(); fields.update(fields_new)
+                            keys.clear()
+                            keys.extend(keys_new)
+                            fields.clear()
+                            fields.update(fields_new)
                             if row >= len(keys):
                                 row = len(keys) - 1
                         status = f"{sel_key} set to {choices[ci]}"
@@ -255,8 +255,10 @@ def run(stdscr):
                 except (ValueError, KeyError):
                     pass
 
+
 def main():
     curses.wrapper(run)
+
 
 if __name__ == "__main__":
     main()

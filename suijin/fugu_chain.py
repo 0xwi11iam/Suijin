@@ -73,7 +73,6 @@ CHAIN_PATTERNS = [
             "  • Look for sensitive internal data in admin views"
         ),
     },
-
     # ---- IDOR chains ------------------------------------------------
     {
         "name": "idor_to_enumeration",
@@ -99,7 +98,6 @@ CHAIN_PATTERNS = [
             "  • Check if victim has access to projects/systems you couldn't reach before"
         ),
     },
-
     # ---- SSRF chains ------------------------------------------------
     {
         "name": "ssrf_to_internal_discovery",
@@ -125,7 +123,6 @@ CHAIN_PATTERNS = [
             "  • These credentials may grant access to production infrastructure"
         ),
     },
-
     # ---- XSS chains -------------------------------------------------
     {
         "name": "xss_to_session_theft",
@@ -151,7 +148,6 @@ CHAIN_PATTERNS = [
             "  • Check if admin has access to other users' data or system configs"
         ),
     },
-
     # ---- SSTI chains ------------------------------------------------
     {
         "name": "ssti_to_rce",
@@ -177,11 +173,16 @@ CHAIN_PATTERNS = [
             "  • Look for API keys, secrets, and other credentials"
         ),
     },
-
     # ---- Generic chains ---------------------------------------------
     {
         "name": "any_finding_to_deeper_probe",
-        "triggers": ["new endpoint found", "directory discovered", "hidden parameter", "file upload endpoint", "api endpoint discovered"],
+        "triggers": [
+            "new endpoint found",
+            "directory discovered",
+            "hidden parameter",
+            "file upload endpoint",
+            "api endpoint discovered",
+        ],
         "constraint_types": ["behavior"],
         "suggestion": (
             "🔗 CHAIN: New attack surface discovered. Next step → probe deeper.\n"
@@ -193,8 +194,20 @@ CHAIN_PATTERNS = [
     },
     {
         "name": "tech_fingerprint_to_cve",
-        "triggers": ["apache", "nginx", "flask", "django", "php", "node", "express",
-                      "tomcat", "iis", "wordpress", "joomla", "drupal"],
+        "triggers": [
+            "apache",
+            "nginx",
+            "flask",
+            "django",
+            "php",
+            "node",
+            "express",
+            "tomcat",
+            "iis",
+            "wordpress",
+            "joomla",
+            "drupal",
+        ],
         "constraint_types": ["verified_cve", "behavior"],
         "suggestion": (
             "🔗 CHAIN: Technology stack identified. Next step → CVE matching.\n"
@@ -218,8 +231,8 @@ class ChainTracker:
     """
 
     def __init__(self):
-        self._seen_findings = set()   # deduplicate suggestions
-        self._chain_history = []      # ordered list of chains triggered
+        self._seen_findings = set()  # deduplicate suggestions
+        self._chain_history = []  # ordered list of chains triggered
 
     def _load_kg(self):
         """Read the knowledge graph JSON file."""
@@ -246,13 +259,15 @@ class ChainTracker:
                 for item in items:
                     if not isinstance(item, dict):
                         continue
-                    findings.append({
-                        "target": tgt,
-                        "type": ctype,
-                        "rule": item.get("rule", ""),
-                        "evidence": item.get("evidence", ""),
-                        "confidence": item.get("confidence", 1.0),
-                    })
+                    findings.append(
+                        {
+                            "target": tgt,
+                            "type": ctype,
+                            "rule": item.get("rule", ""),
+                            "evidence": item.get("evidence", ""),
+                            "confidence": item.get("confidence", 1.0),
+                        }
+                    )
         # Sort by confidence desc
         findings.sort(key=lambda f: -f.get("confidence", 0))
         return findings
@@ -317,7 +332,7 @@ class ChainTracker:
         )
 
         console.print(f"[bold magenta]🔗 Chain Tracker: {len(suggestions)} chain(s) identified[/bold magenta]")
-        for h in self._chain_history[-len(suggestions):]:
+        for h in self._chain_history[-len(suggestions) :]:
             console.print(f"  [dim]→ {h}[/dim]")
 
         return context

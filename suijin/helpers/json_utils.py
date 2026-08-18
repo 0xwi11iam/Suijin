@@ -2,6 +2,7 @@
 
 Ported from redamon/agentic/orchestrator_helpers/json_utils.py.
 """
+
 from __future__ import annotations
 
 import json
@@ -11,6 +12,7 @@ from typing import Optional
 
 class DateTimeEncoder(json.JSONEncoder):
     """JSON encoder that handles datetime objects."""
+
     def default(self, obj):
         if isinstance(obj, datetime):
             return obj.isoformat()

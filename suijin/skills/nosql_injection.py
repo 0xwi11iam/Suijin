@@ -1,6 +1,7 @@
 """
 NoSQL Injection Attack Skill Prompt.
 """
+
 NOSQL_SKILL_PROMPT = """
 ## ATTACK SKILL: NOSQL INJECTION
 

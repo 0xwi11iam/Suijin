@@ -1,6 +1,7 @@
 """
 Django Attack Skill Prompt.
 """
+
 DJANGO_SKILL_PROMPT = """
 ## ATTACK SKILL: DJANGO ATTACKS
 

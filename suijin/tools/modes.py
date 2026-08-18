@@ -170,12 +170,17 @@ def _hitl_check(tool_name: str, args: dict) -> str | None:
         cmd = str(args.get("cmd") or args.get("command") or "")
         binaries = _segment_binaries(cmd)
         if not binaries:
+            record_pending(tool_name, args)
             return "BLOCKED by HITL mode (recon only): empty or unparsable command."
         offenders = [b for b in binaries if b not in _HITL_ALLOWED_BINARIES]
         if offenders:
+            # The operator must see WHAT was blocked — queue it with the
+            # offending binary in the args so /approvals shows the real cmd.
+            record_pending(tool_name, {**args, "blocked_binary": offenders[0]})
             return (
                 f"BLOCKED by HITL mode (recon only): '{offenders[0]}' is not a recon binary. "
                 f"Allowed: {', '.join(sorted(_HITL_ALLOWED_BINARIES))}. "
+                "The operator was notified (suijin approvals). "
                 "Document the exact command for the operator instead of running it."
             )
     return None

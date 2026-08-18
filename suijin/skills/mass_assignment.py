@@ -1,6 +1,7 @@
 """
 Mass Assignment / Auto-Binding Attack Skill Prompt.
 """
+
 MASS_ASSIGNMENT_SKILL_PROMPT = """
 ## ATTACK SKILL: MASS ASSIGNMENT / AUTO-BINDING
 

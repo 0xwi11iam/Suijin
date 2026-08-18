@@ -1,6 +1,7 @@
 """
 Email Header Injection Attack Skill Prompt.
 """
+
 EMAIL_HEADER_SKILL_PROMPT = """
 ## ATTACK SKILL: EMAIL HEADER INJECTION
 

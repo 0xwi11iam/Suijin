@@ -1,4 +1,5 @@
 """Blue forensics skill — log analysis."""
+
 BLUE_FORENSICS_PROMPT = """
 ## BLUE SKILL: FORENSIC ANALYSIS
 Investigate attacker activity across logs and endpoints.

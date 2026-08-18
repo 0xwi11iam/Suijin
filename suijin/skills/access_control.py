@@ -1,6 +1,7 @@
 """
 Access Control / IDOR Attack Skill Prompt.
 """
+
 ACCESS_CONTROL_SKILL_PROMPT = """
 ## ATTACK SKILL: ACCESS CONTROL / IDOR / AUTH BYPASS
 

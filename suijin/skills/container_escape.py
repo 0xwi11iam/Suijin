@@ -1,6 +1,7 @@
 """
 Container Escape Attack Skill Prompt.
 """
+
 CONTAINER_ESCAPE_SKILL_PROMPT = """
 ## ATTACK SKILL: CONTAINER ESCAPE
 

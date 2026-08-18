@@ -1,4 +1,5 @@
 """Blue monitoring skill — endpoint watching workflow."""
+
 BLUE_MONITORING_PROMPT = """
 ## BLUE SKILL: ENDPOINT MONITORING
 Watch all endpoints for anomalous traffic. Score every request 1-10.

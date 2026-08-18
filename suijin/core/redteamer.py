@@ -107,6 +107,16 @@ async def run_red_team_async(config, objective, api_key=None):
     _old_sigint = _signal.signal(_signal.SIGINT, lambda sig, frame: setattr(_signal, "_suijin_interrupted", True))
     _signal._suijin_interrupted = False
 
+    # Live command box — /state /note /kb /pause … usable WHILE the agent runs
+    from suijin.tools.run_commands import HINT, RunBox
+
+    run_box = RunBox(
+        get_state=lambda: agent.get_state(thread_id) or {},
+        thread_id=thread_id,
+        config=config,
+    ).start()
+    console.print(HINT)
+
     while True:
         try:
             input_state = {"_objective": objective, "user_id": "local", "project_id": "default"} if first_run else None
@@ -212,6 +222,7 @@ async def run_red_team_async(config, objective, api_key=None):
                 # If loop completes without break, get final state
                 final_state = agent.get_state(thread_id) or {}
 
+            run_box.stop()
             break  # Normal completion — exit while loop
 
         except (KeyboardInterrupt, asyncio.CancelledError):
@@ -224,6 +235,7 @@ async def run_red_team_async(config, objective, api_key=None):
                 guidance = console.input("[bold cyan]  Guidance  [/bold cyan]").strip()
             except (KeyboardInterrupt, EOFError):
                 console.print("\n[bold red]  Force quit.[/bold red]")
+                run_box.stop()
                 break
             finally:
                 # Re-arm the interrupt flag mechanism
@@ -295,6 +307,7 @@ async def run_red_team_async(config, objective, api_key=None):
             # Graph crashed (bug, not operator interrupt) — report and end
             # the engagement instead of killing the whole application.
             console.print(f"\n[bold red]  Agent loop error: {e}[/bold red]")
+            run_box.stop()
             import traceback
 
             traceback.print_exc()

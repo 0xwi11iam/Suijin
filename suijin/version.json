@@ -1,6 +1,6 @@
 {
-  "version": "3.0.0",
-  "codename": "The Rename Release",
+  "version": "3.2.0",
+  "codename": "Stable",
   "release_date": "2026-08-18",
-  "description": "Suijin v3.0.0: installable Python package (pipx/uv, console command, complete wheel) with packaging-drift guards; HITL approvals console; panic button; DNS-pinned scope enforcement (fail-closed); self-healing dispatch (transient-only retries); output normalizer for nmap/dir-brute. Medusa->Suijin migration E2E (installer + workspace). Coverage 54->60%. 792 tests green."
+  "description": "Suijin v3.2.0 STABLE: Burp-style scope TUI (suijin scope — include/exclude lists, subdomain matching, unresolvable toggle, enforcement on/off; exclude wins over include). Operator Tools menu in the TUI (every feature findable, no hidden verbs). Live run-command box + HITL approvals fix (from 3.1.0 line). Normalizer keeps banners + dir sizes; fixed a newline-swallowing regex that corrupted nmap parsing. 836 tests green; battle, WebUI, approvals, scope all live-verified."
 }

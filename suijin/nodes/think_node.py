@@ -6,6 +6,7 @@ updates state for the next graph transition.
 
 Adapted from redamon/agentic/orchestrator_helpers/nodes/think_node.py.
 """
+
 import asyncio
 import logging
 from uuid import uuid4
@@ -71,24 +72,28 @@ def _run_auto_actions(auto_actions: list, updates: dict):
                 # Inject a message telling the agent to use the action format next turn
                 task = aa_args.get("subagent_task", "")
                 if task:
-                    updates["messages"].append({
-                        "role": "user",
-                        "content": (
-                            f"AUTO: Subagent task queued: {task[:200]}\n"
-                            f"Use action=\"deploy_subagent\" with subagent_task=\"{task[:150]}\" to execute."
-                        ),
-                    })
+                    updates["messages"].append(
+                        {
+                            "role": "user",
+                            "content": (
+                                f"AUTO: Subagent task queued: {task[:200]}\n"
+                                f'Use action="deploy_subagent" with subagent_task="{task[:150]}" to execute.'
+                            ),
+                        }
+                    )
 
             elif aa_action == "add_todo":
                 desc = aa_args.get("description", "")
                 if desc:
                     current_todos = updates.get("todo_list", [])
-                    current_todos.append({
-                        "id": str(uuid4())[:8],
-                        "description": desc,
-                        "status": "pending",
-                        "priority": aa_args.get("priority", "high"),
-                    })
+                    current_todos.append(
+                        {
+                            "id": str(uuid4())[:8],
+                            "description": desc,
+                            "status": "pending",
+                            "priority": aa_args.get("priority", "high"),
+                        }
+                    )
                     updates["todo_list"] = current_todos
 
         except Exception as e:
@@ -117,6 +122,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
 
     # Build system prompt using the new skill-based builder
     from suijin.prompts.base import build_agent_system_prompt  # lazy import, breaks circular dep
+
     system_prompt = build_agent_system_prompt(state)
 
     # Add state context (chain, todos, QA) after the skill+tools prompt
@@ -153,26 +159,26 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
     context_block = f"""
 ## CURRENT STATE
 - **Phase**: {phase}
-- **Iteration**: {iteration}/{state.get('max_iterations', 100)}
-- **Attack Path**: {state.get('attack_path_type', 'recon')}
+- **Iteration**: {iteration}/{state.get("max_iterations", 100)}
+- **Attack Path**: {state.get("attack_path_type", "recon")}
 
 ## RECENT ACTIONS (last 8 tool calls — DO NOT REPEAT FAILURES)
-{action_log or '(none)'}
+{action_log or "(none)"}
 
 ## RECENT MESSAGES (last 15 system/tool messages)
-{recent_msgs or '(none)'}
+{recent_msgs or "(none)"}
 
 ## TARGET INTELLIGENCE
-{json_dumps_safe(state.get('target_info', {}), indent=2)}
+{json_dumps_safe(state.get("target_info", {}), indent=2)}
 
 ## TODO LIST
 {todo_context}
 
 ## CHAIN CONTEXT (recent findings, failures)
-{chain_context or '(no chain context yet)'}
+{chain_context or "(no chain context yet)"}
 
 ## Q&A HISTORY
-{qa_context or '(none)'}
+{qa_context or "(none)"}
 
 ## ⚠️ RULES
 - NEVER repeat a FAILED action. If a tool failed, try a DIFFERENT approach.
@@ -186,7 +192,10 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
     # Build messages
     messages = [
         {"role": "system", "content": full_prompt},
-        {"role": "user", "content": f"Proceed with your next action for objective: {state.get('original_objective', '')}"},
+        {
+            "role": "user",
+            "content": f"Proceed with your next action for objective: {state.get('original_objective', '')}",
+        },
     ]
 
     # ── LLM Call with retry ──────────────────────────────────────────
@@ -199,7 +208,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         try:
             raw_response = await generate_fn(messages, config or {})
         except Exception as e:
-            logger.error(f"LLM call failed (attempt {attempt+1}): {e}")
+            logger.error(f"LLM call failed (attempt {attempt + 1}): {e}")
             if attempt < max_parse_retries - 1:
                 await asyncio.sleep(2 * (attempt + 1))
                 continue
@@ -226,21 +235,26 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
                 "final_summary": f"Agent stopped: {raw_response}",
             }
 
-        logger.warning(f"Parse attempt {attempt+1} failed: {parse_error}")
+        logger.warning(f"Parse attempt {attempt + 1} failed: {parse_error}")
         if attempt < max_parse_retries - 1:
             messages.append({"role": "assistant", "content": raw_response})
-            messages.append({
-                "role": "user",
-                "content": f"Your response was not valid JSON. Error: {parse_error}\n"
-                           f"Please output EXACTLY ONE valid JSON object with the required fields.",
-            })
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"Your response was not valid JSON. Error: {parse_error}\n"
+                    f"Please output EXACTLY ONE valid JSON object with the required fields.",
+                }
+            )
 
     if decision is None:
         logger.error(f"All parse attempts failed. Last error: {parse_error}")
         return {
             "messages": [
                 {"role": "assistant", "content": raw_response},
-                {"role": "user", "content": f"SYSTEM: JSON parse failed after {max_parse_retries} attempts: {parse_error}"},
+                {
+                    "role": "user",
+                    "content": f"SYSTEM: JSON parse failed after {max_parse_retries} attempts: {parse_error}",
+                },
             ],
             "current_iteration": iteration,
             "completion_reason": "parse_failure",
@@ -313,7 +327,10 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
     # ── Audit productivity claim ──────────────────────────────────────
     if productivity:
         discrepancy = audit_productivity_claim(
-            productivity, {}, [], False,
+            productivity,
+            {},
+            [],
+            False,
         )
         if discrepancy:
             # Downgrade: LLM lied about making progress
@@ -327,10 +344,12 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         tool_args = decision.get("tool_args") or {}
 
         if not tool_name:
-            updates["messages"].append({
-                "role": "user",
-                "content": "SYSTEM: action=use_tool requires a tool_name. Please specify which tool to use.",
-            })
+            updates["messages"].append(
+                {
+                    "role": "user",
+                    "content": "SYSTEM: action=use_tool requires a tool_name. Please specify which tool to use.",
+                }
+            )
             updates["execution_trace"] = exec_trace
             updates["current_iteration"] = iteration
             return updates
@@ -354,10 +373,12 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         tool_plan = decision.get("tool_plan") or {}
         steps_list = tool_plan.get("steps", [])
         if not steps_list:
-            updates["messages"].append({
-                "role": "user",
-                "content": "SYSTEM: plan_tools requires at least one step in tool_plan.steps.",
-            })
+            updates["messages"].append(
+                {
+                    "role": "user",
+                    "content": "SYSTEM: plan_tools requires at least one step in tool_plan.steps.",
+                }
+            )
         else:
             first = steps_list[0]
             updates["_current_step"] = {
@@ -384,22 +405,24 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         # ── FREEDOM: no phase-transition gating. Agent decides when to move. ──
 
         if to_phase == phase:
-            updates["messages"].append({
-                "role": "user",
-                "content": f"SYSTEM: Already in {phase} phase. No transition needed.",
-            })
+            updates["messages"].append(
+                {
+                    "role": "user",
+                    "content": f"SYSTEM: Already in {phase} phase. No transition needed.",
+                }
+            )
         else:
             updates["current_phase"] = to_phase
             updates["_just_transitioned_to"] = to_phase
-            phase_history = state.get("phase_history", []) + [
-                PhaseHistoryEntry(phase=to_phase).model_dump()
-            ]
+            phase_history = state.get("phase_history", []) + [PhaseHistoryEntry(phase=to_phase).model_dump()]
             updates["phase_history"] = phase_history
-            updates["messages"].append({
-                "role": "user",
-                "content": f"PHASE TRANSITION: Now in {to_phase} phase. Reason: {reason}\n"
-                           f"You may now use {to_phase}-appropriate tools. Proceed with your next action.",
-            })
+            updates["messages"].append(
+                {
+                    "role": "user",
+                    "content": f"PHASE TRANSITION: Now in {to_phase} phase. Reason: {reason}\n"
+                    f"You may now use {to_phase}-appropriate tools. Proceed with your next action.",
+                }
+            )
 
     elif action == "ask_operator":
         question = decision.get("question", "Need operator guidance.")
@@ -415,30 +438,36 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
     elif action == "complete":
         completion_reason = decision.get("completion_reason", "Objective complete")
         updates["completion_reason"] = completion_reason
-        updates["messages"].append({
-            "role": "user",
-            "content": f"OBJECTIVE COMPLETE: {completion_reason}",
-        })
+        updates["messages"].append(
+            {
+                "role": "user",
+                "content": f"OBJECTIVE COMPLETE: {completion_reason}",
+            }
+        )
 
     elif action == "ask_user":
         uq = decision.get("user_question") or {}
         question = uq.get("question", "No question specified")
         pending = state.get("pending_questions", []) + [uq]
         updates["pending_questions"] = pending
-        updates["messages"].append({
-            "role": "user",
-            "content": f"AGENT QUESTION: {question}\n(Answer will be collected from the operator.)",
-        })
+        updates["messages"].append(
+            {
+                "role": "user",
+                "content": f"AGENT QUESTION: {question}\n(Answer will be collected from the operator.)",
+            }
+        )
 
     elif action == "deploy_subagent":
         # Spawn focused subagents for parallel work.
         # Timeout-protected, _current_step set for TUI, errors isolated from main loop.
         subagent_task = decision.get("subagent_task", "")
         if not subagent_task:
-            updates["messages"].append({
-                "role": "user",
-                "content": "SYSTEM: deploy_subagent requires a subagent_task field.",
-            })
+            updates["messages"].append(
+                {
+                    "role": "user",
+                    "content": "SYSTEM: deploy_subagent requires a subagent_task field.",
+                }
+            )
         else:
             tasks = [t.strip() for t in subagent_task.split("||") if t.strip()]
             if not tasks:
@@ -451,15 +480,19 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
             updates["_current_step"] = {
                 "tool_name": "",  # empty = router sends back to think, not execute_tool
                 "tool_args": {"tasks": len(tasks), "preview": tasks[0][:100]},
-                "iteration": iteration, "phase": phase,
-                "thought": thought, "reasoning": reasoning,
+                "iteration": iteration,
+                "phase": phase,
+                "thought": thought,
+                "reasoning": reasoning,
                 "tool_output": f"Deploying {len(tasks)} subagent(s)...",
             }
 
-            updates["messages"].append({
-                "role": "user",
-                "content": f"DEPLOYING {len(tasks)} SUBAGENT(S):\n" + "\n".join(f"  - {t[:200]}" for t in tasks),
-            })
+            updates["messages"].append(
+                {
+                    "role": "user",
+                    "content": f"DEPLOYING {len(tasks)} SUBAGENT(S):\n" + "\n".join(f"  - {t[:200]}" for t in tasks),
+                }
+            )
 
             try:
                 from suijin.nodes.subagent_node import spawn_and_collect
@@ -468,41 +501,53 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
                 # 65s total timeout (60s batch + 5s buffer) prevents main agent hang
                 results = await asyncio.wait_for(
                     spawn_and_collect(
-                        tasks, generate_fn=generate_fn,
+                        tasks,
+                        generate_fn=generate_fn,
                         route_tool_fn=route_tool,
                         tool_catalog_fn=get_tool_catalog,
-                        max_concurrent=3, total_timeout=60.0,
+                        max_concurrent=3,
+                        total_timeout=60.0,
                     ),
                     timeout=65.0,
                 )
 
                 summary_parts = []
                 for r in results:
-                    status = "OK" if r.success else ("TIMEOUT" if getattr(r, 'partial', False) else "PARTIAL")
+                    status = "OK" if r.success else ("TIMEOUT" if getattr(r, "partial", False) else "PARTIAL")
                     summary_parts.append(f"[{status}] {r.task[:80]} ({r.steps} steps)")
                     findings_text = r.findings[:2000] if r.findings else "(empty)"
-                    updates["messages"].append({
-                        "role": "user",
-                        "content": (
-                            f"SUBAGENT [{r.subagent_id}] COMPLETE ({status}, {r.steps} steps):\n"
-                            f"Task: {r.task[:200]}\nFindings:\n{findings_text}"
-                        ),
-                    })
-                    chain_findings.append({
-                        "source": f"subagent_{r.subagent_id}",
-                        "task": r.task[:200], "success": r.success,
-                        "findings": r.findings[:2000], "steps": r.steps,
-                    })
+                    updates["messages"].append(
+                        {
+                            "role": "user",
+                            "content": (
+                                f"SUBAGENT [{r.subagent_id}] COMPLETE ({status}, {r.steps} steps):\n"
+                                f"Task: {r.task[:200]}\nFindings:\n{findings_text}"
+                            ),
+                        }
+                    )
+                    chain_findings.append(
+                        {
+                            "source": f"subagent_{r.subagent_id}",
+                            "task": r.task[:200],
+                            "success": r.success,
+                            "findings": r.findings[:2000],
+                            "steps": r.steps,
+                        }
+                    )
                     if r.success:
-                        updates["messages"].append({
-                            "role": "user",
-                            "content": "ACTION: Subagent completed successfully. Record findings to knowledge graph with record_finding.",
-                        })
-                    elif getattr(r, 'partial', False):
-                        updates["messages"].append({
-                            "role": "user",
-                            "content": "ACTION: Subagent timed out. Check partial findings above. If useful, incorporate. Otherwise, run the task yourself.",
-                        })
+                        updates["messages"].append(
+                            {
+                                "role": "user",
+                                "content": "ACTION: Subagent completed successfully. Record findings to knowledge graph with record_finding.",
+                            }
+                        )
+                    elif getattr(r, "partial", False):
+                        updates["messages"].append(
+                            {
+                                "role": "user",
+                                "content": "ACTION: Subagent timed out. Check partial findings above. If useful, incorporate. Otherwise, run the task yourself.",
+                            }
+                        )
 
                 updates["_current_step"]["tool_output"] = "Subagents done:\n" + "\n".join(summary_parts)
                 updates["_current_step"]["success"] = any(r.success for r in results) if results else False
@@ -511,27 +556,33 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
                 logger.warning("Subagent deployment timed out after 65s")
                 updates["_current_step"]["tool_output"] = "TIMEOUT: Subagents did not complete within 65s."
                 updates["_current_step"]["success"] = False
-                updates["messages"].append({
-                    "role": "user",
-                    "content": "SYSTEM: Subagent deployment timed out. Continue with main agent tasks.",
-                })
+                updates["messages"].append(
+                    {
+                        "role": "user",
+                        "content": "SYSTEM: Subagent deployment timed out. Continue with main agent tasks.",
+                    }
+                )
             except Exception as e:
                 logger.error(f"Subagent deployment crashed: {e}")
                 updates["_current_step"]["tool_output"] = f"ERROR: {e}"
                 updates["_current_step"]["success"] = False
-                updates["messages"].append({
-                    "role": "user",
-                    "content": f"SYSTEM: Subagent deployment error: {e}. Continue with main agent tasks.",
-                })
+                updates["messages"].append(
+                    {
+                        "role": "user",
+                        "content": f"SYSTEM: Subagent deployment error: {e}. Continue with main agent tasks.",
+                    }
+                )
 
     elif action == "switch_skill":
         ss = decision.get("skill_switch") or {}
         to_skill = ss.get("to_skill", "")
         updates["attack_path_type"] = to_skill
-        updates["messages"].append({
-            "role": "user",
-            "content": f"SKILL SWITCHED to: {to_skill}. Reason: {ss.get('reason', '')}",
-        })
+        updates["messages"].append(
+            {
+                "role": "user",
+                "content": f"SKILL SWITCHED to: {to_skill}. Reason: {ss.get('reason', '')}",
+            }
+        )
 
     # ── Apply chain findings ──────────────────────────────────────────
     if chain_findings:
@@ -539,9 +590,14 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
 
     # ── Stall counter update (with state_grew) ────────────────────────
     stall = update_stall_counters(
-        {**state, "_state_grew_this_turn": state_grew,
-         "_chain_advanced_this_turn": productivity.get("verdict") == "new_info" if productivity else False,
-         "_diagnostic_progress_this_turn": productivity.get("verdict") == "diagnostic_progress" if productivity else False},
+        {
+            **state,
+            "_state_grew_this_turn": state_grew,
+            "_chain_advanced_this_turn": productivity.get("verdict") == "new_info" if productivity else False,
+            "_diagnostic_progress_this_turn": productivity.get("verdict") == "diagnostic_progress"
+            if productivity
+            else False,
+        },
         iteration,
     )
     updates.update(stall)

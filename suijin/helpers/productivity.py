@@ -12,22 +12,47 @@ that classify every tool call into productivity buckets:
 
 Ported from redamon/agentic/orchestrator_helpers/productivity.py.
 """
+
 from __future__ import annotations
 
 # Deploy config and test data — defined inline
 DEPLOY_ENV = {"is_macos": True, "is_linux": False, "is_docker": False, "is_dev": True}
 MIN_REQUIREMENTS = {"python_version": (3, 10), "ram_mb": 2048, "disk_mb": 5120, "cpu_cores": 2}
+
+
 def check_min_requirements() -> dict:
     import platform
     import sys
-    return {"python_ok": sys.version_info >= (3, 10), "python_version": f"{sys.version_info.major}.{sys.version_info.minor}", "platform": platform.platform()}
+
+    return {
+        "python_ok": sys.version_info >= (3, 10),
+        "python_version": f"{sys.version_info.major}.{sys.version_info.minor}",
+        "platform": platform.platform(),
+    }
+
+
 def get_deploy_port(service: str) -> int:
     ports = {"lab_cloudboard_main": 5800, "lab_devops_dashboard": 5700}
     return ports.get(service, 0)
+
+
 INTEGRATION_TEST_CONFIG = {"lab_ports": [5700, 5800, 5801, 5802], "agent_max_iterations": 20, "expected_min_flags": 1}
 EXPECTED_TOOLS = ["execute_terminal", "http_request", "nmap", "gobuster", "sqlmap", "ffuf", "hydra", "nikto", "curl"]
+
+
 def generate_empty_state() -> dict:
-    return {"current_phase": "informational", "messages": [], "findings": [], "flags_found": [], "knowledge_graph": {}, "iteration": 0, "total_cost_usd": 0.0, "todo_list": [], "jobs": {}}
+    return {
+        "current_phase": "informational",
+        "messages": [],
+        "findings": [],
+        "flags_found": [],
+        "knowledge_graph": {},
+        "iteration": 0,
+        "total_cost_usd": 0.0,
+        "todo_list": [],
+        "jobs": {},
+    }
+
 
 import hashlib
 import json
@@ -56,7 +81,8 @@ def _output_fingerprint(step: dict) -> str:
     normalized = re.sub(r"\d{4}-\d{2}-\d{2}T[\d:.\-+Z]+", "<ts>", normalized)
     normalized = re.sub(
         r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}",
-        "<uuid>", normalized,
+        "<uuid>",
+        normalized,
     )
     normalized = re.sub(r"\b\d{10,}\b", "<num>", normalized)
     return hashlib.sha256(normalized.encode("utf-8", errors="ignore")).hexdigest()[:8]
@@ -103,18 +129,16 @@ def audit_productivity_claim(
 
     extracted_any = any(
         (extracted_info or {}).get(k)
-        for k in ("ports", "services", "technologies",
-                  "vulnerabilities", "credentials", "sessions")
+        for k in ("ports", "services", "technologies", "vulnerabilities", "credentials", "sessions")
     )
     state_grew = bool(findings_grew or extracted_any or actionable_findings)
 
     if claims_new and not state_grew:
-        return ("Claimed new_information_gained=true but no chain finding was "
-                "appended, no extracted_info was populated.")
+        return "Claimed new_information_gained=true but no chain finding was appended, no extracted_info was populated."
     if verdict == "new_info" and not state_grew:
         return "Verdict='new_info' but the engagement state did not grow."
     if verdict == "diagnostic_progress" and not (productivity.get("what_was_new") or "").strip():
-        return ("Verdict='diagnostic_progress' but what_was_new is empty.")
+        return "Verdict='diagnostic_progress' but what_was_new is empty."
     return None
 
 
@@ -150,11 +174,7 @@ def detect_uniform_response_anomaly(
     if len(execution_trace) < min_count:
         return None
     recent = execution_trace[-window:]
-    failures = [
-        s for s in recent
-        if isinstance(s, dict)
-        and not s.get("success", True)
-    ]
+    failures = [s for s in recent if isinstance(s, dict) and not s.get("success", True)]
     if len(failures) < min_count:
         return None
 
@@ -178,6 +198,7 @@ def detect_uniform_response_anomaly(
 # ---------------------------------------------------------------------------
 # Axis-based tracking — prevents the agent from hammering the same pattern
 # ---------------------------------------------------------------------------
+
 
 def axis_key(tool_name: str, tool_args: dict) -> str:
     """Derive a stable axis key from a tool call's normalized shape."""
@@ -204,7 +225,8 @@ def record_axis_attempt(tested_axes: dict, axis: str, success: bool) -> dict:
 def axis_unproductive_count(tested_axes: dict) -> int:
     """Count axes with >=3 attempts and 100% failure rate."""
     return sum(
-        1 for v in (tested_axes or {}).values()
+        1
+        for v in (tested_axes or {}).values()
         if v.get("attempts", 0) >= 3 and v.get("attempts", 0) == v.get("failures", 0)
     )
 
@@ -225,12 +247,21 @@ def priority_order_jaccard(current_todos: list, previous_todos: list) -> float:
 # State growth detection
 # ---------------------------------------------------------------------------
 
+
 def detect_state_growth(before: dict, after: dict) -> bool:
     """True if any list-typed field in target_info grew."""
     b = (before or {}).get("target_info") or {}
     a = (after or {}).get("target_info") or {}
-    for key in ("ports", "services", "technologies", "vulnerabilities",
-                "credentials", "sessions", "subdomains", "endpoints"):
+    for key in (
+        "ports",
+        "services",
+        "technologies",
+        "vulnerabilities",
+        "credentials",
+        "sessions",
+        "subdomains",
+        "endpoints",
+    ):
         if len(a.get(key, []) or []) > len(b.get(key, []) or []):
             return True
     return False
@@ -319,7 +350,10 @@ def compute_productivity_score(
 
     # 6. Novelty saturation (0-1): growing state but never advancing chain
     novelty_score = 0
-    if iterations_since_chain_advance > novelty_saturation_grace and iterations_since_state_grew < iterations_since_chain_advance:
+    if (
+        iterations_since_chain_advance > novelty_saturation_grace
+        and iterations_since_state_grew < iterations_since_chain_advance
+    ):
         novelty_score = min(1, (iterations_since_chain_advance - novelty_saturation_grace) / 3)
 
     total = unproductive_score + axis_score + stagnation_score + chain_score + phase_score + novelty_score

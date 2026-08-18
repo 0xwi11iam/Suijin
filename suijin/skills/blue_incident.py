@@ -1,4 +1,5 @@
 """Blue incident response skill."""
+
 BLUE_INCIDENT_PROMPT = """
 ## BLUE SKILL: INCIDENT RESPONSE
 When a critical threat is confirmed, follow the IR playbook.

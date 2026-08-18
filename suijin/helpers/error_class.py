@@ -6,6 +6,7 @@ just THAT one did.
 
 Ported from redamon/agentic/orchestrator_helpers/error_class.py.
 """
+
 from __future__ import annotations
 
 import re
@@ -51,12 +52,17 @@ _HTTP_STATUS_PATTERNS = [
 ]
 
 _GENERIC_5XX_BODY_MARKERS = (
-    "internal server error", "service unavailable",
-    "bad gateway", "gateway timeout",
+    "internal server error",
+    "service unavailable",
+    "bad gateway",
+    "gateway timeout",
 )
 _GENERIC_4XX_BODY_MARKERS = (
-    "method not allowed", "not found", "unauthorized",
-    "forbidden", "bad request",
+    "method not allowed",
+    "not found",
+    "unauthorized",
+    "forbidden",
+    "bad request",
 )
 
 FAST_RESPONSE_THRESHOLD_MS = 50
@@ -129,5 +135,7 @@ def is_diagnostic_failure(error_class: str) -> bool:
     never reached the application's business logic, so the LLM should NOT
     mark this vector as 'tested'."""
     return error_class in (
-        "shell_parser_error", "transport_error", "tool_internal_error",
+        "shell_parser_error",
+        "transport_error",
+        "tool_internal_error",
     )

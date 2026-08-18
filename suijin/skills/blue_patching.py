@@ -1,4 +1,5 @@
 """Blue patching skill — automated hotfix workflow."""
+
 BLUE_PATCHING_PROMPT = """
 ## BLUE SKILL: AUTOMATED PATCHING
 When a vulnerability is confirmed, generate and deploy a fix.

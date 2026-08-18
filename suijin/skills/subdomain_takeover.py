@@ -1,6 +1,7 @@
 """
 Subdomain Takeover Attack Skill Prompt.
 """
+
 SUBDOMAIN_TAKEOVER_SKILL_PROMPT = """
 ## ATTACK SKILL: SUBDOMAIN TAKEOVER
 

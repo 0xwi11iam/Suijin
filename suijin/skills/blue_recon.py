@@ -1,4 +1,5 @@
 """Blue team recon skill — map own attack surface."""
+
 BLUE_RECON_PROMPT = """
 ## BLUE SKILL: DEFENSIVE RECONNAISSANCE
 Map your own attack surface. Run the codebase scanner, identify every endpoint, assess risk per endpoint.

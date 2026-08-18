@@ -1,6 +1,7 @@
 """
 WordPress Attack Skill Prompt.
 """
+
 WORDPRESS_SKILL_PROMPT = """
 ## ATTACK SKILL: WORDPRESS ATTACKS
 

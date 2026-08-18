@@ -9,6 +9,7 @@ Key design decisions:
 - Partial results returned even on timeout (nothing lost)
 - Auto-completes after 2 consecutive failures to avoid wasted cycles
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -21,16 +22,16 @@ from datetime import datetime, timezone
 logger = logging.getLogger(__name__)
 
 # ── Tunable constants ────────────────────────────────────────────────────────
-LLM_TIMEOUT = 15       # seconds per subagent LLM call
-TOOL_TIMEOUT = 30       # seconds per subagent tool execution
+LLM_TIMEOUT = 15  # seconds per subagent LLM call
+TOOL_TIMEOUT = 30  # seconds per subagent tool execution
 MAX_SUBAGENT_STEPS = 3  # steps before auto-complete
-BATCH_TIMEOUT = 60      # seconds for ALL subagents combined
+BATCH_TIMEOUT = 60  # seconds for ALL subagents combined
 
 
 class SubagentResult:
     """Result from a completed subagent."""
-    def __init__(self, subagent_id: str, task: str, success: bool,
-                 findings: str, steps: int, partial: bool = False):
+
+    def __init__(self, subagent_id: str, task: str, success: bool, findings: str, steps: int, partial: bool = False):
         self.subagent_id = subagent_id
         self.task = task
         self.success = success
@@ -121,11 +122,16 @@ async def run_subagent(
             # ── Parse JSON from response ────────────────────────────
             json_match = re.search(r'\{[^{}]*"action"\s*:\s*"[^"]+"[^{}]*\}', str(response), re.DOTALL)
             if not json_match:
-                json_match = re.search(r'\{[\s\S]*\}', str(response))
+                json_match = re.search(r"\{[\s\S]*\}", str(response))
 
             if not json_match:
                 findings_parts.append(f"[step {step_num}] No JSON in response: {str(response)[:150]}")
-                messages.append({"role": "user", "content": 'No JSON found. Output ONLY: {"action": "use_tool", "thought": "...", "tool_name": "...", "tool_args": {...}}'})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": 'No JSON found. Output ONLY: {"action": "use_tool", "thought": "...", "tool_name": "...", "tool_args": {...}}',
+                    }
+                )
                 consecutive_failures += 1
                 continue
 
@@ -152,7 +158,9 @@ async def run_subagent(
                 tool_args = decision.get("tool_args") or {}
 
                 if not tool_name:
-                    messages.append({"role": "user", "content": "Missing tool_name. Must specify a tool from the reference list."})
+                    messages.append(
+                        {"role": "user", "content": "Missing tool_name. Must specify a tool from the reference list."}
+                    )
                     continue
 
                 try:
@@ -167,13 +175,19 @@ async def run_subagent(
                     consecutive_failures = 0
                 except asyncio.TimeoutError:
                     findings_parts.append(f"[{tool_name}] timed out ({TOOL_TIMEOUT}s)")
-                    messages.append({"role": "user", "content": f"Tool {tool_name} timed out. Try a simpler command or complete."})
+                    messages.append(
+                        {"role": "user", "content": f"Tool {tool_name} timed out. Try a simpler command or complete."}
+                    )
                     consecutive_failures += 1
                 except Exception as e:
-                    messages.append({"role": "user", "content": f"Tool {tool_name} error: {e}. Try a different approach."})
+                    messages.append(
+                        {"role": "user", "content": f"Tool {tool_name} error: {e}. Try a different approach."}
+                    )
                     consecutive_failures += 1
             else:
-                messages.append({"role": "user", "content": f"Unknown action '{action}'. Use 'use_tool' or 'complete'."})
+                messages.append(
+                    {"role": "user", "content": f"Unknown action '{action}'. Use 'use_tool' or 'complete'."}
+                )
 
         except Exception as e:
             logger.warning(f"Subagent [{subagent_id}] step {step_num} crashed: {e}")
@@ -184,8 +198,11 @@ async def run_subagent(
     logger.info(f"Subagent [{subagent_id}] done: success={success}, steps={step_num}, findings_len={len(findings)}")
 
     return SubagentResult(
-        subagent_id=subagent_id, task=task, success=success,
-        findings=findings, steps=step_num,
+        subagent_id=subagent_id,
+        task=task,
+        success=success,
+        findings=findings,
+        steps=step_num,
     )
 
 
@@ -217,8 +234,11 @@ async def spawn_and_collect(
         except Exception as e:
             logger.error(f"Subagent crash: {task[:80]} — {e}")
             return SubagentResult(
-                subagent_id="crash", task=task, success=False,
-                findings=f"Subagent crashed: {e}", steps=0,
+                subagent_id="crash",
+                task=task,
+                success=False,
+                findings=f"Subagent crashed: {e}",
+                steps=0,
             )
 
     try:
@@ -230,10 +250,15 @@ async def spawn_and_collect(
         # Unwrap exceptions
         for r in results:
             if isinstance(r, Exception):
-                completed.append(SubagentResult(
-                    subagent_id="error", task="(unknown)",
-                    success=False, findings=f"Exception: {r}", steps=0,
-                ))
+                completed.append(
+                    SubagentResult(
+                        subagent_id="error",
+                        task="(unknown)",
+                        success=False,
+                        findings=f"Exception: {r}",
+                        steps=0,
+                    )
+                )
             else:
                 completed.append(r)
         return completed
@@ -245,9 +270,14 @@ async def spawn_and_collect(
         for i in range(remaining):
             idx = len(completed) + i
             task_text = tasks[idx] if idx < len(tasks) else "(unknown)"
-            completed.append(SubagentResult(
-                subagent_id="timeout", task=task_text, success=False,
-                findings=f"Batch timed out ({total_timeout}s). Subagent did not complete.",
-                steps=0, partial=True,
-            ))
+            completed.append(
+                SubagentResult(
+                    subagent_id="timeout",
+                    task=task_text,
+                    success=False,
+                    findings=f"Batch timed out ({total_timeout}s). Subagent did not complete.",
+                    steps=0,
+                    partial=True,
+                )
+            )
         return completed

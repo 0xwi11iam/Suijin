@@ -1,6 +1,7 @@
 """
 DOM Clobbering Attack Skill Prompt.
 """
+
 DOM_CLOBBERING_SKILL_PROMPT = """
 ## ATTACK SKILL: DOM CLOBBERING
 

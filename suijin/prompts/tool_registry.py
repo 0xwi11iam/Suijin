@@ -33,7 +33,6 @@ TOOL_REGISTRY = {
             "- ⚠️ LONG-RUNNING — for scans/brute-force, set '\"background\": true' in tool_args to run async."
         ),
     },
-
     # ===== HTTP =====
     "http_request": {
         "purpose": "Send a raw HTTP request with browser-emulation headers",
@@ -52,7 +51,6 @@ TOOL_REGISTRY = {
             "- Session cookies persist across calls (requests.Session)."
         ),
     },
-
     # ===== File Operations =====
     "read_file": {
         "purpose": "Read any file from disk",
@@ -66,7 +64,6 @@ TOOL_REGISTRY = {
         "args_format": '"file_path": "scripts/exploit.py", "content": "#!/usr/bin/env python3\\n..."',
         "description": "**write_file** — creates/writes file. Relative paths go to suijin_agent/. Creates parent dirs automatically.",
     },
-
     # ===== Knowledge & Intelligence =====
     "search_kb": {
         "purpose": "Full-text search the local security knowledge base (HackTricks, PayloadsAllTheThings, GTFOBins, LOLBAS, OWASP cheat sheets, SecLists)",
@@ -151,14 +148,13 @@ TOOL_REGISTRY = {
         "purpose": "Spawn parallel subagents to attack different targets/vectors simultaneously",
         "when_to_use": "Multiple ports discovered? Spawn one subagent per port. Multiple vuln types to test? One subagent each. Long scan running? Spawn subagent for active probing. Use || to separate multiple tasks: 'task1 || task2 || task3'.",
         "args_format": 'Use action="deploy_subagent" with subagent_task field (not tool_name/tool_args). Tasks separated by || for parallel execution.',
-        "description": "**deploy_subagent** — ACTION type (not a tool call). Use action=\"deploy_subagent\" with subagent_task=\"task description\". Subagents have full tool access, run independently, and return results. Max 3 concurrent. AGGRESSIVELY deploy subagents — they 10x your throughput.",
+        "description": '**deploy_subagent** — ACTION type (not a tool call). Use action="deploy_subagent" with subagent_task="task description". Subagents have full tool access, run independently, and return results. Max 3 concurrent. AGGRESSIVELY deploy subagents — they 10x your throughput.',
     },
-
     # ===== Metasploit =====
     "msf_check": {
         "purpose": "Verify Metasploit RPC connectivity",
         "when_to_use": "Once at the start of exploitation phase to confirm MSF is available.",
-        "args_format": '(no args)',
+        "args_format": "(no args)",
         "description": "**msf_check** — tests Metasploit RPC connection. Returns version info.",
     },
     "msf_command": {
@@ -179,7 +175,6 @@ TOOL_REGISTRY = {
         "args_format": '"action": "list|info|kill", "id": 1',
         "description": "**msf_sessions** — session management. action=list to see all, action=info for details.",
     },
-
     # ===== Special =====
     "apply_patch": {
         "purpose": "Apply a security patch to the target lab application",
@@ -193,7 +188,6 @@ TOOL_REGISTRY = {
         "args_format": '"flag": "flag{...}"',
         "description": "**claim_flag** — ends the engagement. Only use with confirmed flag/evidence.",
     },
-
     # ===== Creative Freedom =====
     "web_search": {
         "purpose": "Search the internet for exploit techniques, documentation, CVE details",
@@ -231,7 +225,6 @@ TOOL_REGISTRY = {
         "args_format": "(no args)",
         "description": "**list_own_files** — lists all Python files the agent can read/modify.",
     },
-
     # ===== Background Jobs =====
     "job_status": {
         "purpose": "Check status of a background job",
@@ -263,7 +256,6 @@ TOOL_REGISTRY = {
         "args_format": '"job_id": "abc123"',
         "description": "**job_cancel** — marks a job as cancelled. Thread continues but result is ignored.",
     },
-
     # ===== Analysis & Reporting =====
     "payload_generate": {
         "purpose": "Generate context-aware attack payloads for a vulnerability type",
@@ -292,7 +284,7 @@ TOOL_REGISTRY = {
     "attack_tree": {
         "purpose": "Generate a Mermaid flowchart of attack paths from execution trace",
         "when_to_use": "When writing a report or analysing attack chains. Visualizes the path from recon to flag.",
-        "args_format": '"trace_json": "[{\"tool_name\":\"nmap_scan\",\"success\":true,...}]"',
+        "args_format": '"trace_json": "[{"tool_name":"nmap_scan","success":true,...}]"',
         "description": "**attack_tree** — creates Mermaid graph markup. Paste into any Mermaid renderer.",
     },
     "generate_report": {
@@ -305,16 +297,38 @@ TOOL_REGISTRY = {
 
 # ── FREEDOM: all tools available in all phases ──────────────────────
 _ALL_TOOLS = {
-    "execute_terminal", "http_request", "read_file", "write_file",
-    "search_kb", "search_cve", "check_knowledge", "record_finding",
+    "execute_terminal",
+    "http_request",
+    "read_file",
+    "write_file",
+    "search_kb",
+    "search_cve",
+    "check_knowledge",
+    "record_finding",
     "write_note",
-    "msf_check", "msf_command", "msf_run", "msf_sessions",
-    "apply_patch", "claim_flag",
-    "web_search", "list_skills", "list_own_files", "pip_install",
-    "edit_skill", "write_tool",
-    "job_status", "job_wait", "job_output", "job_list", "job_cancel",
-    "payload_generate", "diff_response", "rate_limit_check", "rate_limit_all",
-    "attack_tree", "generate_report",
+    "msf_check",
+    "msf_command",
+    "msf_run",
+    "msf_sessions",
+    "apply_patch",
+    "claim_flag",
+    "web_search",
+    "list_skills",
+    "list_own_files",
+    "pip_install",
+    "edit_skill",
+    "write_tool",
+    "job_status",
+    "job_wait",
+    "job_output",
+    "job_list",
+    "job_cancel",
+    "payload_generate",
+    "diff_response",
+    "rate_limit_check",
+    "rate_limit_all",
+    "attack_tree",
+    "generate_report",
 }
 
 PHASE_TOOLS = {
@@ -350,7 +364,7 @@ def build_tool_catalog_prompt(phase: str = "informational") -> str:
             continue
         lines.append(f"### {tool_name}")
         if info.get("long_running"):
-            lines.append("⚠️  **LONG-RUNNING TOOL** — ALWAYS use `\"background\": true` in args!")
+            lines.append('⚠️  **LONG-RUNNING TOOL** — ALWAYS use `"background": true` in args!')
         lines.append(f"**Purpose**: {info['purpose']}")
         lines.append(f"**When to use**: {info['when_to_use']}")
         lines.append(f"**Args**: `{info['args_format']}`")
@@ -358,10 +372,12 @@ def build_tool_catalog_prompt(phase: str = "informational") -> str:
 
     lines.append("## ⚠️ BACKGROUND EXECUTION (CRITICAL)")
     lines.append("Some tools take 30s–10min to complete. You MUST run them as background jobs")
-    lines.append("to avoid blocking the agent loop. Set `\"background\": true` in tool_args.")
+    lines.append('to avoid blocking the agent loop. Set `"background": true` in tool_args.')
     lines.append("")
     lines.append("**Tools that ALWAYS need background**:")
-    lines.append("- `nmap_scan` with -p- or --script flags → `{\"target\": \"...\", \"flags\": \"-sV -sC -p-\", \"background\": true}`")
+    lines.append(
+        '- `nmap_scan` with -p- or --script flags → `{"target": "...", "flags": "-sV -sC -p-", "background": true}`'
+    )
     lines.append("- `gobuster_dir` / `gobuster_dns` with large wordlists")
     lines.append("- `ffuf_fuzz` with large wordlists")
     lines.append("- `feroxbuster_scan` with large wordlists")
@@ -372,10 +388,10 @@ def build_tool_catalog_prompt(phase: str = "informational") -> str:
     lines.append("- `execute_terminal` with scan/brute-force commands")
     lines.append("")
     lines.append("**Background workflow**:")
-    lines.append("1. Spawn: `{\"tool_name\": \"nmap_scan\", \"tool_args\": {\"target\": \"X\", \"background\": true}}`")
+    lines.append('1. Spawn: `{"tool_name": "nmap_scan", "tool_args": {"target": "X", "background": true}}`')
     lines.append("2. You get a job_id back immediately. Continue other work.")
-    lines.append("3. Check: `job_status {\"job_id\": \"abc123\"}` or `job_list`")
-    lines.append("4. Collect: `job_wait {\"job_id\": \"abc123\", \"timeout\": 300}` then `job_output`")
+    lines.append('3. Check: `job_status {"job_id": "abc123"}` or `job_list`')
+    lines.append('4. Collect: `job_wait {"job_id": "abc123", "timeout": 300}` then `job_output`')
     lines.append("")
 
     lines.append("## Attack Strategy (MUST FOLLOW)")

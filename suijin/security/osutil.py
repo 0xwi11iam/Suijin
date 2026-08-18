@@ -69,17 +69,19 @@ def find_pids_on_port(port):
     try:
         if IS_WINDOWS:
             # netstat -ano: columns ... Local Address ... PID (last column)
-            out = subprocess.run(["netstat", "-ano"], capture_output=True,
-                                 text=True, timeout=10).stdout
+            out = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, timeout=10).stdout
             for line in out.splitlines():
                 parts = line.split()
-                if (len(parts) >= 5 and parts[0].upper() == "TCP"
-                        and parts[1].endswith(f":{port}") and parts[3].upper() == "LISTENING"
-                        and parts[-1].isdigit()):
+                if (
+                    len(parts) >= 5
+                    and parts[0].upper() == "TCP"
+                    and parts[1].endswith(f":{port}")
+                    and parts[3].upper() == "LISTENING"
+                    and parts[-1].isdigit()
+                ):
                     pids.append(int(parts[-1]))
         else:
-            out = subprocess.run(["lsof", "-i", f":{port}", "-t"],
-                                 capture_output=True, text=True, timeout=10).stdout
+            out = subprocess.run(["lsof", "-i", f":{port}", "-t"], capture_output=True, text=True, timeout=10).stdout
             for line in out.splitlines():
                 if line.strip().isdigit():
                     pids.append(int(line.strip()))
@@ -104,8 +106,7 @@ def kill_pid(pid):
 
     try:
         if IS_WINDOWS:
-            subprocess.run(["taskkill", "/PID", str(pid), "/F", "/T"],
-                          capture_output=True, text=True, timeout=10)
+            subprocess.run(["taskkill", "/PID", str(pid), "/F", "/T"], capture_output=True, text=True, timeout=10)
         else:
             os.kill(pid, signal.SIGKILL)
         return True

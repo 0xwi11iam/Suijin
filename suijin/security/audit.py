@@ -22,12 +22,7 @@ ADMIN_KEY = os.environ.get("SUIJIN_ADMIN_KEY", hashlib.sha256(secrets.token_byte
 
 # Default enterprise keys
 DEFAULT_KEYS = {
-    ADMIN_KEY: {
-        "role": "admin",
-        "name": "Admin",
-        "allowed_targets": "*",
-        "created": datetime.now().isoformat()
-    }
+    ADMIN_KEY: {"role": "admin", "name": "Admin", "allowed_targets": "*", "created": datetime.now().isoformat()}
 }
 
 
@@ -65,23 +60,14 @@ def verify_access(api_key: str, target: str) -> dict:
     keys = _load_keys()
 
     if api_key not in keys:
-        return {
-            "allowed": False,
-            "reason": "Invalid API key. Contact admin for access.",
-            "role": None
-        }
+        return {"allowed": False, "reason": "Invalid API key. Contact admin for access.", "role": None}
 
     key_data = keys[api_key]
     allowed_targets = key_data.get("allowed_targets", "")
 
     # Admin can test any target
     if key_data["role"] == "admin" or allowed_targets == "*":
-        return {
-            "allowed": True,
-            "reason": "Admin access granted.",
-            "role": "admin",
-            "user": key_data["name"]
-        }
+        return {"allowed": True, "reason": "Admin access granted.", "role": "admin", "user": key_data["name"]}
 
     # Check if target is in allowed list
     if isinstance(allowed_targets, list):
@@ -91,13 +77,13 @@ def verify_access(api_key: str, target: str) -> dict:
                     "allowed": True,
                     "reason": f"Target authorized for {key_data['name']}.",
                     "role": key_data["role"],
-                    "user": key_data["name"]
+                    "user": key_data["name"],
                 }
 
     return {
         "allowed": False,
         "reason": f"Target '{target}' not authorized for your key. Add target ownership proof first.",
-        "role": key_data["role"]
+        "role": key_data["role"],
     }
 
 
@@ -108,7 +94,7 @@ def log_action(
     result: str,
     mode: str = "red",
     risk_score: float = 0.0,
-    details: dict = None
+    details: dict = None,
 ):
     """
     Log an agent action to the audit trail.
@@ -126,7 +112,7 @@ def log_action(
         "action": action,
         "result": result,
         "risk_score": risk_score,
-        "details": details or {}
+        "details": details or {},
     }
 
     log = _load_log()
@@ -145,7 +131,7 @@ def generate_key(name: str, allowed_targets: list = None, role: str = "user") ->
         "role": role,
         "name": name,
         "allowed_targets": allowed_targets or [],
-        "created": datetime.now().isoformat()
+        "created": datetime.now().isoformat(),
     }
     _save_keys(keys)
     return key
@@ -197,7 +183,7 @@ def print_audit_report(api_key: str = None):
             e["target"][:30],
             e["action"][:40],
             e["result"][:20],
-            str(e["risk_score"])
+            str(e["risk_score"]),
         )
 
     console.print(table)
@@ -218,7 +204,7 @@ if __name__ == "__main__":
         target="http://127.0.0.1:5000",
         result="SUCCESS",
         mode="red",
-        risk_score=0.85
+        risk_score=0.85,
     )
 
     # Generate a test user key

@@ -1,6 +1,7 @@
 """
 Prototype Pollution Attack Skill Prompt.
 """
+
 PROTOTYPE_POLLUTION_SKILL_PROMPT = """
 ## ATTACK SKILL: PROTOTYPE POLLUTION
 

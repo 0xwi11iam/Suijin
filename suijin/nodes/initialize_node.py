@@ -3,6 +3,7 @@
 Prepares the initial AgentState with objective, phase, target info,
 and system prompt. Called once at the start of a graph invocation.
 """
+
 import logging
 
 from suijin.core.state import (
@@ -41,9 +42,7 @@ def initialize_node(state: dict, *, objective: str, config: dict = None) -> dict
     ]
 
     # Initial phase history
-    phase_history = [
-        PhaseHistoryEntry(phase="informational", entered_at=now).model_dump()
-    ]
+    phase_history = [PhaseHistoryEntry(phase="informational", entered_at=now).model_dump()]
 
     # Empty target info
     target_info = TargetInfo().model_dump()

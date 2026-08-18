@@ -1304,6 +1304,21 @@ def run_notify(args) -> int:
     return 1
 
 
+def run_scope(args) -> int:
+    """`suijin scope` — Burp-style scope TUI (edits suijin/policy.json)."""
+    import curses
+
+    from suijin import tui_scope
+
+    try:
+        curses.wrapper(tui_scope.run)
+        return 0
+    except curses.error as e:
+        print(f"error: scope TUI needs a real terminal — {e}")
+        print("non-interactive: edit suijin/policy.json directly, or `suijin policy show`")
+        return 1
+
+
 def run_approvals(args) -> int:
     from suijin.tools import approvals as ap
 
@@ -1337,8 +1352,9 @@ def run_compliance(args) -> int:
 
     findings = load_findings(getattr(args, "engagement", None))
     if not findings:
-        print("No findings recorded for this engagement "
-              "(findings land in suijin_agent/audit_trails/ during engagements).")
+        print(
+            "No findings recorded for this engagement (findings land in suijin_agent/audit_trails/ during engagements)."
+        )
         return 0
     print(render(map_findings(findings)))
     return 0
@@ -1519,27 +1535,27 @@ def main(argv=None):
     notify.set_defaults(func=run_notify)
 
     compliance = sub.add_parser("compliance", help="map engagement findings to CWE / OWASP / ATT&CK")
-    compliance.add_argument("engagement", nargs="?", default=None,
-                            help="engagement name (default: newest audit trail)")
+    compliance.add_argument("engagement", nargs="?", default=None, help="engagement name (default: newest audit trail)")
     compliance.set_defaults(func=run_compliance)
 
     approvals = sub.add_parser("approvals", help="HITL approval console: list/approve/deny/clear")
     approvals_sub = approvals.add_subparsers(dest="approvals_action")
-    approvals_sub.add_parser("list", help="list approval requests") \
-        .set_defaults(func=run_approvals)
+    approvals_sub.add_parser("list", help="list approval requests").set_defaults(func=run_approvals)
     a_ok = approvals_sub.add_parser("approve", help="allow a tool for this session")
     a_ok.add_argument("id", type=int, help="approval request id")
     a_ok.set_defaults(func=run_approvals)
     a_no = approvals_sub.add_parser("deny", help="hard-block a tool for this session")
     a_no.add_argument("id", type=int, help="approval request id")
     a_no.set_defaults(func=run_approvals)
-    approvals_sub.add_parser("clear", help="reset session verdicts (keep the log)") \
-        .set_defaults(func=run_approvals)
+    approvals_sub.add_parser("clear", help="reset session verdicts (keep the log)").set_defaults(func=run_approvals)
     approvals.set_defaults(func=lambda _a: run_approvals(argparse.Namespace(approvals_action="list")))
 
     panic_cmd = sub.add_parser("panic", help="stop all Suijin processes + clear live state NOW")
     panic_cmd.add_argument("--dry-run", action="store_true", help="report what would happen")
     panic_cmd.set_defaults(func=run_panic)
+
+    scope_cmd = sub.add_parser("scope", help="Burp-style target scope TUI (include/exclude/subdomains)")
+    scope_cmd.set_defaults(func=run_scope)
 
     config = sub.add_parser("config", help="inspect and validate configuration")
     config_sub = config.add_subparsers(dest="config_action")

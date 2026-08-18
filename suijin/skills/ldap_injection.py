@@ -1,6 +1,7 @@
 """
 LDAP Injection Attack Skill Prompt.
 """
+
 LDAP_INJECTION_SKILL_PROMPT = """
 ## ATTACK SKILL: LDAP INJECTION
 

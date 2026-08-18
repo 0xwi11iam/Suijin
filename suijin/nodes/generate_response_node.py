@@ -2,6 +2,7 @@
 
 Ported and simplified from redamon/agentic/orchestrator_helpers/nodes/generate_response_node.py.
 """
+
 import logging
 
 from suijin.core.state import (

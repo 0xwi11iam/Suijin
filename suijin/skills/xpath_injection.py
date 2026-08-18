@@ -1,6 +1,7 @@
 """
 XPath Injection Attack Skill Prompt.
 """
+
 XPATH_INJECTION_SKILL_PROMPT = """
 ## ATTACK SKILL: XPATH INJECTION
 

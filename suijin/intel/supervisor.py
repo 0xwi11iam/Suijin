@@ -111,7 +111,7 @@ _TOOL_RE = re.compile(r'\{[\s\S]*?"tool"[\s\S]*?\}')
 
 def _extract_action(assistant_text):
     """Pull a short 'tool: arg' descriptor out of an assistant turn, or None."""
-    m = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', assistant_text)
+    m = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", assistant_text)
     raw = m.group(1) if m else None
     if raw is None:
         m = _TOOL_RE.search(assistant_text)
@@ -119,7 +119,7 @@ def _extract_action(assistant_text):
     if raw is None:
         return None
     try:
-        raw = re.sub(r',\s*\}', '}', raw)
+        raw = re.sub(r",\s*\}", "}", raw)
         data = json.loads(raw)
     except Exception:
         return None
@@ -127,9 +127,14 @@ def _extract_action(assistant_text):
     args = data.get("args") or data.get("parameters") or {}
     detail = ""
     if isinstance(args, dict):
-        detail = str(args.get("cmd") or args.get("command")
-                     or args.get("url") or args.get("keyword")
-                     or args.get("file_path") or args)
+        detail = str(
+            args.get("cmd")
+            or args.get("command")
+            or args.get("url")
+            or args.get("keyword")
+            or args.get("file_path")
+            or args
+        )
     return f"{tool}: {detail}".strip()
 
 
@@ -154,7 +159,7 @@ def collect_telemetry(messages, turn, objective, usage, window=6):
             if act:
                 actions.append(act)
         elif msg.get("role") == "user" and content.startswith("Result:"):
-            results.append(content[len("Result:"):].strip())
+            results.append(content[len("Result:") :].strip())
 
     recent_actions = actions[-window:]
     recent_results = results[-window:]
@@ -162,19 +167,22 @@ def collect_telemetry(messages, turn, objective, usage, window=6):
 
     # Reuse the existing drift detector on the full action list so its
     # low_goal_overlap rule (which needs index > 2) can fire.
-    drift = drift_analyser.analyse_drift(objective, actions) if actions else {
-        "drift_detected": False, "drift_count": 0,
-        "drift_causes": [], "suggestions": [],
-    }
+    drift = (
+        drift_analyser.analyse_drift(objective, actions)
+        if actions
+        else {
+            "drift_detected": False,
+            "drift_count": 0,
+            "drift_causes": [],
+            "suggestions": [],
+        }
+    )
 
     # Cheap repetition / error signals.
     dup_count = 0
     if recent_actions:
         dup_count = max(recent_actions.count(a) for a in recent_actions)
-    error_count = sum(
-        1 for r in recent_results
-        if r.startswith("Error") or "[STDERR]" in r or "Routing Error" in r
-    )
+    error_count = sum(1 for r in recent_results if r.startswith("Error") or "[STDERR]" in r or "Routing Error" in r)
 
     return {
         "turn": turn,
@@ -215,16 +223,19 @@ def heuristic_stuck_check(telemetry, config):
 def _parse_verdict(text):
     """Tolerantly parse the supervisor's JSON verdict."""
     default = {
-        "stuck": False, "reason": "", "new_directive": "",
-        "switch_to_low_hanging": False, "recommend_abort": False,
+        "stuck": False,
+        "reason": "",
+        "new_directive": "",
+        "switch_to_low_hanging": False,
+        "recommend_abort": False,
     }
     if not text:
         return default
-    m = re.search(r'\{[\s\S]*\}', text)
+    m = re.search(r"\{[\s\S]*\}", text)
     if not m:
         return default
     try:
-        raw = re.sub(r',\s*\}', '}', m.group(0))
+        raw = re.sub(r",\s*\}", "}", m.group(0))
         data = json.loads(raw)
     except Exception:
         return default
@@ -256,8 +267,7 @@ def supervisor_review(objective, config, telemetry, flags):
         {"role": "user", "content": user_msg},
     ]
     try:
-        resp = generate(messages, config, model_id=model_id,
-                        temperature=0.1, max_tokens=300)
+        resp = generate(messages, config, model_id=model_id, temperature=0.1, max_tokens=300)
     except Exception as e:
         console.print(f"[yellow]Supervisor call failed: {e}[/yellow]")
         return _parse_verdict(None)
@@ -283,7 +293,7 @@ def evaluate(messages, turn, objective, config):
     flags = heuristic_stuck_check(telemetry, config)
 
     interval = int(config.get("supervisor_interval", 5))
-    deep = (turn % max(interval * 2, 1) == 0)
+    deep = turn % max(interval * 2, 1) == 0
 
     if flags or deep:
         verdict = supervisor_review(objective, config, telemetry, flags)
@@ -308,7 +318,8 @@ def evaluate(messages, turn, objective, config):
                 "target is a web application — interact with it directly using the "
                 "http_request tool (GET/POST), or write a Python script with the "
                 "requests library via write_file and run it. Start by testing the "
-                "login and search forms for SQL injection.")
+                "login and search forms for SQL injection."
+            )
 
     # ---- Cost guardrail (deterministic, independent of the LLM) ----
     cost = float(usage.get("est_cost_usd", 0.0))
@@ -331,9 +342,11 @@ def evaluate(messages, turn, objective, config):
 def format_spend(usage):
     """One-line spend readout for the operator log."""
     est = "~" if usage.get("priced") else "?"
-    return (f"Spend: {est}${usage.get('est_cost_usd', 0):.4f}  |  "
-            f"{usage.get('input_tokens', 0)} in / {usage.get('output_tokens', 0)} out tokens  |  "
-            f"{usage.get('calls', 0)} calls")
+    return (
+        f"Spend: {est}${usage.get('est_cost_usd', 0):.4f}  |  "
+        f"{usage.get('input_tokens', 0)} in / {usage.get('output_tokens', 0)} out tokens  |  "
+        f"{usage.get('calls', 0)} calls"
+    )
 
 
 def render_panel(verdict, flags, usage):
@@ -345,5 +358,4 @@ def render_panel(verdict, flags, usage):
         f"[bold]Directive:[/bold] {directive}\n"
         f"[dim]{format_spend(usage)}[/dim]"
     )
-    console.print(Panel(body, title="🧭 SUPERVISOR OVERRIDE",
-                        border_style="magenta"))
+    console.print(Panel(body, title="🧭 SUPERVISOR OVERRIDE", border_style="magenta"))

@@ -30,6 +30,9 @@ RULE_EXAMPLE = [
 _POLICY_DEFAULT = {
     "description": "Suijin engagement policy — edit as needed",
     "allowed_target_scopes": ["127.0.0.1", "localhost", "::1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"],
+    "excluded_scopes": [],
+    "allow_subdomains": True,
+    "allow_unresolvable": False,
     "blocked_tools": [],
     "blocked_arg_patterns": [],
 }
@@ -164,17 +167,24 @@ def _resolve_host(host: str) -> list[str]:
 
 
 def _target_in_scope(host: str, scopes: list[str], policy: dict) -> tuple[bool, str]:
-    """Scope check with DNS pinning: a hostname in scope must ALSO resolve
+    """Scope check with Burp-style include/exclude semantics and DNS pinning.
+
+    Exclude ALWAYS wins over include. A hostname in scope must ALSO resolve
     only to in-scope IPs — otherwise 'example.com' could be scoped while its
     DNS points the agent at an arbitrary production box. Unresolvable names
     fail CLOSED unless the policy sets allow_unresolvable (offline labs)."""
     import ipaddress
 
+    subdomains = policy.get("allow_subdomains", True)
+    excluded = policy.get("excluded_scopes") or []
+    if excluded and _ip_in_scope(host, excluded, allow_subdomains=True):
+        return False, f"'{host}' is in the EXCLUDE list (exclude wins over include)"
+
     try:
         ipaddress.ip_address(host)
-        return _ip_in_scope(host, scopes), ""
+        return _ip_in_scope(host, scopes, subdomains), ""
     except ValueError:
-        if not _ip_in_scope(host, scopes):
+        if not _ip_in_scope(host, scopes, subdomains):
             return False, ""
         try:
             ips = _resolve_host(host)
@@ -182,19 +192,30 @@ def _target_in_scope(host: str, scopes: list[str], policy: dict) -> tuple[bool, 
             if policy.get("allow_unresolvable"):
                 return True, ""
             return False, f"'{host}' does not resolve (DNS) and allow_unresolvable is not set"
-        bad = [ip for ip in ips if not _ip_in_scope(ip, scopes)]
+        bad = [ip for ip in ips if not _ip_in_scope(ip, scopes, subdomains)]
         if bad:
             return False, f"'{host}' resolves to out-of-scope IP(s): {', '.join(bad)}"
         return True, ""
 
 
-def _ip_in_scope(host: str, scopes: list[str]) -> bool:
+def _ip_in_scope(host: str, scopes: list[str], allow_subdomains: bool = True) -> bool:
     import ipaddress
 
     try:
         addr = ipaddress.ip_address(host.strip())
     except ValueError:
-        return any(host == s or host.endswith("." + s) for s in scopes if "/" not in s)
+        for s in scopes:
+            if "/" in s:
+                continue
+            if host == s:
+                return True
+            # Burp-style: *.scope-entry matches when allow_subdomains is on
+            if allow_subdomains and host.endswith("." + s):
+                return True
+            # explicit wildcard entries always match their subdomains
+            if s.startswith("*.") and (host == s[2:] or host.endswith("." + s[2:])):
+                return True
+        return False
     for s in scopes:
         try:
             if "/" in s and addr in ipaddress.ip_network(s, strict=False):

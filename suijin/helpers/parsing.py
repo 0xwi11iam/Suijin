@@ -5,6 +5,7 @@ parsing that retries on malformed JSON.
 
 Ported from redamon/agentic/orchestrator_helpers/parsing.py.
 """
+
 from __future__ import annotations
 
 import json
@@ -24,14 +25,20 @@ TOKEN_PATTERNS = {
     "bearer": _re.compile(r"Bearer\s+([A-Za-z0-9_\-\.]+)", _re.IGNORECASE),
 }
 SESSION_COOKIE_NAMES = {"session", "token", "auth", "jwt", "sid", "connect.sid", "PHPSESSID", "JSESSIONID"}
+
+
 def extract_tokens_from_response(body: str) -> list:
     found = []
     for token_type, pattern in TOKEN_PATTERNS.items():
         for match in pattern.finditer(body):
             found.append({"type": token_type, "value": match.group(0), "position": match.start()})
     return found
+
+
 def is_exploit_successful(status_code: int) -> bool:
     return status_code in {200, 201, 202, 204, 301, 302}
+
+
 OWASP_TOP_10 = {
     "A01": {"name": "Broken Access Control", "cwe": "CWE-284"},
     "A03": {"name": "Injection", "cwe": "CWE-74"},
@@ -39,9 +46,18 @@ OWASP_TOP_10 = {
     "A10": {"name": "SSRF", "cwe": "CWE-918"},
 }
 WEB_VULN_INDICATORS = {
-    "sqli": {"error_strings": ["SQL syntax", "mysql_fetch", "ORA-", "PostgreSQL", "unclosed quotation"], "owasp_category": "A03"},
-    "xss": {"reflection_check": "<script>alert(1)</script>", "contexts": ["html_body", "attribute_value"], "owasp_category": "A03"},
+    "sqli": {
+        "error_strings": ["SQL syntax", "mysql_fetch", "ORA-", "PostgreSQL", "unclosed quotation"],
+        "owasp_category": "A03",
+    },
+    "xss": {
+        "reflection_check": "<script>alert(1)</script>",
+        "contexts": ["html_body", "attribute_value"],
+        "owasp_category": "A03",
+    },
 }
+
+
 def classify_web_vuln(indicator_text: str) -> list:
     matches = []
     lowered = indicator_text.lower()
@@ -51,6 +67,7 @@ def classify_web_vuln(indicator_text: str) -> list:
                 matches.append({"type": vuln_type, "owasp": info.get("owasp_category"), "confidence": "medium"})
                 break
     return matches
+
 
 logger = logging.getLogger(__name__)
 
@@ -95,8 +112,13 @@ def try_parse_llm_decision(response_text: str) -> tuple[Optional[dict], Optional
             return None, "Missing required field: 'action'"
 
         valid_actions = {
-            "use_tool", "plan_tools", "transition_phase", "complete",
-            "ask_user", "deploy_subagent", "switch_skill",
+            "use_tool",
+            "plan_tools",
+            "transition_phase",
+            "complete",
+            "ask_user",
+            "deploy_subagent",
+            "switch_skill",
         }
         if action not in valid_actions:
             return None, f"Unknown action: '{action}'. Must be one of {valid_actions}"

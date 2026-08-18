@@ -5,6 +5,7 @@ Merges functionality previously spread across redamon bridge modules:
 - Credential classification (trufflehog_scan)
 - CVE-to-attack mapping (gvm_scan)
 """
+
 import math
 import re
 from enum import Enum
@@ -13,7 +14,9 @@ from enum import Enum
 
 SECRET_PATTERNS = {
     "aws_access_key": re.compile(r"(?:AWS|aws)[_\-]?ACCESS[_\-]?KEY[_\-]?ID[=:]\s*['\"]?(AKIA[0-9A-Z]{16})['\"]?"),
-    "aws_secret_key": re.compile(r"(?:AWS|aws)[_\-]?SECRET[_\-]?(?:ACCESS)?[_\-]?KEY[=:]\s*['\"]?([A-Za-z0-9/+=]{40})['\"]?"),
+    "aws_secret_key": re.compile(
+        r"(?:AWS|aws)[_\-]?SECRET[_\-]?(?:ACCESS)?[_\-]?KEY[=:]\s*['\"]?([A-Za-z0-9/+=]{40})['\"]?"
+    ),
     "google_api_key": re.compile(r"AIza[0-9A-Za-z\-_]{35}"),
     "slack_token": re.compile(r"xox[baprs]-[0-9A-Za-z\-_]{10,}"),
     "private_key_pem": re.compile(r"-----BEGIN (?:RSA|DSA|EC|OPENSSH) PRIVATE KEY-----"),
@@ -48,6 +51,7 @@ def is_likely_secret(candidate: str) -> bool:
 
 # ── Credential Classification ─────────────────────────────────────────────────
 
+
 class CredentialClass(Enum):
     AWS_IAM = "aws_iam"
     AWS_SESSION = "aws_session"
@@ -71,11 +75,16 @@ CREDENTIAL_VALIDATORS = {
 }
 
 CREDENTIAL_RISK_LEVELS = {
-    CredentialClass.AWS_IAM: 10, CredentialClass.AWS_SESSION: 9,
-    CredentialClass.GCP_SA: 10, CredentialClass.AZURE_SP: 10,
-    CredentialClass.GITHUB_PAT: 7, CredentialClass.JWT_SECRET: 8,
-    CredentialClass.PRIVATE_KEY: 10, CredentialClass.DATABASE_URL: 9,
-    CredentialClass.API_KEY: 6, CredentialClass.BASIC_AUTH: 4,
+    CredentialClass.AWS_IAM: 10,
+    CredentialClass.AWS_SESSION: 9,
+    CredentialClass.GCP_SA: 10,
+    CredentialClass.AZURE_SP: 10,
+    CredentialClass.GITHUB_PAT: 7,
+    CredentialClass.JWT_SECRET: 8,
+    CredentialClass.PRIVATE_KEY: 10,
+    CredentialClass.DATABASE_URL: 9,
+    CredentialClass.API_KEY: 6,
+    CredentialClass.BASIC_AUTH: 4,
     CredentialClass.UNKNOWN: 1,
 }
 
@@ -98,42 +107,61 @@ def assess_credential_risk(cred_class: CredentialClass, context: str = None) -> 
 
 CVE_ATTACK_MAP = {
     "sql_injection": {
-        "cwe_ids": ["CWE-89"], "tools": ["sqlmap", "manual_payload"],
-        "indicators": ["database error", "syntax error", "unexpected token"], "priority": "critical",
+        "cwe_ids": ["CWE-89"],
+        "tools": ["sqlmap", "manual_payload"],
+        "indicators": ["database error", "syntax error", "unexpected token"],
+        "priority": "critical",
     },
     "xss": {
-        "cwe_ids": ["CWE-79"], "tools": ["manual_payload", "browser_validation"],
-        "indicators": ["<script> reflected", "javascript: URI"], "priority": "high",
+        "cwe_ids": ["CWE-79"],
+        "tools": ["manual_payload", "browser_validation"],
+        "indicators": ["<script> reflected", "javascript: URI"],
+        "priority": "high",
     },
     "ssti": {
-        "cwe_ids": ["CWE-94", "CWE-1336"], "tools": ["tplmap", "manual_payload"],
-        "indicators": ["{{7*7}}", "{{config}}"], "priority": "critical",
+        "cwe_ids": ["CWE-94", "CWE-1336"],
+        "tools": ["tplmap", "manual_payload"],
+        "indicators": ["{{7*7}}", "{{config}}"],
+        "priority": "critical",
     },
     "ssrf": {
-        "cwe_ids": ["CWE-918"], "tools": ["collaborator_client", "manual_payload"],
-        "indicators": ["internal IP response", "metadata endpoint"], "priority": "high",
+        "cwe_ids": ["CWE-918"],
+        "tools": ["collaborator_client", "manual_payload"],
+        "indicators": ["internal IP response", "metadata endpoint"],
+        "priority": "high",
     },
     "command_injection": {
-        "cwe_ids": ["CWE-77", "CWE-78"], "tools": ["commix", "manual_payload"],
-        "indicators": ["; id", "| whoami", "$(whoami)"], "priority": "critical",
+        "cwe_ids": ["CWE-77", "CWE-78"],
+        "tools": ["commix", "manual_payload"],
+        "indicators": ["; id", "| whoami", "$(whoami)"],
+        "priority": "critical",
     },
     "path_traversal": {
-        "cwe_ids": ["CWE-22"], "tools": ["dotdotpwn", "manual_payload"],
-        "indicators": ["../../../etc/passwd"], "priority": "high",
+        "cwe_ids": ["CWE-22"],
+        "tools": ["dotdotpwn", "manual_payload"],
+        "indicators": ["../../../etc/passwd"],
+        "priority": "high",
     },
     "jwt_attacks": {
-        "cwe_ids": ["CWE-347"], "tools": ["jwt_tool", "manual_crafting"],
-        "indicators": ["alg:none", "empty signature", "weak HMAC key"], "priority": "high",
+        "cwe_ids": ["CWE-347"],
+        "tools": ["jwt_tool", "manual_crafting"],
+        "indicators": ["alg:none", "empty signature", "weak HMAC key"],
+        "priority": "high",
     },
     "deserialization": {
-        "cwe_ids": ["CWE-502"], "tools": ["ysoserial", "marshalsec"],
-        "indicators": ["pickle", "java.io.ObjectInputStream"], "priority": "critical",
+        "cwe_ids": ["CWE-502"],
+        "tools": ["ysoserial", "marshalsec"],
+        "indicators": ["pickle", "java.io.ObjectInputStream"],
+        "priority": "critical",
     },
 }
 
 SEVERITY_CVSS = {
-    "critical": (9.0, 10.0), "high": (7.0, 8.9),
-    "medium": (4.0, 6.9), "low": (0.1, 3.9), "info": (0.0, 0.0),
+    "critical": (9.0, 10.0),
+    "high": (7.0, 8.9),
+    "medium": (4.0, 6.9),
+    "low": (0.1, 3.9),
+    "info": (0.0, 0.0),
 }
 
 TECH_VULN_MAP = {

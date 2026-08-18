@@ -1,6 +1,7 @@
 """
 2FA / MFA Bypass Attack Skill Prompt.
 """
+
 TWOFA_BYPASS_SKILL_PROMPT = """
 ## ATTACK SKILL: 2FA / MFA BYPASS
 

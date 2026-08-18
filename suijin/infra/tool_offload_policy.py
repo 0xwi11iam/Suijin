@@ -5,6 +5,7 @@ Declares for each registered tool whether output should be:
     "always" — output is reliably huge; always offload to a file
     "auto"   — offload only if len(output) > OFFLOAD_THRESHOLD
 """
+
 OFFLOAD_THRESHOLD = 50_000
 
 OFFLOAD_POLICY = {

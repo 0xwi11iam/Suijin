@@ -1,6 +1,7 @@
 """
 HTTP Parameter Pollution Attack Skill Prompt.
 """
+
 PARAMETER_POLLUTION_SKILL_PROMPT = """
 ## ATTACK SKILL: HTTP PARAMETER POLLUTION (HPP)
 

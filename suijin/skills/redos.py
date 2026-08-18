@@ -1,6 +1,7 @@
 """
 ReDoS (Regex Denial of Service) Attack Skill Prompt.
 """
+
 REDOS_SKILL_PROMPT = r"""
 ## ATTACK SKILL: REDOS (REGEX DENIAL OF SERVICE)
 

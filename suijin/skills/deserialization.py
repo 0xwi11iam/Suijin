@@ -1,6 +1,7 @@
 """
 Insecure Deserialization Attack Skill Prompt.
 """
+
 DESERIALIZATION_SKILL_PROMPT = """
 ## ATTACK SKILL: INSECURE DESERIALIZATION
 

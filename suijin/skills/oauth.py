@@ -1,6 +1,7 @@
 """
 OAuth / OIDC Attack Skill Prompt.
 """
+
 OAUTH_SKILL_PROMPT = """
 ## ATTACK SKILL: OAUTH / OIDC ATTACKS
 

@@ -1,6 +1,7 @@
 """
 SAML Attack Skill Prompt.
 """
+
 SAML_SKILL_PROMPT = """
 ## ATTACK SKILL: SAML ATTACKS
 

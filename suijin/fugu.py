@@ -29,74 +29,125 @@ ROLES = {
         "name": "Reconnaissance",
         "description": "Port scanning, directory bruteforce, subdomain enum, fingerprinting, CVE lookup.",
         "tools": {
-            "nmap_scan", "gobuster_dir", "gobuster_dns", "feroxbuster_scan",
-            "amass_enum", "search_cve", "http_request", "curl_request",
-            "sslscan_check", "execute_terminal", "read_file", "write_file",
-            "search_kb", "write_note", "check_knowledge", "record_finding",
+            "nmap_scan",
+            "gobuster_dir",
+            "gobuster_dns",
+            "feroxbuster_scan",
+            "amass_enum",
+            "search_cve",
+            "http_request",
+            "curl_request",
+            "sslscan_check",
+            "execute_terminal",
+            "read_file",
+            "write_file",
+            "search_kb",
+            "write_note",
+            "check_knowledge",
+            "record_finding",
         },
         "prompt_prefix": "You are a RECONNAISSANCE specialist. Map the target thoroughly. "
-                         "Use scanning tools, fingerprint services, search CVEs. "
-                         "Do NOT attempt exploitation — that is handled by a later phase. "
-                         "Write every finding to the Knowledge Graph.",
+        "Use scanning tools, fingerprint services, search CVEs. "
+        "Do NOT attempt exploitation — that is handled by a later phase. "
+        "Write every finding to the Knowledge Graph.",
     },
     "exploit": {
         "name": "Exploitation",
         "description": "SQL injection, XSS, LFI, Metasploit exploitation of known CVEs.",
         "tools": {
-            "sqlmap_scan", "msf_run", "msf_command", "msf_check", "msf_sessions",
-            "hydra_brute", "http_request", "curl_request", "execute_terminal",
-            "write_file", "read_file", "write_note", "check_knowledge", "record_finding",
+            "sqlmap_scan",
+            "msf_run",
+            "msf_command",
+            "msf_check",
+            "msf_sessions",
+            "hydra_brute",
+            "http_request",
+            "curl_request",
+            "execute_terminal",
+            "write_file",
+            "read_file",
+            "write_note",
+            "check_knowledge",
+            "record_finding",
         },
         "prompt_prefix": "You are an EXPLOITATION specialist. Reconnaissance has completed — "
-                         "findings are in the Knowledge Graph. Directly exploit discovered "
-                         "vulnerabilities using the recon data. Do NOT re-scan or re-enumerate.",
+        "findings are in the Knowledge Graph. Directly exploit discovered "
+        "vulnerabilities using the recon data. Do NOT re-scan or re-enumerate.",
     },
     "escalate": {
         "name": "Privilege Escalation",
         "description": "Local privilege escalation, SUID/SGID abuse, kernel exploits, token manipulation.",
         "tools": {
-            "execute_terminal", "msf_run", "msf_command", "msf_sessions",
-            "write_file", "read_file", "http_request", "curl_request",
-            "write_note", "check_knowledge", "record_finding",
+            "execute_terminal",
+            "msf_run",
+            "msf_command",
+            "msf_sessions",
+            "write_file",
+            "read_file",
+            "http_request",
+            "curl_request",
+            "write_note",
+            "check_knowledge",
+            "record_finding",
         },
         "prompt_prefix": "You are a PRIVILEGE ESCALATION specialist. You have a foothold on "
-                         "the target. Escalate to SYSTEM/root using local exploits, SUID binaries, "
-                         "misconfigurations, or Metasploit post-exploitation modules.",
+        "the target. Escalate to SYSTEM/root using local exploits, SUID binaries, "
+        "misconfigurations, or Metasploit post-exploitation modules.",
     },
     "persist": {
         "name": "Persistence",
         "description": "Registry run keys, scheduled tasks, cron jobs, SSH keys, services.",
         "tools": {
-            "execute_terminal", "write_file", "read_file",
-            "msf_run", "msf_command", "msf_sessions",
-            "write_note", "check_knowledge", "record_finding",
+            "execute_terminal",
+            "write_file",
+            "read_file",
+            "msf_run",
+            "msf_command",
+            "msf_sessions",
+            "write_note",
+            "check_knowledge",
+            "record_finding",
         },
         "prompt_prefix": "You are a PERSISTENCE specialist. Establish a long-term presence on "
-                         "the target so access is maintained across reboots. Use scheduled tasks, "
-                         "services, SSH keys, or Metasploit persistence modules.",
+        "the target so access is maintained across reboots. Use scheduled tasks, "
+        "services, SSH keys, or Metasploit persistence modules.",
     },
     "lateral": {
         "name": "Lateral Movement",
         "description": "PsExec, WMI, WinRM, SSH, Pass-the-Hash, SMB relay.",
         "tools": {
-            "execute_terminal", "msf_run", "msf_command", "msf_sessions",
-            "hydra_brute", "socat_relay", "http_request", "curl_request",
-            "write_file", "read_file", "write_note", "check_knowledge", "record_finding",
+            "execute_terminal",
+            "msf_run",
+            "msf_command",
+            "msf_sessions",
+            "hydra_brute",
+            "socat_relay",
+            "http_request",
+            "curl_request",
+            "write_file",
+            "read_file",
+            "write_note",
+            "check_knowledge",
+            "record_finding",
         },
         "prompt_prefix": "You are a LATERAL MOVEMENT specialist. Move from the compromised "
-                         "host to other targets on the network using Pass-the-Hash, PsExec, "
-                         "WinRM, or SSH lateral movement techniques.",
+        "host to other targets on the network using Pass-the-Hash, PsExec, "
+        "WinRM, or SSH lateral movement techniques.",
     },
     "report": {
         "name": "Reporting",
         "description": "Compile findings, generate engagement reports.",
         "tools": {
-            "write_file", "read_file", "execute_terminal",
-            "write_note", "check_knowledge", "claim_flag",
+            "write_file",
+            "read_file",
+            "execute_terminal",
+            "write_note",
+            "check_knowledge",
+            "claim_flag",
         },
         "prompt_prefix": "You are a REPORTING specialist. Compile all findings from previous "
-                         "phases into a structured report. Summarize attack chain, list CVEs, "
-                         "document exploited vulnerabilities, and claim the flag.",
+        "phases into a structured report. Summarize attack chain, list CVEs, "
+        "document exploited vulnerabilities, and claim the flag.",
     },
 }
 
@@ -106,23 +157,25 @@ class TaskGraph:
     """A directed acyclic graph of phases. Each phase runs after dependencies complete."""
 
     def __init__(self):
-        self.phases = []        # list of phase dicts in execution order
+        self.phases = []  # list of phase dicts in execution order
 
     @classmethod
     def from_json(cls, data):
         """Parse a JSON task graph from the LLM planner."""
         tg = cls()
         for p in data.get("phases", []):
-            tg.phases.append({
-                "id": p.get("id", f"phase-{len(tg.phases)+1}"),
-                "role": p.get("role", "recon"),
-                "objective": p.get("objective", ""),
-                "depends_on": p.get("depends_on", []),
-                "tools": p.get("tools", []),
-                "success_criteria": p.get("success_criteria", ""),
-                "max_turns": p.get("max_turns", 10),
-                "status": "pending",
-            })
+            tg.phases.append(
+                {
+                    "id": p.get("id", f"phase-{len(tg.phases) + 1}"),
+                    "role": p.get("role", "recon"),
+                    "objective": p.get("objective", ""),
+                    "depends_on": p.get("depends_on", []),
+                    "tools": p.get("tools", []),
+                    "success_criteria": p.get("success_criteria", ""),
+                    "max_turns": p.get("max_turns", 10),
+                    "status": "pending",
+                }
+            )
         return tg
 
     def ready_phases(self):
@@ -156,7 +209,14 @@ class TaskGraph:
     def summary(self):
         lines = []
         for p in self.phases:
-            icon = {"pending":"⏳","in_progress":"🔄","complete":"✅","failed":"❌","exhausted":"⏹️","blocked":"🚫"}.get(p["status"],"?")
+            icon = {
+                "pending": "⏳",
+                "in_progress": "🔄",
+                "complete": "✅",
+                "failed": "❌",
+                "exhausted": "⏹️",
+                "blocked": "🚫",
+            }.get(p["status"], "?")
             lines.append(f"  {icon} {p['id']} [{p['role']}] — {p['objective'][:60]}")
         return "\n".join(lines)
 
@@ -239,9 +299,7 @@ def _build_agent_prompt(role_def, phase, task_graph_summary):
         f"Success: {phase.get('success_criteria', 'Complete the objective')}\n"
         f"Max turns: {phase.get('max_turns', 10)}\n"
         f"\n# TASK GRAPH STATUS\n{task_graph_summary}\n"
-        f"\n# AVAILABLE TOOLS (only these):\n"
-        + "".join(f"- {t}\n" for t in sorted(role_def["tools"]))
-        + "\n# RULES\n"
+        f"\n# AVAILABLE TOOLS (only these):\n" + "".join(f"- {t}\n" for t in sorted(role_def["tools"])) + "\n# RULES\n"
         "1. You are ONLY authorized to use the tools listed above.\n"
         "2. Consult the Knowledge Graph (check_knowledge) for findings from previous phases.\n"
         "3. Record ALL findings with record_finding and write_note.\n"
@@ -253,6 +311,7 @@ def _build_agent_prompt(role_def, phase, task_graph_summary):
 def _role_gated_route(tool_name, args, role_def, config):
     """Route a tool call but block unauthorized tools for this role."""
     from suijin import tools
+
     if tool_name not in role_def["tools"]:
         return (
             f"⛔ TOOL GATED — '{tool_name}' is not authorized for the "
@@ -266,15 +325,15 @@ def _role_gated_route(tool_name, args, role_def, config):
 def _extract_target_from_objective(objective):
     """Pull a hostname or IP from the objective string for scoping chain analysis."""
     # URL first (most specific)
-    m = re.search(r'https?://([^\s/]+)', objective)
+    m = re.search(r"https?://([^\s/]+)", objective)
     if m:
-        return m.group(1).rstrip('/')
+        return m.group(1).rstrip("/")
     # Bare domain with TLD
-    m = re.search(r'\b([a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.[a-zA-Z]{2,})\b', objective)
+    m = re.search(r"\b([a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.[a-zA-Z]{2,})\b", objective)
     if m:
         return m.group(1)
     # IPv4
-    m = re.search(r'\b(\d{1,3}(?:\.\d{1,3}){3})\b', objective)
+    m = re.search(r"\b(\d{1,3}(?:\.\d{1,3}){3})\b", objective)
     if m:
         return m.group(1)
     return None
@@ -282,9 +341,11 @@ def _extract_target_from_objective(objective):
 
 # ---- Adapters to current architecture (replaces legacy redteamer imports) ----
 
+
 def _ai_call(messages, config):
     """LLM call via the shared providers module (was: redteamer.ai_call)."""
     from suijin.modules.loader import load_local_module
+
     return load_local_module("providers").generate(messages, config)
 
 
@@ -296,23 +357,23 @@ def _extract_tool(resp):
     if not isinstance(resp, str):
         return None
     from suijin.helpers.parsing import try_parse_llm_decision
+
     decision, err = try_parse_llm_decision(resp)
     if decision and decision.get("action") in ("use_tool", "plan_tools"):
-        return {"tool": decision.get("tool_name", "unknown"),
-                "args": decision.get("tool_args", {})}
+        return {"tool": decision.get("tool_name", "unknown"), "args": decision.get("tool_args", {})}
     # Fallback: bare {"tool": ..., "args": ...} blocks (balanced-brace scan)
-    plain = re.sub(r'```(?:json)?', '', resp).strip()
-    start = plain.find('{')
+    plain = re.sub(r"```(?:json)?", "", resp).strip()
+    start = plain.find("{")
     if start != -1:
         depth = 0
         for i in range(start, len(plain)):
-            if plain[i] == '{':
+            if plain[i] == "{":
                 depth += 1
-            elif plain[i] == '}':
+            elif plain[i] == "}":
                 depth -= 1
                 if depth == 0:
                     try:
-                        data = json.loads(plain[start:i+1])
+                        data = json.loads(plain[start : i + 1])
                         if isinstance(data, dict) and "tool" in data:
                             return data
                     except Exception:
@@ -325,6 +386,7 @@ def _action_trail_context():
     """Recent audit-trail summary for prompt context (was: get_action_trail_context)."""
     try:
         from suijin.tools.audit_trail import get_audit_json
+
         trail = get_audit_json()
         iters = trail.get("iterations", [])[-5:] if trail else []
         if not iters:
@@ -361,13 +423,18 @@ def _tutorial_knowledge():
 def _host_os_directive():
     """Host OS directive for tool syntax (was: get_host_os_directive)."""
     import platform
+
     system = platform.system()
     if system == "Darwin":
-        return ("\n\n# HOST OS DIRECTIVE\nYou run on macOS. Use BSD tools "
-                "(nmap, curl, python3). brew paths are on PATH. No apt/yum.")
+        return (
+            "\n\n# HOST OS DIRECTIVE\nYou run on macOS. Use BSD tools "
+            "(nmap, curl, python3). brew paths are on PATH. No apt/yum."
+        )
     if system == "Linux":
-        return ("\n\n# HOST OS DIRECTIVE\nYou run on Linux. Use GNU tools "
-                "(nmap, curl, python3). Prefer python3 scripts over shell.")
+        return (
+            "\n\n# HOST OS DIRECTIVE\nYou run on Linux. Use GNU tools "
+            "(nmap, curl, python3). Prefer python3 scripts over shell."
+        )
     return "\n\n# HOST OS DIRECTIVE\nYou run on an unknown OS. Use portable tools."
 
 
@@ -401,12 +468,33 @@ def run_fugu(config, objective, generate_fn, api_key=None):
         console.print("[yellow]Planner returned empty — using default 3-phase plan.[/yellow]")
         plan_data = {
             "phases": [
-                {"id":"phase-1","role":"recon","objective":"Scan target, enumerate services, search CVEs",
-                 "depends_on":[],"tools":["nmap_scan","gobuster_dir","search_cve"],"success_criteria":"At least 3 services identified and CVEs searched","max_turns":8},
-                {"id":"phase-2","role":"exploit","objective":"Exploit discovered vulnerabilities",
-                 "depends_on":["phase-1"],"tools":["sqlmap_scan","msf_run","hydra_brute"],"success_criteria":"At least 1 shell/session obtained or flag captured","max_turns":10},
-                {"id":"phase-3","role":"report","objective":"Compile findings, capture flag",
-                 "depends_on":["phase-2"],"tools":["write_note","claim_flag","write_file"],"success_criteria":"Flag captured","max_turns":5},
+                {
+                    "id": "phase-1",
+                    "role": "recon",
+                    "objective": "Scan target, enumerate services, search CVEs",
+                    "depends_on": [],
+                    "tools": ["nmap_scan", "gobuster_dir", "search_cve"],
+                    "success_criteria": "At least 3 services identified and CVEs searched",
+                    "max_turns": 8,
+                },
+                {
+                    "id": "phase-2",
+                    "role": "exploit",
+                    "objective": "Exploit discovered vulnerabilities",
+                    "depends_on": ["phase-1"],
+                    "tools": ["sqlmap_scan", "msf_run", "hydra_brute"],
+                    "success_criteria": "At least 1 shell/session obtained or flag captured",
+                    "max_turns": 10,
+                },
+                {
+                    "id": "phase-3",
+                    "role": "report",
+                    "objective": "Compile findings, capture flag",
+                    "depends_on": ["phase-2"],
+                    "tools": ["write_note", "claim_flag", "write_file"],
+                    "success_criteria": "Flag captured",
+                    "max_turns": 5,
+                },
             ]
         }
 
@@ -425,7 +513,9 @@ def run_fugu(config, objective, generate_fn, api_key=None):
             blocked = [p for p in task_graph.phases if p["status"] == "blocked"]
             if pending:
                 if blocked:
-                    console.print(f"[yellow]⚠️  {len(blocked)} phase(s) blocked by failed dependencies. Continuing with remaining phases.[/yellow]")
+                    console.print(
+                        f"[yellow]⚠️  {len(blocked)} phase(s) blocked by failed dependencies. Continuing with remaining phases.[/yellow]"
+                    )
                 console.print(f"[dim]Waiting for dependencies: {[p['depends_on'] for p in pending]}[/dim]")
                 time.sleep(1)
                 continue
@@ -437,7 +527,7 @@ def run_fugu(config, objective, generate_fn, api_key=None):
             role_def = ROLES.get(phase["role"], ROLES["recon"])
             task_graph.mark(phase["id"], "in_progress")
 
-            console.print(f"\n[bold cyan]{'─'*50}[/bold cyan]")
+            console.print(f"\n[bold cyan]{'─' * 50}[/bold cyan]")
             console.print(f"[bold]🐡 Phase: {phase['id']} — {role_def['name']}[/bold]")
             console.print(f"[dim]Objective: {phase['objective']}[/dim]")
 
@@ -473,7 +563,7 @@ def run_fugu(config, objective, generate_fn, api_key=None):
 
                 messages.append({"role": "assistant", "content": resp})
 
-                plain = re.sub(r'```(?:json)?.*?```', '', resp, flags=re.DOTALL).strip()
+                plain = re.sub(r"```(?:json)?.*?```", "", resp, flags=re.DOTALL).strip()
                 if plain:
                     console.print(Panel(plain[:500], title=f"{role_def['name']} Log", border_style="blue"))
 
@@ -503,19 +593,23 @@ def run_fugu(config, objective, generate_fn, api_key=None):
                             if anom.get("anomaly"):
                                 console.print("[yellow]  [Oracle] Anomaly — diagnosing...[/yellow]")
                                 verdict, added = oracle_mod.diagnose(
-                                    res, hs, str(t_args)[:200], str(t_args.get("url", "")), config,
-                                    lambda m,u,h=None,b=None: tools.http_request(m,u,h,b),
-                                    lambda c,timeout=None: tools.execute_terminal(c,timeout=timeout),
+                                    res,
+                                    hs,
+                                    str(t_args)[:200],
+                                    str(t_args.get("url", "")),
+                                    config,
+                                    lambda m, u, h=None, b=None: tools.http_request(m, u, h, b),
+                                    lambda c, timeout=None: tools.execute_terminal(c, timeout=timeout),
                                 )
                                 if verdict:
-                                    messages.append({"role":"user","content":verdict})
+                                    messages.append({"role": "user", "content": verdict})
                         except Exception:
                             pass
 
                     if t_name == "claim_flag":
                         break
                 else:
-                    messages.append({"role":"user","content":"SYSTEM: No valid tool block. Continue or finalize."})
+                    messages.append({"role": "user", "content": "SYSTEM: No valid tool block. Continue or finalize."})
 
                 # Supervisor check every 5 turns
                 if turn % 5 == 0:
@@ -549,7 +643,7 @@ def run_fugu(config, objective, generate_fn, api_key=None):
             break
 
     # Summary of final phase states
-    console.print(f"\n[bold cyan]{'─'*50}[/bold cyan]")
+    console.print(f"\n[bold cyan]{'─' * 50}[/bold cyan]")
     console.print(Panel(task_graph.summary(), title="Final Phase Status"))
     console.print(Panel(chainer.get_chain_summary(), title="Attack Chains"))
     if flag_captured:

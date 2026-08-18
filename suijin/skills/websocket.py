@@ -1,6 +1,7 @@
 """
 WebSocket Attack Skill Prompt.
 """
+
 WEBSOCKET_SKILL_PROMPT = """
 ## ATTACK SKILL: WEBSOCKET ATTACKS
 

@@ -1,6 +1,7 @@
 """
 CORS Misconfiguration Attack Skill Prompt.
 """
+
 CORS_SKILL_PROMPT = """
 ## ATTACK SKILL: CORS MISCONFIGURATION
 

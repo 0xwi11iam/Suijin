@@ -16,6 +16,7 @@ try:
     from rich.console import Console
     from rich.panel import Panel
     from rich.table import Table
+
     RICH = True
 except ImportError:
     RICH = False
@@ -27,11 +28,12 @@ REPORTS_DIR = BASE_DIR / "compliance_reports"
 REPORTS_DIR.mkdir(exist_ok=True)
 
 # Risk thresholds
-RISK_HIGH   = 0.7
+RISK_HIGH = 0.7
 RISK_MEDIUM = 0.4
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
+
 
 def _load_log() -> list:
     if AUDIT_LOG.exists():
@@ -57,23 +59,25 @@ def _risk_label(score: float) -> str:
 
 # ── core analysis ─────────────────────────────────────────────────────────────
 
+
 def analyse_log(entries: list) -> dict:
     """
     Crunch audit entries into compliance-relevant stats.
     """
-    total         = len(entries)
-    high_risk     = [e for e in entries if e.get("risk_score", 0) >= RISK_HIGH]
-    medium_risk   = [e for e in entries if RISK_MEDIUM <= e.get("risk_score", 0) < RISK_HIGH]
-    low_risk      = [e for e in entries if e.get("risk_score", 0) < RISK_MEDIUM]
+    total = len(entries)
+    high_risk = [e for e in entries if e.get("risk_score", 0) >= RISK_HIGH]
+    medium_risk = [e for e in entries if RISK_MEDIUM <= e.get("risk_score", 0) < RISK_HIGH]
+    low_risk = [e for e in entries if e.get("risk_score", 0) < RISK_MEDIUM]
 
-    denied        = [e for e in entries if "DENIED" in e.get("result", "").upper()
-                                         or "ACCESS DENIED" in e.get("action", "").upper()]
-    red_ops       = [e for e in entries if e.get("mode") == "red"]
-    blue_ops      = [e for e in entries if e.get("mode") == "blue"]
+    denied = [
+        e for e in entries if "DENIED" in e.get("result", "").upper() or "ACCESS DENIED" in e.get("action", "").upper()
+    ]
+    red_ops = [e for e in entries if e.get("mode") == "red"]
+    blue_ops = [e for e in entries if e.get("mode") == "blue"]
 
-    users         = defaultdict(int)
-    targets       = defaultdict(int)
-    action_types  = defaultdict(int)
+    users = defaultdict(int)
+    targets = defaultdict(int)
+    action_types = defaultdict(int)
 
     for e in entries:
         users[e.get("user", "unknown")] += 1
@@ -81,30 +85,28 @@ def analyse_log(entries: list) -> dict:
         action_type = e.get("action", "")[:30]
         action_types[action_type] += 1
 
-    avg_risk = (
-        sum(e.get("risk_score", 0) for e in entries) / total
-        if total else 0.0
-    )
+    avg_risk = sum(e.get("risk_score", 0) for e in entries) / total if total else 0.0
 
     return {
-        "total_actions"      : total,
-        "high_risk_count"    : len(high_risk),
-        "medium_risk_count"  : len(medium_risk),
-        "low_risk_count"     : len(low_risk),
-        "denied_access"      : len(denied),
-        "red_team_ops"       : len(red_ops),
-        "blue_team_ops"      : len(blue_ops),
-        "unique_users"       : len(users),
-        "unique_targets"     : len(targets),
-        "avg_risk_score"     : round(avg_risk, 3),
-        "top_users"          : dict(sorted(users.items(), key=lambda x: -x[1])[:5]),
-        "top_targets"        : dict(sorted(targets.items(), key=lambda x: -x[1])[:5]),
-        "high_risk_entries"  : high_risk,
-        "denied_entries"     : denied,
+        "total_actions": total,
+        "high_risk_count": len(high_risk),
+        "medium_risk_count": len(medium_risk),
+        "low_risk_count": len(low_risk),
+        "denied_access": len(denied),
+        "red_team_ops": len(red_ops),
+        "blue_team_ops": len(blue_ops),
+        "unique_users": len(users),
+        "unique_targets": len(targets),
+        "avg_risk_score": round(avg_risk, 3),
+        "top_users": dict(sorted(users.items(), key=lambda x: -x[1])[:5]),
+        "top_targets": dict(sorted(targets.items(), key=lambda x: -x[1])[:5]),
+        "high_risk_entries": high_risk,
+        "denied_entries": denied,
     }
 
 
 # ── report generation ─────────────────────────────────────────────────────────
+
 
 def generate_compliance_report(
     api_key: str = None,
@@ -121,12 +123,12 @@ def generate_compliance_report(
     framework : "SOC2" | "HIPAA" | "GENERAL"
     export_json / export_txt : write files to compliance_reports/
     """
-    keys    = _load_keys()
+    keys = _load_keys()
     entries = _load_log()
 
     # Scope to user if not admin
     if api_key and keys.get(api_key, {}).get("role") != "admin":
-        user    = keys.get(api_key, {}).get("name", "unknown")
+        user = keys.get(api_key, {}).get("name", "unknown")
         entries = [e for e in entries if e.get("user") == user]
 
     stats = analyse_log(entries)
@@ -135,22 +137,19 @@ def generate_compliance_report(
     controls = _evaluate_controls(stats, framework)
 
     report = {
-        "report_id"        : f"SUIJIN-{framework}-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
-        "generated_at"     : datetime.now().isoformat(),
-        "framework"        : framework,
-        "period"           : _get_period(entries),
-        "statistics"       : stats,
-        "controls"         : controls,
-        "overall_status"   : _overall_status(controls),
-        "recommendations"  : _recommendations(stats, controls),
+        "report_id": f"SUIJIN-{framework}-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
+        "generated_at": datetime.now().isoformat(),
+        "framework": framework,
+        "period": _get_period(entries),
+        "statistics": stats,
+        "controls": controls,
+        "overall_status": _overall_status(controls),
+        "recommendations": _recommendations(stats, controls),
     }
 
     # Remove bulky sub-lists from the JSON export
     report_clean = {k: v for k, v in report.items() if k not in ("statistics",)}
-    report_clean["statistics"] = {
-        k: v for k, v in stats.items()
-        if k not in ("high_risk_entries", "denied_entries")
-    }
+    report_clean["statistics"] = {k: v for k, v in stats.items() if k not in ("high_risk_entries", "denied_entries")}
 
     if export_json:
         path = REPORTS_DIR / f"{report['report_id']}.json"
@@ -170,73 +169,83 @@ def _get_period(entries: list) -> dict:
     timestamps = [e.get("timestamp", "") for e in entries if e.get("timestamp")]
     return {
         "start": min(timestamps)[:19] if timestamps else "N/A",
-        "end"  : max(timestamps)[:19] if timestamps else "N/A",
+        "end": max(timestamps)[:19] if timestamps else "N/A",
     }
 
 
 # ── control evaluation ────────────────────────────────────────────────────────
 
+
 def _evaluate_controls(stats: dict, framework: str) -> list:
     controls = []
 
     # Access control
-    controls.append({
-        "id"         : "AC-1",
-        "name"       : "Access Control Policy",
-        "status"     : "PASS" if stats["denied_access"] >= 0 else "FAIL",
-        "detail"     : f"{stats['denied_access']} unauthorised access attempts blocked.",
-        "framework"  : framework,
-    })
+    controls.append(
+        {
+            "id": "AC-1",
+            "name": "Access Control Policy",
+            "status": "PASS" if stats["denied_access"] >= 0 else "FAIL",
+            "detail": f"{stats['denied_access']} unauthorised access attempts blocked.",
+            "framework": framework,
+        }
+    )
 
     # Audit logging
-    controls.append({
-        "id"         : "AU-1",
-        "name"       : "Audit Logging",
-        "status"     : "PASS" if stats["total_actions"] > 0 else "FAIL",
-        "detail"     : f"{stats['total_actions']} actions recorded in audit trail.",
-        "framework"  : framework,
-    })
+    controls.append(
+        {
+            "id": "AU-1",
+            "name": "Audit Logging",
+            "status": "PASS" if stats["total_actions"] > 0 else "FAIL",
+            "detail": f"{stats['total_actions']} actions recorded in audit trail.",
+            "framework": framework,
+        }
+    )
 
     # Risk monitoring
-    high_pct = (
-        stats["high_risk_count"] / stats["total_actions"] * 100
-        if stats["total_actions"] else 0
+    high_pct = stats["high_risk_count"] / stats["total_actions"] * 100 if stats["total_actions"] else 0
+    controls.append(
+        {
+            "id": "RA-1",
+            "name": "Risk Assessment",
+            "status": "WARN" if high_pct > 20 else "PASS",
+            "detail": f"{high_pct:.1f}% of actions classified HIGH risk (avg score {stats['avg_risk_score']}).",
+            "framework": framework,
+        }
     )
-    controls.append({
-        "id"         : "RA-1",
-        "name"       : "Risk Assessment",
-        "status"     : "WARN" if high_pct > 20 else "PASS",
-        "detail"     : f"{high_pct:.1f}% of actions classified HIGH risk (avg score {stats['avg_risk_score']}).",
-        "framework"  : framework,
-    })
 
     # Incident response
-    controls.append({
-        "id"         : "IR-1",
-        "name"       : "Incident Response",
-        "status"     : "PASS" if stats["blue_team_ops"] > 0 else "WARN",
-        "detail"     : f"{stats['blue_team_ops']} blue-team defensive operations logged.",
-        "framework"  : framework,
-    })
+    controls.append(
+        {
+            "id": "IR-1",
+            "name": "Incident Response",
+            "status": "PASS" if stats["blue_team_ops"] > 0 else "WARN",
+            "detail": f"{stats['blue_team_ops']} blue-team defensive operations logged.",
+            "framework": framework,
+        }
+    )
 
     # Penetration testing (red team)
-    controls.append({
-        "id"         : "PT-1",
-        "name"       : "Penetration Testing",
-        "status"     : "PASS" if stats["red_team_ops"] > 0 else "INFO",
-        "detail"     : f"{stats['red_team_ops']} authorised red-team operations conducted.",
-        "framework"  : framework,
-    })
+    controls.append(
+        {
+            "id": "PT-1",
+            "name": "Penetration Testing",
+            "status": "PASS" if stats["red_team_ops"] > 0 else "INFO",
+            "detail": f"{stats['red_team_ops']} authorised red-team operations conducted.",
+            "framework": framework,
+        }
+    )
 
     # HIPAA extras
     if framework == "HIPAA":
-        controls.append({
-            "id"         : "HIPAA-164.312(b)",
-            "name"       : "Activity Review",
-            "status"     : "PASS",
-            "detail"     : "All agent activities logged with user identity and timestamp.",
-            "framework"  : "HIPAA",
-        })
+        controls.append(
+            {
+                "id": "HIPAA-164.312(b)",
+                "name": "Activity Review",
+                "status": "PASS",
+                "detail": "All agent activities logged with user identity and timestamp.",
+                "framework": "HIPAA",
+            }
+        )
 
     return controls
 
@@ -253,13 +262,9 @@ def _overall_status(controls: list) -> str:
 def _recommendations(stats: dict, controls: list) -> list:
     recs = []
     if stats["high_risk_count"] > 0:
-        recs.append(
-            f"Review {stats['high_risk_count']} HIGH-risk actions and verify they were authorised."
-        )
+        recs.append(f"Review {stats['high_risk_count']} HIGH-risk actions and verify they were authorised.")
     if stats["denied_access"] > 0:
-        recs.append(
-            f"{stats['denied_access']} access-denied events detected — investigate for intrusion attempts."
-        )
+        recs.append(f"{stats['denied_access']} access-denied events detected — investigate for intrusion attempts.")
     if stats["blue_team_ops"] == 0:
         recs.append("No blue-team operations recorded — enable active defence monitoring.")
     if stats["avg_risk_score"] >= RISK_HIGH:
@@ -270,6 +275,7 @@ def _recommendations(stats: dict, controls: list) -> list:
 
 
 # ── text export ───────────────────────────────────────────────────────────────
+
 
 def _write_txt_report(report: dict, path: Path):
     lines = [
@@ -319,59 +325,63 @@ def _write_txt_report(report: dict, path: Path):
 
 # ── console display ───────────────────────────────────────────────────────────
 
+
 def print_compliance_report(report: dict):
     if not RICH:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"SUIJIN COMPLIANCE REPORT — {report['framework']}")
         print(f"Status: {report['overall_status']}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         for c in report["controls"]:
             print(f"[{c['status']}] {c['id']} {c['name']}: {c['detail']}")
         return
 
     console = Console()
     status_colour = {
-        "COMPLIANT"    : "bold green",
-        "PARTIAL"      : "bold yellow",
+        "COMPLIANT": "bold green",
+        "PARTIAL": "bold yellow",
         "NON-COMPLIANT": "bold red",
     }.get(report["overall_status"], "white")
 
-    console.print(Panel(
-        f"[{status_colour}]{report['overall_status']}[/{status_colour}]\n"
-        f"[dim]Report ID: {report['report_id']}[/dim]\n"
-        f"[dim]Generated: {report['generated_at'][:19]}[/dim]",
-        title=f"Suijin {report['framework']} Compliance Report",
-        border_style="cyan",
-    ))
+    console.print(
+        Panel(
+            f"[{status_colour}]{report['overall_status']}[/{status_colour}]\n"
+            f"[dim]Report ID: {report['report_id']}[/dim]\n"
+            f"[dim]Generated: {report['generated_at'][:19]}[/dim]",
+            title=f"Suijin {report['framework']} Compliance Report",
+            border_style="cyan",
+        )
+    )
 
     s = report["statistics"]
     stat_table = Table(show_header=False, box=None, padding=(0, 2))
-    stat_table.add_column("Key",   style="dim")
+    stat_table.add_column("Key", style="dim")
     stat_table.add_column("Value", style="bold white")
     rows = [
-        ("Total actions",     str(s["total_actions"])),
-        ("High-risk",         f"[red]{s['high_risk_count']}[/red]"),
-        ("Medium-risk",       f"[yellow]{s['medium_risk_count']}[/yellow]"),
-        ("Low-risk",          f"[green]{s['low_risk_count']}[/green]"),
-        ("Access denied",     str(s["denied_access"])),
-        ("Red-team ops",      str(s["red_team_ops"])),
-        ("Blue-team ops",     str(s["blue_team_ops"])),
-        ("Avg risk score",    str(s["avg_risk_score"])),
+        ("Total actions", str(s["total_actions"])),
+        ("High-risk", f"[red]{s['high_risk_count']}[/red]"),
+        ("Medium-risk", f"[yellow]{s['medium_risk_count']}[/yellow]"),
+        ("Low-risk", f"[green]{s['low_risk_count']}[/green]"),
+        ("Access denied", str(s["denied_access"])),
+        ("Red-team ops", str(s["red_team_ops"])),
+        ("Blue-team ops", str(s["blue_team_ops"])),
+        ("Avg risk score", str(s["avg_risk_score"])),
     ]
     for k, v in rows:
         stat_table.add_row(k, v)
     console.print(Panel(stat_table, title="Statistics", border_style="blue"))
 
     ctrl_table = Table(title="Control Checks", border_style="magenta")
-    ctrl_table.add_column("ID",     style="cyan",  no_wrap=True)
+    ctrl_table.add_column("ID", style="cyan", no_wrap=True)
     ctrl_table.add_column("Control", style="white")
-    ctrl_table.add_column("Status", style="bold",  no_wrap=True)
+    ctrl_table.add_column("Status", style="bold", no_wrap=True)
     ctrl_table.add_column("Detail", style="dim")
     colour_map = {"PASS": "green", "FAIL": "red", "WARN": "yellow", "INFO": "blue"}
     for c in report["controls"]:
         col = colour_map.get(c["status"], "white")
         ctrl_table.add_row(
-            c["id"], c["name"],
+            c["id"],
+            c["name"],
             f"[{col}]{c['status']}[/{col}]",
             c["detail"],
         )
@@ -392,26 +402,26 @@ if __name__ == "__main__":
     if not _audit_path.exists() or _audit_path.stat().st_size < 10:
         sample = [
             {
-                "timestamp" : "2026-05-13T10:00:00",
-                "user"      : "Admin",
-                "role"      : "admin",
-                "mode"      : "red",
-                "target"    : "http://127.0.0.1:5000",
-                "action"    : "SQL Injection attempt on /login",
-                "result"    : "SUCCESS",
+                "timestamp": "2026-05-13T10:00:00",
+                "user": "Admin",
+                "role": "admin",
+                "mode": "red",
+                "target": "http://127.0.0.1:5000",
+                "action": "SQL Injection attempt on /login",
+                "result": "SUCCESS",
                 "risk_score": 0.85,
-                "details"   : {}
+                "details": {},
             },
             {
-                "timestamp" : "2026-05-13T10:05:00",
-                "user"      : "Admin",
-                "role"      : "admin",
-                "mode"      : "blue",
-                "target"    : "http://127.0.0.1:5000",
-                "action"    : "Patch applied: sqli",
-                "result"    : "PATCHED",
+                "timestamp": "2026-05-13T10:05:00",
+                "user": "Admin",
+                "role": "admin",
+                "mode": "blue",
+                "target": "http://127.0.0.1:5000",
+                "action": "Patch applied: sqli",
+                "result": "PATCHED",
                 "risk_score": 0.3,
-                "details"   : {}
+                "details": {},
             },
         ]
         with open(_audit_path, "w") as f:

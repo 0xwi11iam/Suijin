@@ -15,6 +15,7 @@ Tools exposed:
 No third-party MCP package required — the protocol surface used here
 (initialize / tools/list / tools/call / ping) is small and stable.
 """
+
 import inspect
 import json
 import os
@@ -91,7 +92,15 @@ def _fallback_desc(name: str) -> str:
 
 def _py_type_to_json(ann) -> str:
     if ann in (str, int, float, bool, list, tuple, dict):
-        return {str: "string", int: "integer", float: "number", bool: "boolean", list: "array", tuple: "array", dict: "object"}[ann]
+        return {
+            str: "string",
+            int: "integer",
+            float: "number",
+            bool: "boolean",
+            list: "array",
+            tuple: "array",
+            dict: "object",
+        }[ann]
     return "string"
 
 
@@ -102,8 +111,7 @@ def _schema_from_signature(func, name: str) -> dict:
     except (TypeError, ValueError):
         sig = None
     if sig is None or any(
-        p.kind in (inspect.Parameter.VAR_KEYWORD, inspect.Parameter.VAR_POSITIONAL)
-        for p in sig.parameters.values()
+        p.kind in (inspect.Parameter.VAR_KEYWORD, inspect.Parameter.VAR_POSITIONAL) for p in sig.parameters.values()
     ):
         return {
             "type": "object",
@@ -114,7 +122,9 @@ def _schema_from_signature(func, name: str) -> dict:
     for pname, param in sig.parameters.items():
         if pname in ("self", "cls", "config", "ctx"):
             continue
-        prop = {"type": _py_type_to_json(param.annotation) if param.annotation is not inspect.Parameter.empty else "string"}
+        prop = {
+            "type": _py_type_to_json(param.annotation) if param.annotation is not inspect.Parameter.empty else "string"
+        }
         if param.default is not inspect.Parameter.empty:
             try:
                 if param.default is not None:
@@ -170,7 +180,9 @@ def _build_backend_tools():
                     "description": _fallback_desc(name),
                     "inputSchema": {
                         "type": "object",
-                        "properties": {"args": {"type": "object", "description": "Tool arguments keyed by parameter name"}},
+                        "properties": {
+                            "args": {"type": "object", "description": "Tool arguments keyed by parameter name"}
+                        },
                     },
                 }
             )
@@ -196,7 +208,7 @@ TOOLS = [
     {
         "name": "suijin_tool",
         "description": "Fallback dispatcher: run any Suijin backend tool by name "
-                       "(tool_name + args dict). Prefer the individually exposed tools.",
+        "(tool_name + args dict). Prefer the individually exposed tools.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -209,7 +221,7 @@ TOOLS = [
     {
         "name": "execute_terminal",
         "description": "Execute a shell command through the Suijin dispatch layer. "
-                       "Guardrails block destructive commands; returns the command run and its output.",
+        "Guardrails block destructive commands; returns the command run and its output.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -222,7 +234,7 @@ TOOLS = [
     {
         "name": "suijin_detect",
         "description": "Run the blue team pre-AI attack pattern detector on a request. "
-                       "Returns score + matched patterns (SQLi, XSS, SSRF, ...).",
+        "Returns score + matched patterns (SQLi, XSS, SSRF, ...).",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -237,7 +249,7 @@ TOOLS = [
     {
         "name": "suijin_kg_attacker",
         "description": "Query the blue team knowledge graph for an attacker's history "
-                       "(flags, attacks, defenses deployed against them).",
+        "(flags, attacks, defenses deployed against them).",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -271,26 +283,31 @@ def _text_content(text, is_error=False):
 
 # ── Tool implementations ──────────────────────────────────────────────
 
+
 def tool_suijin_tool(args):
     tool_name = args.get("tool_name", "")
     tool_args = args.get("args") or {}
     from suijin.tools.dispatch import route_tool
+
     return route_tool(tool_name, tool_args, {})
 
 
 def tool_execute_terminal(args):
     from suijin.tools.dispatch import execute_terminal
+
     return execute_terminal(args.get("cmd", ""), timeout=int(args.get("timeout", 30)))
 
 
 def tool_suijin_detect(args):
     from suijin.core.blue.tui.feed import _detect_obvious_attack
+
     result = _detect_obvious_attack(args.get("request") or {})
     return json.dumps(result, indent=2)
 
 
 def tool_suijin_kg_attacker(args):
     from suijin.core.blue.knowledge_graph import get_kg
+
     return json.dumps(get_kg().get_attacker_history(args.get("ip", "")), indent=2, default=str)
 
 
@@ -299,15 +316,18 @@ def tool_suijin_status(args):
     from suijin.tools.dispatch import list_route_tools
 
     tools = list_route_tools()
-    return json.dumps({
-        "server": SERVER_NAME,
-        "version": SERVER_VERSION,
-        "protocol": PROTOCOL_VERSION,
-        "blue_lab_port": BLUE_LAB_PORT,
-        "proxy_default_port": PROXY_DEFAULT_PORT,
-        "tool_count": len(tools),
-        "tools_sample": tools[:10],
-    }, indent=2)
+    return json.dumps(
+        {
+            "server": SERVER_NAME,
+            "version": SERVER_VERSION,
+            "protocol": PROTOCOL_VERSION,
+            "blue_lab_port": BLUE_LAB_PORT,
+            "proxy_default_port": PROXY_DEFAULT_PORT,
+            "tool_count": len(tools),
+            "tools_sample": tools[:10],
+        },
+        indent=2,
+    )
 
 
 TOOL_HANDLERS = {
@@ -328,11 +348,14 @@ def handle_message(msg):
     request_id = msg.get("id")
 
     if method == "initialize":
-        return _jsonrpc_result(request_id, {
-            "protocolVersion": PROTOCOL_VERSION,
-            "capabilities": {"tools": {}},
-            "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
-        })
+        return _jsonrpc_result(
+            request_id,
+            {
+                "protocolVersion": PROTOCOL_VERSION,
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
+            },
+        )
 
     if method == "notifications/initialized":
         return None  # notification — no response
@@ -355,6 +378,7 @@ def handle_message(msg):
             return _jsonrpc_result(request_id, _text_content(result))
         except Exception as e:
             import traceback
+
             traceback.print_exc(file=sys.stderr)
             return _jsonrpc_result(request_id, _text_content(f"Tool error: {e}", is_error=True))
 

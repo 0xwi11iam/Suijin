@@ -1,6 +1,7 @@
 """
 CSRF (Cross-Site Request Forgery) Attack Skill Prompt.
 """
+
 CSRF_SKILL_PROMPT = """
 ## ATTACK SKILL: CSRF (CROSS-SITE REQUEST FORGERY)
 

@@ -1,6 +1,7 @@
 """
 XSS Attack Skill Prompt.
 """
+
 XSS_SKILL_PROMPT = """
 ## ATTACK SKILL: CROSS-SITE SCRIPTING (XSS)
 

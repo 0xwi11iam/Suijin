@@ -1,6 +1,7 @@
 """
 Clickjacking Attack Skill Prompt.
 """
+
 CLICKJACKING_SKILL_PROMPT = """
 ## ATTACK SKILL: CLICKJACKING
 

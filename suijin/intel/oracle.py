@@ -85,10 +85,23 @@ def strip_response(response_text, status_code=None, headers=None):
     # 6. Build header snapshot
     header_snap = ""
     if headers:
-        important = {k.lower(): v for k, v in (headers if isinstance(headers, dict) else {}).items()
-                     if k.lower() in ("server", "x-powered-by", "content-type", "content-length",
-                                      "set-cookie", "www-authenticate", "x-frame-options",
-                                      "x-content-type-options", "cf-ray", "x-cache")}
+        important = {
+            k.lower(): v
+            for k, v in (headers if isinstance(headers, dict) else {}).items()
+            if k.lower()
+            in (
+                "server",
+                "x-powered-by",
+                "content-type",
+                "content-length",
+                "set-cookie",
+                "www-authenticate",
+                "x-frame-options",
+                "x-content-type-options",
+                "cf-ray",
+                "x-cache",
+            )
+        }
         header_snap = "\n".join(f"  {k}: {v}" for k, v in important.items())
 
     status_line = f"Status: {status_code}" if status_code is not None else ""
@@ -189,10 +202,22 @@ def detect_anomaly(response_text, status_code=None, baseline_len=None, elapsed=N
 
     # Signal 5: Error keywords in body
     error_keywords = [
-        "sql syntax", "mysql_fetch", "pg_query", "ora-", "syntax error",
-        "unclosed quotation", "stack trace", "exception", "debug mode",
-        "warning: mysql", "fatal error", "call stack", "traceback",
-        "mod_security", "request denied", "access denied",
+        "sql syntax",
+        "mysql_fetch",
+        "pg_query",
+        "ora-",
+        "syntax error",
+        "unclosed quotation",
+        "stack trace",
+        "exception",
+        "debug mode",
+        "warning: mysql",
+        "fatal error",
+        "call stack",
+        "traceback",
+        "mod_security",
+        "request denied",
+        "access denied",
     ]
     lowered = (response_text or "").lower()[:2000]
     matched_errors = [kw for kw in error_keywords if kw in lowered]
@@ -298,8 +323,7 @@ def generate_hypotheses(diagnostic_snippet, original_payload="", config=None):
     try:
         # Use a cheap model for fast hypothesis generation
         supervisor_model = config.get("supervisor_model_id", config.get("sentinel_model_id")) if config else None
-        resp = _generate(messages, config, model_id=supervisor_model,
-                         temperature=0.1, max_tokens=600)
+        resp = _generate(messages, config, model_id=supervisor_model, temperature=0.1, max_tokens=600)
     except Exception as e:
         console.print(f"[yellow][Oracle] Hypothesis model failed: {e}[/yellow]")
         return _heuristic_hypotheses(diagnostic_snippet, original_payload)
@@ -318,15 +342,17 @@ def generate_hypotheses(diagnostic_snippet, original_payload="", config=None):
         for i, h in enumerate(hypotheses[:3]):
             if not isinstance(h, dict):
                 continue
-            valid.append({
-                "id": h.get("id", f"H{i+1}"),
-                "hypothesis": h.get("hypothesis", "Unknown"),
-                "confidence": float(h.get("confidence", 0.5)),
-                "validation_payload": h.get("validation_payload", ""),
-                "validation_tool": h.get("validation_tool", "http_request"),
-                "expected_confirm": h.get("expected_confirm", ""),
-                "expected_disconfirm": h.get("expected_disconfirm", ""),
-            })
+            valid.append(
+                {
+                    "id": h.get("id", f"H{i + 1}"),
+                    "hypothesis": h.get("hypothesis", "Unknown"),
+                    "confidence": float(h.get("confidence", 0.5)),
+                    "validation_payload": h.get("validation_payload", ""),
+                    "validation_tool": h.get("validation_tool", "http_request"),
+                    "expected_confirm": h.get("expected_confirm", ""),
+                    "expected_disconfirm": h.get("expected_disconfirm", ""),
+                }
+            )
         return valid if valid else _heuristic_hypotheses(diagnostic_snippet, original_payload)
     except Exception:
         return _heuristic_hypotheses(diagnostic_snippet, original_payload)
@@ -344,64 +370,74 @@ def _heuristic_hypotheses(snippet, original_payload):
 
     # H1: WAF signature match
     if any(kw in lowered for kw in ("403", "406", "denied", "blocked", "mod_security", "waf")):
-        hypotheses.append({
-            "id": "H1",
-            "hypothesis": "WAF/IPS signature match — the payload triggered a security rule",
-            "confidence": 0.85,
-            "validation_payload": _make_synonym_payload(payload),
-            "validation_tool": "http_request",
-            "expected_confirm": "Response changes from blocked to accepted (different status or body)",
-            "expected_disconfirm": "Response remains identical — WAF might block entire parameter",
-        })
+        hypotheses.append(
+            {
+                "id": "H1",
+                "hypothesis": "WAF/IPS signature match — the payload triggered a security rule",
+                "confidence": 0.85,
+                "validation_payload": _make_synonym_payload(payload),
+                "validation_tool": "http_request",
+                "expected_confirm": "Response changes from blocked to accepted (different status or body)",
+                "expected_disconfirm": "Response remains identical — WAF might block entire parameter",
+            }
+        )
 
     # H2: Backend syntax error
     if any(kw in lowered for kw in ("500", "syntax", "error", "exception", "traceback", "mysql", "sql")):
-        hypotheses.append({
-            "id": "H2",
-            "hypothesis": "Backend syntax error — malformed SQL/command crashed the query parser",
-            "confidence": 0.75,
-            "validation_payload": _make_escaped_payload(payload),
-            "validation_tool": "http_request",
-            "expected_confirm": "500 disappears when payload is properly escaped/quoted",
-            "expected_disconfirm": "500 persists regardless of quoting — not a syntax error",
-        })
+        hypotheses.append(
+            {
+                "id": "H2",
+                "hypothesis": "Backend syntax error — malformed SQL/command crashed the query parser",
+                "confidence": 0.75,
+                "validation_payload": _make_escaped_payload(payload),
+                "validation_tool": "http_request",
+                "expected_confirm": "500 disappears when payload is properly escaped/quoted",
+                "expected_disconfirm": "500 persists regardless of quoting — not a syntax error",
+            }
+        )
 
     # H3: Rate limiting
     if any(kw in lowered for kw in ("429", "timeout", "retry", "too many", "rate", "throttl")):
-        hypotheses.append({
-            "id": "H3",
-            "hypothesis": "Rate limiting — too many requests triggered server throttling",
-            "confidence": 0.80,
-            "validation_payload": "[wait 10 seconds, retry original payload]",
-            "validation_tool": "execute_terminal",
-            "expected_confirm": "After waiting, the original payload succeeds again",
-            "expected_disconfirm": "Response stays the same after waiting — not rate limiting",
-        })
+        hypotheses.append(
+            {
+                "id": "H3",
+                "hypothesis": "Rate limiting — too many requests triggered server throttling",
+                "confidence": 0.80,
+                "validation_payload": "[wait 10 seconds, retry original payload]",
+                "validation_tool": "execute_terminal",
+                "expected_confirm": "After waiting, the original payload succeeds again",
+                "expected_disconfirm": "Response stays the same after waiting — not rate limiting",
+            }
+        )
 
     # If we didn't have enough specific signals, add a generic H1
     if not hypotheses:
-        hypotheses.append({
-            "id": "H1",
-            "hypothesis": "Input validation/sanitization — special characters stripped or escaped",
-            "confidence": 0.60,
-            "validation_payload": _make_synonym_payload(payload),
-            "validation_tool": "http_request",
-            "expected_confirm": "Synonym payload with different encoding bypasses the filter",
-            "expected_disconfirm": "Response identical — filter might be on parameter name not value",
-        })
+        hypotheses.append(
+            {
+                "id": "H1",
+                "hypothesis": "Input validation/sanitization — special characters stripped or escaped",
+                "confidence": 0.60,
+                "validation_payload": _make_synonym_payload(payload),
+                "validation_tool": "http_request",
+                "expected_confirm": "Synonym payload with different encoding bypasses the filter",
+                "expected_disconfirm": "Response identical — filter might be on parameter name not value",
+            }
+        )
 
     # Pad to 3 if needed
     while len(hypotheses) < 3:
         n = len(hypotheses) + 1
-        hypotheses.append({
-            "id": f"H{n}",
-            "hypothesis": "Encoding mismatch — character encoding caused truncation or garbling",
-            "confidence": 0.40,
-            "validation_payload": _make_encoded_payload(payload),
-            "validation_tool": "http_request",
-            "expected_confirm": "URL-encoded version of payload produces different response",
-            "expected_disconfirm": "Response identical — encoding is not the issue",
-        })
+        hypotheses.append(
+            {
+                "id": f"H{n}",
+                "hypothesis": "Encoding mismatch — character encoding caused truncation or garbling",
+                "confidence": 0.40,
+                "validation_payload": _make_encoded_payload(payload),
+                "validation_tool": "http_request",
+                "expected_confirm": "URL-encoded version of payload produces different response",
+                "expected_disconfirm": "Response identical — encoding is not the issue",
+            }
+        )
 
     return hypotheses[:3]
 
@@ -411,7 +447,7 @@ def _make_synonym_payload(original):
     if not original:
         return "' OR '1'='1"
     # Swap SQL syntax
-    modified = original.replace("OR 1=1", "OR 2=2").replace("' OR '1'='1", "\" OR \"1\"=\"1\"")
+    modified = original.replace("OR 1=1", "OR 2=2").replace("' OR '1'='1", '" OR "1"="1"')
     modified = modified.replace("--", "#").replace("' --", "'--")
     if modified == original:
         modified = original.replace("SELECT", "select").replace("UNION", "union")
@@ -428,6 +464,7 @@ def _make_escaped_payload(original):
 def _make_encoded_payload(original):
     """Create a URL-encoded version."""
     import urllib.parse
+
     if not original:
         return "%27%20OR%201%3D1%20--"
     return urllib.parse.quote(original)
@@ -469,8 +506,13 @@ def verify_hypothesis(hypothesis, target_url, http_request_fn, execute_terminal_
     try:
         if tool == "http_request":
             from urllib.parse import urljoin
+
             url = urljoin(target_url, "/") if target_url else "http://127.0.0.1:5000/"
-            result = http_request_fn("POST", url, body=payload) if "=" in payload else http_request_fn("GET", url + "?" + payload)
+            result = (
+                http_request_fn("POST", url, body=payload)
+                if "=" in payload
+                else http_request_fn("GET", url + "?" + payload)
+            )
         else:
             result = execute_terminal_fn(payload, timeout=15)
     except Exception as e:
@@ -528,8 +570,7 @@ def _check_evidence(result, confirm_clue, disconfirm_clue, payload):
 # ---------------------------------------------------------------------------
 # Top-level diagnostic pipeline
 # ---------------------------------------------------------------------------
-def diagnose(response_text, status_code, original_payload, target_url, config,
-             http_request_fn, execute_terminal_fn):
+def diagnose(response_text, status_code, original_payload, target_url, config, http_request_fn, execute_terminal_fn):
     """Full diagnostic pipeline: detect → hypothesize → verify → record.
 
     Called from redteamer.py when a tool result looks anomalous.
@@ -548,9 +589,7 @@ def diagnose(response_text, status_code, original_payload, target_url, config,
     signals = anomaly.get("signals", [])
     severity = anomaly.get("severity", "low")
 
-    console.print(
-        f"[bold yellow][Oracle] Anomaly detected [{severity}]: {', '.join(signals[:4])}[/bold yellow]"
-    )
+    console.print(f"[bold yellow][Oracle] Anomaly detected [{severity}]: {', '.join(signals[:4])}[/bold yellow]")
 
     # Step 2: Strip response for token efficiency
     snippet = strip_response(response_text, status_code=status_code)
@@ -588,31 +627,29 @@ def diagnose(response_text, status_code, original_payload, target_url, config,
                 evidence=result["evidence"][:300],
                 confidence=0.95,
             )
-            knowledge_added.append({
-                "type": constraint_type,
-                "rule": h["hypothesis"][:150],
-                "id": h["id"],
-            })
+            knowledge_added.append(
+                {
+                    "type": constraint_type,
+                    "rule": h["hypothesis"][:150],
+                    "id": h["id"],
+                }
+            )
 
             verdict_lines.append(
-                f"✅ {h['id']} CONFIRMED: {h['hypothesis']}\n"
-                f"   Evidence: {result['evidence'][:200]}\n"
+                f"✅ {h['id']} CONFIRMED: {h['hypothesis']}\n   Evidence: {result['evidence'][:200]}\n"
             )
             console.print(f"[green][Oracle] {h['id']} CONFIRMED ✓[/green]")
 
             # Record the finding as a constraint
             break  # Stop after first confirmed hypothesis
         else:
-            verdict_lines.append(
-                f"❌ {h['id']} DISPROVEN: {h['hypothesis']}\n"
-            )
+            verdict_lines.append(f"❌ {h['id']} DISPROVEN: {h['hypothesis']}\n")
             console.print(f"[red][Oracle] {h['id']} disproven ✗[/red]")
 
     # Step 5: If all disproven, flag as false positive / unknown anomaly
     if not verified_any:
         verdict_lines.append(
-            "\n⚠️  ALL HYPOTHESES DISPROVEN — unknown anomaly. "
-            "Falling back to baseline methodology. Supervisor alerted."
+            "\n⚠️  ALL HYPOTHESES DISPROVEN — unknown anomaly. Falling back to baseline methodology. Supervisor alerted."
         )
         kg.add_constraint(
             target=target_url or "unknown",
@@ -646,7 +683,9 @@ def _map_hypothesis_to_constraint(hypothesis_text):
         return "behavior"
     return "behavior"
 
+
 # ── Async wrapper for agent graph integration ─────────────────────────────────
+
 
 async def generate_hypotheses_async(
     diagnostic_snippet: str,
@@ -667,9 +706,11 @@ async def generate_hypotheses_async(
             )
             if response:
                 import re as _re
+
                 m = _re.search(r"\[[\s\S]*\]", str(response))
                 if m:
                     import json as _json
+
                     hypotheses = _json.loads(m.group(0))
                     if isinstance(hypotheses, list) and len(hypotheses) > 0:
                         return hypotheses[:3]

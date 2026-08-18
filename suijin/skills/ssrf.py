@@ -1,6 +1,7 @@
 """
 SSRF Attack Skill Prompt.
 """
+
 SSRF_SKILL_PROMPT = """
 ## ATTACK SKILL: SERVER-SIDE REQUEST FORGERY (SSRF)
 

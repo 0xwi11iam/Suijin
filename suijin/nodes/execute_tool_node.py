@@ -1,4 +1,5 @@
 """Execute tool node — AI chooses sync or background (\"background\": true)."""
+
 import logging
 import threading
 import time as _time
@@ -20,8 +21,13 @@ def _spawn_background_job(tool_name: str, tool_args: dict, route_tool_fn) -> str
     job_id = uuid.uuid4().hex[:8]
     with _job_lock:
         _jobs[job_id] = {
-            "job_id": job_id, "tool_name": tool_name, "tool_args": dict(tool_args),
-            "status": "running", "started_at": _time.time(), "output": "", "error": None,
+            "job_id": job_id,
+            "tool_name": tool_name,
+            "tool_args": dict(tool_args),
+            "status": "running",
+            "started_at": _time.time(),
+            "output": "",
+            "error": None,
         }
 
     def _run():
@@ -70,19 +76,32 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
     if tool_name == "ask_operator":
         question = tool_args.get("question", "Need guidance. Continue?")
         step_data.update({"tool_output": question, "success": True, "error_class": "ask_operator"})
-        return {"_current_step": step_data, "_tool_result": {"success": True, "output": question},
-                "_ask_operator": True,
-                "messages": [{"role": "user", "content": f"AGENT QUESTION: {question}"}]}
+        return {
+            "_current_step": step_data,
+            "_tool_result": {"success": True, "output": question},
+            "_ask_operator": True,
+            "messages": [{"role": "user", "content": f"AGENT QUESTION: {question}"}],
+        }
 
     # ── Background spawn ──────────────────────────────────────────────
     if want_bg:
         job_id = _spawn_background_job(tool_name, tool_args, route_tool_fn)
         cmd = str(tool_args.get("cmd", tool_args.get("command", "")))[:150]
         output = f"BG JOB {job_id}: {tool_name} {cmd}\nCheck: job_status {job_id} | job_wait {job_id}"
-        step_data.update({"tool_output": output, "success": True, "job_id": job_id,
-                          "duration_ms": 0, "error_class": "background_spawn"})
-        return {"_current_step": step_data, "_tool_result": {"success": True, "output": output},
-                "messages": [{"role": "user", "content": f"BG JOB {job_id}: {tool_name}"}]}
+        step_data.update(
+            {
+                "tool_output": output,
+                "success": True,
+                "job_id": job_id,
+                "duration_ms": 0,
+                "error_class": "background_spawn",
+            }
+        )
+        return {
+            "_current_step": step_data,
+            "_tool_result": {"success": True, "output": output},
+            "messages": [{"role": "user", "content": f"BG JOB {job_id}: {tool_name}"}],
+        }
 
     # ── Synchronous (10s timeout, auto-spawn if slower) ──────────────
     set_tenant_context("local", "default")
@@ -93,6 +112,7 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
     # Run in a thread so we can cap with join() timeout
     result_container = {}
     done_event = threading.Event()
+
     def _run_tool():
         try:
             result_container["result"] = route_tool_fn(tool_name, tool_args, {})
@@ -106,7 +126,9 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
                     if job.get("_thread") is me:
                         res = str(result_container.get("result", ""))
                         job["output"] = res
-                        job["status"] = "failed" if res.startswith("Error:") or res.startswith("Tool error:") else "done"
+                        job["status"] = (
+                            "failed" if res.startswith("Error:") or res.startswith("Tool error:") else "done"
+                        )
                         break
             done_event.set()
 
@@ -120,16 +142,33 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
         job_id = uuid.uuid4().hex[:8]
         with _job_lock:
             _jobs[job_id] = {
-                "job_id": job_id, "tool_name": tool_name, "tool_args": dict(tool_args),
-                "status": "running", "started_at": _time.time(), "output": "", "error": None,
+                "job_id": job_id,
+                "tool_name": tool_name,
+                "tool_args": dict(tool_args),
+                "status": "running",
+                "started_at": _time.time(),
+                "output": "",
+                "error": None,
                 "_thread": t,
             }
         cmd = str(tool_args.get("cmd", tool_args.get("command", str(tool_args))))[:150]
         output = f"AUTO-BG {job_id}: {tool_name} (>{AUTO_BG_TIMEOUT}s)\n{cmd}\nCheck: job_status {job_id} | job_wait {job_id}"
-        step_data.update({"tool_output": output, "success": True, "job_id": job_id,
-                          "duration_ms": int((_time.monotonic() - t0) * 1000), "error_class": "auto_background"})
-        return {"_current_step": step_data, "_tool_result": {"success": True, "output": output},
-                "messages": [{"role": "user", "content": f"AUTO-BG {job_id}: {tool_name} was too slow, moved to background."}]}
+        step_data.update(
+            {
+                "tool_output": output,
+                "success": True,
+                "job_id": job_id,
+                "duration_ms": int((_time.monotonic() - t0) * 1000),
+                "error_class": "auto_background",
+            }
+        )
+        return {
+            "_current_step": step_data,
+            "_tool_result": {"success": True, "output": output},
+            "messages": [
+                {"role": "user", "content": f"AUTO-BG {job_id}: {tool_name} was too slow, moved to background."}
+            ],
+        }
 
     # Finished within timeout — return sync result
     result = result_container.get("result", "No output")
@@ -137,9 +176,17 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
     output, _ = maybe_offload(tool_name, str(result))
     duration_ms = int((_time.monotonic() - t0) * 1000)
     success = not output.startswith("Error:") and not output.startswith("Tool error:")
-    ec = classify_error_class(success=success, tool_output=output, error_message=output if not success else None,
-                              duration_ms=duration_ms, tool_name=tool_name)
+    ec = classify_error_class(
+        success=success,
+        tool_output=output,
+        error_message=output if not success else None,
+        duration_ms=duration_ms,
+        tool_name=tool_name,
+    )
 
     step_data.update({"tool_output": output, "success": success, "duration_ms": duration_ms, "error_class": ec})
-    return {"_current_step": step_data, "_tool_result": {"success": success, "output": output},
-            "messages": [{"role": "user", "content": f"RESULT ({tool_name}):\n{wrap_untrusted(output, 'TOOL_OUTPUT')}"}]}
+    return {
+        "_current_step": step_data,
+        "_tool_result": {"success": success, "output": output},
+        "messages": [{"role": "user", "content": f"RESULT ({tool_name}):\n{wrap_untrusted(output, 'TOOL_OUTPUT')}"}],
+    }

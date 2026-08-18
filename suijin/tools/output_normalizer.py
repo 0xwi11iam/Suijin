@@ -12,14 +12,20 @@ import json
 import re
 
 # nmap -sV table lines: "80/tcp open http Apache httpd 2.4.49"
-_NMAP_RE = re.compile(r"^(\d+)/(tcp|udp)\s+open\s+(\S+)\s*(.*)$", re.MULTILINE)
+# (also matches "open|filtered" states — still reachable signal)
+_NMAP_RE = re.compile(r"^(\d+)/(tcp|udp)\s+open(?:\|filtered)?\s+(\S+)[ \t]*(.*)$", re.MULTILINE)
 # gobuster/ffuf result lines: "/admin (Status: 200) [Size: 1234]" or "/admin 200"
 _DIR_RE = re.compile(r"^\s*(/[^\s]*)\s+(?:\(Status:\s*(\d+)|(\d+))", re.MULTILINE)
+# trailing [Size: N] on dir lines
+_SIZE_RE = re.compile(r"\[Size:\s*(\d+)\]")
 _VERSION_RE = re.compile(r"(\d+(?:\.\d+)+[\w.-]*)")
 
 
 def parse_nmap(output: str) -> list[dict]:
-    """[{port, proto, service, version}] for every open service."""
+    """[{port, proto, service, product, version, banner}] per reachable service.
+
+    The full remainder after service is preserved in `banner` — script (NSE)
+    output and uncommon banners never get dropped."""
     out = []
     for m in _NMAP_RE.finditer(output or ""):
         port, proto, service, rest = m.groups()
@@ -31,19 +37,25 @@ def parse_nmap(output: str) -> list[dict]:
                 "service": service,
                 "product": (rest[: vm.start()].strip() if vm else rest.strip())[:60],
                 "version": vm.group(1) if vm else "",
+                "banner": rest.strip()[:120],
             }
         )
     return out
 
 
 def parse_dirs(output: str, min_status: int = 200, max_status: int = 399) -> list[dict]:
-    """[{path, status}] for discovered paths in the 2xx-3xx window."""
+    """[{path, status, size?}] for paths in the status window. Size kept
+    when the tool prints it (gobuster) — useful for spotting real pages."""
     out = []
     for m in _DIR_RE.finditer(output or ""):
         path, s1, s2 = m.groups()
         status = int(s1 or s2 or 0)
         if min_status <= status <= max_status:
-            out.append({"path": path, "status": status})
+            entry = {"path": path, "status": status}
+            sm = _SIZE_RE.search(output[m.start() : m.start() + 200])
+            if sm:
+                entry["size"] = int(sm.group(1))
+            out.append(entry)
     return out
 
 

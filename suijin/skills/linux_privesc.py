@@ -1,6 +1,7 @@
 """
 Linux Privilege Escalation Skill Prompt.
 """
+
 LINUX_PRIVESC_SKILL_PROMPT = r"""
 ## ATTACK SKILL: LINUX PRIVILEGE ESCALATION
 

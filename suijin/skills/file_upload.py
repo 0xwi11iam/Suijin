@@ -1,6 +1,7 @@
 """
 Insecure File Upload Attack Skill Prompt.
 """
+
 FILE_UPLOAD_SKILL_PROMPT = r"""
 ## ATTACK SKILL: INSECURE FILE UPLOAD
 

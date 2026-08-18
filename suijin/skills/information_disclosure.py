@@ -1,6 +1,7 @@
 """
 Information Disclosure Attack Skill Prompt.
 """
+
 INFO_DISCLOSURE_SKILL_PROMPT = """
 ## ATTACK SKILL: INFORMATION DISCLOSURE
 

@@ -6,6 +6,75 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## [3.2.0] — 2026-08-18 — STABLE
+
+### Added
+- **Burp-style scope TUI** (`suijin scope`, curses): include/exclude lists
+  (IPs, CIDRs, hostnames), subdomain matching toggle (`*.entry` semantics),
+  allow-unresolvable-hosts toggle, enforcement on/off — no policy file =
+  nothing enforced. `e` toggles enforcement, `a`/`x` add include/exclude
+  entries, `d` deletes, `q` saves.
+- **Burp semantics in the engine**: `excluded_scopes` (exclude ALWAYS wins
+  over include), `allow_subdomains` toggle (default on; off = exact
+  hostnames only), explicit `*.domain` wildcard entries. DNS pinning and
+  the opt-in no-file policy unchanged.
+- **Operator Tools menu** (TUI option 4): scope editor, approvals console,
+  battle, debrief, replay, dossier, timeline, labs, KB status, workspace
+  cleaner, notify test, providers probe, panic — every feature reachable
+  from the main menu instead of hidden CLI verbs.
+
+### Fixed — found by the new tests
+- **nmap parser newline swallow (pre-existing)**: `\s*` matched newlines,
+  so a service line with no version remainder ("open|filtered ntp")
+  consumed the NEXT line as its banner — corrupting both entries. Now
+  `[ \t]*`; `open|filtered` states are captured as signal, and the full
+  remainder survives in a `banner` field (NSE output never dropped).
+- Directory parser now keeps `[Size: N]` when the tool prints it.
+- Version drift: version.json (3.1.0) vs pyproject (3.0.0) — the packaging
+  guard caught it; both synced through 3.2.0.
+
+### Verified stable (this release's gate)
+836 tests green · ruff clean · doctor/selftest pass · battle E2E (red 375,
+blue 135, live block) · WebUI boot + API responses · approvals
+approve→deny→clear roundtrip · packaging guard suite.
+
+## [3.1.0] — 2026-08-18 — RUN BOX
+
+### Added
+- **Live run-command box** (`suijin/tools/run_commands.py`, wired into the
+  red-team loop): an opencode-style always-on command line while the agent
+  streams. Any line starting with `/` dispatches instantly without
+  interrupting the run: `/state` (live agent state), `/note <text>`,
+  `/kb <query>`, `/cost` (token + spend tally), `/approvals` +
+  `/approve <id>` / `/deny <id>` (HITL decisions mid-run), `/scope`,
+  `/audit`, `/sessions`, `/report` (saves without stopping), `/pause`
+  (drops into guidance mode after the current step), `/panic`,
+  `/help`. Plain text queues as operator guidance, delivered at the next
+  pause. Daemon-thread reader; dispatches are fully guarded (a broken
+  command can never break the run); silent when stdin is a pipe (CI);
+  stop() at every loop exit. Standalone module — no redteamer imports
+  (modular-ready).
+- **Subagent system tests** (`test_subagents.py`, 12): AI-analysis path
+  (prompt carries real handler source; all five engineering outputs
+  parsed), fallback path via real source files (SQLi/command-injection/
+  sensitive-path scoring), batch analysis with crash isolation (one
+  exploding subagent can't kill the batch), anomaly/block counters,
+  notes rendering, risk-ordered summaries, and the exact
+  deploy→analyze→route sequence blueteamer drives.
+
+### Fixed
+- **HITL approvals gap**: `execute_terminal` calls blocked by the recon
+  binary allowlist never queued an approval request — the operator
+  couldn't see or approve blocked commands. They now queue with the
+  offending binary recorded in the args (`blocked_binary`), and the block
+  message points at `suijin approvals`. Approving the request lets the
+  tool through for the session; denying produces an explicit DENIED
+  message on retry.
+- RunBox guidance queue printed a pending count by draining the queue it
+  was reporting (count now read under the same lock, queue intact).
+- `/kb` output had `[hacktricks]`-style source tags eaten by Rich markup
+  interpretation — escaped now.
+
 ## [3.0.0] — 2026-08-18 — THE RENAME RELEASE
 
 ### Added — packaging

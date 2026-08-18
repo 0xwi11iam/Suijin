@@ -1,6 +1,7 @@
 """
 Spring Boot Attack Skill Prompt.
 """
+
 SPRING_BOOT_SKILL_PROMPT = """
 ## ATTACK SKILL: SPRING BOOT ATTACKS
 

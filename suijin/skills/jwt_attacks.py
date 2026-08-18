@@ -1,6 +1,7 @@
 """
 JWT (JSON Web Token) Attack Skill Prompt.
 """
+
 JWT_SKILL_PROMPT = """
 ## ATTACK SKILL: JWT ATTACKS
 

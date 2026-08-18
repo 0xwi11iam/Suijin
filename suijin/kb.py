@@ -53,8 +53,7 @@ SOURCES = {
     # GTFOBins moved its data to the GTFOBins.github.io repo: the binaries are
     # extensionless markdown files under _gtfobins/ (matched via path pattern).
     # ~20 entries are alias stubs — resolved to their target's content.
-    "gtfobins":   {"repo": "GTFOBins/GTFOBins.github.io", "patterns": ["_gtfobins/*"],
-                   "resolve_aliases": True},
+    "gtfobins": {"repo": "GTFOBins/GTFOBins.github.io", "patterns": ["_gtfobins/*"], "resolve_aliases": True},
     "lolbas": {"repo": "LOLBAS-project/LOLBAS", "patterns": ["*.md", "*.yml"]},
     "owasp": {"repo": "OWASP/CheatSheetSeries", "patterns": ["*.md"]},
     "seclists": {
@@ -275,8 +274,7 @@ def compile_kb(
                 if SOURCES[name].get("resolve_aliases"):
                     # Small, stub-heavy sources: buffer the whole source so
                     # alias stubs can be resolved to their target's content.
-                    batch = _resolve_alias_stubs(
-                        list(iter_docs(tar_path, name, SOURCES[name]["patterns"])))
+                    batch = _resolve_alias_stubs(list(iter_docs(tar_path, name, SOURCES[name]["patterns"])))
                     count += _flush(conn, batch, use_fts)
                 else:
                     batch = []
@@ -397,8 +395,7 @@ def kb_status(db_path: Path | None = None) -> dict | None:
 # ── Full-document reads (the index copy may be truncated) ─────────────
 
 
-def read_doc(path: str, source: str | None = None,
-             cache_dir: Path | None = None) -> tuple[str, str, str]:
+def read_doc(path: str, source: str | None = None, cache_dir: Path | None = None) -> tuple[str, str, str]:
     """Return (source, path, full_content) for a KB doc, read from its tarball.
 
     The FTS index caps content at MAX_CONTENT_BYTES; this pulls the original
@@ -432,7 +429,8 @@ def read_doc(path: str, source: str | None = None,
         raise FileNotFoundError(
             f"No KB file matches '{needle}' in cached tarballs "
             f"(sources cached: {', '.join(sorted(p.name for p in cache.glob('*.tar.gz'))) or 'none'}). "
-            "Run: suijin pull kb")
+            "Run: suijin pull kb"
+        )
     if len(candidates) > 1 and not source:
         listing = ", ".join(f"{s}:{r}" for s, r, _, _ in candidates[:6])
         raise ValueError(f"Ambiguous path '{needle}' — matches {len(candidates)} docs: {listing}")
@@ -469,12 +467,17 @@ def kb_diff(db_path: Path | None = None, cache_dir: Path | None = None) -> dict:
             "cached": cached,
             "indexed_docs": indexed,
             "cache_newer_than_build": newer,
-            "action": ("pull" if cached and indexed is None else
-                       "rebuild" if newer else
-                       "cache missing" if indexed is not None and not cached else "ok"),
+            "action": (
+                "pull"
+                if cached and indexed is None
+                else "rebuild"
+                if newer
+                else "cache missing"
+                if indexed is not None and not cached
+                else "ok"
+            ),
         }
-    return {"built": bool(st), "built_at": st.get("built_at") if st else None,
-            "sources": rows}
+    return {"built": bool(st), "built_at": st.get("built_at") if st else None, "sources": rows}
 
 
 if __name__ == "__main__":  # manual build: python -m suijin.kb

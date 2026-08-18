@@ -1,6 +1,7 @@
 """
 XXE (XML External Entity) Attack Skill Prompt.
 """
+
 XXE_SKILL_PROMPT = """
 ## ATTACK SKILL: XXE (XML EXTERNAL ENTITY)
 

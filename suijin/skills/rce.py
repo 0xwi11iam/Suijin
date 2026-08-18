@@ -3,6 +3,7 @@ Command Injection / RCE Attack Skill Prompt.
 
 Concrete mandatory workflow for command injection and RCE.
 """
+
 RCE_SKILL_PROMPT = """
 ## ATTACK SKILL: COMMAND INJECTION / RCE
 

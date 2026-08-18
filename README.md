@@ -118,7 +118,10 @@ docker run -it --rm \
 ## CLI Reference
 
 `suijin` bare launches the Rich TUI. Every subcommand below is
-**non-interactive, offline, and scriptable** (exit 0 = healthy).
+**non-interactive, offline, and scriptable** (exit 0 = healthy). The TUI's
+**Operator Tools** menu (option 4) exposes the interactive ones — scope
+editor, approvals console, battle, debrief, replay — so nothing stays
+hidden behind CLI flags.
 
 | Command | What it does |
 |:--------|:-------------|
@@ -158,6 +161,7 @@ docker run -it --rm \
 | `suijin notify` | Operator notifications: `send 'msg'` / `test` (file/command/macOS channels; battle fires on flags & blocks) |
 | `suijin compliance [eng]` | Map engagement findings to CWE / OWASP Top-10 / MITRE ATT&CK (newest engagement by default) |
 | `suijin approvals` | HITL console: `list` blocked actions, `approve`/`deny <id>` for the session, `clear` resets verdicts |
+| `suijin scope` | **Burp-style scope TUI**: include/exclude lists, subdomain matching, unresolvable toggle, enforcement on/off |
 | `suijin panic` | Kill every Suijin process + clear live state NOW (`--dry-run` previews) |
 | `suijin pull kb` | Download + index the knowledge base (**enables** KB features) |
 | `suijin pull kb --status` | Offline: what's indexed, per-source counts, build age |
@@ -257,11 +261,13 @@ in config — hard failures roll to the next provider.
 
 ### Governance (opt-in)
 
-- **Policy** (`suijin/policy.json`, `suijin policy check|show`): blocked
-  tools, blocked arg regexes, and allowed target scopes (IPs, CIDRs,
-  hostnames) enforced at the dispatch chokepoint. **No file = no
-  enforcement** — existing engagements are untouched; intel-only tools
-  (dossier, KB, CVE search) are never scope-gated.
+- **Policy** (`suijin/policy.json`, `suijin policy check|show`, edited via
+  the `suijin scope` TUI): blocked tools, blocked arg regexes, and
+  Burp-style target scoping — include + exclude lists (exclude wins over
+  include), subdomain matching toggle, `*.domain` wildcards,
+  allow-unresolvable-hosts — enforced at the dispatch chokepoint.
+  **No file = no enforcement** — existing engagements are untouched;
+  intel-only tools (dossier, KB, CVE search) are never scope-gated.
 - **Detector rules** (`suijin/detector_rules.json`, `suijin rules
   validate|list`): custom regex detectors (field: body/path/ua/headers,
   weight 1–10) merged into the eval harness and battle watchdog.
@@ -596,6 +602,27 @@ Dual-mode summary:
 think node (ReAct) over a LangGraph state machine. Every step's tool call and
 raw output is persisted to the audit trail.
 
+### Live command box (during a run)
+
+While the agent streams, an always-on command line is active — type at any
+time, the run never stops:
+
+| Command | Effect |
+|:--------|:-------|
+| `/state` | Live agent state (phase, iterations, messages) |
+| `/note <text>` | Write an engagement note immediately |
+| `/kb <query>` | Quick knowledge-base search (top 3) |
+| `/cost` | Token + spend tally so far |
+| `/approvals` | HITL queue → `/approve <id>` / `/deny <id>` decide mid-run |
+| `/scope` | Current target scopes |
+| `/audit` / `/sessions` | Audit summary / saved sessions |
+| `/report` | Generate + save the report without stopping |
+| `/pause` | Drop into guidance mode after the current step |
+| `/panic` | Kill everything now |
+| plain text | Queued as operator guidance, delivered at the next pause |
+
+`/help` lists them all. Commands are also available in pause mode (Ctrl+C).
+
 ### Supervisor — zero-cost oversight
 
 Runs silently every 5 iterations (configurable). Pure pattern matching — no
@@ -806,6 +833,8 @@ python3 -m pytest suijin/tests/ -m "not ai" # skip live-API tests
 | `test_infra_and_defense.py` | Output offloading (thresholds, previews), firewall (validate-before-exec, rule ops, DROP filtering), traffic-log tailing (append/rotation), msf availability probing |
 | `test_http_session_tools.py` | Session state (cookies/CSRF/auth), rate-limit tracking (429, Retry-After, domain isolation), UA rotation, http_request with mocked transport |
 | `test_import_graph.py` | Import-graph guard: every `suijin.*` import resolves to a real file, entry points importable, pruned packages stay pruned |
+| `test_run_commands.py` | Live run-command box: dispatch semantics, every handler (/state /note /kb /cost /approvals /pause …), guidance queue, guarded failures, lifecycle; HITL execute_terminal approval queueing |
+| `test_subagents.py` | Blue-team endpoint subagents end-to-end: AI analysis path, no-API fallback scoring from real source files, batch crash isolation, anomaly routing, summaries |
 | `test_v210_features.py` | Credential vault (roundtrip/tamper/shred/redaction), dossiers, notify channels, rules + policy (opt-in semantics, scope exemptions, dispatch enforcement), module SDK, provider failover, skill versioning, campaign/watch/timeline/clean, recon hook |
 | `test_kb.py` | KB compile (FTS5, caps), path patterns + GTFOBins alias stubs, zero-doc failures, honest status, download retries + `.part` cleanup, `search_kb` filters, catalog gating |
 | `test_workspace_layout.py` | Canonical workspace merge + symlink migration, sandbox containment, CWD-independent paths |

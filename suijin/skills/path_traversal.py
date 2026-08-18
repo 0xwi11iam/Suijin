@@ -1,6 +1,7 @@
 """
 Path Traversal / LFI Attack Skill Prompt.
 """
+
 PATH_TRAVERSAL_SKILL_PROMPT = """
 ## ATTACK SKILL: PATH TRAVERSAL / LFI
 

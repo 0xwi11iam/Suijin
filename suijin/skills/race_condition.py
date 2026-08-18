@@ -1,6 +1,7 @@
 """
 Race Condition / TOCTOU Attack Skill Prompt.
 """
+
 RACE_CONDITION_SKILL_PROMPT = """
 ## ATTACK SKILL: RACE CONDITION / TOCTOU
 

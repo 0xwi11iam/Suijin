@@ -302,3 +302,71 @@ class TestOutputNormalizer:
 
         out = dispatch.route_tool("normalize_output", {"output": NMAP, "kind": "nmap"}, {})
         assert json.loads(out)[0]["service"] == "ssh"
+
+
+class TestBurpStyleScope:
+    """Include/exclude lists + subdomain toggle — the `suijin scope` TUI model."""
+
+    def test_exclude_wins_over_include(self):
+        from suijin.tools.governance import check_policy
+
+        pol = {"allowed_target_scopes": ["10.0.0.0/8"], "excluded_scopes": ["10.0.0.66"]}
+        ok, why = check_policy("http_request", {"url": "http://10.0.0.66/"}, pol)
+        assert not ok and "EXCLUDE" in why
+        ok, _ = check_policy("http_request", {"url": "http://10.0.0.5/"}, pol)
+        assert ok
+
+    def test_subdomains_toggle_off_blocks_subdomains(self):
+        from suijin.tools.governance import check_policy
+
+        # allow_unresolvable: lab.internal has no DNS in tests — the toggle
+        # under test is the SUBDOMAIN rule, not DNS pinning
+        pol = {"allowed_target_scopes": ["lab.internal"], "allow_subdomains": False, "allow_unresolvable": True}
+        ok, _ = check_policy("http_request", {"url": "http://lab.internal/"}, pol)
+        assert ok  # exact host passes
+        ok, _ = check_policy("http_request", {"url": "http://api.lab.internal/"}, pol)
+        assert not ok  # subdomain blocked with toggle OFF
+
+    def test_subdomains_on_matches_subdomains(self):
+        from suijin.tools.governance import check_policy
+
+        pol = {"allowed_target_scopes": ["lab.internal"], "allow_subdomains": True, "allow_unresolvable": True}
+        ok, _ = check_policy("http_request", {"url": "http://deep.api.lab.internal/"}, pol)
+        assert ok
+
+    def test_explicit_wildcard_entry(self):
+        from suijin.tools.governance import _ip_in_scope
+
+        assert _ip_in_scope("a.example.com", ["*.example.com"])
+        assert _ip_in_scope("example.com", ["*.example.com"])
+        assert not _ip_in_scope("example.org", ["*.example.com"])
+
+    def test_default_policy_carries_new_keys(self):
+        from suijin.tools.governance import _POLICY_DEFAULT
+
+        assert _POLICY_DEFAULT["allow_subdomains"] is True
+        assert _POLICY_DEFAULT["excluded_scopes"] == []
+        assert _POLICY_DEFAULT["allow_unresolvable"] is False
+
+
+class TestNormalizerRichFields:
+    def test_nmap_keeps_banner_and_open_filtered(self):
+        from suijin.tools.output_normalizer import parse_nmap
+
+        rows = parse_nmap(
+            "PORT   STATE SERVICE VERSION\n"
+            "22/tcp open  ssh     OpenSSH 8.9p1\n"
+            "123/udp open|filtered ntp\n"
+            "80/tcp open  http    Apache httpd 2.4.49 ((Unix))\n"
+        )
+        ports = {r["port"]: r for r in rows}
+        assert 123 in ports  # open|filtered is signal too
+        assert ports[80]["banner"] == "Apache httpd 2.4.49 ((Unix))"
+
+    def test_dirs_keep_size(self):
+        from suijin.tools.output_normalizer import parse_dirs
+
+        rows = parse_dirs("/admin (Status: 200) [Size: 1234]\n/login (Status: 200) [Size: 512]\n")
+        by_path = {r["path"]: r for r in rows}
+        assert by_path["/admin"]["size"] == 1234
+        assert by_path["/login"]["size"] == 512

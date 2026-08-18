@@ -1,6 +1,7 @@
 """
 Base prompt builder — autonomous agent system prompt.
 """
+
 from suijin.core.prompt_safety import UNTRUSTED_OUTPUT_GUIDANCE
 from suijin.prompts.tool_registry import build_tool_catalog_prompt
 
@@ -179,6 +180,7 @@ Thought -> Action -> Observation loop.
     try:
         import json
         from pathlib import Path
+
         # config.json lives in the suijin/ package dir — never CWD-relative,
         # or the mode flags silently vanish when launched from elsewhere.
         cfg_path = Path(__file__).resolve().parent.parent / "config.json"
@@ -209,7 +211,7 @@ If a finding requires a destructive test, document it for the human operator ins
 """)
     if cfg.get("mode_deploy_subagent"):
         parts.append(f"""## DEPLOY SUBAGENT MODE: Parallel Multi-Agent Coordination
-You have the POWER to spawn {cfg.get('subagent_count', 2)} parallel subagents.
+You have the POWER to spawn {cfg.get("subagent_count", 2)} parallel subagents.
 Use action="deploy_subagent" with a FOCUSED task description to parallelize work.
 
 ### WHEN TO SPAWN SUBAGENTS (DO THIS AGGRESSIVELY):
@@ -239,6 +241,7 @@ NEVER run sequential scans when you could deploy subagents instead.
 
     # 5. Module skill docs
     from suijin.modules.loader import get_module_skills
+
     ms = get_module_skills()
     if ms:
         parts.append("\n## MODULE TOOL DOCS\n" + ms + "\n")

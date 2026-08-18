@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 
 # Make sure the parent dir is on sys.path so `from suijin import …` works
@@ -16,9 +17,60 @@ from rich.text import Text
 
 from suijin.core.redteamer import main as redteamer_main
 
-# Bridge init removed — standalone operation
-
 console = Console()
+
+CLI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cli.py")
+
+OPERATOR_TOOLS = [
+    ("Scope editor (Burp-style TUI)", ["scope"]),
+    ("Approvals console (HITL)", ["approvals", "list"]),
+    ("Battle — red vs blue on the lab", ["battle"]),
+    ("Engagement debrief", ["debrief"]),
+    ("Replay an engagement", ["replay"]),
+    ("Target dossier", None),  # prompts for target
+    ("Unified timeline", ["timeline"]),
+    ("Lab fleet + campaign", ["labs", "list"]),
+    ("Knowledge base status", ["pull", "kb", "--status"]),
+    ("Workspace cleaner", ["clean"]),
+    ("Notifications test", ["notify", "test"]),
+    ("Provider health probe", ["providers"]),
+    ("PANIC — stop everything", ["panic"]),
+]
+
+
+def _run_cli(args):
+    subprocess.run([sys.executable, CLI, *args])
+
+
+def operator_menu():
+    while True:
+        print(chr(27) + "[2J\033[H", end="")
+        console.print(Panel.fit("[bold white]SUIJIN[/] [dim]Operator Tools[/]", border_style="#30363d"))
+        console.print("\n[bold white]Pick a tool:[/]")
+        for i, (label, _args) in enumerate(OPERATOR_TOOLS, 1):
+            console.print(f"  [bold #e6b47c]{i}.[/] [white]{label}[/]")
+        console.print(f"  [bold white]{len(OPERATOR_TOOLS) + 1}.[/] [dim]Back[/]\n")
+        try:
+            c = input(" ").strip()
+        except (KeyboardInterrupt, EOFError):
+            return
+        if not c.isdigit() or not (1 <= int(c) <= len(OPERATOR_TOOLS)):
+            return
+        label, args = OPERATOR_TOOLS[int(c) - 1]
+        if args is None:  # dossier needs a target
+            try:
+                target = input("  target (IP / hostname / URL): ").strip()
+            except (KeyboardInterrupt, EOFError):
+                continue
+            if target:
+                _run_cli(["dossier", target])
+        else:
+            _run_cli(args)
+        try:
+            input("\n[dim]Press Enter for the menu...[/] ")
+        except (KeyboardInterrupt, EOFError):
+            return
+
 
 def main():
     print(chr(27) + "[2J\033[H", end="")
@@ -26,6 +78,7 @@ def main():
     # Startup availability banner — warn about missing tools before the menu.
     try:
         from suijin.tools.availability import startup_banner
+
         banner = startup_banner()
         if banner:
             console.print(f"[yellow]{banner}[/yellow]")
@@ -33,38 +86,40 @@ def main():
     except Exception:
         pass
 
-    # Welcome Box
-    welcome_text = Text("* Welcome to Suijin Latest", style="bold #e6b47c")
-    console.print(Panel(welcome_text, border_style="#e6b47c", expand=False))
+    console.print(Panel(Text("Welcome to Suijin", style="bold #e6b47c"), border_style="#e6b47c", expand=False))
     print("\n")
-    console.print(" [dim]Login successful.[/] Press [bold #58a6ff]Enter[/] to continue...", end="")
+    console.print(" [dim]Press [bold #58a6ff]Enter[/] to continue...", end="")
     input()
 
-    print(chr(27) + "[2J\033[H", end="")
-    console.print(Panel.fit("[bold white]SUIJIN[/] [dim]Mode Selector[/]", border_style="#30363d"))
+    while True:
+        print(chr(27) + "[2J\033[H", end="")
+        console.print(Panel.fit("[bold white]SUIJIN[/] [dim]Mode Selector[/]", border_style="#30363d"))
 
-    console.print("\n")
+        console.print("\n")
 
-    console.print("[bold white]Select Operational Module:[/]")
-    console.print("  [bold #ff5555]1.[/] [white]Red Team (Autonomous Agent + Fugu Collective Intelligence)[/]")
-    console.print("  [bold #58a6ff]2.[/] [white]Blue Team (Active Defense)[/]")
-    console.print("  [bold yellow]3.[/] [white]Settings[/]")
-    console.print("  [bold white]4.[/] [dim]Exit[/]\n")
+        console.print("[bold white]Select Operational Module:[/]")
+        console.print("  [bold #ff5555]1.[/] [white]Red Team (Autonomous Agent + Fugu Collective Intelligence)[/]")
+        console.print("  [bold #58a6ff]2.[/] [white]Blue Team (Active Defense)[/]")
+        console.print("  [bold yellow]3.[/] [white]Settings[/]")
+        console.print("  [bold #e6b47c]4.[/] [white]Operator Tools (scope, approvals, battle, debrief, …)[/]")
+        console.print("  [bold white]5.[/] [dim]Exit[/]\n")
 
-    try:
-        c = input(" ").strip()
-        if c == '1':
-            redteamer_main()
-        elif c == '2':
-            from suijin.core.blueteamer import main as blueteam_main
-            blueteam_main()
-        elif c == '3':
-            tui_settings.main()
-            main()
-        else:
+        try:
+            c = input(" ").strip()
+            if c == "1":
+                redteamer_main()
+            elif c == "2":
+                from suijin.core.blueteamer import main as blueteam_main
+
+                blueteam_main()
+            elif c == "3":
+                tui_settings.main()
+            elif c == "4":
+                operator_menu()
+            else:
+                sys.exit(0)
+        except KeyboardInterrupt:
             sys.exit(0)
-    except KeyboardInterrupt:
-        sys.exit(0)
 
 
 if __name__ == "__main__":

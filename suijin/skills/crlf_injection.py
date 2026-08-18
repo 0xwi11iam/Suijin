@@ -1,6 +1,7 @@
 """
 CRLF Injection Attack Skill Prompt.
 """
+
 CRLF_SKILL_PROMPT = """
 ## ATTACK SKILL: CRLF INJECTION
 

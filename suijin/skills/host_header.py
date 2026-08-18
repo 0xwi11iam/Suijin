@@ -1,6 +1,7 @@
 """
 Host Header Injection Attack Skill Prompt.
 """
+
 HOST_HEADER_SKILL_PROMPT = """
 ## ATTACK SKILL: HOST HEADER INJECTION
 

@@ -1,4 +1,5 @@
 """Plugin module loader."""
+
 from suijin.modules.loader import (
     discover_modules,
     get_loaded_modules,

@@ -1,6 +1,7 @@
 """
 Open Redirect Attack Skill Prompt.
 """
+
 OPEN_REDIRECT_SKILL_PROMPT = r"""
 ## ATTACK SKILL: OPEN REDIRECT
 
