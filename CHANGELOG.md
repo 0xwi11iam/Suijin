@@ -2,6 +2,40 @@
 
 All notable changes to Medusa.
 
+## [2.11.1] — 2026-08-18 — DEEP-TEST PASS
+
+### Added — 50 tests over live low-coverage modules
+- **Red knowledge graph** (`test_red_knowledge_graph.py`, 19): constraint
+  dedupe with evidence/confidence max-merge, check_payload case-insensitive
+  substring blocking + non-string/empty-rule safety, CVE/bypass queries,
+  summary formatting (partial-confidence annotation only), corrupt-JSON
+  resilience and recovery-on-write, and the real agent surface
+  (record_finding → check_knowledge roundtrip, invalid finding types).
+- **Infrastructure & defense** (`test_infra_and_defense.py`, 17): output
+  offload (never-policy passthrough, threshold boundary, file write +
+  500-char preview + ellipsis), firewall (IP validation BEFORE any
+  subprocess call, block/unblock rule ops, DROP-line filtering), traffic
+  tailing (append, rotation/truncation reset, late-appearing file),
+  msf_check (RPC / console-fallback / not-detected).
+- **Session-awareness + http_request** (`test_http_session_tools.py`, 14):
+  Set-Cookie + CSRF extraction, auth detection, RateLimitTracker (429 +
+  Retry-After, low-remaining throttle, domain isolation, window expiry),
+  UA rotation, and the tool surface with a mocked transport (status
+  render, browser-mimicry defaults, RATE LIMITED short-circuit, transport
+  errors, body forwarding).
+
+### Fixed — bugs the new tests caught
+- **SessionState replayed cookie attributes as cookies**: `Set-Cookie:
+  sid=abc; Path=/; HttpOnly` stored `Path=/` as a cookie and sent it on
+  every subsequent request. Only the first `;`-segment (the actual
+  cookie pair) is parsed now.
+- **Removed orphaned broken hotfix modules**: patch_generator.py +
+  silent_patch.py had zero importers and emitted syntactically invalid
+  patches (`escape(render(x)` — unbalanced parens; the "sqli fix" also
+  stripped every `f"` in the file). Deleted rather than blessed with
+  tests. (~70 other 0%-coverage blue modules audited: also orphaned,
+  noted for a future sweep — none are on live paths.)
+
 ## [2.11.0] — 2026-08-18 — TRUST BUT VERIFY
 
 ### Added — hardening

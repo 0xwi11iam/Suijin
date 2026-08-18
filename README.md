@@ -778,6 +778,9 @@ python3 -m pytest medusa/tests/ -m "not ai" # skip live-API tests
 | `test_kb_v2_and_intel.py` | kb read (full docs, substring, ambiguity), kb diff staleness, fuzzy GTFOBins, KEV mirror + offline search_cve fallback, wordlist mutation + cewl |
 | `test_cli_v210.py` | CLI-level exit codes/output for all v2.10 verbs: kb, pull cve, creds, dossier, timeline, watch, clean, rules, policy, providers, module, notify |
 | `test_compliance.py` | Compliance mapping: known classes, specificity ordering, snake_case normalization, fallback, summaries, engagement loading, CLI verb |
+| `test_red_knowledge_graph.py` | The agent's persistent memory: constraint dedupe + confidence merging, payload-block checks, CVE/bypass queries, corrupt-JSON recovery, record_finding→check_knowledge roundtrip |
+| `test_infra_and_defense.py` | Output offloading (thresholds, previews), firewall (validate-before-exec, rule ops, DROP filtering), traffic-log tailing (append/rotation), msf availability probing |
+| `test_http_session_tools.py` | Session state (cookies/CSRF/auth), rate-limit tracking (429, Retry-After, domain isolation), UA rotation, http_request with mocked transport |
 | `test_v210_features.py` | Credential vault (roundtrip/tamper/shred/redaction), dossiers, notify channels, rules + policy (opt-in semantics, scope exemptions, dispatch enforcement), module SDK, provider failover, skill versioning, campaign/watch/timeline/clean, recon hook |
 | `test_kb.py` | KB compile (FTS5, caps), path patterns + GTFOBins alias stubs, zero-doc failures, honest status, download retries + `.part` cleanup, `search_kb` filters, catalog gating |
 | `test_workspace_layout.py` | Canonical workspace merge + symlink migration, sandbox containment, CWD-independent paths |

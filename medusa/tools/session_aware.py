@@ -34,12 +34,16 @@ class SessionState:
         """Extract cookies and CSRF tokens from response headers/body."""
         import re
 
-        # Extract Set-Cookie
+        # Extract Set-Cookie — each header carries ONE cookie; everything
+        # after the first ';' is an attribute (Path/Domain/Expires/...),
+        # not a cookie to replay. Attributes were previously parsed as
+        # cookies and leaked into subsequent requests.
         for header_key, header_val in headers.items():
             if header_key.lower() == "set-cookie":
-                for part in header_val.split(";"):
-                    if "=" in part:
-                        k, v = part.strip().split("=", 1)
+                first = str(header_val).split(";", 1)[0]
+                if "=" in first:
+                    k, v = first.strip().split("=", 1)
+                    if k.strip():
                         self.cookies[k.strip()] = v.strip()
         # Common CSRF token patterns in body
         csrf_patterns = [

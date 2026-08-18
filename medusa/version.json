@@ -1,6 +1,6 @@
 {
-  "version": "2.11.0",
+  "version": "2.11.1",
   "codename": "Trust But Verify",
   "release_date": "2026-08-18",
-  "description": "Medusa v2.11: hardening pass. CLI-level tests for all v2.10 verbs (caught a real run_watch crash), frontend CI build gate with bundle-freshness check, coverage floor 40->48 (measured 52). WebUI: Dossier + Timeline views, KEV status in overview. New: medusa compliance — findings mapped to CWE / OWASP Top-10 / MITRE ATT&CK. Deliberately trimmed scope: no HITL approval queues, no battle heartbeat files, no production detector changes. 679 tests green."
+  "description": "Medusa v2.11.1: deep-test pass on live low-coverage modules — red knowledge graph (dedupe/confidence-merge/block checks/corruption recovery), output offloading, firewall defense (validation-before-exec), traffic-log tailing, msf availability probing, session-awareness + http_request. Two real bugs found and fixed: SessionState replayed cookie ATTRIBUTES (Path/Domain) as cookies on every subsequent request; hotfix patch_generator/silent_patch were orphaned and emitted syntactically-broken patches (deleted). 729 tests green."
 }
