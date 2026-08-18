@@ -22,9 +22,14 @@ def canon(obj) -> str:
 
 
 def man(mid, tier="recommended", requires=(), overrides=(), broken=None):
-    return {"id": mid, "version": "1.0.0", "tier": tier,
-            "requires": list(requires), "overrides": list(overrides),
-            **({"broken": broken} if broken else {})}
+    return {
+        "id": mid,
+        "version": "1.0.0",
+        "tier": tier,
+        "requires": list(requires),
+        "overrides": list(overrides),
+        **({"broken": broken} if broken else {}),
+    }
 
 
 FIXTURES = [
@@ -32,8 +37,11 @@ FIXTURES = [
     ("empty", [], False),
     ("single", [man("solo", "core")], False),
     ("chain", [man("c", requires=["b"]), man("b", requires=["a"]), man("a", "core")], False),
-    ("diamond", [man("d", requires=["b", "c"]), man("b", requires=["a"]),
-                 man("c", requires=["a"]), man("a", "core")], False),
+    (
+        "diamond",
+        [man("d", requires=["b", "c"]), man("b", requires=["a"]), man("c", requires=["a"]), man("a", "core")],
+        False,
+    ),
     ("missing-dep", [man("x", requires=["ghost"])], False),
     ("missing-deep", [man("y", requires=["x"]), man("x", requires=["ghost"])], False),
     ("cycle-2", [man("a", requires=["b"]), man("b", requires=["a"])], False),
@@ -44,14 +52,16 @@ FIXTURES = [
     ("collision", [man("nmap", "recommended"), man("nmap", "installed")], False),
     ("override-wins", [man("nmap", "recommended"), man("nmap", "installed", overrides=["nmap"])], False),
     ("self-cycle", [man("s", requires=["s"])], False),
-    ("cycle-plus-healthy", [man("a", "core"), man("p", requires=["q"]), man("q", requires=["p"]),
-                            man("h", requires=["a"])], False),
+    (
+        "cycle-plus-healthy",
+        [man("a", "core"), man("p", requires=["q"]), man("q", requires=["p"]), man("h", requires=["a"])],
+        False,
+    ),
 ]
 
 
 class TestResolveDagOracle:
-    @pytest.mark.parametrize("name,manifests,abort", FIXTURES,
-                             ids=[f[0] for f in FIXTURES])
+    @pytest.mark.parametrize("name,manifests,abort", FIXTURES, ids=[f[0] for f in FIXTURES])
     def test_fixture(self, name, manifests, abort):
         blob = json.dumps(manifests)
         pure = json.loads(_pure.resolve_dag(blob))
@@ -118,8 +128,7 @@ class TestFuzzEquivalence:
         rng = random.Random(20260818)
         segments = ["a", "b", "..", ".", "c", "x.txt"]
         for _ in range(300):
-            paths = ["/".join(rng.choices(segments, k=rng.randint(1, 5)))
-                     for _ in range(rng.randint(1, 6))]
+            paths = ["/".join(rng.choices(segments, k=rng.randint(1, 5))) for _ in range(rng.randint(1, 6))]
             blob = json.dumps({"root": "/tmp/ws", "allow": ["/tmp/extra"], "paths": paths})
             pure = json.loads(_pure.check_paths(blob))
             if native.available():
@@ -129,8 +138,11 @@ class TestFuzzEquivalence:
 
 class TestCheckPathsOracle:
     CASES = [
-        {"root": "/tmp/ws", "allow": [], "paths": ["a.txt", "sub/b.txt", "../esc", "/etc/x",
-                                                   "/tmp/ws/abs/ok", "/tmp/other"]},
+        {
+            "root": "/tmp/ws",
+            "allow": [],
+            "paths": ["a.txt", "sub/b.txt", "../esc", "/etc/x", "/tmp/ws/abs/ok", "/tmp/other"],
+        },
         {"root": "/tmp/ws", "allow": ["/tmp/extra"], "paths": ["/tmp/extra/f", "/tmp/extra/../no"]},
         {"root": "/tmp/ws", "allow": [], "paths": [".", "..", "a/../b", "./x/../..", "a/./b/./c"]},
         {"root": "/w", "allow": [], "paths": ["/w", "/w/", "/w/x"]},

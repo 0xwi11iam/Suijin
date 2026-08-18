@@ -29,17 +29,16 @@ class TestPlatformModule:
     def test_boots_via_controller(self, tmp_path, capsys):
         from suijin.kernel import controller
 
-        ctx, report = controller.boot(
-            module_roots=[MODULES], workspace=tmp_path, quiet=True)
+        ctx, report = controller.boot(module_roots=[MODULES], workspace=tmp_path, quiet=True)
         assert not report.aborted
-        assert report.bootable == {"platform"}
+        assert "platform" in report.bootable  # tools module joins the tree later
         # services registered and materialize lazily
         assert ctx.has_service("config")
         assert ctx.has_service("workspace")
         # start() ran: workspace dirs exist, journal recorded
         assert (tmp_path / "reports").is_dir()
         assert (tmp_path / "audit_trails").is_dir()
-        assert any("workspace ready" in ln for ln in ctx.journal.tail(5))
+        assert any("workspace ready" in ln for ln in ctx.journal.tail(30))
         # quiet boot: healthy => silent
         assert capsys.readouterr().out == ""
         ctx.shutdown()

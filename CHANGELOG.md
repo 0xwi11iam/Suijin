@@ -6,6 +6,32 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## [3.9.0] — 2026-08-18 — CORE TIER COMPLETE (PHASE 2)
+
+All four core modules ride the kernel; `controller.boot()` composes the
+whole system from manifests alone:
+
+- **tools** (`suijin/modules/tools/`): bridges every dispatch route —
+  124 core + pack tools — onto the Context during boot. ctx.call_tool is
+  now the kernel surface; route_tool remains the legacy surface,
+  byte-identical behavior.
+- **agent** (`suijin/modules/agent/`): the FIRST NESTED module —
+  graph/nodes/memory sub-manifests resolve as first-class dotted-id DAG
+  units (agent.graph boots before agent, which requires all three).
+  Registry gained one-level recursion with dotted-id position
+  validation (a nested manifest declaring a non-dotted id quarantines
+  with a clear reason). Registers the agent-graph factory, nodes
+  registry, and state schema as Context services.
+- **console** (`suijin/modules/console/`): feature-blind by contract —
+  the ConsoleHooks registry (register_menu/register_verb/
+  unregister_owner) is the extension point every surface renders from.
+  Disable-means-disappear proven by test: unregister_owner removes the
+  module's entries from menu() and verbs.
+- Full boot proof: 7 modules in topological order (agent.graph,
+  agent.memory, agent.nodes, platform, tools, agent, console), 124
+  tools + 12 services materialized on the Context, journal records the
+  sequence, reverse-order shutdown.
+
 ## [3.8.0] — 2026-08-18 — FIRST MODULE STANDING (PHASE 2 BEGINS)
 
 - **platform module** (`suijin/modules/platform/`): the first core-tier

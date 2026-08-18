@@ -1,0 +1,10 @@
+{
+  "id": "agent.nodes",
+  "version": "1.0.0",
+  "tier": "core",
+  "requires": [],
+  "provides": ["nodes"],
+  "entry": "suijin.modules.agent.nodes:NodesSubmodule",
+  "permissions": ["events.emit"],
+  "description": "Graph nodes: think, execute_tool, initialize, generate_response"
+}

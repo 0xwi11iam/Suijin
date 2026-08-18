@@ -1,0 +1,10 @@
+{
+  "id": "tools",
+  "version": "1.0.0",
+  "tier": "core",
+  "requires": ["platform"],
+  "provides": ["tools"],
+  "entry": "suijin.modules.tools:ToolsModule",
+  "permissions": ["shell", "network", "filesystem"],
+  "description": "The tool registry — bridges every core + pack tool onto the kernel Context"
+}

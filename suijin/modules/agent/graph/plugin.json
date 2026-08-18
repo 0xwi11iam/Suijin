@@ -1,0 +1,10 @@
+{
+  "id": "agent.graph",
+  "version": "1.0.0",
+  "tier": "core",
+  "requires": [],
+  "provides": ["graph_builder"],
+  "entry": "suijin.modules.agent.graph:GraphSubmodule",
+  "permissions": [],
+  "description": "LangGraph machine construction (START→initialize→think⇄execute→respond)"
+}

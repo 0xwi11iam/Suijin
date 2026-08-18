@@ -1,6 +1,5 @@
 """Kernel vfs, security, health, journal — final Phase 1 subsystem tests."""
 
-
 import pytest
 
 from suijin.kernel.health import HealthTracker

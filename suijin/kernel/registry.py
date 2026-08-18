@@ -113,22 +113,41 @@ class Registry:
     # ── discovery ───────────────────────────────────────────────────
 
     def scan(self, root: Path) -> set[str]:
-        """Discover plugin.json trees under root (one level of nesting).
-        Later scans replace same-id units (later source wins)."""
+        """Discover plugin.json trees under root, recursing ONE level so
+        nested modules (agent/graph, agent/nodes...) become first-class
+        dotted-id units. Later scans replace same-id units (later source
+        wins); a parent's own manifest lists its children under "modules"
+        and requires them by dotted id.
+        """
         found: set[str] = set()
         root = Path(root)
         if not root.is_dir():
             return found
-        for mf in sorted(root.glob("*/plugin.json")):
+        for mf in sorted(root.glob("*/plugin.json")) + sorted(root.glob("*/*/plugin.json")):
+            rel = mf.parent.relative_to(root)
+            expected_id = ".".join(rel.parts)
             try:
                 data = json.loads(mf.read_text())
             except (OSError, ValueError) as e:
-                unit = Unit.from_manifest({"id": mf.parent.name}, source=mf.parent)
+                unit = Unit.from_manifest({"id": expected_id}, source=mf.parent)
                 unit.broken_reason = f"unparseable manifest: {e}"
-                self._units[unit.id] = unit  # id may be dir name; flagged broken
+                self._units[unit.id] = unit
                 found.add(unit.id)
                 continue
-            unit = Unit.from_manifest(data, source=mf.parent)
+            # dotted id from position for nested manifests; top-level uses
+            # the declared id (validated against position)
+            declared = str(data.get("id", expected_id))
+            if "." in expected_id and "." not in declared:
+                declared = expected_id  # nested manifests MUST carry dotted ids
+            if declared != expected_id and "." in expected_id:
+                unit = Unit.from_manifest({"id": expected_id}, source=mf.parent)
+                unit.broken_reason = (
+                    f"nested manifest id mismatch: declares {declared!r}, position implies {expected_id!r}"
+                )
+                self._units[expected_id] = unit
+                found.add(expected_id)
+                continue
+            unit = Unit.from_manifest({**data, "id": declared}, source=mf.parent)
             self._units[unit.id] = unit  # replacement semantics: later wins
             found.add(unit.id)
         return found
@@ -186,11 +205,18 @@ class Registry:
         #      are object-level and stay here.
         from suijin.kernel import native as _native
 
-        manifests_json = json.dumps([
-            {"id": uid, "version": u.version, "tier": u.tier.name.lower(),
-             "requires": u.requires, "overrides": u.overrides}
-            for uid, u in sorted(winners.items())
-        ])
+        manifests_json = json.dumps(
+            [
+                {
+                    "id": uid,
+                    "version": u.version,
+                    "tier": u.tier.name.lower(),
+                    "requires": u.requires,
+                    "overrides": u.overrides,
+                }
+                for uid, u in sorted(winners.items())
+            ]
+        )
         dag = json.loads(_native.resolve_dag(manifests_json))
         skipped = {k: v for k, v in dag["skipped"].items()}
         bootable = set(dag["bootable"])

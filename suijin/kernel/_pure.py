@@ -123,8 +123,7 @@ def _resolve(manifests: list[dict[str, Any]]) -> dict:
 
     # 5. core-missing aborts
     core_problems = sorted(
-        mid for mid, u in winners.items()
-        if TIER_VALUE.get(u.get("tier"), 2) == 0 and mid in skipped
+        mid for mid, u in winners.items() if TIER_VALUE.get(u.get("tier"), 2) == 0 and mid in skipped
     )
     if core_problems:
         details = "; ".join(f"{mid} ({skipped[mid]})" for mid in core_problems)
@@ -144,9 +143,9 @@ def _resolve(manifests: list[dict[str, Any]]) -> dict:
     placed: set[str] = set()
     while len(placed) < len(bootable):
         ready = sorted(
-            mid for mid in bootable - placed
-            if all(d in placed or d not in bootable
-                   for d in (winners[mid].get("requires") or []))
+            mid
+            for mid in bootable - placed
+            if all(d in placed or d not in bootable for d in (winners[mid].get("requires") or []))
         )
         if not ready:
             break

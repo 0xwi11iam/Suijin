@@ -12,8 +12,9 @@ from suijin.kernel.contracts import Tier
 
 
 class Mod:
-    def __init__(self, mid, tier=Tier.RECOMMENDED, requires=(), provides=(),
-                 tools=(), service_name=None, subscribe=None):
+    def __init__(
+        self, mid, tier=Tier.RECOMMENDED, requires=(), provides=(), tools=(), service_name=None, subscribe=None
+    ):
         self.id = mid
         self.tier = tier
         self.requires = list(requires)
@@ -26,8 +27,9 @@ class Mod:
 
     def register(self, ctx):
         for t in self.tools:
-            ctx.register_tool(t, lambda args, c, n=t: f"{n}:{args.get('x', '')}",
-                              description=f"from {self.id}", owner=self.id)
+            ctx.register_tool(
+                t, lambda args, c, n=t: f"{n}:{args.get('x', '')}", description=f"from {self.id}", owner=self.id
+            )
         if self.service_name:
             ctx.register_service(self.service_name, lambda: f"{self.service_name}-obj")
         if self.subscribe:
@@ -53,8 +55,7 @@ def _tree(tmp_path):
     for mid, tier, requires in specs:
         d = root / mid
         d.mkdir(parents=True)
-        (d / "plugin.json").write_text(json.dumps(
-            {"id": mid, "version": "1.0.0", "tier": tier, "requires": requires}))
+        (d / "plugin.json").write_text(json.dumps({"id": mid, "version": "1.0.0", "tier": tier, "requires": requires}))
     return root
 
 
@@ -62,15 +63,11 @@ class TestFullBoot:
     def test_post(self, tmp_path, capsys):
         entries = {
             "platform": Mod("platform", tier=Tier.CORE),
-            "tools": Mod("tools", tier=Tier.CORE, requires=["platform"],
-                         tools=["demo.scan"], subscribe="started"),
+            "tools": Mod("tools", tier=Tier.CORE, requires=["platform"], tools=["demo.scan"], subscribe="started"),
             "providers": Mod("providers", service_name="llm"),
-            "redteam": Mod("redteam", requires=["tools", "providers"],
-                           tools=["red.attack"]),
+            "redteam": Mod("redteam", requires=["tools", "providers"], tools=["red.attack"]),
         }
-        ctx, report = controller.boot(
-            module_roots=[_tree(tmp_path)], entries=entries,
-            workspace=tmp_path, quiet=True)
+        ctx, report = controller.boot(module_roots=[_tree(tmp_path)], entries=entries, workspace=tmp_path, quiet=True)
 
         # registry: everything bootable except the broken extra
         assert report.bootable == {"platform", "tools", "providers", "redteam"}
@@ -90,6 +87,7 @@ class TestFullBoot:
         # jobs: kernel scheduler live on ctx
         jid = ctx.jobs.spawn("t", {}, fn=lambda n, a, c: "ok")
         import time as _t
+
         _t.sleep(0.2)
         assert ctx.jobs.status(jid) in ("done", "ok")
 

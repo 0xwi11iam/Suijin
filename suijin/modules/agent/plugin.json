@@ -1,0 +1,11 @@
+{
+  "id": "agent",
+  "version": "1.0.0",
+  "tier": "core",
+  "requires": ["agent.graph", "agent.nodes", "agent.memory", "tools"],
+  "provides": ["agent_graph"],
+  "entry": "suijin.modules.agent:AgentModule",
+  "permissions": ["provider", "events.listen", "events.emit"],
+  "modules": ["graph", "nodes", "memory"],
+  "description": "The run loop: LangGraph state machine orchestrating think/execute/respond"
+}

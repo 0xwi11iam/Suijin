@@ -1,0 +1,10 @@
+{
+  "id": "console",
+  "version": "1.0.0",
+  "tier": "core",
+  "requires": ["agent"],
+  "provides": ["console", "console_hooks"],
+  "entry": "suijin.modules.console:ConsoleModule",
+  "permissions": ["filesystem", "events.listen"],
+  "description": "Surfaces: TUI menus, CLI verbs, WebUI, MCP — feature-blind, driven by registered hooks"
+}

@@ -1,0 +1,10 @@
+{
+  "id": "agent.memory",
+  "version": "1.0.0",
+  "tier": "core",
+  "requires": [],
+  "provides": ["state_schema"],
+  "entry": "suijin.modules.agent.memory:MemorySubmodule",
+  "permissions": ["filesystem"],
+  "description": "Agent state, engagement sessions, crash-recovery persistence"
+}

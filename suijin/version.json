@@ -1,6 +1,6 @@
 {
-  "version": "3.8.0",
-  "codename": "First Module Standing",
+  "version": "3.9.0",
+  "codename": "Core Tier Complete",
   "release_date": "2026-08-18",
-  "description": "Suijin v3.8.0: PHASE 2 BEGINS \u2014 platform, the first core-tier module, boots through the kernel. controller.boot() now materializes modules from manifest entry strings (no injected objects): platform registers config/workspace/llm/scorer services on the Context, initializes runtime + workspace dirs on start, journals the boot. Controller entry-materialization bug found+fixed by the new tests. 964 green."
+  "description": "Suijin v3.9.0: PHASE 2 CORE TIER COMPLETE \u2014 platform, tools (124 tools bridged onto the Context), agent (NESTED: graph/nodes/memory sub-modules as first-class dotted-id DAG units), console (feature-blind surfaces with the ConsoleHooks registry: register_menu/register_verb/unregister_owner \u2014 disable means disappear). Full boot: 7 modules in dependency order, 12 services. Registry now recurses one level with dotted-id validation. 980 tests green, 115 kernel."
 }
