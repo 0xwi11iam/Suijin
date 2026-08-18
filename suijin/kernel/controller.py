@@ -14,7 +14,11 @@ import sys
 from pathlib import Path
 
 from suijin.kernel.context import Context
+from suijin.kernel.health import HealthTracker
+from suijin.kernel.jobs import JobScheduler
+from suijin.kernel.journal import Journal
 from suijin.kernel.registry import Registry
+from suijin.kernel.vfs import Vfs
 
 # The live boot's entry objects (tests + shutdown introspection).
 _LAST_BOOT_ENTRIES: dict[str, object] = {}
@@ -72,6 +76,11 @@ def boot(
 
     # register() for every module — failures quarantine (recommended) or abort (core)
     ctx = Context(config=config, workspace=workspace)
+    ctx.vfs = Vfs(ctx.workspace)
+    ctx.jobs = JobScheduler()
+    ctx.journal = Journal(ctx.workspace / "logs")
+    ctx.health = HealthTracker()
+    ctx.journal.append("boot", report.summary())
     started: list[object] = []
     for unit in bootable_units:
         mod = entries.get(unit.id)
@@ -92,10 +101,14 @@ def boot(
         try:
             mod.start(ctx)
             started.append(mod)
+            ctx.health.record_boot(unit.id, status="ok")
+            ctx.journal.append("module.start", unit.id)
         except Exception as e:  # noqa: BLE001
             if unit.tier.value == 0:
                 raise RuntimeError(f"core module '{unit.id}' failed start: {e}") from e
             report.skipped[unit.id] = f"start failed: {e}"
+            ctx.health.record_boot(unit.id, status="failed", detail=str(e))
+            ctx.journal.append("module.skip", f"{unit.id}: {e}")
 
     _LAST_BOOT_ENTRIES = {u.id: entries[u.id] for u in bootable_units if u.id in entries}
     _LAST_CONTEXT = ctx
@@ -108,11 +121,18 @@ def boot(
                 stopped.append(getattr(mod, "id", "?"))
             except Exception:  # noqa: BLE001 — shutdown is best-effort
                 pass
+        # shutdown entry goes to disk (flush clears the ring by design)
+        ctx.journal.append("boot", f"shutdown: {len(stopped)} module(s) stopped")
+        ctx.journal.flush()
         return stopped
 
     ctx.shutdown = _shutdown  # type: ignore[method-assign]
 
     # Quiet-boot contract: silent when healthy, report when degraded
+    for mid, reason in report.skipped.items():
+        ctx.health.record_boot(mid, status="skipped", detail=reason)
+    for mid, reason in report.quarantined.items():
+        ctx.health.record_boot(mid, status="quarantined", detail=reason)
     problems = bool(report.skipped or report.quarantined or report.collisions)
     if problems or not quiet:
         print(f"[suijin boot] {report.summary()}")

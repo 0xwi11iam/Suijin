@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "suijin"
-version = "3.5.0"
+version = "3.6.0"
 description = "Suijin — autonomous red & blue teaming (formerly Medusa)"
 readme = "README.md"
 license = { text = "MIT" }

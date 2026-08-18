@@ -6,6 +6,32 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## [3.6.0] — 2026-08-18 — KERNEL COMPLETE (PHASE 1)
+
+All 12 kernel subsystems live; controller boots with a full POST:
+
+- **jobs**: kernel JobScheduler (spawn/get/status/output/list/cancel,
+  200-job cap) — tools/job_registry delegates here in Phase 2.
+- **vfs**: the single file-chokepoint — workspace-anchored resolution,
+  symlink-escape detection, allowlist extras, boundary-checked writes.
+- **security**: the permission vocabulary (network/shell/filesystem/
+  provider/events.*) — declared in manifests, validated at parse,
+  enforced at one point, renderable by the Module Manager.
+- **config**: LayeredConfig — kernel → module → user → env shadowing,
+  immutable snapshots; import-order-dependent config state dies here.
+- **health**: per-module last-boot status feeding boot report + doctor.
+- **journal**: dmesg analog — ring buffer + rotated disk log; the boot,
+  module lifecycle, and shutdown are recorded on every run. (Named
+  journal, not logging — no stdlib shadowing.)
+- **errors**: BootError/DependencyError/PermissionDenied/QuarantinedModule.
+- **controller** now wires Vfs, JobScheduler, Journal, and HealthTracker
+  into every Context; records module.start/skip events; flushes the
+  journal on reverse-order shutdown.
+- **POST test** (test_integration_boot): one boot exercising every
+  subsystem — scan realistic tree (incl. a broken module), verify tools/
+  services/events delivery/jobs/vfs boundaries/journal on disk/health
+  counts/quiet-boot output/shutdown. 68 kernel tests total.
+
 ## [3.5.0] — 2026-08-18 — KERNEL DAWN (PHASE 1 CORE)
 
 `suijin/kernel/` exists — stdlib-only, purity-linted, 45 kernel tests:
