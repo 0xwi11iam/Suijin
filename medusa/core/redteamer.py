@@ -32,6 +32,7 @@ from medusa.core.red.config_loader import (  # noqa: F401 — deliberate re-expo
     BASE_DIR,
     CONFIG_PATH,
     ENV_PATH,
+    active_model,
     load_config,
     load_env,
 )
@@ -79,7 +80,7 @@ async def run_red_team_async(config, objective, api_key=None):
     thread_id = f"redteam_{int(time.time())}"
 
     provider_name = config.get('provider', 'unknown')
-    model_name = config.get('final_model_id') or config.get(f'{provider_name}_model', 'auto')
+    model_name = active_model(config)
     console.print("\n[bold #e6b47c] Launching Agent[/bold #e6b47c] [dim](Ctrl+C to guide)[/dim]")
     console.print(f"[dim]{objective}[/dim]")
     console.print(f"[dim]{provider_name} / {model_name}[/dim]\n")

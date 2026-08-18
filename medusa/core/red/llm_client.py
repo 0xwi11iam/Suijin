@@ -10,7 +10,7 @@ import asyncio
 
 from rich.console import Console
 
-from medusa.core.red.config_loader import load_config
+from medusa.core.red.config_loader import active_model, load_config
 
 console = Console()
 
@@ -20,7 +20,7 @@ async def generate_async(messages, config=None):
     if not config:
         config = load_config()
     provider = config.get("provider", "unknown")
-    model = config.get("final_model_id") or config.get(f"{provider}_model", "auto")
+    model = active_model(config)
     msg_count = len(messages)
     prompt_chars = sum(len(m.get("content", "")) for m in messages)
 

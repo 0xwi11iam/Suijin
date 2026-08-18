@@ -2,6 +2,21 @@
 
 All notable changes to Medusa.
 
+## [2.9.1] — 2026-08-18 — PROVIDER-AWARE MODEL DISPLAY
+
+### Fixed
+- **Status lines showed the wrong model** — the launcher banner and the
+  `Thinking... (zai/deepseek-ai/DeepSeek-V4-Flash)` spinner hardcoded
+  `final_model_id` (a HuggingFace-style id written by the default config)
+  as the cross-provider fallback, so it always won over `<provider>_model`.
+  New `active_model()` helper (core/red/config_loader.py) resolves the
+  model per provider; wired into redteamer's launcher line, llm_client's
+  spinner, the blue AI engine's `result.llm_model` record, the LobsterTrap
+  forwarder, and the AMD branch (which now also honors an `amd_model` key).
+  HuggingFace keeps `final_model_id` — that's the only provider it means
+  anything for. The actual API calls were always correct; only display and
+  record-keeping lied. 6 regression tests.
+
 ## [2.9.0] — 2026-08-18 — PURPLE ARENA
 
 ### Added

@@ -270,6 +270,88 @@ class TestZaiConfig:
         assert "pay-as-you-go" in out
 
 
+class TestActiveModelResolution:
+    """The status line / display model must be provider-aware.
+
+    Regression: selecting zai displayed 'zai / deepseek-ai/DeepSeek-V4-Flash'
+    because final_model_id (an HF-style id) was the hardcoded cross-provider
+    default — even while the actual API call correctly used glm-5.3.
+    """
+
+    DEFAULT_CFG = {
+        "final_model_id": "deepseek-ai/DeepSeek-V4-Flash",  # written by default config
+        "zai_model": "glm-5.3",
+        "deepseek_model": "deepseek-v4-flash",
+        "gemini_model": "gemini-2.5-flash",
+        "anthropic_model": "claude-opus-4-7",
+    }
+
+    def test_zai_shows_glm_not_final_model_id(self):
+        from medusa.core.red.config_loader import active_model
+
+        cfg = {**self.DEFAULT_CFG, "provider": "zai"}
+        assert active_model(cfg) == "glm-5.3"
+
+    def test_every_provider_resolves_its_own_model(self):
+        from medusa.core.red.config_loader import active_model
+
+        for provider, expected in (
+            ("zai", "glm-5.3"),
+            ("deepseek", "deepseek-v4-flash"),
+            ("gemini", "gemini-2.5-flash"),
+            ("anthropic", "claude-opus-4-7"),
+        ):
+            assert active_model({**self.DEFAULT_CFG, "provider": provider}) == expected
+
+    def test_huggingface_keeps_final_model_id(self):
+        from medusa.core.red.config_loader import active_model
+
+        assert active_model({**self.DEFAULT_CFG, "provider": "huggingface"}) \
+            == "deepseek-ai/DeepSeek-V4-Flash"
+
+    def test_zai_endpoint_variant_shows_model(self):
+        from medusa.core.red.config_loader import active_model
+
+        cfg = {**self.DEFAULT_CFG, "provider": "zai", "zai_model": "glm-5-turbo",
+               "zai_endpoint": "paas"}
+        assert active_model(cfg) == "glm-5-turbo"
+
+    def test_missing_everything_is_auto(self):
+        from medusa.core.red.config_loader import active_model
+
+        assert active_model({}) == "auto"
+        assert active_model(None) == "auto"
+
+    def test_llm_client_uses_active_model(self, monkeypatch):
+        # the Thinking... spinner builds its label from active_model()
+        import asyncio
+
+        from medusa.core.red import llm_client
+
+        monkeypatch.setattr(
+            llm_client, "_generate", lambda msgs, cfg: "ok"
+        )
+        labels = []
+        monkeypatch.setattr(
+            llm_client.console, "status",
+            lambda label, **_k: labels.append(label) or _NullCtx(),
+        )
+        out = asyncio.run(llm_client.generate_async(
+            [{"role": "user", "content": "hi"}],
+            {**self.DEFAULT_CFG, "provider": "zai"}))
+        assert out == "ok"
+        assert "zai/glm-5.3" in labels[0]
+        assert "DeepSeek" not in labels[0]
+
+
+class _NullCtx:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_a):
+        return False
+
+
 class TestDeepSeekTimeoutRegression:
     """DeepSeek's retry loop used to fall through to 'Unknown provider'
     instead of returning a timeout message (fixed alongside the Z.ai work)."""

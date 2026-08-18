@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from medusa.core.constants import DEFAULT_MODEL, RISK_HIGH
+from medusa.core.red.config_loader import active_model
 
 
 @dataclass
@@ -177,7 +178,7 @@ Respond ONLY with valid JSON. No markdown, no explanation outside JSON."""
             # Record cost
             usage = get_usage()
             result.llm_cost_usd = usage.get("est_cost_usd", 0.0)
-            result.llm_model = self.config.get("final_model_id", DEFAULT_MODEL)
+            result.llm_model = active_model(self.config) or DEFAULT_MODEL
 
         except Exception as e:
             result.reasoning = f"AI call failed: {e}"

@@ -29,6 +29,21 @@ from medusa.core.constants import (
 console = Console()
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # medusa/ directory
 ENV_PATH = BASE_DIR / ".env"
+
+
+def active_model(config: dict | None) -> str:
+    """Provider-aware model resolution for display and routing.
+
+    `final_model_id` is a HuggingFace-style repo id and is ONLY meaningful
+    for the huggingface provider — it must never leak as a cross-provider
+    default (it used to: selecting zai displayed
+    'zai / deepseek-ai/DeepSeek-V4-Flash' even while calling glm-5.3).
+    """
+    cfg = config or {}
+    provider = cfg.get("provider", "deepseek")
+    if provider == "huggingface":
+        return cfg.get("final_model_id") or "auto"
+    return cfg.get(f"{provider}_model") or "auto"
 CONFIG_PATH = BASE_DIR / "config.json"
 
 

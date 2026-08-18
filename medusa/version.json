@@ -1,6 +1,6 @@
 {
-  "version": "2.9.0",
+  "version": "2.9.1",
   "codename": "Purple Arena",
   "release_date": "2026-08-18",
-  "description": "Medusa v2.9: engagement lifecycle + purple team. `medusa export` (chain-of-custody evidence bundles with SHA-256 manifest + verify), `medusa debrief` (cross-engagement analytics), `medusa replay` (interactive timeline + markdown transcripts), `medusa eval` (offline detector tuning harness: precision/recall/F1 + threshold sweep — it found and fixed real detector gaps, recall 0.14->0.57), `medusa battle` (scripted red vs pattern blue, live scoreboard, real tarpits/blocks). 559 tests green."
+  "description": "Medusa v2.9.1: provider-aware model display — selecting Z.ai no longer shows 'zai / deepseek-ai/DeepSeek-V4-Flash' in the launcher/Thinking spinner (final_model_id was hardcoded as a cross-provider default; now every surface resolves <provider>_model, HF keeps final_model_id). 565 tests green."
 }

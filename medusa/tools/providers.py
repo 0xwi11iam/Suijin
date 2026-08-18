@@ -279,7 +279,9 @@ def generate(
     # ---------- LobsterTrap proxy check ----------
     if _lobstertrap_available():
         console.print("[bold green][LobsterTrap] Active — inspecting prompt...[/bold green]")
-        lt_model = model_id or config.get("final_model_id", "gpt-3.5-turbo")
+        from medusa.core.red.config_loader import active_model
+
+        lt_model = model_id or active_model(config)
         lt_result = _call_via_lobstertrap(messages, lt_model, temp, mtokens)
         if lt_result is not None:
             if lt_result.startswith("Error: LobsterTrap DENIED"):
@@ -467,7 +469,7 @@ def generate(
     if provider == "amd":
         api_key = os.environ.get("AMD_API_KEY")
         endpoint = config.get("amd_config", {}).get("endpoint", "https://api.amd.com/v1")
-        amd_model = model_id or config.get("final_model_id")
+        amd_model = model_id or config.get("amd_model") or config.get("final_model_id")
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
