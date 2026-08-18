@@ -48,6 +48,7 @@ export interface Snapshot {
   version: string
   provider: { name: string; model: string; zai_endpoint: string | null }
   kb: KbInfo
+  kev: { count: number; retrieved?: string }
   tools: { module_tool_count: number; missing: Record<string, string[]> }
   labs: LabInfo[]
   tarpit: Record<string, { delay?: number; [k: string]: unknown }>
@@ -60,4 +61,18 @@ export interface Snapshot {
   sessions_count: number
   audits: AuditSummary[]
   error?: string
+}
+
+export interface DossierData {
+  target: string
+  constraints: Record<string, string[]>
+  failures: string[]
+  engagements: string[]
+  reports: string[]
+}
+
+export interface TimelineEvent {
+  ts: string
+  kind: string
+  detail: string
 }

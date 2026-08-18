@@ -141,6 +141,15 @@ def build_snapshot() -> dict:
     except Exception as e:
         snap["kb"] = {"built": False, "error": str(e)}
 
+    # CISA KEV mirror (optional — built via `medusa pull cve`)
+    try:
+        from medusa.tools.cve_mirror import kev_status
+
+        st = kev_status()
+        snap["kev"] = st if st else {"count": 0}
+    except Exception:
+        snap["kev"] = {"count": 0}
+
     # modules / tools
     try:
         from medusa.modules.loader import discover_modules, get_module_tools
@@ -309,6 +318,25 @@ def create_app() -> Flask:
         if not q:
             return jsonify({"error": "q required"}), 400
         return jsonify({"q": q, "result": search_kb(q, limit=limit)})
+
+    @app.get("/api/dossier")
+    def dossier():
+        from medusa.tools.dossier import build_dossier
+
+        target = request.args.get("target", "").strip()
+        if not target:
+            return jsonify({"error": "target required"}), 400
+        try:
+            return jsonify(build_dossier(target))
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+
+    @app.get("/api/timeline")
+    def timeline():
+        from medusa.tools.housekeeping import build_timeline
+
+        limit = min(int(request.args.get("limit", 60)), 200)
+        return jsonify({"events": build_timeline(limit=limit)})
 
     @app.get("/api/report")
     def report_content():

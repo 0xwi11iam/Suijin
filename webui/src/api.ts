@@ -1,4 +1,4 @@
-import type { Snapshot } from "./types"
+import type { DossierData, Snapshot, TimelineEvent } from "./types"
 
 const base = ""
 
@@ -29,6 +29,21 @@ export async function fetchSession(file: string): Promise<Record<string, unknown
 export async function fetchConfig(): Promise<Record<string, unknown>> {
   const r = await fetch("/api/config")
   if (!r.ok) throw new Error(`config ${r.status}`)
+  return r.json()
+}
+
+export async function fetchDossier(target: string): Promise<DossierData> {
+  const r = await fetch(`/api/dossier?target=${encodeURIComponent(target)}`)
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({ error: `dossier ${r.status}` }))
+    throw new Error(e.error || `dossier ${r.status}`)
+  }
+  return r.json()
+}
+
+export async function fetchTimeline(limit = 60): Promise<{ events: TimelineEvent[] }> {
+  const r = await fetch(`/api/timeline?limit=${limit}`)
+  if (!r.ok) throw new Error(`timeline ${r.status}`)
   return r.json()
 }
 

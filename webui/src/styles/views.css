@@ -91,3 +91,20 @@ input[type="range"] {
   width: 46px; height: 46px; border-radius: 8px;
   border: 1px solid var(--border-subtle);
 }
+
+/* timeline */
+.timeline-day {
+  padding: 8px 24px 4px;
+  color: var(--text-tertiary);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 11px;
+}
+.timeline-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 7px 24px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 13px;
+}
+.timeline-row:hover { background: rgba(255,255,255,0.02); }

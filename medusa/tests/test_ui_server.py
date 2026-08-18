@@ -131,6 +131,69 @@ class TestKbSearch:
         assert d["result"] == "RESULT:sqli:3"
 
 
+class TestDossierEndpoint:
+    def test_requires_target(self, client):
+        assert client.get("/api/dossier").status_code == 400
+
+    def test_dossier_shape(self, client, monkeypatch):
+        from medusa.tools import dossier as dos
+
+        monkeypatch.setattr(dos, "build_dossier", lambda t: {
+            "target": t, "constraints": {"blocks": ["x OR 1=1"]},
+            "failures": [], "engagements": [], "reports": []})
+        d = client.get("/api/dossier?target=10.0.0.5").get_json()
+        assert d["target"] == "10.0.0.5"
+        assert d["constraints"]["blocks"] == ["x OR 1=1"]
+
+    def test_invalid_target_400(self, client, monkeypatch):
+        from medusa.tools import dossier as dos
+
+        def boom(t):
+            raise ValueError("target required")
+
+        monkeypatch.setattr(dos, "build_dossier", boom)
+        assert client.get("/api/dossier?target=%20").status_code == 400
+
+
+class TestTimelineEndpoint:
+    def test_events_listed(self, client, monkeypatch):
+        from medusa.tools import housekeeping as hk
+
+        monkeypatch.setattr(hk, "build_timeline", lambda limit=60: [
+            {"ts": "2026-08-18 01:00:00", "kind": "engagement start", "detail": "x"}])
+        d = client.get("/api/timeline").get_json()
+        assert d["events"][0]["kind"] == "engagement start"
+
+    def test_limit_clamped(self, client, monkeypatch):
+        from medusa.tools import housekeeping as hk
+
+        seen = {}
+
+        def fake(limit=60):
+            seen["limit"] = limit
+            return []
+
+        monkeypatch.setattr(hk, "build_timeline", fake)
+        client.get("/api/timeline?limit=9999")
+        assert seen["limit"] == 200
+
+
+class TestKevInOverview:
+    def test_kev_field_always_present(self, client, monkeypatch):
+        import medusa.tools.cve_mirror as cm
+
+        monkeypatch.setattr(cm, "kev_status", lambda: {"count": 1337, "retrieved": "x"})
+        d = client.get("/api/overview").get_json()
+        assert d["kev"]["count"] == 1337
+
+    def test_kev_none_when_missing(self, client, monkeypatch):
+        import medusa.tools.cve_mirror as cm
+
+        monkeypatch.setattr(cm, "kev_status", lambda: None)
+        d = client.get("/api/overview").get_json()
+        assert d["kev"] == {"count": 0}
+
+
 class TestSse:
     def test_events_stream_is_sse(self, client):
         # The generator is infinite by design — consume only the leading

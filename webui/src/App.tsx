@@ -8,12 +8,16 @@ import Labs from "./views/Labs"
 import Reports from "./views/Reports"
 import Settings from "./views/Settings"
 import Graph from "./views/Graph"
+import Dossier from "./views/Dossier"
+import Timeline from "./views/Timeline"
 
 const NAV = [
   { to: "/", icon: "◈", label: "Dashboard", end: true },
   { to: "/red", icon: "⚔", label: "Red Team" },
   { to: "/blue", icon: "🛡", label: "Blue Team" },
   { to: "/graph", icon: "◉", label: "Knowledge Graph" },
+  { to: "/dossier", icon: "◫", label: "Dossier" },
+  { to: "/timeline", icon: "⋮", label: "Timeline" },
   { to: "/labs", icon: "⚗", label: "Labs" },
   { to: "/reports", icon: "▤", label: "Reports" },
   { to: "/settings", icon: "⚙", label: "Settings" },
@@ -113,6 +117,8 @@ export default function App() {
             <Route path="/red" element={<RedTeam />} />
             <Route path="/blue" element={<BlueTeam />} />
             <Route path="/graph" element={<Graph />} />
+            <Route path="/dossier" element={<Dossier />} />
+            <Route path="/timeline" element={<Timeline />} />
             <Route path="/labs" element={<Labs />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/settings" element={<Settings />} />

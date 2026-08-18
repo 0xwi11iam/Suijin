@@ -89,6 +89,14 @@ export default function Settings() {
           )}
           <div className="small" style={{ marginTop: 12 }}>
             Failed sources retry with <span className="mono">medusa pull kb --sources &lt;name&gt;</span>.
+            {snap?.kev && snap.kev.count > 0 && (
+              <>
+                {" "}KEV mirror: <span className="mono" style={{ color: "var(--red)" }}>
+                  {snap.kev.count.toLocaleString()}
+                </span>{" "}
+                actively-exploited CVEs cached (<span className="mono">medusa pull cve</span>).
+              </>
+            )}
           </div>
         </div>
       )}
