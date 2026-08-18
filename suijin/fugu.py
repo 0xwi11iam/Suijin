@@ -447,12 +447,12 @@ def run_fugu(config, objective, generate_fn, api_key=None):
         generate_fn: LLM generate function from providers
         api_key:     optional enterprise auth key
     """
+    from suijin import tools  # the package (route_tool, http_request, …)
     from suijin.fugu_chain import ChainTracker
     from suijin.intel.supervisor import format_spend
     from suijin.modules.loader import load_local_module
 
     providers = load_local_module("providers")
-    tools = load_local_module("tools")
 
     console.print(Panel.fit("[bold cyan]🐡 Fugu Collective Intelligence Mode[/bold cyan]"))
 

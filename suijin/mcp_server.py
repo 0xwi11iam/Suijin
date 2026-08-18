@@ -34,9 +34,11 @@ from suijin import __version__ as SERVER_VERSION  # noqa: E402 — after sys.pat
 
 # Load the module packs (Modules/Tools, Modules/Mods) so every backend tool
 # is dispatchable. Idempotent; must run before building the tool registry.
-from suijin.modules.loader import discover_modules, get_module_tools
+from suijin.modules.loader import get_module_tools  # noqa: F401 — used lazily
 
-discover_modules()
+# Module-pack discovery moved behind init_runtime() (Phase 0): import-time
+# discovery executed every pack's main.py before the server was even asked
+# to do anything. The tools/list handler initializes on demand.
 
 # Curated descriptions for the most-used tools. Module tools without a
 # docstring fall back to these.
@@ -204,6 +206,9 @@ def _make_route_handler(name: str):
     return handler
 
 
+# Core (always-present) MCP tools. Backend tools are appended LAZILY on
+# first tools/list / tools/call — building them at import time would run
+# module-pack discovery before init_runtime() has been called (Phase 0).
 TOOLS = [
     {
         "name": "suijin_tool",
@@ -263,7 +268,20 @@ TOOLS = [
         "description": "Engine status: version, backend health, tool count.",
         "inputSchema": {"type": "object", "properties": {}},
     },
-] + _build_backend_tools()
+]
+
+_full_tools_cache: list | None = None
+
+
+def _full_tools() -> list:
+    """Core tools + one entry per backend tool (built once, on demand)."""
+    global _full_tools_cache
+    if _full_tools_cache is None:
+        from suijin.tools.runtime import init_runtime
+
+        init_runtime()
+        _full_tools_cache = TOOLS + _build_backend_tools()
+    return _full_tools_cache
 
 
 def _jsonrpc_error(request_id, code, message):
@@ -337,10 +355,22 @@ TOOL_HANDLERS = {
     "suijin_kg_attacker": tool_suijin_kg_attacker,
     "suijin_status": tool_suijin_status,
 }
+# Backend-tool handlers register lazily alongside _full_tools() so pack
+# callables exist before any tools/call can name them.
 for _entry in TOOLS:
     _name = _entry["name"]
     if _name not in TOOL_HANDLERS:
         TOOL_HANDLERS[_name] = _make_route_handler(_name)
+
+
+def _all_handlers() -> dict:
+    """Core handlers + backend-tool handlers (registered once, on demand)."""
+    if len(TOOL_HANDLERS) == len(TOOLS):
+        for _entry in _full_tools():
+            _name = _entry["name"]
+            if _name not in TOOL_HANDLERS:
+                TOOL_HANDLERS[_name] = _make_route_handler(_name)
+    return TOOL_HANDLERS
 
 
 def handle_message(msg):
@@ -364,13 +394,13 @@ def handle_message(msg):
         return _jsonrpc_result(request_id, {})
 
     if method == "tools/list":
-        return _jsonrpc_result(request_id, {"tools": TOOLS})
+        return _jsonrpc_result(request_id, {"tools": _full_tools()})
 
     if method == "tools/call":
         params = msg.get("params") or {}
         name = params.get("name", "")
         arguments = params.get("arguments") or {}
-        handler = TOOL_HANDLERS.get(name)
+        handler = _all_handlers().get(name)
         if handler is None:
             return _jsonrpc_result(request_id, _text_content(f"Unknown tool: {name}", is_error=True))
         try:
@@ -386,6 +416,9 @@ def handle_message(msg):
 
 
 def main():
+    from suijin.tools.runtime import init_runtime
+
+    init_runtime()
     for line in sys.stdin:
         line = line.strip()
         if not line:

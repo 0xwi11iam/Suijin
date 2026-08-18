@@ -73,6 +73,9 @@ def _fail(name, detail=""):
 
 
 def run_doctor() -> int:
+    from suijin.tools.runtime import init_runtime
+
+    init_runtime()
     rows = []
     critical = 0
 

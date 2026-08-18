@@ -78,25 +78,55 @@ def set_verbose(v: bool):
 # installed package. This single helper replaces the 6 duplicate copies
 # of importlib.util.spec_from_file_location scattered across the codebase.
 
+# Canonical name -> module object. One instance per file, forever: the old
+# behavior re-executed the file on every call, spawning split-brain
+# instances (providers.py ran FIVE times, each with its own USAGE
+# accumulator — "shares ONE instance" comments were false).
+_local_cache: dict[str, object] = {}
+
+# Search order: root first, then subdirs. The canonical name for caching
+# is the resolved file's real import path (e.g. "suijin.tools.providers"),
+# so force-loaded and normally-imported modules share sys.modules.
+SEARCH_DIRS = [BASE_DIR] + [BASE_DIR / d for d in ("tools", "security", "intel", "core", "infra")]
+
 
 def load_local_module(mod_name: str):
-    """Import a sibling .py file by name, searching suijin/ root and subdirs.
+    """Import a sibling .py by name, searching suijin/ root and subdirs.
 
-    Returns the loaded module object. Searches: suijin/, suijin/tools/,
-    suijin/security/, suijin/intel/, suijin/core/.
+    Contract (Phase 0, item 3):
+      - returns the SAME module object on every call for a given file
+      - when the file maps to a real package module, the sys.modules entry
+        IS that module (dynamic load == normal import)
+      - raises ModuleNotFoundError (clear, catchable) when nothing matches
     """
     import importlib.util
 
-    # Search order: root first, then subdirs
-    search_dirs = [BASE_DIR] + [BASE_DIR / d for d in ("tools", "security", "intel", "core", "infra")]
-    for search in search_dirs:
+    for search in SEARCH_DIRS:
         path = search / f"{mod_name}.py"
-        if path.exists():
-            spec = importlib.util.spec_from_file_location(mod_name, str(path))
-            mod = importlib.util.module_from_spec(spec)
+        if not path.exists():
+            continue
+        # Canonical import path: suijin/<rel>.py -> suijin.<rel with dots>
+        try:
+            rel = path.resolve().relative_to(BASE_DIR.resolve()).with_suffix("")
+            canonical = "suijin." + ".".join(rel.parts)
+        except ValueError:
+            canonical = f"suijin_local.{mod_name}"
+        cached = sys.modules.get(canonical)
+        if cached is not None:
+            return cached
+        spec = importlib.util.spec_from_file_location(canonical, str(path))
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[canonical] = mod  # register BEFORE exec (self-import safety)
+        try:
             spec.loader.exec_module(mod)
-            return mod
-    raise FileNotFoundError(f"Cannot force-load '{mod_name}' in {search_dirs}")
+        except BaseException:
+            sys.modules.pop(canonical, None)
+            raise
+        return mod
+    raise ModuleNotFoundError(
+        f"suijin module '{mod_name}' not found in any search dir "
+        f"({', '.join(str(d.name) for d in SEARCH_DIRS)})"
+    )
 
 
 def discover_modules():

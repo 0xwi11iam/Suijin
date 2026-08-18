@@ -9,6 +9,16 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _runtime_once():
+    """The test suite is an entry point: initialize the runtime explicitly
+    (Phase 0 contract — importing suijin.tools.* no longer discovers module
+    packs / migrates the workspace as an import side effect)."""
+    from suijin.tools.runtime import init_runtime
+
+    init_runtime()
+
+
 @pytest.fixture(autouse=True)
 def reset_cost_tracking():
     """Reset provider cost tracking before each test."""
