@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "suijin"
-version = "3.11.0"
+version = "3.12.0"
 description = "Suijin — autonomous red & blue teaming (formerly Medusa)"
 readme = "README.md"
 license = { text = "MIT" }
@@ -25,6 +25,7 @@ dependencies = [
     "flask_cors>=4.0,<5.0",
     "PyJWT>=2.8,<3.0",
     "duckduckgo-search>=6.0",
+    "textual>=8.0,<9.0",  # Module Manager TUI (Phase 4)
     "urllib3>=1.26",
 ]
 

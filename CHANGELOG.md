@@ -6,6 +6,27 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## [3.12.0] — 2026-08-18 — MODULE MANAGER (PHASE 4)
+
+- **Management API** (`suijin/modules/manager.py`): install/uninstall/
+  enable/disable/list/info — the single source of truth behind both the
+  CLI and the TUI. Installs validate manifests, refuse core-tier
+  imposters into user space, protect bundled modules from uninstall,
+  and report python deps with the exact pip command (`--with-deps`
+  opts in; nothing executes implicitly).
+- **Textual Module Manager** (`suijin module`, bare): tier-grouped
+  table + detail pane (deps ✓/✗, permissions, source), keys for
+  toggle/install/uninstall/info/deps/perms/boot-report. Driven
+  headlessly in tests via Textual's run_test pilot.
+- **CLI verbs**: `suijin module list | info <id> | enable <id> |
+  disable <id> | install <path> [--with-deps] | uninstall <id>` (plus
+  the existing SDK init/validate under the same command).
+- **Boot honors enable/disable**: disabled recommended modules are
+  dropped before materialization — tools, services, AND menu entries
+  never exist that boot (verified end-to-end: disabling redteam +
+  blueteam leaves exactly [ops] in the menu). Disabling CORE aborts
+  with a readable reason. State is ~/.suijin/modules.json.
+
 ## [3.11.0] — 2026-08-18 — PACKS ASCEND (PHASE 3 COMPLETE)
 
 All 49 Modules/ packs are kernel plugins:

@@ -81,6 +81,26 @@ def boot(
     for root in module_roots or []:
         reg.scan(Path(root))
     report = reg.resolve()
+
+    # operator enable/disable state (suijin module disable): disabled units
+    # are dropped BEFORE materialization — their tools/services/menus never
+    # exist this boot. Disabled CORE aborts (that's a broken system).
+    try:
+        from suijin.modules import manager as _mgmt
+
+        for uid in list(report.bootable):
+            if uid in report.units and not _mgmt.is_enabled(uid):
+                unit = report.units[uid]
+                if unit.tier.value == 0:
+                    raise RuntimeError(
+                        f"boot aborted — core module '{uid}' is disabled "
+                        "(core modules cannot be disabled: suijin module enable " + uid + ")"
+                    )
+                report.bootable.discard(uid)
+                report.boot_order = [u for u in report.boot_order if u.id != uid]
+                report.skipped[uid] = "disabled by operator"
+    except ImportError:
+        pass  # manager module unavailable (minimal installs) — no state to honor
     if report.aborted:
         raise RuntimeError(f"boot aborted — {report.abort_reason}")
 

@@ -1,6 +1,6 @@
 {
-  "version": "3.11.0",
-  "codename": "Packs Ascend",
+  "version": "3.12.0",
+  "codename": "Module Manager",
   "release_date": "2026-08-18",
-  "description": "Suijin v3.11.0: PHASE 3 COMPLETE \u2014 all 49 Modules/ packs convert to kernel plugins (pack_converter generates plugin.json + entry shims; flat layout, category kept as metadata). Full OS boot with packs: 61 modules, packs own their 93 tools (tools module owns the 31 core routes); pack-less boots bridge everything, behavior identical. Pack ownership decided by the BOOT (booted-unit stamp), not ambient discovery. 990 tests green (125 kernel)."
+  "description": "Suijin v3.12.0: PHASE 4 \u2014 the install system. Management API (install/uninstall/enable/disable/list/info; deps reported with exact pip commands, --with-deps opt-in; core-tier imposters refused; bundled modules uninstall-protected), Textual Module Manager TUI (tier-grouped table, detail pane, boot report screen), CLI verbs (suijin module list/info/enable/disable/install/uninstall \u2014 bare opens the TUI), and the boot honors enable/disable: disabled recommended modules vanish from tools/services/menus; disabled core aborts with a readable reason. 1010 tests green."
 }

@@ -1125,6 +1125,49 @@ def run_providers(args) -> int:
     return 0 if ok_count else 1
 
 
+def run_module_manager(args) -> int:
+    """`suijin module` — bare opens the Textual manager; verbs call the API."""
+    from suijin.modules import manager as mgmt
+
+    action = getattr(args, "module_action", "tui")
+    try:
+        if action == "tui":
+            from suijin.modules.manager_tui import ModuleManager
+
+            ModuleManager().run()
+            return 0
+        if action == "list":
+            for e in mgmt.list_modules():
+                mark = "●" if e["enabled"] else "○"
+                print(f"  {mark} {e['tier']:12} {e['id']:20} v{e['version']}")
+            return 0
+        if action == "info":
+            info = mgmt.module_info(args.id)
+            print(f"{info['id']} v{info['version']} [{info['tier']}] enabled={info['enabled']}")
+            print(f"  requires:    {', '.join(info['requires']) or '—'}")
+            print(f"  permissions: {', '.join(info['permissions']) or '—'}")
+            print(f"  source:      {info['source']}")
+            return 0
+        if action == "enable":
+            print("enabled" if mgmt.set_enabled(args.id, True) else f"error: unknown module '{args.id}'")
+            return 0 if mgmt.is_enabled(args.id) else 1
+        if action == "disable":
+            ok = mgmt.set_enabled(args.id, False)
+            print("disabled (next boot)" if ok else f"error: unknown module '{args.id}'")
+            return 0 if ok else 1
+        if action == "install":
+            print(mgmt.install(args.path, with_deps=bool(getattr(args, "with_deps", False))))
+            return 0
+        if action == "uninstall":
+            mgmt.uninstall(args.id)
+            print(f"{args.id}: uninstalled")
+            return 0
+    except mgmt.InstallError as e:
+        print(f"error: {e}")
+        return 1
+    return 1
+
+
 def run_module(args) -> int:
     from suijin.tools import module_sdk
 
@@ -1519,15 +1562,36 @@ def main(argv=None):
     providers_cmd.add_argument("--all", action="store_true", help="probe every provider with a key, not just the chain")
     providers_cmd.set_defaults(func=run_providers)
 
-    module = sub.add_parser("module", help="module SDK: init / validate")
+    module = sub.add_parser("module", help="module manager (bare = TUI) + SDK")
     module_sub = module.add_subparsers(dest="module_action")
-    mod_init = module_sub.add_parser("init", help="scaffold a new module pack")
+    module_sub.add_parser("tui", help="open the Textual Module Manager").set_defaults(func=run_module_manager)
+    m_list = module_sub.add_parser("list", help="list modules with tiers + state")
+    m_list.set_defaults(func=run_module_manager)
+    m_info = module_sub.add_parser("info", help="module details")
+    m_info.add_argument("id", help="module id")
+    m_info.set_defaults(func=run_module_manager)
+    m_en = module_sub.add_parser("enable", help="enable a module (next boot)")
+    m_en.add_argument("id", help="module id")
+    m_en.set_defaults(func=run_module_manager)
+    m_dis = module_sub.add_parser("disable", help="disable a module (next boot)")
+    m_dis.add_argument("id", help="module id")
+    m_dis.set_defaults(func=run_module_manager)
+    m_inst = module_sub.add_parser("install", help="install a module from a path")
+    m_inst.add_argument("path", help="module directory containing plugin.json")
+    m_inst.add_argument(
+        "--with-deps", action="store_true", help="also pip-install declared python deps (explicit opt-in)"
+    )
+    m_inst.set_defaults(func=run_module_manager)
+    m_un = module_sub.add_parser("uninstall", help="remove an installed (user-space) module")
+    m_un.add_argument("id", help="module id")
+    m_un.set_defaults(func=run_module_manager)
+    mod_init = module_sub.add_parser("init", help="scaffold a new module pack (SDK)")
     mod_init.add_argument("name", help="module name (snake_case)")
     mod_init.set_defaults(func=run_module)
-    mod_val = module_sub.add_parser("validate", help="validate a module pack")
+    mod_val = module_sub.add_parser("validate", help="validate a module pack (SDK)")
     mod_val.add_argument("name", help="module directory name under Modules/Tools")
     mod_val.set_defaults(func=run_module)
-    module.set_defaults(func=lambda _a: run_module(argparse.Namespace(module_action="validate", name="")))
+    module.set_defaults(func=run_module_manager)
 
     notify = sub.add_parser("notify", help="operator notifications: send / test")
     notify_sub = notify.add_subparsers(dest="notify_action")
