@@ -6,6 +6,33 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## [3.5.0] — 2026-08-18 — KERNEL DAWN (PHASE 1 CORE)
+
+`suijin/kernel/` exists — stdlib-only, purity-linted, 45 kernel tests:
+
+- **contracts**: Module/Tool protocols (structural), Tier IntEnum
+  (CORE/RECOMMENDED/INSTALLED) — the kernel understands categories of
+  software, never specific modules.
+- **EventBus**: synchronous pub/sub with per-subscriber fault isolation
+  (a broken listener can never break the chain) — the replacement for
+  every lazy cross-import hook.
+- **Context**: the syscall table handed to every module — config,
+  workspace, events, lazy services, namespaced tool registry with
+  contained failures.
+- **Registry**: manifest parsing, recursive scan, dependency DAG with
+  cycle NAMING, tier collision policy (later tier loses unless
+  `overrides` declares the shadow), broken-manifest quarantine,
+  fixpoint availability resolution, BootReport with human summary.
+  Boot-simulator fixtures cover healthy/missing-dep/circular/collision/
+  broken trees.
+- **controller.boot()**: the composition root — scan → resolve →
+  register (all) → start (topological order). Core failures abort;
+  recommended/installed failures skip + report. Quiet-boot contract:
+  silent when healthy, report exactly when degraded. ctx.shutdown()
+  stops in reverse order, best-effort.
+- **Kernel purity linter** (test_kernel_purity): kernel files may import
+  only stdlib + suijin.kernel.*, verified by AST AND clean-interpreter
+  import — the architectural keystone, enforced from day one.
 ## [3.4.0] — 2026-08-18 — PHASE 0 COMPLETE
 
 Suijin OS groundwork finished — the tree is de-coupled and kernel-ready.

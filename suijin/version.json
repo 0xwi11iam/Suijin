@@ -1,6 +1,6 @@
 {
-  "version": "3.4.0",
-  "codename": "OS Groundwork",
+  "version": "3.5.0",
+  "codename": "Kernel Dawn",
   "release_date": "2026-08-18",
-  "description": "Suijin v3.4.0: Phase 0 COMPLETE \u2014 one job registry (dead twin removed, auto-bg promotion routed through it), all 8 tools\u2192core inversions eliminated via the services seam (proto-Context), import-time mkdirs made lazy. 865 tests green. Kernel (Phase 1) is next."
+  "description": "Suijin v3.5.0: THE KERNEL LANDS (Phase 1 core) \u2014 contracts (Module/Tool protocols, tiers), EventBus (per-subscriber fault isolation), Context (the syscall table: services/tools/events), Registry (manifest DAG with cycle-naming, collision policy, quarantine), controller.boot() (quiet-boot scene analysis), plus the kernel-purity linter. Stdlib-only, 45 kernel tests. Remaining subsystems (jobs/vfs/security/config/health/journal) absorb legacy twins next."
 }

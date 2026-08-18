@@ -918,7 +918,7 @@ modules (agent/graph, agent/nodes…) resolve as one flat dependency graph.
 | Phase | Scope | Status |
 |:------|:------|:-------|
 | 0 | De-couple in place: god-import split, split-brain loader, import-time side effects, one job registry, services seam (inversions = 0), lazy mkdirs | ✅ **complete** |
-| 1 | Kernel (12 subsystems, each absorbing a legacy twin) | **in progress** |
+| 1 | Kernel: contracts/events/context/registry/controller + purity linter ✅ · jobs/vfs/security/config/health/journal absorb legacy twins next | **in progress** |
 | 1.5 | Rust core + oracle tests + wheel matrix | planned |
 | 2 | Core tier onto kernel | planned |
 | 3 | Recommended tier + 49 packs converted | planned |
