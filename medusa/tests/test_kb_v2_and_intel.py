@@ -59,6 +59,7 @@ def kb_env(tmp_path, monkeypatch):
     )
     summary = compile_kb(db_path=db, cache_dir=cache, log=lambda *_: None)
     monkeypatch.setattr(kbmod, "DB_PATH", db)
+    monkeypatch.setattr(kbmod, "CACHE_DIR", cache)  # used by read_doc defaults
     monkeypatch.setattr(kb_tools, "DB_PATH", db)
     monkeypatch.setattr(kb_tools, "CACHE_DIR", cache)
     monkeypatch.setattr(kb_tools, "WORKSPACE_DIR", ws)

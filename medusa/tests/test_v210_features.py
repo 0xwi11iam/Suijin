@@ -475,12 +475,15 @@ class TestClean:
 
 
 class TestReconHook:
-    def test_exploit_leads_appended(self, monkeypatch):
+    def test_exploit_leads_appended(self, monkeypatch, tmp_path):
+        import medusa.kb as kbmod
         import medusa.tools.kb_tools as kbt
         from medusa.tools import recon
 
-        monkeypatch.setattr(kbt, "DB_PATH", Path("/fake/exists"))
-        monkeypatch.setattr(recon, "_suggest", None, raising=False)
+        # make the KB-present check true WITHOUT a real build (CI has none)
+        fake_db = tmp_path / "kb.sqlite3"
+        fake_db.write_bytes(b"")
+        monkeypatch.setattr(kbmod, "DB_PATH", fake_db)
 
         def fake_suggest(service, version=""):
             return "Offline suggestions for 'awk'\n[gtfobins] awk is a living-off-the-land binary"
