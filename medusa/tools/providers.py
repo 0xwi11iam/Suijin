@@ -610,3 +610,23 @@ def generate(
         return "Error: Z.ai API Timeout"
 
     return f"Error: Unknown provider '{provider}'"
+
+
+def generate_with_failover(messages, config=None, **kwargs) -> str:
+    """generate() across a provider fallback chain (config['fallback_providers']).
+
+    The chain is [<primary from config.provider>, *config.fallback_providers].
+    Falls through ONLY on hard failures (Error:/timeout strings) — successful
+    outputs (including KB-disabled guidance from tools) pass straight back.
+    """
+    cfg = dict(config or {})
+    chain = [cfg.get("provider", "deepseek")]
+    chain += [p for p in (cfg.get("fallback_providers") or []) if p != chain[0]]
+    last = ""
+    for provider in chain:
+        cfg["provider"] = str(provider).lower()
+        out = generate(messages, cfg, **kwargs)
+        if not str(out).startswith("Error:"):
+            return out
+        last = out
+    return last

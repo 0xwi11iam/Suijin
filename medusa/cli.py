@@ -27,6 +27,7 @@ import os
 import shutil
 import socket
 import sys
+import time
 from pathlib import Path
 
 # Make the repo root importable so `from medusa import ...` works regardless of
@@ -919,6 +920,388 @@ def run_selftest() -> int:
     return 0
 
 
+# ── v2.10 operator commands ───────────────────────────────────────────
+
+
+def run_kb_read(args) -> int:
+    from medusa.kb import read_doc
+
+    try:
+        source, path, content = read_doc(args.path, source=getattr(args, "source", None))
+    except (FileNotFoundError, ValueError) as e:
+        print(f"error: {e}")
+        return 1
+    print(f"--- [{source}] {path} ({len(content):,} chars) ---")
+    print(content)
+    return 0
+
+
+def run_kb_diff(_args) -> int:
+    from medusa.kb import kb_diff
+
+    d = kb_diff()
+    if not d["built"]:
+        print("Knowledge base NOT BUILT — run: medusa pull kb")
+        return 1
+    print(f"built: {str(d['built_at'])[:19]}")
+    actions = []
+    for name, row in d["sources"].items():
+        flag = {"rebuild": "[rebuild]", "pull": "[pull]  ", "cache missing": "[nocach]"}.get(row["action"], "[ok]    ")
+        idx = f"{row['indexed_docs']:,} docs" if row["indexed_docs"] is not None else "not indexed"
+        newer = " cache-newer" if row["cache_newer_than_build"] else ""
+        print(f"  {flag} {name:12} {idx}{newer}")
+        if row["action"] in ("rebuild", "pull"):
+            actions.append(name)
+    if actions:
+        print(f"\nstale/missing: {', '.join(actions)} — refresh with: medusa pull kb --sources {' '.join(actions)}")
+    else:
+        print("\nindex is up to date with cached tarballs.")
+    return 0
+
+
+def run_pull_cve(args) -> int:
+    from medusa.tools.cve_mirror import kev_status, pull_kev
+
+    if getattr(args, "status", False):
+        st = kev_status()
+        if not st:
+            print("KEV mirror not built — run: medusa pull cve")
+            return 1
+        print(f"KEV mirror: {st['count']} actively-exploited CVEs (retrieved {str(st['retrieved'])[:19]})")
+        return 0
+    try:
+        data = pull_kev(force=bool(getattr(args, "force", False)))
+    except Exception as e:
+        print(f"error: {e}")
+        return 1
+    print(f"KEV catalog mirrored: {data['count']} CVEs (no API key; refresh: medusa pull cve --force)")
+    return 0
+
+
+def run_creds(args) -> int:
+    import getpass
+
+    from medusa.tools import credential_vault as vault
+
+    action = getattr(args, "creds_action", "list")
+
+    def _pass(new: bool = False) -> str:
+        if new:
+            return getpass.getpass("New vault passphrase: ")
+        return getpass.getpass("Vault passphrase: ")
+
+    if action == "init":
+        print(vault.init_vault(getpass.getpass("Set vault passphrase: ")))
+        return 0
+    if not vault.vault_exists():
+        print("No vault — run: medusa creds init")
+        return 1
+    if action == "list":
+        print(vault.list_credentials(_pass(), reveal=bool(getattr(args, "reveal", False))))
+    elif action == "add":
+        print(
+            vault.add_credential(
+                args.service,
+                args.type or "password",
+                args.value,
+                username=args.username or "",
+                notes=args.notes or "",
+                passphrase=_pass(),
+            )
+        )
+    elif action == "get":
+        entries = [c for c in vault.load_vault(_pass()) if args.service in c.get("service", "")]
+        for c in entries:
+            print(f"{c.get('service')} | {c.get('type')} | {c.get('username', '')} | {c.get('value')}")
+        if not entries:
+            print(f"No credentials matching '{args.service}'.")
+    elif action == "export":
+        print(vault.export_credentials(_pass(), redact=not getattr(args, "plain", False)))
+    return 0
+
+
+def run_dossier(args) -> int:
+    from medusa.tools.dossier import build_dossier, render_dossier
+
+    try:
+        print(render_dossier(build_dossier(args.target)))
+    except ValueError as e:
+        print(f"error: {e}")
+        return 1
+    return 0
+
+
+def run_rules(args) -> int:
+    from medusa.tools.governance import RULES_PATH, load_rules, validate_rules
+
+    action = getattr(args, "rules_action", "validate")
+    if action == "list":
+        rules = load_rules()
+        if not rules:
+            print(f"No custom rules (create {RULES_PATH.name} — see docs for the schema)")
+            return 0
+        for r in rules:
+            print(
+                f"  {r.get('name', '?'):24} {r.get('field', 'body'):8} w{r.get('weight', 3)}  {r.get('pattern', '')[:50]}"
+            )
+        return 0
+    problems = validate_rules()
+    if not problems:
+        n = len(load_rules())
+        print(
+            f"[ok] {RULES_PATH.name}: valid ({n} rule(s))"
+            if RULES_PATH.exists()
+            else "[--] no rules file (none needed)"
+        )
+        return 0
+    for p in problems:
+        print(f"[XX] {p}")
+    return 1
+
+
+def run_policy(args) -> int:
+    from medusa.tools.governance import POLICY_PATH, load_policy, validate_policy
+
+    action = getattr(args, "policy_action", "check")
+    if action == "show":
+        print(json.dumps(load_policy(), indent=2))
+        return 0
+    problems = validate_policy()
+    if not POLICY_PATH.exists():
+        print(f"[--] no policy file — defaults apply (private scopes only). Create {POLICY_PATH.name} to customize.")
+        return 0
+    if not problems:
+        pol = load_policy()
+        print(
+            f"[ok] {POLICY_PATH.name}: valid — {len(pol['allowed_target_scopes'])} scopes, "
+            f"{len(pol['blocked_tools'])} blocked tools, {len(pol['blocked_arg_patterns'])} arg patterns"
+        )
+        return 0
+    for p in problems:
+        print(f"[XX] {p}")
+    return 1
+
+
+def run_providers(args) -> int:
+    from medusa.core.red.config_loader import load_config
+    from medusa.tools.providers import generate
+
+    cfg = load_config()
+    if getattr(args, "all", False):
+        chain = ["deepseek", "zai", "gemini", "anthropic", "amd", "huggingface"]
+    else:
+        chain = [cfg.get("provider", "deepseek")] + (cfg.get("fallback_providers") or [])
+    ok_count = 0
+    for provider in dict.fromkeys(chain):
+        env = {
+            "zai": "ZAI_API_KEY",
+            "deepseek": "DEEPSEEK_API_KEY",
+            "gemini": "GEMINI_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+            "amd": "AMD_API_KEY",
+            "huggingface": "HF_TOKEN",
+        }.get(provider, "")
+        if env and not os.environ.get(env):
+            print(f"  {provider:12} SKIP (no {env})")
+            continue
+        test_cfg = {**cfg, "provider": provider}
+        t0 = time.time()
+        try:
+            out = generate(
+                [{"role": "user", "content": "Reply with the single word: pong"}], test_cfg, max_tokens=8, retries=1
+            )
+        except Exception as e:
+            out = f"Error: {e}"
+        ms = int((time.time() - t0) * 1000)
+        if str(out).startswith("Error:"):
+            print(f"  {provider:12} FAIL ({ms} ms) — {str(out)[:90]}")
+        else:
+            ok_count += 1
+            print(f"  {provider:12} ok ({ms} ms) — {str(out)[:40]!r}")
+    print(f"\n{ok_count}/{len(set(chain))} provider(s) responding")
+    return 0 if ok_count else 1
+
+
+def run_module(args) -> int:
+    from medusa.tools import module_sdk
+
+    action = getattr(args, "module_action", "validate")
+    if action == "init":
+        try:
+            mod_dir = module_sdk.scaffold_module(args.name)
+        except (ValueError, FileExistsError) as e:
+            print(f"error: {e}")
+            return 1
+        print(f"scaffolded {mod_dir.name}/ (manifest.json, main.py, skill.md)")
+        print("implement main.py, then validate: medusa module validate " + mod_dir.name)
+        return 0
+    ok, problems = module_sdk.validate_module(args.name)
+    if ok:
+        print(f"[ok] module '{args.name}': manifest + implementation valid")
+        return 0
+    for p in problems:
+        print(f"[XX] {p}")
+    return 1
+
+
+def run_skills(args) -> int:
+    from medusa.tools import self_improve as si
+
+    action = getattr(args, "skills_action", "list")
+    if action == "list":
+        print(si.list_available_skills())
+        return 0
+    name = getattr(args, "name", "")
+    if not name:
+        print("error: skill name required (see: medusa skills)")
+        return 1
+    if action == "history":
+        snaps = si.skill_history(name)
+        if not snaps:
+            print(f"No version history for '{name}' yet (snapshots are taken on every edit_skill).")
+            return 0
+        for s in snaps:
+            print(f"  {s.name}  ({s.stat().st_size} bytes)")
+        return 0
+    if action == "diff":
+        print(si.skill_diff(name, rev=getattr(args, "rev", None)))
+        return 0
+    if action == "rollback":
+        print(si.skill_rollback(name, rev=getattr(args, "rev", None)))
+        return 0
+    return 1
+
+
+def run_labs_campaign(args) -> int:
+    from medusa.tools.housekeeping import render_campaign, run_campaign
+    from medusa.tools.workspace import WORKSPACE_DIR
+
+    specs = []
+    lab_dir = Path(_PKG_DIR) / "lab"
+    for d in sorted(lab_dir.iterdir()):
+        if not d.is_dir() or d.name.startswith("__"):
+            continue
+        app = next((c for c in ("app.py", "vulnerable_app.py") if (d / c).exists()), None)
+        if not app:
+            continue
+        port = _lab_port(d / app)
+        if port:
+            specs.append({"name": d.name, "port": int(port)})
+    if not specs:
+        print("No labs found.")
+        return 1
+    # boot each lab, probe, stop — sequential to keep ports clean
+    import subprocess
+    import sys
+    import urllib.request
+
+    results = {}
+    for spec in specs:
+        app = next(
+            (
+                lab_dir / spec["name"] / c
+                for c in ("app.py", "vulnerable_app.py")
+                if (lab_dir / spec["name"] / c).exists()
+            )
+        )
+        proc = subprocess.Popen([sys.executable, str(app)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        try:
+            for _ in range(15):
+                try:
+                    urllib.request.urlopen(f"http://127.0.0.1:{spec['port']}/", timeout=1)
+                    break
+                except Exception:
+                    time.sleep(0.3)
+            single = run_campaign([spec], out_dir=WORKSPACE_DIR / "reports")
+            results.update(single["labs"])
+        finally:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+    merged = {
+        "ran_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "labs": results,
+        "summary": {
+            "total": len(results),
+            "reachable": sum(1 for v in results.values() if v["reachable"]),
+            "flags_exposed": sum(len(v["flags"]) for v in results.values()),
+        },
+    }
+    print(render_campaign(merged))
+    print("\ncapability baseline — landing-page exposure only; exploitation is the agent's job.")
+    return 0
+
+
+def run_watch(args) -> int:
+    import signal
+
+    from medusa.core.constants import BLUE_TRAFFIC_LOG
+    from medusa.tools.housekeeping import tail_file, watch_lines
+    from medusa.ui.server import _enrich_traffic
+
+    path = Path(getattr(args, "traffic", None) or BLUE_TRAFFIC_LOG)
+    if not path.exists():
+        print(f"No traffic log at {path} — run the blue lab or pass --traffic <file>")
+        return 1
+    print(f"watching {path} (Ctrl+C to stop)")
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    try:
+        for line in tail_file(path):
+            for out in watch_lines([line], enrich=_enrich_traffic):
+                print(out)
+    except KeyboardInterrupt:
+        print("\nstopped")
+    return 0
+
+
+def run_timeline() -> int:
+    from medusa.tools.housekeeping import build_timeline
+
+    events = build_timeline()
+    if not events:
+        print("No engagement history yet (audits, sessions, reports all empty).")
+        return 0
+    last_day = None
+    for e in events:
+        day, clock = e["ts"].split(" ")
+        if day != last_day:
+            print(f"\n{day}")
+            last_day = day
+        print(f"  {clock}  {e['kind']:20} {e['detail'][:70]}")
+    return 0
+
+
+def run_clean(args) -> int:
+    from medusa.tools.housekeeping import clean_workspace
+
+    print(clean_workspace(apply=bool(getattr(args, "apply", False)), age_days=int(getattr(args, "days", 30))))
+    return 0
+
+
+def run_notify(args) -> int:
+    from medusa.tools import notify
+
+    action = getattr(args, "notify_action", "send")
+    if action == "test":
+        if not notify.load_config():
+            print(notify.write_example_config())
+            return 0
+        for line in notify.send("medusa", "notification test — channel works"):
+            print(f"  {line}")
+        return 0
+    if action == "send":
+        msg = " ".join(getattr(args, "message", []) or [])
+        if not msg:
+            print("error: message required — medusa notify send 'engagement finished'")
+            return 1
+        for line in notify.send("medusa", msg):
+            print(f"  {line}")
+        return 0
+    return 1
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="medusa",
@@ -937,15 +1320,51 @@ def main(argv=None):
         "env": ("show API key presence (names only, never values)", run_env),
         "tools": ("list all agent tools with availability", run_tools_list),
         "modules": ("list loaded module packs", run_modules_list),
-        "skills": ("list agent-editable attack skills", run_skills_list),
         "workspace": ("workspace layout, usage, and symlink health", run_workspace_status),
         "reports": ("list engagement reports", run_reports_list),
         "sessions": ("list saved engagement sessions", run_sessions_list),
-        "labs": ("list built-in vulnerable labs with ports", run_labs_list),
+        "timeline": ("unified engagement timeline across artifacts", run_timeline),
     }
     for name, (help_text, fn) in SIMPLE_COMMANDS.items():
         p = sub.add_parser(name, help=help_text)
         p.set_defaults(func=lambda _a, _fn=fn: _fn())
+
+    dossier = sub.add_parser("dossier", help="per-target intelligence dossier (KG + failures + history)")
+    dossier.add_argument("target", help="IP / hostname / URL")
+    dossier.set_defaults(func=run_dossier)
+
+    clean = sub.add_parser("clean", help="workspace cleaner — dry-run by default")
+    clean.add_argument("--apply", action="store_true", help="archive stale files then delete")
+    clean.add_argument("--days", type=int, default=30, help="staleness threshold (default 30)")
+    clean.set_defaults(func=run_clean)
+
+    watch = sub.add_parser("watch", help="live-score a traffic log as it grows (Ctrl+C to stop)")
+    watch.add_argument("--traffic", help="traffic .jsonl (default: the live blue log)")
+    watch.set_defaults(func=run_watch)
+
+    # skills: list (default) + history/diff/rollback
+    skills = sub.add_parser("skills", help="agent-editable skills: list/history/diff/rollback")
+    skills_sub = skills.add_subparsers(dest="skills_action")
+    skills_sub.add_parser("list", help="list all skills").set_defaults(func=lambda _a: run_skills_list())
+    hist = skills_sub.add_parser("history", help="revision snapshots for a skill")
+    hist.add_argument("name", help="skill name")
+    hist.set_defaults(func=run_skills)
+    diff = skills_sub.add_parser("diff", help="unified diff of a revision vs the live skill")
+    diff.add_argument("name", help="skill name")
+    diff.add_argument("--rev", help="revision substring (default: latest)")
+    diff.set_defaults(func=run_skills)
+    rb = skills_sub.add_parser("rollback", help="restore a skill from history")
+    rb.add_argument("name", help="skill name")
+    rb.add_argument("--rev", help="revision substring (default: latest)")
+    rb.set_defaults(func=run_skills)
+    skills.set_defaults(func=lambda _a: run_skills_list())
+
+    # labs: list (default) + run campaign
+    labs = sub.add_parser("labs", help="built-in labs: list / run campaign")
+    labs_sub = labs.add_subparsers(dest="labs_action")
+    labs_sub.add_parser("list", help="list labs with ports").set_defaults(func=lambda _a: run_labs_list())
+    labs_sub.add_parser("run", help="boot + probe every lab; capability matrix").set_defaults(func=run_labs_campaign)
+    labs.set_defaults(func=lambda _a: run_labs_list())
 
     ui = sub.add_parser("ui", help="launch the local web dashboard (127.0.0.1)")
     ui.add_argument("--port", type=int, default=7800, help="listen port (default 7800)")
@@ -979,6 +1398,16 @@ def main(argv=None):
     battle.add_argument("--port", type=int, default=5906, help="lab port (default 5906)")
     battle.set_defaults(func=run_battle_cmd)
 
+    # kb: read full docs + diff build vs cache
+    kb = sub.add_parser("kb", help="knowledge base: read full docs / diff build")
+    kb_sub = kb.add_subparsers(dest="kb_action")
+    kb_read = kb_sub.add_parser("read", help="dump a full (untruncated) KB document")
+    kb_read.add_argument("path", help="doc path or unique substring (e.g. _gtfobins/awk)")
+    kb_read.add_argument("--source", help="restrict to one KB source")
+    kb_read.set_defaults(func=run_kb_read)
+    kb_sub.add_parser("diff", help="compare the built index against cached tarballs").set_defaults(func=run_kb_diff)
+    kb.set_defaults(func=lambda _a: run_kb_diff())
+
     pull = sub.add_parser("pull", help="download resources (knowledge bases, ...)")
     pull_sub = pull.add_subparsers(dest="pull_target")
     pull_kb = pull_sub.add_parser("kb", help="download & compile security knowledge bases into medusa/kb.sqlite3")
@@ -987,6 +1416,65 @@ def main(argv=None):
     pull_kb.add_argument("--list", dest="list_sources", action="store_true", help="list available sources and exit")
     pull_kb.add_argument("--status", action="store_true", help="show what's indexed (offline) and exit")
     pull_kb.set_defaults(func=run_pull_kb)
+    pull_cve = pull_sub.add_parser("cve", help="mirror the CISA KEV catalog (no API key)")
+    pull_cve.add_argument("--force", action="store_true", help="refresh even if <24h old")
+    pull_cve.add_argument("--status", action="store_true", help="show mirror status (offline)")
+    pull_cve.set_defaults(func=run_pull_cve)
+
+    creds = sub.add_parser("creds", help="credential vault (encrypted at rest)")
+    creds_sub = creds.add_subparsers(dest="creds_action")
+    creds_sub.add_parser("init", help="create the vault (imports legacy credentials.json)").set_defaults(func=run_creds)
+    creds_list = creds_sub.add_parser("list", help="list credentials (values hidden)")
+    creds_list.add_argument("--reveal", action="store_true", help="show plaintext values")
+    creds_list.set_defaults(func=run_creds)
+    creds_add = creds_sub.add_parser("add", help="store a credential")
+    creds_add.add_argument("--service", required=True)
+    creds_add.add_argument("--value", required=True)
+    creds_add.add_argument("--type", default="password")
+    creds_add.add_argument("--username", default="")
+    creds_add.add_argument("--notes", default="")
+    creds_add.set_defaults(func=run_creds)
+    creds_get = creds_sub.add_parser("get", help="search credentials (revealed)")
+    creds_get.add_argument("service", help="service substring")
+    creds_get.set_defaults(func=run_creds)
+    creds_export = creds_sub.add_parser("export", help="export (redacted by default)")
+    creds_export.add_argument("--plain", action="store_true", help="export PLAINTEXT (careful)")
+    creds_export.set_defaults(func=run_creds)
+    creds.set_defaults(func=lambda _a: run_creds(argparse.Namespace(creds_action="list")))
+
+    rules = sub.add_parser("rules", help="custom detector rules: validate / list")
+    rules_sub = rules.add_subparsers(dest="rules_action")
+    rules_sub.add_parser("validate", help="lint detector_rules.json").set_defaults(func=run_rules)
+    rules_sub.add_parser("list", help="list custom rules").set_defaults(func=run_rules)
+    rules.set_defaults(func=lambda _a: run_rules(argparse.Namespace(rules_action="validate")))
+
+    policy = sub.add_parser("policy", help="engagement policy: check / show")
+    policy_sub = policy.add_subparsers(dest="policy_action")
+    policy_sub.add_parser("check", help="lint policy.json").set_defaults(func=run_policy)
+    policy_sub.add_parser("show", help="effective policy").set_defaults(func=run_policy)
+    policy.set_defaults(func=lambda _a: run_policy(argparse.Namespace(policy_action="check")))
+
+    providers_cmd = sub.add_parser("providers", help="probe configured providers (tiny live request)")
+    providers_cmd.add_argument("--all", action="store_true", help="probe every provider with a key, not just the chain")
+    providers_cmd.set_defaults(func=run_providers)
+
+    module = sub.add_parser("module", help="module SDK: init / validate")
+    module_sub = module.add_subparsers(dest="module_action")
+    mod_init = module_sub.add_parser("init", help="scaffold a new module pack")
+    mod_init.add_argument("name", help="module name (snake_case)")
+    mod_init.set_defaults(func=run_module)
+    mod_val = module_sub.add_parser("validate", help="validate a module pack")
+    mod_val.add_argument("name", help="module directory name under Modules/Tools")
+    mod_val.set_defaults(func=run_module)
+    module.set_defaults(func=lambda _a: run_module(argparse.Namespace(module_action="validate", name="")))
+
+    notify = sub.add_parser("notify", help="operator notifications: send / test")
+    notify_sub = notify.add_subparsers(dest="notify_action")
+    notify_send = notify_sub.add_parser("send", help="send a notification")
+    notify_send.add_argument("message", nargs="+", help="message text")
+    notify_send.set_defaults(func=run_notify)
+    notify_sub.add_parser("test", help="write example config / test channels").set_defaults(func=run_notify)
+    notify.set_defaults(func=run_notify)
 
     config = sub.add_parser("config", help="inspect and validate configuration")
     config_sub = config.add_subparsers(dest="config_action")

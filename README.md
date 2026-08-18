@@ -113,13 +113,26 @@ docker run -it --rm \
 | `medusa workspace` | Workspace layout, per-directory usage, symlink health |
 | `medusa reports` | Engagement reports in `medusa_agent/reports/` (newest first) |
 | `medusa sessions` | Saved engagement sessions with objectives |
-| `medusa labs` | Built-in vulnerable labs: ports, descriptions, launch commands |
+| `medusa labs` | Built-in labs: list ports / `run` a capability campaign |
 | `medusa ui` | Launch the **web dashboard** on `127.0.0.1:7800` (see below) |
 | `medusa export` | Chain-of-custody evidence bundle: zip + SHA-256 manifest (`--with-creds`, `--verify <zip>`) |
 | `medusa debrief` | Engagement analytics from audit trails (`-v` for per-engagement detail) |
 | `medusa replay` | Step through an engagement timeline (`--list`, `--file`, `--export-md`) |
 | `medusa eval` | Replay recorded traffic through the blue detector: precision/recall/F1 + threshold sweep |
 | `medusa battle` | Purple team: scripted red vs pattern blue on the lab — live scoreboard |
+| `medusa kb read <path>` | Dump a **full (untruncated) KB document** from its tarball; `medusa kb diff` checks index vs cache staleness |
+| `medusa pull cve` | Mirror the CISA KEV catalog (no API key) — powers offline `search_cve` + actively-exploited badges |
+| `medusa creds` | Encrypted credential vault: `init` / `list [--reveal]` / `add` / `get` / `export [--plain]` |
+| `medusa dossier <target>` | Per-target intel: KG constraints, failed techniques, engagement + report history |
+| `medusa timeline` | Unified chronological view across audits, sessions, and reports |
+| `medusa watch` | Live-score the traffic log as it grows (`--traffic <file>`) |
+| `medusa clean` | Workspace cleaner — dry-run by default, `--apply` archives then deletes |
+| `medusa rules` | Custom detector rules: `validate` (lint) / `list` |
+| `medusa policy` | Engagement policy: `check` (lint) / `show` — opt-in, enforced at dispatch |
+| `medusa providers` | Probe configured providers with a tiny live request (`--all` for every keyed provider) |
+| `medusa module` | Module SDK: `init <name>` scaffolds, `validate <name>` lints manifest + imports |
+| `medusa skills` | Skill list + versioning: `history` / `diff` / `rollback` (snapshots on every agent edit) |
+| `medusa notify` | Operator notifications: `send 'msg'` / `test` (file/command/macOS channels; battle fires on flags & blocks) |
 | `medusa pull kb` | Download + index the knowledge base (**enables** KB features) |
 | `medusa pull kb --status` | Offline: what's indexed, per-source counts, build age |
 | `medusa pull kb --list` | Available sources with size warnings |
@@ -196,7 +209,48 @@ deploys real defenses — tarpits the lab actually enforces (measurable
 latency), network blocks that deny subsequent red requests. Live Rich
 scoreboard during the fight; markdown battle report saved to
 `medusa_agent/reports/`. Scoring: red = 100/flag + 25/attack-class,
-blue = 10/detection + 25/tarpit + 50/block.
+blue = 10/detection + 25/tarpit + 50/block. Flag captures and blocks fire
+`medusa notify` channels when configured.
+
+### Agent capability upgrades (v2.10)
+
+New agent tools, all offline:
+
+| Tool | What it does |
+|:-----|:-------------|
+| `kb_read` | Full untruncated KB documents (the FTS copy is capped); substring paths OK |
+| `target_dossier` | Per-target intel: blocked patterns, failed techniques, history — consult before re-attacking |
+| `mutate_wordlist` | Seed words → leet/years/suffixes wordlist (cap 50k) into `medusa_agent/wordlists/` |
+| `cewl_words` | Harvest a wordlist from a target page's visible words |
+
+`suggest_exploit` now fuzzy-matches GTFOBins bins (`finnd` → `find`), and
+`recon_chain` automatically appends offline exploit leads for fingerprinted
+services. `search_cve` falls back to the local KEV mirror when NVD is
+unreachable. Provider failover: set `"fallback_providers": ["deepseek"]`
+in config — hard failures roll to the next provider.
+
+### Governance (opt-in)
+
+- **Policy** (`medusa/policy.json`, `medusa policy check|show`): blocked
+  tools, blocked arg regexes, and allowed target scopes (IPs, CIDRs,
+  hostnames) enforced at the dispatch chokepoint. **No file = no
+  enforcement** — existing engagements are untouched; intel-only tools
+  (dossier, KB, CVE search) are never scope-gated.
+- **Detector rules** (`medusa/detector_rules.json`, `medusa rules
+  validate|list`): custom regex detectors (field: body/path/ua/headers,
+  weight 1–10) merged into the eval harness and battle watchdog.
+- **Credential vault** (`medusa creds`): PBKDF2-HMAC-SHA256 + tagged
+  keystream encryption at rest, imports + shreds legacy
+  `credentials.json`, redacted exports.
+
+### Ops utilities (v2.10)
+
+`medusa providers` (live provider probe), `medusa module init|validate`
+(module SDK), `medusa skills history|diff|rollback` (every agent
+self-edit is snapshotted), `medusa labs run` (boot + probe every lab →
+capability matrix), `medusa watch` (live-scored traffic tail),
+`medusa timeline` (unified artifact history), `medusa clean` (dry-run
+first workspace cleaner), `medusa notify` (file/command/macOS channels).
 
 ---
 
@@ -718,6 +772,8 @@ python3 -m pytest medusa/tests/ -m "not ai" # skip live-API tests
 | `test_ui_server.py` | WebUI backend: API contract, path-traversal safety, config redaction, SSE leading frame, SPA fallback vs asset 404s, traffic enrichment with the real anomaly detector |
 | `test_export_debrief_replay.py` | Evidence bundles (build/verify/tamper/extra-file/creds opt-in/redaction), debrief stats + fleet trends, replay listing/markdown/non-TTY |
 | `test_eval_battle.py` | Harness labeling (heuristic + labels.jsonl override), confusion-matrix math, threshold sweep, real-scorer replay; battle score math, watchdog detect/tarpit/block, report rendering |
+| `test_kb_v2_and_intel.py` | kb read (full docs, substring, ambiguity), kb diff staleness, fuzzy GTFOBins, KEV mirror + offline search_cve fallback, wordlist mutation + cewl |
+| `test_v210_features.py` | Credential vault (roundtrip/tamper/shred/redaction), dossiers, notify channels, rules + policy (opt-in semantics, scope exemptions, dispatch enforcement), module SDK, provider failover, skill versioning, campaign/watch/timeline/clean, recon hook |
 | `test_kb.py` | KB compile (FTS5, caps), path patterns + GTFOBins alias stubs, zero-doc failures, honest status, download retries + `.part` cleanup, `search_kb` filters, catalog gating |
 | `test_workspace_layout.py` | Canonical workspace merge + symlink migration, sandbox containment, CWD-independent paths |
 | `test_dispatch.py` | Tool routing, guardrails, file ops, CVSS/KEV parsing, jobs |

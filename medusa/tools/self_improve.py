@@ -4,13 +4,76 @@ and tool implementations to become more effective over time.
 
 CRITICAL: These tools give the agent the power to rewrite itself.
 This is intentional — a creative agent needs to be able to improve.
+
+Every edit_skill write snapshots the previous version into
+medusa_agent/skill_history/<name>/ so `medusa skills rollback` can undo
+any self-modification.
 """
 
 from __future__ import annotations
 
+import shutil
+import time
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent  # medusa/ root
+HISTORY_DIR = BASE_DIR.parent / "medusa_agent" / "skill_history"
+
+
+def _snapshot(skill_path: Path, skill_name: str) -> Path | None:
+    """Copy the current skill into timestamped history; returns the snapshot."""
+    if not skill_path.exists():
+        return None
+    hist = HISTORY_DIR / skill_name
+    hist.mkdir(parents=True, exist_ok=True)
+    snap = hist / f"{time.time_ns()}_{time.strftime('%Y%m%d_%H%M%S')}.py"
+    shutil.copy2(skill_path, snap)
+    # bound history at 25 revisions per skill
+    snaps = sorted(hist.glob("*.py"))
+    for old in snaps[:-25]:
+        old.unlink()
+    return snap
+
+
+def skill_history(skill_name: str) -> list[Path]:
+    """Timestamped snapshots for a skill, oldest first."""
+    hist = HISTORY_DIR / skill_name
+    return sorted(hist.glob("*.py")) if hist.is_dir() else []
+
+
+def skill_diff(skill_name: str, rev: str | None = None) -> str:
+    """Unified diff of a revision (default latest) vs the live skill."""
+    import difflib
+
+    snaps = skill_history(skill_name)
+    if not snaps:
+        return f"No history for skill '{skill_name}' yet."
+    snap = next((s for s in snaps if rev and rev in s.name), snaps[-1])
+    live = BASE_DIR / "skills" / f"{skill_name}.py"
+    if not live.exists():
+        return f"Live skill '{skill_name}' no longer exists."
+    diff = difflib.unified_diff(
+        snap.read_text().splitlines(),
+        live.read_text().splitlines(),
+        fromfile=f"history/{snap.name}",
+        tofile="live",
+        lineterm="",
+    )
+    body = "\n".join(diff)
+    return body or f"'{skill_name}' live version is identical to {snap.name}"
+
+
+def skill_rollback(skill_name: str, rev: str | None = None) -> str:
+    """Restore a skill from history (default: previous revision)."""
+    snaps = skill_history(skill_name)
+    if not snaps:
+        return f"No history for skill '{skill_name}' — nothing to roll back."
+    snap = next((s for s in snaps if rev and rev in s.name), snaps[-1])
+    live = BASE_DIR / "skills" / f"{skill_name}.py"
+    if live.exists():
+        _snapshot(live, skill_name)  # snapshot current before overwriting
+    shutil.copy2(snap, live)
+    return f"Rolled back '{skill_name}' to {snap.name}"
 
 
 def edit_skill(skill_name: str, new_content: str) -> str:
@@ -34,10 +97,8 @@ def edit_skill(skill_name: str, new_content: str) -> str:
         return f"Skill '{skill_name}' not found. Available: {', '.join(available)}"
 
     try:
-        # Backup old version
-        backup_path = skill_path.with_suffix(".py.bak")
-        if skill_path.exists():
-            backup_path.write_text(skill_path.read_text())
+        # Versioned snapshot of the old version (rollback support)
+        snap = _snapshot(skill_path, skill_name)
 
         # Write new content (preserve the module-level variable name pattern)
         var_name = skill_name.upper() + "_SKILL_PROMPT"
@@ -45,7 +106,8 @@ def edit_skill(skill_name: str, new_content: str) -> str:
             new_content = f'{var_name} = """\n{new_content}\n"""\n'
 
         skill_path.write_text(new_content)
-        return f"✅ Skill '{skill_name}' updated ({len(new_content)} chars). Backup saved to {backup_path.name}"
+        snap_note = f" snapshot {snap.name}" if snap else ""
+        return f"✅ Skill '{skill_name}' updated ({len(new_content)} chars).{snap_note}"
     except Exception as e:
         return f"Error updating skill: {e}"
 

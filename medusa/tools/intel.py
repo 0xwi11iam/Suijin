@@ -72,6 +72,13 @@ def search_cve(software, config, version=None, limit=5):
         max_total = max(max_total, data.get("totalResults", 0))
 
     if error and max_total == 0:
+        # NVD unreachable and nothing cached from earlier strategies — fall
+        # back to the local CISA KEV mirror (medusa pull cve) if present.
+        from medusa.tools.cve_mirror import format_kev_results, search_kev
+
+        kev_hits = search_kev(software, version_str, limit=limit)
+        if kev_hits:
+            return format_kev_results(kev_hits, f"{software} {version_str or ''}".strip())
         return error
 
     vulns = data.get("vulnerabilities", []) if data else []

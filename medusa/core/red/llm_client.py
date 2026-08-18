@@ -45,4 +45,8 @@ def _generate(messages, config):
     """Thread-friendly wrapper that lazily resolves the providers module."""
     from medusa.modules.loader import load_local_module
     providers = load_local_module("providers")
+    fn = getattr(providers, "generate_with_failover", None)
+    # honor config['fallback_providers'] when configured; plain generate otherwise
+    if fn and (config or {}).get("fallback_providers"):
+        return fn(messages, config)
     return providers.generate(messages, config)

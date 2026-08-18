@@ -28,6 +28,7 @@ from medusa.tools.aux_tools import (
     _web_search,
     _write_tool,
 )
+from medusa.tools.dossier import build_dossier, render_dossier
 
 # Re-exported for backwards compatibility — these names lived on dispatch.py
 # before the split and external callers still import them from here.
@@ -62,6 +63,28 @@ from medusa.tools.kb_tools import (
     suggest_exploit,
     wordlist_tool,
 )
+from medusa.tools.wordlist_mutator import cewl_words, mutate_wordlist
+
+
+def _kb_read_tool(path: str) -> str:
+    from medusa.kb import read_doc
+
+    try:
+        source, rel, content = read_doc(path)
+    except (FileNotFoundError, ValueError) as e:
+        return f"Error: {e}"
+    from medusa.tools.runtime import truncate
+
+    return f"--- [{source}] {rel} ({len(content):,} chars)\n" + truncate(content, 20000)
+
+
+def _target_dossier_tool(target: str) -> str:
+    try:
+        return render_dossier(build_dossier(target))
+    except ValueError as e:
+        return f"Error: {e}"
+
+
 from medusa.tools.metasploit import (
     _msf_console_fallback,
     _msf_rpc_connect,
@@ -187,6 +210,18 @@ def _build_routes(config):
             a.get("cmd") or a.get("command"), timeout=int(a.get("timeout", 30))
         ),
         "search_kb": lambda a: search_kb(a.get("keyword"), limit=a.get("limit") or 5),
+        "kb_read": lambda a: _kb_read_tool(a.get("path", "")),
+        "target_dossier": lambda a: _target_dossier_tool(a.get("target", "")),
+        "mutate_wordlist": lambda a: mutate_wordlist(
+            a.get("seeds"),
+            out=a.get("out", "wordlists/mutated.txt"),
+            leet=bool(a.get("leet", True)),
+            years=bool(a.get("years", True)),
+            suffixes=bool(a.get("suffixes", True)),
+        ),
+        "cewl_words": lambda a: cewl_words(
+            a.get("url", ""), out=a.get("out"), min_len=int(a.get("min_len", 3)), max_len=int(a.get("max_len", 24))
+        ),
         # Knowledge-base toolkit (offline)
         "kb_stats": lambda a: kb_stats(),
         "find_wordlist": lambda a: find_wordlist(a.get("keyword"), extract=a.get("extract", True)),
@@ -286,6 +321,14 @@ def route_tool(tool_name, args, config):
     blocked = check_mode_restrictions(tool_name, args, config)
     if blocked:
         return blocked
+
+    # Engagement policy (medusa/policy.json): blocked tools/args and
+    # out-of-scope targets. Opt-in — the default policy allows local ranges.
+    from medusa.tools.governance import check_policy
+
+    allowed, reason = check_policy(tool_name, args)
+    if not allowed:
+        return reason
 
     # ── FREEDOM: no phase gating. All tools always available. ──
 

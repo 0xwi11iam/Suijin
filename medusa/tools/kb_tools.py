@@ -146,7 +146,8 @@ def suggest_exploit(service: str, version: str = "") -> str:
     binname = service.split()[0]
     out = [f"Offline suggestions for '{service}'" + (f" {version}" if version else "") + ":"]
 
-    # 1. GTFOBins exact binary (privesc)
+    # 1. GTFOBins exact binary (privesc), with fuzzy fallback for near-misses
+    fuzzy_note = ""
     try:
         conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
         try:
@@ -154,12 +155,26 @@ def suggest_exploit(service: str, version: str = "") -> str:
                 "SELECT path, substr(content, 1, 600) FROM kb_files WHERE source='gtfobins' AND path = ? LIMIT 1",
                 (f"_gtfobins/{binname}",),
             ).fetchone()
+            if row is None:
+                from difflib import get_close_matches
+
+                names = [
+                    r[0].rsplit("/", 1)[-1] for r in conn.execute("SELECT path FROM kb_files WHERE source='gtfobins'")
+                ]
+                close = get_close_matches(binname, names, n=1, cutoff=0.75)
+                if close:
+                    row = conn.execute(
+                        "SELECT path, substr(content, 1, 600) FROM kb_files WHERE source='gtfobins' AND path = ? LIMIT 1",
+                        (f"_gtfobins/{close[0]}",),
+                    ).fetchone()
+                    if row:
+                        fuzzy_note = f" (fuzzy: {binname} ~ {close[0]})"
         finally:
             conn.close()
     except sqlite3.Error:
         row = None
     if row:
-        out.append(f"\n[gtfobins] {binname} is a living-off-the-land binary (path: {row[0]}):")
+        out.append(f"\n[gtfobins] {binname} is a living-off-the-land binary (path: {row[0]}){fuzzy_note}:")
         out.append("  " + row[1].replace("\n", "\n  ")[:600])
 
     # 2/3. HackTricks + PayloadsAllTheThings FTS hits via search_kb

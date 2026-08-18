@@ -1,6 +1,6 @@
 {
-  "version": "2.9.2",
-  "codename": "Purple Arena",
+  "version": "2.10.0",
+  "codename": "Full Arsenal",
   "release_date": "2026-08-18",
-  "description": "Medusa v2.9.2: dead-code sweep (stale mcp 2.3.0-beta version drift, dead runtime plumbing, unused config keys, oracle unreachable code) + WebUI overhaul — duplicate-feed flood fixed, ForceGraph re-render storm fixed, detector grid now lights up from real signal counts, radar plots live data, mobile hamburger drawer, severity-railed traffic rows. 565 tests green."
+  "description": "Medusa v2.10: twenty new features. KB v2 (kb read full docs, kb diff, fuzzy GTFOBins), CISA KEV mirror + offline search_cve fallback, credential vault (PBKDF2+HMAC at-rest), target dossiers, custom detector rules + policy engine (opt-in, dispatch-enforced), provider failover chain, module SDK (init/validate), skill versioning (snapshot/diff/rollback), lab campaign runner, traffic watcher, unified timeline, workspace cleaner, notification hooks (battle-integrated), wordlist mutation + cewl harvesting, recon auto-suggest on fingerprint. 12 new CLI verbs. 620 tests green."
 }

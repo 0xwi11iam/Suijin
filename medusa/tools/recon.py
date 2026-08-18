@@ -79,4 +79,35 @@ def recon_chain(target: str, config=None, ports: str | None = None) -> str:
     for port, product, version, cves in version_to_cves(services, config or {}):
         lines.append(f"\n### {port}: {product} {version}\n{cves}")
 
+    lines.append(_exploit_leads(services))
     return "\n".join(lines)
+
+
+def _exploit_leads(services: list[dict], max_leads: int = 3) -> str:
+    """Offline KB exploit suggestions for the top fingerprinted services."""
+    from medusa.kb import DB_PATH
+
+    if not DB_PATH.exists():
+        return ""
+    from medusa.tools.kb_tools import suggest_exploit
+
+    seen, blocks = set(), []
+    for s in services:
+        service = (
+            (s.get("banner") or s.get("service") or "").split()[0] if (s.get("banner") or s.get("service")) else ""
+        )
+        if not service or service.lower() in seen:
+            continue
+        seen.add(service.lower())
+        try:
+            res = suggest_exploit(service)
+        except Exception:
+            continue
+        if "gtfobins" in res or "[hacktricks]" in res or "[payloads]" in res:
+            head = res.split("\n", 1)[0]
+            blocks.append(f"\n### {s['port']}: {head}\n" + "\n".join(res.splitlines()[1:12]))
+        if len(blocks) >= max_leads:
+            break
+    if not blocks:
+        return ""
+    return "\n## Exploit leads (offline KB)\n" + "\n".join(blocks)

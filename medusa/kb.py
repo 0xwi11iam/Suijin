@@ -394,5 +394,88 @@ def kb_status(db_path: Path | None = None) -> dict | None:
         return None
 
 
+# ── Full-document reads (the index copy may be truncated) ─────────────
+
+
+def read_doc(path: str, source: str | None = None,
+             cache_dir: Path | None = None) -> tuple[str, str, str]:
+    """Return (source, path, full_content) for a KB doc, read from its tarball.
+
+    The FTS index caps content at MAX_CONTENT_BYTES; this pulls the original
+    file so the agent can read an entire cheatsheet. `path` may be a unique
+    substring (e.g. "sql-injection/README.md"); source is inferred when
+    omitted. Raises FileNotFoundError when nothing matches, ValueError when
+    ambiguous.
+    """
+    cache = Path(cache_dir) if cache_dir else CACHE_DIR
+    needle = (path or "").strip().strip("/")
+    if not needle:
+        raise ValueError("path required (e.g. '_gtfobins/awk' or 'sqli.md')")
+    candidates: list[tuple[str, str, Path, object]] = []
+    names = [source] if source else list(SOURCES)
+    for name in names:
+        if name not in SOURCES:
+            raise ValueError(f"Unknown KB source '{name}'. Available: {', '.join(sorted(SOURCES))}")
+        tar_path = cache / f"{name}.tar.gz"
+        if not tar_path.exists():
+            continue
+        with tarfile.open(tar_path, mode="r:gz") as tar:
+            for member in tar:
+                if not member.isfile():
+                    continue
+                parts = member.name.split("/", 1)
+                rel = parts[1] if len(parts) == 2 else member.name
+                if needle in rel:
+                    candidates.append((name, rel, tar_path, member))
+                    break  # one hit per source is plenty for substring search
+    if not candidates:
+        raise FileNotFoundError(
+            f"No KB file matches '{needle}' in cached tarballs "
+            f"(sources cached: {', '.join(sorted(p.name for p in cache.glob('*.tar.gz'))) or 'none'}). "
+            "Run: medusa pull kb")
+    if len(candidates) > 1 and not source:
+        listing = ", ".join(f"{s}:{r}" for s, r, _, _ in candidates[:6])
+        raise ValueError(f"Ambiguous path '{needle}' — matches {len(candidates)} docs: {listing}")
+    name, rel, tar_path, member = candidates[0]
+    with tarfile.open(tar_path, mode="r:gz") as tar:
+        f = tar.extractfile(member)
+        content = f.read().decode("utf-8", errors="ignore") if f else ""
+    return name, rel, content
+
+
+def kb_diff(db_path: Path | None = None, cache_dir: Path | None = None) -> dict:
+    """Compare the built DB against its cached tarballs.
+
+    Reports, per source: indexed doc count vs current cache, whether the
+    cached tarball is NEWER than the last build (re-pull would change the
+    index), and sources that have a cache but no index (or vice versa).
+    """
+    from datetime import datetime as _dt
+
+    target = Path(db_path) if db_path else DB_PATH
+    cache = Path(cache_dir) if cache_dir else CACHE_DIR
+    st = kb_status(target)
+    built_at = None
+    if st:
+        with contextlib.suppress(ValueError):
+            built_at = _dt.fromisoformat(st["built_at"])
+    rows: dict[str, dict] = {}
+    for name in SOURCES:
+        tar_path = cache / f"{name}.tar.gz"
+        cached = tar_path.exists()
+        indexed = (st.get("per_source", {}) or {}).get(name) if st else None
+        newer = bool(cached and built_at and _dt.fromtimestamp(tar_path.stat().st_mtime, tz=timezone.utc) > built_at)
+        rows[name] = {
+            "cached": cached,
+            "indexed_docs": indexed,
+            "cache_newer_than_build": newer,
+            "action": ("pull" if cached and indexed is None else
+                       "rebuild" if newer else
+                       "cache missing" if indexed is not None and not cached else "ok"),
+        }
+    return {"built": bool(st), "built_at": st.get("built_at") if st else None,
+            "sources": rows}
+
+
 if __name__ == "__main__":  # manual build: python -m medusa.kb
     compile_kb()

@@ -2,6 +2,73 @@
 
 All notable changes to Medusa.
 
+## [2.10.0] — 2026-08-18 — FULL ARSENAL (20 FEATURES)
+
+### Added — knowledge & intel
+- **KB v2**: `medusa kb read <path>` dumps full untruncated documents from
+  the cached tarballs (the FTS copy is 256k-capped); substring paths and
+  cross-source ambiguity handling; agent tool `kb_read`. `medusa kb diff`
+  reports per-source index-vs-cache staleness (newer tarball → rebuild,
+  unindexed cache → pull). `suggest_exploit` fuzzy-matches GTFOBins bins
+  (difflib, cutoff 0.75 — `finnd` → `find`).
+- **CISA KEV mirror** (`medusa pull cve`, no API key): 24h-cached catalog
+  in `medusa/cve_cache/`; `search_cve` falls back to it offline with
+  `[KEV offline]` attribution when NVD is unreachable.
+- **Recon auto-suggest**: `recon_chain` appends offline exploit leads
+  (GTFOBins/HackTricks/PayloadsAllTheThings) for fingerprinted services.
+
+### Added — operator commands
+- **Credential vault** (`medusa creds init|list|add|get|export`):
+  PBKDF2-HMAC-SHA256 keystream encryption + HMAC tag at rest (stdlib
+  only), file perms 0600, imports AND SHREDS legacy credentials.json,
+  redacted exports by default.
+- **Target dossiers** (`medusa dossier <target>` + `target_dossier` agent
+  tool): merges red-KG constraints, failure_db, audit mentions, and report
+  mentions into one per-target profile.
+- **`medusa timeline`**: unified chronological view across audits,
+  sessions, and reports.
+- **`medusa watch`**: live tail of the traffic log with per-line scoring
+  (same tier semantics as the TUI).
+- **`medusa clean`**: workspace cleaner — dry-run by default, `--apply`
+  archives stale outputs/sandbox to a zip then deletes.
+- **`medusa providers`**: live provider probe (tiny request, latency +
+  error report); `--all` probes every keyed provider.
+- **`medusa notify`**: operator notifications (macOS / arbitrary command
+  / file channels) — battle mode fires on flag captures and network
+  blocks.
+- **`medusa labs run`**: boots and probes every lab (reachability, landing
+  flags, route hints, latency) → capability-matrix baseline.
+
+### Added — governance (opt-in)
+- **Policy engine** (`medusa/policy.json` + `medusa policy check|show`):
+  blocked tools, blocked arg regexes, allowed target scopes (IPs/CIDRs/
+  hostnames) enforced at the route_tool chokepoint. NO FILE = NO
+  ENFORCEMENT (existing engagements untouched); intel-only tools are
+  scope-exempt by design.
+- **Custom detector rules** (`medusa/detector_rules.json` + `medusa rules
+  validate|list`): regex detectors (field: body/path/ua/headers, weight
+  1-10) loaded by the eval harness and battle watchdog; linted for regex/
+  schema errors.
+
+### Added — extensibility & resilience
+- **Module SDK** (`medusa module init|validate`): scaffolds a working pack
+  (manifest + implementation + skill doc); validation checks manifest
+  schema, imports main.py, and verifies every declared tool is a callable
+  with a docstring.
+- **Skill versioning** (`medusa skills history|diff|rollback`): every
+  edit_skill write snapshots the prior version (nanosecond-named, capped
+  at 25/skill) into medusa_agent/skill_history/.
+- **Provider failover**: `fallback_providers` config list honored via
+  generate_with_failover (hard errors roll to the next provider; successes
+  short-circuit); wired into llm_client.
+- **Wordlist engine**: `mutate_wordlist` agent tool (leet/years/suffixes/
+  prefixes, 50k cap) and `cewl_words` (harvest wordlists from fetched
+  pages, script/style stripped).
+
+### Tests
+- 55 new tests (`test_kb_v2_and_intel.py` + `test_v210_features.py`);
+  620 total, all offline.
+
 ## [2.9.2] — 2026-08-18 — DEAD-CODE SWEEP + WEBUI OVERHAUL
 
 ### Fixed — WebUI bugs

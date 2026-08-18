@@ -30,6 +30,16 @@ console = Console()
 FLAG_RE = "FLAG{"
 
 
+def _notify(title: str, message: str) -> None:
+    """Fire operator notifications if medusa/notify.json is configured."""
+    try:
+        from medusa.tools.notify import send
+
+        send(title, message)
+    except Exception:
+        pass  # notifications must never break a battle
+
+
 @dataclass
 class BattleState:
     red_flags: list[str] = field(default_factory=list)
@@ -104,6 +114,7 @@ class BlueWatchdog:
             self.state.blue_blocked = True
             self.state.blue_block_at = self.state.red_requests
             self.state.events.append(f"blue: {ip} score {score} -> BLOCK")
+            _notify("medusa battle", f"blue BLOCKED {ip} (score {score})")
 
     def _tarpit(self, ip: str, score: int) -> None:
         if ip and ip not in self._tarpitted:
@@ -151,6 +162,7 @@ def run_red_campaign(base_url: str, state: BattleState, watchdog: BlueWatchdog, 
                 if flag not in state.red_flags:
                     state.red_flags.append(flag)
                     state.events.append(f"red: captured {flag}")
+                    _notify("medusa battle", f"red captured {flag}")
         if cls and cls not in state.red_classes_hit:
             ok = r.status_code < 500
             if ok:
