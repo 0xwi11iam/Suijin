@@ -1,6 +1,6 @@
 {
-  "version": "3.10.0",
-  "codename": "Full Stack Boot",
+  "version": "3.11.0",
+  "codename": "Packs Ascend",
   "release_date": "2026-08-18",
-  "description": "Suijin v3.10.0: PHASE 3 RECOMMENDED TIER \u2014 providers, redteam, blueteam, knowledge, ops ride the kernel. Full OS boot: 12 modules topological, console menu driven by module hooks (redteam/blueteam/ops), 124 tools + 31 services on the Context. Disable-means-disappear proven at tier level: removing redteam's manifest removes its menu entry, verb, and services while everything else boots. Quiet boot held. 986 green (121 kernel)."
+  "description": "Suijin v3.11.0: PHASE 3 COMPLETE \u2014 all 49 Modules/ packs convert to kernel plugins (pack_converter generates plugin.json + entry shims; flat layout, category kept as metadata). Full OS boot with packs: 61 modules, packs own their 93 tools (tools module owns the 31 core routes); pack-less boots bridge everything, behavior identical. Pack ownership decided by the BOOT (booted-unit stamp), not ambient discovery. 990 tests green (125 kernel)."
 }

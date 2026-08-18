@@ -6,6 +6,28 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## [3.11.0] — 2026-08-18 — PACKS ASCEND (PHASE 3 COMPLETE)
+
+All 49 Modules/ packs are kernel plugins:
+
+- **pack_converter** (`suijin/modules/pack_converter.py`): generates
+  plugin.json + entry shims from every legacy manifest — flat layout
+  (dest/<id>/, category kept as metadata), ids from directory names,
+  permissions derived from declared binaries, collision detection.
+- **Pack bridge** (`_packbridge.py`): the ONE seam to the legacy pack
+  loader (file-located — suijin/modules is now a package, so
+  `suijin.modules.loader` can no longer be imported; the seam is
+  isolated and dies in Phase 5).
+- **Ownership decided by the BOOT, not ambient discovery**: the legacy
+  loader mixes core builtins into its registry (core_utils re-declares
+  search_kb/apply_patch/claim_flag), so pack ownership is computed from
+  ctx._booted_unit_ids — stamped before start() — and the tools module
+  bridges core-only when packs booted, everything when they didn't.
+- Verified both modes: pack-less = 12 modules / 124 tools-owned (legacy
+  identical); with packs = 61 modules, tools owns 31 core, packs own
+  their 93 (nmap owns nmap_scan).
+- Full OS boot: 61 modules topological, quiet when healthy.
+
 ## [3.10.0] — 2026-08-18 — FULL STACK BOOT (PHASE 3: RECOMMENDED TIER)
 
 - **providers**: LLM abstraction on the Context — llm.generate,

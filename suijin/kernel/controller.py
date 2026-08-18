@@ -25,13 +25,36 @@ _LAST_BOOT_ENTRIES: dict[str, object] = {}
 _LAST_CONTEXT: Context | None = None
 
 
-def _import_entry(entry: str) -> object | None:
+def _import_entry(entry: str, source: Path | None = None) -> object | None:
     """Resolve 'pkg.module:Class' to an instance. None on any failure —
-    the caller quarantines with the reason."""
+    the caller quarantines with the reason.
+
+    Special scheme 'pack_entry:<id>': load entry.py from the unit's own
+    source directory (converted packs ship their shim beside plugin.json).
+    """
     if not entry or ":" not in entry:
         return None
     mod_path, _, cls_name = entry.partition(":")
     try:
+        if mod_path == "pack_entry":
+            if source is None:
+                return None
+            shim = Path(source) / "entry.py"
+            if not shim.exists():
+                return None
+            import importlib.util
+
+            canonical = f"suijin_packs.{cls_name}"
+            if canonical in sys.modules:
+                cached = sys.modules[canonical]
+                cls = getattr(cached, "PackModule", None)
+                return cls() if cls else None
+            spec = importlib.util.spec_from_file_location(canonical, shim)
+            mod = importlib.util.module_from_spec(spec)
+            sys.modules[canonical] = mod
+            spec.loader.exec_module(mod)
+            cls = getattr(mod, "PackModule", None)
+            return cls() if cls else None
         __import__(mod_path)
         cls = getattr(sys.modules[mod_path], cls_name, None)
         return cls() if cls else None
@@ -67,7 +90,7 @@ def boot(
         uid = unit.id
         if uid in entries:
             continue
-        obj = _import_entry(unit.entry)
+        obj = _import_entry(unit.entry, source=unit.source)
         if obj is None:
             if unit.tier.value == 0:  # core without an object = boot problem
                 raise RuntimeError(f"core module '{uid}' has no loadable entry")
@@ -78,6 +101,8 @@ def boot(
 
     # register() for every module — failures quarantine (recommended) or abort (core)
     ctx = Context(config=config, workspace=workspace)
+    # stamped BEFORE start() so tools-start can see the booted pack set
+    ctx._booted_unit_ids = {u.id for u in bootable_units}
     ctx.vfs = Vfs(ctx.workspace)
     ctx.jobs = JobScheduler()
     ctx.journal = Journal(ctx.workspace / "logs")
