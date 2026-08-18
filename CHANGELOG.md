@@ -6,6 +6,31 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## [3.3.0] — 2026-08-18 — OS GROUNDWORK (PHASE 0)
+
+First structural commit of the Suijin OS refactor — behavior identical,
+851 tests green, three confirmed hazards dead:
+
+- **God-import split**: `suijin/tools/__init__.py` made ANY tools import
+  (even stdlib-only `workspace`) execute the full dispatch tree, LLM
+  providers, huggingface_hub, module discovery, and a workspace
+  migration. Now a PEP 562 lazy facade with submodule fallback; enforced
+  by import-purity tests (`test_phase0_purity.py`) that run leaf imports
+  in clean interpreters and assert nothing heavy loads.
+- **Import-time side effects → `init_runtime()`**: module discovery, TLS
+  suppression, workspace migration, mkdirs were import side effects of
+  `tools/runtime.py`; now an explicit, idempotent, thread-safe call made
+  by the entry points (cli doctor, TUI main, MCP main, test conftest).
+  MCP's tool registry also builds lazily (was import-time).
+- **Split-brain loader fixed**: `load_local_module` re-executed files
+  without caching — providers.py ran as FIVE instances with five
+  separate cost accumulators. Now one instance per file, cached under
+  its canonical name so dynamic load == normal import;
+  `fugu.py`'s load of a nonexistent "tools" module (a real crash) fixed
+  with a direct package import.
+- README: full Suijin OS architecture roadmap documented (kernel, Rust
+  core, tiers, Module Manager, phase table).
+
 ## [3.2.0] — 2026-08-18 — STABLE
 
 ### Added

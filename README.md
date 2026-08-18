@@ -889,6 +889,47 @@ symlink, auto-repaired at startup).
 
 ---
 
+## Architecture Roadmap — Suijin OS (v4.0)
+
+Suijin is being rebuilt as a modular **operating system for security
+automation** — same functionality, same look, same commands throughout;
+the internals become snap-in modules. Analogy: kernel + system packages +
+bundled apps + installable community software.
+
+### The design (locked)
+
+| Layer | What | Form |
+|:------|:-----|:-----|
+| **Kernel** | 12 stdlib-only subsystems: contracts (module/tool protocols), context (the "syscall table" handed to every module), events (pub/sub replacing cross-imports), registry (manifest parsing, dependency DAG, tiers), controller (`boot()` scene analysis + management API), jobs, vfs (file-boundary chokepoint), security (declared permissions, enforced once), config (layered merge), health (boot report), journal (rotated ring log), errors | `suijin/kernel/` |
+| **Rust core** | `suijin-core` crate (PyO3/maturin, abi3 wheels): `resolve_dag` + `check_paths` — the only pure data-in/data-out functions. Pure-Python implementations are permanent test oracles; `pipx install suijin` never needs a Rust toolchain | `native/suijin-core/` |
+| **Core tier** | Cannot be disabled (boot aborts without them): `platform` (workspace/config/runtime), `tools` (registry + dispatch), `agent` (graph/nodes/memory), `console` (CLI/TUIs/UI/MCP — menus and verbs are hook-registered, so a disabled module's menu entries genuinely disappear) | `suijin/modules/` |
+| **Recommended tier** | Bundled, individually disableable: `providers`, `redteam`, `blueteam`, `knowledge`, `ops` + the 49 tool packs (converted, namespaced — shadowing a builtin requires an explicit `overrides` flag) | in-wheel |
+| **Installed tier** | Community modules in `~/.suijin/modules/`, discovered at every boot; deps reported with exact pip commands (`--with-deps` opt-in); broken modules quarantined — boot continues | `~/.suijin/modules/` |
+| **Module Manager** | Textual TUI (`suijin module`): tiered list, per-module detail (deps ✓/✗, tools, permissions, last boot), enable/disable, install/uninstall, boot report. Quiet boot: silent when healthy | Phase 4 |
+
+Module shape: one folder, `plugin.json` (`id`, `version`, `tier`,
+`requires`, `provides`, `permissions`, `overrides`), an entry module
+implementing `register(ctx)` / `start(ctx)` / `stop(ctx)`. Nested physical
+modules (agent/graph, agent/nodes…) resolve as one flat dependency graph.
+`suijin module new` scaffolds a conforming module.
+
+### Status
+
+| Phase | Scope | Status |
+|:------|:------|:-------|
+| 0 | De-couple in place: god-import split, split-brain loader, import-time side effects → `init_runtime()` | ✅ **landed** (items 4–6: job registries, inverted deps, stray mkdirs — in progress) |
+| 1 | Kernel (12 subsystems, each absorbing a legacy twin) | next |
+| 1.5 | Rust core + oracle tests + wheel matrix | planned |
+| 2 | Core tier onto kernel | planned |
+| 3 | Recommended tier + 49 packs converted | planned |
+| 4 | Module Manager TUI + install system | planned |
+| 5 | Shims out, boundary linter in CI, ARCHITECTURE.md, v4.0.0 | planned |
+
+Every phase gates on: full suite green, ruff clean, behavior identical
+(old import paths keep working via shims until Phase 5).
+
+---
+
 ## Troubleshooting
 
 | Symptom | Fix |

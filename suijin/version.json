@@ -1,6 +1,6 @@
 {
-  "version": "3.2.0",
-  "codename": "Stable",
+  "version": "3.3.0",
+  "codename": "OS Groundwork",
   "release_date": "2026-08-18",
-  "description": "Suijin v3.2.0 STABLE: Burp-style scope TUI (suijin scope — include/exclude lists, subdomain matching, unresolvable toggle, enforcement on/off; exclude wins over include). Operator Tools menu in the TUI (every feature findable, no hidden verbs). Live run-command box + HITL approvals fix (from 3.1.0 line). Normalizer keeps banners + dir sizes; fixed a newline-swallowing regex that corrupted nmap parsing. 836 tests green; battle, WebUI, approvals, scope all live-verified."
+  "description": "Suijin v3.3.0: Suijin OS Phase 0 begun \u2014 god-import split (tools package is lazy), import-time side effects moved behind init_runtime(), split-brain module loader fixed (one instance per file; fugu crash fixed). 851 tests green. Full OS architecture (kernel + tiers + Rust core + Module Manager) documented in README."
 }
