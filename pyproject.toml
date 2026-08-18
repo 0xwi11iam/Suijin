@@ -1,3 +1,57 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "suijin"
+version = "3.0.0"
+description = "Suijin — autonomous red & blue teaming (formerly Medusa)"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "William Jiang" }]
+keywords = ["security", "pentesting", "red-team", "blue-team", "agent", "llm"]
+# Full toolset (module packs under Modules/) requires a repo checkout —
+# see README "Packaging". The wheel ships every core tool.
+dependencies = [
+    "requests>=2.28,<3.0",
+    "rich>=13.0,<14.0",
+    "huggingface_hub>=0.20,<1.0",
+    "psutil>=5.9,<6.0",
+    "pydantic>=2.0,<3.0",
+    "langgraph>=1.0,<2.0",
+    "langgraph-checkpoint>=2.0,<3.0",
+    "flask>=2.3,<4.0",
+    "flask_cors>=4.0,<5.0",
+    "PyJWT>=2.8,<3.0",
+    "duckduckgo-search>=6.0",
+    "urllib3>=1.26",
+]
+
+[project.urls]
+Homepage = "https://github.com/0xwi11iam/Suijin"
+
+[project.scripts]
+suijin = "suijin.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["suijin*"]
+exclude = ["suijin.tests*", "webui*"]
+
+[tool.setuptools.package-data]
+# Non-Python assets the runtime reads — a wheel without these is broken.
+suijin = [
+    "version.json",
+    "config.json",
+    "blue_config.json",
+    "engagement_schema.json",
+    "prompts/*.py",
+    "skills/*.py",
+    "tutorials/**/*.md",
+    "tutorials/*.md",
+]
+"suijin.ui" = ["dist/*", "dist/assets/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["suijin/tests"]
 python_files = ["test_*.py"]
