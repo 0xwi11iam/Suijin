@@ -1,0 +1,10 @@
+{
+  "id": "platform",
+  "version": "1.0.0",
+  "tier": "core",
+  "requires": [],
+  "provides": ["config", "workspace", "llm", "traffic_scorer"],
+  "entry": "suijin.modules.platform:PlatformModule",
+  "permissions": ["filesystem"],
+  "description": "Workspace, layered config, runtime init — the foundation core module"
+}

@@ -1,6 +1,6 @@
 {
-  "version": "3.7.0",
-  "codename": "Rust Heart",
+  "version": "3.8.0",
+  "codename": "First Module Standing",
   "release_date": "2026-08-18",
-  "description": "Suijin v3.7.0: PHASE 1.5 \u2014 the compiled core. native/suijin-core crate (PyO3 abi3): resolve_dag + check_paths, the only two pure data-in/data-out functions. Pure-Python oracle ships as permanent fallback; oracle suite (fixtures + 600-case fuzz) asserts canonical-JSON equality \u2014 it caught a real divergence (unsorted core-abort text) and a real algorithm bug (dependents of skipped modules booted anyway) on its first run, fixed in all three implementations. registry.resolve() now delegates graph math to the compiled core. 958 tests green."
+  "description": "Suijin v3.8.0: PHASE 2 BEGINS \u2014 platform, the first core-tier module, boots through the kernel. controller.boot() now materializes modules from manifest entry strings (no injected objects): platform registers config/workspace/llm/scorer services on the Context, initializes runtime + workspace dirs on start, journals the boot. Controller entry-materialization bug found+fixed by the new tests. 964 green."
 }

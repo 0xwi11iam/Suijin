@@ -72,6 +72,8 @@ def boot(
             if unit.tier.value == 0:  # core without an object = boot problem
                 raise RuntimeError(f"core module '{uid}' has no loadable entry")
             report.quarantined[uid] = f"entry not loadable: {unit.entry!r}"
+        else:
+            entries[uid] = obj
     bootable_units = [u for u in report.boot_order if u.id not in report.quarantined]
 
     # register() for every module — failures quarantine (recommended) or abort (core)

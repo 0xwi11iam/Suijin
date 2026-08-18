@@ -6,6 +6,24 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## [3.8.0] — 2026-08-18 — FIRST MODULE STANDING (PHASE 2 BEGINS)
+
+- **platform module** (`suijin/modules/platform/`): the first core-tier
+  module boots through the kernel — plugin.json manifest (tier: core,
+  entry string), registers config/workspace/llm/traffic_scorer services
+  on the Context (the Phase 0 services seam graduates into module
+  registration), initializes runtime + workspace directories on start,
+  journals the boot.
+- **controller entry materialization fixed**: imported module objects
+  never landed in the boot entries (register/start silently skipped for
+  manifest-sourced modules). Found by the new platform boot tests —
+  exactly why tests come first.
+- Context is now the source of truth for the workspace path: the module
+  honors ctx.workspace (was returning the global — test caught it).
+- Boot sequence proven end-to-end: scan suijin/modules → resolve →
+  materialize from entry string → register → start → services
+  materialize → shutdown. No injected objects anywhere.
+
 ## [3.7.0] — 2026-08-18 — RUST HEART (PHASE 1.5)
 
 The compiled core exists and the kernel uses it:
