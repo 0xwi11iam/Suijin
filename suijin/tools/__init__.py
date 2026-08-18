@@ -16,14 +16,26 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:  # static analysis still sees the surface
     from suijin.tools.dispatch import (
         get_proxy as get_proxy,
+    )
+    from suijin.tools.dispatch import (
         get_tool_catalog as get_tool_catalog,
+    )
+    from suijin.tools.dispatch import (
         reset_recon_state as reset_recon_state,
+    )
+    from suijin.tools.dispatch import (
         route_tool as route_tool,
+    )
+    from suijin.tools.dispatch import (
         set_proxy as set_proxy,
     )
     from suijin.tools.providers import (
         generate as generate,
+    )
+    from suijin.tools.providers import (
         get_usage as get_usage,
+    )
+    from suijin.tools.providers import (
         reset_usage as reset_usage,
     )
 

@@ -65,7 +65,6 @@ class TestInitRuntime:
         assert before and rt.is_initialized()
 
     def test_workspace_dirs_created(self, tmp_path, monkeypatch):
-        import shutil
 
         import suijin.tools.workspace as ws
 
