@@ -919,7 +919,7 @@ modules (agent/graph, agent/nodes…) resolve as one flat dependency graph.
 |:------|:------|:-------|
 | 0 | De-couple in place: god-import split, split-brain loader, import-time side effects, one job registry, services seam (inversions = 0), lazy mkdirs | ✅ **complete** |
 | 1 | Kernel — ALL 12 subsystems live (contracts, events, context, registry, controller, jobs, vfs, security, config, health, journal, errors), full-boot POST test, purity linter | ✅ **complete** |
-| 1.5 | Rust core + oracle tests + wheel matrix | planned |
+| 1.5 | Rust core: crate live (resolve_dag + check_paths), pure oracle + fuzz oracle suite, registry delegates to compiled core; maturin wheel matrix pending network | **nearly complete** |
 | 2 | Core tier onto kernel | planned |
 | 3 | Recommended tier + 49 packs converted | planned |
 | 4 | Module Manager TUI + install system | planned |

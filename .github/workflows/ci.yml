@@ -90,3 +90,29 @@ jobs:
             git diff --stat -- suijin/ui/dist
             exit 1
           fi
+
+  rust-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native/suijin-core
+
+      - name: Format + lint + unit tests
+        run: |
+          cd native/suijin-core
+          cargo fmt --check
+          cargo clippy -- -D warnings
+          cargo test --release
+
+      - name: Python oracle comparison (pure vs compiled)
+        run: |
+          cd native/suijin-core && cargo build --release && cd ../..
+          pip install pytest --quiet
+          python -m pytest suijin/tests/kernel/test_native_oracle.py -q
+        env:
+          PYTHONPATH: ${{ github.workspace }}

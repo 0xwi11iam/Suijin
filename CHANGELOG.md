@@ -6,6 +6,31 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## [3.7.0] — 2026-08-18 — RUST HEART (PHASE 1.5)
+
+The compiled core exists and the kernel uses it:
+
+- **native/suijin-core crate** (PyO3, abi3-py310, serde): `resolve_dag`
+  and `check_paths` — exactly two functions cross the boundary, both
+  JSON-in/JSON-out, zero Python object graph. 5 Rust unit tests; builds
+  warning-free; deterministic BTreeMap serialization.
+- **Pure-Python oracle** (`kernel/_pure.py`): permanent fallback AND test
+  oracle. **Native shim** (`kernel/native.py`): wheel → dev-build →
+  pure, the only file that may touch the compiled module.
+- **Oracle suite** (`test_native_oracle.py`): 15 fixtures + 600-case
+  fuzz (generated trees + path strings), canonical-JSON equality. On its
+  first run it caught (1) a real divergence — unsorted core-abort text
+  in Rust — and (2) a real algorithm bug shared by Rust, the oracle, AND
+  the original registry: a module whose dependency was skipped still
+  booted. Both fixed in all three implementations.
+- **registry.resolve()** now delegates the graph math (cycles, fixpoint,
+  core-abort, topo order) to the compiled core via the shim; collision
+  policy and quarantine remain object-level. The dead Python DFS is
+  deleted. Pure fallback keeps every environment working — `pipx install
+  suijin` still never needs a Rust toolchain.
+- maturin wheel build + CI matrix deferred to stable network (crate +
+  dev-build path proven locally).
+
 ## [3.6.0] — 2026-08-18 — KERNEL COMPLETE (PHASE 1)
 
 All 12 kernel subsystems live; controller boots with a full POST:

@@ -72,3 +72,4 @@ suijin/cve_cache/
 suijin/notify.json
 suijin/policy.json
 suijin/detector_rules.json
+native/suijin-core/target/**/suijin_core.abi3.so

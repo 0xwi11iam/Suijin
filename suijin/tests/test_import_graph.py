@@ -54,6 +54,8 @@ def test_no_dangling_suijin_imports():
         for m in _collect_imports(f):
             if not m.startswith("suijin"):
                 continue
+            if m == "suijin_core":
+                continue  # the compiled core: optional build artifact, not a source file
             targets = _module_targets(m)
             if not any(t.exists() for t in targets):
                 dangling.append(f"{f.relative_to(REPO)} imports missing {m}")

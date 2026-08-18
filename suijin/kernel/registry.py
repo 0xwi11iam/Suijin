@@ -178,90 +178,28 @@ class Registry:
                     report.collisions.append((uid, loser_tier))
             winners[uid] = winner
 
-        # 3. cycle detection (Tarjan-lite via DFS coloring) over winners
-        WHITE, GREY, BLACK = 0, 1, 2
-        color = {uid: WHITE for uid in winners}
-        stack: list[str] = []
+        # 3-6. Graph resolution (cycles, fixpoint availability, core-abort,
+        #      topological order) delegates to the compiled core via the
+        #      native shim — with the pure-Python oracle as automatic
+        #      fallback. Byte-compatible outputs are enforced by
+        #      test_native_oracle.py; collision policy and quarantine above
+        #      are object-level and stay here.
+        from suijin.kernel import native as _native
 
-        def dfs(uid: str) -> list[str] | None:
-            color[uid] = GREY
-            stack.append(uid)
-            for dep in winners[uid].requires:
-                if dep not in winners:
-                    continue  # missing handled later
-                if color[dep] == GREY:
-                    i = stack.index(dep)
-                    return stack[i:] + [dep]  # the cycle, named
-                if color[dep] == WHITE:
-                    cyc = dfs(dep)
-                    if cyc:
-                        return cyc
-            stack.pop()
-            color[uid] = BLACK
-            return None
-
-        cycles: dict[str, list[str]] = {}
-        for uid in list(winners):
-            if color[uid] == WHITE:
-                cyc = dfs(uid)
-                if cyc:
-                    for member in cyc:
-                        cycles[member] = cyc
-
-        # 4. availability: a unit is bootable iff all requires are bootable
-        #    and it's not in a cycle. Iterate to fixpoint.
-        bootable: set[str] = set()
-        skipped: dict[str, str] = {}
-        changed = True
-        pending = dict(winners)
-        while changed:
-            changed = False
-            for uid, unit in list(pending.items()):
-                if uid in cycles:
-                    skipped[uid] = f"dependency cycle: {' -> '.join(cycles[uid])}"
-                    del pending[uid]
-                    changed = True
-                    continue
-                missing = [d for d in unit.requires if d not in winners]
-                if missing:
-                    skipped[uid] = f"missing dependency: {', '.join(missing)}"
-                    del pending[uid]
-                    changed = True
-                    continue
-                unready = [d for d in unit.requires if d not in bootable and d in pending]
-                if unready:
-                    continue  # may become ready next pass
-                bootable.add(uid)
-                del pending[uid]
-                changed = True
-        # anything still pending has a skipped/cyclic dependency chain
-        for uid, unit in pending.items():
-            blocked = [d for d in unit.requires if d not in bootable]
-            skipped[uid] = f"dependencies unavailable: {', '.join(blocked)}"
-
-        # 5. core-missing aborts the boot
-        core_problems = []
-        for uid, unit in winners.items():
-            if unit.tier is Tier.CORE and uid in skipped:
-                core_problems.append(f"{uid} ({skipped[uid]})")
-        if core_problems:
+        manifests_json = json.dumps([
+            {"id": uid, "version": u.version, "tier": u.tier.name.lower(),
+             "requires": u.requires, "overrides": u.overrides}
+            for uid, u in sorted(winners.items())
+        ])
+        dag = json.loads(_native.resolve_dag(manifests_json))
+        skipped = {k: v for k, v in dag["skipped"].items()}
+        bootable = set(dag["bootable"])
+        if dag["aborted"]:
             report.aborted = True
-            report.abort_reason = "core module(s) unavailable: " + "; ".join(core_problems)
+            report.abort_reason = dag["abort_reason"]
             report.skipped = skipped
             return report
-
-        # 6. topological boot order over bootable units
-        order: list[Unit] = []
-        placed: set[str] = set()
-        while len(placed) < len(bootable):
-            progressed = False
-            for uid in sorted(bootable - placed):
-                if all(d in placed for d in winners[uid].requires):
-                    order.append(winners[uid])
-                    placed.add(uid)
-                    progressed = True
-            if not progressed:  # defensive — cycles were already removed
-                break
+        order = [winners[uid] for uid in dag["boot_order"]]
 
         report.units = winners
         report.boot_order = order
