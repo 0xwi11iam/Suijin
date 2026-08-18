@@ -54,7 +54,7 @@ Built-in. No installation needed. Notes go to `.notes/{engagement}_notes.md`.
 ## Notes File Format
 
 ```
-# Medusa Engagement Notes — client-name
+# Suijin Engagement Notes — client-name
 Started: 2026-06-25 10:54:21
 ---
 

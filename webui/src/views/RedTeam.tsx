@@ -16,7 +16,7 @@ export default function RedTeam() {
       lines.push({ text: `# actions: ${a.actions} | success ${a.success} | failed ${a.failed} | findings ${a.findings} | $${a.cost_usd.toFixed(4)}`, cls: "t-dim" })
       lines.push({ text: "", cls: "" })
     }
-    if (lines.length === 0) lines.push({ text: "No audit trails yet — run an engagement from the TUI (medusa → Red Team).", cls: "t-amber" })
+    if (lines.length === 0) lines.push({ text: "No audit trails yet — run an engagement from the TUI (suijin → Red Team).", cls: "t-amber" })
     return lines
   }, [audits])
 
@@ -103,7 +103,7 @@ export default function RedTeam() {
           </div>
           <div className="small" style={{ marginTop: 14 }}>
             {snap ? `${snap.tools.module_tool_count} module tools loaded. ` : ""}
-            Missing binaries unlock via brew/apt — see <span className="mono">medusa doctor</span>.
+            Missing binaries unlock via brew/apt — see <span className="mono">suijin doctor</span>.
           </div>
         </div>
       </div>
@@ -124,7 +124,7 @@ export default function RedTeam() {
           <div className="display-stat" style={{ color: snap?.kb.built ? "var(--accent)" : "var(--text-tertiary)" }}>
             {snap?.kb.built ? (snap.kb.docs ?? 0).toLocaleString() : "—"}
           </div>
-          <div className="small">{snap?.kb.built ? "docs indexed · search_kb armed" : "run: medusa pull kb"}</div>
+          <div className="small">{snap?.kb.built ? "docs indexed · search_kb armed" : "run: suijin pull kb"}</div>
         </div>
         <div className="card">
           <div className="card-title">Failure Memory</div>

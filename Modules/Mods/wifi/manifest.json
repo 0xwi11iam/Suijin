@@ -2,7 +2,7 @@
     "name": "WiFi Cracking",
     "version": "1.0",
     "description": "WiFi network scanning, handshake capture, and WPA/WPA2 cracking tools.",
-    "author": "Medusa",
+    "author": "Suijin",
     "tools": {
         "wifi_scan": {
             "description": "Scan for nearby WiFi networks and return BSSID, channel, signal strength, and encryption type.",

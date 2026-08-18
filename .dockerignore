@@ -21,22 +21,22 @@ env/
 Thumbs.db
 
 # Secrets — never bake into images (compose mounts config.json at runtime)
-medusa/.env
-medusa/config.json
+suijin/.env
+suijin/config.json
 access_keys.json
-medusa/operation_state_recovery.json
-medusa/engagement_schema.json
+suijin/operation_state_recovery.json
+suijin/engagement_schema.json
 
-# Knowledge base — built on demand inside the container via `medusa pull kb`
-medusa/kb.sqlite3
-medusa/kb_cache/
+# Knowledge base — built on demand inside the container via `suijin pull kb`
+suijin/kb.sqlite3
+suijin/kb_cache/
 
 # Large third-party (not needed in container)
 redamon/
 
 # Agent workspace (mounted as volume)
-medusa/medusa_agent/
-medusa_agent/
+suijin/suijin_agent/
+suijin_agent/
 
 # Notes
 .notes/
@@ -47,4 +47,4 @@ docker-compose.yml
 .dockerignore
 
 # Tests
-medusa/tests/
+suijin/tests/

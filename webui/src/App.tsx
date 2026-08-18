@@ -29,7 +29,7 @@ function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () => void }
     <>
       {open && <div className="drawer-backdrop" onClick={onNavigate} />}
       <aside className={`sidebar${open ? " open" : ""}`}>
-        <div className="logo float" title="Medusa">
+        <div className="logo float" title="Suijin">
           <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
             <circle cx="17" cy="17" r="14" stroke="var(--accent)" strokeWidth="1.5" opacity="0.5" />
             <circle cx="17" cy="17" r="8" stroke="var(--accent)" strokeWidth="1.5" />

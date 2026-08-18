@@ -8,7 +8,7 @@ def _gvm_exec(cmd):
 
 def gvm_scan(target, config="Full and fast"):
     if not target: return "Error: target required"
-    return _gvm_exec(f"gvm-cli socket --xml '<create_task><name>Medusa-{target}</name><config><name>{config}</name></config><target><name>{target}</name></target></create_task>' 2>&1")
+    return _gvm_exec(f"gvm-cli socket --xml '<create_task><name>Suijin-{target}</name><config><name>{config}</name></config><target><name>{target}</name></target></create_task>' 2>&1")
 
 def gvm_list_tasks():
     return _gvm_exec("gvm-cli socket --xml '<get_tasks/>' 2>&1")

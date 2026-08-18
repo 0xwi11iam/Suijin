@@ -1,7 +1,7 @@
 """John the Ripper wrapper."""
 import shlex
 
-from medusa.tools.result import run_command
+from suijin.tools.result import run_command
 
 
 def john_crack(hashfile, wordlist="", format=""):

@@ -17,7 +17,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [snap, setSnap] = useState<Snapshot | null>(null)
   const [live, setLive] = useState(false)
   const [mode, setMode] = useState<Mode>(() =>
-    (localStorage.getItem("medusa-mode") as Mode) || "red"
+    (localStorage.getItem("suijin-mode") as Mode) || "red"
   )
 
   useEffect(() => {
@@ -33,7 +33,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    localStorage.setItem("medusa-mode", mode)
+    localStorage.setItem("suijin-mode", mode)
   }, [mode])
 
   return <Ctx.Provider value={{ snap, live, mode, setMode }}>{children}</Ctx.Provider>

@@ -47,7 +47,7 @@ Use the index numbers [N] in click/type commands.
 ```json
 {"tool": "mcp_browser_screenshot", "args": {}}
 ```
-Saves to /tmp/medusa_screenshot.png
+Saves to /tmp/suijin_screenshot.png
 
 ### Extract Text
 ```json

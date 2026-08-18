@@ -30,7 +30,7 @@ export default function Reports() {
       <div className="view-head">
         <div>
           <h1>Reports &amp; Audit</h1>
-          <div className="sub">Engagement artifacts from medusa_agent/reports and medusa_agent/audit_trails.</div>
+          <div className="sub">Engagement artifacts from suijin_agent/reports and suijin_agent/audit_trails.</div>
         </div>
       </div>
 

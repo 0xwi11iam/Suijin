@@ -6,7 +6,7 @@
 
 ## Context
 
-Medusa needs to persist relationships between entities across a security engagement:
+Suijin needs to persist relationships between entities across a security engagement:
 
 - **Red Team**: Targets → Ports → Services → Vulnerabilities → Exploits → Flags
 - **Blue Team**: Attackers → Attacks → Defenses → Intelligence → Countermeasures
@@ -44,7 +44,7 @@ The knowledge graph is queried in the hot path — every LLM prompt includes att
 **Chose Option B — JSON file with in-memory index.**
 
 The deciding factors:
-1. **Zero-setup requirement** — Medusa target users (bug bounty hunters, CTF players, security researchers) should not need to install and configure a graph database
+1. **Zero-setup requirement** — Suijin target users (bug bounty hunters, CTF players, security researchers) should not need to install and configure a graph database
 2. **Scale fits the problem** — a typical engagement has <1,000 nodes and <5,000 edges; Python dict lookups handle this trivially
 3. **Session isolation** — each engagement is a fresh session; no need for persistent multi-session storage
 4. **Hot-path performance** — `get_attacker_history(ip)` is a single dict lookup, not a network round-trip + query parse + execution
@@ -68,7 +68,7 @@ The Neo4j code that existed in early versions was dead code — the operational 
 
 ## Migration Path
 
-If Medusa evolves to need real graph queries (e.g., multi-session attacker correlation, community detection), the JSON structure maps cleanly to Neo4j nodes and relationships. The `knowledge_graph.py` API (`add_attacker()`, `get_attacker_history()`, `bridge_from_red_team()`) is an abstraction that could be backed by Neo4j without changing callers.
+If Suijin evolves to need real graph queries (e.g., multi-session attacker correlation, community detection), the JSON structure maps cleanly to Neo4j nodes and relationships. The `knowledge_graph.py` API (`add_attacker()`, `get_attacker_history()`, `bridge_from_red_team()`) is an abstraction that could be backed by Neo4j without changing callers.
 
 ## Alternatives Not Pursued
 

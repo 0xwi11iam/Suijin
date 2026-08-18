@@ -22,7 +22,7 @@ The tool is built-in (uses `subprocess`). CLI tools you install become available
 | Port scanning | `nmap`, `masscan`, `rustscan`, `unicornscan` |
 | Subdomain enum | `amass`, `sublist3r`, `subfinder`, `assetfinder`, `dnsrecon` |
 | Vuln scanning | `sqlmap`, `nikto`, `nuclei`, `wapiti`, `skipfish` |
-| Brute force | `hydra`, `medusa`, `ncrack`, `crowbar`, `patator` |
+| Brute force | `hydra`, `suijin`, `ncrack`, `crowbar`, `patator` |
 | Hash cracking | `john`, `hashcat`, `hashid`, `hash-identifier` |
 | Exploitation | `metasploit`, `searchsploit`, `empire`, `crackmapexec` |
 | Network | `socat`, `netcat`, `ncat`, `socat`, `sslscan`, `testssl.sh` |
@@ -62,6 +62,6 @@ The tool passes commands directly to the shell. Common patterns:
 ## Security Notes
 
 - Commands like `pip install`, `sudo`, `brew install`, `apt install` require user approval
-- The command runs with `cwd = medusa_agent/` by default
+- The command runs with `cwd = suijin_agent/` by default
 - Output is truncated at 8000 characters
 - PID self-preservation: refuses to kill its own process

@@ -1,0 +1,45 @@
+{
+  "127.0.0.1": {
+    "blocks": [
+      {
+        "rule": "test",
+        "evidence": "",
+        "confidence": 1.0,
+        "verified_at": "2026-08-10T03:36:58.886428+00:00",
+        "last_seen": "2026-08-10T03:36:58.886529+00:00"
+      }
+    ],
+    "_updated": "2026-08-10T03:36:58.886531+00:00"
+  },
+  "drfrost.org": {
+    "behavior": [
+      {
+        "rule": "CSP connect-src header leaks subdomain sonic.drfrost.org",
+        "evidence": "Homepage response header: connect-src 'self' https://sonic.drfrost.org https://o4510674642862080.ingest.de.sentry.io",
+        "confidence": 1.0,
+        "verified_at": "2026-08-12T09:01:21.461517+00:00",
+        "last_seen": "2026-08-12T09:01:21.461523+00:00"
+      }
+    ],
+    "_updated": "2026-08-12T09:01:21.461525+00:00"
+  },
+  "10.9.9.9": {
+    "blocks": [
+      {
+        "rule": "' OR 1=1",
+        "evidence": "403",
+        "confidence": 1.0,
+        "verified_at": "2026-08-18T06:17:30.376024+00:00",
+        "last_seen": "2026-08-18T06:17:37.384677+00:00"
+      },
+      {
+        "rule": "' OR '1'='1",
+        "evidence": "403",
+        "confidence": 1.0,
+        "verified_at": "2026-08-18T06:19:33.839723+00:00",
+        "last_seen": "2026-08-18T10:09:17.803600+00:00"
+      }
+    ],
+    "_updated": "2026-08-18T10:09:17.803601+00:00"
+  }
+}

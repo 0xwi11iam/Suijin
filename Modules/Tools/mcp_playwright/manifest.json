@@ -20,7 +20,7 @@
       "parameters": {"selector": "Index [N] or CSS selector", "text": "Text to type"}
     },
     "mcp_browser_screenshot": {
-      "description": "Capture a full-page screenshot. Saves to /tmp/medusa_screenshot.png by default.",
+      "description": "Capture a full-page screenshot. Saves to /tmp/suijin_screenshot.png by default.",
       "parameters": {"filepath": "Output file path (optional)"}
     },
     "mcp_browser_extract": {

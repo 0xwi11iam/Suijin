@@ -11,7 +11,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "../medusa/ui/dist",
+    outDir: "../suijin/ui/dist",
     emptyOutDir: true,
     sourcemap: false,
   },

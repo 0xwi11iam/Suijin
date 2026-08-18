@@ -33,11 +33,11 @@ You can expect:
 
 ## Security Model
 
-Medusa is a **dual-use offensive/defensive security tool**. It is intended for authorized testing only (see [DISCLAIMER](README.md#legal-disclaimer)). The security model assumes:
+Suijin is a **dual-use offensive/defensive security tool**. It is intended for authorized testing only (see [DISCLAIMER](README.md#legal-disclaimer)). The security model assumes:
 
 - The operator has **explicit authorization** for the target
-- The host running Medusa is **trusted and single-operator**
-- API keys in `medusa/.env` are **never committed** (gitignored)
+- The host running Suijin is **trusted and single-operator**
+- API keys in `suijin/.env` are **never committed** (gitignored)
 
 ### Known accepted risks (by design)
 
@@ -45,13 +45,13 @@ Medusa is a **dual-use offensive/defensive security tool**. It is intended for a
 |---|---|---|
 | AI can execute shell commands | Core feature — the agent drives `nmap`, `sqlmap`, etc. | `guardrails.py` blocks destructive patterns (`rm -rf /`, `mkfs`, fork bombs); self-kill protection refuses to kill its own PID |
 | Blue team AI can patch code | Core feature — autonomous hotfix | Patches logged to the knowledge graph + audit trail; hotfix is opt-in per config |
-| Workspace file writes | Agent needs a scratch area | `workspace.py` confines writes to `medusa_agent/` + `/tmp` allowlist; symlink-resolved boundary checks |
+| Workspace file writes | Agent needs a scratch area | `workspace.py` confines writes to `suijin_agent/` + `/tmp` allowlist; symlink-resolved boundary checks |
 | LLM prompt injection via target content | Tool output enters prompts | `prompt_safety.py` wraps untrusted content with unforgeable boundary markers |
 | Gov/mil/edu targets | Not allowed | `hard_guardrail.py` blocks these domains |
 
 ### Reporting a vulnerability IN the tool
 
-If you discover a vulnerability in a component Medusa depends on (e.g., Flask lab dependency), report it to that project upstream and optionally notify us so we can bump the dependency.
+If you discover a vulnerability in a component Suijin depends on (e.g., Flask lab dependency), report it to that project upstream and optionally notify us so we can bump the dependency.
 
 ## Security CI
 

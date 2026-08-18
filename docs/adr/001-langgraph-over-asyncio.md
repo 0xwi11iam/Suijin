@@ -6,7 +6,7 @@
 
 ## Context
 
-Medusa Red Team needs to orchestrate a multi-step attack pipeline: initialize context → think (LLM reasoning) → execute tool → generate response → loop. Each step may take seconds to minutes (LLM calls, network scans, exploitation attempts). The pipeline must:
+Suijin Red Team needs to orchestrate a multi-step attack pipeline: initialize context → think (LLM reasoning) → execute tool → generate response → loop. Each step may take seconds to minutes (LLM calls, network scans, exploitation attempts). The pipeline must:
 
 1. **Persist state** across iterations (findings, flags, audit trail, tool outputs, cost tracking)
 2. **Handle interruptions** gracefully (Ctrl+C pause, user guidance injection)

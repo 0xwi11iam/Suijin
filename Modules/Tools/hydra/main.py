@@ -1,7 +1,7 @@
 """Hydra wrapper."""
 import shlex
 
-from medusa.tools.result import run_command
+from suijin.tools.result import run_command
 def hydra_brute(target, service, options=""):
     if not target or not service: return "Error: target and service required"
     cmd = f"hydra -I {options} {shlex.quote(target)} {service}"

@@ -1,7 +1,7 @@
 """Nuclei vulnerability scanner wrapper."""
 import shlex
 
-from medusa.tools.result import run_command
+from suijin.tools.result import run_command
 def nuclei_scan(target, templates="cve,exposures,misconfig", flags="-silent -stats"):
     if not target: return "Error: target required"
     cmd = f"nuclei -u {shlex.quote(target)} -t {shlex.quote(templates)} {flags}"

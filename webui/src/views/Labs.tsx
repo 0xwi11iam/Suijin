@@ -70,7 +70,7 @@ export default function Labs() {
                     ? <span className="badge badge-green">● RUNNING</span>
                     : <span className="badge badge-grey">stopped</span>}
                 </td>
-                <td className="mono dim">python3 medusa/lab/{l.name}/app.py</td>
+                <td className="mono dim">python3 suijin/lab/{l.name}/app.py</td>
               </tr>
             ))}
           </tbody>

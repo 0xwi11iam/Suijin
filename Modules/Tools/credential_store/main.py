@@ -5,16 +5,16 @@ import time
 from pathlib import Path
 
 try:
-    from medusa.tools.workspace import WORKSPACE_DIR
-except Exception:  # loaded outside the medusa process — same layout by convention
-    WORKSPACE_DIR = Path(__file__).resolve().parent.parent.parent.parent / "medusa_agent"
+    from suijin.tools.workspace import WORKSPACE_DIR
+except Exception:  # loaded outside the suijin process — same layout by convention
+    WORKSPACE_DIR = Path(__file__).resolve().parent.parent.parent.parent / "suijin_agent"
 
 STORE_PATH = WORKSPACE_DIR / "credentials.json"
 
 
 def _load_store():
     if not STORE_PATH.exists():
-        return {"_schema": "medusa-credentials-v1", "credentials": []}
+        return {"_schema": "suijin-credentials-v1", "credentials": []}
     return json.loads(STORE_PATH.read_text())
 
 

@@ -1,5 +1,5 @@
 [tool.pytest.ini_options]
-testpaths = ["medusa/tests"]
+testpaths = ["suijin/tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -12,8 +12,8 @@ markers = [
 asyncio_mode = "auto"
 
 [tool.coverage.run]
-source = ["medusa"]
-omit = ["medusa/lab/*", "medusa/tests/*", "medusa_agent/*"]
+source = ["suijin"]
+omit = ["suijin/lab/*", "suijin/tests/*", "suijin_agent/*"]
 
 [tool.coverage.report]
 fail_under = 48
@@ -26,7 +26,7 @@ exclude_lines = [
 [tool.ruff]
 target-version = "py310"
 line-length = 120
-exclude = ["medusa/lab/", "medusa_agent/", "__pycache__/", ".git/"]
+exclude = ["suijin/lab/", "suijin_agent/", "__pycache__/", ".git/"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "B", "SIM", "I"]
@@ -46,6 +46,6 @@ indent-style = "space"
 
 [tool.pyright]
 typeCheckingMode = "basic"
-exclude = ["medusa/lab/", "medusa_agent/", "__pycache__/"]
+exclude = ["suijin/lab/", "suijin_agent/", "__pycache__/"]
 reportMissingImports = false
 reportOptionalMemberAccess = false

@@ -8,4 +8,4 @@ Persist discovered credentials during engagements. Auto-loaded on next run.
 {"tool": "creds_get", "args": {"service": "admin_panel"}}
 ```
 
-Stored at `medusa_agent/credentials.json`. Entries are deduplicated by service+value.
+Stored at `suijin_agent/credentials.json`. Entries are deduplicated by service+value.

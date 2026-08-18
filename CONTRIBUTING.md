@@ -1,6 +1,6 @@
-# Contributing to Medusa
+# Contributing to Suijin
 
-Thank you for your interest in contributing! Medusa is a dual-mode (Red Team + Blue Team) autonomous security platform. This guide covers everything you need to start contributing.
+Thank you for your interest in contributing! Suijin is a dual-mode (Red Team + Blue Team) autonomous security platform. This guide covers everything you need to start contributing.
 
 ## Developer Setup
 
@@ -13,22 +13,22 @@ Thank you for your interest in contributing! Medusa is a dual-mode (Red Team + B
 ### Quick Start
 
 ```bash
-git clone https://github.com/0xwi11iam/Medusa.git
-cd medusa-security
+git clone https://github.com/0xwi11iam/Suijin.git
+cd suijin-security
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r medusa/requirements.txt
+pip install -r suijin/requirements.txt
 
 # Set your API key
-echo "DEEPSEEK_API_KEY=sk-..." > medusa/.env
+echo "DEEPSEEK_API_KEY=sk-..." > suijin/.env
 
 # Verify setup
-python3 -m pytest medusa/tests/ -q
+python3 -m pytest suijin/tests/ -q
 ```
 
 ### Project Structure
 
 ```
-medusa/
+suijin/
 ├── core/           # State machine, red/blue teamers, config, constants
 │   └── blue/       # Blue team SOC modules (ai_engine, feed, proxy, defense, soc)
 ├── tools/          # 85-tool dispatch, guardrails, workspace, providers
@@ -38,7 +38,7 @@ medusa/
 ├── prompts/        # LLM system prompts (red_team, blue_team)
 └── main.py         # TUI entry point (Rich console)
 Modules/            # Tool wrappers (nmap, sqlmap, hydra, metasploit, etc.)
-medusa_agent/       # Agent workspace (outputs, payloads, scripts)
+suijin_agent/       # Agent workspace (outputs, payloads, scripts)
 ```
 
 ## Development Workflow
@@ -47,16 +47,16 @@ medusa_agent/       # Agent workspace (outputs, payloads, scripts)
 
 ```bash
 # Full suite (~1 second)
-python3 -m pytest medusa/tests/ -q
+python3 -m pytest suijin/tests/ -q
 
 # Specific file
-python3 -m pytest medusa/tests/test_tools.py -v
+python3 -m pytest suijin/tests/test_tools.py -v
 
 # Skip slow/AI tests
-python3 -m pytest medusa/tests/ -q -m "not slow and not ai"
+python3 -m pytest suijin/tests/ -q -m "not slow and not ai"
 
 # With coverage
-python3 -m pytest medusa/tests/ --cov=medusa --cov-report=term-missing
+python3 -m pytest suijin/tests/ --cov=suijin --cov-report=term-missing
 ```
 
 ### Linting & Type Checking
@@ -64,11 +64,11 @@ python3 -m pytest medusa/tests/ --cov=medusa --cov-report=term-missing
 ```bash
 # Ruff (configured in pyproject.toml)
 pip install ruff
-ruff check medusa/
-ruff format --check medusa/
+ruff check suijin/
+ruff format --check suijin/
 
 # Pyright (configured in pyproject.toml)
-pyright medusa/
+pyright suijin/
 ```
 
 ### Pre-commit Hooks
@@ -109,16 +109,16 @@ See [`docs/adr/`](docs/adr/) for Architecture Decision Records:
 
 ## Adding a New Tool
 
-1. Create wrapper in `Modules/` (or use existing wrappers in `medusa/tools/`)
-2. Register in `medusa/tools/dispatch.py` tool routing table
-3. Add skill definition in `medusa/skills/` if it's an attack technique
-4. Add tests in `medusa/tests/`
+1. Create wrapper in `Modules/` (or use existing wrappers in `suijin/tools/`)
+2. Register in `suijin/tools/dispatch.py` tool routing table
+3. Add skill definition in `suijin/skills/` if it's an attack technique
+4. Add tests in `suijin/tests/`
 
 ## Adding a New Attack Pattern Detector
 
-1. Add regex pattern to `_ATTACK_PATTERNS` in `medusa/core/blue/tui/feed.py`
+1. Add regex pattern to `_ATTACK_PATTERNS` in `suijin/core/blue/tui/feed.py`
 2. Set appropriate weight (1–5)
-3. Add test in `medusa/tests/test_blue_team.py`
+3. Add test in `suijin/tests/test_blue_team.py`
 4. Update the pattern table in `README.md`
 
 ## Code Style
@@ -127,9 +127,9 @@ See [`docs/adr/`](docs/adr/) for Architecture Decision Records:
 - **Quotes**: Double quotes (configured in ruff)
 - **Error handling**: No bare `except:` — always `except Exception` with logging
 - **Types**: Use `from __future__ import annotations` for forward references
-- **Constants**: Use `medusa.core.constants` — never hardcode model IDs, ports, or thresholds
-- **Config**: Validate with Pydantic models in `medusa/core/config_models.py`
-- **Paths**: Use `medusa/core/paths.py` for tmp paths, `medusa/tools/workspace.py` for workspace paths
+- **Constants**: Use `suijin.core.constants` — never hardcode model IDs, ports, or thresholds
+- **Config**: Validate with Pydantic models in `suijin/core/config_models.py`
+- **Paths**: Use `suijin/core/paths.py` for tmp paths, `suijin/tools/workspace.py` for workspace paths
 
 ## Commit Conventions
 

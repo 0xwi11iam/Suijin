@@ -1,19 +1,19 @@
-# Medusa Security — Docker Compose
+# Suijin Security — Docker Compose
 # Usage:
 #   docker compose build
-#   docker compose run --rm medusa
-#   Or with env: DEEPSEEK_API_KEY=sk-xxx docker compose run --rm medusa
+#   docker compose run --rm suijin
+#   Or with env: DEEPSEEK_API_KEY=sk-xxx docker compose run --rm suijin
 
 services:
-  medusa:
+  suijin:
     build: .
-    image: medusa:latest
-    container_name: medusa-agent
+    image: suijin:latest
+    container_name: suijin-agent
     stdin_open: true
     tty: true
     volumes:
-      - ./medusa_agent:/app/medusa_agent
-      - ./medusa/config.json:/app/medusa/config.json
+      - ./suijin_agent:/app/suijin_agent
+      - ./suijin/config.json:/app/suijin/config.json
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - HF_TOKEN=${HF_TOKEN:-}
@@ -26,8 +26,8 @@ services:
       - VT_API_KEY=${VT_API_KEY:-}
       - NVD_API_KEY=${NVD_API_KEY:-}
     networks:
-      - medusa-net
+      - suijin-net
 
 networks:
-  medusa-net:
+  suijin-net:
     driver: bridge

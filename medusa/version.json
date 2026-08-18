@@ -1,6 +1,0 @@
-{
-  "version": "2.11.2",
-  "codename": "Trust But Verify",
-  "release_date": "2026-08-18",
-  "description": "Medusa v2.11.2: dead-code sweep — 73 unreachable modules (67 KB) removed via AST import-graph reachability from entry points + tests: 6 whole blue-team packages (counter_intel, endpoints, forensics, hotfix, intel, response), 20 blue files in live packages, 4 stub blueteam nodes, 4 dead blue prompts, 9 orphaned tools (incl. the never-wired failure_learner/hotreload_skills), core/paths + logging_config duplicates. mode_hotreload_skills flag removed (no consumer). New import-graph guard test prevents dangling-import regressions. 740 tests green."
-}

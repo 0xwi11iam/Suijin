@@ -1,7 +1,7 @@
 """mitmproxy traffic capture — passive HTTP/HTTPS analysis."""
 import subprocess, os, json, glob, time, threading
 
-_capture_dir = "/tmp/medusa_mitmproxy"
+_capture_dir = "/tmp/suijin_mitmproxy"
 _mitm_proc = None
 
 def _ensure_dir():

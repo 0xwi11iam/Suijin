@@ -78,7 +78,7 @@ def _dispatch(page, cmd, kw):
     elif cmd == "type":
         return _type(page, kw["selector"], kw["text"])
     elif cmd == "screenshot":
-        fp = kw.get("filepath") or os.path.join(tempfile.gettempdir(), "medusa_screenshot.png")
+        fp = kw.get("filepath") or os.path.join(tempfile.gettempdir(), "suijin_screenshot.png")
         page.screenshot(path=fp, full_page=True)
         return f"Screenshot: {fp}"
     elif cmd == "extract":

@@ -58,7 +58,7 @@ export default function BlueTeam() {
         <div style={{ maxHeight: 300, overflowY: "auto", marginTop: 8 }}>
           {traffic.length === 0 && (
             <div className="small" style={{ padding: 24 }}>
-              No live traffic. Start Blue Team (<span className="mono">medusa</span> → Blue Team → built-in lab) and attack
+              No live traffic. Start Blue Team (<span className="mono">suijin</span> → Blue Team → built-in lab) and attack
               from another terminal — requests stream here over SSE.
             </div>
           )}

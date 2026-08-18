@@ -40,7 +40,7 @@ export default function Settings() {
 
       {tab === "config" && (
         <div className="card">
-          <div className="card-title">Effective medusa/config.json — validated, secrets redacted</div>
+          <div className="card-title">Effective suijin/config.json — validated, secrets redacted</div>
           {!cfg && <div className="skeleton" style={{ height: 300 }} />}
           {cfg && (
             <table className="table kv-table">
@@ -57,8 +57,8 @@ export default function Settings() {
             </table>
           )}
           <div className="small" style={{ marginTop: 12 }}>
-            Edit via <span className="mono">medusa/config.json</span> or the Settings TUI — this console is read-only.
-            Validate with <span className="mono">medusa config validate</span>.
+            Edit via <span className="mono">suijin/config.json</span> or the Settings TUI — this console is read-only.
+            Validate with <span className="mono">suijin config validate</span>.
           </div>
         </div>
       )}
@@ -83,18 +83,18 @@ export default function Settings() {
             </>
           ) : (
             <div className="small">
-              KB not built. Run <span className="mono">medusa pull kb</span> (optionally{" "}
+              KB not built. Run <span className="mono">suijin pull kb</span> (optionally{" "}
               <span className="mono">--sources</span> to skip the ~300 MB SecLists pull).
             </div>
           )}
           <div className="small" style={{ marginTop: 12 }}>
-            Failed sources retry with <span className="mono">medusa pull kb --sources &lt;name&gt;</span>.
+            Failed sources retry with <span className="mono">suijin pull kb --sources &lt;name&gt;</span>.
             {snap?.kev && snap.kev.count > 0 && (
               <>
                 {" "}KEV mirror: <span className="mono" style={{ color: "var(--red)" }}>
                   {snap.kev.count.toLocaleString()}
                 </span>{" "}
-                actively-exploited CVEs cached (<span className="mono">medusa pull cve</span>).
+                actively-exploited CVEs cached (<span className="mono">suijin pull cve</span>).
               </>
             )}
           </div>

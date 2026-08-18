@@ -132,7 +132,7 @@ export default function Dashboard() {
           <AttackMap spikes={spikes} />
           <div className="small" style={{ padding: "0 24px 16px" }}>
             Vectors spawn when attack signals arrive on the blue-team feed — fire attacks at a lab
-            (<span className="mono">medusa labs</span>) or run <span className="mono">medusa battle</span>.
+            (<span className="mono">suijin labs</span>) or run <span className="mono">suijin battle</span>.
           </div>
         </div>
 
@@ -142,7 +142,7 @@ export default function Dashboard() {
           <div className="small">
             {hasSignals
               ? "Live detector signals from the traffic window + blue KG."
-              : "No attack signals yet — start a lab and probe it, or run medusa battle."}
+              : "No attack signals yet — start a lab and probe it, or run suijin battle."}
           </div>
         </div>
       </div>
@@ -154,7 +154,7 @@ export default function Dashboard() {
           <div className="feed">
             {feed.length === 0 && (
               <div className="small" style={{ padding: 24 }}>
-                No live traffic yet. Start the blue team (<span className="mono">medusa</span> → Blue Team)
+                No live traffic yet. Start the blue team (<span className="mono">suijin</span> → Blue Team)
                 and probe the lab — events appear here in real time.
               </div>
             )}

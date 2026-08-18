@@ -1,16 +1,26 @@
 <p align="center">
-  <img src="assets/medusa.png" alt="Medusa Logo" width="160"/>
+  <img src="assets/suijin.png" alt="Suijin Logo" width="160"/>
 </p>
-<h1 align="center">Medusa</h1>
+<h1 align="center">Suijin</h1>
+
+> **NAME CHANGE — Medusa is now Suijin.** This project was renamed in full
+> (v2.12.0): the package (`medusa/` → `suijin/`), the CLI (`medusa` →
+> `suijin`), the agent workspace (`medusa_agent/` → `suijin_agent/`), the
+> installer (`~/.medusa` → `~/.suijin`), and every doc, prompt, and config
+> reference. Existing data migrates automatically on first run — your
+> `medusa_agent/` artifacts, KB database, and `~/.medusa` installation are
+> carried over, never dropped. Old `MEDUSA_*` environment overrides and the
+> `MEDUSA_TMP_DIR` variable still work. Prior releases in the changelog were
+> written under the Medusa name.
 
 <p align="center">
-  <img height="20" src="https://img.shields.io/badge/v2.7.0-operators__cli-green?style=flat" alt="Version"/>
+  <img height="20" src="https://img.shields.io/badge/v2.12.0-suijin-green?style=flat" alt="Version"/>
   <img height="20" src="https://img.shields.io/badge/LICENSE-MIT-4169A1?style=flat" alt="License"/>
   <img height="20" src="https://img.shields.io/badge/PYTHON-3.10+-306998?style=flat&logo=python&logoColor=white" alt="Python"/>
   <img height="20" src="https://img.shields.io/badge/LangGraph-State%20Machine-FF6B35?style=flat" alt="LangGraph"/>
 </p>
 
-Medusa is a dual-mode autonomous security platform: a **Red Team** agent that
+Suijin is a dual-mode autonomous security platform: a **Red Team** agent that
 chains reconnaissance → exploitation → reporting over a LangGraph state machine,
 and a **Blue Team** agent that monitors live HTTP traffic, detects attacks, and
 responds with deception, blocking, and source patching. Both modes share one
@@ -61,117 +71,117 @@ toolkit, one knowledge base, and one knowledge graph.
 ### One command (macOS / Linux)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/0xwi11iam/Medusa/main/install.sh | bash
-medusa doctor     # verify the environment
-medusa selftest   # offline smoke test (no network, no API keys)
-medusa            # launch the interface
+curl -fsSL https://raw.githubusercontent.com/0xwi11iam/Suijin/main/install.sh | bash
+suijin doctor     # verify the environment
+suijin selftest   # offline smoke test (no network, no API keys)
+suijin            # launch the interface
 ```
 
-The installer clones into `~/.medusa/repo`, creates an isolated virtualenv, and
-drops a `medusa` launcher on your PATH. Environment overrides:
-`MEDUSA_INSTALL_DIR`, `MEDUSA_BIN_DIR`, `MEDUSA_REPO`, `MEDUSA_NO_PATH_EDIT`.
+The installer clones into `~/.suijin/repo`, creates an isolated virtualenv, and
+drops a `suijin` launcher on your PATH. Environment overrides:
+`SUIJIN_INSTALL_DIR`, `SUIJIN_BIN_DIR`, `SUIJIN_REPO`, `SUIJIN_NO_PATH_EDIT`.
 
 ### Manual
 
 ```bash
-git clone https://github.com/0xwi11iam/Medusa.git && cd Medusa
+git clone https://github.com/0xwi11iam/Suijin.git && cd Suijin
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r medusa/requirements.txt
-python3 medusa/main.py
+pip install -r suijin/requirements.txt
+python3 suijin/main.py
 ```
 
 ### Docker
 
 ```bash
-docker build -t medusa .
+docker build -t suijin .
 docker run -it --rm \
-  -v $(pwd)/medusa_agent:/app/medusa_agent \
+  -v $(pwd)/suijin_agent:/app/suijin_agent \
   -e ZAI_API_KEY=$ZAI_API_KEY \
-  medusa
+  suijin
 ```
 
 ---
 
 ## CLI Reference
 
-`medusa` bare launches the Rich TUI. Every subcommand below is
+`suijin` bare launches the Rich TUI. Every subcommand below is
 **non-interactive, offline, and scriptable** (exit 0 = healthy).
 
 | Command | What it does |
 |:--------|:-------------|
-| `medusa` | Launch the classic Rich TUI (Red / Blue / Settings) |
-| `medusa doctor` | Full environment check: python, deps, binaries, config, modules, KB, workspace |
-| `medusa selftest` | Offline smoke test: imports, KB gating, workspace anchors, sandbox, boundaries |
-| `medusa status` | One-page summary: provider, KB, workspace, modules, lab port |
-| `medusa version` | Release, codename, python, platform, package path |
-| `medusa env` | API key presence by name — values are never printed |
-| `medusa tools` | All 112+ agent tools with availability (missing binaries marked) |
-| `medusa modules` | Loaded module packs with tool counts and dependencies |
-| `medusa skills` | Agent-editable attack/defense skills |
-| `medusa config show` | Effective config (defaults merged), secrets redacted |
-| `medusa config validate` | Pydantic validation of `config.json` + `blue_config.json` (exit 1 on failure) |
-| `medusa workspace` | Workspace layout, per-directory usage, symlink health |
-| `medusa reports` | Engagement reports in `medusa_agent/reports/` (newest first) |
-| `medusa sessions` | Saved engagement sessions with objectives |
-| `medusa labs` | Built-in labs: list ports / `run` a capability campaign |
-| `medusa ui` | Launch the **web dashboard** on `127.0.0.1:7800` (see below) |
-| `medusa export` | Chain-of-custody evidence bundle: zip + SHA-256 manifest (`--with-creds`, `--verify <zip>`) |
-| `medusa debrief` | Engagement analytics from audit trails (`-v` for per-engagement detail) |
-| `medusa replay` | Step through an engagement timeline (`--list`, `--file`, `--export-md`) |
-| `medusa eval` | Replay recorded traffic through the blue detector: precision/recall/F1 + threshold sweep |
-| `medusa battle` | Purple team: scripted red vs pattern blue on the lab — live scoreboard |
-| `medusa kb read <path>` | Dump a **full (untruncated) KB document** from its tarball; `medusa kb diff` checks index vs cache staleness |
-| `medusa pull cve` | Mirror the CISA KEV catalog (no API key) — powers offline `search_cve` + actively-exploited badges |
-| `medusa creds` | Encrypted credential vault: `init` / `list [--reveal]` / `add` / `get` / `export [--plain]` |
-| `medusa dossier <target>` | Per-target intel: KG constraints, failed techniques, engagement + report history |
-| `medusa timeline` | Unified chronological view across audits, sessions, and reports |
-| `medusa watch` | Live-score the traffic log as it grows (`--traffic <file>`) |
-| `medusa clean` | Workspace cleaner — dry-run by default, `--apply` archives then deletes |
-| `medusa rules` | Custom detector rules: `validate` (lint) / `list` |
-| `medusa policy` | Engagement policy: `check` (lint) / `show` — opt-in, enforced at dispatch |
-| `medusa providers` | Probe configured providers with a tiny live request (`--all` for every keyed provider) |
-| `medusa module` | Module SDK: `init <name>` scaffolds, `validate <name>` lints manifest + imports |
-| `medusa skills` | Skill list + versioning: `history` / `diff` / `rollback` (snapshots on every agent edit) |
-| `medusa notify` | Operator notifications: `send 'msg'` / `test` (file/command/macOS channels; battle fires on flags & blocks) |
-| `medusa compliance [eng]` | Map engagement findings to CWE / OWASP Top-10 / MITRE ATT&CK (newest engagement by default) |
-| `medusa pull kb` | Download + index the knowledge base (**enables** KB features) |
-| `medusa pull kb --status` | Offline: what's indexed, per-source counts, build age |
-| `medusa pull kb --list` | Available sources with size warnings |
-| `medusa pull kb --sources <names>` | Pull a subset (rebuilds the DB with just those) |
-| `medusa pull kb --force` | Re-download even if tarballs are cached |
+| `suijin` | Launch the classic Rich TUI (Red / Blue / Settings) |
+| `suijin doctor` | Full environment check: python, deps, binaries, config, modules, KB, workspace |
+| `suijin selftest` | Offline smoke test: imports, KB gating, workspace anchors, sandbox, boundaries |
+| `suijin status` | One-page summary: provider, KB, workspace, modules, lab port |
+| `suijin version` | Release, codename, python, platform, package path |
+| `suijin env` | API key presence by name — values are never printed |
+| `suijin tools` | All 112+ agent tools with availability (missing binaries marked) |
+| `suijin modules` | Loaded module packs with tool counts and dependencies |
+| `suijin skills` | Agent-editable attack/defense skills |
+| `suijin config show` | Effective config (defaults merged), secrets redacted |
+| `suijin config validate` | Pydantic validation of `config.json` + `blue_config.json` (exit 1 on failure) |
+| `suijin workspace` | Workspace layout, per-directory usage, symlink health |
+| `suijin reports` | Engagement reports in `suijin_agent/reports/` (newest first) |
+| `suijin sessions` | Saved engagement sessions with objectives |
+| `suijin labs` | Built-in labs: list ports / `run` a capability campaign |
+| `suijin ui` | Launch the **web dashboard** on `127.0.0.1:7800` (see below) |
+| `suijin export` | Chain-of-custody evidence bundle: zip + SHA-256 manifest (`--with-creds`, `--verify <zip>`) |
+| `suijin debrief` | Engagement analytics from audit trails (`-v` for per-engagement detail) |
+| `suijin replay` | Step through an engagement timeline (`--list`, `--file`, `--export-md`) |
+| `suijin eval` | Replay recorded traffic through the blue detector: precision/recall/F1 + threshold sweep |
+| `suijin battle` | Purple team: scripted red vs pattern blue on the lab — live scoreboard |
+| `suijin kb read <path>` | Dump a **full (untruncated) KB document** from its tarball; `suijin kb diff` checks index vs cache staleness |
+| `suijin pull cve` | Mirror the CISA KEV catalog (no API key) — powers offline `search_cve` + actively-exploited badges |
+| `suijin creds` | Encrypted credential vault: `init` / `list [--reveal]` / `add` / `get` / `export [--plain]` |
+| `suijin dossier <target>` | Per-target intel: KG constraints, failed techniques, engagement + report history |
+| `suijin timeline` | Unified chronological view across audits, sessions, and reports |
+| `suijin watch` | Live-score the traffic log as it grows (`--traffic <file>`) |
+| `suijin clean` | Workspace cleaner — dry-run by default, `--apply` archives then deletes |
+| `suijin rules` | Custom detector rules: `validate` (lint) / `list` |
+| `suijin policy` | Engagement policy: `check` (lint) / `show` — opt-in, enforced at dispatch |
+| `suijin providers` | Probe configured providers with a tiny live request (`--all` for every keyed provider) |
+| `suijin module` | Module SDK: `init <name>` scaffolds, `validate <name>` lints manifest + imports |
+| `suijin skills` | Skill list + versioning: `history` / `diff` / `rollback` (snapshots on every agent edit) |
+| `suijin notify` | Operator notifications: `send 'msg'` / `test` (file/command/macOS channels; battle fires on flags & blocks) |
+| `suijin compliance [eng]` | Map engagement findings to CWE / OWASP Top-10 / MITRE ATT&CK (newest engagement by default) |
+| `suijin pull kb` | Download + index the knowledge base (**enables** KB features) |
+| `suijin pull kb --status` | Offline: what's indexed, per-source counts, build age |
+| `suijin pull kb --list` | Available sources with size warnings |
+| `suijin pull kb --sources <names>` | Pull a subset (rebuilds the DB with just those) |
+| `suijin pull kb --force` | Re-download even if tarballs are cached |
 
 Examples:
 
 ```bash
-medusa status && medusa labs
-medusa pull kb --sources hacktricks gtfobins   # skip the 300 MB SecLists pull
-medusa config validate || echo "fix config.json"
-medusa export && medusa export --verify medusa_agent/exports/<latest>.zip
-medusa battle                                   # red vs blue, live scoreboard
+suijin status && suijin labs
+suijin pull kb --sources hacktricks gtfobins   # skip the 300 MB SecLists pull
+suijin config validate || echo "fix config.json"
+suijin export && suijin export --verify suijin_agent/exports/<latest>.zip
+suijin battle                                   # red vs blue, live scoreboard
 ```
 
 ---
 
 ## Engagement Lifecycle Tools
 
-### Evidence export (`medusa export`)
+### Evidence export (`suijin export`)
 
 One command packs everything an engagement produced into a tamper-evident
 zip: reports, audit trails, sessions, blue state, dossiers, both knowledge
 graphs, and the redacted config. Every file is SHA-256-hashed in
 `manifest.json` alongside a `custody.json` chain-of-custody record (who,
-when, host, commit). `medusa export --verify <zip>` re-hashes the bundle
+when, host, commit). `suijin export --verify <zip>` re-hashes the bundle
 and flags any mismatch, missing, or unlisted file. Credentials are excluded
 unless `--with-creds` is passed explicitly.
 
-### Debrief (`medusa debrief`)
+### Debrief (`suijin debrief`)
 
-Analytics over `medusa_agent/audit_trails/*.json`: per-engagement table
+Analytics over `suijin_agent/audit_trails/*.json`: per-engagement table
 (actions, success/fail, findings, cost, duration), cross-engagement fleet
 trends (avg duration, findings per engagement, top tools), and with `-v`
 per-engagement severity/tool breakdowns including which tools keep failing.
 
-### Replay (`medusa replay`)
+### Replay (`suijin replay`)
 
 Interactive timeline over any engagement's audit trail: space to play/pause,
 arrows to scrub (10-step jumps on up/down), +/- for speed, `q` to quit.
@@ -179,7 +189,7 @@ Panels show the thought, the action + args, and the full observation per
 step. `--export-md OUT` writes the complete shareable transcript;
 non-TTY contexts print it directly.
 
-### Detector tuning harness (`medusa eval`)
+### Detector tuning harness (`suijin eval`)
 
 Replays recorded traffic (`--traffic`, default the live blue log) through
 the REAL production scorer, labels each entry with strong heuristic
@@ -200,7 +210,7 @@ all query-string attacks; XXE bodies and X-Admin headers were never
 scanned) — production recall on battle traffic went 0.14 → 0.57 at the
 same threshold with precision held at 0.80.
 
-### Battle mode (`medusa battle`)
+### Battle mode (`suijin battle`)
 
 Purple-team in one command: boots the blue_target lab, clears blue state,
 then runs a scripted red campaign (recon → auth attacks → access attacks →
@@ -209,9 +219,9 @@ live traffic log, scores every request with the production scorer, and
 deploys real defenses — tarpits the lab actually enforces (measurable
 latency), network blocks that deny subsequent red requests. Live Rich
 scoreboard during the fight; markdown battle report saved to
-`medusa_agent/reports/`. Scoring: red = 100/flag + 25/attack-class,
+`suijin_agent/reports/`. Scoring: red = 100/flag + 25/attack-class,
 blue = 10/detection + 25/tarpit + 50/block. Flag captures and blocks fire
-`medusa notify` channels when configured.
+`suijin notify` channels when configured.
 
 ### Agent capability upgrades (v2.10)
 
@@ -221,7 +231,7 @@ New agent tools, all offline:
 |:-----|:-------------|
 | `kb_read` | Full untruncated KB documents (the FTS copy is capped); substring paths OK |
 | `target_dossier` | Per-target intel: blocked patterns, failed techniques, history — consult before re-attacking |
-| `mutate_wordlist` | Seed words → leet/years/suffixes wordlist (cap 50k) into `medusa_agent/wordlists/` |
+| `mutate_wordlist` | Seed words → leet/years/suffixes wordlist (cap 50k) into `suijin_agent/wordlists/` |
 | `cewl_words` | Harvest a wordlist from a target page's visible words |
 
 `suggest_exploit` now fuzzy-matches GTFOBins bins (`finnd` → `find`), and
@@ -232,35 +242,35 @@ in config — hard failures roll to the next provider.
 
 ### Governance (opt-in)
 
-- **Policy** (`medusa/policy.json`, `medusa policy check|show`): blocked
+- **Policy** (`suijin/policy.json`, `suijin policy check|show`): blocked
   tools, blocked arg regexes, and allowed target scopes (IPs, CIDRs,
   hostnames) enforced at the dispatch chokepoint. **No file = no
   enforcement** — existing engagements are untouched; intel-only tools
   (dossier, KB, CVE search) are never scope-gated.
-- **Detector rules** (`medusa/detector_rules.json`, `medusa rules
+- **Detector rules** (`suijin/detector_rules.json`, `suijin rules
   validate|list`): custom regex detectors (field: body/path/ua/headers,
   weight 1–10) merged into the eval harness and battle watchdog.
-- **Credential vault** (`medusa creds`): PBKDF2-HMAC-SHA256 + tagged
+- **Credential vault** (`suijin creds`): PBKDF2-HMAC-SHA256 + tagged
   keystream encryption at rest, imports + shreds legacy
   `credentials.json`, redacted exports.
 
 ### Ops utilities (v2.10)
 
-`medusa providers` (live provider probe), `medusa module init|validate`
-(module SDK), `medusa skills history|diff|rollback` (every agent
-self-edit is snapshotted), `medusa labs run` (boot + probe every lab →
-capability matrix), `medusa watch` (live-scored traffic tail),
-`medusa timeline` (unified artifact history), `medusa clean` (dry-run
-first workspace cleaner), `medusa notify` (file/command/macOS channels).
+`suijin providers` (live provider probe), `suijin module init|validate`
+(module SDK), `suijin skills history|diff|rollback` (every agent
+self-edit is snapshotted), `suijin labs run` (boot + probe every lab →
+capability matrix), `suijin watch` (live-scored traffic tail),
+`suijin timeline` (unified artifact history), `suijin clean` (dry-run
+first workspace cleaner), `suijin notify` (file/command/macOS channels).
 
 ---
 
-## Web Dashboard (`medusa ui`)
+## Web Dashboard (`suijin ui`)
 
 ```bash
-medusa ui                # http://127.0.0.1:7800 — browser opens automatically
-medusa ui --port 8080    # custom port
-medusa ui --no-open      # don't auto-open the browser
+suijin ui                # http://127.0.0.1:7800 — browser opens automatically
+suijin ui --port 8080    # custom port
+suijin ui --no-open      # don't auto-open the browser
 ```
 
 A local-first, read-only operator console: React + TypeScript single-page app
@@ -290,7 +300,7 @@ not a public service.
   first paint has data; keepalives hold proxies open.
 - REST surface: `/api/overview`, `/api/kb/search`, `/api/report`,
   `/api/session`, `/api/config` (redacted).
-- Traffic entries are enriched server-side with `medusa.core.blue.traffic.
+- Traffic entries are enriched server-side with `suijin.core.blue.traffic.
   anomaly_detector` so dashboard tiers match TUI scoring exactly.
 - Path safety: report/session reads are workspace-confined (traversal
   rejected), config values matching key/token/secret/password are redacted.
@@ -298,13 +308,13 @@ not a public service.
 ### Frontend development
 
 Sources live in `webui/` (Vite + React 18 + TypeScript; the built bundle is
-committed at `medusa/ui/dist/` so `medusa ui` works without Node).
+committed at `suijin/ui/dist/` so `suijin ui` works without Node).
 
 ```bash
 cd webui
 npm install
 npm run dev      # :5173 with hot reload, proxying /api to :7800
-npm run build    # rebuilds medusa/ui/dist (commit the result)
+npm run build    # rebuilds suijin/ui/dist (commit the result)
 ```
 
 Fonts: Gotham Medium is commercial — the theme loads Montserrat as its
@@ -319,25 +329,25 @@ Serif and JetBrains Mono from Google Fonts.
 
 ```bash
 # Terminal 1: start a lab
-python3 medusa/lab/blue_target/vulnerable_app.py        # :5906
+python3 suijin/lab/blue_target/vulnerable_app.py        # :5906
 
 # Terminal 2: launch and point the agent at it
-python3 medusa/main.py   # choose [1] Red Team, target http://127.0.0.1:5906
+python3 suijin/main.py   # choose [1] Red Team, target http://127.0.0.1:5906
 ```
 
 The agent runs the chain autonomously — port scan, endpoint discovery,
 directory brute-force, CVE lookup, exploitation — logging every step to the
 audit trail and `.notes/`, and finishes with a report in
-`medusa_agent/reports/`.
+`suijin_agent/reports/`.
 
 ### Blue Team
 
 ```bash
 # Terminal 1: Blue Team starts and watches the built-in lab
-python3 medusa/main.py   # choose [2] Blue Team → 2 (built-in lab :5906)
+python3 suijin/main.py   # choose [2] Blue Team → 2 (built-in lab :5906)
 
 # Terminal 2: attack it once the baseline locks (after 25 requests)
-python3 medusa/lab/blue_target/attack_simulator.py
+python3 suijin/lab/blue_target/attack_simulator.py
 # or by hand:
 curl -X POST http://127.0.0.1:5906/auth/login \
   -H "Content-Type: application/json" \
@@ -354,12 +364,12 @@ to both sides.
 
 ## Configuration
 
-Configuration lives in **`medusa/config.json`** (red team) and
-**`medusa/blue_config.json`** (blue team). API keys live in `medusa/.env` or
+Configuration lives in **`suijin/config.json`** (red team) and
+**`suijin/blue_config.json`** (blue team). API keys live in `suijin/.env` or
 environment variables — **never in config.json**. Validate with
-`medusa config validate`; inspect with `medusa config show` (secrets redacted).
+`suijin config validate`; inspect with `suijin config show` (secrets redacted).
 
-### `medusa/config.json` — key reference
+### `suijin/config.json` — key reference
 
 | Key | Default | Meaning |
 |:----|:--------|:--------|
@@ -389,7 +399,7 @@ provider (`<provider>_model`; HuggingFace uses `final_model_id`).
 Unknown keys are caught at startup by Pydantic validation; `zai_endpoint`
 accepts only `coding`, `paas`, or a full custom base URL.
 
-### `medusa/blue_config.json` — key reference
+### `suijin/blue_config.json` — key reference
 
 ```json
 {
@@ -423,8 +433,8 @@ accepts only `coding`, `paas`, or a full custom base URL.
 
 Z.ai serves **two separate chat-completions endpoints** that accept the same
 `ZAI_API_KEY` but bill differently. Pick with `zai_endpoint` in
-`medusa/config.json` (Settings TUI → provider `zai` → `zai_endpoint`, or
-`medusa config validate` catches typos):
+`suijin/config.json` (Settings TUI → provider `zai` → `zai_endpoint`, or
+`suijin config validate` catches typos):
 
 | `zai_endpoint` | Base URL | Billing |
 |:---------------|:---------|:--------|
@@ -432,8 +442,8 @@ Z.ai serves **two separate chat-completions endpoints** that accept the same
 | `"paas"` | `https://api.z.ai/api/paas/v4` | Pay-as-you-go — per-token **USD** billing, full GLM catalogue. Choose this only if you don't have a Coding Plan. |
 
 A Coding Plan key hitting the `paas` endpoint (or vice versa) returns **403** —
-Medusa detects this and prints the exact fix instead of retrying. `medusa
-doctor` and `medusa status` show the active endpoint. A full custom base URL
+Suijin detects this and prints the exact fix instead of retrying. `suijin
+doctor` and `suijin status` show the active endpoint. A full custom base URL
 (e.g. a proxy) is also accepted as `zai_endpoint`.
 
 Docs: <https://docs.z.ai/devpack/tool/others>
@@ -442,31 +452,31 @@ Docs: <https://docs.z.ai/devpack/tool/others>
 
 ## Knowledge Base
 
-`medusa pull kb` **downloads and indexes** the offline security knowledge base
+`suijin pull kb` **downloads and indexes** the offline security knowledge base
 into one SQLite FTS5 database — that act **enables** all KB features. Until you
 run it, they stay **disabled** (`search_kb` reports DISABLED, the tool catalog
 lists it under a disabled section, and the agent asks the operator to run the
 pull).
 
 ```bash
-medusa pull kb              # download all sources and compile to SQLite FTS5
-medusa pull kb --status     # what's indexed, per-source counts, build age
-medusa pull kb --list       # available sources (incl. size warnings)
-medusa pull kb --sources hacktricks gtfobins   # subset (replaces the DB)
-medusa pull kb --force      # ignore cached tarballs
+suijin pull kb              # download all sources and compile to SQLite FTS5
+suijin pull kb --status     # what's indexed, per-source counts, build age
+suijin pull kb --list       # available sources (incl. size warnings)
+suijin pull kb --sources hacktricks gtfobins   # subset (replaces the DB)
+suijin pull kb --force      # ignore cached tarballs
 ```
 
 | | |
 |:--|:--|
 | **Sources** | HackTricks, PayloadsAllTheThings, GTFOBins (`GTFOBins.github.io` — path-pattern matched under `_gtfobins/`, alias stubs like `awk -> mawk` resolved), LOLBAS, OWASP Cheat Sheets, SecLists (`~300 MB`, warned before download) |
-| **Storage** | `medusa/kb.sqlite3` (FTS5, BM25-ranked) + `medusa/kb_cache/` tarballs — always inside the repo, never bundled |
+| **Storage** | `suijin/kb.sqlite3` (FTS5, BM25-ranked) + `suijin/kb_cache/` tarballs — always inside the repo, never bundled |
 | **Agent tool** | `search_kb` — ranked results with source + snippet, offline. Optional `source:<name>` filter (e.g. `"source:gtfobins awk sudo"`) and `limit` 1–20 (default 5) |
 | **Honest status** | Only sources that actually indexed docs are counted; a source that downloads but matches 0 files is a **failure** with a pattern hint, never a silent gap |
 | **Resilient pulls** | 3 download attempts per ref with backoff, stale `.part` files discarded (never resumed), progress logging every 50 MB, 600 s timeout |
 
 The agent's attack rhythm is KB-first: *fingerprint → search_kb → search_cve →
 attack*. One dead source never kills a pull — failures are skipped, reported,
-and retryable with `--sources <name>`. `medusa doctor` shows per-source doc
+and retryable with `--sources <name>`. `suijin doctor` shows per-source doc
 counts and a STALE warning when the build is older than 30 days.
 
 ### Agent toolkit built on the KB
@@ -477,8 +487,8 @@ API key; the four marked ★ need the KB built):
 | Tool | What it does |
 |:-----|:-------------|
 | ★ `suggest_exploit` | Fingerprinted service → exact GTFOBins privesc page + HackTricks + PayloadsAllTheThings leads, offline |
-| ★ `find_wordlist` | Keyword → matching SecLists wordlists, **materialized** into `medusa_agent/wordlists/` ready for `ffuf -w` |
-| ★ `extract_payloads` | Pulls runnable code blocks from KB docs into `medusa_agent/payloads/` |
+| ★ `find_wordlist` | Keyword → matching SecLists wordlists, **materialized** into `suijin_agent/wordlists/` ready for `ffuf -w` |
+| ★ `extract_payloads` | Pulls runnable code blocks from KB docs into `suijin_agent/payloads/` |
 | ★ `kb_stats` | Per-source inventory, build age, failed sources |
 | `wordlist_tool` | Merge / dedupe / length-filter wordlists |
 | `mine_failures` | Clusters `failure_db.json` into technique/reason patterns to stop repeating |
@@ -491,10 +501,10 @@ in-order words — `"union select"` won't match `select ... union`.
 
 ## Agent Workspace
 
-All agent artifacts live in **one** root-level `medusa_agent/`:
+All agent artifacts live in **one** root-level `suijin_agent/`:
 
 ```
-medusa_agent/
+suijin_agent/
 ├── reports/         engagement reports (markdown/html/json)
 ├── audit_trails/    zero-truncation JSON/MD audit logs
 ├── sessions/        saved sessions for replay
@@ -508,14 +518,14 @@ medusa_agent/
 ```
 
 The layout is **self-repairing**: on startup, `ensure_workspace_layout()`
-(`medusa/tools/workspace.py`) merges any legacy real `medusa/medusa_agent/`
+(`suijin/tools/workspace.py`) merges any legacy real `suijin/suijin_agent/`
 directory up into the root workspace and replaces the inner path with a
-symlink `-> ../medusa_agent`. All writes go through one anchor
+symlink `-> ../suijin_agent`. All writes go through one anchor
 (`WORKSPACE_DIR`); absolute paths outside the workspace and `/tmp` allowlist
-are rejected; the shell sandbox lives at `medusa_agent/sandbox`. KB artifacts
-stay strictly in `medusa/` — never inside the workspace.
+are rejected; the shell sandbox lives at `suijin_agent/sandbox`. KB artifacts
+stay strictly in `suijin/` — never inside the workspace.
 
-Check it: `medusa workspace` (usage + symlink health), `medusa selftest`
+Check it: `suijin workspace` (usage + symlink health), `suijin selftest`
 (boundary + sandbox containment invariants).
 
 ---
@@ -524,7 +534,7 @@ Check it: `medusa workspace` (usage + symlink health), `medusa selftest`
 
 ```mermaid
 graph TB
-    subgraph "Medusa Core"
+    subgraph "Suijin Core"
         MAIN[main.py<br/>Mode Selector]
         RED[redteamer.py<br/>LangGraph State Machine]
         BLUE[blueteamer.py<br/>Live Traffic Monitor]
@@ -647,7 +657,7 @@ structure). After 25 requests the baseline locks and AI analysis activates.
 | 13 | Scanner User-Agent | 4 | sqlmap, Nikto, Burp |
 | 14 | Mass Assignment | 4 | `"role":"admin"` |
 | 15 | Auth Bypass Header | 5 | `X-Admin: true` |
-| 16 | Brute Force | 3 | Hydra/Medusa UA, repeated attempts |
+| 16 | Brute Force | 3 | Hydra/Suijin UA, repeated attempts |
 | 17 | File Inclusion | 5 | `php://filter`, `data://text` |
 | 18 | GraphQL Attack | 3 | `__schema`, deep nesting |
 
@@ -719,20 +729,20 @@ the AI full context so responses escalate with repetition.
 
 ## Built-in Labs
 
-Eight deliberately vulnerable Flask apps ship in `medusa/lab/` — practice
-without touching anything you don't own. `medusa labs` lists them live with
+Eight deliberately vulnerable Flask apps ship in `suijin/lab/` — practice
+without touching anything you don't own. `suijin labs` lists them live with
 ports and launch commands.
 
 | Lab | Port | Launch | Focus |
 |:----|:-----|:-------|:------|
-| cloud_iam_lab | 5900 | `python3 medusa/lab/cloud_iam_lab/app.py` | AWS IAM misconfigurations |
-| api_only_lab | 5901 | `python3 medusa/lab/api_only_lab/app.py` | REST + GraphQL: BOLA, mass assignment, rate-limit bypass |
-| oauth_lab | 5902 | `python3 medusa/lab/oauth_lab/app.py` | OAuth 2.0 / OIDC misconfigurations |
-| log4shell_lab | 5903 | `python3 medusa/lab/log4shell_lab/app.py` | Log4j RCE |
-| wordpress_lab | 5904 | `python3 medusa/lab/wordpress_lab/app.py` | WordPress + vulnerable plugins |
-| ad_lab | 5905 | `python3 medusa/lab/ad_lab/app.py` | Simulated AD DC: Kerberos, LDAP, SMB |
-| blue_target | 5906 | `python3 medusa/lab/blue_target/vulnerable_app.py` | 25 endpoints, 8 route groups, 15+ vuln classes (below) |
-| devops_dashboard | 5700 | `python3 medusa/lab/devops_dashboard/app.py` | Hard RCE lab — multi-step chain required |
+| cloud_iam_lab | 5900 | `python3 suijin/lab/cloud_iam_lab/app.py` | AWS IAM misconfigurations |
+| api_only_lab | 5901 | `python3 suijin/lab/api_only_lab/app.py` | REST + GraphQL: BOLA, mass assignment, rate-limit bypass |
+| oauth_lab | 5902 | `python3 suijin/lab/oauth_lab/app.py` | OAuth 2.0 / OIDC misconfigurations |
+| log4shell_lab | 5903 | `python3 suijin/lab/log4shell_lab/app.py` | Log4j RCE |
+| wordpress_lab | 5904 | `python3 suijin/lab/wordpress_lab/app.py` | WordPress + vulnerable plugins |
+| ad_lab | 5905 | `python3 suijin/lab/ad_lab/app.py` | Simulated AD DC: Kerberos, LDAP, SMB |
+| blue_target | 5906 | `python3 suijin/lab/blue_target/vulnerable_app.py` | 25 endpoints, 8 route groups, 15+ vuln classes (below) |
+| devops_dashboard | 5700 | `python3 suijin/lab/devops_dashboard/app.py` | Hard RCE lab — multi-step chain required |
 
 ### blue_target (:5906) — route groups
 
@@ -760,8 +770,8 @@ user dump → UNION-inject search → path-traversal file read → RCE via
 ## Testing
 
 ```bash
-python3 -m pytest medusa/tests/ -q          # full suite (offline)
-python3 -m pytest medusa/tests/ -m "not ai" # skip live-API tests
+python3 -m pytest suijin/tests/ -q          # full suite (offline)
+python3 -m pytest suijin/tests/ -m "not ai" # skip live-API tests
 ```
 
 500+ tests across 16 files — all offline (network mocked, no API keys needed).
@@ -780,7 +790,7 @@ python3 -m pytest medusa/tests/ -m "not ai" # skip live-API tests
 | `test_red_knowledge_graph.py` | The agent's persistent memory: constraint dedupe + confidence merging, payload-block checks, CVE/bypass queries, corrupt-JSON recovery, record_finding→check_knowledge roundtrip |
 | `test_infra_and_defense.py` | Output offloading (thresholds, previews), firewall (validate-before-exec, rule ops, DROP filtering), traffic-log tailing (append/rotation), msf availability probing |
 | `test_http_session_tools.py` | Session state (cookies/CSRF/auth), rate-limit tracking (429, Retry-After, domain isolation), UA rotation, http_request with mocked transport |
-| `test_import_graph.py` | Import-graph guard: every `medusa.*` import resolves to a real file, entry points importable, pruned packages stay pruned |
+| `test_import_graph.py` | Import-graph guard: every `suijin.*` import resolves to a real file, entry points importable, pruned packages stay pruned |
 | `test_v210_features.py` | Credential vault (roundtrip/tamper/shred/redaction), dossiers, notify channels, rules + policy (opt-in semantics, scope exemptions, dispatch enforcement), module SDK, provider failover, skill versioning, campaign/watch/timeline/clean, recon hook |
 | `test_kb.py` | KB compile (FTS5, caps), path patterns + GTFOBins alias stubs, zero-doc failures, honest status, download retries + `.part` cleanup, `search_kb` filters, catalog gating |
 | `test_workspace_layout.py` | Canonical workspace merge + symlink migration, sandbox containment, CWD-independent paths |
@@ -798,8 +808,8 @@ pyright, ruff, pip-audit.
 ## Project Layout
 
 ```
-medusa-security/
-├── medusa/                  Python package (the whole backend)
+suijin-security/
+├── suijin/                  Python package (the whole backend)
 │   ├── cli.py               CLI entry — doctor, selftest, status, pull kb, ...
 │   ├── main.py              Rich TUI launcher
 │   ├── kb.py                Knowledge base: download, index, FTS5 compile
@@ -820,7 +830,7 @@ medusa-security/
 │   ├── kb.sqlite3           Compiled KB (gitignored — build with pull kb)
 │   └── kb_cache/            Downloaded tarballs (gitignored)
 ├── Modules/                 Module packs (Tools/ + Mods/), 49 packs, 93 tools
-├── medusa_agent/            THE agent workspace (see Agent Workspace)
+├── suijin_agent/            THE agent workspace (see Agent Workspace)
 ├── docs/adr/                Architecture decision records
 ├── install.sh               One-command installer
 ├── Dockerfile, docker-compose.yml
@@ -829,8 +839,8 @@ medusa-security/
 ```
 
 Portability: all paths resolve via `Path(__file__).resolve().parent` — rename
-or move the project folder freely. Requirements: `medusa/` and `Modules/` at
-the same level; `medusa_agent/` at project root (`medusa/medusa_agent` is a
+or move the project folder freely. Requirements: `suijin/` and `Modules/` at
+the same level; `suijin_agent/` at project root (`suijin/suijin_agent` is a
 symlink, auto-repaired at startup).
 
 ---
@@ -839,14 +849,14 @@ symlink, auto-repaired at startup).
 
 | Symptom | Fix |
 |:--------|:---|
-| `ModuleNotFoundError: medusa` | Run from the repository root, or use `install.sh`. |
-| Interface exits immediately | Run in a real terminal (no pipes); see `medusa doctor`. |
-| `Tool calls return Invalid Tool` | Check `medusa modules` — the pack's manifest or its binary may be missing (`medusa tools` marks gaps). |
+| `ModuleNotFoundError: suijin` | Run from the repository root, or use `install.sh`. |
+| Interface exits immediately | Run in a real terminal (no pipes); see `suijin doctor`. |
+| `Tool calls return Invalid Tool` | Check `suijin modules` — the pack's manifest or its binary may be missing (`suijin tools` marks gaps). |
 | nmap/gobuster missing | `brew install nmap gobuster feroxbuster john` / `apt install ...` |
-| No API key | Heuristic mode works without one. Add `medusa/.env` (`ZAI_API_KEY=...`) and verify with `medusa env`. |
+| No API key | Heuristic mode works without one. Add `suijin/.env` (`ZAI_API_KEY=...`) and verify with `suijin env`. |
 | Z.ai returns 403 | Endpoint/billing mismatch — set `zai_endpoint` to `coding` (plan) or `paas` (PAYG). See [Providers](#llm-providers). |
-| Port 5906 in use | `lsof -i :5906`; other labs use 5900–5905 / 5700 (`medusa labs`). |
-| KB not searchable | `medusa pull kb --status` — if not built, run `medusa pull kb`. |
+| Port 5906 in use | `lsof -i :5906`; other labs use 5900–5905 / 5700 (`suijin labs`). |
+| KB not searchable | `suijin pull kb --status` — if not built, run `suijin pull kb`. |
 
 **FAQ:** Can I run without an LLM? Yes — heuristics, detectors, and tool
 dispatch all work; the LLM adds reasoning and reporting quality. Is this
@@ -859,7 +869,7 @@ legal? Only against systems you own or have written permission to test.
 | Term | Meaning |
 |:-----|:--------|
 | Module pack | Self-contained tool bundle under `Modules/Tools` or `Modules/Mods` with a manifest |
-| Knowledge base (KB) | Offline FTS5 index of HackTricks/GTFOBins/etc., built by `medusa pull kb` |
+| Knowledge base (KB) | Offline FTS5 index of HackTricks/GTFOBins/etc., built by `suijin pull kb` |
 | Knowledge graph | Persistent store of findings, flags, patches, attacker profiles shared by both teams |
 | Supervisor | Zero-cost pattern detector watching the red team for loops and misses |
 | Subagent | Helper agent spawned for a scoped task (max 3 concurrent) |
@@ -873,7 +883,7 @@ legal? Only against systems you own or have written permission to test.
 ## Contributing & Credits
 
 Contributions welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Report
-vulnerabilities in Medusa itself via [SECURITY.md](SECURITY.md). Decisions are
+vulnerabilities in Suijin itself via [SECURITY.md](SECURITY.md). Decisions are
 recorded in [docs/adr/](docs/adr/).
 
 Created by **William Jiang** (lead developer) and **Roland Poon** (design &

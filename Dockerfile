@@ -1,6 +1,6 @@
-# Medusa Security — Kali-based autonomous red teaming agent
-# Build: docker build -t medusa .
-# Run:   docker run -it --rm -v $(pwd)/medusa_agent:/app/medusa_agent -e DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY medusa
+# Suijin Security — Kali-based autonomous red teaming agent
+# Build: docker build -t suijin .
+# Run:   docker run -it --rm -v $(pwd)/suijin_agent:/app/suijin_agent -e DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY suijin
 
 FROM kalilinux/kali-rolling:latest
 
@@ -36,21 +36,21 @@ ENV PATH="/root/go/bin:$PATH"
 
 # ── Python environment ───────────────────────────────────────────────
 WORKDIR /app
-COPY medusa/requirements.txt /app/medusa-requirements.txt
-RUN python3 -m venv /opt/medusa-venv
-ENV PATH="/opt/medusa-venv/bin:$PATH"
-RUN pip install --no-cache-dir -r /app/medusa-requirements.txt && \
+COPY suijin/requirements.txt /app/suijin-requirements.txt
+RUN python3 -m venv /opt/suijin-venv
+ENV PATH="/opt/suijin-venv/bin:$PATH"
+RUN pip install --no-cache-dir -r /app/suijin-requirements.txt && \
     pip install --no-cache-dir requests urllib3 rich duckduckgo-search
 
 # ── Application code ─────────────────────────────────────────────────
 COPY . /app/
 
 # ── Agent workspace ──────────────────────────────────────────────────
-# Canonical workspace: /app/medusa_agent (volume-mount point), with
-# /app/medusa/medusa_agent symlinked to it for legacy path references.
-RUN mkdir -p /app/medusa_agent/outputs /app/medusa_agent/payloads /app/medusa_agent/scripts \
-    && ln -sfn ../medusa_agent /app/medusa/medusa_agent
+# Canonical workspace: /app/suijin_agent (volume-mount point), with
+# /app/suijin/suijin_agent symlinked to it for legacy path references.
+RUN mkdir -p /app/suijin_agent/outputs /app/suijin_agent/payloads /app/suijin_agent/scripts \
+    && ln -sfn ../suijin_agent /app/suijin/suijin_agent
 
 # ── Entrypoint ───────────────────────────────────────────────────────
-WORKDIR /app/medusa
+WORKDIR /app/suijin
 ENTRYPOINT ["python3", "main.py"]

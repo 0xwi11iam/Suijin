@@ -1,6 +1,6 @@
 # File I/O (`read_file`, `write_file`)
 
-Read and write files. Relative paths resolve to `medusa_agent/`; absolute paths work everywhere.
+Read and write files. Relative paths resolve to `suijin_agent/`; absolute paths work everywhere.
 
 ## Installation
 
@@ -11,12 +11,12 @@ Built-in. No installation needed.
 ### read_file
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `file_path` | Yes | Path to read. Relative → `medusa_agent/{path}`. Absolute → anywhere on system |
+| `file_path` | Yes | Path to read. Relative → `suijin_agent/{path}`. Absolute → anywhere on system |
 
 ### write_file
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `file_path` | Yes | Path to write. Relative → `medusa_agent/{path}`. Absolute → anywhere |
+| `file_path` | Yes | Path to write. Relative → `suijin_agent/{path}`. Absolute → anywhere |
 | `content` | Yes | String content to write. Overwrites existing file |
 
 ## Workflows
@@ -45,16 +45,16 @@ Built-in. No installation needed.
 
 ### Read from project directory
 ```json
-{"tool": "read_file", "args": {"file_path": "medusa/config.json"}}
+{"tool": "read_file", "args": {"file_path": "suijin/config.json"}}
 ```
 
 ## Path Resolution Rules
 
 | Input | Resolves to |
 |-------|-------------|
-| `"scripts/test.py"` | `medusa_agent/scripts/test.py` |
+| `"scripts/test.py"` | `suijin_agent/scripts/test.py` |
 | `"/etc/passwd"` | `/etc/passwd` (absolute preserved) |
-| `"medusa/config.json"` | `medusa_agent/medusa/config.json` (relative to workspace) |
+| `"suijin/config.json"` | `suijin_agent/suijin/config.json` (relative to workspace) |
 
 ## Tips
 

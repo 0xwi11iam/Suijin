@@ -1,4 +1,4 @@
-name: Medusa CI
+name: Suijin CI
 
 on:
   push:
@@ -31,35 +31,35 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r medusa/requirements.txt
+          pip install -r suijin/requirements.txt
           pip install pytest pytest-asyncio pytest-cov
 
       - name: Verify package imports
         run: |
           PYTHONPATH="$PWD:$PYTHONPATH" python -c "
-          import medusa.core.state, medusa.core.agent_graph, medusa.core.supervisor, medusa.core.error_handler
-          import medusa.core.blue.config, medusa.core.blue.knowledge_graph, medusa.core.blue.ai_engine
-          import medusa.tools.guardrails, medusa.tools.workspace, medusa.core.blue.errors
-          import medusa.core.config_models, medusa.core.constants
+          import suijin.core.state, suijin.core.agent_graph, suijin.core.supervisor, suijin.core.error_handler
+          import suijin.core.blue.config, suijin.core.blue.knowledge_graph, suijin.core.blue.ai_engine
+          import suijin.tools.guardrails, suijin.tools.workspace, suijin.core.blue.errors
+          import suijin.core.config_models, suijin.core.constants
           print('All imports OK')
           "
 
       - name: Run tests with coverage
         run: |
-          PYTHONPATH="$PWD:$PYTHONPATH" python -m pytest medusa/tests/ \
+          PYTHONPATH="$PWD:$PYTHONPATH" python -m pytest suijin/tests/ \
             -v --tb=short \
-            --cov=medusa --cov-report=term-missing --cov-report=xml \
+            --cov=suijin --cov-report=term-missing --cov-report=xml \
             -m "not ai" \
             -p no:warnings
 
       - name: Type check (non-blocking)
         continue-on-error: true
         run: |
-          pip install pyright && pyright medusa/
+          pip install pyright && pyright suijin/
 
       - name: Lint check
         run: |
-          pip install ruff && ruff check medusa/
+          pip install ruff && ruff check suijin/
 
       - name: Dependency audit (non-blocking)
         continue-on-error: true
@@ -83,10 +83,10 @@ jobs:
 
       - name: Committed bundle must be fresh
         run: |
-          # The build just regenerated medusa/ui/dist. If git sees changes,
+          # The build just regenerated suijin/ui/dist. If git sees changes,
           # the committed bundle is stale — rebuild locally and commit it.
-          if ! git diff --quiet -- medusa/ui/dist; then
-            echo "::error::medusa/ui/dist is stale — run: cd webui && npm run build"
-            git diff --stat -- medusa/ui/dist
+          if ! git diff --quiet -- suijin/ui/dist; then
+            echo "::error::suijin/ui/dist is stale — run: cd webui && npm run build"
+            git diff --stat -- suijin/ui/dist
             exit 1
           fi

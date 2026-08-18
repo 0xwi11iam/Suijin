@@ -1,7 +1,7 @@
 """SQLMap wrapper."""
 import shlex
 
-from medusa.tools.result import run_command
+from suijin.tools.result import run_command
 
 
 def sqlmap_scan(url, flags="--batch --random-agent", tamper=""):
