@@ -1,6 +1,6 @@
 {
-  "version": "2.10.0",
-  "codename": "Full Arsenal",
+  "version": "2.11.0",
+  "codename": "Trust But Verify",
   "release_date": "2026-08-18",
-  "description": "Medusa v2.10: twenty new features. KB v2 (kb read full docs, kb diff, fuzzy GTFOBins), CISA KEV mirror + offline search_cve fallback, credential vault (PBKDF2+HMAC at-rest), target dossiers, custom detector rules + policy engine (opt-in, dispatch-enforced), provider failover chain, module SDK (init/validate), skill versioning (snapshot/diff/rollback), lab campaign runner, traffic watcher, unified timeline, workspace cleaner, notification hooks (battle-integrated), wordlist mutation + cewl harvesting, recon auto-suggest on fingerprint. 12 new CLI verbs. 620 tests green."
+  "description": "Medusa v2.11: hardening pass. CLI-level tests for all v2.10 verbs (caught a real run_watch crash), frontend CI build gate with bundle-freshness check, coverage floor 40->48 (measured 52). WebUI: Dossier + Timeline views, KEV status in overview. New: medusa compliance — findings mapped to CWE / OWASP Top-10 / MITRE ATT&CK. Deliberately trimmed scope: no HITL approval queues, no battle heartbeat files, no production detector changes. 679 tests green."
 }

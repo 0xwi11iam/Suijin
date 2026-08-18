@@ -1304,6 +1304,18 @@ def run_notify(args) -> int:
     return 1
 
 
+def run_compliance(args) -> int:
+    from medusa.tools.compliance import load_findings, map_findings, render
+
+    findings = load_findings(getattr(args, "engagement", None))
+    if not findings:
+        print("No findings recorded for this engagement "
+              "(findings land in medusa_agent/audit_trails/ during engagements).")
+        return 0
+    print(render(map_findings(findings)))
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="medusa",
@@ -1477,6 +1489,11 @@ def main(argv=None):
     notify_send.set_defaults(func=run_notify)
     notify_sub.add_parser("test", help="write example config / test channels").set_defaults(func=run_notify)
     notify.set_defaults(func=run_notify)
+
+    compliance = sub.add_parser("compliance", help="map engagement findings to CWE / OWASP / ATT&CK")
+    compliance.add_argument("engagement", nargs="?", default=None,
+                            help="engagement name (default: newest audit trail)")
+    compliance.set_defaults(func=run_compliance)
 
     config = sub.add_parser("config", help="inspect and validate configuration")
     config_sub = config.add_subparsers(dest="config_action")

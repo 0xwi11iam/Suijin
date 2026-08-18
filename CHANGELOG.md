@@ -2,6 +2,44 @@
 
 All notable changes to Medusa.
 
+## [2.11.0] — 2026-08-18 — TRUST BUT VERIFY
+
+### Added — hardening
+- **CLI tests for every v2.10 verb** (`test_cli_v210.py`, 30 tests): exit
+  codes, arg errors, output shape for kb diff/read, pull cve, creds
+  (init/list/add/get/export with mocked passphrase), dossier, timeline,
+  watch, clean (dry-run vs apply), rules, policy, providers, module,
+  notify. **Caught a real bug**: run_watch passed the list-based
+  traffic enricher as a per-entry function — it crashed on the first
+  live line at runtime. Fixed with a per-entry adapter.
+- **Frontend CI gate**: new `webui` job — node 20, `npm ci && npm run
+  build`, then a git-diff freshness check on `medusa/ui/dist`: a stale
+  committed bundle fails the build (permanently closes the v2.9.2-class
+  regression). Build verified byte-deterministic locally.
+- **Coverage floor** 40 → 48 (measured 52%, 4-point buffer).
+
+### Added — WebUI
+- **Dossier view**: target search → constraint/failure/history/report
+  cards with richness count (`/api/dossier?target=`).
+- **Timeline view**: day-grouped unified feed across audits, sessions,
+  and reports with kind-colored badges (`/api/timeline?limit=`).
+- KEV mirror count in `/api/overview` + Settings KB tab. 9 new backend
+  tests; dist rebuilt and committed.
+
+### Added — compliance mapping
+- **`medusa compliance [engagement]`** (`tools/compliance.py`): findings
+  mapped to CWE / OWASP Top-10 2021 / MITRE ATT&CK via a pure keyword
+  lookup (snake_case finding types normalized; specific rows before
+  generic; unmapped fall back to CWE-693). Per-finding table + per-
+  framework summaries. Standalone by design — no report-pipeline
+  changes, no state. 22 tests.
+
+### Deliberately NOT built (over-engineering review)
+- HITL approvals queue (hot-path + TTL state + coordination risk)
+- Battle live-view heartbeat file (stale-state trap; reports suffice)
+- Skill golden-set evals (keyword scoring = misleading signal)
+- Custom detector rules in the production path (defense drift risk)
+
 ## [2.10.0] — 2026-08-18 — FULL ARSENAL (20 FEATURES)
 
 ### Added — knowledge & intel

@@ -133,6 +133,7 @@ docker run -it --rm \
 | `medusa module` | Module SDK: `init <name>` scaffolds, `validate <name>` lints manifest + imports |
 | `medusa skills` | Skill list + versioning: `history` / `diff` / `rollback` (snapshots on every agent edit) |
 | `medusa notify` | Operator notifications: `send 'msg'` / `test` (file/command/macOS channels; battle fires on flags & blocks) |
+| `medusa compliance [eng]` | Map engagement findings to CWE / OWASP Top-10 / MITRE ATT&CK (newest engagement by default) |
 | `medusa pull kb` | Download + index the knowledge base (**enables** KB features) |
 | `medusa pull kb --status` | Offline: what's indexed, per-source counts, build age |
 | `medusa pull kb --list` | Available sources with size warnings |
@@ -277,6 +278,8 @@ not a public service.
 | **Blue Team** | Three-tier traffic monitor with severity rails + triggering signals (scored with the *real* `anomaly_detector`), 18-detector grid counting live hits, tarpit controls + live tarpitted-IP table, session KG summary |
 | **Knowledge Graph** | Interactive force-directed graph (hand-rolled physics, no JS deps) of the blue session KG or persistent red constraints; click nodes for details |
 | **Labs** | Fleet table with live port probes, copy-to-clipboard attack commands for blue_target |
+| **Dossier** | Target search → knowledge-graph constraints, failed techniques, engagement + report history, richness count |
+| **Timeline** | Day-grouped unified feed across audits, sessions, and reports |
 | **Reports** | Audit summaries (actions/success/findings/cost per engagement) + report file browser with viewer |
 | **Settings** | Effective config (secrets redacted), KB inventory per source, design tokens |
 
@@ -773,6 +776,8 @@ python3 -m pytest medusa/tests/ -m "not ai" # skip live-API tests
 | `test_export_debrief_replay.py` | Evidence bundles (build/verify/tamper/extra-file/creds opt-in/redaction), debrief stats + fleet trends, replay listing/markdown/non-TTY |
 | `test_eval_battle.py` | Harness labeling (heuristic + labels.jsonl override), confusion-matrix math, threshold sweep, real-scorer replay; battle score math, watchdog detect/tarpit/block, report rendering |
 | `test_kb_v2_and_intel.py` | kb read (full docs, substring, ambiguity), kb diff staleness, fuzzy GTFOBins, KEV mirror + offline search_cve fallback, wordlist mutation + cewl |
+| `test_cli_v210.py` | CLI-level exit codes/output for all v2.10 verbs: kb, pull cve, creds, dossier, timeline, watch, clean, rules, policy, providers, module, notify |
+| `test_compliance.py` | Compliance mapping: known classes, specificity ordering, snake_case normalization, fallback, summaries, engagement loading, CLI verb |
 | `test_v210_features.py` | Credential vault (roundtrip/tamper/shred/redaction), dossiers, notify channels, rules + policy (opt-in semantics, scope exemptions, dispatch enforcement), module SDK, provider failover, skill versioning, campaign/watch/timeline/clean, recon hook |
 | `test_kb.py` | KB compile (FTS5, caps), path patterns + GTFOBins alias stubs, zero-doc failures, honest status, download retries + `.part` cleanup, `search_kb` filters, catalog gating |
 | `test_workspace_layout.py` | Canonical workspace merge + symlink migration, sandbox containment, CWD-independent paths |
