@@ -16,6 +16,9 @@ build/
 __pycache__/
 *.pyc
 dist/
+# ...except the committed WebUI bundle (medusa ui works without Node)
+!medusa/ui/dist/
+!medusa/ui/dist/**
 *.egg-info/
 
 # ── Runtime agent data (generated, never commit) ───────────────────
