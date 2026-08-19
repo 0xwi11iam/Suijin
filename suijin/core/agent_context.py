@@ -1,33 +1,16 @@
-"""
-Per-session agent context — ContextVars for user/project/phase identity.
+"""DEPRECATED (v4.1 modularisation): lives at suijin.modules.platform.lib.agent_context. Lazy shim."""
 
-Lives in its own module so lightweight callers (workspace_fs, job_runner,
-output_offload) can import the contextvars without pulling in langchain
-or other heavy deps.
-"""
+import importlib as _il
 
-from __future__ import annotations
+from suijin.modules.platform.lib.agent_context import *  # noqa: F401,F403 — re-export public names
 
-from contextvars import ContextVar
-
-current_user_id: ContextVar[str] = ContextVar("current_user_id", default="")
-current_project_id: ContextVar[str] = ContextVar("current_project_id", default="")
-current_session_id: ContextVar[str] = ContextVar("current_session_id", default="")
-current_phase: ContextVar[str] = ContextVar("current_phase", default="informational")
+_target = _il.import_module("suijin.modules.platform.lib.agent_context")
+__all__ = [n for n in dir(_target) if not n.startswith("__")]
 
 
-def set_tenant_context(user_id: str, project_id: str, session_id: str = "") -> None:
-    """Set the current user, project (and session) context for tools."""
-    current_user_id.set(user_id)
-    current_project_id.set(project_id)
-    current_session_id.set(session_id or "")
+def __getattr__(name):
+    return getattr(_target, name)
 
 
-def set_phase_context(phase: str) -> None:
-    """Set the current phase context for tool restrictions."""
-    current_phase.set(phase)
-
-
-def get_phase_context() -> str:
-    """Get the current phase context."""
-    return current_phase.get()
+def __dir__():
+    return dir(_target)

@@ -60,7 +60,7 @@ class TestImportPurity:
 
 class TestInitRuntime:
     def test_idempotent_and_thread_safe(self):
-        from suijin.tools import runtime as rt
+        from suijin.modules.platform.lib import runtime as rt
 
         rt.init_runtime()
         before = rt.is_initialized()
@@ -69,9 +69,9 @@ class TestInitRuntime:
 
     def test_workspace_dirs_created(self, tmp_path, monkeypatch):
 
-        import suijin.tools.workspace as ws
+        import suijin.modules.platform.lib.workspace as ws
 
-        rt = __import__("suijin.tools.runtime", fromlist=["x"])
+        rt = __import__("suijin.modules.platform.lib.runtime", fromlist=["x"])
         # point workspace at a fresh tree and force a re-init
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
         monkeypatch.setattr(rt, "WORKSPACE_DIR", tmp_path)
@@ -80,7 +80,7 @@ class TestInitRuntime:
             assert (tmp_path / sub).is_dir(), sub
 
     def test_lazy_session_auto_initializes(self):
-        from suijin.tools import runtime as rt
+        from suijin.modules.platform.lib import runtime as rt
 
         rt._initialized = False
         _ = rt.global_session.get  # touching a SESSION attribute auto-inits

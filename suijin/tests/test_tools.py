@@ -373,7 +373,7 @@ class TestConstantsExist:
     """All expected constants are defined with correct types."""
 
     def test_provider_names(self):
-        from suijin.core.constants import (
+        from suijin.modules.platform.lib.constants import (
             PROVIDER_ANTHROPIC,
             PROVIDER_DEEPSEEK,
             PROVIDER_GEMINI,
@@ -386,7 +386,7 @@ class TestConstantsExist:
         assert PROVIDER_ANTHROPIC == "anthropic"
 
     def test_model_ids(self):
-        from suijin.core.constants import (
+        from suijin.modules.platform.lib.constants import (
             DEFAULT_MODEL,
             GEMINI_MODEL,
             SENTINEL_MODEL,
@@ -399,13 +399,13 @@ class TestConstantsExist:
         assert "gemini" in GEMINI_MODEL
 
     def test_expert_models_is_list(self):
-        from suijin.core.constants import EXPERT_MODELS
+        from suijin.modules.platform.lib.constants import EXPERT_MODELS
 
         assert isinstance(EXPERT_MODELS, list)
         assert len(EXPERT_MODELS) >= 4
 
     def test_default_ports(self):
-        from suijin.core.constants import (
+        from suijin.modules.platform.lib.constants import (
             BLUE_LAB_PORT,
             METASPLOIT_RPC_PORT,
             PROXY_DEFAULT_PORT,
@@ -416,7 +416,7 @@ class TestConstantsExist:
         assert METASPLOIT_RPC_PORT == 55553
 
     def test_scoring_thresholds(self):
-        from suijin.core.constants import (
+        from suijin.modules.platform.lib.constants import (
             BASELINE_REQUESTS,
             PATTERN_SCORE_THRESHOLD,
             RISK_HIGH,
@@ -438,7 +438,7 @@ class TestConstantsExist:
 
     def test_threshold_ordering(self):
         """Scores must be ordered: SUSPICIOUS < DECEIVE < HIGH < CRITICAL < SHADOW"""
-        from suijin.core.constants import (
+        from suijin.modules.platform.lib.constants import (
             RISK_HIGH,
             SCORE_CRITICAL,
             SCORE_DECEIVE,
@@ -449,7 +449,7 @@ class TestConstantsExist:
         assert SCORE_SUSPICIOUS < SCORE_DECEIVE < RISK_HIGH < SCORE_CRITICAL < SCORE_SHADOW
 
     def test_deception_params(self):
-        from suijin.core.constants import (
+        from suijin.modules.platform.lib.constants import (
             TARPIT_DEFAULT_DELAY,
             TARPIT_MAX_DELAY,
             TARPIT_WINDOW_MINUTES,
@@ -460,7 +460,7 @@ class TestConstantsExist:
         assert TARPIT_DEFAULT_DELAY == 5.0
 
     def test_timeouts(self):
-        from suijin.core.constants import (
+        from suijin.modules.platform.lib.constants import (
             BATCH_TIMEOUT,
             FIREWALL_TIMEOUT,
             HTTP_TIMEOUT,
@@ -477,7 +477,7 @@ class TestConstantsExist:
         assert PROXY_FORWARD_TIMEOUT == 30
 
     def test_limits(self):
-        from suijin.core.constants import (
+        from suijin.modules.platform.lib.constants import (
             MAX_ITERATIONS,
             MAX_RECENT_REQUESTS,
             MAX_SUBAGENTS,
@@ -501,7 +501,7 @@ class TestConstantsTmpDir:
             # Force reimport
             import importlib
 
-            import suijin.core.constants as c
+            import suijin.modules.platform.lib.constants as c
 
             importlib.reload(c)
             assert str(c.TMP_DIR) == "/tmp"
@@ -515,7 +515,7 @@ class TestConstantsTmpDir:
         try:
             import importlib
 
-            import suijin.core.constants as c
+            import suijin.modules.platform.lib.constants as c
 
             importlib.reload(c)
             assert str(c.TMP_DIR) == "/custom/tmp/path"
@@ -527,7 +527,7 @@ class TestConstantsTmpDir:
             # Restore default
             import importlib
 
-            import suijin.core.constants as c
+            import suijin.modules.platform.lib.constants as c
 
             os.environ.pop("SUIJIN_TMP_DIR", None)
             importlib.reload(c)

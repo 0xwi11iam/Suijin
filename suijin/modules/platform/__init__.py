@@ -28,7 +28,7 @@ class PlatformModule(Module):
         """Declare services — cheap, no I/O, no side effects."""
 
         def _load_config():
-            from suijin.core.red.config_loader import load_config
+            from suijin.modules.platform.lib.config_loader import load_config
 
             return load_config()
 
@@ -48,8 +48,8 @@ class PlatformModule(Module):
         """One-time process init: module packs, workspace layout, dirs."""
         if self._initialized:
             return
-        from suijin.tools.runtime import init_runtime
-        from suijin.tools.workspace import ensure_workspace_layout
+        from suijin.modules.platform.lib.runtime import init_runtime
+        from suijin.modules.platform.lib.workspace import ensure_workspace_layout
 
         init_runtime()
         ensure_workspace_layout()

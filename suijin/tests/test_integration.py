@@ -116,7 +116,6 @@ class TestBlueTeamPipeline:
         r2 = ok("success")
         assert r2["status"] == "ok"
 
-
     def test_deception_engine_wired(self):
         """Verify deception engine loads and uses structured errors."""
         from suijin.core.blue.defense.deception_engine import DeceptionEngine
