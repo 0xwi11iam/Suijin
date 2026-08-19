@@ -273,7 +273,7 @@ class TestModuleSdk:
 
 class TestFailover:
     def test_falls_through_on_error(self, monkeypatch):
-        from suijin.tools import providers
+        from suijin.modules.providers import lib as providers
 
         calls = []
 
@@ -289,7 +289,7 @@ class TestFailover:
         assert calls == ["zai", "deepseek"]
 
     def test_success_short_circuits(self, monkeypatch):
-        from suijin.tools import providers
+        from suijin.modules.providers import lib as providers
 
         calls = []
 
@@ -304,7 +304,7 @@ class TestFailover:
         assert out == "fine" and calls == ["zai"]
 
     def test_all_down_returns_last_error(self, monkeypatch):
-        from suijin.tools import providers
+        from suijin.modules.providers import lib as providers
 
         monkeypatch.setattr(providers, "generate", lambda m, c=None, **k: "Error: nope")
         out = providers.generate_with_failover(

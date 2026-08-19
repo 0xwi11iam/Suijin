@@ -295,7 +295,7 @@ class TestProvidersProbe:
     def test_ok_with_mocked_generate(self, monkeypatch):
 
         from suijin.core.red import config_loader
-        from suijin.tools import providers
+        from suijin.modules.providers import lib as providers
 
         monkeypatch.setattr(config_loader, "load_config", lambda: {"provider": "zai"})
         monkeypatch.setenv("ZAI_API_KEY", "k")
@@ -306,7 +306,7 @@ class TestProvidersProbe:
     def test_failure_reported(self, monkeypatch):
 
         from suijin.core.red import config_loader
-        from suijin.tools import providers
+        from suijin.modules.providers import lib as providers
 
         monkeypatch.setattr(config_loader, "load_config", lambda: {"provider": "zai"})
         monkeypatch.setenv("ZAI_API_KEY", "k")

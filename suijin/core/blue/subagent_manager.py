@@ -91,8 +91,8 @@ class SubagentManager:
 
     async def analyze_endpoint(self, sa: EndpointSubagent) -> EndpointSubagent:
         """Deep analysis — read the ENTIRE source file, no truncation."""
+        from suijin.modules.providers.lib import generate
         from suijin.prompts.blue_system import BLUE_SYSTEM_PROMPT
-        from suijin.tools.providers import generate
 
         ep = sa.endpoint
         file_path = ep.get("file", "")

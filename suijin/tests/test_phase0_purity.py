@@ -29,7 +29,7 @@ class TestImportPurity:
         # the god-import chain must not fire
         for banned in (
             "suijin.tools.dispatch",
-            "suijin.tools.providers",
+            "suijin.modules.providers.lib",
             "suijin.modules.loader",
             "suijin.kb",
             "huggingface_hub",
@@ -40,7 +40,7 @@ class TestImportPurity:
         mods = _imported_modules("import suijin.tools.guardrails")
         assert "suijin.tools.guardrails" in mods
         assert "suijin.tools.dispatch" not in mods
-        assert "suijin.tools.providers" not in mods
+        assert "suijin.modules.providers.lib" not in mods
 
     def test_kb_is_leaf(self):
         mods = _imported_modules("import suijin.kb")
@@ -105,12 +105,12 @@ class TestCompatFacade:
             assert hasattr(tools, name), name
         # USAGE (a mutable dict) is deliberately NOT lazily re-exported: a
         # snapshot copy would silently diverge from the live accumulator.
-        # Use tools.get_usage() / suijin.tools.providers.USAGE instead.
+        # Use tools.get_usage() / suijin.modules.providers.lib.USAGE instead.
         assert not hasattr(tools, "USAGE")
 
     def test_old_import_paths_still_resolve(self):
+        import suijin.modules.providers.lib as p
         import suijin.tools.dispatch as d
-        import suijin.tools.providers as p
 
         assert callable(d.route_tool)
         assert callable(p.generate)

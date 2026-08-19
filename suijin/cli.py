@@ -1087,7 +1087,7 @@ def run_policy(args) -> int:
 
 def run_providers(args) -> int:
     from suijin.core.red.config_loader import load_config
-    from suijin.tools.providers import generate
+    from suijin.modules.providers.lib import generate
 
     cfg = load_config()
     if getattr(args, "all", False):

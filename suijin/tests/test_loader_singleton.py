@@ -21,7 +21,7 @@ class TestSingleInstance:
         """Dynamic load and normal import must be the SAME object — cost
         accumulators and monkeypatches shared everywhere."""
         from suijin.modules.loader import load_local_module
-        from suijin.tools import providers
+        from suijin.modules.providers import lib as providers
 
         assert load_local_module("providers") is providers
 
@@ -29,7 +29,7 @@ class TestSingleInstance:
         """The concrete symptom: USAGE incremented via one handle is visible
         through the other (was impossible with 5 instances)."""
         from suijin.modules.loader import load_local_module
-        from suijin.tools import providers
+        from suijin.modules.providers import lib as providers
 
         dyn = load_local_module("providers")
         before = dyn.USAGE["calls"]

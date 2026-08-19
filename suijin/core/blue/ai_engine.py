@@ -134,8 +134,8 @@ Respond ONLY with valid JSON. No markdown, no explanation outside JSON."""
         request_id: int = 0,
     ) -> AIAnalysisResult:
         """Send an anomalous request to the LLM for deep analysis."""
+        from suijin.modules.providers.lib import generate, get_usage
         from suijin.prompts.blue_system import BLUE_SYSTEM_PROMPT
-        from suijin.tools.providers import generate, get_usage
 
         t0 = time.time()
 

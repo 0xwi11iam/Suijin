@@ -14,6 +14,15 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # static analysis still sees the surface
+    from suijin.modules.providers.lib import (
+        generate as generate,
+    )
+    from suijin.modules.providers.lib import (
+        get_usage as get_usage,
+    )
+    from suijin.modules.providers.lib import (
+        reset_usage as reset_usage,
+    )
     from suijin.tools.dispatch import (
         get_proxy as get_proxy,
     )
@@ -29,15 +38,6 @@ if TYPE_CHECKING:  # static analysis still sees the surface
     from suijin.tools.dispatch import (
         set_proxy as set_proxy,
     )
-    from suijin.tools.providers import (
-        generate as generate,
-    )
-    from suijin.tools.providers import (
-        get_usage as get_usage,
-    )
-    from suijin.tools.providers import (
-        reset_usage as reset_usage,
-    )
 
 _LAZY = {
     "get_proxy": ("suijin.tools.dispatch", "get_proxy"),
@@ -45,9 +45,9 @@ _LAZY = {
     "reset_recon_state": ("suijin.tools.dispatch", "reset_recon_state"),
     "route_tool": ("suijin.tools.dispatch", "route_tool"),
     "set_proxy": ("suijin.tools.dispatch", "set_proxy"),
-    "generate": ("suijin.tools.providers", "generate"),
-    "get_usage": ("suijin.tools.providers", "get_usage"),
-    "reset_usage": ("suijin.tools.providers", "reset_usage"),
+    "generate": ("suijin.modules.providers.lib", "generate"),
+    "get_usage": ("suijin.modules.providers.lib", "get_usage"),
+    "reset_usage": ("suijin.modules.providers.lib", "reset_usage"),
 }
 
 
@@ -59,7 +59,7 @@ def __getattr__(name: str):
         module = importlib.import_module(entry[0])
         return getattr(module, entry[1])
     # Submodule fallback (standard lazy-package pattern): makes
-    # `suijin.tools.providers` / `monkeypatch.setattr("suijin.tools.x.y")`
+    # `suijin.modules.providers.lib` / `monkeypatch.setattr("suijin.tools.x.y")`
     # resolve without eagerly importing anything.
     try:
         return importlib.import_module(f"{__name__}.{name}")

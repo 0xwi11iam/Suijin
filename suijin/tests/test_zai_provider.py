@@ -8,7 +8,7 @@ pay-as-you-go endpoint ("paas" — per-token USD). All network calls are mocked
 
 import pytest
 
-from suijin.tools import providers
+from suijin.modules.providers import lib as providers
 
 
 @pytest.fixture(autouse=True)

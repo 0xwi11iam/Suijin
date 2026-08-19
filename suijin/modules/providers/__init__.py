@@ -15,7 +15,7 @@ class ProvidersModule(Module):
     tier = Tier.RECOMMENDED
 
     def register(self, ctx) -> None:
-        import suijin.tools.providers as p
+        import suijin.modules.providers.lib as p
 
         # the single, canonical LLM service — one module object, one
         # USAGE accumulator (the Phase 0 split-brain fix made this true)

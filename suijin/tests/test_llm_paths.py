@@ -20,18 +20,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 class TestProviderPricing:
     def test_exact_model(self):
-        from suijin.tools.providers import _price_for
+        from suijin.modules.providers.lib import _price_for
 
         assert _price_for("deepseek-v4-flash") == (0.27, 1.10)
 
     def test_prefix_match(self):
-        from suijin.tools.providers import _price_for
+        from suijin.modules.providers.lib import _price_for
 
         price = _price_for("anthropic/claude-opus-4-8")
         assert price == (15.0, 75.0)
 
     def test_unknown_model_none(self):
-        from suijin.tools.providers import _price_for
+        from suijin.modules.providers.lib import _price_for
 
         assert _price_for("totally-unknown-model") is None
         assert _price_for(None) is None
@@ -40,7 +40,7 @@ class TestProviderPricing:
 
 class TestProviderUsage:
     def test_reset_and_record(self):
-        from suijin.tools.providers import _record_usage, get_usage, reset_usage
+        from suijin.modules.providers.lib import _record_usage, get_usage, reset_usage
 
         reset_usage()
         _record_usage("deepseek", "deepseek-v4-flash", 1000, 500)
@@ -53,7 +53,7 @@ class TestProviderUsage:
         assert abs(usage["est_cost_usd"] - expected_cost) < 1e-9
 
     def test_unpriced_model_uses_default_rate(self):
-        from suijin.tools.providers import _record_usage, get_usage, reset_usage
+        from suijin.modules.providers.lib import _record_usage, get_usage, reset_usage
 
         reset_usage()
         _record_usage("unknown", "mystery-model", 1000000, 1000000)
@@ -63,7 +63,7 @@ class TestProviderUsage:
         assert abs(usage["est_cost_usd"] - expected_cost) < 1e-9
 
     def test_record_usage_never_raises(self):
-        from suijin.tools.providers import _record_usage, get_usage, reset_usage
+        from suijin.modules.providers.lib import _record_usage, get_usage, reset_usage
 
         reset_usage()
         # Malformed token counts must be swallowed — never crash the call
@@ -87,8 +87,8 @@ class FakeResponse:
 
 class TestGenerateDeepSeek:
     def test_success_returns_content_and_records_usage(self, monkeypatch):
-        import suijin.tools.providers as p
-        from suijin.tools.providers import generate, get_usage, reset_usage
+        import suijin.modules.providers.lib as p
+        from suijin.modules.providers.lib import generate, get_usage, reset_usage
 
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
@@ -113,8 +113,8 @@ class TestGenerateDeepSeek:
         assert usage["input_tokens"] == 100
 
     def test_missing_key_errors_before_request(self, monkeypatch):
-        import suijin.tools.providers as p
-        from suijin.tools.providers import generate
+        import suijin.modules.providers.lib as p
+        from suijin.modules.providers.lib import generate
 
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
@@ -125,8 +125,8 @@ class TestGenerateDeepSeek:
         assert called == []
 
     def test_401_invalid_key(self, monkeypatch):
-        import suijin.tools.providers as p
-        from suijin.tools.providers import generate
+        import suijin.modules.providers.lib as p
+        from suijin.modules.providers.lib import generate
 
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "bad-key")
@@ -135,8 +135,8 @@ class TestGenerateDeepSeek:
         assert "Invalid DeepSeek API Key" in result
 
     def test_402_payment_required(self, monkeypatch):
-        import suijin.tools.providers as p
-        from suijin.tools.providers import generate
+        import suijin.modules.providers.lib as p
+        from suijin.modules.providers.lib import generate
 
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
@@ -145,8 +145,8 @@ class TestGenerateDeepSeek:
         assert "402" in result
 
     def test_retries_exhausted_falls_through(self, monkeypatch):
-        import suijin.tools.providers as p
-        from suijin.tools.providers import generate
+        import suijin.modules.providers.lib as p
+        from suijin.modules.providers.lib import generate
 
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
@@ -156,8 +156,8 @@ class TestGenerateDeepSeek:
         assert "Error" in result
 
     def test_non_deepseek_model_remapped(self, monkeypatch):
-        import suijin.tools.providers as p
-        from suijin.tools.providers import generate
+        import suijin.modules.providers.lib as p
+        from suijin.modules.providers.lib import generate
 
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
@@ -177,16 +177,16 @@ class TestGenerateDeepSeek:
         assert sent["json"]["model"] == "deepseek-v4-flash"
 
     def test_unknown_provider(self, monkeypatch):
-        import suijin.tools.providers as p
-        from suijin.tools.providers import generate
+        import suijin.modules.providers.lib as p
+        from suijin.modules.providers.lib import generate
 
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         result = generate([{"role": "user", "content": "hi"}], {"provider": "not-a-real-provider"})
         assert "Unknown provider" in result
 
     def test_lobstertrap_active_routes_through_proxy(self, monkeypatch):
-        import suijin.tools.providers as p
-        from suijin.tools.providers import generate
+        import suijin.modules.providers.lib as p
+        from suijin.modules.providers.lib import generate
 
         monkeypatch.setattr(p, "_lobstertrap_available", lambda: True)
         monkeypatch.setattr(p, "_call_via_lobstertrap", lambda messages, model, temp, mt: "proxy result")
@@ -297,7 +297,7 @@ class TestAIEngineAnalyze:
                 }
             )
 
-        monkeypatch.setattr("suijin.tools.providers.generate", fake_generate)
+        monkeypatch.setattr("suijin.modules.providers.lib.generate", fake_generate)
 
     def test_analyze_flagged(self, monkeypatch):
         from suijin.core.blue.ai_engine import BlueAIEngine
@@ -323,7 +323,7 @@ class TestAIEngineAnalyze:
         def fake_generate(messages, config=None, **kwargs):
             return "Error: DeepSeek API key not set"
 
-        monkeypatch.setattr("suijin.tools.providers.generate", fake_generate)
+        monkeypatch.setattr("suijin.modules.providers.lib.generate", fake_generate)
 
         engine = BlueAIEngine({})
         result = asyncio.run(
@@ -341,7 +341,7 @@ class TestAIEngineAnalyze:
         def fake_generate(messages, config=None, **kwargs):
             return "garbage that is not json"
 
-        monkeypatch.setattr("suijin.tools.providers.generate", fake_generate)
+        monkeypatch.setattr("suijin.modules.providers.lib.generate", fake_generate)
 
         engine = BlueAIEngine({})
         result = asyncio.run(

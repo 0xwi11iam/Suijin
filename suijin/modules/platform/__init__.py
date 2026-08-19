@@ -34,7 +34,7 @@ class PlatformModule(Module):
 
         ctx.register_service("config", _load_config)
         ctx.register_service("workspace", lambda: Path(ctx.workspace))
-        ctx.register_service("llm", lambda: __import__("suijin.tools.providers", fromlist=["generate"]).generate)
+        ctx.register_service("llm", lambda: __import__("suijin.modules.providers.lib", fromlist=["generate"]).generate)
 
         # traffic services (blue scorer etc.) — the Phase 0 seam, reborn
         def _scorer():

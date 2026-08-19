@@ -119,7 +119,7 @@ class TestLiveHandlers:
         assert "numeric id" in out.file.getvalue()
 
     def test_cost_reports_tally(self):
-        from suijin.tools import providers
+        from suijin.modules.providers import lib as providers
 
         providers.reset_usage()
         providers.USAGE.update(

@@ -15,6 +15,7 @@ available via get_module_tools() and their skills via get_module_skills().
 
 import importlib.util
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -85,7 +86,7 @@ def set_verbose(v: bool):
 _local_cache: dict[str, object] = {}
 
 # Search order: root first, then subdirs. The canonical name for caching
-# is the resolved file's real import path (e.g. "suijin.tools.providers"),
+# is the resolved file's real import path (e.g. "suijin.modules.providers.lib"),
 # so force-loaded and normally-imported modules share sys.modules.
 SEARCH_DIRS = [BASE_DIR] + [BASE_DIR / d for d in ("tools", "security", "intel", "core", "infra")]
 
@@ -105,6 +106,14 @@ def load_local_module(mod_name: str):
         path = search / f"{mod_name}.py"
         if not path.exists():
             continue
+        # DEPRECATED shims (v4.1 modularisation): follow them to the real home
+        try:
+            head = path.read_text(errors="ignore")[:600]
+            m = re.search(r'import_module\("([^"]+)"\)', head)
+            if m and "DEPRECATED" in head:
+                return __import__(m.group(1), fromlist=["_"])
+        except OSError:
+            pass
         # Canonical import path: suijin/<rel>.py -> suijin.<rel with dots>
         try:
             rel = path.resolve().relative_to(BASE_DIR.resolve()).with_suffix("")

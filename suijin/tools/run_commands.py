@@ -186,7 +186,7 @@ def _default_handlers(box: RunBox) -> dict:
         _service("red_list_sessions")()
 
     def cost(_args):
-        from suijin.tools.providers import get_usage
+        from suijin.modules.providers.lib import get_usage
 
         u = get_usage()
         box._out.print(

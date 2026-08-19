@@ -28,7 +28,7 @@ def sample_ai_json(sa):
 
 class TestAnalyzeEndpoint:
     def test_ai_path_populates_everything(self, tmp_path, monkeypatch):
-        from suijin.tools import providers as _providers
+        from suijin.modules.providers import lib as _providers
 
         mgr = make_mgr(tmp_path)
         sa = mgr.deploy_all([{"path": "/login", "method": "POST", "file": __file__}])[0]
@@ -52,7 +52,7 @@ class TestAnalyzeEndpoint:
         assert "FULL HANDLER CODE" in captured["prompt"]
 
     def test_ai_failure_falls_back(self, tmp_path, monkeypatch):
-        from suijin.tools import providers as _providers
+        from suijin.modules.providers import lib as _providers
 
         mgr = make_mgr(tmp_path)
         sa = mgr.deploy_all([{"path": "/admin/config", "method": "GET", "file": __file__}])[0]
@@ -73,7 +73,7 @@ class TestAnalyzeEndpoint:
         assert sa.defense_plan  # generic plan present
 
     def test_fallback_flags_command_injection(self, tmp_path, monkeypatch):
-        from suijin.tools import providers as _providers
+        from suijin.modules.providers import lib as _providers
 
         mgr = make_mgr(tmp_path)
         src = tmp_path / "ping_handler.py"
@@ -86,7 +86,7 @@ class TestAnalyzeEndpoint:
         assert "Command injection" in sa.vulnerability_notes
 
     def test_fallback_flags_sqli_patterns(self, tmp_path, monkeypatch):
-        from suijin.tools import providers as _providers
+        from suijin.modules.providers import lib as _providers
 
         mgr = make_mgr(tmp_path)
         src = tmp_path / "search_handler.py"
@@ -102,7 +102,7 @@ class TestAnalyzeEndpoint:
 class TestBatching:
     def test_analyze_all_batches_and_collects(self, tmp_path, monkeypatch):
         import suijin.core.blue.subagent_manager as sm
-        from suijin.tools import providers as _providers
+        from suijin.modules.providers import lib as _providers
 
         mgr = make_mgr(tmp_path)
         eps = [{"path": f"/p{i}", "method": "GET", "file": __file__} for i in range(7)]
@@ -186,7 +186,7 @@ class TestIntegrationWithFeed:
 
     def test_blueteamer_sequence(self, tmp_path, monkeypatch):
         import suijin.core.blue.subagent_manager as sm
-        from suijin.tools import providers as _providers
+        from suijin.modules.providers import lib as _providers
 
         mgr = make_mgr(tmp_path)
         endpoints = [{"path": p, "method": "GET", "file": __file__} for p in ("/", "/login", "/admin", "/api/x")]
