@@ -92,7 +92,7 @@ jobs:
           # The build just regenerated suijin/ui/dist. If git sees changes,
           # the committed bundle is stale — rebuild locally and commit it.
           if ! git diff --quiet -- suijin/ui/dist; then
-            echo "::error::suijin/ui/dist is stale — run: cd webui && npm run build"
+            echo "::error::suijin/ui/dist is stale — run: cd suijin/modules/console/webui && npm run build"
             git diff --stat -- suijin/ui/dist
             exit 1
           fi

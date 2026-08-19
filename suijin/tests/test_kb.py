@@ -407,24 +407,25 @@ class TestRepoAnchoredPaths:
     """KB artifacts must ALWAYS live inside the suijin-security repo folder —
     never CWD-dependent, never scattered into $HOME or /tmp."""
 
-    def test_paths_anchored_to_package_dir(self):
-        # v4.1: kb lives in modules/knowledge/lib; artifacts stay in the
-        # suijin PACKAGE dir (where they always lived on disk)
-        import suijin
+    def test_paths_anchored_to_workspace_caches(self):
+        # v4.1: runtime data lives in the agent workspace (caches/), not
+        # the package — a built KB survives reinstalls and, in Docker,
+        # container recreation (workspace is the volume)
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-        pkg_dir = kbmod.Path(suijin.__file__).resolve().parent  # <repo>/suijin
-        assert pkg_dir / "kb.sqlite3" == kbmod.DB_PATH
-        assert pkg_dir / "kb_cache" == kbmod.CACHE_DIR
+        caches = WORKSPACE_DIR / "caches"
+        assert caches / "kb.sqlite3" == kbmod.DB_PATH
+        assert caches / "kb_cache" == kbmod.CACHE_DIR
         assert kbmod.DB_PATH.is_absolute()
         assert kbmod.CACHE_DIR.is_absolute()
 
     def test_paths_stable_regardless_of_cwd(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        import suijin
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-        pkg_dir = kbmod.Path(suijin.__file__).resolve().parent
-        assert pkg_dir / "kb.sqlite3" == kbmod.DB_PATH
-        assert pkg_dir / "kb_cache" == kbmod.CACHE_DIR
+        caches = WORKSPACE_DIR / "caches"
+        assert caches / "kb.sqlite3" == kbmod.DB_PATH
+        assert caches / "kb_cache" == kbmod.CACHE_DIR
 
 
 class TestPartialFailureResilience:
@@ -494,10 +495,14 @@ class TestWorkspaceIntegrity:
     """The agent workspace (suijin_agent/) is sacred — KB artifacts must
     never leak into it, and its anchoring must not change."""
 
-    def test_workspace_anchored_and_separate_from_kb(self):
+    def test_kb_lives_in_workspace_caches_not_scattered(self):
+        """v4.1: runtime data (kb db + caches) lives INSIDE the workspace
+        under caches/ — one volume to rule them all — but never scattered
+        at the workspace root."""
         from suijin.modules.platform.lib.workspace import PROJECT_DIR, WORKSPACE_DIR
 
         assert WORKSPACE_DIR == PROJECT_DIR / "suijin_agent"
-        assert kbmod.CACHE_DIR != WORKSPACE_DIR
-        assert kbmod.DB_PATH.parent != WORKSPACE_DIR
-        assert kbmod.DB_PATH not in WORKSPACE_DIR.rglob("*") if WORKSPACE_DIR.exists() else True
+        caches = WORKSPACE_DIR / "caches"
+        assert kbmod.DB_PATH.parent == caches
+        assert kbmod.CACHE_DIR.parent == caches
+        assert kbmod.DB_PATH != WORKSPACE_DIR / "kb.sqlite3"  # not at root

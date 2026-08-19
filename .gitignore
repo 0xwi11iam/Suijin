@@ -50,8 +50,7 @@ suijin/lab/*/devops.db
 config.json
 
 # ── Knowledge base (built on demand via `suijin pull kb`) ──────────
-suijin/kb.sqlite3
-suijin/kb_cache/
+suijin_agent/caches/
 
 # ── Additional secrets ─────────────────────────────────────────────
 access_keys.json
@@ -68,7 +67,7 @@ webui/*.tsbuildinfo
 webui/dist/
 
 # ── v2.10 runtime artifacts ───────────────────────────────────────
-suijin/cve_cache/
+
 suijin/notify.json
 suijin/policy.json
 suijin/detector_rules.json

@@ -51,8 +51,6 @@ suijin = [
     "modules/*/plugin.json",
     "modules/*/manifest.json",
     "modules/*/skill.md",
-    "tutorials/**/*.md",
-    "tutorials/*.md",
 ]
 "suijin.modules.console.lib.ui" = ["dist/*", "dist/assets/*"]
 

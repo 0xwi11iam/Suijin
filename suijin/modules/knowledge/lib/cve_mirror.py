@@ -14,8 +14,18 @@ from pathlib import Path
 
 import requests
 
-BASE_DIR = Path(__file__).resolve().parents[3]  # suijin/ package
-CVE_CACHE_DIR = BASE_DIR / "cve_cache"
+
+def _workspace_caches() -> Path:
+    """The workspace caches dir (v4.1: runtime data lives in the agent
+    workspace, not the package). Monkeypatch-friendly: tests may setattr
+    DB_PATH / CACHE_DIR directly — this only feeds the DEFAULTS below."""
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+    d = WORKSPACE_DIR / "caches"
+    return d
+
+
+CVE_CACHE_DIR = _workspace_caches() / "cve_cache"
 KEV_PATH = CVE_CACHE_DIR / "kev.json"
 KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 

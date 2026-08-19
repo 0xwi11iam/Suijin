@@ -24,7 +24,15 @@ except ImportError:
 BASE_DIR = Path(__file__).resolve().parents[4]
 AUDIT_LOG = BASE_DIR / "audit_log.json"
 KEYS_FILE = BASE_DIR / "access_keys.json"
-REPORTS_DIR = BASE_DIR / "compliance_reports"
+
+
+def _reports_dir():
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+    return WORKSPACE_DIR / "compliance_reports"
+
+
+REPORTS_DIR = _reports_dir()
 REPORTS_DIR.mkdir(exist_ok=True)
 
 # Risk thresholds

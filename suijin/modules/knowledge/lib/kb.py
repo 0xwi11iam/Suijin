@@ -25,9 +25,19 @@ from datetime import datetime, timezone
 from fnmatch import fnmatch
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parents[3]  # suijin/ package (kb.sqlite3 lives here)
-DB_PATH = BASE_DIR / "kb.sqlite3"
-CACHE_DIR = BASE_DIR / "kb_cache"
+
+def _workspace_caches() -> Path:
+    """The workspace caches dir (v4.1: runtime data lives in the agent
+    workspace, not the package). Monkeypatch-friendly: tests may setattr
+    DB_PATH / CACHE_DIR directly — this only feeds the DEFAULTS below."""
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+    d = WORKSPACE_DIR / "caches"
+    return d
+
+
+DB_PATH = _workspace_caches() / "kb.sqlite3"
+CACHE_DIR = _workspace_caches() / "kb_cache"
 
 # Max bytes of a file's content indexed per document. Guards against
 # single-line wordlist monsters (rockyou & co) blowing up FTS memory.

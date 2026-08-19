@@ -28,8 +28,8 @@ suijin/operation_state_recovery.json
 suijin/engagement_schema.json
 
 # Knowledge base — built on demand inside the container via `suijin pull kb`
-suijin/kb.sqlite3
-suijin/kb_cache/
+# (v4.1: lives in the workspace volume, so a built KB SURVIVES container recreation)
+suijin_agent/caches/
 
 # Large third-party (not needed in container)
 redamon/
@@ -39,7 +39,14 @@ suijin/suijin_agent/
 suijin_agent/
 
 # Notes
-.notes/
+suijin/.notes/
+
+# Rust build artifacts (native/suijin-core/target can be GBs)
+native/**/target/
+
+# Frontend toolchain
+suijin/modules/console/webui/node_modules/
+suijin/modules/console/webui/*.tsbuildinfo
 
 # Docker
 Dockerfile
