@@ -6,6 +6,19 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v4.8.0 — Wave 5: blue team depth
+
+- **Attack replay into blue**: red traces score against the real
+  detector — training/eval without a live lab.
+- **Deception effectiveness** metrics per battle.
+- **SOC playbooks**: detections fire registered response actions.
+- **FP feedback loop** + allowlist manager.
+- **Incident timeline** generation.
+- **nginx/Apache log adapters**.
+- **Canary tripwires**: credential generation + reuse watch.
+
+1,151 tests.
+
 ## v4.7.0 — Wave 4: reporting & workflow
 
 - **Report templates**: exec / technical / compliance views of one
