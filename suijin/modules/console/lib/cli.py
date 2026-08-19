@@ -1342,6 +1342,40 @@ def _enrich_traffic(entries: list) -> list:
     return entries
 
 
+def run_market_cmd(args) -> int:
+    """`suijin market search|install|update|list` — F41-F43."""
+    from suijin.modules import marketplace as mp
+
+    action = getattr(args, "action", "list")
+    idx = getattr(args, "index", None) or mp.DEFAULT_INDEX
+    try:
+        if action == "search":
+            hits = mp.search(getattr(args, "name", "") or "", idx)
+            if not hits:
+                print("no matches")
+                return 0
+            for h in hits[:20]:
+                print(f"  {h['id']:24} v{h.get('version', '?'):8} {str(h.get('description', ''))[:60]}")
+            return 0
+        if action == "install":
+            out = mp.install_pack(getattr(args, "name", ""), idx)
+        elif action == "update":
+            out = mp.update_pack(getattr(args, "name", ""), idx)
+        else:
+            installed = mp.list_installed()
+            if not installed:
+                print("no user-installed packs (~/.suijin/modules is empty)")
+                return 0
+            for i in installed:
+                print(f"  {i['id']:24} v{i['version']:8} {i['path']}")
+            return 0
+        print(out)
+        return 1 if out.startswith("Error") else 0
+    except (OSError, ValueError) as e:
+        print(f"error: {e}")
+        return 1
+
+
 def run_engage_cmd(args) -> int:
     """`suijin engage <template> <target>` — C21 template application."""
     from suijin.modules.ops.lib import engagement_templates as et
@@ -1636,6 +1670,12 @@ def main(argv=None):
     fetch_p.add_argument("name", help="catalog name")
     fetch_p.set_defaults(func=lambda a: run_wordlist_cmd("fetch", a.name))
     wl.set_defaults(func=lambda a: run_wordlist_cmd("list", ""))
+
+    market = sub.add_parser("market", help="pack marketplace: search/install/update from index URLs")
+    market.add_argument("action", choices=["search", "install", "update", "list"], help="marketplace action")
+    market.add_argument("name", nargs="?", help="pack id (search term for 'search')")
+    market.add_argument("--index", default=None, help="index URL (default: the community index)")
+    market.set_defaults(func=run_market_cmd)
 
     engage = sub.add_parser("engage", help="apply an engagement template to a target")
     engage.add_argument("template", nargs="?", help="template name (suijin engage --list)")

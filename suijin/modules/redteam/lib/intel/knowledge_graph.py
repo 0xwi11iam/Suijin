@@ -145,3 +145,23 @@ def summary(target):
             conf = f" [{item.get('confidence', 1.0):.0%}]" if item.get("confidence", 1.0) < 1.0 else ""
             lines.append(f"    • {item.get('rule', '?')}{conf}")
     return "\n".join(lines)
+
+
+# ── G49: visualization export ──────────────────────────────────────────
+
+
+def export_mermaid() -> str:
+    """Whole-graph mermaid diagram (targets -> constraints)."""
+    data = _load()
+    lines = ["graph LR"]
+    targets = data.get("targets") or {}
+    for tname, tdata in targets.items():
+        node = "".join(c if c.isalnum() else "_" for c in tname)[:24]
+        lines.append(f'  {node}["{tname[:20]}"]')
+        for c in tdata.get("constraints") or []:
+            ctype = c.get("type", "?")
+            rule = str(c.get("rule", ""))[:28].replace('"', "'")
+            lines.append(f'  {node} -->|{ctype}| {node}_{ctype}_{abs(hash(rule)) % 997}["{rule}"]')
+    if len(lines) == 1:
+        return "graph LR\n  empty[(knowledge graph is empty)]"
+    return "\n".join(lines)

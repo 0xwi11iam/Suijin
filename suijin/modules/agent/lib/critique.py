@@ -165,3 +165,42 @@ def _record_learnings(critique: dict, config: dict, final_state: dict) -> None:
             )
     except Exception:  # noqa: BLE001
         logger.warning("critique KG recording failed", exc_info=True)
+
+
+# ── G47: self-promoted learnings ───────────────────────────────────────
+
+
+def promote_learnings(dry_run: bool = True) -> str:
+    """Draft tactics_to_remember entries as skill.md drop files for the
+    operator to approve. dry_run=True prints; False writes to
+    suijin/skills/ with a _draft prefix (still dormant until renamed)."""
+    from suijin.modules.platform.lib.workspace import artifact_dir
+
+    rdir = artifact_dir("reports")
+    candidates = []
+    for p in sorted(rdir.glob("critique_*.md")) if rdir.is_dir() else []:
+        section = False
+        for line in p.read_text(errors="ignore").splitlines():
+            if line.startswith("## Tactics to remember"):
+                section = True
+                continue
+            if section and line.startswith("- "):
+                candidates.append(line[2:].strip()[:200])
+            elif section and line.startswith("##"):
+                section = False
+    if not candidates:
+        return "No tactics recorded in critique reports yet."
+    if dry_run:
+        return "promotable tactics (dry run — re-run with dry_run=False):\n  " + "\n  ".join(
+            f"- {c}" for c in candidates[:10]
+        )
+    from pathlib import Path as _P
+
+    skills_dir = _P(__file__).resolve().parents[3] / "skills"
+    skills_dir.mkdir(parents=True, exist_ok=True)
+    written = []
+    for i, tactic in enumerate(candidates[:5], 1):
+        name = skills_dir / f"_draft_learned_{i}.md"
+        name.write_text(f"<!-- skip until reviewed -->\n\n## Learned tactic\n\n- {tactic}\n")
+        written.append(name.name)
+    return f"drafted {len(written)} skill files (dormant, '_draft_' prefix): " + ", ".join(written)

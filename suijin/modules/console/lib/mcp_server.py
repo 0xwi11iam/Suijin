@@ -199,7 +199,8 @@ def _build_backend_tools():
                 {
                     "name": name,
                     "description": _fallback_desc(name),
-                    "inputSchema": {
+                    "inputSchema": _manifest_schema(name)
+                    or {
                         "type": "object",
                         "properties": {
                             "args": {"type": "object", "description": "Tool arguments keyed by parameter name"}
@@ -208,6 +209,27 @@ def _build_backend_tools():
                 }
             )
     return tools
+
+
+def _manifest_schema(name: str) -> dict | None:
+    """Typed schema from the declaring pack's manifest parameters (F46)."""
+    try:
+        from suijin.modules.loader import discover_modules, get_loaded_modules
+
+        discover_modules()
+        for _key, mod in (get_loaded_modules() or {}).items():
+            decl = (mod.get("manifest", {}).get("tools") or {}).get(name)
+            if decl and isinstance(decl, dict):
+                params = decl.get("parameters")
+                if isinstance(params, dict) and params:
+                    return {
+                        "type": "object",
+                        "properties": {k: {"type": "string", "description": str(v)[:120]} for k, v in params.items()},
+                        "required": [],
+                    }
+    except Exception:  # noqa: BLE001 — schema enrichment is best-effort
+        pass
+    return None
 
 
 def _make_route_handler(name: str):
