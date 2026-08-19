@@ -1,47 +1,18 @@
-"""Command safety guardrails — extracted from dispatch.py for maintainability."""
+"""DEPRECATED (v4.1 modularisation): lives at suijin.modules.tools.lib.guardrails. Lazy shim.
 
-from __future__ import annotations
+Pure-delegation: every attribute read resolves against the canonical
+module at ACCESS time, so monkeypatch.setattr on either module is
+visible through both."""
 
-import os
+import importlib as _il
 
-_BLOCKED_PATTERNS = [
-    "rm -rf /",
-    "rm -rf ~",
-    "rm -rf .",
-    "mkfs.",
-    "dd if=",
-    ":(){ :|:& };:",
-    "> /dev/sda",
-    "chmod 777 /",
-    "wget .* -O /tmp/.*\\|.*sh",
-    "curl .*\\|.*sh",
-    "sudo rm -rf",
-    "sudo shutdown",
-    "sudo reboot",
-    "sudo halt",
-    "> /etc/passwd",
-    "> /etc/shadow",
-]
+_target = _il.import_module("suijin.modules.tools.lib.guardrails")
+__all__ = [x for x in dir(_target) if not x.startswith("__")]
 
 
-def is_dangerous(cmd: str):
-    """Check command against blocked patterns. Returns (is_dangerous, pattern)."""
-    cmd_lower = cmd.lower().replace(" ", "")
-    for pattern in _BLOCKED_PATTERNS:
-        p = pattern.lower().replace(" ", "")
-        if p in cmd_lower:
-            return True, pattern
-    return False, None
+def __getattr__(name):
+    return getattr(_target, name)
 
 
-def confirm_global_action(cmd: str, pattern: str) -> bool:
-    """Require operator confirmation for dangerous commands."""
-    if os.environ.get("SUIJIN_AUTO_APPROVE", "").lower() == "true":
-        return True
-    try:
-        from rich.console import Console as _RichConsole
-
-        _RichConsole(stderr=True).print(f"  [bold red]BLOCKED:[/bold red] '{pattern}' matched in command")
-    except Exception:
-        pass
-    return False
+def __dir__():
+    return dir(_target)

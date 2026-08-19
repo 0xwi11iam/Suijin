@@ -5,8 +5,8 @@ availability probing (all subprocesses mocked — nothing leaves the box).
 
 import pytest
 
-from suijin.infra import output_offload as oo
-from suijin.infra.tool_offload_policy import get_offload_mode
+from suijin.modules.platform.lib.infra import output_offload as oo
+from suijin.modules.platform.lib.infra.tool_offload_policy import get_offload_mode
 
 
 class TestOutputOffload:
@@ -135,7 +135,7 @@ class TestTailFile:
 
 class TestMsfCheck:
     def test_unavailable_without_rpc_or_console(self, monkeypatch):
-        from suijin.tools import metasploit as msf
+        from suijin.modules.tools.lib import metasploit as msf
 
         monkeypatch.setattr(msf, "_msf_rpc_connect", lambda cfg: (None, None))
 
@@ -147,7 +147,7 @@ class TestMsfCheck:
         assert "NOT detected" in out
 
     def test_console_fallback_detected(self, monkeypatch):
-        from suijin.tools import metasploit as msf
+        from suijin.modules.tools.lib import metasploit as msf
 
         monkeypatch.setattr(msf, "_msf_rpc_connect", lambda cfg: (None, None))
 
@@ -159,7 +159,7 @@ class TestMsfCheck:
         assert "msfconsole" in out and "No RPC daemon" in out
 
     def test_rpc_connected_reports_version(self, monkeypatch):
-        from suijin.tools import metasploit as msf
+        from suijin.modules.tools.lib import metasploit as msf
 
         class Proxy:
             class core:

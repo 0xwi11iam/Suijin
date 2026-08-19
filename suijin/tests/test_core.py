@@ -12,38 +12,38 @@ class TestDispatchGuardrails:
     """Verify command safety guardrails actually work."""
 
     def test_dangerous_rmrf_blocked(self):
-        from suijin.tools.dispatch import is_dangerous
+        from suijin.modules.tools.lib.dispatch import is_dangerous
 
         dangerous, pattern = is_dangerous("rm -rf /")
         assert dangerous
         assert pattern
 
     def test_dangerous_mkfs_blocked(self):
-        from suijin.tools.dispatch import is_dangerous
+        from suijin.modules.tools.lib.dispatch import is_dangerous
 
         dangerous, _ = is_dangerous("mkfs.ext4 /dev/sda")
         assert dangerous
 
     def test_dangerous_fork_bomb_blocked(self):
-        from suijin.tools.dispatch import is_dangerous
+        from suijin.modules.tools.lib.dispatch import is_dangerous
 
         dangerous, _ = is_dangerous(":(){ :|:& };:")
         assert dangerous
 
     def test_dangerous_chmod_blocked(self):
-        from suijin.tools.dispatch import is_dangerous
+        from suijin.modules.tools.lib.dispatch import is_dangerous
 
         dangerous, _ = is_dangerous("chmod 777 /")
         assert dangerous
 
     def test_safe_command_passes(self):
-        from suijin.tools.dispatch import is_dangerous
+        from suijin.modules.tools.lib.dispatch import is_dangerous
 
         dangerous, _ = is_dangerous("nmap -sV 127.0.0.1")
         assert not dangerous
 
     def test_safe_python_passes(self):
-        from suijin.tools.dispatch import is_dangerous
+        from suijin.modules.tools.lib.dispatch import is_dangerous
 
         dangerous, _ = is_dangerous("python3 -c 'print(1+1)'")
         assert not dangerous
@@ -52,7 +52,7 @@ class TestDispatchGuardrails:
         # Should block unless SUIJIN_AUTO_APPROVE=true
         import os
 
-        from suijin.tools.dispatch import confirm_global_action
+        from suijin.modules.tools.lib.dispatch import confirm_global_action
 
         old = os.environ.pop("SUIJIN_AUTO_APPROVE", None)
         result = confirm_global_action("rm -rf /", "rm -rf /")
@@ -61,13 +61,13 @@ class TestDispatchGuardrails:
         assert result is False
 
     def test_workspace_path_rejects_absolute(self):
-        from suijin.tools.dispatch import resolve_workspace_path
+        from suijin.modules.tools.lib.dispatch import resolve_workspace_path
 
         with pytest.raises(PermissionError):
             resolve_workspace_path("/etc/passwd")
 
     def test_workspace_path_allows_tmp(self):
-        from suijin.tools.dispatch import resolve_workspace_path
+        from suijin.modules.tools.lib.dispatch import resolve_workspace_path
 
         result = resolve_workspace_path("/tmp/test.txt")
         assert "/tmp" in str(result)

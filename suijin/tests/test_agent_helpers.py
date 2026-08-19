@@ -173,7 +173,7 @@ def test_tool_registry():
 
 
 def test_workspace_fs():
-    from suijin.infra.workspace_fs import outputs_path, payloads_path, scripts_path, workspace_path
+    from suijin.modules.platform.lib.infra.workspace_fs import outputs_path, payloads_path, scripts_path, workspace_path
 
     assert "suijin_agent" in workspace_path()
     assert "outputs" in outputs_path()
@@ -239,7 +239,7 @@ def test_compliance_module():
 
 
 def test_diff_engine():
-    from suijin.tools.diff_engine import diff_responses, quick_diff
+    from suijin.modules.tools.lib.diff_engine import diff_responses, quick_diff
 
     result = diff_responses("hello world", "hello WORLD", sensitivity="high")
     assert result["is_different"]
@@ -255,7 +255,7 @@ def test_diff_engine():
 
 
 def test_payload_generator():
-    from suijin.tools.payload_generator import PAYLOAD_DB, generate_payloads, list_payload_types
+    from suijin.modules.tools.lib.payload_generator import PAYLOAD_DB, generate_payloads, list_payload_types
 
     sqli = generate_payloads("sqli", framework="mysql")
     assert "OR" in sqli or "' OR" in sqli
@@ -403,7 +403,7 @@ def test_secret_patterns():
 
 
 def test_report_exporter():
-    from suijin.tools.report_exporter import _safe_id, generate_report
+    from suijin.modules.tools.lib.report_exporter import _safe_id, generate_report
 
     path = generate_report(
         engagement_name="test_engagement",

@@ -1,7 +1,7 @@
 """Tests for suijin/tools/availability.py — tool-to-binary mapping."""
 
 from suijin.modules.loader import discover_modules
-from suijin.tools.availability import (
+from suijin.modules.tools.lib.availability import (
     install_hint,
     missing_binaries,
     tool_dependencies,

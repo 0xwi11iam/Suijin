@@ -153,7 +153,7 @@ def build_snapshot() -> dict:
     # modules / tools
     try:
         from suijin.modules.loader import discover_modules, get_module_tools
-        from suijin.tools.availability import missing_binaries
+        from suijin.modules.tools.lib.availability import missing_binaries
 
         discover_modules()
         snap["tools"] = {
@@ -311,7 +311,7 @@ def create_app() -> Flask:
 
     @app.get("/api/kb/search")
     def kb_search():
-        from suijin.tools.intel import search_kb
+        from suijin.modules.tools.lib.intel import search_kb
 
         q = request.args.get("q", "").strip()
         limit = int(request.args.get("limit", 5))

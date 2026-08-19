@@ -1,8 +1,10 @@
-"""DEPRECATED (v4.1 modularisation): lives at suijin.modules.knowledge.lib.kb_tools. Lazy shim."""
+"""DEPRECATED (v4.1 modularisation): lives at suijin.modules.knowledge.lib.kb_tools. Lazy shim.
+
+Pure-delegation: every attribute read resolves against the canonical
+module at ACCESS time, so monkeypatch.setattr on either module is
+visible through both (the star-import snapshot was patch-blind)."""
 
 import importlib as _il
-
-from suijin.modules.knowledge.lib.kb_tools import *  # noqa: F401,F403
 
 _target = _il.import_module("suijin.modules.knowledge.lib.kb_tools")
 __all__ = [n for n in dir(_target) if not n.startswith("__")]

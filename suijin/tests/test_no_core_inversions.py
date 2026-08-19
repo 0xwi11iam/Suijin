@@ -49,7 +49,7 @@ def test_no_tools_to_core_inversions():
 
 class TestServiceSeam:
     def test_register_and_get(self):
-        from suijin.tools import services
+        from suijin.modules.tools.lib import services
 
         def make():
             return {"kind": "scorer"}
@@ -58,12 +58,12 @@ class TestServiceSeam:
         assert services.get("traffic_scorer")["kind"] == "scorer"
 
     def test_get_missing_returns_none(self):
-        from suijin.tools import services
+        from suijin.modules.tools.lib import services
 
         assert services.get("definitely_not_registered_xyz") is None
 
     def test_last_registration_wins(self):
-        from suijin.tools import services
+        from suijin.modules.tools.lib import services
 
         services.register("seam_test", lambda: 1)
         services.register("seam_test", lambda: 2)
@@ -72,7 +72,7 @@ class TestServiceSeam:
     def test_producers_lazy(self):
         """Producers must be callables invoked at GET time — nothing should
         execute at registration (kernel rule: no import side effects)."""
-        from suijin.tools import services
+        from suijin.modules.tools.lib import services
 
         calls = []
         services.register("seam_lazy", lambda: calls.append(1) or "made")
@@ -81,7 +81,7 @@ class TestServiceSeam:
         assert calls == [1]
 
     def test_core_services_registered_at_runtime_init(self):
-        from suijin.tools import services
+        from suijin.modules.tools.lib import services
 
         if not services.has("traffic_scorer"):
             import pytest

@@ -1,63 +1,18 @@
-"""
-Session Replay — save and resume engagements from LangGraph checkpoints.
-"""
+"""DEPRECATED (v4.1 modularisation): lives at suijin.modules.tools.lib.session_replay. Lazy shim.
 
-from __future__ import annotations
+Pure-delegation: every attribute read resolves against the canonical
+module at ACCESS time, so monkeypatch.setattr on either module is
+visible through both."""
 
-import json
-from datetime import datetime, timezone
-from pathlib import Path
+import importlib as _il
 
-from suijin.tools.workspace import WORKSPACE_DIR
-
-REPLAY_DIR = WORKSPACE_DIR / "sessions"
-REPLAY_DIR.mkdir(parents=True, exist_ok=True)
+_target = _il.import_module("suijin.modules.tools.lib.session_replay")
+__all__ = [x for x in dir(_target) if not x.startswith("__")]
 
 
-def save_session(thread_id: str, objective: str, config: dict, state: dict, cost: float = 0):
-    """Save agent session state for later replay."""
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    data = {
-        "thread_id": thread_id,
-        "objective": objective,
-        "saved_at": ts,
-        "config": config,
-        "state_summary": {
-            "phase": state.get("current_phase", "?"),
-            "iterations": state.get("current_iteration", 0),
-            "trace_count": len(state.get("execution_trace", [])),
-            "message_count": len(state.get("messages", [])),
-            "completion_reason": state.get("completion_reason", ""),
-        },
-        "cost_usd": cost,
-    }
-    path = REPLAY_DIR / f"{thread_id}_{ts}.json"
-    path.write_text(json.dumps(data, indent=2, default=str))
-    return str(path)
+def __getattr__(name):
+    return getattr(_target, name)
 
 
-def list_sessions() -> list:
-    """List all saved sessions."""
-    sessions = []
-    for f in sorted(REPLAY_DIR.glob("*.json"), reverse=True):
-        try:
-            data = json.loads(f.read_text())
-            data["_file"] = str(f)
-            sessions.append(data)
-        except Exception as e:
-            import logging
-
-            logging.getLogger("suijin").warning(f"Session replay failed: {e}")
-            pass
-    return sessions
-
-
-def load_session_summary(session_file: str) -> dict:
-    """Load a saved session summary."""
-    return json.loads(Path(session_file).read_text())
-
-
-def get_latest_session() -> dict | None:
-    """Get the most recent saved session."""
-    sessions = list_sessions()
-    return sessions[0] if sessions else None
+def __dir__():
+    return dir(_target)

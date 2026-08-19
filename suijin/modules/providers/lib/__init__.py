@@ -256,7 +256,7 @@ def generate(
     retries=3,
 ):
     if config is None:
-        from suijin.tools.services import get as _service
+        from suijin.modules.tools.lib.services import get as _service
 
         config = _service("red_config")
 
@@ -267,7 +267,7 @@ def generate(
     # ---------- LobsterTrap proxy check ----------
     if _lobstertrap_available():
         console.print("[bold green][LobsterTrap] Active — inspecting prompt...[/bold green]")
-        from suijin.tools.services import get as _service
+        from suijin.modules.tools.lib.services import get as _service
 
         lt_model = model_id or _service("red_active_model")(config)
         lt_result = _call_via_lobstertrap(messages, lt_model, temp, mtokens)

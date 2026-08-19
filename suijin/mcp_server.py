@@ -157,7 +157,7 @@ SPECIAL_TOOL_NAMES = {"execute_terminal", "suijin_detect", "suijin_kg_attacker",
 
 def _build_backend_tools():
     """One MCP tool per backend tool, with a real name and schema."""
-    from suijin.tools.dispatch import list_route_tools
+    from suijin.modules.tools.lib.dispatch import list_route_tools
 
     module_tools = get_module_tools()
     tools = []
@@ -193,7 +193,7 @@ def _build_backend_tools():
 
 def _make_route_handler(name: str):
     def handler(args):
-        from suijin.tools.dispatch import route_tool
+        from suijin.modules.tools.lib.dispatch import route_tool
 
         result = route_tool(name, args or {}, {})
         header = (
@@ -305,13 +305,13 @@ def _text_content(text, is_error=False):
 def tool_suijin_tool(args):
     tool_name = args.get("tool_name", "")
     tool_args = args.get("args") or {}
-    from suijin.tools.dispatch import route_tool
+    from suijin.modules.tools.lib.dispatch import route_tool
 
     return route_tool(tool_name, tool_args, {})
 
 
 def tool_execute_terminal(args):
-    from suijin.tools.dispatch import execute_terminal
+    from suijin.modules.tools.lib.dispatch import execute_terminal
 
     return execute_terminal(args.get("cmd", ""), timeout=int(args.get("timeout", 30)))
 
@@ -331,7 +331,7 @@ def tool_suijin_kg_attacker(args):
 
 def tool_suijin_status(args):
     from suijin.core.constants import BLUE_LAB_PORT, PROXY_DEFAULT_PORT
-    from suijin.tools.dispatch import list_route_tools
+    from suijin.modules.tools.lib.dispatch import list_route_tools
 
     tools = list_route_tools()
     return json.dumps(

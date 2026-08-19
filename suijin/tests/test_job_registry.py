@@ -9,7 +9,7 @@ tools both delegate to it.
 
 import time
 
-from suijin.tools import job_registry as jr
+from suijin.modules.tools.lib import job_registry as jr
 
 
 class TestJobRegistry:
@@ -60,8 +60,8 @@ class TestJobRegistry:
 
     def test_node_delegates_to_registry(self):
         """execute_tool_node must use THE registry — no private copy."""
+        from suijin.modules.tools.lib import job_registry
         from suijin.nodes import execute_tool_node as node
-        from suijin.tools import job_registry
 
         assert node._jobs is job_registry._jobs
         assert node._job_lock is job_registry._job_lock
@@ -70,7 +70,7 @@ class TestJobRegistry:
         """tools/jobs.py must not import node privates anymore."""
         import inspect
 
-        from suijin.tools import jobs
+        from suijin.modules.tools.lib import jobs
 
         src = inspect.getsource(jobs)
         assert "execute_tool_node" not in src, "jobs.py still reaches into the node"
@@ -84,7 +84,7 @@ class TestJobRegistry:
 
     def test_dispatch_reexports_alive(self):
         """dispatch's _jobs/_job_lock re-exports must point at THE registry."""
-        from suijin.tools import dispatch as dp
-        from suijin.tools import job_registry
+        from suijin.modules.tools.lib import dispatch as dp
+        from suijin.modules.tools.lib import job_registry
 
         assert dp._jobs is job_registry._jobs

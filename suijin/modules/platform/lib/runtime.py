@@ -49,7 +49,7 @@ def init_runtime(force: bool = False) -> None:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         # Service seam (Phase 0, item 5): core capabilities registered as
         # LAZY producers — nothing imports suijin.core from tools directly.
-        from suijin.tools import services as _services
+        from suijin.modules.tools.lib import services as _services
 
         _services.register(
             "traffic_scorer",

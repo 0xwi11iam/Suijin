@@ -11,7 +11,7 @@ import pytest
 
 from suijin.modules.knowledge.lib import kb as kbmod
 from suijin.modules.knowledge.lib.kb import compile_kb, iter_docs, kb_status
-from suijin.tools.intel import _fts_match_expr
+from suijin.modules.tools.lib.intel import _fts_match_expr
 
 
 def _make_tar(files: dict[str, str]) -> bytes:
@@ -124,7 +124,7 @@ class TestIterDocs:
 
 class TestSearchKbTool:
     def test_disabled_when_not_built(self, monkeypatch):
-        from suijin.tools import intel
+        from suijin.modules.tools.lib import intel
 
         monkeypatch.setattr(intel, "DB_PATH", __import__("pathlib").Path("/nonexistent/kb.sqlite3"))
         result = intel.search_kb("sqli")
@@ -132,7 +132,7 @@ class TestSearchKbTool:
         assert "suijin pull kb" in result
 
     def test_fts_search_returns_source_and_snippet(self, fake_env, monkeypatch):
-        from suijin.tools import intel
+        from suijin.modules.tools.lib import intel
 
         compile_kb(db_path=fake_env["db"], cache_dir=fake_env["cache"], log=lambda *_: None)
         monkeypatch.setattr(intel, "DB_PATH", fake_env["db"])
@@ -142,14 +142,14 @@ class TestSearchKbTool:
         assert "union select" in result.lower() or "…" in result
 
     def test_no_match_message(self, fake_env, monkeypatch):
-        from suijin.tools import intel
+        from suijin.modules.tools.lib import intel
 
         compile_kb(db_path=fake_env["db"], cache_dir=fake_env["cache"], log=lambda *_: None)
         monkeypatch.setattr(intel, "DB_PATH", fake_env["db"])
         assert "No matching" in intel.search_kb("zzz nonexistent topic zzz")
 
     def test_like_fallback_when_fts_missing(self, fake_env, monkeypatch):
-        from suijin.tools import intel
+        from suijin.modules.tools.lib import intel
 
         compile_kb(db_path=fake_env["db"], cache_dir=fake_env["cache"], log=lambda *_: None)
         # Simulate a DB built without FTS5: drop the virtual table so the
@@ -334,7 +334,7 @@ class TestPathPatterns:
         assert paths == {"_gtfobins/awk", "_gtfobins/mawk", "_gtfobins/R", "_gtfobins/sub/deep.txt"}
 
     def test_alias_stubs_resolved_to_target_content(self, gtfo_env, monkeypatch):
-        from suijin.tools import intel
+        from suijin.modules.tools.lib import intel
 
         compile_kb(db_path=gtfo_env["db"], cache_dir=gtfo_env["cache"], log=lambda *_: None)
         monkeypatch.setattr(intel, "DB_PATH", gtfo_env["db"])
@@ -361,7 +361,7 @@ class TestPathPatterns:
 
 class TestSearchKbSourceFilterAndLimit:
     def test_source_filter_scopes_results(self, fake_env, monkeypatch):
-        from suijin.tools import intel
+        from suijin.modules.tools.lib import intel
 
         compile_kb(db_path=fake_env["db"], cache_dir=fake_env["cache"], log=lambda *_: None)
         monkeypatch.setattr(intel, "DB_PATH", fake_env["db"])
@@ -370,7 +370,7 @@ class TestSearchKbSourceFilterAndLimit:
         assert "[payloads]" not in result
 
     def test_source_filter_unknown_reports_available(self, fake_env, monkeypatch):
-        from suijin.tools import intel
+        from suijin.modules.tools.lib import intel
 
         compile_kb(db_path=fake_env["db"], cache_dir=fake_env["cache"], log=lambda *_: None)
         monkeypatch.setattr(intel, "DB_PATH", fake_env["db"])
@@ -379,7 +379,7 @@ class TestSearchKbSourceFilterAndLimit:
         assert "payloads" in result and "seclists" in result
 
     def test_limit_clamps_results(self, fake_env, monkeypatch):
-        from suijin.tools import intel
+        from suijin.modules.tools.lib import intel
 
         compile_kb(db_path=fake_env["db"], cache_dir=fake_env["cache"], log=lambda *_: None)
         monkeypatch.setattr(intel, "DB_PATH", fake_env["db"])
@@ -390,7 +390,7 @@ class TestSearchKbSourceFilterAndLimit:
         assert intel.search_kb("union select", limit="garbage").count("--- [") <= 5
 
     def test_source_filter_with_like_fallback(self, fake_env, monkeypatch):
-        from suijin.tools import intel
+        from suijin.modules.tools.lib import intel
 
         compile_kb(db_path=fake_env["db"], cache_dir=fake_env["cache"], log=lambda *_: None)
         conn = sqlite3.connect(fake_env["db"])
@@ -471,7 +471,7 @@ class TestCatalogFeatureGating:
     def test_catalog_lists_disabled_when_no_db(self, monkeypatch):
         import suijin.modules.knowledge.lib.kb as kb_mod
         from suijin.modules.knowledge.lib.kb import DB_PATH as real_db
-        from suijin.tools import dispatch
+        from suijin.modules.tools.lib import dispatch
 
         monkeypatch.setattr(kb_mod, "DB_PATH", real_db.parent / "definitely_missing_kb.sqlite3")
         catalog = dispatch.get_tool_catalog()
@@ -480,7 +480,7 @@ class TestCatalogFeatureGating:
 
     def test_catalog_advertises_search_kb_when_built(self, fake_env, monkeypatch):
         import suijin.modules.knowledge.lib.kb as kb_mod
-        from suijin.tools import dispatch
+        from suijin.modules.tools.lib import dispatch
 
         compile_kb(db_path=fake_env["db"], cache_dir=fake_env["cache"], log=lambda *_: None)
         monkeypatch.setattr(kb_mod, "DB_PATH", fake_env["db"])

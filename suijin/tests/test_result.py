@@ -1,6 +1,6 @@
 """Tests for suijin/tools/result.py — structured command results."""
 
-from suijin.tools.result import CommandResult, run_command
+from suijin.modules.tools.lib.result import CommandResult, run_command
 
 
 class TestCommandResult:
@@ -37,7 +37,7 @@ class TestRunCommand:
         assert "command not found" in r.stderr
 
     def test_execute_terminal_structured(self):
-        from suijin.tools.terminal import execute_terminal
+        from suijin.modules.tools.lib.terminal import execute_terminal
 
         result = execute_terminal("echo structured_term_ok")
         assert "[COMMAND] echo structured_term_ok" in result
@@ -47,7 +47,7 @@ class TestRunCommand:
 
 class TestStreaming:
     def test_run_command_streams_lines_to_sink(self):
-        from suijin.tools.result import clear_stream_sink, set_stream_sink
+        from suijin.modules.tools.lib.result import clear_stream_sink, set_stream_sink
 
         received = []
         set_stream_sink(received.append)
@@ -60,7 +60,7 @@ class TestStreaming:
         assert "line3" in r.stdout
 
     def test_run_command_streaming_timeout(self):
-        from suijin.tools.result import clear_stream_sink, set_stream_sink
+        from suijin.modules.tools.lib.result import clear_stream_sink, set_stream_sink
 
         received = []
         set_stream_sink(received.append)
@@ -76,8 +76,8 @@ class TestBackgroundJobStreaming:
     def test_spawn_background_job_streams_output(self):
         import time
 
+        from suijin.modules.tools.lib.result import run_command
         from suijin.nodes.execute_tool_node import _job_lock, _jobs, _spawn_background_job
-        from suijin.tools.result import run_command
 
         def fake_route(tool, args, config):
             return run_command("for i in 1 2 3; do echo jobline$i; sleep 0.05; done", shell=True).format()

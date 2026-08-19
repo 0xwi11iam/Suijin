@@ -317,7 +317,7 @@ class TestProvidersProbe:
 
 class TestModuleNotify:
     def test_module_init_and_validate(self, monkeypatch, tmp_path):
-        from suijin.tools import module_sdk
+        from suijin.modules.tools.lib import module_sdk
 
         monkeypatch.setattr(module_sdk, "MODULES_ROOT", tmp_path)
         code, out = run_cli(["module", "init", "smoke_pack"])
@@ -327,7 +327,7 @@ class TestModuleNotify:
         assert code == 0 and "valid" in out
 
     def test_module_init_rejects_duplicate(self, monkeypatch, tmp_path):
-        from suijin.tools import module_sdk
+        from suijin.modules.tools.lib import module_sdk
 
         monkeypatch.setattr(module_sdk, "MODULES_ROOT", tmp_path)
         run_cli(["module", "init", "dup"])

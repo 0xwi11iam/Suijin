@@ -18,8 +18,8 @@ console = Console()
 def force_report(agent, thread_id, final_state, objective, config):
     """Generate a full engagement report on demand."""
     from suijin.modules.loader import load_local_module
-    from suijin.tools.audit_trail import get_audit_json
-    from suijin.tools.report_exporter import generate_report
+    from suijin.modules.tools.lib.audit_trail import get_audit_json
+    from suijin.modules.tools.lib.report_exporter import generate_report
 
     providers = load_local_module("providers")
     state = final_state or agent.get_state(thread_id) or {}
@@ -38,14 +38,14 @@ def force_report(agent, thread_id, final_state, objective, config):
     console.print(f"[green]Report saved: {path}[/green]")
     # Also end audit trail
     from suijin.modules.loader import load_local_module as _llm
-    from suijin.tools.audit_trail import end_audit
+    from suijin.modules.tools.lib.audit_trail import end_audit
 
     end_audit(_llm("providers").USAGE.get("est_cost_usd", 0))
 
 
 def print_audit_trail():
     """Print a summary of the current audit trail."""
-    from suijin.tools.audit_trail import get_audit_json
+    from suijin.modules.tools.lib.audit_trail import get_audit_json
 
     trail = get_audit_json()
     if not trail or not trail.get("iterations"):
@@ -87,7 +87,7 @@ def build_attack_chains(trace: list) -> list:
 
 def list_sessions():
     """List saved sessions for replay."""
-    from suijin.tools.session_replay import list_sessions as _list
+    from suijin.modules.tools.lib.session_replay import list_sessions as _list
 
     sessions = _list()
     if not sessions:

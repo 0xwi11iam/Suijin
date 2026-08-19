@@ -1,6 +1,6 @@
 """Tests for suijin/tools/recon.py — recon chaining and version-to-CVE."""
 
-from suijin.tools.recon import parse_services, recon_chain, version_to_cves
+from suijin.modules.tools.lib.recon import parse_services, recon_chain, version_to_cves
 
 NMAP_OUT = """[COMMAND] nmap -sV -sC -T4 127.0.0.1
 [EXIT] 0 (2.0s)
@@ -32,7 +32,7 @@ class TestVersionToCves:
             called.append((software, version))
             return f"CVE for {software} {version}"
 
-        monkeypatch.setattr("suijin.tools.intel.search_cve", fake_search_cve)
+        monkeypatch.setattr("suijin.modules.tools.lib.intel.search_cve", fake_search_cve)
         services = [{"port": 80, "proto": "tcp", "service": "http", "banner": "Apache httpd 2.4.49"}]
         results = version_to_cves(services, {})
         assert results[0][1] == "httpd"
@@ -50,7 +50,7 @@ class TestReconChain:
         def fake_search_cve(software, config, version=None, limit=5):
             return f"CVE for {software} {version}"
 
-        monkeypatch.setattr("suijin.tools.intel.search_cve", fake_search_cve)
+        monkeypatch.setattr("suijin.modules.tools.lib.intel.search_cve", fake_search_cve)
 
         report = recon_chain("127.0.0.1", config={})
         assert "# Recon chain: 127.0.0.1" in report

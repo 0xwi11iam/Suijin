@@ -9,7 +9,7 @@ import pytest
 from suijin.modules.knowledge.lib import cve_mirror, kb_tools
 from suijin.modules.knowledge.lib import kb as kbmod
 from suijin.modules.knowledge.lib.kb import compile_kb, kb_diff, read_doc
-from suijin.tools.wordlist_mutator import cewl_words, extract_words, mutate_wordlist
+from suijin.modules.tools.lib.wordlist_mutator import cewl_words, extract_words, mutate_wordlist
 
 
 def _make_tar(files: dict[str, str]) -> bytes:
@@ -90,7 +90,7 @@ class TestKbRead:
             read_doc("shared_name", cache_dir=kb_env["cache"])
 
     def test_kb_read_agent_tool(self, kb_env, monkeypatch):
-        from suijin.tools import dispatch
+        from suijin.modules.tools.lib import dispatch
 
         out = dispatch.route_tool("kb_read", {"path": "_gtfobins/awk"}, {})
         assert "[gtfobins]" in out
@@ -211,7 +211,7 @@ class TestKevMirror:
         assert cve_mirror.search_kev("totally unrelated thing") == []
 
     def test_search_cve_falls_back_to_kev(self, tmp_path, monkeypatch):
-        from suijin.tools import intel
+        from suijin.modules.tools.lib import intel
 
         monkeypatch.setattr(cve_mirror, "CVE_CACHE_DIR", tmp_path)
         monkeypatch.setattr(cve_mirror, "KEV_PATH", tmp_path / "kev.json")
@@ -256,7 +256,7 @@ class TestKevMirror:
 
 class TestMutateWordlist:
     def test_expansion(self, tmp_path, monkeypatch):
-        from suijin.tools import wordlist_mutator as wm
+        from suijin.modules.tools.lib import wordlist_mutator as wm
 
         monkeypatch.setattr(wm, "WORKSPACE_DIR", tmp_path)
         monkeypatch.setattr(wm, "resolve_workspace_path", lambda p: (tmp_path / p).resolve())
@@ -283,7 +283,7 @@ class TestCewl:
         assert all(len(w) >= 3 for w in words)
 
     def test_cewl_fetches_and_writes(self, tmp_path, monkeypatch):
-        from suijin.tools import wordlist_mutator as wm
+        from suijin.modules.tools.lib import wordlist_mutator as wm
 
         monkeypatch.setattr(wm, "WORKSPACE_DIR", tmp_path)
         monkeypatch.setattr(wm, "resolve_workspace_path", lambda p: (tmp_path / p).resolve())

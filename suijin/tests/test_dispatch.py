@@ -15,24 +15,24 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 class TestPureHelpers:
     def test_truncate_short(self):
-        from suijin.tools.dispatch import truncate
+        from suijin.modules.tools.lib.dispatch import truncate
 
         assert truncate("hello") == "hello"
 
     def test_truncate_long(self):
-        from suijin.tools.dispatch import truncate
+        from suijin.modules.tools.lib.dispatch import truncate
 
         result = truncate("x" * 60000, limit=50000)
         assert result.startswith("x" * 50000)
         assert "TRUNCATED" in result
 
     def test_truncate_empty(self):
-        from suijin.tools.dispatch import truncate
+        from suijin.modules.tools.lib.dispatch import truncate
 
         assert truncate("") == ""
 
     def test_proxy_state_management(self):
-        from suijin.tools.dispatch import get_proxy, reset_recon_state, set_proxy
+        from suijin.modules.tools.lib.dispatch import get_proxy, reset_recon_state, set_proxy
 
         set_proxy("http://proxy.example:8080")
         assert get_proxy() == "http://proxy.example:8080"
@@ -45,14 +45,14 @@ class TestExecuteTerminalSafety:
     """Guardrails + self-kill protection without real subprocess."""
 
     def test_empty_command(self):
-        from suijin.tools.dispatch import execute_terminal
+        from suijin.modules.tools.lib.dispatch import execute_terminal
 
         result = execute_terminal("")
         assert "No command" in result
 
     def test_self_kill_protection(self):
         """Command that kills the agent's own PID must be refused."""
-        from suijin.tools.dispatch import execute_terminal
+        from suijin.modules.tools.lib.dispatch import execute_terminal
 
         my_pid = str(os.getpid())
         result = execute_terminal(f"kill -9 {my_pid}")
@@ -61,15 +61,15 @@ class TestExecuteTerminalSafety:
 
     def test_dangerous_command_blocked(self):
         """rm -rf / must be blocked by guardrails."""
-        from suijin.tools.dispatch import execute_terminal
+        from suijin.modules.tools.lib.dispatch import execute_terminal
 
         result = execute_terminal("rm -rf /")
         assert "denied" in result.lower()
 
     def test_safe_command_executes(self, monkeypatch):
         """Safe command runs via mocked subprocess."""
-        import suijin.tools.dispatch as d
-        import suijin.tools.result as result_mod
+        import suijin.modules.tools.lib.dispatch as d
+        import suijin.modules.tools.lib.result as result_mod
 
         calls = {}
 
@@ -92,8 +92,8 @@ class TestExecuteTerminalSafety:
         """Timeout errors surface as error messages, not crashes."""
         import subprocess as sp
 
-        import suijin.tools.dispatch as d
-        import suijin.tools.result as result_mod
+        import suijin.modules.tools.lib.dispatch as d
+        import suijin.modules.tools.lib.result as result_mod
 
         def mock_run(cmd, **kwargs):
             raise sp.TimeoutExpired(cmd, timeout=1)
@@ -105,7 +105,7 @@ class TestExecuteTerminalSafety:
 
 class TestFileOps:
     def test_read_file_missing(self):
-        from suijin.tools.dispatch import read_file
+        from suijin.modules.tools.lib.dispatch import read_file
 
         # Use an allowlisted path (/tmp) that doesn't exist
         result = read_file("/tmp/suijin_definitely_missing_file_xyz.txt")
@@ -114,7 +114,7 @@ class TestFileOps:
 
     def test_read_file_outside_workspace_rejected(self):
         """Absolute paths outside workspace + allowlist are rejected."""
-        from suijin.tools.dispatch import read_file
+        from suijin.modules.tools.lib.dispatch import read_file
 
         with pytest.raises(PermissionError):
             read_file("/etc/passwd")
@@ -123,7 +123,7 @@ class TestFileOps:
         """Write to /tmp (allowlisted) and read it back."""
         import uuid
 
-        from suijin.tools.dispatch import read_file, write_file
+        from suijin.modules.tools.lib.dispatch import read_file, write_file
 
         path = f"/tmp/suijin_test_{uuid.uuid4().hex[:8]}.txt"
         try:
@@ -139,7 +139,7 @@ class TestFileOps:
         """Relative paths resolve into the agent workspace."""
         import uuid
 
-        from suijin.tools.dispatch import read_file, write_file
+        from suijin.modules.tools.lib.dispatch import read_file, write_file
 
         rel = f"outputs/test_{uuid.uuid4().hex[:8]}.txt"
         try:
@@ -157,19 +157,19 @@ class TestFileOps:
 
 class TestCVSSHelpers:
     def test_is_kev_true(self):
-        from suijin.tools.dispatch import _is_kev
+        from suijin.modules.tools.lib.dispatch import _is_kev
 
         assert _is_kev({"cisaExploitAdd": "2024-01-01"}) is True
         assert _is_kev({"cisaActionDue": "2024-02-01"}) is True
 
     def test_is_kev_false(self):
-        from suijin.tools.dispatch import _is_kev
+        from suijin.modules.tools.lib.dispatch import _is_kev
 
         assert _is_kev({}) is False
         assert _is_kev({"vulnStatus": "Analyzed"}) is False
 
     def test_extract_cvss_v31(self):
-        from suijin.tools.dispatch import _extract_cvss
+        from suijin.modules.tools.lib.dispatch import _extract_cvss
 
         cve_data = {"metrics": {"cvssMetricV31": [{"cvssData": {"baseScore": 9.8, "baseSeverity": "CRITICAL"}}]}}
         score, severity = _extract_cvss(cve_data)
@@ -177,7 +177,7 @@ class TestCVSSHelpers:
         assert severity == "CRITICAL"
 
     def test_extract_cvss_v30(self):
-        from suijin.tools.dispatch import _extract_cvss
+        from suijin.modules.tools.lib.dispatch import _extract_cvss
 
         cve_data = {"metrics": {"cvssMetricV30": [{"cvssData": {"baseScore": 7.5, "baseSeverity": "HIGH"}}]}}
         score, severity = _extract_cvss(cve_data)
@@ -185,7 +185,7 @@ class TestCVSSHelpers:
         assert severity == "HIGH"
 
     def test_extract_cvss_missing_returns_na(self):
-        from suijin.tools.dispatch import _extract_cvss
+        from suijin.modules.tools.lib.dispatch import _extract_cvss
 
         score, severity = _extract_cvss({})
         assert score == "N/A"
@@ -194,19 +194,19 @@ class TestCVSSHelpers:
 
 class TestJobTracking:
     def test_job_status_unknown(self):
-        from suijin.tools.dispatch import _job_status
+        from suijin.modules.tools.lib.dispatch import _job_status
 
         result = _job_status("nonexistent-job-id")
         assert isinstance(result, str)
 
     def test_job_list(self):
-        from suijin.tools.dispatch import _job_list
+        from suijin.modules.tools.lib.dispatch import _job_list
 
         result = _job_list()
         assert isinstance(result, str)
 
     def test_job_cancel_unknown(self):
-        from suijin.tools.dispatch import _job_cancel
+        from suijin.modules.tools.lib.dispatch import _job_cancel
 
         result = _job_cancel("nonexistent-job-id")
         assert isinstance(result, str)
@@ -214,7 +214,7 @@ class TestJobTracking:
 
 class TestRouteTool:
     def test_unknown_tool(self):
-        from suijin.tools.dispatch import route_tool
+        from suijin.modules.tools.lib.dispatch import route_tool
 
         result = route_tool("nonexistent_tool_xyz", {}, {})
         assert "Invalid Tool" in result
@@ -225,7 +225,7 @@ class TestRouteTool:
         Module tools (from Tools/) shadow builtin routes, so we neutralize
         get_module_tools first to test the builtin route.
         """
-        import suijin.tools.dispatch as d
+        import suijin.modules.tools.lib.dispatch as d
 
         def mock_http(method, url, headers=None, body=""):
             return "Mocked response"
@@ -236,7 +236,7 @@ class TestRouteTool:
         assert "Mocked" in result
 
     def test_route_execute_terminal_self_kill(self):
-        from suijin.tools.dispatch import route_tool
+        from suijin.modules.tools.lib.dispatch import route_tool
 
         my_pid = str(os.getpid())
         result = route_tool("execute_terminal", {"cmd": f"kill {my_pid}"}, {})
@@ -244,19 +244,19 @@ class TestRouteTool:
 
     def test_route_deploy_subagent_guidance(self):
         """deploy_subagent used as tool_name must return self-correction guidance."""
-        from suijin.tools.dispatch import route_tool
+        from suijin.modules.tools.lib.dispatch import route_tool
 
         result = route_tool("deploy_subagent", {}, {})
         assert "WRONG FORMAT" in result
 
     def test_route_claim_flag(self):
-        from suijin.tools.dispatch import route_tool
+        from suijin.modules.tools.lib.dispatch import route_tool
 
         result = route_tool("claim_flag", {"flag": "FLAG{test}"}, {})
         assert "FLAG{test}" in result
 
     def test_get_tool_catalog_is_markdown(self):
-        from suijin.tools.dispatch import get_tool_catalog
+        from suijin.modules.tools.lib.dispatch import get_tool_catalog
 
         catalog = get_tool_catalog()
         assert isinstance(catalog, str)

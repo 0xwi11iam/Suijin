@@ -5,7 +5,7 @@ at the dispatch chokepoint (tools/modes.py) so they cannot be bypassed by a
 misbehaving model.
 """
 
-from suijin.tools.modes import _segment_binaries, check_mode_restrictions
+from suijin.modules.tools.lib.modes import _segment_binaries, check_mode_restrictions
 
 
 class TestSegmentBinaries:
@@ -94,13 +94,13 @@ class TestRouteToolEnforcement:
     """The modes must be enforced by the public dispatcher, not just the helper."""
 
     def test_route_tool_blocks_in_hitl(self):
-        from suijin.tools.dispatch import route_tool
+        from suijin.modules.tools.lib.dispatch import route_tool
 
         result = route_tool("msf_run", {"module": "exploit/unix/ftp"}, {"mode_hitl": True})
         assert isinstance(result, str) and "HITL" in result
 
     def test_route_tool_allows_when_off(self):
-        from suijin.tools.dispatch import route_tool
+        from suijin.modules.tools.lib.dispatch import route_tool
 
         # route to a tool that does no harm with empty args
         result = route_tool("search_kb", {"keyword": ""}, {"mode_hitl": False})

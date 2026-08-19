@@ -80,7 +80,7 @@ def main():
 
     # Startup availability banner — warn about missing tools before the menu.
     try:
-        from suijin.tools.availability import startup_banner
+        from suijin.modules.tools.lib.availability import startup_banner
 
         banner = startup_banner()
         if banner:

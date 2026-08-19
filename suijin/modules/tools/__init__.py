@@ -55,7 +55,7 @@ def _core_routes(pack_manifest_roots=None) -> dict:
     manifest is excluded — even if the bridge runs before the pack's
     start() (core tier boots first). The pack owns its declarations;
     the bridge must never squat on them."""
-    from suijin.tools import dispatch
+    from suijin.modules.tools.lib import dispatch
 
     routes = dict(dispatch._build_routes(None))
     if not pack_manifest_roots:

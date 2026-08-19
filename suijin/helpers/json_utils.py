@@ -1,8 +1,10 @@
-"""DEPRECATED (v4.1 modularisation): lives at suijin.modules.platform.lib.helpers.json_utils. Lazy shim."""
+"""DEPRECATED (v4.1 modularisation): lives at suijin.modules.platform.lib.helpers.json_utils. Lazy shim.
+
+Pure-delegation: every attribute read resolves against the canonical
+module at ACCESS time, so monkeypatch.setattr on either module is
+visible through both (the star-import snapshot was patch-blind)."""
 
 import importlib as _il
-
-from suijin.modules.platform.lib.helpers.json_utils import *  # noqa: F401,F403 — re-export public names
 
 _target = _il.import_module("suijin.modules.platform.lib.helpers.json_utils")
 __all__ = [n for n in dir(_target) if not n.startswith("__")]

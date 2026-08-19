@@ -410,7 +410,7 @@ def run_status() -> int:
 
 def run_tools_list() -> int:
     """Every callable agent tool, core + module, with availability marks."""
-    from suijin.tools.dispatch import list_route_tools
+    from suijin.modules.tools.lib.dispatch import list_route_tools
 
     core = sorted(list_route_tools())
     print(f"Core tools ({len(core)}):")
@@ -418,7 +418,7 @@ def run_tools_list() -> int:
         print(f"  {t}")
     try:
         from suijin.modules.loader import discover_modules, get_loaded_modules
-        from suijin.tools.availability import missing_binaries
+        from suijin.modules.tools.lib.availability import missing_binaries
 
         discover_modules()
         unavail = missing_binaries()
@@ -466,7 +466,7 @@ def run_modules_list() -> int:
 
 def run_skills_list() -> int:
     """Attack/defense skills the agent can edit via the edit_skill tool."""
-    from suijin.tools.self_improve import list_available_skills
+    from suijin.modules.tools.lib.self_improve import list_available_skills
 
     out = list_available_skills()
     print(out)
@@ -833,7 +833,7 @@ def run_selftest() -> int:
 
     def _imports():
         import suijin.modules.knowledge.lib.kb  # noqa: F401
-        import suijin.tools.dispatch  # noqa: F401 — pulls runtime, workspace, kb
+        import suijin.modules.tools.lib.dispatch  # noqa: F401 — pulls runtime, workspace, kb
 
         return "ok"
 
@@ -848,7 +848,7 @@ def run_selftest() -> int:
     def _catalog_gating():
         import suijin.modules.knowledge.lib.kb as kb_mod
         from suijin.modules.knowledge.lib.kb import DB_PATH as real_db
-        from suijin.tools import dispatch
+        from suijin.modules.tools.lib import dispatch
 
         built = dispatch.get_tool_catalog()
         with patch.object(kb_mod, "DB_PATH", real_db.parent / "_selftest_missing_.sqlite3"):
@@ -875,7 +875,7 @@ def run_selftest() -> int:
     def _sandbox():
         from pathlib import Path
 
-        from suijin.infra import job_runner
+        from suijin.modules.platform.lib.infra import job_runner
         from suijin.tools.workspace import WORKSPACE_DIR
 
         wd = Path(job_runner.get_sandbox_workdir())
@@ -1169,7 +1169,7 @@ def run_module_manager(args) -> int:
 
 
 def run_module(args) -> int:
-    from suijin.tools import module_sdk
+    from suijin.modules.tools.lib import module_sdk
 
     action = getattr(args, "module_action", "validate")
     if action == "init":
@@ -1191,7 +1191,7 @@ def run_module(args) -> int:
 
 
 def run_skills(args) -> int:
-    from suijin.tools import self_improve as si
+    from suijin.modules.tools.lib import self_improve as si
 
     action = getattr(args, "skills_action", "list")
     if action == "list":

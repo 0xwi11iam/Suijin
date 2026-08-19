@@ -1,54 +1,18 @@
-"""Analysis & reporting tool wrappers (payloads, diffing, rate limits, reports)."""
+"""DEPRECATED (v4.1 modularisation): lives at suijin.modules.tools.lib.reporting. Lazy shim.
 
-from __future__ import annotations
+Pure-delegation: every attribute read resolves against the canonical
+module at ACCESS time, so monkeypatch.setattr on either module is
+visible through both."""
 
+import importlib as _il
 
-def _payload_gen(vuln_type: str, framework: str = "") -> str:
-    from suijin.tools.payload_generator import generate_payloads, list_payload_types
-
-    if not vuln_type:
-        return list_payload_types()
-    return generate_payloads(vuln_type, framework=framework)
-
-
-def _diff_resp(baseline: str, injected: str, sensitivity: str = "medium") -> str:
-    from suijin.tools.diff_engine import diff_responses, quick_diff
-
-    if len(baseline) < 200 and "http" not in baseline.lower():
-        return quick_diff(baseline, injected)
-    import json
-
-    return json.dumps(diff_responses(baseline, injected, sensitivity), indent=2)
+_target = _il.import_module("suijin.modules.tools.lib.reporting")
+__all__ = [x for x in dir(_target) if not x.startswith("__")]
 
 
-def _rate_check(endpoint: str) -> str:
-    import json
-
-    from suijin.tools.rate_limit_detector import check_rate_limit
-
-    return json.dumps(check_rate_limit(endpoint), indent=2)
+def __getattr__(name):
+    return getattr(_target, name)
 
 
-def _rate_all() -> str:
-    from suijin.tools.rate_limit_detector import get_all_endpoints_status
-
-    return get_all_endpoints_status()
-
-
-def _attack_tree(trace_json: str) -> str:
-    import json
-
-    from suijin.tools.attack_tree import build_attack_tree
-
-    trace = json.loads(trace_json) if trace_json else []
-    return build_attack_tree(trace)
-
-
-def _gen_report(engagement: str, trace_json: str, findings_json: str) -> str:
-    import json
-
-    from suijin.tools.report_exporter import generate_report
-
-    trace = json.loads(trace_json) if trace_json else []
-    findings = json.loads(findings_json) if findings_json else []
-    return generate_report(engagement, trace, findings, {}, [], 0)
+def __dir__():
+    return dir(_target)

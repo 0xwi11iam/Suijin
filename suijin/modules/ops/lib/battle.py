@@ -25,7 +25,7 @@ from rich.table import Table
 
 def score_request(req, profile, **kw):
     """Blue scorer via the service seam (no tools→core import)."""
-    from suijin.tools.services import get as _service
+    from suijin.modules.tools.lib.services import get as _service
 
     fn = _service("traffic_scorer")
     return fn(req, profile, **kw)

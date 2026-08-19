@@ -76,13 +76,13 @@ class TestCanonicalLayout:
         assert inner.is_symlink() or not inner.exists()
 
     def test_sandbox_inside_workspace(self):
-        from suijin.infra import job_runner
+        from suijin.modules.platform.lib.infra import job_runner
 
         wd = Path(job_runner.get_sandbox_workdir())
         assert str(wd).startswith(str(ws.WORKSPACE_DIR))
 
     def test_report_default_paths_anchored(self, tmp_path, monkeypatch):
-        from suijin.tools import burp_export, html_report
+        from suijin.modules.tools.lib import burp_export, html_report
 
         monkeypatch.setattr(burp_export, "WORKSPACE_DIR", tmp_path)
         p = burp_export.export_burp_xml([{"finding_type": "xss", "description": "d"}])
@@ -92,7 +92,7 @@ class TestCanonicalLayout:
         assert str(p).startswith(str(tmp_path / "reports"))
 
     def test_tool_dirs_point_at_root(self):
-        from suijin.tools import audit_trail, report_exporter, session_replay
+        from suijin.modules.tools.lib import audit_trail, report_exporter, session_replay
 
         for d in (audit_trail.AUDIT_DIR, report_exporter.REPORTS_DIR, session_replay.REPLAY_DIR):
             assert str(d).startswith(str(ws.WORKSPACE_DIR)), d

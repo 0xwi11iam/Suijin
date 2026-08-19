@@ -187,7 +187,7 @@ def suggest_exploit(service: str, version: str = "") -> str:
         out.append("  " + row[1].replace("\n", "\n  ")[:600])
 
     # 2/3. HackTricks + PayloadsAllTheThings FTS hits via search_kb
-    from suijin.tools.intel import search_kb  # tools module (slice 5)
+    from suijin.modules.tools.lib.intel import search_kb  # tools module (slice 5)
 
     for source, label in (("hacktricks", "hacktricks"), ("payloads", "payloads")):
         res = search_kb(f"source:{source} {service}", limit=3)
@@ -229,7 +229,7 @@ def extract_payloads(keyword: str, max_payloads: int = 10) -> str:
         return "Error: keyword required (e.g. 'reverse shell bash', 'sqli union bypass')."
     if not DB_PATH.exists():
         return "Knowledge base DISABLED. Run 'suijin pull kb' first."
-    from suijin.tools.intel import search_kb  # tools module (slice 5)
+    from suijin.modules.tools.lib.intel import search_kb  # tools module (slice 5)
 
     res = search_kb(keyword, limit=5)
     if res.startswith("No matching"):

@@ -7,7 +7,7 @@ import time
 import pytest
 from rich.console import Console
 
-from suijin.tools.run_commands import RunBox
+from suijin.modules.tools.lib.run_commands import RunBox
 
 
 def make_box(**kw):
@@ -79,7 +79,7 @@ class TestDispatch:
 
 class TestLiveHandlers:
     def test_note_written(self, tmp_path, monkeypatch):
-        from suijin.tools import intel
+        from suijin.modules.tools.lib import intel
 
         notes = tmp_path / ".notes"
         monkeypatch.setattr(intel, "NOTES_DIR", notes)
@@ -196,7 +196,7 @@ class TestHitlTerminalApprovals:
         return ap
 
     def test_blocked_binary_queues_with_reason(self):
-        from suijin.tools import dispatch
+        from suijin.modules.tools.lib import dispatch
 
         dispatch.route_tool("execute_terminal", {"cmd": "hydra -l admin -P wl 10.0.0.1"}, {"mode_hitl": True})
         from suijin.modules.ops.lib.approvals import list_approvals
@@ -206,7 +206,7 @@ class TestHitlTerminalApprovals:
 
     def test_approving_execute_terminal_allows_binary(self):
         from suijin.modules.ops.lib import approvals as ap
-        from suijin.tools import dispatch, modes
+        from suijin.modules.tools.lib import dispatch, modes
 
         dispatch.route_tool("execute_terminal", {"cmd": "sqlmap -u http://10.0.0.1"}, {"mode_hitl": True})
         item = [i for i in ap.list_approvals() if i["tool"] == "execute_terminal"][-1]
@@ -219,7 +219,7 @@ class TestHitlTerminalApprovals:
 
     def test_denying_reports_in_block_message(self):
         from suijin.modules.ops.lib import approvals as ap
-        from suijin.tools import dispatch
+        from suijin.modules.tools.lib import dispatch
 
         dispatch.route_tool("execute_terminal", {"cmd": "hydra x"}, {"mode_hitl": True})
         item = [i for i in ap.list_approvals() if i["tool"] == "execute_terminal"][-1]

@@ -4,8 +4,8 @@ stealth UA rotation, and the http_request tool surface (mocked transport —
 no network).
 """
 
-from suijin.tools import http_tools
-from suijin.tools.session_aware import (
+from suijin.modules.tools.lib import http_tools
+from suijin.modules.tools.lib.session_aware import (
     RateLimitTracker,
     SessionState,
     get_random_ua,
@@ -107,7 +107,7 @@ class TestHttpRequestTool:
 
     def test_rate_limited_short_circuits(self, monkeypatch):
         self._patch_session(monkeypatch, _FakeResp())
-        import suijin.tools.session_aware as sa
+        import suijin.modules.tools.lib.session_aware as sa
 
         monkeypatch.setattr(sa, "is_rate_limited", lambda url: True)
         out = http_tools.http_request("GET", "http://throttled.local/")

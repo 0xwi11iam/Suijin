@@ -114,7 +114,7 @@ class TestDossier:
 
     def test_agent_tool(self, tmp_path, monkeypatch):
         from suijin.modules.ops.lib import dossier as dos
-        from suijin.tools import dispatch
+        from suijin.modules.tools.lib import dispatch
 
         kg = self._ws(tmp_path)
         monkeypatch.setattr(dos, "WORKSPACE_DIR", tmp_path)
@@ -223,7 +223,7 @@ class TestPolicy:
 
     def test_route_tool_enforces_policy(self, monkeypatch, tmp_path):
         from suijin.modules.ops.lib import governance
-        from suijin.tools import dispatch
+        from suijin.modules.tools.lib import dispatch
 
         monkeypatch.setattr(governance, "POLICY_PATH", tmp_path / "policy.json")
         (tmp_path / "policy.json").write_text(
@@ -245,7 +245,7 @@ class TestPolicy:
 
 class TestModuleSdk:
     def test_scaffold_and_validate(self, tmp_path):
-        from suijin.tools.module_sdk import scaffold_module, validate_module
+        from suijin.modules.tools.lib.module_sdk import scaffold_module, validate_module
 
         mod = scaffold_module("my_scanner", root=tmp_path)
         assert (mod / "manifest.json").exists()
@@ -253,7 +253,7 @@ class TestModuleSdk:
         assert ok, problems
 
     def test_validate_catches_missing_tool(self, tmp_path):
-        from suijin.tools.module_sdk import scaffold_module, validate_module
+        from suijin.modules.tools.lib.module_sdk import scaffold_module, validate_module
 
         scaffold_module("broken", root=tmp_path)
         mfile = tmp_path / "broken" / "main.py"
@@ -262,7 +262,7 @@ class TestModuleSdk:
         assert not ok and any("not a function" in p for p in problems)
 
     def test_duplicate_scaffold_rejected(self, tmp_path):
-        from suijin.tools.module_sdk import scaffold_module
+        from suijin.modules.tools.lib.module_sdk import scaffold_module
 
         scaffold_module("dup", root=tmp_path)
         with pytest.raises(FileExistsError):
@@ -320,7 +320,7 @@ class TestFailover:
 class TestSkillVersioning:
     @pytest.fixture
     def skill_env(self, tmp_path, monkeypatch):
-        from suijin.tools import self_improve as si
+        from suijin.modules.tools.lib import self_improve as si
 
         skills = tmp_path / "skills"
         skills.mkdir()
@@ -479,7 +479,7 @@ class TestReconHook:
     def test_exploit_leads_appended(self, monkeypatch, tmp_path):
         import suijin.modules.knowledge.lib.kb as kbmod
         import suijin.modules.knowledge.lib.kb_tools as kbt
-        from suijin.tools import recon
+        from suijin.modules.tools.lib import recon
 
         # make the KB-present check true WITHOUT a real build (CI has none)
         fake_db = tmp_path / "kb.sqlite3"
@@ -497,7 +497,7 @@ class TestReconHook:
 
     def test_no_leads_when_kb_missing(self, monkeypatch):
         import suijin.modules.knowledge.lib.kb as kbmod
-        import suijin.tools.recon as recon_mod
+        import suijin.modules.tools.lib.recon as recon_mod
 
         monkeypatch.setattr(kbmod, "DB_PATH", Path("/nonexistent/kb.sqlite3"))
         assert recon_mod._exploit_leads([{"port": 1, "service": "x"}]) == ""

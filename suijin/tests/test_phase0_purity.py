@@ -28,7 +28,7 @@ class TestImportPurity:
         assert "suijin.tools.workspace" in mods
         # the god-import chain must not fire
         for banned in (
-            "suijin.tools.dispatch",
+            "suijin.modules.tools.lib.dispatch",
             "suijin.modules.providers.lib",
             "suijin.modules.loader",
             "suijin.kb",
@@ -37,9 +37,9 @@ class TestImportPurity:
             assert banned not in mods, f"workspace import dragged in {banned}"
 
     def test_guardrails_is_leaf(self):
-        mods = _imported_modules("import suijin.tools.guardrails")
-        assert "suijin.tools.guardrails" in mods
-        assert "suijin.tools.dispatch" not in mods
+        mods = _imported_modules("import suijin.modules.tools.lib.guardrails")
+        assert "suijin.modules.tools.lib.guardrails" in mods
+        assert "suijin.modules.tools.lib.dispatch" not in mods
         assert "suijin.modules.providers.lib" not in mods
 
     def test_kb_is_leaf(self):
@@ -110,7 +110,7 @@ class TestCompatFacade:
 
     def test_old_import_paths_still_resolve(self):
         import suijin.modules.providers.lib as p
-        import suijin.tools.dispatch as d
+        import suijin.modules.tools.lib.dispatch as d
 
         assert callable(d.route_tool)
         assert callable(p.generate)

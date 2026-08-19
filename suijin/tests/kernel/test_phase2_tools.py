@@ -40,7 +40,7 @@ class TestToolsModule:
 
     def test_ctx_call_tool_routes_to_real_tool(self, tmp_path, monkeypatch):
         from suijin.kernel import controller
-        from suijin.tools import intel
+        from suijin.modules.tools.lib import intel
 
         ctx, _ = controller.boot(module_roots=[MODULES], workspace=tmp_path, quiet=True)
         monkeypatch.setattr(intel, "search_kb", lambda kw, limit=5: f"FOUND:{kw}")

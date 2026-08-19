@@ -262,14 +262,14 @@ class TestPhraseQueries:
     """Quoted spans in search_kb keywords become ordered FTS5 phrases."""
 
     def test_expr_phrases(self):
-        from suijin.tools.intel import _fts_match_expr
+        from suijin.modules.tools.lib.intel import _fts_match_expr
 
         assert _fts_match_expr('sql "union select" bypass') == '"sql" "union select" "bypass"'
         assert _fts_match_expr('"union select"') == '"union select"'
         assert _fts_match_expr("union select") == '"union" "select"'  # old behavior intact
 
     def test_phrase_requires_adjacency(self, kb_env, monkeypatch):
-        from suijin.tools import intel
+        from suijin.modules.tools.lib import intel
 
         monkeypatch.setattr(intel, "DB_PATH", kb_env["db"])
         # adjacent words match the phrase

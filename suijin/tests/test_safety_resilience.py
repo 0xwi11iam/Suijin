@@ -41,7 +41,7 @@ class TestApprovals:
         self.ap.decide(1, approve=True)
         assert self.ap.decision_for("msf_run") == "approved"
         # the live gate: an approved tool passes HITL
-        from suijin.tools.modes import check_mode_restrictions
+        from suijin.modules.tools.lib.modes import check_mode_restrictions
 
         assert check_mode_restrictions("msf_run", {}, {"mode_hitl": True}) is None
 
@@ -49,7 +49,7 @@ class TestApprovals:
         self.ap.record_pending("msf_run", {})
         self.ap.decide(1, approve=False)
         assert self.ap.decision_for("msf_run") == "denied"
-        from suijin.tools.modes import check_mode_restrictions
+        from suijin.modules.tools.lib.modes import check_mode_restrictions
 
         blocked = check_mode_restrictions("msf_run", {}, {"mode_hitl": True})
         assert blocked and "DENIED" in blocked
@@ -73,7 +73,7 @@ class TestApprovals:
 
         monkeypatch.setattr(ap, "APPROVALS_PATH", tmp_path / "a.json")
         monkeypatch.setattr(ap, "SESSION_PATH", tmp_path / "s.json")
-        from suijin.tools import dispatch
+        from suijin.modules.tools.lib import dispatch
 
         dispatch.route_tool("msf_run", {"module": "x"}, {"mode_hitl": True})
         items = ap.list_approvals()
@@ -203,7 +203,7 @@ class TestScopeDnsPinning:
 
 class TestSelfHealing:
     def test_transient_retries_then_succeeds(self, monkeypatch):
-        from suijin.tools import dispatch as dp
+        from suijin.modules.tools.lib import dispatch as dp
 
         monkeypatch.setattr(dp, "_RETRY_BACKOFF_S", (0, 0))
         calls = {"n": 0}
@@ -218,7 +218,7 @@ class TestSelfHealing:
         assert out == "recovered" and calls["n"] == 3
 
     def test_logical_error_no_retry(self, monkeypatch):
-        from suijin.tools import dispatch as dp
+        from suijin.modules.tools.lib import dispatch as dp
 
         calls = {"n": 0}
 
@@ -231,7 +231,7 @@ class TestSelfHealing:
         assert "Tool Error" in out and "error" in out
 
     def test_persistent_transient_reports(self, monkeypatch):
-        from suijin.tools import dispatch as dp
+        from suijin.modules.tools.lib import dispatch as dp
 
         monkeypatch.setattr(dp, "_RETRY_BACKOFF_S", (0, 0))
 
@@ -243,7 +243,7 @@ class TestSelfHealing:
         assert "3/3" in out
 
     def test_route_tool_survives_exceptions(self, monkeypatch):
-        from suijin.tools import dispatch as dp
+        from suijin.modules.tools.lib import dispatch as dp
 
         monkeypatch.setattr(dp, "_build_routes", lambda cfg: {"boom_tool": lambda a: 1 / 0})
         out = dp.route_tool("boom_tool", {}, {})
@@ -271,7 +271,7 @@ Progress: 100 / 100"""
 
 class TestOutputNormalizer:
     def test_nmap_services_extracted(self):
-        from suijin.tools.output_normalizer import parse_nmap
+        from suijin.modules.tools.lib.output_normalizer import parse_nmap
 
         rows = parse_nmap(NMAP)
         assert [r["port"] for r in rows] == [22, 80, 443]
@@ -280,25 +280,25 @@ class TestOutputNormalizer:
         assert rows[1]["version"] == "2.4.49"
 
     def test_dirs_filtered_to_2xx_3xx(self):
-        from suijin.tools.output_normalizer import parse_dirs
+        from suijin.modules.tools.lib.output_normalizer import parse_dirs
 
         rows = parse_dirs(DIRS)
         paths = {r["path"]: r["status"] for r in rows}
         assert paths == {"/admin": 200, "/login": 200, "/assets": 301, "/.git/HEAD": 200}
 
     def test_auto_detects_nmap_then_dirs(self):
-        from suijin.tools.output_normalizer import normalize_output
+        from suijin.modules.tools.lib.output_normalizer import normalize_output
 
         assert json.loads(normalize_output(NMAP))[1]["port"] == 80
         assert len(json.loads(normalize_output(DIRS))) == 4
 
     def test_unknown_output_note(self):
-        from suijin.tools.output_normalizer import normalize_output
+        from suijin.modules.tools.lib.output_normalizer import normalize_output
 
         assert "No structure recognized" in normalize_output("random text log")
 
     def test_agent_tool_routed(self):
-        from suijin.tools import dispatch
+        from suijin.modules.tools.lib import dispatch
 
         out = dispatch.route_tool("normalize_output", {"output": NMAP, "kind": "nmap"}, {})
         assert json.loads(out)[0]["service"] == "ssh"
@@ -351,7 +351,7 @@ class TestBurpStyleScope:
 
 class TestNormalizerRichFields:
     def test_nmap_keeps_banner_and_open_filtered(self):
-        from suijin.tools.output_normalizer import parse_nmap
+        from suijin.modules.tools.lib.output_normalizer import parse_nmap
 
         rows = parse_nmap(
             "PORT   STATE SERVICE VERSION\n"
@@ -364,7 +364,7 @@ class TestNormalizerRichFields:
         assert ports[80]["banner"] == "Apache httpd 2.4.49 ((Unix))"
 
     def test_dirs_keep_size(self):
-        from suijin.tools.output_normalizer import parse_dirs
+        from suijin.modules.tools.lib.output_normalizer import parse_dirs
 
         rows = parse_dirs("/admin (Status: 200) [Size: 1234]\n/login (Status: 200) [Size: 512]\n")
         by_path = {r["path"]: r for r in rows}

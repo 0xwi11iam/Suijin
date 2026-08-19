@@ -124,7 +124,7 @@ class TestKbSearch:
         assert client.get("/api/kb/search").status_code == 400
 
     def test_search_passes_through(self, client, monkeypatch):
-        from suijin.tools import intel
+        from suijin.modules.tools.lib import intel
 
         monkeypatch.setattr(intel, "search_kb", lambda q, limit=5: f"RESULT:{q}:{limit}")
         d = client.get("/api/kb/search?q=sqli&limit=3").get_json()

@@ -124,7 +124,7 @@ class TestResilience:
 
     def test_agent_routing_roundtrip(self, kg_file):
         # the actual agent surface: check_knowledge/record_finding
-        from suijin.tools.intel import check_knowledge, record_finding
+        from suijin.modules.tools.lib.intel import check_knowledge, record_finding
 
         record_finding("10.9.9.9", "blocks", "' OR '1'='1", evidence="403", config={})
         out = check_knowledge("10.9.9.9", payload="' or '1'='1 --", config={})
@@ -133,7 +133,7 @@ class TestResilience:
         assert "Knowledge Graph • 10.9.9.9" in out
 
     def test_record_finding_rejects_bad_type(self):
-        from suijin.tools.intel import record_finding
+        from suijin.modules.tools.lib.intel import record_finding
 
         out = record_finding("t", "nonsense_type", "x", config={})
         assert "Invalid finding_type" in out

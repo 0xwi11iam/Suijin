@@ -7,9 +7,9 @@ import time as _time
 from suijin.core.agent_context import set_phase_context, set_tenant_context
 from suijin.core.prompt_safety import wrap_untrusted
 from suijin.helpers.error_class import classify_error_class
-from suijin.infra.output_offload import maybe_offload
-from suijin.tools.job_registry import _job_lock, _jobs
-from suijin.tools.job_registry import spawn as _registry_spawn
+from suijin.modules.platform.lib.infra.output_offload import maybe_offload
+from suijin.modules.tools.lib.job_registry import _job_lock, _jobs
+from suijin.modules.tools.lib.job_registry import spawn as _registry_spawn
 
 logger = logging.getLogger(__name__)
 

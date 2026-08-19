@@ -94,7 +94,7 @@ async def run_red_team_async(config, objective, api_key=None):
 
     # Start audit trail
     try:
-        from suijin.tools.audit_trail import start_audit
+        from suijin.modules.tools.lib.audit_trail import start_audit
 
         start_audit(objective[:80])
     except Exception:
@@ -108,7 +108,7 @@ async def run_red_team_async(config, objective, api_key=None):
     _signal._suijin_interrupted = False
 
     # Live command box — /state /note /kb /pause … usable WHILE the agent runs
-    from suijin.tools.run_commands import HINT, RunBox
+    from suijin.modules.tools.lib.run_commands import HINT, RunBox
 
     run_box = RunBox(
         get_state=lambda: agent.get_state(thread_id) or {},
@@ -197,7 +197,7 @@ async def run_red_team_async(config, objective, api_key=None):
 
                         # Audit trail: log AI thought + action
                         try:
-                            from suijin.tools.audit_trail import log_iteration
+                            from suijin.modules.tools.lib.audit_trail import log_iteration
 
                             tool_out = step.get("tool_output", "")
                             log_iteration(
@@ -349,7 +349,7 @@ async def run_red_team_async(config, objective, api_key=None):
 
         # End audit trail and save session
         try:
-            from suijin.tools.audit_trail import end_audit
+            from suijin.modules.tools.lib.audit_trail import end_audit
 
             end_audit(spend)
         except Exception:
@@ -357,7 +357,7 @@ async def run_red_team_async(config, objective, api_key=None):
 
             logging.getLogger("suijin").warning("Agent loop error", exc_info=True)
         try:
-            from suijin.tools.session_replay import save_session
+            from suijin.modules.tools.lib.session_replay import save_session
 
             save_session(thread_id, objective, config, final_state, spend)
         except Exception as e:

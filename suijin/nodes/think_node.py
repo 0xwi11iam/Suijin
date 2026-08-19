@@ -43,7 +43,7 @@ def _run_auto_actions(auto_actions: list, updates: dict):
     - job_list: check background jobs
     - deploy_subagent: spawn parallel work (fires async, result in future turn)
     """
-    from suijin.tools.dispatch import route_tool
+    from suijin.modules.tools.lib.dispatch import route_tool
 
     for aa in auto_actions:
         if not isinstance(aa, dict):
@@ -495,8 +495,8 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
             )
 
             try:
+                from suijin.modules.tools.lib.dispatch import get_tool_catalog, route_tool
                 from suijin.nodes.subagent_node import spawn_and_collect
-                from suijin.tools.dispatch import get_tool_catalog, route_tool
 
                 # 65s total timeout (60s batch + 5s buffer) prevents main agent hang
                 results = await asyncio.wait_for(
