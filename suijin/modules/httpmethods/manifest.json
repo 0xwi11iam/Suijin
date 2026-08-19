@@ -1,0 +1,14 @@
+{
+  "name": "Httpmethods",
+  "version": "1.0",
+  "description": "HTTP method surface mapper.",
+  "tools": {
+    "method_scan": {
+      "description": "Probe methods incl. TRACE/PUT/DEBUG on a URL.",
+      "parameters": {
+        "url": "Target URL"
+      }
+    }
+  },
+  "dependencies": []
+}

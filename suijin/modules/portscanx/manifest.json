@@ -1,0 +1,15 @@
+{
+  "name": "Portscanx",
+  "version": "1.0",
+  "description": "Pure-python TCP connect scanner (top ports).",
+  "tools": {
+    "tcp_scan": {
+      "description": "TCP connect scan of common ports on a host (stdlib sockets).",
+      "parameters": {
+        "host": "Target host",
+        "ports": "Optional port list (default top 100)"
+      }
+    }
+  },
+  "dependencies": []
+}

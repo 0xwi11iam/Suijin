@@ -1,0 +1,20 @@
+{
+  "id": "adenum",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.adenum",
+    "ad_null_session"
+  ],
+  "entry": "pack_entry:adenum",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Active Directory enumeration helpers (impacket-backed)."
+}

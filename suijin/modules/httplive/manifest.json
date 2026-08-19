@@ -1,0 +1,14 @@
+{
+  "name": "Httplive",
+  "version": "1.0",
+  "description": "Batch HTTP liveness checker.",
+  "tools": {
+    "http_alive": {
+      "description": "HEAD-check a batch of URLs; report statuses.",
+      "parameters": {
+        "urls": "Comma/newline separated URLs"
+      }
+    }
+  },
+  "dependencies": []
+}

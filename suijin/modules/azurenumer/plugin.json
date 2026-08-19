@@ -1,0 +1,20 @@
+{
+  "id": "azurenumer",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.azurenumer",
+    "az_account_list"
+  ],
+  "entry": "pack_entry:azurenumer",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Azure subscription enumeration via az CLI (authorized creds only)."
+}

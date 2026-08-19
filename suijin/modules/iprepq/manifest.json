@@ -1,0 +1,15 @@
+{
+  "name": "Iprepq",
+  "version": "1.0",
+  "description": "IP reputation lookups.",
+  "tools": {
+    "ip_abuse_check": {
+      "description": "Check an IP against AbuseIPDB (key required) with clear no-key handling.",
+      "parameters": {
+        "ip": "IP address",
+        "api_key": "AbuseIPDB API key"
+      }
+    }
+  },
+  "dependencies": []
+}

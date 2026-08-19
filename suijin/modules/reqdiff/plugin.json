@@ -1,0 +1,21 @@
+{
+  "id": "reqdiff",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.reqdiff",
+    "header_diff",
+    "response_diff"
+  ],
+  "entry": "pack_entry:reqdiff",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Response comparison pair-tools."
+}

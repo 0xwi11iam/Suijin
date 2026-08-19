@@ -1,0 +1,21 @@
+{
+  "id": "ssrfcanary",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.ssrfcanary",
+    "ssrf_blind_probe",
+    "ssrf_canary"
+  ],
+  "entry": "pack_entry:ssrfcanary",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "SSRF canary URL builders + callback-free detection."
+}

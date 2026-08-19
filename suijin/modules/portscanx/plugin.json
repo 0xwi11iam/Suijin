@@ -1,0 +1,20 @@
+{
+  "id": "portscanx",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.portscanx",
+    "tcp_scan"
+  ],
+  "entry": "pack_entry:portscanx",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Pure-python TCP connect scanner (top ports)."
+}

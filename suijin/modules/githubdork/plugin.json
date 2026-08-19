@@ -1,0 +1,21 @@
+{
+  "id": "githubdork",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.githubdork",
+    "github_dork_urls",
+    "github_gist_scan"
+  ],
+  "entry": "pack_entry:githubdork",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "GitHub dorking helpers (search URL builders + optional API fetch)."
+}

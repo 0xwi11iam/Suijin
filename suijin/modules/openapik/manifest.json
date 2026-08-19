@@ -1,0 +1,21 @@
+{
+  "name": "Openapik",
+  "version": "1.0",
+  "description": "OpenAPI/Swagger spec parsing into endpoint inventories.",
+  "tools": {
+    "openapi_parse": {
+      "description": "Parse an OpenAPI spec (JSON/YAML text) into an endpoint + parameter inventory.",
+      "parameters": {
+        "spec": "The spec document text",
+        "base_url": "Base URL to absolutize"
+      }
+    },
+    "openapi_find": {
+      "description": "Find swagger/openapi spec files on a base URL.",
+      "parameters": {
+        "url": "Base URL"
+      }
+    }
+  },
+  "dependencies": []
+}

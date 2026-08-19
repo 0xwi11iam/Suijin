@@ -1,0 +1,14 @@
+{
+  "name": "Proxycheck",
+  "version": "1.0",
+  "description": "Proxy/egress-IP validation.",
+  "tools": {
+    "proxy_check": {
+      "description": "Validate a proxy (scheme://host:port) shows a different egress IP.",
+      "parameters": {
+        "proxy": "e.g. socks5://127.0.0.1:9050 or http://p:8080"
+      }
+    }
+  },
+  "dependencies": []
+}

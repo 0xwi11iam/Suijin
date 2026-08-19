@@ -1,0 +1,20 @@
+{
+  "name": "Urltoolz",
+  "version": "1.0",
+  "description": "URL parsing utilities.",
+  "tools": {
+    "url_parse": {
+      "description": "Decompose a URL: scheme/host/port/path/params; flag encoded tricks.",
+      "parameters": {
+        "url": "URL"
+      }
+    },
+    "param_table": {
+      "description": "Extract query params into a table (decoded values, types).",
+      "parameters": {
+        "url": "URL"
+      }
+    }
+  },
+  "dependencies": []
+}

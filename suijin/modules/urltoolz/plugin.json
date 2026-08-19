@@ -1,0 +1,21 @@
+{
+  "id": "urltoolz",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.urltoolz",
+    "param_table",
+    "url_parse"
+  ],
+  "entry": "pack_entry:urltoolz",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "URL parsing utilities."
+}

@@ -1,0 +1,20 @@
+{
+  "id": "protodetect",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.protodetect",
+    "grpc_detect"
+  ],
+  "entry": "pack_entry:protodetect",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "gRPC/protobuf service detection."
+}

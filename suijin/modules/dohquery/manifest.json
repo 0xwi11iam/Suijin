@@ -1,0 +1,21 @@
+{
+  "name": "Dohquery",
+  "version": "1.0",
+  "description": "DNS-over-HTTPS queries (Cloudflare/Google) \u2014 passive, no local resolver.",
+  "tools": {
+    "doh_resolve": {
+      "description": "Resolve A/AAAA/CNAME/TXT/MX via DoH.",
+      "parameters": {
+        "name": "Record name",
+        "type": "Record type (default A)"
+      }
+    },
+    "dns_compare": {
+      "description": "Compare a name's answer across resolvers (CDN/GEO split detection).",
+      "parameters": {
+        "name": "Record name"
+      }
+    }
+  },
+  "dependencies": []
+}

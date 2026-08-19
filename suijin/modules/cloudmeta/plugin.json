@@ -1,0 +1,20 @@
+{
+  "id": "cloudmeta",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.cloudmeta",
+    "cloud_metadata_probe"
+  ],
+  "entry": "pack_entry:cloudmeta",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Cloud metadata endpoint probes (IMDS/SSRF validation targets)."
+}

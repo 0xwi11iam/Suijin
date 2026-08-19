@@ -1,0 +1,15 @@
+{
+  "name": "Whoisraw",
+  "version": "1.0",
+  "description": "Raw WHOIS over port 43 (no external binary).",
+  "tools": {
+    "whois_lookup": {
+      "description": "WHOIS query for a domain or IP via stdlib socket.",
+      "parameters": {
+        "query": "Domain or IP",
+        "server": "Optional whois server override"
+      }
+    }
+  },
+  "dependencies": []
+}

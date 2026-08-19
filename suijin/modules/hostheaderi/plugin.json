@@ -1,0 +1,20 @@
+{
+  "id": "hostheaderi",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.hostheaderi",
+    "host_header_inject"
+  ],
+  "entry": "pack_entry:hostheaderi",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Host header injection probe (password-reset poisoning support)."
+}

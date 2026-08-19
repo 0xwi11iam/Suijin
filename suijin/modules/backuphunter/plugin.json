@@ -1,0 +1,20 @@
+{
+  "id": "backuphunter",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.backuphunter",
+    "backup_file_probe"
+  ],
+  "entry": "pack_entry:backuphunter",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Common backup/archive file probe."
+}

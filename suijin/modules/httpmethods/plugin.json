@@ -1,0 +1,20 @@
+{
+  "id": "httpmethods",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.httpmethods",
+    "method_scan"
+  ],
+  "entry": "pack_entry:httpmethods",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "HTTP method surface mapper."
+}

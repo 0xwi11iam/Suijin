@@ -1,0 +1,15 @@
+{
+  "name": "Cloudmeta",
+  "version": "1.0",
+  "description": "Cloud metadata endpoint probes (IMDS/SSRF validation targets).",
+  "tools": {
+    "cloud_metadata_probe": {
+      "description": "Check a host:port for exposed cloud metadata services (AWS/GCP/Azure IMDS).",
+      "parameters": {
+        "host": "Target host",
+        "port": "Optional port (default scans common ones)"
+      }
+    }
+  },
+  "dependencies": []
+}

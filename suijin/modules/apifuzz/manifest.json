@@ -1,0 +1,22 @@
+{
+  "name": "Apifuzz",
+  "version": "1.0",
+  "description": "API logic probes: mass assignment, verb tampering.",
+  "tools": {
+    "mass_assign_probe": {
+      "description": "Send role/permission fields to a profile-update endpoint; detect silent acceptance.",
+      "parameters": {
+        "url": "Endpoint",
+        "method": "HTTP method (default PATCH)",
+        "token": "Auth header value"
+      }
+    },
+    "verb_tamper": {
+      "description": "Try alternate HTTP verbs on an endpoint; report differing outcomes.",
+      "parameters": {
+        "url": "Endpoint"
+      }
+    }
+  },
+  "dependencies": []
+}

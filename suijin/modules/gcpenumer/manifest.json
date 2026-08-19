@@ -1,0 +1,14 @@
+{
+  "name": "Gcpenumer",
+  "version": "1.0",
+  "description": "Current gcloud identity (authorized creds only).",
+  "tools": {
+    "gcp_whoami": {
+      "description": "Current gcloud identity (authorized creds only).",
+      "parameters": {}
+    }
+  },
+  "dependencies": [
+    "gcloud"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "Macvendor",
+  "version": "1.0",
+  "description": "MAC vendor lookup (offline mini-table + API fallback).",
+  "tools": {
+    "mac_vendor": {
+      "description": "Identify a NIC vendor from a MAC address.",
+      "parameters": {
+        "mac": "MAC address (any separator)"
+      }
+    }
+  },
+  "dependencies": []
+}

@@ -1,0 +1,14 @@
+{
+  "name": "Crtshq",
+  "version": "1.0",
+  "description": "Certificate transparency subdomain discovery (crt.sh).",
+  "tools": {
+    "crtsh_subdomains": {
+      "description": "Query crt.sh for subdomains of a domain.",
+      "parameters": {
+        "domain": "Target domain"
+      }
+    }
+  },
+  "dependencies": []
+}

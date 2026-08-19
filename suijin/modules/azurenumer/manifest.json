@@ -1,0 +1,14 @@
+{
+  "name": "Azurenumer",
+  "version": "1.0",
+  "description": "Azure subscription enumeration via az CLI (authorized creds only).",
+  "tools": {
+    "az_account_list": {
+      "description": "Azure subscription enumeration via az CLI (authorized creds only).",
+      "parameters": {}
+    }
+  },
+  "dependencies": [
+    "az"
+  ]
+}

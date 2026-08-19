@@ -1,0 +1,20 @@
+{
+  "name": "Githubdork",
+  "version": "1.0",
+  "description": "GitHub dorking helpers (search URL builders + optional API fetch).",
+  "tools": {
+    "github_dork_urls": {
+      "description": "Generate GitHub code-search URLs for org secrets.",
+      "parameters": {
+        "org": "GitHub org/user name"
+      }
+    },
+    "github_gist_scan": {
+      "description": "Fetch an org's public gists via API (no auth, rate-limited).",
+      "parameters": {
+        "user": "GitHub username"
+      }
+    }
+  },
+  "dependencies": []
+}

@@ -1,0 +1,21 @@
+{
+  "id": "tfsec",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.tfsec",
+    "dockerfile_scan",
+    "tf_scan"
+  ],
+  "entry": "pack_entry:tfsec",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Terraform & Dockerfile security review (pure pattern lints)."
+}

@@ -1,0 +1,21 @@
+{
+  "name": "Apkstatics",
+  "version": "1.0",
+  "description": "APK static analysis (pure python: unzip + pattern extraction).",
+  "tools": {
+    "apk_inventory": {
+      "description": "Unzip an APK; list components, permissions markers, embedded URLs, secrets.",
+      "parameters": {
+        "apk_path": "Path to .apk"
+      }
+    },
+    "apk_strings": {
+      "description": "Extract high-value strings (URLs, keys, firebase, tokens) from an APK.",
+      "parameters": {
+        "apk_path": "Path to .apk",
+        "pattern": "Optional regex"
+      }
+    }
+  },
+  "dependencies": []
+}

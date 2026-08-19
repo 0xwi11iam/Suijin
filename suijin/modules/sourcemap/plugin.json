@@ -1,0 +1,20 @@
+{
+  "id": "sourcemap",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.sourcemap",
+    "sourcemap_check"
+  ],
+  "entry": "pack_entry:sourcemap",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Source map exposure checker (JS source recovery)."
+}

@@ -1,0 +1,21 @@
+{
+  "id": "dohquery",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.dohquery",
+    "dns_compare",
+    "doh_resolve"
+  ],
+  "entry": "pack_entry:dohquery",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "DNS-over-HTTPS queries (Cloudflare/Google) \u2014 passive, no local resolver."
+}

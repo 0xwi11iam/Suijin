@@ -1,0 +1,15 @@
+{
+  "name": "Backuphunter",
+  "version": "1.0",
+  "description": "Common backup/archive file probe.",
+  "tools": {
+    "backup_file_probe": {
+      "description": "Probe backup/archive permutations for a path.",
+      "parameters": {
+        "url": "Base URL",
+        "path": "Path to probe (default index)"
+      }
+    }
+  },
+  "dependencies": []
+}

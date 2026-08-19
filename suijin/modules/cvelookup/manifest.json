@@ -1,0 +1,16 @@
+{
+  "name": "Cvelookup",
+  "version": "1.0",
+  "description": "NVD CVE lookup by keyword/CPE.",
+  "tools": {
+    "cve_search_nvd": {
+      "description": "Search NVD for CVEs matching a product keyword.",
+      "parameters": {
+        "keyword": "Product keyword (e.g. 'log4j')",
+        "api_key": "Optional NVD API key",
+        "limit": "Max results (default 10)"
+      }
+    }
+  },
+  "dependencies": []
+}

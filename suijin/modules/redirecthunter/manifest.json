@@ -1,0 +1,15 @@
+{
+  "name": "Redirecthunter",
+  "version": "1.0",
+  "description": "Open redirect validation.",
+  "tools": {
+    "open_redirect_check": {
+      "description": "Test a redirect param against safe canary domains.",
+      "parameters": {
+        "url": "URL containing the redirect param",
+        "param": "Param name (auto if omitted)"
+      }
+    }
+  },
+  "dependencies": []
+}

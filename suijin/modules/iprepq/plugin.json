@@ -1,0 +1,20 @@
+{
+  "id": "iprepq",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.iprepq",
+    "ip_abuse_check"
+  ],
+  "entry": "pack_entry:iprepq",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "IP reputation lookups."
+}

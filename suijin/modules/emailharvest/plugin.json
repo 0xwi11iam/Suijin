@@ -1,0 +1,20 @@
+{
+  "id": "emailharvest",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.emailharvest",
+    "harvest_emails"
+  ],
+  "entry": "pack_entry:emailharvest",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Email harvest from page text (pure regex)."
+}

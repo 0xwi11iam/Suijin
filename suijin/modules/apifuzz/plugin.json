@@ -1,0 +1,21 @@
+{
+  "id": "apifuzz",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.apifuzz",
+    "mass_assign_probe",
+    "verb_tamper"
+  ],
+  "entry": "pack_entry:apifuzz",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "API logic probes: mass assignment, verb tampering."
+}

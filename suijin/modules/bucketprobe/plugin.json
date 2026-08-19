@@ -1,0 +1,20 @@
+{
+  "id": "bucketprobe",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.bucketprobe",
+    "bucket_check"
+  ],
+  "entry": "pack_entry:bucketprobe",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Public cloud bucket checker (AWS/GCP/Azure naming permutations)."
+}

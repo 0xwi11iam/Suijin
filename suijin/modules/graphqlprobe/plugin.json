@@ -1,0 +1,21 @@
+{
+  "id": "graphqlprobe",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.graphqlprobe",
+    "graphql_introspect",
+    "graphql_suggest"
+  ],
+  "entry": "pack_entry:graphqlprobe",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "GraphQL endpoint probing (introspection, field suggestions)."
+}

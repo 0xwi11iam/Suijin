@@ -1,0 +1,21 @@
+{
+  "name": "Graphqlprobe",
+  "version": "1.0",
+  "description": "GraphQL endpoint probing (introspection, field suggestions).",
+  "tools": {
+    "graphql_introspect": {
+      "description": "Attempt full introspection query against a GraphQL endpoint.",
+      "parameters": {
+        "url": "GraphQL endpoint URL"
+      }
+    },
+    "graphql_suggest": {
+      "description": "Probe field-name suggestions (typo-based schema leak).",
+      "parameters": {
+        "url": "GraphQL endpoint URL",
+        "field": "A field name to fuzz around"
+      }
+    }
+  },
+  "dependencies": []
+}

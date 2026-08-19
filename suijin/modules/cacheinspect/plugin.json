@@ -1,0 +1,20 @@
+{
+  "id": "cacheinspect",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.cacheinspect",
+    "cache_probe"
+  ],
+  "entry": "pack_entry:cacheinspect",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Cache behavior/poisoning pre-checks."
+}

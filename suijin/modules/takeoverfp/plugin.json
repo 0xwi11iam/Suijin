@@ -1,0 +1,20 @@
+{
+  "id": "takeoverfp",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.takeoverfp",
+    "takeover_fingerprint"
+  ],
+  "entry": "pack_entry:takeoverfp",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Subdomain takeover fingerprinting (CNAME + known-service signatures)."
+}

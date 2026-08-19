@@ -1,0 +1,20 @@
+{
+  "id": "httplive",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.httplive",
+    "http_alive"
+  ],
+  "entry": "pack_entry:httplive",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Batch HTTP liveness checker."
+}

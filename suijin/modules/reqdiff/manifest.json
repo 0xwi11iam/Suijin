@@ -1,0 +1,22 @@
+{
+  "name": "Reqdiff",
+  "version": "1.0",
+  "description": "Response comparison pair-tools.",
+  "tools": {
+    "response_diff": {
+      "description": "Fetch two URLs and diff status/headers/body.",
+      "parameters": {
+        "url_a": "First URL",
+        "url_b": "Second URL"
+      }
+    },
+    "header_diff": {
+      "description": "Compare headers of two responses.",
+      "parameters": {
+        "url_a": "First URL",
+        "url_b": "Second URL"
+      }
+    }
+  },
+  "dependencies": []
+}

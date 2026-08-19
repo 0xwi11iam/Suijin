@@ -1,0 +1,20 @@
+{
+  "id": "gcpenumer",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.gcpenumer",
+    "gcp_whoami"
+  ],
+  "entry": "pack_entry:gcpenumer",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Current gcloud identity (authorized creds only)."
+}

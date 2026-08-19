@@ -1,0 +1,14 @@
+{
+  "name": "Sourcemap",
+  "version": "1.0",
+  "description": "Source map exposure checker (JS source recovery).",
+  "tools": {
+    "sourcemap_check": {
+      "description": "Check JS bundle URLs for exposed .map files.",
+      "parameters": {
+        "urls": "One or more .js URLs (comma separated)"
+      }
+    }
+  },
+  "dependencies": []
+}

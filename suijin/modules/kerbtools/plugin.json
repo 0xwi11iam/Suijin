@@ -1,0 +1,21 @@
+{
+  "id": "kerbtools",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.kerbtools",
+    "kerb_hash_format",
+    "spn_candidates"
+  ],
+  "entry": "pack_entry:kerbtools",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Kerberos ticket/hash format helpers (pure python)."
+}

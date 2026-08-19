@@ -1,0 +1,22 @@
+{
+  "name": "Secretscanr",
+  "version": "1.0",
+  "description": "Secret/credential scanning (regex + entropy), file or text.",
+  "tools": {
+    "scan_secrets": {
+      "description": "Scan text or a file for credentials/API keys/tokens.",
+      "parameters": {
+        "text": "Text to scan (or use file)",
+        "file": "File path alternative"
+      }
+    },
+    "entropy_check": {
+      "description": "High-entropy string finder (base64/hex candidates) in text.",
+      "parameters": {
+        "text": "Text",
+        "min_len": "Minimum length (default 20)"
+      }
+    }
+  },
+  "dependencies": []
+}

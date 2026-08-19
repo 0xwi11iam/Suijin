@@ -1,0 +1,21 @@
+{
+  "id": "secretscanr",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.secretscanr",
+    "entropy_check",
+    "scan_secrets"
+  ],
+  "entry": "pack_entry:secretscanr",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Secret/credential scanning (regex + entropy), file or text."
+}

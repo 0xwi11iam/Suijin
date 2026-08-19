@@ -1,0 +1,20 @@
+{
+  "id": "cvelookup",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.cvelookup",
+    "cve_search_nvd"
+  ],
+  "entry": "pack_entry:cvelookup",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "NVD CVE lookup by keyword/CPE."
+}

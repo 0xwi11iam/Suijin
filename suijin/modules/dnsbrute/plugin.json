@@ -1,0 +1,20 @@
+{
+  "id": "dnsbrute",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.dnsbrute",
+    "dns_brute"
+  ],
+  "entry": "pack_entry:dnsbrute",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Subdomain word-brute via DoH (passive transport)."
+}

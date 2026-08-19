@@ -1,0 +1,21 @@
+{
+  "name": "Kerbtools",
+  "version": "1.0",
+  "description": "Kerberos ticket/hash format helpers (pure python).",
+  "tools": {
+    "kerb_hash_format": {
+      "description": "Convert a Kerberos hash (kirbi/asrep/tgs) to hashcat/john format guidance.",
+      "parameters": {
+        "hash": "The hash string",
+        "type": "asrep|tgs|kirbi"
+      }
+    },
+    "spn_candidates": {
+      "description": "Generate likely SPN service account names from a domain.",
+      "parameters": {
+        "domain": "e.g. corp.local"
+      }
+    }
+  },
+  "dependencies": []
+}

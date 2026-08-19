@@ -1,0 +1,21 @@
+{
+  "id": "openapik",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.openapik",
+    "openapi_find",
+    "openapi_parse"
+  ],
+  "entry": "pack_entry:openapik",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "OpenAPI/Swagger spec parsing into endpoint inventories."
+}

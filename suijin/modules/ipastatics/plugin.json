@@ -1,0 +1,20 @@
+{
+  "id": "ipastatics",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.ipastatics",
+    "ipa_info"
+  ],
+  "entry": "pack_entry:ipastatics",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "IPA static analysis (Info.plist + embedded.mobileprovision)."
+}

@@ -1,0 +1,20 @@
+{
+  "id": "awsenumer",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.awsenumer",
+    "aws_enum"
+  ],
+  "entry": "pack_entry:awsenumer",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "AWS identity + high-privilege enumeration via aws CLI (authorized creds only)."
+}

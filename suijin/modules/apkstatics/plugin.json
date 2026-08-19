@@ -1,0 +1,21 @@
+{
+  "id": "apkstatics",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.apkstatics",
+    "apk_inventory",
+    "apk_strings"
+  ],
+  "entry": "pack_entry:apkstatics",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "APK static analysis (pure python: unzip + pattern extraction)."
+}

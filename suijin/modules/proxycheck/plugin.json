@@ -1,0 +1,20 @@
+{
+  "id": "proxycheck",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.proxycheck",
+    "proxy_check"
+  ],
+  "entry": "pack_entry:proxycheck",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Proxy/egress-IP validation."
+}

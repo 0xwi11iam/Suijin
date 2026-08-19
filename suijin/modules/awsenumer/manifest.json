@@ -1,0 +1,17 @@
+{
+  "name": "Awsenumer",
+  "version": "1.0",
+  "description": "AWS identity + high-privilege enumeration via aws CLI (authorized creds only).",
+  "tools": {
+    "aws_enum": {
+      "description": "AWS identity + high-privilege enumeration via aws CLI (authorized creds only).",
+      "parameters": {
+        "profile": "AWS profile (default default)",
+        "region": "Region (default us-east-1)"
+      }
+    }
+  },
+  "dependencies": [
+    "aws"
+  ]
+}

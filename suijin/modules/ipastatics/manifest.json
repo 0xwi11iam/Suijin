@@ -1,0 +1,14 @@
+{
+  "name": "Ipastatics",
+  "version": "1.0",
+  "description": "IPA static analysis (Info.plist + embedded.mobileprovision).",
+  "tools": {
+    "ipa_info": {
+      "description": "Extract Info.plist facts and provisioning profile from an IPA.",
+      "parameters": {
+        "ipa_path": "Path to .ipa"
+      }
+    }
+  },
+  "dependencies": []
+}

@@ -1,0 +1,14 @@
+{
+  "name": "Securitytxt",
+  "version": "1.0",
+  "description": "security.txt policy checker.",
+  "tools": {
+    "security_txt_check": {
+      "description": "Fetch and validate /.well-known/security.txt.",
+      "parameters": {
+        "url": "Base URL"
+      }
+    }
+  },
+  "dependencies": []
+}

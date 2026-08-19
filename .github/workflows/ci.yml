@@ -38,6 +38,7 @@ jobs:
         run: |
           bash -n install.sh
           bash -n docker.sh
+          bash -n kali-setup.sh
           python -c "import yaml; yaml.safe_load(open('docker-compose.yml'))"
           # .env.example keys must match compose env list exactly
           import re

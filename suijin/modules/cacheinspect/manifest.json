@@ -1,0 +1,14 @@
+{
+  "name": "Cacheinspect",
+  "version": "1.0",
+  "description": "Cache behavior/poisoning pre-checks.",
+  "tools": {
+    "cache_probe": {
+      "description": "Fingerprint cache layers + unkeyed-header reflection.",
+      "parameters": {
+        "url": "Target URL"
+      }
+    }
+  },
+  "dependencies": []
+}

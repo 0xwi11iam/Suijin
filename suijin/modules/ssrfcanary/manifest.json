@@ -1,0 +1,20 @@
+{
+  "name": "Ssrfcanary",
+  "version": "1.0",
+  "description": "SSRF canary URL builders + callback-free detection.",
+  "tools": {
+    "ssrf_canary": {
+      "description": "Build canary URLs for common callback services.",
+      "parameters": {
+        "token": "Unique token (default random)"
+      }
+    },
+    "ssrf_blind_probe": {
+      "description": "Time-based blind SSRRF detection for a URL parameter.",
+      "parameters": {
+        "url": "URL with the param already injected (e.g. http://t/f?url=http://10.0.0.5:81)"
+      }
+    }
+  },
+  "dependencies": []
+}

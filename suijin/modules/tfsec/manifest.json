@@ -1,0 +1,20 @@
+{
+  "name": "Tfsec",
+  "version": "1.0",
+  "description": "Terraform & Dockerfile security review (pure pattern lints).",
+  "tools": {
+    "tf_scan": {
+      "description": "Scan Terraform (text) for insecure patterns.",
+      "parameters": {
+        "text": "Terraform source (or file=)"
+      }
+    },
+    "dockerfile_scan": {
+      "description": "Lint a Dockerfile for security anti-patterns.",
+      "parameters": {
+        "text": "Dockerfile (or file=)"
+      }
+    }
+  },
+  "dependencies": []
+}

@@ -1,0 +1,14 @@
+{
+  "name": "Adenum",
+  "version": "1.0",
+  "description": "Active Directory enumeration helpers (impacket-backed).",
+  "tools": {
+    "ad_null_session": {
+      "description": "Anonymous LDAP bind + rootDSE dump via impacket (no creds).",
+      "parameters": {
+        "dc": "Domain controller host"
+      }
+    }
+  },
+  "dependencies": []
+}

@@ -1,0 +1,15 @@
+{
+  "name": "Emailharvest",
+  "version": "1.0",
+  "description": "Email harvest from page text (pure regex).",
+  "tools": {
+    "harvest_emails": {
+      "description": "Extract emails from provided text (or a fetched page).",
+      "parameters": {
+        "text": "Text to harvest",
+        "url": "Optional URL to fetch first"
+      }
+    }
+  },
+  "dependencies": []
+}

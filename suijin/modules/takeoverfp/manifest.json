@@ -1,0 +1,14 @@
+{
+  "name": "Takeoverfp",
+  "version": "1.0",
+  "description": "Subdomain takeover fingerprinting (CNAME + known-service signatures).",
+  "tools": {
+    "takeover_fingerprint": {
+      "description": "Resolve CNAMEs and match dangling-service fingerprints.",
+      "parameters": {
+        "hosts": "Hostnames (comma separated)"
+      }
+    }
+  },
+  "dependencies": []
+}

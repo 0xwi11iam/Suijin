@@ -1,0 +1,15 @@
+{
+  "name": "Dnsbrute",
+  "version": "1.0",
+  "description": "Subdomain word-brute via DoH (passive transport).",
+  "tools": {
+    "dns_brute": {
+      "description": "Brute subdomains from a word list via DNS-over-HTTPS.",
+      "parameters": {
+        "domain": "Base domain",
+        "words": "Comma separated subdomain candidates"
+      }
+    }
+  },
+  "dependencies": []
+}

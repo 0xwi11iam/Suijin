@@ -1,0 +1,20 @@
+{
+  "id": "crtshq",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.crtshq",
+    "crtsh_subdomains"
+  ],
+  "entry": "pack_entry:crtshq",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Certificate transparency subdomain discovery (crt.sh)."
+}

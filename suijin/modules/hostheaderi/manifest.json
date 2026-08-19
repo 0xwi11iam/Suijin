@@ -1,0 +1,15 @@
+{
+  "name": "Hostheaderi",
+  "version": "1.0",
+  "description": "Host header injection probe (password-reset poisoning support).",
+  "tools": {
+    "host_header_inject": {
+      "description": "Send a request with a controlled Host header; report reflection.",
+      "parameters": {
+        "url": "Target URL",
+        "host_value": "Host value to inject (default evil.example)"
+      }
+    }
+  },
+  "dependencies": []
+}

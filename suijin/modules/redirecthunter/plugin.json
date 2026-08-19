@@ -1,0 +1,20 @@
+{
+  "id": "redirecthunter",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.redirecthunter",
+    "open_redirect_check"
+  ],
+  "entry": "pack_entry:redirecthunter",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Open redirect validation."
+}

@@ -1,0 +1,20 @@
+{
+  "id": "whoisraw",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.whoisraw",
+    "whois_lookup"
+  ],
+  "entry": "pack_entry:whoisraw",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Raw WHOIS over port 43 (no external binary)."
+}

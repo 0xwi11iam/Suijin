@@ -1,0 +1,20 @@
+{
+  "id": "macvendor",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.macvendor",
+    "mac_vendor"
+  ],
+  "entry": "pack_entry:macvendor",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "MAC vendor lookup (offline mini-table + API fallback)."
+}

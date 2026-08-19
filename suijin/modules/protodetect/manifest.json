@@ -1,0 +1,15 @@
+{
+  "name": "Protodetect",
+  "version": "1.0",
+  "description": "gRPC/protobuf service detection.",
+  "tools": {
+    "grpc_detect": {
+      "description": "Detect gRPC services (reflection + grpc-web headers) on a host.",
+      "parameters": {
+        "host": "host",
+        "port": "port (default 50051)"
+      }
+    }
+  },
+  "dependencies": []
+}

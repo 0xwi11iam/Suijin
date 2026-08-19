@@ -1,0 +1,14 @@
+{
+  "name": "Bucketprobe",
+  "version": "1.0",
+  "description": "Public cloud bucket checker (AWS/GCP/Azure naming permutations).",
+  "tools": {
+    "bucket_check": {
+      "description": "Probe bucket-name permutations across S3/GCS/Azure for public listings.",
+      "parameters": {
+        "name": "Bucket base name (company/domain)"
+      }
+    }
+  },
+  "dependencies": []
+}

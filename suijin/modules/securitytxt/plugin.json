@@ -1,0 +1,20 @@
+{
+  "id": "securitytxt",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.securitytxt",
+    "security_txt_check"
+  ],
+  "entry": "pack_entry:securitytxt",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "security.txt policy checker."
+}
