@@ -44,6 +44,8 @@ def save_session(thread_id: str, objective: str, config: dict, state: dict, cost
             "message_count": len(state.get("messages", [])),
             "completion_reason": state.get("completion_reason", ""),
         },
+        "prompt_profile": state.get("_prompt_profile") or {},
+        "prompt_profile_trend": state.get("_prompt_profile_trend") or [],
         "cost_usd": cost,
     }
     path = _replay_dir() / f"{thread_id}_{ts}.json"

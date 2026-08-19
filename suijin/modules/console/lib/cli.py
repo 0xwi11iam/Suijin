@@ -111,6 +111,20 @@ def run_doctor() -> int:
         rows.append(_fail("dependencies", "missing: " + ", ".join(missing_deps)))
         critical += 1
 
+    # Provider failover telemetry (D29) — informational
+    try:
+        from suijin.modules.providers.lib import FAILOVER_STATS as _fs
+
+        if _fs["chains"]:
+            note = f"{_fs['chains']} chains: {_fs['primary_ok']} primary-ok, {_fs['failovers']} failovers, {_fs['all_down']} all-down"
+            if _fs["last_event"]:
+                note += f" | last: {_fs['last_event'][:60]}"
+            rows.append(_ok("provider failover", note))
+        else:
+            rows.append(_ok("provider failover", "no chain calls yet this session"))
+    except Exception as e:
+        rows.append(_warn("provider failover", str(e)[:60]))
+
     # Required binaries
     for b in REQUIRED_BINARIES:
         p = shutil.which(b)
@@ -421,6 +435,18 @@ def run_status() -> int:
         print(f"modules:          load failed — {e}")
 
     print(f"lab port:         5906 {'free' if _port_free(5906) else 'IN USE'}")
+
+    # Efficiency leaderboard + forecast (D28/D30)
+    try:
+        from suijin.modules.ops.lib.metering import forecast, leaderboard
+
+        print()
+        print(leaderboard(limit=8))
+        fc = forecast()
+        if fc:
+            print(f"forecast: {fc.splitlines()[0]}")
+    except Exception as e:
+        print(f"metering:  {e}")
     return 0
 
 
@@ -1316,6 +1342,31 @@ def _enrich_traffic(entries: list) -> list:
     return entries
 
 
+def run_profile_cmd(args) -> int:
+    """`suijin profile` — prompt budget profile of the newest saved session."""
+    import json
+
+    from suijin.modules.agent.lib.profiler import render
+    from suijin.modules.platform.lib.workspace import artifact_dir
+
+    sdir = artifact_dir("sessions")
+    sessions = sorted(sdir.glob("*.json")) if sdir.is_dir() else []
+    if not sessions:
+        print("no saved sessions yet")
+        return 1
+    data = json.loads(sessions[-1].read_text())
+    print(f"session: {data.get('objective', '?')[:60]} ({sessions[-1].name})")
+    if not data.get("prompt_profile"):
+        print("this session predates the profiler — run a new engagement")
+        return 0
+    pseudo_state = {
+        "_prompt_profile": data.get("prompt_profile"),
+        "_prompt_profile_trend": data.get("prompt_profile_trend", []),
+    }
+    print(render(pseudo_state))
+    return 0
+
+
 def run_spar_cmd(args) -> int:
     """`suijin spar` — detector practice volley, scored against a baseline."""
     from suijin.modules.ops.lib.sparring import render_spar, run_spar
@@ -1490,6 +1541,9 @@ def main(argv=None):
     clean.add_argument("--apply", action="store_true", help="archive stale files then delete")
     clean.add_argument("--days", type=int, default=30, help="staleness threshold (default 30)")
     clean.set_defaults(func=run_clean)
+
+    profile = sub.add_parser("profile", help="prompt budget profile of the latest session (token breakdown + growth)")
+    profile.set_defaults(func=run_profile_cmd)
 
     spar = sub.add_parser("spar", help="sparring mode: detector practice volley vs stored baseline")
     spar.add_argument("--name", default="default", help="baseline name (default 'default')")

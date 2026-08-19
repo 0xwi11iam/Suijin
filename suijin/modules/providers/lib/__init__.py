@@ -612,6 +612,22 @@ def generate(
     return f"Error: Unknown provider '{provider}'"
 
 
+# Failover telemetry (D29): chain outcomes per process lifetime. Doctor
+# surfaces this; tests reset it. Never affects call behavior.
+FAILOVER_STATS = {
+    "chains": 0,  # generate_with_failover invocations
+    "failovers": 0,  # times the primary failed and a fallback answered
+    "all_down": 0,  # every provider in the chain failed
+    "primary_ok": 0,  # primary answered first try
+    "errors_by_provider": {},  # provider -> failure count
+    "last_event": "",  # human note for doctor
+}
+
+
+def _failover_event(note: str) -> None:
+    FAILOVER_STATS["last_event"] = note
+
+
 def generate_with_failover(messages, config=None, **kwargs) -> str:
     """generate() across a provider fallback chain (config['fallback_providers']).
 
@@ -622,11 +638,23 @@ def generate_with_failover(messages, config=None, **kwargs) -> str:
     cfg = dict(config or {})
     chain = [cfg.get("provider", "deepseek")]
     chain += [p for p in (cfg.get("fallback_providers") or []) if p != chain[0]]
+    FAILOVER_STATS["chains"] += 1
     last = ""
-    for provider in chain:
+    for i, provider in enumerate(chain):
         cfg["provider"] = str(provider).lower()
         out = generate(messages, cfg, **kwargs)
         if not str(out).startswith("Error:"):
+            if i == 0:
+                FAILOVER_STATS["primary_ok"] += 1
+                _failover_event(f"{provider} answered (primary)")
+            else:
+                FAILOVER_STATS["failovers"] += 1
+                _failover_event(f"{provider} answered via FAILOVER (primary {chain[0]} failed)")
             return out
+        FAILOVER_STATS["errors_by_provider"][cfg["provider"]] = (
+            FAILOVER_STATS["errors_by_provider"].get(cfg["provider"], 0) + 1
+        )
         last = out
+    FAILOVER_STATS["all_down"] += 1
+    _failover_event(f"ALL {len(chain)} provider(s) failed: {', '.join(chain)}")
     return last

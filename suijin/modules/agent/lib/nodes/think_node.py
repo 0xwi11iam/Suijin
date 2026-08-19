@@ -218,6 +218,14 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         },
     ]
 
+    # Prompt profile (D31): snapshot token breakdown before the call
+    try:
+        from suijin.modules.agent.lib.profiler import record as _record_profile
+
+        _record_profile(state)
+    except Exception:  # noqa: BLE001 — profiling must never break thinking
+        pass
+
     # ── LLM Call with retry ──────────────────────────────────────────
     max_parse_retries = 3
     decision = None
