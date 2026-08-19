@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from suijin.tests.test_cli_commands import run_cli
+from suijin.tests.console.test_cli_commands import run_cli
 
 # ── HITL approvals ─────────────────────────────────────────────────────
 

@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[3]
 SERVER = REPO_ROOT / "suijin" / "modules" / "console" / "lib" / "mcp_server.py"
 
 

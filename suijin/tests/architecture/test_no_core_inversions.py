@@ -10,7 +10,7 @@ seam. This test FAILS on any reintroduced inversion.
 import ast
 from pathlib import Path
 
-TOOLS_DIR = Path(__file__).resolve().parents[1] / "modules" / "tools" / "lib"
+TOOLS_DIR = Path(__file__).resolve().parents[2] / "modules" / "tools" / "lib"
 
 # Importing core.CONSTANTS from tools is acceptable (shared kernel
 # values, no behavior); importing anything else under suijin.core is not.

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 PKG = REPO / "suijin"
 EXCLUDE = {"tests", "lab", "__pycache__", "kb_cache", "ui"}
 
