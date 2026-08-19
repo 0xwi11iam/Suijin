@@ -77,7 +77,7 @@ class TestRecommendedTier:
 
     def test_llm_service_superseded_by_providers(self, tmp_path):
         ctx, _ = boot_all(tmp_path)
-        import suijin.tools.providers as p
+        import suijin.modules.providers.lib as p
 
         # providers' registration won: same module object, one accumulator
         assert ctx.service("llm") is p.generate

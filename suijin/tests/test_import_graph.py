@@ -65,7 +65,7 @@ def test_no_dangling_suijin_imports():
 def test_entry_points_importable():
     import importlib
 
-    for mod in ("suijin.main", "suijin.cli", "suijin.kb", "suijin.ui.server"):
+    for mod in ("suijin.main", "suijin.cli", "suijin.modules.knowledge.lib.kb", "suijin.ui.server"):
         importlib.import_module(mod)
 
 

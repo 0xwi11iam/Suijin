@@ -79,7 +79,7 @@ class TestSecretPatterns:
     def test_aws_key_detected(self):
         import re
 
-        from suijin.security.secret_patterns import SECRET_PATTERNS
+        from suijin.modules.platform.lib.security.secret_patterns import SECRET_PATTERNS
 
         # The pattern matches "AWS_ACCESS_KEY_ID=AKIA..." format or bare keys in context
         found = False
@@ -97,7 +97,7 @@ class TestSecretPatterns:
     def test_jwt_detected(self):
         import re
 
-        from suijin.security.secret_patterns import SECRET_PATTERNS
+        from suijin.modules.platform.lib.security.secret_patterns import SECRET_PATTERNS
 
         found = False
         for name, pattern in SECRET_PATTERNS.items():

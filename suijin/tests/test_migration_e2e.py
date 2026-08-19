@@ -109,7 +109,7 @@ def test_migration_via_python_layout_function(fake_machine, tmp_path):
     (legacy / "audit_trails").mkdir(parents=True)
     (legacy / "audit_trails" / "e.json").write_text("{}")
 
-    from suijin.tools.workspace import ensure_workspace_layout
+    from suijin.modules.platform.lib.workspace import ensure_workspace_layout
 
     changed = ensure_workspace_layout(base_dir=src / "suijin", workspace_dir=src / "suijin_agent")
     assert changed is True

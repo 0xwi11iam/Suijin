@@ -10,7 +10,7 @@ import threading
 from datetime import datetime, timezone
 from typing import Optional
 
-from suijin.tools.workspace import WORKSPACE_DIR
+from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
 STATE_DIR = WORKSPACE_DIR / "blue_state"
 

@@ -495,7 +495,7 @@ class TestWorkspaceIntegrity:
     never leak into it, and its anchoring must not change."""
 
     def test_workspace_anchored_and_separate_from_kb(self):
-        from suijin.tools.workspace import PROJECT_DIR, WORKSPACE_DIR
+        from suijin.modules.platform.lib.workspace import PROJECT_DIR, WORKSPACE_DIR
 
         assert WORKSPACE_DIR == PROJECT_DIR / "suijin_agent"
         assert kbmod.CACHE_DIR != WORKSPACE_DIR

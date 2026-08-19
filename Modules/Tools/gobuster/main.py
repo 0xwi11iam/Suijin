@@ -1,7 +1,7 @@
 """Gobuster wrapper."""
 import shlex
 
-from suijin.tools.result import run_command
+from suijin.modules.tools.lib.result import run_command
 def gobuster_dir(url, wordlist, extensions="", threads=20):
     if not url or not wordlist: return "Error: url and wordlist required"
     ext_flag = f"-x {extensions}" if extensions else ""

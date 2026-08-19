@@ -39,12 +39,13 @@ from suijin.core.red.config_loader import (  # noqa: F401 — deliberate re-expo
 )
 from suijin.core.red.llm_client import generate_async
 from suijin.modules.loader import discover_modules, load_local_module
-from suijin.tools.workspace import WORKSPACE_DIR
+from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
 # Centralized force-load — shares ONE instance per module
 providers = load_local_module("providers")
 
-from suijin import tools
+from suijin.modules.platform.lib import runtime as _runtime
+from suijin.modules.tools.lib import dispatch as _dispatch
 
 audit_mod = load_local_module("audit")
 supervisor = load_local_module("supervisor")
@@ -64,17 +65,17 @@ DUMP_PATH = BASE_DIR / "operation_state_recovery.json"
 async def run_red_team_async(config, objective, api_key=None):
 
     providers.reset_usage()
-    tools.reset_recon_state()
+    _runtime.reset_recon_state()
 
     # Apply proxy setting from config
     proxy_url = config.get("proxy_url", "")
     if proxy_url:
-        tools.set_proxy(proxy_url)
+        _dispatch.set_proxy(proxy_url)
         console.print(f"[dim]Proxy: {proxy_url}[/dim]")
 
     agent = SuijinAgentGraph(
         generate_fn=generate_async,
-        route_tool_fn=tools.route_tool,
+        route_tool_fn=_dispatch.route_tool,
         max_iterations=config.get("max_iterations", 100),
     )
 

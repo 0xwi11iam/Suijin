@@ -148,7 +148,7 @@ class TestFileOps:
             content = read_file(rel)
             assert "workspace content" in content
         finally:
-            from suijin.tools.workspace import WORKSPACE_DIR
+            from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
             p = WORKSPACE_DIR / rel
             if p.exists():

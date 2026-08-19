@@ -36,10 +36,10 @@ def execute_terminal(cmd, timeout=30):
             return f"SYSTEM OVERRIDE: Refusing to execute command. {my_pid} is the AI Agent's own Process ID. You must find the target application's PID."
 
         # Global-action gate: intercept dangerous commands
-        from suijin.tools.guardrails import is_dangerous
+        from suijin.modules.tools.lib.guardrails import is_dangerous
 
         dangerous, pattern = is_dangerous(cmd)
-        from suijin.tools.guardrails import confirm_global_action
+        from suijin.modules.tools.lib.guardrails import confirm_global_action
 
         if dangerous and not confirm_global_action(cmd, pattern):
             return f"Command denied by user (matched: {pattern}).\nCommand was: {cmd[:200]}"

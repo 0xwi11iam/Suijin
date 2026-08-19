@@ -73,7 +73,7 @@ def operator_menu():
 
 
 def main():
-    from suijin.tools.runtime import init_runtime
+    from suijin.modules.platform.lib.runtime import init_runtime
 
     init_runtime()  # explicit one-time init (Phase 0 contract)
     print(chr(27) + "[2J\033[H", end="")

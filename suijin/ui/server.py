@@ -88,7 +88,7 @@ def _enrich_traffic(entries: list[dict]) -> list[dict]:
 
 
 def _workspace() -> Path:
-    from suijin.tools.workspace import WORKSPACE_DIR
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
     return WORKSPACE_DIR
 

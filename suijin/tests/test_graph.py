@@ -90,7 +90,7 @@ class TestErrorHandler:
 
     def test_error_class_imports(self):
         try:
-            from suijin.helpers.error_class import classify_error
+            from suijin.modules.platform.lib.helpers.error_class import classify_error
 
             assert classify_error is not None
         except ImportError as e:
@@ -108,7 +108,7 @@ class TestPromptSafety:
 
     def test_hard_guardrail_blocks_gov(self):
         try:
-            from suijin.helpers.hard_guardrail import check_guardrail
+            from suijin.modules.platform.lib.helpers.hard_guardrail import check_guardrail
 
             result = check_guardrail("hack fbi.gov")
             assert result is not None
@@ -117,7 +117,7 @@ class TestPromptSafety:
 
     def test_hard_guardrail_allows_normal(self):
         try:
-            from suijin.helpers.hard_guardrail import check_guardrail
+            from suijin.modules.platform.lib.helpers.hard_guardrail import check_guardrail
 
             result = check_guardrail("scan example.com")
             assert result is None

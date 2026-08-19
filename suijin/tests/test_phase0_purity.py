@@ -1,6 +1,6 @@
 """Phase 0 purity gates — importing a leaf tool must NOT drag the world in.
 
-The old tools/__init__ imported dispatch (whole tool tree, providers,
+The old package init imported dispatch (whole tool tree, providers,
 huggingface_hub) AND providers at package init, so `from
 suijin.tools.workspace import WORKSPACE_DIR` executed the entire chain —
 including module discovery and a workspace migration. These tests make
@@ -24,14 +24,14 @@ def _imported_modules(snippet: str) -> set[str]:
 
 class TestImportPurity:
     def test_workspace_is_leaf(self):
-        mods = _imported_modules("import suijin.tools.workspace")
-        assert "suijin.tools.workspace" in mods
+        mods = _imported_modules("import suijin.modules.platform.lib.workspace")
+        assert "suijin.modules.platform.lib.workspace" in mods
         # the god-import chain must not fire
         for banned in (
             "suijin.modules.tools.lib.dispatch",
             "suijin.modules.providers.lib",
             "suijin.modules.loader",
-            "suijin.kb",
+            "suijin.modules.knowledge.lib.kb",
             "huggingface_hub",
         ):
             assert banned not in mods, f"workspace import dragged in {banned}"
@@ -43,16 +43,16 @@ class TestImportPurity:
         assert "suijin.modules.providers.lib" not in mods
 
     def test_kb_is_leaf(self):
-        mods = _imported_modules("import suijin.kb")
-        assert "suijin.kb" in mods
-        assert "suijin.tools" not in mods  # no package __init__ chain either
+        mods = _imported_modules("import suijin.modules.knowledge.lib.kb")
+        assert "suijin.modules.knowledge.lib.kb" in mods
+        assert "suijin.modules.tools.lib.dispatch" not in mods
         assert "suijin.modules.loader" not in mods
 
     def test_runtime_import_is_side_effect_free(self):
         """Importing runtime must NOT discover modules, migrate the workspace,
         or suppress warnings — init_runtime() owns all of that now."""
-        mods = _imported_modules("import suijin.tools.runtime")
-        assert "suijin.tools.runtime" in mods
+        mods = _imported_modules("import suijin.modules.platform.lib.runtime")
+        assert "suijin.modules.platform.lib.runtime" in mods
         assert "suijin.modules.loader" not in mods
         # modules.loader is imported lazily inside init_runtime — the pure
         # import must not have executed it
@@ -87,27 +87,7 @@ class TestInitRuntime:
         assert rt.is_initialized()
 
 
-class TestCompatFacade:
-    def test_star_import_surface_intact(self):
-        """`from suijin import tools` must still expose the documented names
-        (lazy) — external code and tests rely on them."""
-        from suijin import tools
-
-        for name in (
-            "route_tool",
-            "get_tool_catalog",
-            "generate",
-            "get_usage",
-            "set_proxy",
-            "get_proxy",
-            "reset_usage",
-        ):
-            assert hasattr(tools, name), name
-        # USAGE (a mutable dict) is deliberately NOT lazily re-exported: a
-        # snapshot copy would silently diverge from the live accumulator.
-        # Use tools.get_usage() / suijin.modules.providers.lib.USAGE instead.
-        assert not hasattr(tools, "USAGE")
-
+class TestCanonicalPaths:
     def test_old_import_paths_still_resolve(self):
         import suijin.modules.providers.lib as p
         import suijin.modules.tools.lib.dispatch as d

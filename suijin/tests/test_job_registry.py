@@ -77,7 +77,7 @@ class TestJobRegistry:
 
     def test_runtime_dead_registry_gone(self):
         """runtime.py's dead _jobs/_job_lock must no longer exist."""
-        from suijin.tools import runtime as rt
+        from suijin.modules.platform.lib import runtime as rt
 
         assert not hasattr(rt, "_jobs")
         assert not hasattr(rt, "_job_lock")

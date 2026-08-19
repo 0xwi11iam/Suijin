@@ -1,7 +1,7 @@
 """Subfinder wrapper."""
 import shlex
 
-from suijin.tools.result import run_command
+from suijin.modules.tools.lib.result import run_command
 def subfinder_enum(domain, flags="-all -silent"):
     if not domain: return "Error: domain required"
     cmd = f"subfinder -d {shlex.quote(domain)} {flags}"

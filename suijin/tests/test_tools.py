@@ -244,25 +244,25 @@ class TestWorkspacePathResolution:
     """Test resolve_workspace_path security boundaries."""
 
     def test_rejects_etc_passwd(self):
-        from suijin.tools.workspace import resolve_workspace_path
+        from suijin.modules.platform.lib.workspace import resolve_workspace_path
 
         with pytest.raises(PermissionError):
             resolve_workspace_path("/etc/passwd")
 
     def test_rejects_etc_shadow(self):
-        from suijin.tools.workspace import resolve_workspace_path
+        from suijin.modules.platform.lib.workspace import resolve_workspace_path
 
         with pytest.raises(PermissionError):
             resolve_workspace_path("/etc/shadow")
 
     def test_rejects_root(self):
-        from suijin.tools.workspace import resolve_workspace_path
+        from suijin.modules.platform.lib.workspace import resolve_workspace_path
 
         with pytest.raises(PermissionError):
             resolve_workspace_path("/")
 
     def test_rejects_home_ssh_key(self):
-        from suijin.tools.workspace import resolve_workspace_path
+        from suijin.modules.platform.lib.workspace import resolve_workspace_path
 
         # $HOME is allowlisted, so ~/.ssh won't be rejected.
         # But /etc/ssh keys should be blocked.
@@ -270,32 +270,32 @@ class TestWorkspacePathResolution:
             resolve_workspace_path("/etc/ssh/ssh_host_rsa_key")
 
     def test_rejects_var_log(self):
-        from suijin.tools.workspace import resolve_workspace_path
+        from suijin.modules.platform.lib.workspace import resolve_workspace_path
 
         with pytest.raises(PermissionError):
             resolve_workspace_path("/var/log/system.log")
 
     def test_allows_tmp(self):
-        from suijin.tools.workspace import resolve_workspace_path
+        from suijin.modules.platform.lib.workspace import resolve_workspace_path
 
         result = resolve_workspace_path("/tmp/test_file.txt")
         assert "/tmp" in str(result)
 
     def test_allows_private_tmp(self):
-        from suijin.tools.workspace import resolve_workspace_path
+        from suijin.modules.platform.lib.workspace import resolve_workspace_path
 
         result = resolve_workspace_path("/private/tmp/foo.json")
         assert "/tmp" in str(result) or "/private/tmp" in str(result)
 
     def test_allows_var_tmp(self):
-        from suijin.tools.workspace import resolve_workspace_path
+        from suijin.modules.platform.lib.workspace import resolve_workspace_path
 
         # macOS: /var/tmp -> /private/var/tmp after resolve()
         result = resolve_workspace_path("/var/tmp/scan_output.txt")
         assert "/var/tmp" in str(result) or "/private/var/tmp" in str(result)
 
     def test_relative_path_inside_workspace(self):
-        from suijin.tools.workspace import resolve_workspace_path
+        from suijin.modules.platform.lib.workspace import resolve_workspace_path
 
         result = resolve_workspace_path("outputs/scan.json")
         assert result.is_absolute()
@@ -303,7 +303,7 @@ class TestWorkspacePathResolution:
 
     def test_dot_dot_traversal_rejected(self):
         """../../../etc/passwd must not escape workspace"""
-        from suijin.tools.workspace import WORKSPACE_DIR, resolve_workspace_path
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR, resolve_workspace_path
 
         # resolve() normalizes away .. so this should land inside workspace
         result = resolve_workspace_path("../../../etc/passwd")
@@ -324,7 +324,7 @@ class TestWorkspaceSymlinkSafety:
     """Symlink resolution prevents bypass attacks."""
 
     def test_resolves_symlinks(self):
-        from suijin.tools.workspace import resolve_workspace_path
+        from suijin.modules.platform.lib.workspace import resolve_workspace_path
 
         # Create a temp symlink inside /tmp that points to /etc/passwd
         tmpdir = tempfile.mkdtemp()
@@ -342,7 +342,7 @@ class TestWorkspaceSymlinkSafety:
         # Use /tmp directly (tempfile goes to /var/folders on macOS)
         import uuid
 
-        from suijin.tools.workspace import resolve_workspace_path
+        from suijin.modules.platform.lib.workspace import resolve_workspace_path
 
         test_id = str(uuid.uuid4())[:8]
         tmpdir = os.path.join("/tmp", f"suijin_test_{test_id}")

@@ -12,9 +12,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 @pytest.fixture(scope="session", autouse=True)
 def _runtime_once():
     """The test suite is an entry point: initialize the runtime explicitly
-    (Phase 0 contract — importing suijin.tools.* no longer discovers module
+    (Phase 0 contract — importing platform runtime no longer discovers module
     packs / migrates the workspace as an import side effect)."""
-    from suijin.tools.runtime import init_runtime
+    from suijin.modules.platform.lib.runtime import init_runtime
 
     init_runtime()
 
@@ -23,7 +23,7 @@ def _runtime_once():
 def reset_cost_tracking():
     """Reset provider cost tracking before each test."""
     try:
-        from suijin.tools.providers import reset_usage
+        from suijin.modules.providers.lib import reset_usage
 
         reset_usage()
     except ImportError:
@@ -37,7 +37,7 @@ def mock_provider(monkeypatch):
     def mock_generate(messages, config=None, **kwargs):
         return '{"verdict":"FLAGGED","score":8,"action":"DECEIVE","reasoning":"Test response"}'
 
-    monkeypatch.setattr("suijin.tools.providers.generate", mock_generate)
+    monkeypatch.setattr("suijin.modules.providers.lib.generate", mock_generate)
     return mock_generate
 
 

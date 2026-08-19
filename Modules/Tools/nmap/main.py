@@ -1,7 +1,7 @@
 """Nmap scanner wrapper."""
 import shlex
 
-from suijin.tools.result import run_command
+from suijin.modules.tools.lib.result import run_command
 
 
 def nmap_scan(target, flags="-sV -sC"):

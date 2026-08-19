@@ -277,7 +277,7 @@ def _full_tools() -> list:
     """Core tools + one entry per backend tool (built once, on demand)."""
     global _full_tools_cache
     if _full_tools_cache is None:
-        from suijin.tools.runtime import init_runtime
+        from suijin.modules.platform.lib.runtime import init_runtime
 
         init_runtime()
         _full_tools_cache = TOOLS + _build_backend_tools()
@@ -416,7 +416,7 @@ def handle_message(msg):
 
 
 def main():
-    from suijin.tools.runtime import init_runtime
+    from suijin.modules.platform.lib.runtime import init_runtime
 
     init_runtime()
     for line in sys.stdin:

@@ -19,9 +19,9 @@ from suijin.core.state import (
     format_qa_history,
     format_todo_list,
 )
-from suijin.helpers.json_utils import json_dumps_safe
-from suijin.helpers.parsing import try_parse_llm_decision
-from suijin.helpers.productivity import (
+from suijin.modules.platform.lib.helpers.json_utils import json_dumps_safe
+from suijin.modules.platform.lib.helpers.parsing import try_parse_llm_decision
+from suijin.modules.platform.lib.helpers.productivity import (
     audit_productivity_claim,
     detect_state_growth,
     downgrade_verdict_to_no_progress,

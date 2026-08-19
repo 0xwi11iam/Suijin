@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 def test_provider_routing():
     """Verify the generate() function routes to the correct provider."""
-    from suijin.tools.providers import generate
+    from suijin.modules.providers.lib import generate
 
     config = {"provider": "deepseek", "temperature": 0.1, "max_tokens_per_request": 100}
     messages = [{"role": "user", "content": "Say 'hello' and nothing else."}]
@@ -71,7 +71,7 @@ def test_huggingface():
         print("  ⏭️  HuggingFace: no HF_TOKEN — skipped")
         return
 
-    from suijin.tools.providers import generate
+    from suijin.modules.providers.lib import generate
 
     config = {
         "provider": "huggingface",
@@ -93,7 +93,7 @@ def test_huggingface():
 
 def test_error_handling():
     """Test that invalid configs produce proper errors."""
-    from suijin.tools.providers import generate
+    from suijin.modules.providers.lib import generate
 
     # Invalid provider
     config = {"provider": "nonexistent", "temperature": 0}
@@ -116,7 +116,7 @@ def test_error_handling():
 
 def test_token_counting():
     """Verify USAGE dict is updated after calls."""
-    from suijin.tools.providers import USAGE, generate, reset_usage
+    from suijin.modules.providers.lib import USAGE, generate, reset_usage
 
     reset_usage()
     assert USAGE["calls"] == 0
@@ -149,7 +149,7 @@ def test_response_time():
         print("  ⏭️  Response time: no key — skipped")
         return
 
-    from suijin.tools.providers import generate
+    from suijin.modules.providers.lib import generate
 
     config = {"provider": "deepseek", "temperature": 0, "max_tokens_per_request": 50}
     messages = [{"role": "user", "content": "Say 'pong'"}]

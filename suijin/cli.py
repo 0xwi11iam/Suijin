@@ -73,7 +73,7 @@ def _fail(name, detail=""):
 
 
 def run_doctor() -> int:
-    from suijin.tools.runtime import init_runtime
+    from suijin.modules.platform.lib.runtime import init_runtime
 
     init_runtime()
     rows = []
@@ -171,7 +171,7 @@ def run_doctor() -> int:
 
     # Workspace layout (canonical root dir + inner symlink)
     try:
-        import suijin.tools.workspace as ws
+        import suijin.modules.platform.lib.workspace as ws
 
         ws.ensure_workspace_layout()
         inner = ws.PROJECT_DIR / "suijin" / "suijin_agent"
@@ -388,7 +388,7 @@ def run_status() -> int:
         print(f"knowledge base:   {e}")
 
     try:
-        import suijin.tools.workspace as ws
+        import suijin.modules.platform.lib.workspace as ws
 
         ws.ensure_workspace_layout()
         inner = ws.PROJECT_DIR / "suijin" / "suijin_agent"
@@ -544,7 +544,7 @@ def _dir_stats(p) -> tuple[int, int]:
 def run_workspace_status() -> int:
     """Canonical workspace layout, per-directory usage, symlink health."""
 
-    import suijin.tools.workspace as ws
+    import suijin.modules.platform.lib.workspace as ws
 
     ws.ensure_workspace_layout()
     inner = ws.PROJECT_DIR / "suijin" / "suijin_agent"
@@ -572,7 +572,7 @@ def run_reports_list() -> int:
     """Engagement reports in suijin_agent/reports (newest first, top 30)."""
     from datetime import datetime
 
-    from suijin.tools.workspace import WORKSPACE_DIR
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
     rdir = WORKSPACE_DIR / "reports"
     files = []
@@ -594,7 +594,7 @@ def run_sessions_list() -> int:
     import json
     from datetime import datetime
 
-    from suijin.tools.workspace import WORKSPACE_DIR
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
     sdir = WORKSPACE_DIR / "sessions"
     files = []
@@ -678,7 +678,7 @@ def run_replay(args) -> int:
         path = Path(f)
         trail = None
         if not path.is_absolute():
-            from suijin.tools.workspace import WORKSPACE_DIR
+            from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
             cand = WORKSPACE_DIR / "audit_trails" / f
             path = cand if cand.exists() else path
@@ -818,7 +818,7 @@ def run_selftest() -> int:
     """Offline smoke test: imports, KB gating, workspace anchors, sandbox.
 
     No network, no API keys, no side effects beyond workspace layout repair
-    (which runs on every import of suijin.tools.runtime anyway).
+    (which runs on every import of the platform runtime anyway).
     """
     from unittest.mock import patch
 
@@ -862,7 +862,7 @@ def run_selftest() -> int:
         return "catalog gating consistent (built + disabled states)"
 
     def _workspace_anchor():
-        from suijin.tools.workspace import PROJECT_DIR, WORKSPACE_DIR, ensure_workspace_layout
+        from suijin.modules.platform.lib.workspace import PROJECT_DIR, WORKSPACE_DIR, ensure_workspace_layout
 
         assert WORKSPACE_DIR == PROJECT_DIR / "suijin_agent"
         ensure_workspace_layout()  # repair if needed, then verify
@@ -876,7 +876,7 @@ def run_selftest() -> int:
         from pathlib import Path
 
         from suijin.modules.platform.lib.infra import job_runner
-        from suijin.tools.workspace import WORKSPACE_DIR
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
         wd = Path(job_runner.get_sandbox_workdir())
         assert str(wd).startswith(str(WORKSPACE_DIR)), f"sandbox escaped workspace: {wd}"
@@ -885,7 +885,7 @@ def run_selftest() -> int:
         return "sandbox inside workspace, guardrails block system commands"
 
     def _boundary():
-        from suijin.tools.workspace import resolve_workspace_path
+        from suijin.modules.platform.lib.workspace import resolve_workspace_path
 
         try:
             resolve_workspace_path("/etc/passwd")
@@ -1220,7 +1220,7 @@ def run_skills(args) -> int:
 
 def run_labs_campaign(args) -> int:
     from suijin.modules.ops.lib.housekeeping import render_campaign, run_campaign
-    from suijin.tools.workspace import WORKSPACE_DIR
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
     specs = []
     lab_dir = Path(_PKG_DIR) / "lab"

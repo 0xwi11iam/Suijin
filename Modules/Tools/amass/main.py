@@ -1,7 +1,7 @@
 """Amass wrapper."""
 import shlex
 
-from suijin.tools.result import run_command
+from suijin.modules.tools.lib.result import run_command
 def amass_enum(domain, flags="-passive"):
     if not domain: return "Error: domain required"
     cmd = f"amass enum {flags} -d {shlex.quote(domain)}"

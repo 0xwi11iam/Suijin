@@ -15,7 +15,6 @@ available via get_module_tools() and their skills via get_module_skills().
 
 import importlib.util
 import json
-import re
 import sys
 from pathlib import Path
 
@@ -88,7 +87,14 @@ _local_cache: dict[str, object] = {}
 # Search order: root first, then subdirs. The canonical name for caching
 # is the resolved file's real import path (e.g. "suijin.modules.providers.lib"),
 # so force-loaded and normally-imported modules share sys.modules.
-SEARCH_DIRS = [BASE_DIR] + [BASE_DIR / d for d in ("tools", "security", "intel", "core", "infra")]
+SEARCH_DIRS = [BASE_DIR] + [BASE_DIR / d for d in ("intel", "core")]
+
+# v4.1 clean break: names whose old files are gone map straight to their
+# canonical module homes (dynamic load == normal import, always).
+CANONICAL_ALIASES = {
+    "providers": "suijin.modules.providers.lib",
+    "audit": "suijin.modules.platform.lib.security.audit",
+}
 
 
 def load_local_module(mod_name: str):
@@ -102,18 +108,13 @@ def load_local_module(mod_name: str):
     """
     import importlib.util
 
+    if mod_name in CANONICAL_ALIASES:
+        return __import__(CANONICAL_ALIASES[mod_name], fromlist=["_"])
+
     for search in SEARCH_DIRS:
         path = search / f"{mod_name}.py"
         if not path.exists():
             continue
-        # DEPRECATED shims (v4.1 modularisation): follow them to the real home
-        try:
-            head = path.read_text(errors="ignore")[:600]
-            m = re.search(r'import_module\("([^"]+)"\)', head)
-            if m and "DEPRECATED" in head:
-                return __import__(m.group(1), fromlist=["_"])
-        except OSError:
-            pass
         # Canonical import path: suijin/<rel>.py -> suijin.<rel with dots>
         try:
             rel = path.resolve().relative_to(BASE_DIR.resolve()).with_suffix("")

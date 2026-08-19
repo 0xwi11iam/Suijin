@@ -39,8 +39,8 @@ jobs:
           PYTHONPATH="$PWD:$PYTHONPATH" python -c "
           import suijin.core.state, suijin.core.agent_graph, suijin.core.supervisor, suijin.core.error_handler
           import suijin.core.blue.config, suijin.core.blue.knowledge_graph, suijin.core.blue.ai_engine
-          import suijin.tools.guardrails, suijin.tools.workspace, suijin.core.blue.errors
-          import suijin.core.config_models, suijin.core.constants
+          import suijin.modules.tools.lib.guardrails, suijin.modules.platform.lib.workspace, suijin.core.blue.errors
+          import suijin.modules.platform.lib.config_models, suijin.modules.platform.lib.constants
           print('All imports OK')
           "
 

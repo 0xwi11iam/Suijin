@@ -157,7 +157,7 @@ def fetch_source(name: str, force: bool = False, cache_dir: Path | None = None, 
 
 
 def _default_session():
-    from suijin.tools.runtime import global_session
+    from suijin.modules.platform.lib.runtime import global_session
 
     return global_session
 
@@ -480,5 +480,5 @@ def kb_diff(db_path: Path | None = None, cache_dir: Path | None = None) -> dict:
     return {"built": bool(st), "built_at": st.get("built_at") if st else None, "sources": rows}
 
 
-if __name__ == "__main__":  # manual build: python -m suijin.kb
+if __name__ == "__main__":  # manual build: python -m suijin.modules.knowledge.lib.kb
     compile_kb()

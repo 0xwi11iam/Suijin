@@ -16,7 +16,7 @@ def test_prompt_safety():
 
 
 def test_hard_guardrail():
-    from suijin.helpers.hard_guardrail import is_hard_blocked
+    from suijin.modules.platform.lib.helpers.hard_guardrail import is_hard_blocked
 
     blocked, _ = is_hard_blocked("whitehouse.gov")
     assert blocked
@@ -29,7 +29,7 @@ def test_hard_guardrail():
 
 
 def test_error_class():
-    from suijin.helpers.error_class import classify_error_class, is_diagnostic_failure
+    from suijin.modules.platform.lib.helpers.error_class import classify_error_class, is_diagnostic_failure
 
     assert classify_error_class(success=True, tool_output="ok", error_message=None, duration_ms=10) == "success"
     assert (
@@ -59,7 +59,11 @@ def test_error_class():
 
 
 def test_json_utils():
-    from suijin.helpers.json_utils import extract_json, json_dumps_safe, repair_trailing_json_delimiters
+    from suijin.modules.platform.lib.helpers.json_utils import (
+        extract_json,
+        json_dumps_safe,
+        repair_trailing_json_delimiters,
+    )
 
     assert extract_json('{"key": "value"}') == '{"key": "value"}'
     assert extract_json('prefix {"a":1} suffix') == '{"a":1}'
@@ -73,7 +77,7 @@ def test_json_utils():
 
 
 def test_parsing():
-    from suijin.helpers.parsing import try_parse_llm_decision
+    from suijin.modules.platform.lib.helpers.parsing import try_parse_llm_decision
 
     decision, err = try_parse_llm_decision(
         '{"action":"use_tool","thought":"test","tool_name":"nmap","tool_args":{"target":"x"}}'
@@ -85,7 +89,7 @@ def test_parsing():
 
 
 def test_productivity():
-    from suijin.helpers.productivity import (
+    from suijin.modules.platform.lib.helpers.productivity import (
         axis_key,
         axis_unproductive_count,
         compute_productivity_score,
@@ -218,7 +222,7 @@ def test_engagement_schema():
 
 
 def test_compliance_module():
-    from suijin.security.compliance import _evaluate_controls, _risk_label, analyse_log
+    from suijin.modules.platform.lib.security.compliance import _evaluate_controls, _risk_label, analyse_log
 
     entries = [
         {"user": "admin", "action": "scan", "target": "app1", "risk_score": 0.8, "mode": "red", "result": "OK"},
@@ -368,7 +372,7 @@ def test_error_handler():
 
 
 def test_secret_patterns():
-    from suijin.security.secret_patterns import (
+    from suijin.modules.platform.lib.security.secret_patterns import (
         CVE_ATTACK_MAP,
         SECRET_PATTERNS,
         TECH_VULN_MAP,

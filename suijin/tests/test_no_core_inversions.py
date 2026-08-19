@@ -1,4 +1,4 @@
-"""Phase 0, item 5 — tools must not import suijin.core (inverted deps).
+"""Phase 0, item 5 — the tools module must not import suijin.core (inverted deps).
 
 The recon found 8 sites where tool modules reached UP into core (blue
 scorer, red session_control, red config_loader) — the exact shape the
@@ -10,13 +10,13 @@ seam. This test FAILS on any reintroduced inversion.
 import ast
 from pathlib import Path
 
-TOOLS_DIR = Path(__file__).resolve().parents[1] / "tools"
+TOOLS_DIR = Path(__file__).resolve().parents[1] / "modules" / "tools" / "lib"
 
 # Importing core.CONSTANTS from tools is acceptable (shared kernel
 # values, no behavior); importing anything else under suijin.core is not.
 _BANNED = "suijin.core"
 _ALLOWED_PREFIX = "suijin.core.constants"
-_SEAM = "tools/services.py"
+_SEAM = "modules/tools/lib/services.py"
 
 
 def _imports(tree: ast.Module) -> set[tuple[int, str]]:
@@ -27,8 +27,8 @@ def _imports(tree: ast.Module) -> set[tuple[int, str]]:
                 out.add((node.lineno, a.name))
         elif isinstance(node, ast.ImportFrom):
             base = f"{node.module}" if node.module else ""
-            if node.level:  # relative — resolve against tools package
-                base = f"suijin.tools.{base}" if base else "suijin.tools"
+            if node.level:  # relative — resolve against the tools lib package
+                base = f"suijin.modules.tools.lib.{base}" if base else "suijin.modules.tools.lib"
             out.add((node.lineno, base))
     return out
 

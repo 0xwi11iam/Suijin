@@ -274,7 +274,7 @@ class TestFormattingHelpers:
 
 class TestParsing:
     def test_successful_parsing(self):
-        from suijin.helpers.parsing import try_parse_llm_decision
+        from suijin.modules.platform.lib.helpers.parsing import try_parse_llm_decision
 
         resp = '{"action":"use_tool","thought":"test scan","tool_name":"nmap","tool_args":{"target":"x"}}'
         decision, err = try_parse_llm_decision(resp)
@@ -284,7 +284,7 @@ class TestParsing:
         assert err is None
 
     def test_parsing_with_json_in_text(self):
-        from suijin.helpers.parsing import try_parse_llm_decision
+        from suijin.modules.platform.lib.helpers.parsing import try_parse_llm_decision
 
         resp = 'some text {"action":"complete","thought":"done"} more text'
         decision, err = try_parse_llm_decision(resp)
@@ -292,28 +292,28 @@ class TestParsing:
         assert decision["action"] == "complete"
 
     def test_parsing_no_json(self):
-        from suijin.helpers.parsing import try_parse_llm_decision
+        from suijin.modules.platform.lib.helpers.parsing import try_parse_llm_decision
 
         decision, err = try_parse_llm_decision("no json here")
         assert decision is None
         assert err is not None
 
     def test_parsing_invalid_action(self):
-        from suijin.helpers.parsing import try_parse_llm_decision
+        from suijin.modules.platform.lib.helpers.parsing import try_parse_llm_decision
 
         decision, err = try_parse_llm_decision('{"action":"hack_the_planet"}')
         assert decision is None
         assert "Unknown action" in (err or "")
 
     def test_parsing_missing_tool_name_for_use_tool(self):
-        from suijin.helpers.parsing import try_parse_llm_decision
+        from suijin.modules.platform.lib.helpers.parsing import try_parse_llm_decision
 
         decision, err = try_parse_llm_decision('{"action":"use_tool"}')
         assert decision is None
         assert "tool_name" in (err or "")
 
     def test_all_valid_actions(self):
-        from suijin.helpers.parsing import try_parse_llm_decision
+        from suijin.modules.platform.lib.helpers.parsing import try_parse_llm_decision
 
         for action in [
             "use_tool",
@@ -329,21 +329,21 @@ class TestParsing:
             assert decision is not None, f"Failed for action={action}: {err}"
 
     def test_parsing_malformed_json_repairs(self):
-        from suijin.helpers.parsing import try_parse_llm_decision
+        from suijin.modules.platform.lib.helpers.parsing import try_parse_llm_decision
 
         # Missing closing brace — repair_trailing_json_delimiters should fix
         decision, err = try_parse_llm_decision('{"action":"complete","thought":"x"')
         assert decision is not None
 
     def test_extract_tokens_from_response(self):
-        from suijin.helpers.parsing import extract_tokens_from_response
+        from suijin.modules.platform.lib.helpers.parsing import extract_tokens_from_response
 
         body = "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgN"
         found = extract_tokens_from_response(body)
         assert len(found) >= 1
 
     def test_classify_web_vuln_sqli(self):
-        from suijin.helpers.parsing import classify_web_vuln
+        from suijin.modules.platform.lib.helpers.parsing import classify_web_vuln
 
         results = classify_web_vuln("SQL syntax error in mysql_fetch")
         assert len(results) >= 1
@@ -352,28 +352,28 @@ class TestParsing:
 
 class TestJsonUtils:
     def test_extract_json_object(self):
-        from suijin.helpers.json_utils import extract_json
+        from suijin.modules.platform.lib.helpers.json_utils import extract_json
 
         assert extract_json('{"a":1}') == '{"a":1}'
 
     def test_extract_json_from_text(self):
-        from suijin.helpers.json_utils import extract_json
+        from suijin.modules.platform.lib.helpers.json_utils import extract_json
 
         assert extract_json('prefix {"a":1} suffix') == '{"a":1}'
 
     def test_extract_json_no_object(self):
-        from suijin.helpers.json_utils import extract_json
+        from suijin.modules.platform.lib.helpers.json_utils import extract_json
 
         assert extract_json("no json") is None
 
     def test_repair_missing_brace(self):
-        from suijin.helpers.json_utils import repair_trailing_json_delimiters
+        from suijin.modules.platform.lib.helpers.json_utils import repair_trailing_json_delimiters
 
         result = repair_trailing_json_delimiters('{"a":1,"b":{"c":2}')
         assert result == '{"a":1,"b":{"c":2}}'
 
     def test_json_dumps_safe_datetime(self):
-        from suijin.helpers.json_utils import json_dumps_safe
+        from suijin.modules.platform.lib.helpers.json_utils import json_dumps_safe
 
         now = datetime.now(timezone.utc)
         s = json_dumps_safe({"ts": now})
@@ -387,55 +387,55 @@ class TestJsonUtils:
 
 class TestProductivity:
     def test_is_unproductive_no_progress(self):
-        from suijin.helpers.productivity import is_unproductive
+        from suijin.modules.platform.lib.helpers.productivity import is_unproductive
 
         step = {"productivity": {"verdict": "no_progress", "new_information_gained": False}}
         assert is_unproductive(step) is True
 
     def test_is_unproductive_duplicate(self):
-        from suijin.helpers.productivity import is_unproductive
+        from suijin.modules.platform.lib.helpers.productivity import is_unproductive
 
         step = {"productivity": {"verdict": "duplicate"}}
         assert is_unproductive(step) is True
 
     def test_is_unproductive_blocked(self):
-        from suijin.helpers.productivity import is_unproductive
+        from suijin.modules.platform.lib.helpers.productivity import is_unproductive
 
         step = {"productivity": {"verdict": "blocked"}}
         assert is_unproductive(step) is True
 
     def test_is_unproductive_new_info(self):
-        from suijin.helpers.productivity import is_unproductive
+        from suijin.modules.platform.lib.helpers.productivity import is_unproductive
 
         step = {"productivity": {"verdict": "new_info", "new_information_gained": True}}
         assert is_unproductive(step) is False
 
     def test_is_unproductive_diagnostic_progress(self):
-        from suijin.helpers.productivity import is_unproductive
+        from suijin.modules.platform.lib.helpers.productivity import is_unproductive
 
         step = {"productivity": {"verdict": "diagnostic_progress"}}
         assert is_unproductive(step) is False
 
     def test_is_unproductive_empty_step(self):
-        from suijin.helpers.productivity import is_unproductive
+        from suijin.modules.platform.lib.helpers.productivity import is_unproductive
 
         assert is_unproductive({}) is False
 
     def test_is_unproductive_nested_in_output_analysis(self):
-        from suijin.helpers.productivity import is_unproductive
+        from suijin.modules.platform.lib.helpers.productivity import is_unproductive
 
         step = {"output_analysis": {"productivity": {"verdict": "no_progress"}}}
         assert is_unproductive(step) is True
 
     def test_normalize_args_pattern_collapses_ids(self):
-        from suijin.helpers.productivity import _normalize_args_pattern
+        from suijin.modules.platform.lib.helpers.productivity import _normalize_args_pattern
 
         p1 = _normalize_args_pattern("nmap", {"target": "192.168.1.1"})
         p2 = _normalize_args_pattern("nmap", {"target": "10.0.0.1"})
         assert p1 == p2  # Both collapse to "<ip>"
 
     def test_output_fingerprint_stable(self):
-        from suijin.helpers.productivity import _output_fingerprint
+        from suijin.modules.platform.lib.helpers.productivity import _output_fingerprint
 
         fp1 = _output_fingerprint({"tool_output": "hello world"})
         fp2 = _output_fingerprint({"tool_output": "hello world"})
@@ -443,20 +443,24 @@ class TestProductivity:
         assert len(fp1) == 8
 
     def test_output_fingerprint_different(self):
-        from suijin.helpers.productivity import _output_fingerprint
+        from suijin.modules.platform.lib.helpers.productivity import _output_fingerprint
 
         fp1 = _output_fingerprint({"tool_output": "hello"})
         fp2 = _output_fingerprint({"tool_output": "world"})
         assert fp1 != fp2
 
     def test_axis_key(self):
-        from suijin.helpers.productivity import axis_key
+        from suijin.modules.platform.lib.helpers.productivity import axis_key
 
         k = axis_key("nmap", {"target": "192.168.1.1", "ports": "1-1000"})
         assert "nmap" in k
 
     def test_axis_unproductive_count(self):
-        from suijin.helpers.productivity import axis_key, axis_unproductive_count, record_axis_attempt
+        from suijin.modules.platform.lib.helpers.productivity import (
+            axis_key,
+            axis_unproductive_count,
+            record_axis_attempt,
+        )
 
         k = axis_key("nmap", {"target": "x"})
         axes = {}
@@ -466,7 +470,7 @@ class TestProductivity:
         assert axis_unproductive_count(axes) == 1
 
     def test_compute_productivity_score(self):
-        from suijin.helpers.productivity import compute_productivity_score
+        from suijin.modules.platform.lib.helpers.productivity import compute_productivity_score
 
         score = compute_productivity_score([], {}, 0, 1, 100, "informational")
         assert isinstance(score, dict)
@@ -474,7 +478,7 @@ class TestProductivity:
         assert 0 <= score["score"] <= 10
 
     def test_tier_for_score(self):
-        from suijin.helpers.productivity import tier_for_score
+        from suijin.modules.platform.lib.helpers.productivity import tier_for_score
 
         assert tier_for_score(1.0) == "green"
         assert tier_for_score(6.0) == "orange"
@@ -488,12 +492,12 @@ class TestProductivity:
 
 class TestErrorClass:
     def test_success(self):
-        from suijin.helpers.error_class import classify_error_class
+        from suijin.modules.platform.lib.helpers.error_class import classify_error_class
 
         assert classify_error_class(success=True, tool_output="ok", error_message=None, duration_ms=10) == "success"
 
     def test_transport_error(self):
-        from suijin.helpers.error_class import classify_error_class
+        from suijin.modules.platform.lib.helpers.error_class import classify_error_class
 
         assert (
             classify_error_class(success=False, tool_output="connection refused", error_message=None, duration_ms=100)
@@ -501,7 +505,7 @@ class TestErrorClass:
         )
 
     def test_5xx_normal(self):
-        from suijin.helpers.error_class import classify_error_class
+        from suijin.modules.platform.lib.helpers.error_class import classify_error_class
 
         assert (
             classify_error_class(success=False, tool_output="HTTP/1.1 500 Error", error_message=None, duration_ms=300)
@@ -509,7 +513,7 @@ class TestErrorClass:
         )
 
     def test_5xx_fast(self):
-        from suijin.helpers.error_class import classify_error_class
+        from suijin.modules.platform.lib.helpers.error_class import classify_error_class
 
         assert (
             classify_error_class(success=False, tool_output="HTTP/1.1 500 Error", error_message=None, duration_ms=30)
@@ -517,7 +521,7 @@ class TestErrorClass:
         )
 
     def test_4xx(self):
-        from suijin.helpers.error_class import classify_error_class
+        from suijin.modules.platform.lib.helpers.error_class import classify_error_class
 
         assert (
             classify_error_class(
@@ -527,7 +531,7 @@ class TestErrorClass:
         )
 
     def test_tool_internal_error(self):
-        from suijin.helpers.error_class import classify_error_class
+        from suijin.modules.platform.lib.helpers.error_class import classify_error_class
 
         assert (
             classify_error_class(success=False, tool_output="command not found", error_message=None, duration_ms=10)
@@ -535,7 +539,7 @@ class TestErrorClass:
         )
 
     def test_is_diagnostic_failure(self):
-        from suijin.helpers.error_class import is_diagnostic_failure
+        from suijin.modules.platform.lib.helpers.error_class import is_diagnostic_failure
 
         assert is_diagnostic_failure("transport_error") is True
         assert is_diagnostic_failure("shell_parser_error") is True
@@ -545,26 +549,26 @@ class TestErrorClass:
 
 class TestHardGuardrail:
     def test_blocks_gov_domain(self):
-        from suijin.helpers.hard_guardrail import is_hard_blocked
+        from suijin.modules.platform.lib.helpers.hard_guardrail import is_hard_blocked
 
         blocked, _ = is_hard_blocked("whitehouse.gov")
         assert blocked
 
     def test_blocks_mil_domain(self):
-        from suijin.helpers.hard_guardrail import is_hard_blocked
+        from suijin.modules.platform.lib.helpers.hard_guardrail import is_hard_blocked
 
         # .mil domains should be blocked
         blocked, _ = is_hard_blocked("army.mil")
         assert blocked
 
     def test_allows_private_ip(self):
-        from suijin.helpers.hard_guardrail import is_hard_blocked
+        from suijin.modules.platform.lib.helpers.hard_guardrail import is_hard_blocked
 
         blocked, _ = is_hard_blocked("192.168.1.1")
         assert not blocked
 
     def test_allows_local_domain(self):
-        from suijin.helpers.hard_guardrail import is_hard_blocked
+        from suijin.modules.platform.lib.helpers.hard_guardrail import is_hard_blocked
 
         blocked, _ = is_hard_blocked("my-test-app.local")
         assert not blocked
@@ -596,25 +600,25 @@ class TestModuleLoader:
 
 class TestProviders:
     def test_usage_reset(self):
-        from suijin.tools.providers import USAGE, reset_usage
+        from suijin.modules.providers.lib import USAGE, reset_usage
 
         reset_usage()
         assert USAGE["calls"] == 0
         assert USAGE["est_cost_usd"] == 0.0
 
     def test_model_pricing_has_deepseek(self):
-        from suijin.tools.providers import MODEL_PRICING
+        from suijin.modules.providers.lib import MODEL_PRICING
 
         assert "deepseek-v4-flash" in MODEL_PRICING
         assert "deepseek-v4-pro" in MODEL_PRICING
 
     def test_model_pricing_has_qwen(self):
-        from suijin.tools.providers import MODEL_PRICING
+        from suijin.modules.providers.lib import MODEL_PRICING
 
         assert "Qwen/Qwen2.5-3B-Instruct" in MODEL_PRICING
 
     def test_generate_unknown_provider(self):
-        from suijin.tools.providers import generate
+        from suijin.modules.providers.lib import generate
 
         config = {"provider": "nonexistent", "temperature": 0}
         messages = [{"role": "user", "content": "test"}]
@@ -622,7 +626,7 @@ class TestProviders:
         assert "Unknown provider" in result or "Error" in result
 
     def test_generate_missing_key(self):
-        from suijin.tools.providers import generate
+        from suijin.modules.providers.lib import generate
 
         orig = os.environ.pop("DEEPSEEK_API_KEY", None)
         try:
@@ -635,7 +639,7 @@ class TestProviders:
                 os.environ["DEEPSEEK_API_KEY"] = orig
 
     def test_provider_cost_estimation_in_pricing(self):
-        from suijin.tools.providers import MODEL_PRICING
+        from suijin.modules.providers.lib import MODEL_PRICING
 
         # Verify pricing constants are reasonable
         in_price, out_price = MODEL_PRICING["deepseek-v4-flash"]
@@ -645,7 +649,7 @@ class TestProviders:
         assert in_price + out_price > 0.5  # should cost something
 
     def test_get_usage_returns_dict(self):
-        from suijin.tools.providers import get_usage, reset_usage
+        from suijin.modules.providers.lib import get_usage, reset_usage
 
         reset_usage()
         usage = get_usage()

@@ -90,7 +90,7 @@ class TestHttpRequestTool:
                 sent.update(method=method, url=url, headers=headers, data=data)
                 return resp
 
-        import suijin.tools.runtime as rt
+        import suijin.modules.platform.lib.runtime as rt
 
         monkeypatch.setattr(rt, "global_session", FakeGlobal())
         monkeypatch.setattr(http_tools, "global_session", FakeGlobal())
@@ -121,7 +121,7 @@ class TestHttpRequestTool:
             def request(self, *a, **k):
                 raise ConnectionError("refused")
 
-        import suijin.tools.runtime as rt
+        import suijin.modules.platform.lib.runtime as rt
 
         monkeypatch.setattr(rt, "global_session", Boom())
         monkeypatch.setattr(http_tools, "global_session", Boom())

@@ -162,7 +162,7 @@ class TestArtifactListings:
     """reports / sessions read the canonical workspace — tmp-backed here."""
 
     def test_reports_listing(self, monkeypatch, tmp_path):
-        import suijin.tools.workspace as ws
+        import suijin.modules.platform.lib.workspace as ws
 
         reports = tmp_path / "reports"
         reports.mkdir()
@@ -173,7 +173,7 @@ class TestArtifactListings:
         assert "eng_report.md" in out
 
     def test_reports_empty(self, monkeypatch, tmp_path):
-        import suijin.tools.workspace as ws
+        import suijin.modules.platform.lib.workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
         code, out = run_cli(["reports"])
@@ -181,7 +181,7 @@ class TestArtifactListings:
         assert "No reports yet" in out
 
     def test_sessions_listing_shows_objective(self, monkeypatch, tmp_path):
-        import suijin.tools.workspace as ws
+        import suijin.modules.platform.lib.workspace as ws
 
         sessions = tmp_path / "sessions"
         sessions.mkdir()
@@ -193,7 +193,7 @@ class TestArtifactListings:
         assert "own the lab" in out
 
     def test_sessions_empty(self, monkeypatch, tmp_path):
-        import suijin.tools.workspace as ws
+        import suijin.modules.platform.lib.workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
         code, out = run_cli(["sessions"])

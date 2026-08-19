@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 
 try:
-    from suijin.tools.workspace import WORKSPACE_DIR
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 except Exception:  # loaded outside the suijin process — same layout by convention
     WORKSPACE_DIR = Path(__file__).resolve().parent.parent.parent.parent / "suijin_agent"
 

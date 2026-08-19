@@ -9,7 +9,7 @@ legacy real inner dir by merging its contents up.
 import os
 from pathlib import Path
 
-from suijin.tools import workspace as ws
+from suijin.modules.platform.lib import workspace as ws
 
 
 def _make(tmp_path):
