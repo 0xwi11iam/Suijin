@@ -629,6 +629,45 @@ def get_tool_catalog():
   ```
 """
 
+    # Analysis & utility routes that predate the curated prose above —
+    # callable but previously invisible to the model (flexibility fix:
+    # every routed tool must appear in the catalog exactly once).
+    catalog += """## Analysis & Utility Tools
+- **target_dossier** — per-target intelligence dossier (knowledge graph + failure history + notes).
+  ```json
+  {"tool": "target_dossier", "args": {"target": "TARGET"}}
+  ```
+- **payload_generate** — ready-made payloads by vulnerability type and framework.
+  ```json
+  {"tool": "payload_generate", "args": {"vuln_type": "rce", "framework": "spring"}}
+  ```
+- **mutate_wordlist** — expand a seed wordlist (leet, years, suffixes) into payloads/wordlists/.
+  ```json
+  {"tool": "mutate_wordlist", "args": {"seeds": ["admin", "company2024"]}}
+  ```
+- **cewl_words** — harvest a custom wordlist from a target URL's content.
+  ```json
+  {"tool": "cewl_words", "args": {"url": "http://TARGET"}}
+  ```
+- **diff_response** — diff baseline vs injected responses to expose subtle behavior changes.
+  ```json
+  {"tool": "diff_response", "args": {"baseline": "...", "injected": "..."}}
+  ```
+- **rate_limit_check / rate_limit_all** — detect rate-limited endpoints before brute force.
+  ```json
+  {"tool": "rate_limit_check", "args": {"endpoint": "/login"}}
+  ```
+- **attack_tree** — render a trace as an attack tree diagram for the report.
+  ```json
+  {"tool": "attack_tree", "args": {"trace_json": "..."}}
+  ```
+- **normalize_output** — normalize raw tool output for comparison/storage.
+- **kb_read** — read one KB document by path (from search_kb results).
+  ```json
+  {"tool": "kb_read", "args": {"path": "gtfobins/aws.md"}}
+  ```
+"""
+
     # Module tools — only advertise the ones whose binaries are present, and
     # list the missing ones separately with install hints so the agent never
     # wastes a turn calling a tool that cannot run.

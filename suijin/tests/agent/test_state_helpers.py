@@ -320,6 +320,7 @@ class TestParsing:
             "plan_tools",
             "transition_phase",
             "complete",
+            "ask_operator",
             "ask_user",
             "deploy_subagent",
             "switch_skill",
@@ -327,6 +328,19 @@ class TestParsing:
             extra = ', "tool_name":"nmap"' if action in ("use_tool", "plan_tools") else ""
             decision, err = try_parse_llm_decision(f'{{"action":"{action}"{extra}}}')
             assert decision is not None, f"Failed for action={action}: {err}"
+
+    def test_ask_operator_round_trips_the_graph_handlers(self):
+        """Regression (v4.1.1): the system prompt teaches ask_operator, the
+        think/execute nodes handle it — but the parser rejected it, burning
+        all 3 parse retries and killing engagements on a legal action."""
+        from suijin.modules.platform.lib.helpers.parsing import try_parse_llm_decision
+
+        decision, err = try_parse_llm_decision(
+            '{"action": "ask_operator", "thought": "unclear scope", "question": "Focus on X or Y?"}'
+        )
+        assert decision is not None, err
+        assert decision["action"] == "ask_operator"
+        assert decision["question"] == "Focus on X or Y?"
 
     def test_parsing_malformed_json_repairs(self):
         from suijin.modules.platform.lib.helpers.parsing import try_parse_llm_decision

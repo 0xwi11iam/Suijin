@@ -116,6 +116,7 @@ def try_parse_llm_decision(response_text: str) -> tuple[Optional[dict], Optional
             "plan_tools",
             "transition_phase",
             "complete",
+            "ask_operator",
             "ask_user",
             "deploy_subagent",
             "switch_skill",
