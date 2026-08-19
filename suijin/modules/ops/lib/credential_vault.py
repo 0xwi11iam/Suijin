@@ -172,7 +172,9 @@ def export_credentials(passphrase: str, out_path: Path | None = None, redact: bo
     entries = load_vault(passphrase)
     if redact:
         entries = [{**c, "value": "***redacted***"} for c in entries]
-    out = Path(out_path) if out_path else _ws().WORKSPACE_DIR / "reports" / "vault_export.json"
+    from suijin.modules.platform.lib.workspace import artifact_dir as _ad
+
+    out = Path(out_path) if out_path else _ad("reports") / "vault_export.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({"credentials": entries}, indent=2))
     return (

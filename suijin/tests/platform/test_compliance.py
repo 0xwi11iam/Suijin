@@ -111,8 +111,8 @@ class TestCliVerb:
         code, out = run_cli(["compliance"])
         assert code == 0 and "No findings" in out
 
-        (tmp_path / "audit_trails").mkdir()
-        (tmp_path / "audit_trails" / "eng.json").write_text(
+        (tmp_path / "outputs" / "audit_trails").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "outputs" / "audit_trails" / "eng.json").write_text(
             json.dumps({"findings": [{"type": "sqli", "description": "login bypass", "severity": "high"}]})
         )
         code, out = run_cli(["compliance"])

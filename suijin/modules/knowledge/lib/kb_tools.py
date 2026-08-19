@@ -97,7 +97,9 @@ def _extract_seclists_file(rel_path: str) -> str | None:
             if member is None:
                 return None
             data = tar.extractfile(member).read()
-        out_dir = _ws().resolve_workspace_path("wordlists")
+        from suijin.modules.platform.lib.workspace import artifact_dir as _ad
+
+        out_dir = _ad("wordlists")
         out_dir.mkdir(parents=True, exist_ok=True)
         out = out_dir / base
         out.write_bytes(data)
@@ -248,7 +250,9 @@ def extract_payloads(keyword: str, max_payloads: int = 10) -> str:
     except sqlite3.Error as e:
         return f"KB Error: {e}"
 
-    out_dir = _ws().resolve_workspace_path("payloads")
+    from suijin.modules.platform.lib.workspace import artifact_dir as _ad
+
+    out_dir = _ad("payloads")
     out_dir.mkdir(parents=True, exist_ok=True)
     written = []
     for source, path, content in docs:

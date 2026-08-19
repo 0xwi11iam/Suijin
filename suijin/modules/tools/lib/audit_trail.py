@@ -14,9 +14,10 @@ def _audit_dir():
     v = globals().get("AUDIT_DIR")
     if v is not None:
         return v
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-    return WORKSPACE_DIR / "audit_trails"
+    from suijin.modules.platform.lib.workspace import artifact_dir as _ad
+
+    return _ad("audit_trails")
 
 
 def __getattr__(name):

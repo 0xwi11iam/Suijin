@@ -155,3 +155,27 @@ class TestRenameMigration:
 
         assert not legacy_inner.exists()
         assert (root / "outputs" / "job.log").read_text() == "log"
+
+
+class TestOutputsConsolidation:
+    def test_artifacts_nest_under_outputs(self, tmp_path, monkeypatch):
+        """v4.2 contract: every artifact category lives under outputs/ —
+        one parent for everything an engagement produces."""
+        import suijin.modules.platform.lib.workspace as ws
+
+        monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        for name in ws.ARTIFACT_DIRS:
+            d = ws.artifact_dir(name)
+            assert d.parent == tmp_path / "outputs", name
+
+    def test_legacy_artifacts_migrate_once(self, tmp_path, monkeypatch):
+        import suijin.modules.platform.lib.workspace as ws
+
+        monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        (tmp_path / "reports").mkdir()
+        (tmp_path / "reports" / "old.md").write_text("x")
+        moved = ws.migrate_legacy_artifacts()
+        assert "reports" in moved
+        assert (tmp_path / "outputs" / "reports" / "old.md").read_text() == "x"
+        assert not (tmp_path / "reports").exists()
+        assert ws.migrate_legacy_artifacts() == []  # idempotent

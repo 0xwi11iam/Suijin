@@ -61,7 +61,9 @@ def is_command_allowed(command: str) -> bool:
 
 
 def get_sandbox_workdir() -> str:
-    workdir = WORKSPACE_DIR / "sandbox"
+    from suijin.modules.platform.lib.workspace import artifact_dir as _ad
+
+    workdir = _ad("sandbox")
     workdir.mkdir(parents=True, exist_ok=True)
     return str(workdir)
 

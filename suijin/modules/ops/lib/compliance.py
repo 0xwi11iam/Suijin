@@ -88,7 +88,9 @@ def summarize(mapped: list[dict]) -> dict:
 
 def load_findings(engagement: str | None = None, workspace: Path | None = None) -> list[dict]:
     """Findings from audit trails; newest engagement when name omitted."""
-    ws = Path(workspace) if workspace else _ws().WORKSPACE_DIR / "audit_trails"
+    from suijin.modules.platform.lib.workspace import artifact_dir as _ad
+
+    ws = Path(workspace) if workspace else _ad("audit_trails")
     trails = sorted(ws.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True) if ws.is_dir() else []
     if engagement:
         needle = engagement.lower().replace(" ", "_")

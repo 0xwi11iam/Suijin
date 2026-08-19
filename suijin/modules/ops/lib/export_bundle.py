@@ -26,11 +26,11 @@ def _ws():
 
 # workspace-relative folders always included when present
 _BUNDLE_DIRS = (
-    "reports",
-    "audit_trails",
-    "sessions",
-    "blue_state",
-    "dossiers",
+    "outputs/reports",
+    "outputs/audit_trails",
+    "outputs/sessions",
+    "outputs/blue_state",
+    "outputs/dossiers",
     "evidence",
     "evidence_chains",
 )
@@ -104,7 +104,9 @@ def build_bundle(
 
     ts = datetime.now(timezone.utc)
     if out_path is None:
-        out_dir = ws / "exports"
+        from suijin.modules.platform.lib.workspace import artifact_dir as _ad
+
+        out_dir = _ad("exports")
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / f"suijin_bundle_{ts.strftime('%Y%m%d_%H%M%S')}.zip"
 

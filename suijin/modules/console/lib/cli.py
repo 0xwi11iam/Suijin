@@ -39,6 +39,8 @@ if _pkg_parent not in sys.path:
     sys.path.insert(0, _pkg_parent)
 
 # Single source of truth: suijin/version.json (via the package __init__).
+from suijin.modules.platform.lib.workspace import artifact_dir as _ad  # noqa: E402 — console surface (boundary-exempt)
+
 VERSION = None  # patchable seam; resolved lazily
 
 
@@ -590,9 +592,7 @@ def run_reports_list() -> int:
     """Engagement reports in suijin_agent/reports (newest first, top 30)."""
     from datetime import datetime
 
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
-
-    rdir = WORKSPACE_DIR / "reports"
+    rdir = _ad("reports")
     files = []
     if rdir.exists():
         files = sorted((f for f in rdir.rglob("*") if f.is_file()), key=lambda p: p.stat().st_mtime, reverse=True)[:30]
@@ -612,9 +612,7 @@ def run_sessions_list() -> int:
     import json
     from datetime import datetime
 
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
-
-    sdir = WORKSPACE_DIR / "sessions"
+    sdir = _ad("sessions")
     files = []
     if sdir.exists():
         files = sorted(sdir.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
@@ -696,9 +694,7 @@ def run_replay(args) -> int:
         path = Path(f)
         trail = None
         if not path.is_absolute():
-            from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
-
-            cand = WORKSPACE_DIR / "audit_trails" / f
+            cand = _ad("audit_trails") / f
             path = cand if cand.exists() else path
         if path.exists():
             try:
@@ -1238,7 +1234,6 @@ def run_skills(args) -> int:
 
 def run_labs_campaign(args) -> int:
     from suijin.modules.ops.lib.housekeeping import render_campaign, run_campaign
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
     specs = []
     lab_dir = Path(_PKG_DIR) / "lab"
@@ -1276,7 +1271,7 @@ def run_labs_campaign(args) -> int:
                     break
                 except Exception:
                     time.sleep(0.3)
-            single = run_campaign([spec], out_dir=WORKSPACE_DIR / "reports")
+            single = run_campaign([spec], out_dir=_ad("reports"))
             results.update(single["labs"])
         finally:
             proc.terminate()

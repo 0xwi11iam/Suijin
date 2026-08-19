@@ -14,9 +14,10 @@ def _reports_dir():
     v = globals().get("REPORTS_DIR")
     if v is not None:
         return v
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-    return WORKSPACE_DIR / "reports"
+    from suijin.modules.platform.lib.workspace import artifact_dir as _ad
+
+    return _ad("reports")
 
 
 def __getattr__(name):

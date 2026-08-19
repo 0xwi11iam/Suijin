@@ -455,12 +455,12 @@ class TestClean:
 
         from suijin.modules.ops.lib.housekeeping import clean_workspace
 
-        self._old_file(tmp_path / "sandbox" / "x.txt")
+        self._old_file(tmp_path / "outputs" / "sandbox" / "x.txt")
         out = clean_workspace(apply=True, workspace=tmp_path)
         assert "archived" in out
-        assert not (tmp_path / "sandbox" / "x.txt").exists()
+        assert not (tmp_path / "outputs" / "sandbox" / "x.txt").exists()
         zips = list((tmp_path / "exports").glob("cleaned_*.zip"))
-        assert zips and "sandbox/x.txt" in zipfile.ZipFile(zips[0]).namelist()
+        assert zips and "outputs/sandbox/x.txt" in zipfile.ZipFile(zips[0]).namelist()
 
     def test_fresh_files_kept(self, tmp_path):
         from suijin.modules.ops.lib.housekeeping import clean_workspace

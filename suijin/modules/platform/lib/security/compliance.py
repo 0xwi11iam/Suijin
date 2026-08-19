@@ -27,9 +27,10 @@ KEYS_FILE = BASE_DIR / "access_keys.json"
 
 
 def _reports_dir():
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-    return WORKSPACE_DIR / "compliance_reports"
+    from suijin.modules.platform.lib.workspace import artifact_dir as _ad
+
+    return _ad("compliance_reports")
 
 
 REPORTS_DIR = _reports_dir()

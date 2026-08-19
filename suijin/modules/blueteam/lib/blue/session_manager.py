@@ -17,11 +17,20 @@ def _workspace_dir():
     return _v
 
 
-STATE_DIR = _workspace_dir() / "blue_state"
+STATE_DIR = None  # patchable seam; resolved lazily (boundary rule)
+
+
+def _state_dir():
+    v = globals().get("STATE_DIR")
+    if v is not None:
+        return v
+    from suijin.modules.platform.lib.workspace import artifact_dir
+
+    return artifact_dir("blue_state")
 
 
 def _ensure_dir() -> None:
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    _state_dir().mkdir(parents=True, exist_ok=True)
 
 
 _ensure_dir()  # module init: this module IS the state manager — creating
@@ -102,7 +111,7 @@ class BlueSession:
             return profile
 
     def save(self):
-        path = STATE_DIR / f"session_{self.session_id}.json"
+        path = _state_dir() / f"session_{self.session_id}.json"
         path.write_text(
             json.dumps(
                 {

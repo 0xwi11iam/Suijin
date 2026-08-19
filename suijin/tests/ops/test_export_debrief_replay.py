@@ -13,9 +13,9 @@ from suijin.modules.ops.lib.export_bundle import build_bundle, verify_bundle
 @pytest.fixture
 def ws(tmp_path):
     """Workspace with a full engagement's worth of artifacts + KGs + config."""
-    (tmp_path / "reports").mkdir()
-    (tmp_path / "reports" / "eng.md").write_text("# report\nFLAG{x}")
-    (tmp_path / "audit_trails").mkdir()
+    (tmp_path / "outputs" / "reports").mkdir(parents=True)
+    (tmp_path / "outputs" / "reports" / "eng.md").write_text("# report\nFLAG{x}")
+    (tmp_path / "outputs" / "audit_trails").mkdir(parents=True)
     trail = {
         "engagement": "testlab",
         "started": "2026-08-17T10:00:00+00:00",
@@ -52,7 +52,7 @@ def ws(tmp_path):
             },
         ],
     }
-    (tmp_path / "audit_trails" / "testlab.json").write_text(json.dumps(trail))
+    (tmp_path / "outputs" / "audit_trails" / "testlab.json").write_text(json.dumps(trail))
     (tmp_path / "sessions").mkdir()
     (tmp_path / "sessions" / "s1.json").write_text(json.dumps({"objective": "o"}))
     (tmp_path / "credentials.json").write_text('{"api_key": "sk-supersecret"}')
@@ -74,8 +74,8 @@ class TestExport:
         with zipfile.ZipFile(out) as zf:
             names = zf.namelist()
         assert "manifest.json" in names and "custody.json" in names
-        assert "workspace/reports/eng.md" in names
-        assert "workspace/audit_trails/testlab.json" in names
+        assert "workspace/outputs/reports/eng.md" in names
+        assert "workspace/outputs/audit_trails/testlab.json" in names
         assert "config.redacted.json" in names
         ok, problems = verify_bundle(out)
         assert ok, problems
@@ -109,7 +109,7 @@ class TestExport:
         tampered = out.with_name("tampered.zip")
         with zipfile.ZipFile(tampered, "w") as zf:
             for info, data in items:
-                if info.filename == "workspace/reports/eng.md":
+                if info.filename == "workspace/outputs/reports/eng.md":
                     data = b"# tampered report"
                 zf.writestr(info, data)
         ok, problems = verify_bundle(tampered)
@@ -136,7 +136,7 @@ class TestExport:
 
 class TestDebrief:
     def test_load_and_stats(self, ws):
-        trails = db.load_audits(ws["ws"] / "audit_trails")
+        trails = db.load_audits(ws["ws"] / "outputs" / "audit_trails")
         assert len(trails) == 1
         s = db.engagement_stats(trails[0])
         assert s["engagement"] == "testlab"
@@ -147,7 +147,7 @@ class TestDebrief:
         assert s["tools"]["http_request"] == 2
 
     def test_fleet_trends(self, ws):
-        trails = db.load_audits(ws["ws"] / "audit_trails")
+        trails = db.load_audits(ws["ws"] / "outputs" / "audit_trails")
         f = db.fleet_stats(trails)
         assert f["engagements"] == 1
         assert f["total_findings"] == 2
@@ -155,7 +155,7 @@ class TestDebrief:
         assert f["avg_duration_s"] == 300.0
 
     def test_render(self, ws):
-        trails = db.load_audits(ws["ws"] / "audit_trails")
+        trails = db.load_audits(ws["ws"] / "outputs" / "audit_trails")
         out = db.render_debrief(trails, verbose=True)
         assert "ENGAGEMENTS (1)" in out
         assert "testlab" in out
@@ -171,17 +171,19 @@ class TestDebrief:
 
 class TestReplay:
     def test_list_replays(self, ws):
-        trails = rp.list_replays(ws["ws"] / "audit_trails")
+        trails = rp.list_replays(ws["ws"] / "outputs" / "audit_trails")
         assert len(trails) == 1
         assert len(trails[0]["iterations"]) == 3
 
     def test_empty_trails_excluded(self, ws):
-        (ws["ws"] / "audit_trails" / "empty.json").write_text(json.dumps({"engagement": "e", "iterations": []}))
-        trails = rp.list_replays(ws["ws"] / "audit_trails")
+        (ws["ws"] / "outputs" / "audit_trails" / "empty.json").write_text(
+            json.dumps({"engagement": "e", "iterations": []})
+        )
+        trails = rp.list_replays(ws["ws"] / "outputs" / "audit_trails")
         assert len(trails) == 1
 
     def test_markdown_transcript(self, ws):
-        trail = rp.list_replays(ws["ws"] / "audit_trails")[0]
+        trail = rp.list_replays(ws["ws"] / "outputs" / "audit_trails")[0]
         md = rp.render_markdown(trail)
         assert "# Replay — testlab" in md
         assert "## Step 1 — recon [✔]" in md
@@ -190,7 +192,7 @@ class TestReplay:
         assert "FLAG{x}" in md
 
     def test_non_tty_replay_prints_transcript(self, ws, capsys, monkeypatch):
-        trail = rp.list_replays(ws["ws"] / "audit_trails")[0]
+        trail = rp.list_replays(ws["ws"] / "outputs" / "audit_trails")[0]
         monkeypatch.setattr(rp.sys.stdin, "isatty", lambda: False)
         rp.run_replay(trail)
         out = capsys.readouterr().out

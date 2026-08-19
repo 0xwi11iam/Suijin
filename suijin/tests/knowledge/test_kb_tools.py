@@ -100,7 +100,7 @@ class TestFindWordlist:
     def test_finds_and_extracts(self, kb_env):
         out = kb_tools.find_wordlist("common")
         assert "Passwords/common.txt" in out
-        extracted = kb_env["ws"] / "wordlists" / "common.txt"
+        extracted = kb_env["ws"] / "outputs" / "wordlists" / "common.txt"
         assert extracted.exists()
         assert "password123" in extracted.read_text()
         assert "wordlists/common.txt" in out
@@ -150,7 +150,7 @@ class TestExtractPayloads:
     def test_extracts_code_block(self, kb_env):
         out = kb_tools.extract_payloads("reverse shells")
         assert "payloads/" in out
-        files = list((kb_env["ws"] / "payloads").glob("kb_*"))
+        files = list((kb_env["ws"] / "outputs" / "payloads").glob("kb_*"))
         assert files, out
         content = files[0].read_text()
         assert "/dev/tcp" in content

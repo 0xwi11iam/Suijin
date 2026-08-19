@@ -10,6 +10,60 @@ BASE_DIR = Path(__file__).resolve().parents[3]  # suijin/ root
 PROJECT_DIR = BASE_DIR.parent  # repo root
 WORKSPACE_DIR = PROJECT_DIR / "suijin_agent"  # the ONE canonical agent workspace
 
+# v4.2: ALL agent artifacts nest under outputs/ — one parent for everything
+# the engagement produces. State/config (blue_config.json, notify.json,
+# approvals.json, engagement_schema.json, caches/) stays at the workspace
+# root by design.
+ARTIFACT_DIRS = (
+    "reports",
+    "dossiers",
+    "exports",
+    "sessions",
+    "audit_trails",
+    "blue_state",
+    "compliance_reports",
+    "wordlists",
+    "payloads",
+    "sandbox",
+)
+
+
+def artifact_dir(name: str) -> Path:
+    """Canonical home for one artifact category (honours patched WORKSPACE_DIR)."""
+    if name not in ARTIFACT_DIRS:
+        raise ValueError(f"unknown artifact dir {name!r} (one of {ARTIFACT_DIRS})")
+    return WORKSPACE_DIR / "outputs" / name
+
+
+def migrate_legacy_artifacts(workspace: Path | None = None) -> list[str]:
+    """One-time move: root-level artifact dirs -> outputs/<name> (merge).
+
+    Idempotent; returns the moved names. Never raises into the caller."""
+    moved = []
+    try:
+        ws = Path(workspace) if workspace else WORKSPACE_DIR
+        out_root = ws / "outputs"
+        for name in ARTIFACT_DIRS:
+            legacy = ws / name
+            if not legacy.is_dir():
+                continue
+            target = out_root / name
+            target.mkdir(parents=True, exist_ok=True)
+            for item in list(legacy.iterdir()):
+                dest = target / item.name
+                if dest.exists():
+                    if item.name == ".DS_Store":
+                        item.unlink(missing_ok=True)
+                    continue  # target wins; keep both eras' files otherwise
+                item.rename(dest)
+            if not any(legacy.iterdir()):
+                legacy.rmdir()
+            moved.append(name)
+    except OSError:
+        pass
+    return moved
+
+
 # Pre-rename (Medusa era) names — data under them is migrated, never dropped.
 _LEGACY_ROOT_NAMES = ("medusa_agent",)
 _LEGACY_INNER_NAMES = ("medusa_agent",)

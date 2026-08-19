@@ -126,7 +126,7 @@ def outputs_path() -> str:
 
 
 def payloads_path() -> str:
-    p = WORKSPACE_ROOT / "payloads"
+    p = WORKSPACE_ROOT / "outputs" / "payloads"
     p.mkdir(parents=True, exist_ok=True)
     return str(p)
 

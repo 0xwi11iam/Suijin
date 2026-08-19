@@ -21,7 +21,7 @@ from pathlib import Path
 import requests
 import urllib3
 
-from suijin.modules.platform.lib.workspace import WORKSPACE_DIR, ensure_workspace_layout
+from suijin.modules.platform.lib.workspace import ensure_workspace_layout
 
 BASE_DIR = Path(__file__).resolve().parents[3]
 PROJECT_DIR = BASE_DIR.parent
@@ -96,8 +96,15 @@ def init_runtime(force: bool = False) -> None:
         # Workspace layout: merge any legacy suijin/suijin_agent real dir
         # into the canonical root workspace and symlink the inner path.
         ensure_workspace_layout()
-        for sub in ("payloads", "scripts", "outputs"):
-            (WORKSPACE_DIR / sub).mkdir(parents=True, exist_ok=True)
+        # v4.2: artifacts nest under outputs/; migrate legacy root-level
+        # artifact dirs once, then guarantee the full tree exists.
+        import suijin.modules.platform.lib.workspace as _ws
+
+        _ws.migrate_legacy_artifacts()
+        _ws.WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
+        (_ws.WORKSPACE_DIR / "scripts").mkdir(parents=True, exist_ok=True)
+        for _name in _ws.ARTIFACT_DIRS:
+            (_ws.WORKSPACE_DIR / "outputs" / _name).mkdir(parents=True, exist_ok=True)
         _initialized = True
 
 

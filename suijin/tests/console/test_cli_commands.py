@@ -167,8 +167,8 @@ class TestArtifactListings:
     def test_reports_listing(self, monkeypatch, tmp_path):
         import suijin.modules.platform.lib.workspace as ws
 
-        reports = tmp_path / "reports"
-        reports.mkdir()
+        reports = tmp_path / "outputs" / "reports"
+        reports.mkdir(parents=True)
         (reports / "eng_report.md").write_text("# report")
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
         code, out = run_cli(["reports"])
@@ -186,8 +186,8 @@ class TestArtifactListings:
     def test_sessions_listing_shows_objective(self, monkeypatch, tmp_path):
         import suijin.modules.platform.lib.workspace as ws
 
-        sessions = tmp_path / "sessions"
-        sessions.mkdir()
+        sessions = tmp_path / "outputs" / "sessions"
+        sessions.mkdir(parents=True)
         (sessions / "s1.json").write_text(json.dumps({"objective": "own the lab"}))
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
         code, out = run_cli(["sessions"])

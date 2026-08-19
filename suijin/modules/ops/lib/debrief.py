@@ -22,7 +22,9 @@ def _ws():
 
 def load_audits(audit_dir: Path | None = None) -> list[dict]:
     """Load every audit trail, oldest first. Returns [] when none exist."""
-    d = Path(audit_dir) if audit_dir else _ws().WORKSPACE_DIR / "audit_trails"
+    from suijin.modules.platform.lib.workspace import artifact_dir as _ad
+
+    d = Path(audit_dir) if audit_dir else _ad("audit_trails")
     out: list[dict] = []
     if not d.is_dir():
         return out

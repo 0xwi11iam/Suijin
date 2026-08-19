@@ -214,7 +214,7 @@ def _normalize_ts(raw: str) -> str:
 
 # ── Workspace cleaner ──────────────────────────────────────────────────
 
-_CLEAN_TARGETS = ("outputs", "sandbox", "notifications.log")
+_CLEAN_TARGETS = ("outputs", "notifications.log")
 
 
 def find_stale(workspace: Path | None = None, age_days: int = 30, now: float | None = None) -> list[Path]:

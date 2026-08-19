@@ -74,10 +74,15 @@ class TestInitRuntime:
         rt = __import__("suijin.modules.platform.lib.runtime", fromlist=["x"])
         # point workspace at a fresh tree and force a re-init
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
-        monkeypatch.setattr(rt, "WORKSPACE_DIR", tmp_path)
+        try:
+            monkeypatch.setattr(rt, "WORKSPACE_DIR", tmp_path)
+        except AttributeError:
+            pass  # v4.2: runtime reads the workspace module directly
         rt.init_runtime(force=True)
-        for sub in ("payloads", "scripts", "outputs"):
-            assert (tmp_path / sub).is_dir(), sub
+        assert (tmp_path / "scripts").is_dir()
+        assert (tmp_path / "outputs").is_dir()
+        for name in ("reports", "audit_trails", "sessions", "payloads", "wordlists"):
+            assert (tmp_path / "outputs" / name).is_dir(), f"outputs/{name}"
 
     def test_lazy_session_auto_initializes(self):
         from suijin.modules.platform.lib import runtime as rt
