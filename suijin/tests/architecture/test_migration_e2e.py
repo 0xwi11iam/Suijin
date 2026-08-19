@@ -75,9 +75,26 @@ def test_medusa_to_suijin_migration(fake_machine, tmp_path):
         "SUIJIN_REPO": str(src),
     }
 
-    r = subprocess.run(["bash", str(INSTALL_SH)], env=env, capture_output=True, text=True, timeout=600)
-    out = r.stdout + r.stderr
-    assert r.returncode == 0, out
+    # Warm pip cache: repeat runs reuse wheels instead of cold-downloading
+    # the whole dependency tree (deterministic on slow links).
+    env.setdefault("PIP_CACHE_DIR", os.path.expanduser("~/.cache/suijin-pip"))
+    # Own process group: on timeout, kill the WHOLE group — an orphaned
+    # pip grandchild otherwise holds the stdout pipe and hangs the runner.
+    proc = subprocess.Popen(
+        ["bash", str(INSTALL_SH)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, start_new_session=True,
+    )
+    try:
+        out, _ = proc.communicate(timeout=900)
+    except subprocess.TimeoutExpired:
+        import contextlib
+        import signal
+
+        with contextlib.suppress(OSError):
+            os.killpg(proc.pid, signal.SIGKILL)
+        out, _ = proc.communicate()
+        pytest.fail("install.sh timed out after 900s (network?); last output:\n" + out[-1500:])
+    assert proc.returncode == 0, out
 
     # 1. install dir migrated from ~/.medusa (marker carried, dir renamed)
     assert (home / ".suijin" / "repo").is_dir()
