@@ -93,3 +93,20 @@ def write_example_config() -> str:
         )
     )
     return f"example config written to {_config_path()} — edit channels, then 'suijin notify test'"
+
+
+# ── C23: webhook channel ───────────────────────────────────────────────
+
+
+def send_webhook(url: str, payload: dict, timeout: int = 10) -> str:
+    """POST a JSON payload to a webhook (Slack/Discord/generic accept
+    {"text": ...}). Returns a result note; never raises."""
+    if not url:
+        return "Error: url required"
+    try:
+        import requests
+
+        r = requests.post(url, json=payload, timeout=(3, timeout), headers={"Content-Type": "application/json"})
+        return f"webhook {r.status_code} ({len(r.content)}B)"
+    except Exception as e:  # noqa: BLE001 — notify never raises
+        return f"webhook failed: {type(e).__name__}: {e}"

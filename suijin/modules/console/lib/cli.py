@@ -1342,6 +1342,42 @@ def _enrich_traffic(entries: list) -> list:
     return entries
 
 
+def run_engage_cmd(args) -> int:
+    """`suijin engage <template> <target>` — C21 template application."""
+    from suijin.modules.ops.lib import engagement_templates as et
+
+    if getattr(args, "list", False):
+        print(et.list_templates())
+        return 0
+    try:
+        resolved = et.apply_template(getattr(args, "template", ""), getattr(args, "target", ""))
+    except (FileNotFoundError, ValueError) as e:
+        print(f"error: {e}")
+        return 1
+    print(json.dumps(resolved, indent=2))
+    print("\nlaunch: suijin (config applied above; recipes: " + ", ".join(resolved.get("recipes", [])) + ")")
+    return 0
+
+
+def run_theater_cmd(args) -> int:
+    """`suijin theater` — C26 animated session replay."""
+    import json as _json
+
+    from suijin.modules.platform.lib.workspace import artifact_dir
+    from suijin.modules.tools.lib.theater import render_frames
+
+    sdir = artifact_dir("sessions")
+    sessions = sorted(sdir.glob("*.json")) if sdir.is_dir() else []
+    if not sessions:
+        print("no saved sessions")
+        return 1
+    data = _json.loads(sessions[-1].read_text())
+    print(f"replaying: {data.get('objective', '?')[:60]}")
+    for frame in render_frames(data.get("iterations") or []):
+        print(frame)
+    return 0
+
+
 def run_wordlist_cmd(action: str, name: str) -> int:
     """`suijin wordlist list|fetch` — F45 hub."""
     from suijin.modules.knowledge.lib import wordlist_hub
@@ -1600,6 +1636,15 @@ def main(argv=None):
     fetch_p.add_argument("name", help="catalog name")
     fetch_p.set_defaults(func=lambda a: run_wordlist_cmd("fetch", a.name))
     wl.set_defaults(func=lambda a: run_wordlist_cmd("list", ""))
+
+    engage = sub.add_parser("engage", help="apply an engagement template to a target")
+    engage.add_argument("template", nargs="?", help="template name (suijin engage --list)")
+    engage.add_argument("target", nargs="?", help="concrete target")
+    engage.add_argument("--list", action="store_true", help="list templates")
+    engage.set_defaults(func=run_engage_cmd)
+
+    theater_p = sub.add_parser("theater", help="animated replay of the latest session")
+    theater_p.set_defaults(func=run_theater_cmd)
 
     plan = sub.add_parser("plan", help="decompose an objective into an ordered subtask plan")
     plan.add_argument("objective", help="the engagement objective")

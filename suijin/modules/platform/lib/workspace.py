@@ -28,6 +28,8 @@ ARTIFACT_DIRS = (
     "spar_baselines",
     "memory",
     "evidence",
+    "engagement_templates",
+    "portal",
 )
 
 

@@ -78,3 +78,41 @@ def get_latest_session() -> dict | None:
     """Get the most recent saved session."""
     sessions = list_sessions()
     return sessions[0] if sessions else None
+
+
+# ── C25: session time-travel ───────────────────────────────────────────
+
+
+def fork_from_iteration(
+    source_session: Path, iteration: int, fork_objective: str = "", dest_dir: Path | None = None
+) -> Path:
+    """Copy a saved session truncated at iteration N — a fork point for a
+    different strategy. Messages/trace beyond N are dropped; the fork
+    keeps everything up to and including N."""
+    import json as _json
+
+    data = _json.loads(Path(source_session).read_text())
+    state = dict(data.get("state_summary") or {})
+    trace = list(data.get("iterations") or [])
+    kept = [t for t in trace if int(t.get("iteration", 0)) <= iteration]
+    if not kept:
+        raise ValueError(f"no iterations <= {iteration} in this session")
+    from datetime import datetime, timezone
+
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    fork = {
+        "thread_id": f"fork_{Path(source_session).stem}_{iteration}_{ts}",
+        "objective": fork_objective or f"{data.get('objective', '?')} (forked @it{iteration})",
+        "forked_from": str(source_session),
+        "forked_at_iteration": iteration,
+        "saved_at": ts,
+        "state_summary": {**state, "iterations": iteration, "trace_count": len(kept), "completion_reason": ""},
+        "iterations": kept,
+        "cost_usd": 0.0,
+        "fork_note": f"resume with a different strategy from iteration {iteration}",
+    }
+    out_dir = Path(dest_dir) if dest_dir else _replay_dir()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / f"{fork['thread_id']}.json"
+    out.write_text(_json.dumps(fork, indent=2))
+    return out
