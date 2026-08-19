@@ -183,7 +183,12 @@ def validate_module(name: str, root: Path | None = None) -> tuple[bool, list[str
                 if not callable(fn):
                     problems.append(f"tool '{tname}' declared but not a function in main.py")
                 elif not (fn.__doc__ or "").strip():
-                    problems.append(f"tool '{tname}' missing a docstring (agents need it)")
+                    # advisory (marker prefix): the catalog description comes
+                    # from the manifest, so the agent still sees the tool —
+                    # docstrings are the convention, not a hard requirement
+                    problems.append(
+                        f"advise: tool '{tname}' has no docstring (manifest feeds the catalog; docstrings are the convention)"
+                    )
     return (not problems), problems
 
 
@@ -315,3 +320,103 @@ class PackModule(Module):
         f"# {name}\n\nAdopted from an addon. Tools: " + ", ".join(f"`{t}`" for t in tool_names) + "\n"
     )
     return dest
+
+
+def test_pack(name: str, root: Path | None = None) -> tuple[bool, list[str]]:
+    """One-command pack test (F44): the author's pre-publish gate.
+
+    Checks: files present (manifest/plugin/entry/main/skill), manifest
+    schema + implementation import (validate_module), a real kernel boot
+    where the pack registers its tools, catalog advertisement for every
+    declared tool, and callable shape for each. Returns (ok, report).
+    """
+    lines: list[str] = []
+    base = Path(root) if root else Path(__file__).resolve().parents[2]
+    pdir = base / name
+    if not pdir.is_dir():
+        return False, [f"[XX] no pack directory: {pdir}"]
+
+    # 1. files
+    for f in ("manifest.json", "plugin.json", "entry.py"):
+        if not (pdir / f).exists():
+            lines.append(f"[XX] missing {f}")
+    if (pdir / "main.py").exists():
+        lines.append("[ok] implementation main.py present")
+    elif all(not (pdir / f).exists() for f in ("main.py",)):
+        lines.append("[--] no main.py (entry-only pack)")
+    if (pdir / "skill.md").exists():
+        lines.append("[ok] skill.md present (agent docs)")
+    else:
+        lines.append("[--] no skill.md — the agent won't get usage docs")
+
+    # 2. schema + import
+    ok_v, problems = validate_module(name, base if root else MODULES_ROOT if False else base)
+    real_problems = [p for p in problems if not p.startswith("advise: ")]
+    for p in problems:
+        if p.startswith("advise: "):
+            lines.append(f"[--] {p[len('advise: ') :]}")
+    if not real_problems:
+        lines.append("[ok] manifest schema + implementation import")
+    else:
+        lines += [f"[XX] {p}" for p in real_problems]
+
+    # 3. boot + tool registration + catalog
+    try:
+        import json as _json
+
+        from suijin.kernel import controller
+
+        ctx, report = controller.boot(
+            module_roots=[base if root else Path(__file__).resolve().parents[2]],
+            workspace=base.parent / ".moduletest_ws",
+            quiet=True,
+        )
+        try:
+            ids = [u.id for u in report.boot_order]
+            if name in ids:
+                lines.append(f"[ok] boots as kernel unit (estate: {len(ids)} units)")
+            else:
+                if name in report.skipped:
+                    lines.append(f"[XX] skipped at boot: {report.skipped[name]}")
+                elif name in report.quarantined:
+                    lines.append(f"[XX] quarantined: {report.quarantined[name]}")
+                else:
+                    lines.append("[XX] not in boot order")
+                return False, lines
+            manifest = _json.loads((pdir / "manifest.json").read_text())
+            declared = sorted((manifest.get("tools") or {}).keys())
+            missing_reg = [t for t in declared if not ctx.has_tool(t)]
+            if missing_reg:
+                lines.append(f"[XX] declared but NOT registered: {', '.join(missing_reg)}")
+            else:
+                lines.append(f"[ok] all {len(declared)} declared tool(s) registered")
+            # catalog advertisement
+            from suijin.modules.loader import discover_modules
+
+            discover_modules()
+            from suijin.modules.tools.lib import dispatch
+
+            catalog = dispatch.get_tool_catalog()
+            invisible = [t for t in declared if t not in catalog]
+            if invisible:
+                lines.append(f"[XX] invisible to the model (not in catalog): {', '.join(invisible)}")
+            elif declared:
+                lines.append("[ok] every tool advertised in the catalog")
+            # callable smoke: zero-arg call must not crash the kernel
+
+            for t in declared:
+                entry = ctx._tools.get(t) or {}
+                fn = entry.get("fn")
+                if fn is not None:
+                    try:
+                        out = str(fn({}, ctx))
+                        lines.append(f"[ok] {t} callable smoke: {out.splitlines()[0][:50]}")
+                    except Exception as e:  # noqa: BLE001 — smoke failures are report data
+                        lines.append(f"[--] {t} smoke needs args ({type(e).__name__})")
+        finally:
+            ctx.shutdown()
+    except Exception as e:  # noqa: BLE001
+        lines.append(f"[XX] boot failed: {e}")
+
+    ok = not any(ln.startswith("[XX]") for ln in lines)
+    return ok, lines

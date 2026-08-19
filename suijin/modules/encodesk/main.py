@@ -4,6 +4,7 @@ import urllib.parse
 
 
 def encode_text(text: str = "", scheme: str = "base64") -> str:
+    """Encode text (base64, base32, hex, url, rot13)."""
     if not text:
         return "Error: text required"
     scheme = (scheme or "base64").lower()
@@ -26,6 +27,7 @@ def encode_text(text: str = "", scheme: str = "base64") -> str:
 
 
 def decode_text(text: str = "", scheme: str = "base64") -> str:
+    """Decode text (base64, base32, hex, url, rot13)."""
     if not text:
         return "Error: text required"
     scheme = (scheme or "base64").lower()

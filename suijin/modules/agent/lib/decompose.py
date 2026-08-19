@@ -36,7 +36,9 @@ def decompose(objective: str, config: dict | None = None, generate_fn=None) -> d
         try:
             import asyncio
 
-            raw = asyncio.run(generate_fn([{"role": "user", "content": _PROMPT.format(objective=objective[:400])}], config or {}))
+            raw = asyncio.run(
+                generate_fn([{"role": "user", "content": _PROMPT.format(objective=objective[:400])}], config or {})
+            )
             if isinstance(raw, str) and not raw.startswith("Error"):
                 start, end = raw.find("{"), raw.rfind("}")
                 data = json.loads(raw[start : end + 1])
@@ -55,14 +57,56 @@ def decompose(objective: str, config: dict | None = None, generate_fn=None) -> d
 def _heuristic(objective: str) -> list[dict]:
     """Offline fallback: the universal recon->test->verify->report spine."""
     low = objective.lower()
-    subs = [{"id": 1, "task": f"Recon and fingerprint the target(s) in scope for: {objective[:80]}", "depends_on": [], "why": "Every engagement starts with an accurate attack surface."}]
-    subs.append({"id": 2, "task": "Enumerate exposed services, endpoints, and versions", "depends_on": [1], "why": "Versioned surface drives vuln matching."})
+    subs = [
+        {
+            "id": 1,
+            "task": f"Recon and fingerprint the target(s) in scope for: {objective[:80]}",
+            "depends_on": [],
+            "why": "Every engagement starts with an accurate attack surface.",
+        }
+    ]
+    subs.append(
+        {
+            "id": 2,
+            "task": "Enumerate exposed services, endpoints, and versions",
+            "depends_on": [1],
+            "why": "Versioned surface drives vuln matching.",
+        }
+    )
     if any(w in low for w in ("web", "http", "api", "site", "app")):
-        subs.append({"id": 3, "task": "Web testing: headers, auth, injection points, business logic", "depends_on": [2], "why": "Objective mentions a web surface."})
+        subs.append(
+            {
+                "id": 3,
+                "task": "Web testing: headers, auth, injection points, business logic",
+                "depends_on": [2],
+                "why": "Objective mentions a web surface.",
+            }
+        )
     else:
-        subs.append({"id": 3, "task": "Service-specific testing against exposed versions", "depends_on": [2], "why": "Matched CVEs and misconfigs first."})
-    subs.append({"id": 4, "task": "Verify every candidate finding with independent evidence", "depends_on": [3], "why": "No unverified claims in the report."})
-    subs.append({"id": 5, "task": "Write the report with severity, evidence, and remediation", "depends_on": [4], "why": "Deliverable."})
+        subs.append(
+            {
+                "id": 3,
+                "task": "Service-specific testing against exposed versions",
+                "depends_on": [2],
+                "why": "Matched CVEs and misconfigs first.",
+            }
+        )
+    subs.append(
+        {
+            "id": 4,
+            "task": "Verify every candidate finding with independent evidence",
+            "depends_on": [3],
+            "why": "No unverified claims in the report.",
+        }
+    )
+    subs.append(
+        {
+            "id": 5,
+            "task": "Write the report with severity, evidence, and remediation",
+            "depends_on": [4],
+            "why": "Deliverable.",
+        }
+    )
     return subs
 
 

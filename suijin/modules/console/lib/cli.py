@@ -1362,6 +1362,17 @@ def run_plan_cmd(args) -> int:
     return 0
 
 
+def run_module_test(args) -> int:
+    """`suijin module test <name>` — F44 pack harness."""
+    from suijin.modules.tools.lib.module_sdk import test_pack
+
+    ok, lines = test_pack(getattr(args, "name", ""))
+    for ln in lines:
+        print(ln)
+    print(f"\n{'PASS' if ok else 'FAIL'}: {getattr(args, 'name', '?')}")
+    return 0 if ok else 1
+
+
 def run_recipes_cmd(args) -> int:
     """`suijin recipes [list|mine]` — macros + mined proposals."""
     from suijin.modules.tools.lib.recipes import mine_recipes, recipe_list
@@ -1731,6 +1742,10 @@ def main(argv=None):
     m_un.add_argument("id", help="module id")
     m_un.set_defaults(func=run_module_manager)
     mod_init = module_sub.add_parser("init", help="scaffold a new module pack (SDK)")
+    mod_test = module_sub.add_parser("test", help="test a pack end-to-end (author's pre-publish gate)")
+    mod_test.add_argument("name", help="pack directory name")
+    mod_test.set_defaults(func=lambda a: run_module_test(a))
+
     mod_adopt = module_sub.add_parser("adopt", help="graduate an addon (suijin/addons/<name>) into a full pack")
     mod_adopt.add_argument("name", help="addon folder name under suijin/addons/")
     mod_init.add_argument("name", help="module name (snake_case)")
