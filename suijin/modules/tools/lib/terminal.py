@@ -6,6 +6,7 @@ Scoped to the agent workspace with destructive-command guardrails.
 from __future__ import annotations
 
 import os
+import sys
 import shlex
 
 
@@ -28,6 +29,16 @@ def execute_terminal(cmd, timeout=30):
     try:
         if not cmd:
             return "Error: No command provided."
+
+        # Suijin does not run as native Python on Windows — the tool
+        # ecosystem (packs, POSIX shell) is Linux-based. Windows users
+        # run the container via install.ps1 / docker compose.
+        if sys.platform == "win32":
+            return (
+                "Error: native Windows is not supported. Suijin runs on macOS, "
+                "Linux, or via Docker on Windows — use install.ps1 to set up the "
+                "container, then run commands inside it."
+            )
 
         # Self-Kill Protection
         my_pid = str(os.getpid())
