@@ -14,7 +14,7 @@
 > written under the Medusa name.
 
 <p align="center">
-  <img height="20" src="https://img.shields.io/badge/v4.2.0-suijin-green?style=flat" alt="Version"/>
+  <img height="20" src="https://img.shields.io/badge/v4.3.0-suijin-green?style=flat" alt="Version"/>
   <img height="20" src="https://img.shields.io/badge/LICENSE-MIT-4169A1?style=flat" alt="License"/>
   <img height="20" src="https://img.shields.io/badge/PYTHON-3.10+-306998?style=flat&logo=python&logoColor=white" alt="Python"/>
   <img height="20" src="https://img.shields.io/badge/LangGraph-State%20Machine-FF6B35?style=flat" alt="LangGraph"/>
@@ -26,14 +26,11 @@ and a **Blue Team** agent that monitors live HTTP traffic, detects attacks, and
 responds with deception, blocking, and source patching. Both modes share one
 toolkit, one knowledge base, and one knowledge graph.
 
-> **v4.2.0 — STABLE AND READY.** The modular OS is complete and now
-> extensible in four zero-overlap rungs: markdown **skills**
-> (`suijin/skills/*.md` -> prompt), **addons** (`suijin/addons/<name>/
-> main.py` -> auto-tools), **packs** (manifest bricks), and first-party
-> modules. Every tool call on every surface lands in an append-only
-> audit trail; every artifact lands under `suijin_agent/outputs/`;
-> deploy is turnkey (Docker volume-first + tiered installer). See
-> `developer.md` to get started.
+> **v4.3.0 — STABLE AND READY.** 221 agent tools across 123 packs,
+> a self-critiquing agent that writes its own learnings to the
+> knowledge graph, sparring mode with detector regression gates, and
+> four turnkey install paths (native macOS/Linux, Docker, Windows-via-
+> Docker, existing-Kali). See `developer.md` to get started.
 
 > **LEGAL DISCLAIMER**: This tool is intended for **authorized security
 > testing**, **educational purposes**, and **research only**. Never use this
@@ -159,7 +156,7 @@ hidden behind CLI flags.
 | `suijin status` | One-page summary: provider, KB, workspace, modules, lab port |
 | `suijin version` | Release, codename, python, platform, package path |
 | `suijin env` | API key presence by name — values are never printed |
-| `suijin tools` | All 172 agent tools with availability (missing binaries marked) |
+| `suijin tools` | All 221 agent tools with availability (missing binaries marked) |
 | `suijin modules` | Loaded module packs with tool counts and dependencies |
 | `suijin skills` | Agent-editable attack/defense skills |
 | `suijin config show` | Effective config (defaults merged), secrets redacted |
@@ -172,6 +169,7 @@ hidden behind CLI flags.
 | `suijin debrief` | Engagement analytics from audit trails (`-v` for per-engagement detail) |
 | `suijin replay` | Step through an engagement timeline (`--list`, `--file`, `--export-md`) |
 | `suijin eval` | Replay recorded traffic through the blue detector: precision/recall/F1 + threshold sweep |
+| `suijin spar` | Sparring mode: detector practice volley vs stored baseline, regression-gated |
 | `suijin battle` | Purple team: scripted red vs pattern blue on the lab — live scoreboard |
 | `suijin kb read <path>` | Dump a **full (untruncated) KB document** from its tarball; `suijin kb diff` checks index vs cache staleness |
 | `suijin pull cve` | Mirror the CISA KEV catalog (no API key) — powers offline `search_cve` + actively-exploited badges |

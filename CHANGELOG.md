@@ -6,6 +6,52 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v4.3.0 — harness round 2 (+51 tools), self-critique, sparring, turnkey deploy
+
+**Status: stable and ready.** 1,053 tests, 137-unit / 221-tool boot
+(0 skipped), four install paths, offline-verifiable everywhere.
+
+### Harness: +51 tools across 39 packs (221 total)
+Cloud (IMDS probes, bucket checks, aws/gcp/az wrappers), AD/kerberos
+(kerberos hash formats, SPN candidates), API security (GraphQL
+introspection + field suggestions, OpenAPI spec hunting + parsing,
+mass-assignment + verb tampering, gRPC detection), mobile statics
+(APK inventory + secret strings, IPA Info.plist), secrets (regex +
+entropy scanning, source-map exposure, Terraform/Dockerfile lints),
+OSINT (CT logs, DoH + split-horizon compare, GitHub dorks, raw WHOIS,
+email harvest), web depth probes (SSRF canaries, open-redirect
+validation, Host-header injection, cache poisoning pre-checks,
+takeover fingerprinting, backup hunting), infra (offline MAC vendor
+table, NVD CVE search, stdlib TCP scan, DoH subdomain brute).
+Every tool offline-tested; catalog parity holds.
+
+### Self-critique
+The agent grades its own engagement post-run: what worked, what
+wasted calls, missed leads, tactics to remember — report saved to
+outputs/reports/critique_*.md and tactics recorded to the knowledge
+graph for future engagements. Config-gated, never fatal.
+
+### Sparring mode
+`suijin spar`: fixed practice volley through the REAL blue detector,
+scored against stored baselines with regression detection and CI-gate
+exit codes. Detector drift becomes visible the moment it happens.
+
+### Deploy: four turnkey paths
+- macOS/Linux native: install.sh — interactive start (OS + pip
+  preference with detected defaults), FULL dependency resolution
+  (git/python3/venv/build headers auto-installed, stale-venv rebuild)
+- Windows: install.ps1 (Docker-only by policy; native refused with a
+  clear pointer)
+- Docker: docker.sh + .env.example (one command; colima + Desktop),
+  minimal-footprint image (kali-linux-core, opt-in heavyweights)
+- Existing Kali container: kali-setup.sh (curl-pipe, full arsenal,
+  hard-stops on non-Kali)
+
+Also: mcp_server sys.path bootstrap bug fixed (surfaced when the venv
+was rebuilt); 7 vacuous test skips in test_graph.py became 11 live
+behavioral tests; install e2e re-verified against every installer
+change.
+
 ## v4.2.0 — audit trail, outputs consolidation, skills & addons; turnkey deploy
 
 **Status: stable and ready.** 1,021 tests, 98-unit / 172-tool default

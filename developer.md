@@ -122,6 +122,28 @@ Every tool invocation on every surface is recorded, append-only:
 values are never stored (key names + sha256 digest). Extend surfaces by
 calling `ToolAudit.record(...)` — never raise from audit code.
 
+## Deploy paths (four, all tested)
+
+| Platform | Script | Notes |
+|---|---|---|
+| macOS / Linux native | `install.sh` | interactive start (OS + pip), full dependency auto-resolution |
+| Any Docker host | `docker.sh` + `.env.example` | one command; colima or Desktop |
+| Windows | `install.ps1` | Docker-only by policy (native refused with a pointer) |
+| Existing Kali container | `kali-setup.sh` | curl-pipe; hard-stops on non-Kali |
+
+The Docker image is minimal-footprint by design (kali-linux-core +
+curated tools; metasploit behind `--build-arg WITH_METASPLOIT=1`).
+
+## Notable subsystems
+
+- **Self-critique** (`modules/agent/lib/critique.py`): post-run LLM
+  review; report to `outputs/reports/critique_*.md`, tactics to the KG.
+- **Sparring** (`modules/ops/lib/sparring.py`): detector practice with
+  baselines under `outputs/spar_baselines/`; `--fail-on-regression`
+  gives CI semantics.
+- **Audit trail** (`kernel/audit.py`): every tool call on every
+  surface, append-only, arg digests only.
+
 ## Test gates (run before every commit)
 
 ```bash

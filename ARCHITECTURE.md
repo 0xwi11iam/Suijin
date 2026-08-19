@@ -183,7 +183,7 @@ suijin/
 │   ├── blueteam/    #   defense stack
 │   ├── redteam/     #   offense stack + intel/KG
 │   ├── console/     #   CLI router, TUIs, MCP
-│   └── <84 snap-in tool packs>    # nmap, sqlmap, encodesk, sslprobe ... (manifest.json bricks)
+│   └── <123 snap-in tool packs>    # nmap, sqlmap, encodesk, sslprobe ... (manifest.json bricks)
 ├── tests/           # per-slice suites (reorganized per-module next)
 ├── lab/             # vulnerable target apps
 └── main.py          # Docker entrypoint
