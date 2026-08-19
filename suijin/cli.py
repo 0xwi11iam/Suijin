@@ -151,7 +151,7 @@ def run_doctor() -> int:
 
     # Knowledge base (optional — built on demand via `suijin pull kb`)
     try:
-        from suijin.kb import kb_status
+        from suijin.modules.knowledge.lib.kb import kb_status
 
         st = kb_status()
         if st:
@@ -243,7 +243,7 @@ def _port_free(port: int) -> bool:
 
 def run_pull_kb(args) -> int:
     """`suijin pull kb` — download & compile the security knowledge base."""
-    from suijin.kb import DB_PATH, SOURCES, compile_kb, kb_status
+    from suijin.modules.knowledge.lib.kb import DB_PATH, SOURCES, compile_kb, kb_status
 
     if getattr(args, "list_sources", False):
         print("Available knowledge base sources:")
@@ -376,7 +376,7 @@ def run_status() -> int:
         print("provider:         no config.json (heuristic mode works)")
 
     try:
-        from suijin.kb import kb_status
+        from suijin.modules.knowledge.lib.kb import kb_status
 
         st = kb_status()
         if st:
@@ -832,13 +832,13 @@ def run_selftest() -> int:
             checks.append((name, False, str(e)))
 
     def _imports():
-        import suijin.kb  # noqa: F401
+        import suijin.modules.knowledge.lib.kb  # noqa: F401
         import suijin.tools.dispatch  # noqa: F401 — pulls runtime, workspace, kb
 
         return "ok"
 
     def _kb_status():
-        from suijin.kb import kb_status
+        from suijin.modules.knowledge.lib.kb import kb_status
 
         st = kb_status()
         if st:
@@ -846,8 +846,8 @@ def run_selftest() -> int:
         return "not built — search_kb DISABLED (run: suijin pull kb)"
 
     def _catalog_gating():
-        import suijin.kb as kb_mod
-        from suijin.kb import DB_PATH as real_db
+        import suijin.modules.knowledge.lib.kb as kb_mod
+        from suijin.modules.knowledge.lib.kb import DB_PATH as real_db
         from suijin.tools import dispatch
 
         built = dispatch.get_tool_catalog()
@@ -927,7 +927,7 @@ def run_selftest() -> int:
 
 
 def run_kb_read(args) -> int:
-    from suijin.kb import read_doc
+    from suijin.modules.knowledge.lib.kb import read_doc
 
     try:
         source, path, content = read_doc(args.path, source=getattr(args, "source", None))
@@ -940,7 +940,7 @@ def run_kb_read(args) -> int:
 
 
 def run_kb_diff(_args) -> int:
-    from suijin.kb import kb_diff
+    from suijin.modules.knowledge.lib.kb import kb_diff
 
     d = kb_diff()
     if not d["built"]:
@@ -963,7 +963,7 @@ def run_kb_diff(_args) -> int:
 
 
 def run_pull_cve(args) -> int:
-    from suijin.tools.cve_mirror import kev_status, pull_kev
+    from suijin.modules.knowledge.lib.cve_mirror import kev_status, pull_kev
 
     if getattr(args, "status", False):
         st = kev_status()

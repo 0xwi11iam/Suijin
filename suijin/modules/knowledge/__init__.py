@@ -10,14 +10,16 @@ class KnowledgeModule(Module):
     tier = Tier.RECOMMENDED
 
     def register(self, ctx) -> None:
-        ctx.register_service("kb.status", lambda: __import__("suijin.kb", fromlist=["kb_status"]).kb_status)
-        ctx.register_service("kb.compile", lambda: __import__("suijin.kb", fromlist=["compile_kb"]).compile_kb)
-        ctx.register_service(
-            "kev.status", lambda: __import__("suijin.tools.cve_mirror", fromlist=["kev_status"]).kev_status
-        )
+        from suijin.modules.knowledge.lib import cve_mirror, kb
+
+        ctx.register_service("kb.status", kb.kb_status)
+        ctx.register_service("kb.compile", kb.compile_kb)
+        ctx.register_service("kev.status", cve_mirror.kev_status)
 
     def start(self, ctx) -> None:
-        st = ctx.service("kb.status")()
+        from suijin.modules.knowledge.lib.kb import kb_status
+
+        st = kb_status()
         if st:
             ctx.journal.append("knowledge", f"KB ready: {st['docs']} docs")
         else:

@@ -10,9 +10,9 @@ import tarfile
 
 import pytest
 
-from suijin import kb as kbmod
-from suijin.kb import compile_kb
-from suijin.tools import kb_tools
+from suijin.modules.knowledge.lib import kb as kbmod
+from suijin.modules.knowledge.lib import kb_tools
+from suijin.modules.knowledge.lib.kb import compile_kb
 
 
 def _make_tar(files: dict[str, str]) -> bytes:
@@ -75,9 +75,13 @@ def kb_env(tmp_path, monkeypatch):
     monkeypatch.setattr(kbmod, "DB_PATH", db)  # used by kb_status() inside kb_stats()
     monkeypatch.setattr(kb_tools, "DB_PATH", db)
     monkeypatch.setattr(kb_tools, "CACHE_DIR", cache)
-    monkeypatch.setattr(kb_tools, "WORKSPACE_DIR", ws)
+    # v4.1: kb_tools resolves workspace access lazily via platform —
+    # patch the single source, not a copy
+    import suijin.modules.platform.lib.workspace as pws
+
+    monkeypatch.setattr(pws, "WORKSPACE_DIR", ws)
     monkeypatch.setattr(
-        kb_tools,
+        pws,
         "resolve_workspace_path",
         lambda p: (ws / p).resolve(),
     )

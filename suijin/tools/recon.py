@@ -85,11 +85,11 @@ def recon_chain(target: str, config=None, ports: str | None = None) -> str:
 
 def _exploit_leads(services: list[dict], max_leads: int = 3) -> str:
     """Offline KB exploit suggestions for the top fingerprinted services."""
-    from suijin.kb import DB_PATH
+    from suijin.modules.knowledge.lib.kb import DB_PATH
 
     if not DB_PATH.exists():
         return ""
-    from suijin.tools.kb_tools import suggest_exploit
+    from suijin.modules.knowledge.lib.kb_tools import suggest_exploit
 
     seen, blocks = set(), []
     for s in services:

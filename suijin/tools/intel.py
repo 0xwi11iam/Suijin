@@ -74,7 +74,7 @@ def search_cve(software, config, version=None, limit=5):
     if error and max_total == 0:
         # NVD unreachable and nothing cached from earlier strategies — fall
         # back to the local CISA KEV mirror (suijin pull cve) if present.
-        from suijin.tools.cve_mirror import format_kev_results, search_kev
+        from suijin.modules.knowledge.lib.cve_mirror import format_kev_results, search_kev
 
         kev_hits = search_kev(software, version_str, limit=limit)
         if kev_hits:

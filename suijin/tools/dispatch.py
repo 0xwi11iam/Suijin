@@ -19,6 +19,15 @@ Layout:
 
 from __future__ import annotations
 
+from suijin.modules.knowledge.lib.kb_tools import (
+    anonymize_report,
+    extract_payloads,
+    find_wordlist,
+    kb_stats,
+    mine_failures,
+    suggest_exploit,
+    wordlist_tool,
+)
 from suijin.modules.loader import get_module_tools
 from suijin.tools.aux_tools import (
     _edit_skill,
@@ -54,21 +63,12 @@ from suijin.tools.jobs import (
     _job_status,
     _job_wait,
 )
-from suijin.tools.kb_tools import (
-    anonymize_report,
-    extract_payloads,
-    find_wordlist,
-    kb_stats,
-    mine_failures,
-    suggest_exploit,
-    wordlist_tool,
-)
 from suijin.tools.output_normalizer import normalize_output
 from suijin.tools.wordlist_mutator import cewl_words, mutate_wordlist
 
 
 def _kb_read_tool(path: str) -> str:
-    from suijin.kb import read_doc
+    from suijin.modules.knowledge.lib.kb import read_doc
 
     try:
         source, rel, content = read_doc(path)
@@ -443,7 +443,7 @@ def get_tool_catalog():
 
     # Knowledge base — feature-gated: only advertised when the operator has
     # built it with `suijin pull kb`. Otherwise listed as disabled below.
-    from suijin.kb import kb_status
+    from suijin.modules.knowledge.lib.kb import kb_status
 
     _kb = kb_status()
     if _kb:

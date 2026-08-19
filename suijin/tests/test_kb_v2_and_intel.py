@@ -6,9 +6,9 @@ import tarfile
 
 import pytest
 
-from suijin import kb as kbmod
-from suijin.kb import compile_kb, kb_diff, read_doc
-from suijin.tools import cve_mirror, kb_tools
+from suijin.modules.knowledge.lib import cve_mirror, kb_tools
+from suijin.modules.knowledge.lib import kb as kbmod
+from suijin.modules.knowledge.lib.kb import compile_kb, kb_diff, read_doc
 from suijin.tools.wordlist_mutator import cewl_words, extract_words, mutate_wordlist
 
 
@@ -62,8 +62,10 @@ def kb_env(tmp_path, monkeypatch):
     monkeypatch.setattr(kbmod, "CACHE_DIR", cache)  # used by read_doc defaults
     monkeypatch.setattr(kb_tools, "DB_PATH", db)
     monkeypatch.setattr(kb_tools, "CACHE_DIR", cache)
-    monkeypatch.setattr(kb_tools, "WORKSPACE_DIR", ws)
-    monkeypatch.setattr(kb_tools, "resolve_workspace_path", lambda p: (ws / p).resolve())
+    import suijin.modules.platform.lib.workspace as pws
+
+    monkeypatch.setattr(pws, "WORKSPACE_DIR", ws)
+    monkeypatch.setattr(pws, "resolve_workspace_path", lambda p: (ws / p).resolve())
     return {"db": db, "cache": cache, "ws": ws, "summary": summary}
 
 

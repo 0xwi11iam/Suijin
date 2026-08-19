@@ -124,7 +124,7 @@ def build_snapshot() -> dict:
 
     # knowledge base
     try:
-        from suijin.kb import kb_status
+        from suijin.modules.knowledge.lib.kb import kb_status
 
         st = kb_status()
         if st:
@@ -143,7 +143,7 @@ def build_snapshot() -> dict:
 
     # CISA KEV mirror (optional — built via `suijin pull cve`)
     try:
-        from suijin.tools.cve_mirror import kev_status
+        from suijin.modules.knowledge.lib.cve_mirror import kev_status
 
         st = kev_status()
         snap["kev"] = st if st else {"count": 0}

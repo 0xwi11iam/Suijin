@@ -16,7 +16,7 @@ from suijin.tests.test_cli_commands import run_cli
 
 class TestKbVerbs:
     def test_kb_diff_not_built(self, monkeypatch):
-        import suijin.kb as kbmod
+        import suijin.modules.knowledge.lib.kb as kbmod
 
         monkeypatch.setattr(kbmod, "kb_diff", lambda: {"built": False, "sources": {}})
         code, out = run_cli(["kb", "diff"])
@@ -24,7 +24,7 @@ class TestKbVerbs:
         assert "NOT BUILT" in out
 
     def test_kb_diff_ok(self, monkeypatch):
-        import suijin.kb as kbmod
+        import suijin.modules.knowledge.lib.kb as kbmod
 
         monkeypatch.setattr(
             kbmod,
@@ -43,7 +43,7 @@ class TestKbVerbs:
         assert "up to date" in out
 
     def test_kb_diff_flags_stale(self, monkeypatch):
-        import suijin.kb as kbmod
+        import suijin.modules.knowledge.lib.kb as kbmod
 
         monkeypatch.setattr(
             kbmod,
@@ -66,7 +66,7 @@ class TestKbVerbs:
         assert "rebuild" in out and "--sources gtfobins" in out
 
     def test_kb_read_missing_doc(self, monkeypatch):
-        import suijin.kb as kbmod
+        import suijin.modules.knowledge.lib.kb as kbmod
 
         def boom(path, source=None):
             raise FileNotFoundError("no match")
@@ -77,7 +77,7 @@ class TestKbVerbs:
         assert "error" in out
 
     def test_kb_read_dumps_content(self, monkeypatch):
-        import suijin.kb as kbmod
+        import suijin.modules.knowledge.lib.kb as kbmod
 
         monkeypatch.setattr(kbmod, "read_doc", lambda p, source=None: ("gtfobins", p, "FULL CONTENT"))
         code, out = run_cli(["kb", "read", "_gtfobins/awk"])
@@ -88,7 +88,7 @@ class TestKbVerbs:
 
 class TestPullCve:
     def test_status_without_mirror(self, monkeypatch):
-        import suijin.tools.cve_mirror as cm
+        import suijin.modules.knowledge.lib.cve_mirror as cm
 
         monkeypatch.setattr(cm, "KEV_PATH", type("P", (), {"exists": lambda s: False})())
         code, out = run_cli(["pull", "cve", "--status"])
@@ -96,7 +96,7 @@ class TestPullCve:
         assert "not built" in out
 
     def test_pull_network_failure(self, monkeypatch):
-        import suijin.tools.cve_mirror as cm
+        import suijin.modules.knowledge.lib.cve_mirror as cm
 
         def boom(force=False):
             raise RuntimeError("no network")

@@ -9,8 +9,8 @@ import tarfile
 
 import pytest
 
-from suijin import kb as kbmod
-from suijin.kb import compile_kb, iter_docs, kb_status
+from suijin.modules.knowledge.lib import kb as kbmod
+from suijin.modules.knowledge.lib.kb import compile_kb, iter_docs, kb_status
 from suijin.tools.intel import _fts_match_expr
 
 
@@ -408,7 +408,11 @@ class TestRepoAnchoredPaths:
     never CWD-dependent, never scattered into $HOME or /tmp."""
 
     def test_paths_anchored_to_package_dir(self):
-        pkg_dir = kbmod.Path(kbmod.__file__).resolve().parent  # <repo>/suijin
+        # v4.1: kb lives in modules/knowledge/lib; artifacts stay in the
+        # suijin PACKAGE dir (where they always lived on disk)
+        import suijin
+
+        pkg_dir = kbmod.Path(suijin.__file__).resolve().parent  # <repo>/suijin
         assert pkg_dir / "kb.sqlite3" == kbmod.DB_PATH
         assert pkg_dir / "kb_cache" == kbmod.CACHE_DIR
         assert kbmod.DB_PATH.is_absolute()
@@ -416,7 +420,9 @@ class TestRepoAnchoredPaths:
 
     def test_paths_stable_regardless_of_cwd(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        pkg_dir = kbmod.Path(kbmod.__file__).resolve().parent
+        import suijin
+
+        pkg_dir = kbmod.Path(suijin.__file__).resolve().parent
         assert pkg_dir / "kb.sqlite3" == kbmod.DB_PATH
         assert pkg_dir / "kb_cache" == kbmod.CACHE_DIR
 
@@ -463,8 +469,8 @@ class TestCatalogFeatureGating:
     disabled tool."""
 
     def test_catalog_lists_disabled_when_no_db(self, monkeypatch):
-        import suijin.kb as kb_mod
-        from suijin.kb import DB_PATH as real_db
+        import suijin.modules.knowledge.lib.kb as kb_mod
+        from suijin.modules.knowledge.lib.kb import DB_PATH as real_db
         from suijin.tools import dispatch
 
         monkeypatch.setattr(kb_mod, "DB_PATH", real_db.parent / "definitely_missing_kb.sqlite3")
@@ -473,7 +479,7 @@ class TestCatalogFeatureGating:
         assert "suijin pull kb" in catalog
 
     def test_catalog_advertises_search_kb_when_built(self, fake_env, monkeypatch):
-        import suijin.kb as kb_mod
+        import suijin.modules.knowledge.lib.kb as kb_mod
         from suijin.tools import dispatch
 
         compile_kb(db_path=fake_env["db"], cache_dir=fake_env["cache"], log=lambda *_: None)

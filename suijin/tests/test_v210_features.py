@@ -476,8 +476,8 @@ class TestClean:
 
 class TestReconHook:
     def test_exploit_leads_appended(self, monkeypatch, tmp_path):
-        import suijin.kb as kbmod
-        import suijin.tools.kb_tools as kbt
+        import suijin.modules.knowledge.lib.kb as kbmod
+        import suijin.modules.knowledge.lib.kb_tools as kbt
         from suijin.tools import recon
 
         # make the KB-present check true WITHOUT a real build (CI has none)
@@ -495,7 +495,7 @@ class TestReconHook:
         assert "gtfobins" in out
 
     def test_no_leads_when_kb_missing(self, monkeypatch):
-        import suijin.kb as kbmod
+        import suijin.modules.knowledge.lib.kb as kbmod
         import suijin.tools.recon as recon_mod
 
         monkeypatch.setattr(kbmod, "DB_PATH", Path("/nonexistent/kb.sqlite3"))

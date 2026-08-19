@@ -191,14 +191,14 @@ class TestTimelineEndpoint:
 
 class TestKevInOverview:
     def test_kev_field_always_present(self, client, monkeypatch):
-        import suijin.tools.cve_mirror as cm
+        import suijin.modules.knowledge.lib.cve_mirror as cm
 
         monkeypatch.setattr(cm, "kev_status", lambda: {"count": 1337, "retrieved": "x"})
         d = client.get("/api/overview").get_json()
         assert d["kev"]["count"] == 1337
 
     def test_kev_none_when_missing(self, client, monkeypatch):
-        import suijin.tools.cve_mirror as cm
+        import suijin.modules.knowledge.lib.cve_mirror as cm
 
         monkeypatch.setattr(cm, "kev_status", lambda: None)
         d = client.get("/api/overview").get_json()

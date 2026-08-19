@@ -122,7 +122,7 @@ _proxy_url = None
 # importing runtime must not pull the kb module (import purity).
 def __getattr__(name):
     if name == "DB_PATH":
-        from suijin.kb import DB_PATH
+        from suijin.modules.knowledge.lib.kb import DB_PATH
 
         return DB_PATH
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
