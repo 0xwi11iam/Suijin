@@ -21,8 +21,9 @@ import json
 import os
 import sys
 
-# Ensure repo root is importable regardless of launch cwd (same pattern as main.py)
-_pkg_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Ensure repo root is importable regardless of launch cwd (same pattern as main.py).
+# lib/console/modules/suijin -> repo root is FIVE dirnames up.
+_pkg_parent = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 if _pkg_parent not in sys.path:
     sys.path.insert(0, _pkg_parent)
 

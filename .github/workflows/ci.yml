@@ -34,6 +34,18 @@ jobs:
           pip install -r suijin/requirements.txt
           pip install pytest pytest-asyncio pytest-cov
 
+      - name: Deploy scripts sanity
+        run: |
+          bash -n install.sh
+          bash -n docker.sh
+          python -c "import yaml; yaml.safe_load(open('docker-compose.yml'))"
+          # .env.example keys must match compose env list exactly
+          import re
+          env_list = yaml.safe_load(open('docker-compose.yml'))['services']['suijin']['environment']
+          compose_keys = {m.group(1) for e in env_list for m in [re.match(r'([A-Z_]+)=', str(e))] if m}
+          example_keys = set(re.findall(r'^([A-Z_]+)=', open('.env.example').read(), re.M))
+          assert compose_keys == example_keys, f"env drift: {compose_keys ^ example_keys}"
+
       - name: Verify package imports
         run: |
           PYTHONPATH="$PWD:$PYTHONPATH" python -c "

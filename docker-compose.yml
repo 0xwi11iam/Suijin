@@ -21,6 +21,9 @@ services:
     tty: true
     init: true
     restart: "no"
+    env_file:
+      - path: .env
+        required: false
     volumes:
       - workspace:/app/suijin_agent
       - ./suijin/config.json:/app/suijin/config.json:ro
