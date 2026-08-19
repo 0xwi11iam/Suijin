@@ -262,6 +262,7 @@ class TestRouteTool:
         assert isinstance(catalog, str)
         assert len(catalog) > 0
 
+
 class TestCatalogParity:
     def test_every_routed_tool_is_advertised(self):
         """Flexibility contract: a tool the model cannot see is a tool that
@@ -277,6 +278,4 @@ class TestCatalogParity:
         catalog = dispatch.get_tool_catalog()
         routes = set(dispatch._build_routes(None).keys())
         missing = sorted(n for n in routes if n not in catalog)
-        assert missing == ["deploy_subagent"], (
-            f"routed but invisible to the model: {missing}"
-        )
+        assert missing == ["deploy_subagent"], f"routed but invisible to the model: {missing}"

@@ -97,16 +97,6 @@ jobs:
             exit 1
           fi
 
-  rust-core:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: native/suijin-core
 
       - name: Format + lint + unit tests
         run: |

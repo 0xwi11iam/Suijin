@@ -44,8 +44,6 @@ exclude = ["suijin.tests*", "webui*"]
 suijin = [
     "version.json",
     "config.json",
-    "blue_config.json",
-    "engagement_schema.json",
     "modules/agent/lib/prompts/*.py",
     "modules/agent/lib/skills/*.py",
     "modules/*/plugin.json",

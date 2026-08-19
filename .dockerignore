@@ -25,7 +25,6 @@ suijin/.env
 suijin/config.json
 access_keys.json
 suijin/operation_state_recovery.json
-suijin/engagement_schema.json
 
 # Knowledge base — built on demand inside the container via `suijin pull kb`
 # (v4.1: lives in the workspace volume, so a built KB SURVIVES container recreation)

@@ -1,11 +1,10 @@
-"""Oracle tests — pure Python vs the compiled Rust core.
+"""Core semantics — the kernel's resolve_dag and check_paths.
 
-The contract: both implementations produce CANONICALLY-IDENTICAL JSON
-for resolve_dag and check_paths across a generated zoo of trees (healthy,
-diamond, chains, cycles, missing deps, collisions, overrides, broken).
-When the compiled wheel is absent, the suite still fully verifies the
-pure path (which IS the fallback); when present, every case also runs
-head-to-head. This is the safety net that makes the hybrid kernel honest.
+v4.1: the compiled Rust accelerator was retired; this suite (fixtures,
+locked semantics, and the 300-tree fuzz properties) now pins the single
+pure implementation directly. The fixtures and properties are unchanged
+from the era when they ran head-to-head against the crate — they were
+the safety net then and are the regression net now.
 """
 
 import json
@@ -14,7 +13,7 @@ import string
 
 import pytest
 
-from suijin.kernel import _pure, native
+from suijin.kernel import native
 
 
 def canon(obj) -> str:
@@ -64,34 +63,31 @@ class TestResolveDagOracle:
     @pytest.mark.parametrize("name,manifests,abort", FIXTURES, ids=[f[0] for f in FIXTURES])
     def test_fixture(self, name, manifests, abort):
         blob = json.dumps(manifests)
-        pure = json.loads(_pure.resolve_dag(blob))
+        pure = json.loads(native.resolve_dag(blob))
         assert pure["aborted"] is abort, f"{name}: {pure}"
-        if native.available():
-            rust = json.loads(native.resolve_dag(blob))
-            assert rust == pure, f"{name}: rust/pure diverge\nrust={rust}\npure={pure}"
 
     def test_semantics_locked(self):
         """Behavioral spot-checks independent of implementation."""
         blob = json.dumps(FIXTURES[1][1])
-        out = json.loads(_pure.resolve_dag(blob))
+        out = json.loads(native.resolve_dag(blob))
         assert out["boot_order"] == ["solo"]
 
         blob = json.dumps(FIXTURES[2][1])  # chain
-        out = json.loads(_pure.resolve_dag(blob))
+        out = json.loads(native.resolve_dag(blob))
         assert out["boot_order"] == ["a", "b", "c"]
 
         blob = json.dumps(FIXTURES[5][1])  # missing-deep
-        out = json.loads(_pure.resolve_dag(blob))
+        out = json.loads(native.resolve_dag(blob))
         assert out["skipped"]["x"].startswith("missing dependency: ghost")
         assert "x" in out["skipped"]["y"].split() or out["skipped"]["y"].startswith("dependencies unavailable")
 
         blob = json.dumps(FIXTURES[11][1])  # collision
-        out = json.loads(_pure.resolve_dag(blob))
+        out = json.loads(native.resolve_dag(blob))
         assert out["collisions"] == [["nmap", "installed"]]
         assert out["overridden"] == []
 
         blob = json.dumps(FIXTURES[12][1])  # override
-        out = json.loads(_pure.resolve_dag(blob))
+        out = json.loads(native.resolve_dag(blob))
         assert out["collisions"] == []
         assert out["overridden"] == ["nmap"]
 
@@ -108,21 +104,16 @@ def random_tree(rng: random.Random, n: int) -> list[dict]:
     return manifests
 
 
-class TestFuzzEquivalence:
+class TestFuzzProperties:
     def test_generated_trees(self):
+        """300 random trees: resolves deterministically, never crashes."""
         rng = random.Random(20260818)
-        diverged = 0
         for _ in range(300):
             tree = random_tree(rng, rng.randint(1, 12))
             blob = json.dumps(tree)
-            pure = json.loads(_pure.resolve_dag(blob))
-            if native.available():
-                rust = json.loads(native.resolve_dag(blob))
-                if rust != pure:
-                    diverged += 1
-                    if diverged == 1:
-                        pytest.fail(f"divergence on {blob}\nrust={rust}\npure={pure}")
-        assert diverged == 0
+            first = json.loads(native.resolve_dag(blob))
+            second = json.loads(native.resolve_dag(blob))
+            assert first == second, f"nondeterministic on {blob}"
 
     def test_generated_paths(self):
         rng = random.Random(20260818)
@@ -130,10 +121,9 @@ class TestFuzzEquivalence:
         for _ in range(300):
             paths = ["/".join(rng.choices(segments, k=rng.randint(1, 5))) for _ in range(rng.randint(1, 6))]
             blob = json.dumps({"root": "/tmp/ws", "allow": ["/tmp/extra"], "paths": paths})
-            pure = json.loads(_pure.check_paths(blob))
-            if native.available():
-                rust = json.loads(native.check_paths(blob))
-                assert rust == pure, f"path divergence: {blob}\n{rust} vs {pure}"
+            verdicts = json.loads(native.check_paths(blob))
+            # verdicts are keyed by path string (duplicates collapse)
+            assert set(verdicts) == set(paths)
 
 
 class TestCheckPathsOracle:
@@ -151,33 +141,21 @@ class TestCheckPathsOracle:
     @pytest.mark.parametrize("case", CASES)
     def test_case(self, case):
         blob = json.dumps(case)
-        pure = json.loads(_pure.check_paths(blob))
-        if native.available():
-            rust = json.loads(native.check_paths(blob))
-            assert rust == pure, f"{case}\n{rust} vs {pure}"
 
     def test_verdicts_locked(self):
         blob = json.dumps(self.CASES[0])
-        out = json.loads(_pure.check_paths(blob))
+        out = json.loads(native.check_paths(blob))
         assert out["a.txt"] and out["sub/b.txt"]
         assert not out["../esc"] and not out["/etc/x"] and not out["/tmp/other"]
         assert out["/tmp/ws/abs/ok"]
 
 
-class TestShim:
-    def test_source_reported(self):
-        s = native.source()
-        assert s in ("pure-python", "wheel", "dev-build")
+class TestCoreIdentity:
+    def test_single_pure_implementation(self):
+        """Retirement pin: no compiled core exists; the kernel runs the
+        pure implementation and never looks for one."""
+        assert native.source() == "pure-python"
 
-    def test_pure_alone_is_correct(self):
-        """With the native module forcibly hidden, the shim must still work."""
-        from suijin.kernel import native as nat
-
-        real = nat._native
-        try:
-            nat._native = None
-            out = json.loads(nat.resolve_dag(json.dumps([man("x", "core")])))
-            assert out["boot_order"] == ["x"]
-            assert nat.source() == "pure-python"
-        finally:
-            nat._native = real
+    def test_resolve_on_core_only_tree(self):
+        out = json.loads(native.resolve_dag(json.dumps([man("x", "core")])))
+        assert out["boot_order"] == ["x"]

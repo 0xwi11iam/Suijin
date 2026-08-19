@@ -528,8 +528,12 @@ def run_config_validate() -> int:
         ("config.json", RedConfig),
         ("blue_config.json", BlueConfig),
     )
+    # config.json = package-level operator config (API keys; the compose
+    # mount point). blue_config.json = workspace operator tuning (v4.1).
+    from suijin.modules.blueteam.lib.blue import config as _blue_cfg
+
     for fname, model in checks:
-        path = os.path.join(_PKG_DIR, fname)
+        path = str(_blue_cfg._config_path()) if fname == "blue_config.json" else os.path.join(_PKG_DIR, fname)
         if not os.path.exists(path):
             print(f"[--] {fname}: not present (defaults apply)")
             continue

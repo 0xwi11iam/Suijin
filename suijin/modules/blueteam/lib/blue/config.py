@@ -8,7 +8,26 @@ import json
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[3]
-CONFIG_PATH = BASE_DIR / "blue_config.json"
+# v4.1: operator tuning state — lives in the workspace (the volume),
+# auto-created from DEFAULT_BLUE_CONFIG on first load. Lazy accessor
+# (boundary rule) honouring a monkeypatched module attr.
+CONFIG_PATH = None
+
+
+def _config_path():
+    v = globals().get("CONFIG_PATH")
+    if v is not None:
+        return v  # monkeypatched / set by the operator
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+    return WORKSPACE_DIR / "blue_config.json"
+
+
+def __getattr__(name):
+    if name == "CONFIG_PATH":
+        return _config_path()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 DEFAULT_BLUE_CONFIG = {
     "traffic_normalization_turns": 10,
@@ -65,13 +84,13 @@ DEFAULT_BLUE_CONFIG = {
 
 
 def load_blue_config() -> dict:
-    if CONFIG_PATH.exists():
-        loaded = json.loads(CONFIG_PATH.read_text())
+    if _config_path().exists():
+        loaded = json.loads(_config_path().read_text())
         merged = dict(DEFAULT_BLUE_CONFIG)
         _deep_merge(merged, loaded)
     else:
         merged = dict(DEFAULT_BLUE_CONFIG)
-        CONFIG_PATH.write_text(json.dumps(DEFAULT_BLUE_CONFIG, indent=2))
+        _config_path().write_text(json.dumps(DEFAULT_BLUE_CONFIG, indent=2))
 
     # Validate with Pydantic model — catches typos and bad values at startup
     try:
@@ -87,7 +106,7 @@ def load_blue_config() -> dict:
 
 
 def save_blue_config(config: dict) -> None:
-    CONFIG_PATH.write_text(json.dumps(config, indent=2))
+    _config_path().write_text(json.dumps(config, indent=2))
 
 
 def _deep_merge(base: dict, override: dict) -> None:

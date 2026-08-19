@@ -25,9 +25,7 @@ dist/
 suijin_agent/
 suijin/suijin_agent/
 suijin/knowledge_graph.json
-suijin/engagement_schema.json
 suijin/operation_state_recovery.json
-suijin/blue_config.json
 suijin/.notes/
 suijin_agent/reports/
 suijin_agent/audit_trails/
@@ -68,7 +66,6 @@ webui/dist/
 
 # ── v2.10 runtime artifacts ───────────────────────────────────────
 
-suijin/notify.json
 suijin/policy.json
 suijin/detector_rules.json
 native/suijin-core/target/**/suijin_core.abi3.so

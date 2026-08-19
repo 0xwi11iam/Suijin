@@ -203,7 +203,7 @@ class TestEventReentrancy:
         (pure + Rust are both iterative; this pins that)."""
         import json
 
-        from suijin.kernel import _pure
+        from suijin.kernel import native as _pure
 
         manifests = [{"id": "m0", "version": "1", "tier": "core", "requires": [], "overrides": []}]
         for i in range(1, 200):

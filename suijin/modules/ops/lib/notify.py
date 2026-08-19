@@ -18,14 +18,31 @@ from datetime import datetime
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[3]  # suijin/ package
-CONFIG_PATH = BASE_DIR / "notify.json"
+# v4.1: operator config — lives in the workspace (the volume). Lazy
+# accessor (boundary rule) honouring a monkeypatched module attr.
+CONFIG_PATH = None
+
+
+def _config_path():
+    v = globals().get("CONFIG_PATH")
+    if v is not None:
+        return v  # monkeypatched / set by the operator
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+    return WORKSPACE_DIR / "notify.json"
+
+
+def __getattr__(name):
+    if name == "CONFIG_PATH":
+        return _config_path()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def load_config() -> dict:
-    if not CONFIG_PATH.exists():
+    if not _config_path().exists():
         return {}
     try:
-        data = json.loads(CONFIG_PATH.read_text())
+        data = json.loads(_config_path().read_text())
         return data if isinstance(data, dict) else {}
     except ValueError:
         return {}
@@ -69,10 +86,10 @@ def send(title: str, message: str, config: dict | None = None) -> list[str]:
 
 
 def write_example_config() -> str:
-    CONFIG_PATH.write_text(
+    _config_path().write_text(
         json.dumps(
             {"macos": False, "command": "", "file": str(BASE_DIR.parent / "suijin_agent" / "notifications.log")},
             indent=2,
         )
     )
-    return f"example config written to {CONFIG_PATH} — edit channels, then 'suijin notify test'"
+    return f"example config written to {_config_path()} — edit channels, then 'suijin notify test'"

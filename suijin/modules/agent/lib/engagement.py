@@ -13,14 +13,42 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-BASE_DIR = Path(__file__).resolve().parents[3]  # suijin/ package
-SCHEMA_PATH = BASE_DIR / "engagement_schema.json"
-RECOVERY_PATH = BASE_DIR / "operation_state_recovery.json"
+# v4.1: engagement state is RUNTIME DATA — it lives in the agent
+# workspace (the volume), never the package dir. Lazy accessors
+# (boundary rule) that honour monkeypatched module attrs.
+SCHEMA_PATH = None
+RECOVERY_PATH = None
+
+
+def _schema_path():
+    v = globals().get("SCHEMA_PATH")
+    if v is not None:
+        return v  # monkeypatched / set by the operator
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+    return WORKSPACE_DIR / "engagement_schema.json"
+
+
+def _recovery_path():
+    v = globals().get("RECOVERY_PATH")
+    if v is not None:
+        return v  # monkeypatched / set by the operator
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+    return WORKSPACE_DIR / "operation_state_recovery.json"
+
+
+def __getattr__(name):
+    if name == "SCHEMA_PATH":
+        return _schema_path()
+    if name == "RECOVERY_PATH":
+        return _recovery_path()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 # Default schema template
 DEFAULT_SCHEMA = {
@@ -64,24 +92,24 @@ def _utc_now() -> str:
 
 def load_engagement_schema() -> dict:
     """Load the engagement schema, creating it if missing."""
-    if not SCHEMA_PATH.exists():
+    if not _schema_path().exists():
         schema = dict(DEFAULT_SCHEMA)
         schema["created_at"] = _utc_now()
         schema["updated_at"] = _utc_now()
-        SCHEMA_PATH.write_text(json.dumps(schema, indent=2))
+        _schema_path().write_text(json.dumps(schema, indent=2))
         return schema
     try:
-        return json.loads(SCHEMA_PATH.read_text())
+        return json.loads(_schema_path().read_text())
     except json.JSONDecodeError:
         logger.warning("Corrupt engagement schema — regenerating")
-        SCHEMA_PATH.write_text(json.dumps(DEFAULT_SCHEMA, indent=2))
+        _schema_path().write_text(json.dumps(DEFAULT_SCHEMA, indent=2))
         return dict(DEFAULT_SCHEMA)
 
 
 def save_engagement_schema(schema: dict) -> None:
     """Persist the engagement schema to disk."""
     schema["updated_at"] = _utc_now()
-    SCHEMA_PATH.write_text(json.dumps(schema, indent=2, default=str))
+    _schema_path().write_text(json.dumps(schema, indent=2, default=str))
 
 
 def update_engagement_stats(**kwargs) -> None:
@@ -143,16 +171,16 @@ def save_session_state(state: dict) -> str:
         "target_info": _serialize_target(state.get("target_info", {})),
         "engagement_stats": load_engagement_schema().get("stats", {}),
     }
-    RECOVERY_PATH.write_text(json.dumps(recovery_data, indent=2, default=str))
-    return str(RECOVERY_PATH)
+    _recovery_path().write_text(json.dumps(recovery_data, indent=2, default=str))
+    return str(_recovery_path())
 
 
 def load_session_state() -> Optional[dict]:
     """Load a previously saved session for recovery. Returns None if no save exists."""
-    if not RECOVERY_PATH.exists():
+    if not _recovery_path().exists():
         return None
     try:
-        data = json.loads(RECOVERY_PATH.read_text())
+        data = json.loads(_recovery_path().read_text())
     except json.JSONDecodeError:
         logger.warning("Corrupt recovery file — ignoring")
         return None
@@ -169,14 +197,14 @@ def load_session_state() -> Optional[dict]:
 
 def clear_recovery_state() -> None:
     """Remove the recovery file after successful completion."""
-    if RECOVERY_PATH.exists():
-        RECOVERY_PATH.unlink()
+    if _recovery_path().exists():
+        _recovery_path().unlink()
         logger.info("Recovery state cleared — engagement completed normally")
 
 
 def has_recovery_state() -> bool:
     """Check if a recovery save exists."""
-    return RECOVERY_PATH.exists() and RECOVERY_PATH.stat().st_size > 0
+    return _recovery_path().exists() and _recovery_path().stat().st_size > 0
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
