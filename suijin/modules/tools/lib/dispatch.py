@@ -357,6 +357,16 @@ def _build_routes(config):
     except Exception:  # noqa: BLE001 — addons never break route building
         pass
 
+    # Recipes (A3): named multi-tool macros
+    try:
+        from suijin.modules.tools.lib import recipes as _recipes
+
+        routes["recipe_run"] = lambda a: _recipes.recipe_run(a.get("name", ""), a.get("target", ""), route_tool)
+        routes["recipe_list"] = lambda a: _recipes.recipe_list()
+        routes["recipe_define"] = lambda a: _recipes.recipe_define(a.get("name", ""), a.get("steps_json", ""))
+    except Exception:  # noqa: BLE001 — recipes never break route building
+        pass
+
     return routes
 
 
@@ -637,6 +647,22 @@ def get_tool_catalog():
   {"tool": "job_cancel", "args": {"job_id": "abc123"}}
   ```
 """
+
+    # Recipes section (A3)
+    try:
+        from suijin.modules.tools.lib.recipes import BUILT_IN_RECIPES
+
+        if BUILT_IN_RECIPES:
+            catalog += "## Tool Recipes (multi-tool macros)\n"
+            for _rn, _steps in sorted(BUILT_IN_RECIPES.items()):
+                catalog += (
+                    f"- **recipe_run** ({_rn}: " + " -> ".join(st["tool"] for st in _steps) + ")\n"
+                    f'  {{"tool": "recipe_run", "args": {{"name": "{_rn}", "target": "TARGET"}}}}\n'
+                )
+            catalog += "- **recipe_list** — every available recipe (built-in + user-defined).\n"
+            catalog += "- **recipe_define** — persist your own macro as a JSON step list.\n"
+    except Exception:  # noqa: BLE001
+        pass
 
     # Addon tools section (zero-boilerplate drops)
     try:

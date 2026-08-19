@@ -1342,6 +1342,18 @@ def _enrich_traffic(entries: list) -> list:
     return entries
 
 
+def run_recipes_cmd(args) -> int:
+    """`suijin recipes [list|mine]` — macros + mined proposals."""
+    from suijin.modules.tools.lib.recipes import mine_recipes, recipe_list
+
+    action = getattr(args, "action", "list") or "list"
+    if action == "mine":
+        print(mine_recipes())
+    else:
+        print(recipe_list())
+    return 0
+
+
 def run_profile_cmd(args) -> int:
     """`suijin profile` — prompt budget profile of the newest saved session."""
     import json
@@ -1541,6 +1553,10 @@ def main(argv=None):
     clean.add_argument("--apply", action="store_true", help="archive stale files then delete")
     clean.add_argument("--days", type=int, default=30, help="staleness threshold (default 30)")
     clean.set_defaults(func=run_clean)
+
+    recipes = sub.add_parser("recipes", help="tool recipes: list macros (or mine new ones from history)")
+    recipes.add_argument("action", nargs="?", choices=["list", "mine"], default="list")
+    recipes.set_defaults(func=run_recipes_cmd)
 
     profile = sub.add_parser("profile", help="prompt budget profile of the latest session (token breakdown + growth)")
     profile.set_defaults(func=run_profile_cmd)
