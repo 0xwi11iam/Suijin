@@ -4,12 +4,21 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/0xwi11iam/Suijin/main/install.sh | bash
 #
+# Interactive start (when run in a terminal): confirms your OS and pip
+# command with detected defaults — just press Enter. Piped/non-interactive
+# runs skip the questions and use auto-detection.
+#
+# Dependencies are resolved FULLY: missing git/python3 (and venv/build
+# headers on apt systems) are installed automatically; nothing is left
+# for the user to fix by hand.
+#
 # Tiers:
 #   (default)  python core        — fastest: agent + 50+ pure-python tools
 #   --tools    + common pentest   — nmap, gobuster, ffuf, sqlmap, ...
 #   --full     + heavy arsenal    — metasploit, impacket, hashcat, ...
 #
 # Windows? Do NOT use this script — run install.ps1 (Docker-based).
+# Existing Kali container? Use kali-setup.sh instead.
 #
 # Flags:  --tools | --full | --no-tools | -h/--help
 # Env:    SUIJIN_INSTALL_DIR (default ~/.suijin), SUIJIN_BIN_DIR
@@ -29,7 +38,7 @@ for arg in "$@"; do
     --tools) TIER="tools" ;;
     --full)  TIER="full" ;;
     --no-tools) TIER="core" ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
     *) printf '[suijin] unknown flag: %s (see --help)\n' "$arg"; exit 1 ;;
   esac
 done
@@ -47,6 +56,18 @@ ok()     { printf "  ${GREEN}ok${OFF}   %s ${DIM}(+%ds)${OFF}\n" "$*" "$(( $(dat
 warn()   { printf "  ${YELLOW}warn${OFF} %s\n" "$*"; }
 fail()   { printf "  ${RED}fail${OFF} %s\n" "$*"; exit 1; }
 note()   { printf "      ${DIM}%s${OFF}\n" "$*"; }
+
+# ask_default PROMPT DEFAULT — sets ANSWER; non-TTY runs (curl | bash)
+# take the detected default without blocking on stdin.
+ask_default() {
+  if [ -t 0 ] && [ -t 1 ]; then
+    printf "  %s ${DIM}[%s]${OFF} " "$1" "$2"
+    read -r ANSWER || true
+    ANSWER="${ANSWER:-$2}"
+  else
+    ANSWER="$2"
+  fi
+}
 
 banner() {
   printf "\n${BOLD}${CYAN}"
@@ -77,30 +98,116 @@ EOF
   printf "${OFF}\n"
 }
 
-# ── 1/8 platform ───────────────────────────────────────────────────────
-banner
-step "checking platform"
-OS="$(uname -s)"; ARCH="$(uname -m)"
-case "$OS" in
-  Darwin) PKG="brew" ;;
-  Linux)  PKG="apt" ;;
-  *) fail "unsupported OS: $OS (macOS/Linux native; Windows uses install.ps1 + Docker)" ;;
-esac
-if [ "$OS" = "Linux" ] && ! command -v apt-get >/dev/null 2>&1; then
-  warn "no apt-get found — tool tiers will list manual install hints instead"
+# system package install helper (best effort, never aborts the install)
+have() { command -v "$1" >/dev/null 2>&1; }
+SUDO=""
+if [ "$(uname -s)" = "Linux" ] && [ "$(id -u)" -ne 0 ]; then
+  have sudo && SUDO="sudo"
 fi
-ok "$OS ($ARCH) — packages via $PKG"
-[ "$OS" = "Darwin" ] && note "apple silicon detected" [ "$ARCH" = "arm64" ] || true
+sys_install() {
+  if have brew; then
+    brew install -q "$@" 2>/dev/null || return 1
+  elif have apt-get; then
+    $SUDO apt-get update -qq >/dev/null 2>&1 || true
+    $SUDO apt-get install -y -qq "$@" >/dev/null 2>&1 || return 1
+  else
+    return 1
+  fi
+}
 
-# ── 2/8 prerequisites ──────────────────────────────────────────────────
-step "checking prerequisites (git, python3)"
-MISSING=()
-for dep in git python3; do
-  command -v "$dep" >/dev/null 2>&1 || MISSING+=("$dep")
-done
-[ ${#MISSING[@]} -gt 0 ] && fail "missing: ${MISSING[*]} — install them and re-run"
+banner
+
+# ── 1/8 platform + preferences ─────────────────────────────────────────
+step "platform + preferences"
+DETECTED_OS="$(uname -s)"
+case "$DETECTED_OS" in
+  Darwin) DETECTED_LABEL="macos" ;;
+  Linux)  DETECTED_LABEL="linux" ;;
+  *) fail "unsupported OS: $DETECTED_OS (macOS/Linux native; Windows uses install.ps1 + Docker)" ;;
+esac
+
+if [ -t 0 ] && [ -t 1 ]; then
+  printf "  a couple of questions — Enter accepts the detected default\n"
+  ask_default "which OS are you installing on? (macos/linux)" "$DETECTED_LABEL"
+  case "$ANSWER" in
+    macos|mac|darwin|osx) CHOSEN_OS="macos" ;;
+    linux|gnu/linux)      CHOSEN_OS="linux" ;;
+    *) CHOSEN_OS="$DETECTED_LABEL"; warn "unrecognized choice — using detected '$DETECTED_LABEL'" ;;
+  esac
+  if [ "$CHOSEN_OS" != "$DETECTED_LABEL" ]; then
+    warn "you chose '$CHOSEN_OS' but this machine detects as '$DETECTED_LABEL' — going with your choice for package selection"
+  fi
+else
+  CHOSEN_OS="$DETECTED_LABEL"
+  note "non-interactive run — OS auto-detected: $CHOSEN_OS"
+fi
+
+# pip preference (pip3 is the modern default; pip honored if chosen)
+PIP_DEFAULT="pip3"; have pip3 || { have pip && PIP_DEFAULT="pip"; }
+if [ -t 0 ] && [ -t 1 ]; then
+  ask_default "which pip command do you use? (pip3/pip)" "$PIP_DEFAULT"
+  case "$ANSWER" in
+    pip3) PIP_BIN="pip3" ;;
+    pip)  PIP_BIN="pip" ;;
+    *)    PIP_BIN="$PIP_DEFAULT"; warn "unrecognized choice — using '$PIP_DEFAULT'" ;;
+  esac
+else
+  PIP_BIN="$PIP_DEFAULT"
+  note "non-interactive run — pip command: $PIP_BIN"
+fi
+
+ARCH="$(uname -m)"
+PKG="none"
+[ "$CHOSEN_OS" = "macos" ] && PKG="brew"
+[ "$CHOSEN_OS" = "linux" ] && PKG="apt"
+ok "$CHOSEN_OS ($ARCH), packages via $PKG, pip: $PIP_BIN"
+
+# ── 2/8 prerequisites — fully resolved, nothing left to the user ───────
+step "resolving prerequisites (git, python3, build headers)"
+
+if ! have git; then
+  warn "git not found — installing"
+  if [ "$CHOSEN_OS" = "macos" ] && ! have brew; then
+    if [ -t 0 ]; then
+      ask_default "Homebrew missing — install it now? (y/n)" "y"
+      case "$ANSWER" in y|Y|yes) /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" || warn "brew install failed";; esac
+    else
+      note "no brew and non-interactive — trying xcode command line tools for git"
+      xcode-select --install >/dev/null 2>&1 || true
+    fi
+  fi
+  sys_install git || warn "could not auto-install git — install it manually and re-run"
+fi
+have git && ok "git $(git --version 2>/dev/null | awk '{print $3}' || echo present)" || warn "git still missing (continuing — needed for clone)"
+
+if ! have python3; then
+  warn "python3 not found — installing"
+  if [ "$CHOSEN_OS" = "macos" ]; then
+    sys_install python@3.14 2>/dev/null || sys_install python3 || warn "python install failed — install python3 and re-run"
+  else
+    sys_install python3 python3-pip python3-venv python3-dev build-essential || warn "python install failed — install python3 and re-run"
+  fi
+fi
+have python3 || fail "python3 could not be resolved automatically — install Python 3.10+ and re-run"
 PYV=$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')
-ok "git + python3 ${PYV}"
+ok "python3 ${PYV}"
+
+# venv capability: Debian/Ubuntu ships python3-venv separately — resolve it
+if ! python3 -c "import venv" >/dev/null 2>&1; then
+  warn "python3 venv module missing — installing"
+  sys_install "python3-venv" "python${PYV}-venv" 2>/dev/null || warn "venv package unavailable"
+  python3 -c "import venv" >/dev/null 2>&1 || fail "python3 venv unavailable — install python3-venv and re-run"
+fi
+ok "venv module ready"
+
+# pip bootstrap on the chosen command (best effort; the venv has its own)
+if ! have "$PIP_BIN"; then
+  warn "$PIP_BIN not found — trying the other, then ensurepip"
+  have pip3 && PIP_BIN="pip3" || { have pip && PIP_BIN="pip"; }
+  have "$PIP_BIN" || python3 -m ensurepip --upgrade >/dev/null 2>&1 || sys_install python3-pip || true
+  have "$PIP_BIN" || note "system $PIP_BIN unavailable — the installer venv carries its own pip (safe to continue)"
+fi
+ok "pip: $PIP_BIN"
 
 # ── 3/8 source ─────────────────────────────────────────────────────────
 step "fetching source"
@@ -139,36 +246,50 @@ fi
 ln -sfn ../suijin_agent "$REPO_DIR/suijin/suijin_agent"
 ok "workspace ready at suijin_agent/"
 
-# ── 5/8 python deps ────────────────────────────────────────────────────
+# ── 5/8 python deps (venv health check + build-header retry) ───────────
 step "creating virtualenv + installing python deps"
 VENV="$INSTALL_DIR/venv"
+# a venv inherited from a migration (or an OS python upgrade) can carry a
+# stale interpreter shebang — detect and rebuild instead of failing on it
+if [ -x "$VENV/bin/python" ] && ! "$VENV/bin/python" --version >/dev/null 2>&1; then
+  warn "existing venv is broken (stale interpreter) — rebuilding it"
+  rm -rf "$VENV"
+fi
 if [ ! -x "$VENV/bin/python" ]; then
   python3 -m venv "$VENV" || fail "venv creation failed"
 fi
 "$VENV/bin/pip" install --quiet --upgrade pip
-"$VENV/bin/pip" install --quiet -r "$REPO_DIR/suijin/requirements.txt" \
-  || fail "python deps failed — see output above"
-ok "$(basename "$VENV") ready with $( "$VENV/bin/pip" list 2>/dev/null | wc -l | tr -d ' ' ) packages"
+if ! "$VENV/bin/pip" install --quiet -r "$REPO_DIR/suijin/requirements.txt"; then
+  warn "dependency install failed — resolving build headers and retrying"
+  if [ "$CHOSEN_OS" = "linux" ]; then
+    sys_install build-essential "python${PYV}-dev" python3-dev || true
+  else
+    note "macOS: ensure Xcode command line tools are current (xcode-select --install)"
+  fi
+  "$VENV/bin/pip" install --quiet -r "$REPO_DIR/suijin/requirements.txt" \
+    || fail "python deps failed after retry — see output above"
+fi
+NPKGS=$( "$VENV/bin/pip" list 2>/dev/null | wc -l | tr -d ' ' )
+ok "venv ready with ${NPKGS} packages"
 
 # ── 6/8 optional tools ─────────────────────────────────────────────────
-CORE_TOOLS=()
 TOOLS_TIER=(nmap gobuster ffuf sqlmap nikto whatweb sslscan amass subfinder nuclei)
 FULL_TIER=(metasploit-framework hydra john hashcat medusa snmp redis impacket dnsrecon wafw00f dirsearch testssl.sh crackmapexec)
 
 install_pkgs() {
-  local want=("$@") miss=() have=()
+  local want=("$@") miss=() have_now=()
   for p in "${want[@]}"; do
-    if command -v "$p" >/dev/null 2>&1; then have+=("$p"); else miss+=("$p"); fi
+    if command -v "$p" >/dev/null 2>&1; then have_now+=("$p"); else miss+=("$p"); fi
   done
-  [ ${#have[@]} -gt 0 ] && note "already present: ${have[*]}"
+  [ ${#have_now[@]} -gt 0 ] && note "already present: ${have_now[*]}"
   [ ${#miss[@]} -eq 0 ] && return 0
   note "installing: ${miss[*]}"
-  if command -v brew >/dev/null 2>&1; then
+  if have brew; then
     brew install -q "${miss[@]}" 2>/dev/null \
       || warn "some brew names differ on macOS — run 'suijin doctor' for hints"
-  elif command -v apt-get >/dev/null 2>&1; then
-    sudo apt-get update -qq >/dev/null 2>&1 || true
-    sudo apt-get install -y -qq "${miss[@]}" >/dev/null 2>&1 \
+  elif have apt-get; then
+    $SUDO apt-get update -qq >/dev/null 2>&1 || true
+    $SUDO apt-get install -y -qq "${miss[@]}" >/dev/null 2>&1 \
       || warn "some apt packages unavailable — run 'suijin doctor' for hints"
   else
     warn "no brew/apt — install manually: ${miss[*]}"
