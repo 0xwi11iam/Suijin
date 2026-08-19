@@ -48,3 +48,4 @@ docker-compose.yml
 
 # Tests
 suijin/tests/
+.opencode/

@@ -116,14 +116,6 @@ class TestBlueTeamPipeline:
         r2 = ok("success")
         assert r2["status"] == "ok"
 
-    def test_fugu_importable(self):
-        """Verify Fugu is no longer dead code — importable from main."""
-        from suijin.fugu import run_fugu
-
-        assert run_fugu is not None
-        from suijin.fugu_chain import ChainTracker
-
-        assert ChainTracker is not None
 
     def test_deception_engine_wired(self):
         """Verify deception engine loads and uses structured errors."""

@@ -2,7 +2,7 @@
 
 Registration shims for Phase 2: entries point at the existing
 implementations (core/agent_graph.py etc.); the module registers the
-agent-graph FACTORY as a Context service so any surface (console, fugu,
+agent-graph FACTORY as a Context service so any surface (console,
 battle) can build runs without importing the agent package.
 """
 

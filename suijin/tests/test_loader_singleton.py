@@ -45,7 +45,7 @@ class TestSingleInstance:
 
 class TestLoaderRobustness:
     def test_missing_module_raises_clearly(self, monkeypatch):
-        """fugu.py:455 loads 'tools' which never existed — the failure must
+        """historical: fugu.py:455 (deleted) loaded 'tools' which never existed — the failure must
         be a clear ModuleNotFoundError, not an opaque FileNotFoundError."""
         import pytest
 
