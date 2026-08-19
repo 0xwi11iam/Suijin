@@ -1,6 +1,6 @@
-"""Core agent framework — state machine, orchestrator, safety."""
+"""Legacy core tree — blue/red stacks (dissolving in slices 7/8).
 
-from suijin.core.agent_context import *
-from suijin.core.prompt_safety import *
-from suijin.core.state import *
-# agent_graph and redteamer imported lazily to avoid circular imports
+The agent brain (state/agent_graph/supervisor/engagement) lives at
+suijin.modules.agent.lib since v4.1. This package keeps only the team
+implementations until they move.
+"""

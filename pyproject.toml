@@ -46,8 +46,8 @@ suijin = [
     "config.json",
     "blue_config.json",
     "engagement_schema.json",
-    "prompts/*.py",
-    "skills/*.py",
+    "modules/agent/lib/prompts/*.py",
+    "modules/agent/lib/skills/*.py",
     "tutorials/**/*.md",
     "tutorials/*.md",
 ]

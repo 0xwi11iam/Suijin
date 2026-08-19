@@ -2,12 +2,11 @@
 Base prompt builder — autonomous agent system prompt.
 """
 
-from suijin.core.prompt_safety import UNTRUSTED_OUTPUT_GUIDANCE
-from suijin.prompts.tool_registry import build_tool_catalog_prompt
+from suijin.modules.agent.lib.prompts.tool_registry import build_tool_catalog_prompt
 
 # Secret patterns, credential classification, and CVE mapping are now
 # defined inline in suijin/security/secret_patterns.py
-from suijin.skills.loader import get_skill_prompt
+from suijin.modules.agent.lib.skills.loader import get_skill_prompt
 
 base_prompt = """
 ##  AUTONOMOUS SECURITY AGENT — FULL CAPABILITIES
@@ -149,6 +148,13 @@ Even if the engagement failed, write a report explaining what was tried and why.
 """
 
 
+def _untrusted_guidance() -> str:
+    """Platform prompt-safety guidance (lazy: boundary rule)."""
+    from suijin.modules.platform.lib.prompt_safety import UNTRUSTED_OUTPUT_GUIDANCE
+
+    return UNTRUSTED_OUTPUT_GUIDANCE
+
+
 def build_agent_system_prompt(state: dict) -> str:
     """Build the complete system prompt for the current agent turn.
 
@@ -173,7 +179,7 @@ Thought -> Action -> Observation loop.
 ## OBJECTIVE
 {objective}
 
-{UNTRUSTED_OUTPUT_GUIDANCE}
+{_untrusted_guidance()}
 """)
 
     # 1.5. Operational mode constraints
@@ -183,7 +189,7 @@ Thought -> Action -> Observation loop.
 
         # config.json lives in the suijin/ package dir — never CWD-relative,
         # or the mode flags silently vanish when launched from elsewhere.
-        cfg_path = Path(__file__).resolve().parent.parent / "config.json"
+        cfg_path = Path(__file__).resolve().parents[3] / "config.json"
         cfg = json.loads(cfg_path.read_text())
     except Exception:
         cfg = {}

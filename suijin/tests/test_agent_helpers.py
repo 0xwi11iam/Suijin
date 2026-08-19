@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
 def test_prompt_safety():
-    from suijin.core.prompt_safety import wrap_untrusted
+    from suijin.modules.platform.lib.prompt_safety import wrap_untrusted
 
     result = wrap_untrusted("hello world", "TOOL_OUTPUT")
     assert "<<<UNTRUSTED_TOOL_OUTPUT id=" in result
@@ -122,7 +122,7 @@ def test_productivity():
 
 
 def test_state():
-    from suijin.core.state import ExecutionStep, TargetInfo, TodoItem, new_agent_state
+    from suijin.modules.agent.lib.state import ExecutionStep, TargetInfo, TodoItem, new_agent_state
 
     s = new_agent_state(original_objective="test", max_iterations=50)
     assert s["original_objective"] == "test"
@@ -145,7 +145,7 @@ def test_state():
 
 
 def test_skill_loader():
-    from suijin.skills.loader import get_available_skills, get_skill_prompt
+    from suijin.modules.agent.lib.skills.loader import get_available_skills, get_skill_prompt
 
     prompt = get_skill_prompt("sql_injection")
     assert "SQL INJECTION" in prompt.upper()
@@ -157,7 +157,7 @@ def test_skill_loader():
 
 
 def test_tool_registry():
-    from suijin.prompts.tool_registry import (
+    from suijin.modules.agent.lib.prompts.tool_registry import (
         build_tool_catalog_prompt,
         get_allowed_tools_for_phase,
         is_tool_allowed_in_phase,
@@ -189,7 +189,7 @@ def test_workspace_fs():
 
 
 def test_engagement_schema():
-    from suijin.core.engagement import (
+    from suijin.modules.agent.lib.engagement import (
         add_finding_to_schema,
         clear_recovery_state,
         load_engagement_schema,
@@ -213,7 +213,7 @@ def test_engagement_schema():
     state = {"original_objective": "test_recovery", "current_phase": "recon", "current_iteration": 5}
     path = save_session_state(state)
     assert "operation_state_recovery.json" in path
-    from suijin.core.engagement import has_recovery_state, load_session_state
+    from suijin.modules.agent.lib.engagement import has_recovery_state, load_session_state
 
     assert has_recovery_state()
     recovery = load_session_state()
@@ -277,7 +277,7 @@ def test_payload_generator():
 
 
 def test_supervisor_patterns():
-    from suijin.core.supervisor import (
+    from suijin.modules.agent.lib.supervisor import (
         _detect_bookkeeping_loop,
         _detect_missed_flag,
         _detect_repeating_tool,
@@ -349,7 +349,7 @@ def test_drift_analyser():
 
 
 def test_error_handler():
-    from suijin.core.error_handler import GracefulFallback, classify_and_handle
+    from suijin.modules.platform.lib.error_handler import GracefulFallback, classify_and_handle
 
     # Connection refused
     result = classify_and_handle(ConnectionError("Connection refused"), "http_request")

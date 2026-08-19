@@ -4,24 +4,58 @@ import logging
 import threading
 import time as _time
 
-from suijin.core.agent_context import set_phase_context, set_tenant_context
-from suijin.core.prompt_safety import wrap_untrusted
-from suijin.modules.platform.lib.helpers.error_class import classify_error_class
-from suijin.modules.platform.lib.infra.output_offload import maybe_offload
-from suijin.modules.tools.lib.job_registry import _job_lock, _jobs
-from suijin.modules.tools.lib.job_registry import spawn as _registry_spawn
-
 logger = logging.getLogger(__name__)
 
 # THE job registry lives in tools/job_registry.py (Phase 0, item 4).
 # These aliases keep older references working — they are the SAME objects.
-_jobs = _jobs
-_job_lock = _job_lock
+
+
+def _jr():
+    """Tools job registry (lazy: boundary rule)."""
+    from suijin.modules.tools.lib import job_registry
+
+    return job_registry
+
+
+def _classify_error_class(*a, **k):
+    from suijin.modules.platform.lib.helpers.error_class import classify_error_class
+
+    return classify_error_class(*a, **k)
+
+
+def _maybe_offload(*a, **k):
+    from suijin.modules.platform.lib.infra.output_offload import maybe_offload
+
+    return maybe_offload(*a, **k)
+
+
+def __getattr__(name):
+    if name in ("_job_lock", "_jobs"):
+        return getattr(_jr(), name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def _phase_ctx(*a, **k):
+    from suijin.modules.platform.lib.agent_context import set_phase_context
+
+    return set_phase_context(*a, **k)
+
+
+def _tenant_ctx(*a, **k):
+    from suijin.modules.platform.lib.agent_context import set_tenant_context
+
+    return set_tenant_context(*a, **k)
+
+
+def _wrap_untrusted(*a, **k):
+    from suijin.modules.platform.lib.prompt_safety import wrap_untrusted
+
+    return wrap_untrusted(*a, **k)
 
 
 def _spawn_background_job(tool_name: str, tool_args: dict, route_tool_fn) -> str:
     """Spawn a tool as a background thread. Returns job_id immediately."""
-    return _registry_spawn(tool_name, tool_args, route_tool_fn)
+    return _jr().spawn(tool_name, tool_args, route_tool_fn)
 
 
 async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
@@ -68,8 +102,8 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
         }
 
     # ── Synchronous (10s timeout, auto-spawn if slower) ──────────────
-    set_tenant_context("local", "default")
-    set_phase_context(state.get("current_phase", "informational"))
+    _tenant_ctx("local", "default")
+    _phase_ctx(state.get("current_phase", "informational"))
 
     AUTO_BG_TIMEOUT = 10  # seconds before auto-promoting to background
 
@@ -85,8 +119,8 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
         finally:
             # If this thread was promoted to a bg job, update the job entry
             me = threading.current_thread()
-            with _job_lock:
-                for _jid, job in list(_jobs.items()):
+            with _jr()._job_lock:
+                for _jid, job in list(_jr()._jobs.items()):
                     if job.get("_thread") is me:
                         res = str(result_container.get("result", ""))
                         job["output"] = res
@@ -98,9 +132,9 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
 
     def _adopt() -> str:
         """Adopt the still-running thread into THE registry (no orphan)."""
-        with _job_lock:
+        with _jr()._job_lock:
             job_id = __import__("uuid").uuid4().hex[:8]
-            _jobs[job_id] = {
+            _jr()._jobs[job_id] = {
                 "job_id": job_id,
                 "tool_name": tool_name,
                 "tool_args": dict(tool_args),
@@ -146,10 +180,10 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
     # Finished within timeout — return sync result
     result = result_container.get("result", "No output")
 
-    output, _ = maybe_offload(tool_name, str(result))
+    output, _ = _maybe_offload(tool_name, str(result))
     duration_ms = int((_time.monotonic() - t0) * 1000)
     success = not output.startswith("Error:") and not output.startswith("Tool error:")
-    ec = classify_error_class(
+    ec = _classify_error_class(
         success=success,
         tool_output=output,
         error_message=output if not success else None,
@@ -161,5 +195,5 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
     return {
         "_current_step": step_data,
         "_tool_result": {"success": success, "output": output},
-        "messages": [{"role": "user", "content": f"RESULT ({tool_name}):\n{wrap_untrusted(output, 'TOOL_OUTPUT')}"}],
+        "messages": [{"role": "user", "content": f"RESULT ({tool_name}):\n{_wrap_untrusted(output, 'TOOL_OUTPUT')}"}],
     }

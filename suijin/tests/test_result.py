@@ -76,8 +76,8 @@ class TestBackgroundJobStreaming:
     def test_spawn_background_job_streams_output(self):
         import time
 
+        from suijin.modules.agent.lib.nodes.execute_tool_node import _job_lock, _jobs, _spawn_background_job
         from suijin.modules.tools.lib.result import run_command
-        from suijin.nodes.execute_tool_node import _job_lock, _jobs, _spawn_background_job
 
         def fake_route(tool, args, config):
             return run_command("for i in 1 2 3; do echo jobline$i; sleep 0.05; done", shell=True).format()

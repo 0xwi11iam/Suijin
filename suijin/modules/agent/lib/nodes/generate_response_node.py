@@ -5,11 +5,10 @@ Ported and simplified from redamon/agentic/orchestrator_helpers/nodes/generate_r
 
 import logging
 
-from suijin.core.state import (
+from suijin.modules.agent.lib.state import (
     format_execution_trace,
     format_todo_list,
 )
-from suijin.modules.platform.lib.helpers.json_utils import json_dumps_safe
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +46,12 @@ Use the execution trace as your sole source of truth. Do not hallucinate finding
 """
 
 
+def _json_dumps_safe(*a, **k):
+    from suijin.modules.platform.lib.helpers.json_utils import json_dumps_safe
+
+    return json_dumps_safe(*a, **k)
+
+
 async def generate_response_node(state: dict, *, generate_fn) -> dict:
     """Generate the final response/report.
 
@@ -66,7 +71,7 @@ async def generate_response_node(state: dict, *, generate_fn) -> dict:
     completion_reason = state.get("completion_reason", "Session ended")
 
     exec_trace = format_execution_trace(state.get("execution_trace", []))
-    target_info = json_dumps_safe(state.get("target_info", {}), indent=2)
+    target_info = _json_dumps_safe(state.get("target_info", {}), indent=2)
     todos = format_todo_list(state.get("todo_list", []))
 
     prompt = FINAL_REPORT_PROMPT.format(

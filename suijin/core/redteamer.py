@@ -53,7 +53,7 @@ supervisor.set_providers(providers)
 oracle = load_local_module("oracle")
 oracle.set_providers(providers)
 
-from suijin.core.agent_graph import SuijinAgentGraph
+from suijin.modules.agent.lib.agent_graph import SuijinAgentGraph
 
 console = Console()
 DUMP_PATH = BASE_DIR / "operation_state_recovery.json"
@@ -275,7 +275,7 @@ async def run_red_team_async(config, objective, api_key=None):
                 except (KeyboardInterrupt, EOFError):
                     break
             elif guidance.lower().startswith("/health"):
-                from suijin.core.templates import print_health_check
+                from suijin.modules.platform.lib.templates import print_health_check
 
                 print_health_check(console)
                 try:

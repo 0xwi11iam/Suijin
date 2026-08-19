@@ -6,7 +6,7 @@ from suijin.core.blue.deception.honeypot_factory import generate_honeypot_respon
 from suijin.core.blue.deception.shadow_redirect import redirect_to_shadow
 from suijin.core.blue.deception.time_sink import TimeSink
 from suijin.core.blue.errors import DeceptionError, ErrorSeverity, err, ok
-from suijin.core.constants import SCORE_DECEIVE, SCORE_SHADOW, SCORE_SUSPICIOUS, TARPIT_DEFAULT_DELAY
+from suijin.modules.platform.lib.constants import SCORE_DECEIVE, SCORE_SHADOW, SCORE_SUSPICIOUS, TARPIT_DEFAULT_DELAY
 
 
 class DeceptionEngine:

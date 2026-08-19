@@ -16,8 +16,8 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from suijin.core.constants import DEFAULT_MODEL, RISK_HIGH
 from suijin.core.red.config_loader import active_model
+from suijin.modules.platform.lib.constants import DEFAULT_MODEL, RISK_HIGH
 
 
 @dataclass
@@ -134,8 +134,8 @@ Respond ONLY with valid JSON. No markdown, no explanation outside JSON."""
         request_id: int = 0,
     ) -> AIAnalysisResult:
         """Send an anomalous request to the LLM for deep analysis."""
+        from suijin.modules.agent.lib.prompts.blue_system import BLUE_SYSTEM_PROMPT
         from suijin.modules.providers.lib import generate, get_usage
-        from suijin.prompts.blue_system import BLUE_SYSTEM_PROMPT
 
         t0 = time.time()
 

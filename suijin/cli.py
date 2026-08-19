@@ -507,7 +507,7 @@ def run_config_validate() -> int:
     """Pydantic-validate config.json and blue_config.json. Exit 1 on failure."""
     import json
 
-    from suijin.core.config_models import BlueConfig, RedConfig
+    from suijin.modules.platform.lib.config_models import BlueConfig, RedConfig
 
     ok = True
     checks = (
@@ -715,7 +715,7 @@ def run_eval(args) -> int:
         render_eval,
         replay_scores,
     )
-    from suijin.core.constants import BLUE_TRAFFIC_LOG
+    from suijin.modules.platform.lib.constants import BLUE_TRAFFIC_LOG
 
     log = Path(getattr(args, "traffic", None) or BLUE_TRAFFIC_LOG)
     if not log.exists():
@@ -1283,8 +1283,8 @@ def run_labs_campaign(args) -> int:
 def run_watch(args) -> int:
     import signal
 
-    from suijin.core.constants import BLUE_TRAFFIC_LOG
     from suijin.modules.ops.lib.housekeeping import tail_file, watch_lines
+    from suijin.modules.platform.lib.constants import BLUE_TRAFFIC_LOG
     from suijin.ui.server import _enrich_traffic
 
     path = Path(getattr(args, "traffic", None) or BLUE_TRAFFIC_LOG)

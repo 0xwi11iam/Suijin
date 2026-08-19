@@ -75,7 +75,7 @@ def load_blue_config() -> dict:
 
     # Validate with Pydantic model — catches typos and bad values at startup
     try:
-        from suijin.core.config_models import BlueConfig
+        from suijin.modules.platform.lib.config_models import BlueConfig
 
         validated = BlueConfig(**merged)
         return validated.model_dump()

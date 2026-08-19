@@ -85,7 +85,7 @@ def load_config() -> dict:
         config.setdefault(k, v)
     # Validate with Pydantic — catch typos at startup
     try:
-        from suijin.core.config_models import RedConfig
+        from suijin.modules.platform.lib.config_models import RedConfig
 
         validated = RedConfig(**config)
         config.update(validated.model_dump())

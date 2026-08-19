@@ -17,7 +17,7 @@ class AgentModule(Module):
 
     def register(self, ctx) -> None:
         def _factory(generate_fn, route_tool_fn, max_iterations=100):
-            from suijin.core.agent_graph import SuijinAgentGraph
+            from suijin.modules.agent.lib.agent_graph import SuijinAgentGraph
 
             return SuijinAgentGraph(
                 generate_fn=generate_fn,
@@ -26,7 +26,9 @@ class AgentModule(Module):
             )
 
         ctx.register_service("agent_graph", _factory)
-        ctx.register_service("agent_state", lambda: __import__("suijin.core.state", fromlist=["AgentState"]).AgentState)
+        ctx.register_service(
+            "agent_state", lambda: __import__("suijin.modules.agent.lib.state", fromlist=["AgentState"]).AgentState
+        )
 
     def start(self, ctx) -> None:
         ctx.journal.append("agent", "run-loop service registered")

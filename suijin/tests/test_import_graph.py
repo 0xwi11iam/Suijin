@@ -94,7 +94,7 @@ def test_blue_tree_only_contains_live_modules():
         "suijin.core.blue.ai_engine",
         "suijin.core.blue.knowledge_graph",
         "suijin.core.blue.subagent_manager",
-        "suijin.prompts.blue_system",
+        "suijin.modules.agent.lib.prompts.blue_system",
     ],
 )
 def test_kept_blue_modules_importable(module):

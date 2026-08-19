@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from suijin.core.constants import RISK_HIGH
+from suijin.modules.platform.lib.constants import RISK_HIGH
 
 
 class Tier1Analyst:

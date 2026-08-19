@@ -6,7 +6,7 @@ and system prompt. Called once at the start of a graph invocation.
 
 import logging
 
-from suijin.core.state import (
+from suijin.modules.agent.lib.state import (
     ConversationObjective,
     PhaseHistoryEntry,
     TargetInfo,

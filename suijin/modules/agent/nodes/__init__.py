@@ -11,7 +11,7 @@ class NodesSubmodule(Module):
 
     def register(self, ctx) -> None:
         def _nodes():
-            import suijin.nodes as pkg
+            import suijin.modules.agent.lib.nodes as pkg
 
             return {
                 n: getattr(pkg, n)

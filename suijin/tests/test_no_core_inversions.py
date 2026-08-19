@@ -15,7 +15,7 @@ TOOLS_DIR = Path(__file__).resolve().parents[1] / "modules" / "tools" / "lib"
 # Importing core.CONSTANTS from tools is acceptable (shared kernel
 # values, no behavior); importing anything else under suijin.core is not.
 _BANNED = "suijin.core"
-_ALLOWED_PREFIX = "suijin.core.constants"
+_ALLOWED_PREFIX = "suijin.modules.platform.lib.constants"
 _SEAM = "modules/tools/lib/services.py"
 
 

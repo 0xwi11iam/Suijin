@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from suijin.core.constants import RISK_HIGH
+from suijin.modules.platform.lib.constants import RISK_HIGH
 
 
 @dataclass
@@ -91,8 +91,8 @@ class SubagentManager:
 
     async def analyze_endpoint(self, sa: EndpointSubagent) -> EndpointSubagent:
         """Deep analysis — read the ENTIRE source file, no truncation."""
+        from suijin.modules.agent.lib.prompts.blue_system import BLUE_SYSTEM_PROMPT
         from suijin.modules.providers.lib import generate
-        from suijin.prompts.blue_system import BLUE_SYSTEM_PROMPT
 
         ep = sa.endpoint
         file_path = ep.get("file", "")

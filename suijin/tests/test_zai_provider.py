@@ -214,27 +214,27 @@ class TestZaiConfig:
     """config plumbing: defaults, Pydantic validation, loader setdefault."""
 
     def test_redconfig_defaults_to_coding(self):
-        from suijin.core.config_models import RedConfig
+        from suijin.modules.platform.lib.config_models import RedConfig
 
         cfg = RedConfig(provider="zai")
         assert cfg.zai_endpoint == "coding"
         assert cfg.zai_model == "glm-5.3"
 
     def test_redconfig_accepts_paas_and_urls(self):
-        from suijin.core.config_models import RedConfig
+        from suijin.modules.platform.lib.config_models import RedConfig
 
         assert RedConfig(zai_endpoint="paas").zai_endpoint == "paas"
         assert RedConfig(zai_endpoint="PAAS").zai_endpoint == "paas"
         assert RedConfig(zai_endpoint="https://proxy.example.com/v1").zai_endpoint == "https://proxy.example.com/v1"
 
     def test_redconfig_rejects_unknown_endpoint(self):
-        from suijin.core.config_models import RedConfig
+        from suijin.modules.platform.lib.config_models import RedConfig
 
         with pytest.raises(Exception, match="zai_endpoint"):
             RedConfig(zai_endpoint="free-tier")
 
     def test_constants_default(self):
-        from suijin.core.constants import ZAI_ENDPOINT
+        from suijin.modules.platform.lib.constants import ZAI_ENDPOINT
 
         assert ZAI_ENDPOINT == "coding"
 

@@ -12,7 +12,7 @@ class GraphSubmodule(Module):
     def register(self, ctx) -> None:
         ctx.register_service(
             "graph_builder",
-            lambda: __import__("suijin.core.agent_graph", fromlist=["SuijinAgentGraph"]).SuijinAgentGraph,
+            lambda: __import__("suijin.modules.agent.lib.agent_graph", fromlist=["SuijinAgentGraph"]).SuijinAgentGraph,
         )
 
     def start(self, ctx) -> None:

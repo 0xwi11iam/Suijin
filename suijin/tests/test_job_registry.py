@@ -60,8 +60,8 @@ class TestJobRegistry:
 
     def test_node_delegates_to_registry(self):
         """execute_tool_node must use THE registry — no private copy."""
+        from suijin.modules.agent.lib.nodes import execute_tool_node as node
         from suijin.modules.tools.lib import job_registry
-        from suijin.nodes import execute_tool_node as node
 
         assert node._jobs is job_registry._jobs
         assert node._job_lock is job_registry._job_lock

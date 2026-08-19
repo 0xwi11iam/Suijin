@@ -25,10 +25,10 @@ from typing import Annotated, Callable, Optional
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
-from suijin.nodes.execute_tool_node import execute_tool_node
-from suijin.nodes.generate_response_node import generate_response_node
-from suijin.nodes.initialize_node import initialize_node
-from suijin.nodes.think_node import think_node
+from suijin.modules.agent.lib.nodes.execute_tool_node import execute_tool_node
+from suijin.modules.agent.lib.nodes.generate_response_node import generate_response_node
+from suijin.modules.agent.lib.nodes.initialize_node import initialize_node
+from suijin.modules.agent.lib.nodes.think_node import think_node
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +145,7 @@ class SuijinAgentGraph:
             iteration = result.get("current_iteration", state.get("current_iteration", 0))
             if iteration > 0 and iteration % supervisor_interval == 0:
                 try:
-                    from suijin.core.supervisor import analyze_trace, analyze_trace_with_llm
+                    from suijin.modules.agent.lib.supervisor import analyze_trace, analyze_trace_with_llm
 
                     trace = result.get("execution_trace", state.get("execution_trace", []))
 
@@ -228,7 +228,7 @@ class SuijinAgentGraph:
             # ── Session persistence (save every 5 iterations) ──────
             if iteration > 0 and iteration % 5 == 0:
                 try:
-                    from suijin.core.engagement import save_session_state
+                    from suijin.modules.agent.lib.engagement import save_session_state
 
                     merged = {**state, **result}
                     save_session_state(merged)
@@ -309,7 +309,7 @@ class SuijinAgentGraph:
         self._build()
 
         # Initialize engagement schema and recovery
-        from suijin.core.engagement import (
+        from suijin.modules.agent.lib.engagement import (
             clear_recovery_state,
             has_recovery_state,
             load_engagement_schema,
@@ -367,7 +367,7 @@ class SuijinAgentGraph:
         except Exception:
             logger.exception("Agent graph crashed — saving recovery state")
             try:
-                from suijin.core.engagement import save_session_state
+                from suijin.modules.agent.lib.engagement import save_session_state
 
                 save_session_state(initial_state)
             except Exception:

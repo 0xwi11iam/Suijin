@@ -147,7 +147,7 @@ class TestConfigValidation:
     """Verify Pydantic config models catch bad configs."""
 
     def test_blue_config_defaults(self):
-        from suijin.core.config_models import BlueConfig
+        from suijin.modules.platform.lib.config_models import BlueConfig
 
         c = BlueConfig()
         assert c.scorer.critical_threshold == 8
@@ -155,7 +155,7 @@ class TestConfigValidation:
         assert c.cost.daily_budget_usd == 5.0
 
     def test_red_config_defaults(self):
-        from suijin.core.config_models import RedConfig
+        from suijin.modules.platform.lib.config_models import RedConfig
 
         c = RedConfig()
         assert c.cost_hard_cap_usd == 2.0
@@ -164,7 +164,7 @@ class TestConfigValidation:
     def test_red_config_rejects_negative_cost(self):
         from pydantic import ValidationError
 
-        from suijin.core.config_models import RedConfig
+        from suijin.modules.platform.lib.config_models import RedConfig
 
         with pytest.raises(ValidationError):  # Pydantic validation error
             RedConfig(cost_hard_cap_usd=-1.0)

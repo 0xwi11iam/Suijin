@@ -330,7 +330,7 @@ def tool_suijin_kg_attacker(args):
 
 
 def tool_suijin_status(args):
-    from suijin.core.constants import BLUE_LAB_PORT, PROXY_DEFAULT_PORT
+    from suijin.modules.platform.lib.constants import BLUE_LAB_PORT, PROXY_DEFAULT_PORT
     from suijin.modules.tools.lib.dispatch import list_route_tools
 
     tools = list_route_tools()

@@ -22,8 +22,8 @@ from rich.table import Table
 
 from suijin.core.blue.config import load_blue_config
 from suijin.core.blue.session_manager import init_session
-from suijin.core.constants import BLUE_LAB_PORT, BLUE_TRAFFIC_LOG, PROXY_DEFAULT_PORT
 from suijin.modules.loader import load_local_module
+from suijin.modules.platform.lib.constants import BLUE_LAB_PORT, BLUE_TRAFFIC_LOG, PROXY_DEFAULT_PORT
 
 console = Console()
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -372,7 +372,7 @@ async def _run_async():
             if cmd == "/quit":
                 break
             elif cmd == "/health":
-                from suijin.core.templates import print_health_check
+                from suijin.modules.platform.lib.templates import print_health_check
 
                 print_health_check(console)
             elif cmd == "/report":

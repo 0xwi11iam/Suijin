@@ -14,7 +14,7 @@ from pathlib import Path
 from flask import Flask, Response, jsonify, request, send_from_directory
 
 from suijin import __version__ as VERSION
-from suijin.core.constants import (
+from suijin.modules.platform.lib.constants import (
     BLUE_KG_PATH,
     BLUE_TARPIT_FILE,
     BLUE_TRAFFIC_LOG,

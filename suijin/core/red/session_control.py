@@ -104,7 +104,7 @@ def list_sessions():
 
 def handle_template(config):
     """Interactive template browser — view, load, or create engagement templates."""
-    from suijin.core.templates import list_templates, load_template, save_template
+    from suijin.modules.platform.lib.templates import list_templates, load_template, save_template
 
     templates = list_templates()
     console.print(f"\n[bold]Available Templates ({len(templates)}):[/bold]")

@@ -17,6 +17,17 @@ import time
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[3]  # suijin/ package
+SKILLS_DIR = None  # optional override; derived from BASE_DIR when unset
+
+
+def _skills_dir():
+    """Skills home (honours patched BASE_DIR / SKILLS_DIR module attrs)."""
+    v = globals().get("SKILLS_DIR")
+    if v is not None:
+        return v
+    return globals()["BASE_DIR"] / "modules" / "agent" / "lib" / "skills"
+
+
 HISTORY_DIR = BASE_DIR.parent / "suijin_agent" / "skill_history"
 
 
@@ -49,7 +60,7 @@ def skill_diff(skill_name: str, rev: str | None = None) -> str:
     if not snaps:
         return f"No history for skill '{skill_name}' yet."
     snap = next((s for s in snaps if rev and rev in s.name), snaps[-1])
-    live = BASE_DIR / "skills" / f"{skill_name}.py"
+    live = _skills_dir() / f"{skill_name}.py"
     if not live.exists():
         return f"Live skill '{skill_name}' no longer exists."
     diff = difflib.unified_diff(
@@ -69,7 +80,7 @@ def skill_rollback(skill_name: str, rev: str | None = None) -> str:
     if not snaps:
         return f"No history for skill '{skill_name}' — nothing to roll back."
     snap = next((s for s in snaps if rev and rev in s.name), snaps[-1])
-    live = BASE_DIR / "skills" / f"{skill_name}.py"
+    live = _skills_dir() / f"{skill_name}.py"
     if live.exists():
         _snapshot(live, skill_name)  # snapshot current before overwriting
     shutil.copy2(snap, live)
@@ -89,10 +100,10 @@ def edit_skill(skill_name: str, new_content: str) -> str:
     Returns:
         Confirmation or error message.
     """
-    skill_path = BASE_DIR / "skills" / f"{skill_name}.py"
+    skill_path = _skills_dir() / f"{skill_name}.py"
     if not skill_path.exists():
         # List available skills
-        skills_dir = BASE_DIR / "skills"
+        skills_dir = _skills_dir()
         available = [f.stem for f in skills_dir.glob("*.py") if f.stem != "__init__" and f.stem != "loader"]
         return f"Skill '{skill_name}' not found. Available: {', '.join(available)}"
 
@@ -139,7 +150,7 @@ def write_tool(tool_name: str, code: str) -> str:
 
 def list_available_skills() -> str:
     """List all attack skills the agent can edit."""
-    skills_dir = BASE_DIR / "skills"
+    skills_dir = _skills_dir()
     files = sorted(f.stem for f in skills_dir.glob("*.py") if f.stem not in ("__init__", "loader"))
     return "Available skills:\n" + "\n".join(f"  - {s}" for s in files)
 

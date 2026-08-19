@@ -7,7 +7,7 @@ No middleware needed — just point your browser/curl at the proxy port.
 
 Usage:
     from suijin.core.blue.proxy import start_proxy
-    from suijin.core.constants import PROXY_DEFAULT_PORT, BLUE_LAB_PORT, BLUE_TRAFFIC_LOG
+    from suijin.modules.platform.lib.constants import PROXY_DEFAULT_PORT, BLUE_LAB_PORT, BLUE_TRAFFIC_LOG
     proxy = start_proxy(listen_port=PROXY_DEFAULT_PORT, target_port=BLUE_LAB_PORT,
                         log_path=str(BLUE_TRAFFIC_LOG))
     # All traffic to :8080 gets logged then forwarded to :5906
@@ -24,7 +24,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from suijin.core.constants import BLUE_LAB_PORT, BLUE_TARPIT_FILE, BLUE_TRAFFIC_LOG, PROXY_DEFAULT_PORT
+from suijin.modules.platform.lib.constants import BLUE_LAB_PORT, BLUE_TARPIT_FILE, BLUE_TRAFFIC_LOG, PROXY_DEFAULT_PORT
 
 
 class ProxyHandler(BaseHTTPRequestHandler):

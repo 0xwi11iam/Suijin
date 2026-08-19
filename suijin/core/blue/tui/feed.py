@@ -34,7 +34,7 @@ from suijin.core.blue.tui.request_panel import (
     render_normal_line,
     render_subagent_assignment,
 )
-from suijin.core.constants import BLUE_TARPIT_FILE, PATTERN_SCORE_THRESHOLD, RISK_HIGH
+from suijin.modules.platform.lib.constants import BLUE_TARPIT_FILE, PATTERN_SCORE_THRESHOLD, RISK_HIGH
 
 console = Console()
 

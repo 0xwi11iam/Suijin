@@ -13,7 +13,7 @@ class TestStateMachine:
 
     def test_state_imports(self):
         try:
-            from suijin.core.state import SuijinState
+            from suijin.modules.agent.lib.state import SuijinState
 
             assert SuijinState is not None
         except ImportError as e:
@@ -21,7 +21,7 @@ class TestStateMachine:
 
     def test_state_defaults(self):
         try:
-            from suijin.core.state import SuijinState
+            from suijin.modules.agent.lib.state import SuijinState
 
             state = SuijinState(messages=[], objective="test", target="localhost")
             assert state.phase == "informational"
@@ -30,7 +30,7 @@ class TestStateMachine:
 
     def test_state_serializable(self):
         try:
-            from suijin.core.state import SuijinState
+            from suijin.modules.agent.lib.state import SuijinState
 
             state = SuijinState(messages=[], objective="test", target="localhost")
             d = state.model_dump()
@@ -39,12 +39,12 @@ class TestStateMachine:
             pytest.skip(f"State module unavailable: {e}")
 
     def test_agent_graph_imports(self):
-        from suijin.core.agent_graph import SuijinAgentGraph
+        from suijin.modules.agent.lib.agent_graph import SuijinAgentGraph
 
         assert SuijinAgentGraph is not None
 
     def test_supervisor_imports(self):
-        from suijin.core.supervisor import analyze_trace
+        from suijin.modules.agent.lib.supervisor import analyze_trace
 
         assert analyze_trace is not None
 
@@ -54,14 +54,14 @@ class TestThinkNode:
 
     def test_think_node_imports(self):
         try:
-            from suijin.nodes.think_node import think
+            from suijin.modules.agent.lib.nodes.think_node import think
 
             assert think is not None
         except ImportError as e:
             pytest.skip(f"Think node unavailable: {e}")
 
     def test_subagent_node_imports(self):
-        from suijin.nodes.subagent_node import spawn_and_collect
+        from suijin.modules.agent.lib.nodes.subagent_node import spawn_and_collect
 
         assert spawn_and_collect is not None
 
@@ -70,7 +70,7 @@ class TestEngagement:
     """Verify engagement state save/restore."""
 
     def test_session_state_imports(self):
-        from suijin.core.engagement import load_session_state, save_session_state
+        from suijin.modules.agent.lib.engagement import load_session_state, save_session_state
 
         assert save_session_state is not None
         assert load_session_state is not None
@@ -81,7 +81,7 @@ class TestErrorHandler:
 
     def test_error_handler_imports(self):
         try:
-            from suijin.core.error_handler import GracefulFallback, safe_call
+            from suijin.modules.platform.lib.error_handler import GracefulFallback, safe_call
 
             assert safe_call is not None
             assert GracefulFallback is not None
@@ -101,7 +101,7 @@ class TestPromptSafety:
     """Verify prompt injection defenses."""
 
     def test_wrap_untrusted(self):
-        from suijin.core.prompt_safety import wrap_untrusted
+        from suijin.modules.platform.lib.prompt_safety import wrap_untrusted
 
         wrapped = wrap_untrusted("user input")
         assert "UNTRUSTED" in wrapped

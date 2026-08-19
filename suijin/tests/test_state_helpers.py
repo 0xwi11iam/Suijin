@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 class TestTodoItem:
     def test_default_creation(self):
-        from suijin.core.state import TodoItem
+        from suijin.modules.agent.lib.state import TodoItem
 
         t = TodoItem(description="scan ports")
         assert t.description == "scan ports"
@@ -30,21 +30,21 @@ class TestTodoItem:
         assert len(t.id) == 8
 
     def test_explicit_status(self):
-        from suijin.core.state import TodoItem
+        from suijin.modules.agent.lib.state import TodoItem
 
         t = TodoItem(description="exploit sqli", status="in_progress", priority="high")
         assert t.status == "in_progress"
         assert t.priority == "high"
 
     def test_completed_at_settable(self):
-        from suijin.core.state import TodoItem
+        from suijin.modules.agent.lib.state import TodoItem
 
         now = datetime.now(timezone.utc)
         t = TodoItem(description="done", completed_at=now)
         assert t.completed_at == now
 
     def test_priority_coercion_synonyms(self):
-        from suijin.core.state import TodoItem
+        from suijin.modules.agent.lib.state import TodoItem
 
         t1 = TodoItem(description="x", priority="critical")
         assert t1.priority == "high"
@@ -54,7 +54,7 @@ class TestTodoItem:
         assert t3.priority == "low"
 
     def test_notes_optional(self):
-        from suijin.core.state import TodoItem
+        from suijin.modules.agent.lib.state import TodoItem
 
         t = TodoItem(description="no notes")
         assert t.notes is None
@@ -64,7 +64,7 @@ class TestTodoItem:
 
 class TestExecutionStep:
     def test_minimal_creation(self):
-        from suijin.core.state import ExecutionStep
+        from suijin.modules.agent.lib.state import ExecutionStep
 
         s = ExecutionStep(iteration=1)
         assert s.iteration == 1
@@ -73,7 +73,7 @@ class TestExecutionStep:
         assert s.step_id
 
     def test_with_tool(self):
-        from suijin.core.state import ExecutionStep
+        from suijin.modules.agent.lib.state import ExecutionStep
 
         s = ExecutionStep(
             iteration=2,
@@ -91,7 +91,7 @@ class TestExecutionStep:
         assert s.duration_ms == 3400
 
     def test_error_step(self):
-        from suijin.core.state import ExecutionStep
+        from suijin.modules.agent.lib.state import ExecutionStep
 
         s = ExecutionStep(
             iteration=3,
@@ -104,7 +104,7 @@ class TestExecutionStep:
         assert s.error_class == "transport_error"
 
     def test_tool_args_none_stays_none(self):
-        from suijin.core.state import ExecutionStep
+        from suijin.modules.agent.lib.state import ExecutionStep
 
         s = ExecutionStep(iteration=1, tool_args=None)
         # tool_args=None is valid (no tool call yet)
@@ -113,14 +113,14 @@ class TestExecutionStep:
 
 class TestTargetInfo:
     def test_creation(self):
-        from suijin.core.state import TargetInfo
+        from suijin.modules.agent.lib.state import TargetInfo
 
         t = TargetInfo(ports=[80, 443], services=["http", "https"])
         assert t.ports == [80, 443]
         assert t.services == ["http", "https"]
 
     def test_merge_from(self):
-        from suijin.core.state import TargetInfo
+        from suijin.modules.agent.lib.state import TargetInfo
 
         t1 = TargetInfo(ports=[80, 443], services=["http", "https"])
         t2 = TargetInfo(ports=[22, 80], services=["ssh"], primary_target="example.com")
@@ -130,7 +130,7 @@ class TestTargetInfo:
         assert merged.primary_target == "example.com"
 
     def test_merge_updates_primary_target(self):
-        from suijin.core.state import TargetInfo
+        from suijin.modules.agent.lib.state import TargetInfo
 
         t1 = TargetInfo(primary_target="example.com")
         t2 = TargetInfo(primary_target="other.com")
@@ -139,7 +139,7 @@ class TestTargetInfo:
         assert merged.primary_target == "other.com"
 
     def test_target_type_enum(self):
-        from suijin.core.state import TargetInfo
+        from suijin.modules.agent.lib.state import TargetInfo
 
         t = TargetInfo(target_type="domain")
         assert t.target_type == "domain"
@@ -149,7 +149,7 @@ class TestTargetInfo:
 
 class TestNewAgentState:
     def test_creates_fresh_state(self):
-        from suijin.core.state import new_agent_state
+        from suijin.modules.agent.lib.state import new_agent_state
 
         s = new_agent_state(original_objective="test target", max_iterations=50)
         assert s["original_objective"] == "test target"
@@ -159,14 +159,14 @@ class TestNewAgentState:
         assert s["execution_trace"] == []
 
     def test_generates_session_id(self):
-        from suijin.core.state import new_agent_state
+        from suijin.modules.agent.lib.state import new_agent_state
 
         s1 = new_agent_state()
         # Session IDs are empty unless provided
         assert s1["session_id"] == ""
 
     def test_default_max_iterations(self):
-        from suijin.core.state import new_agent_state
+        from suijin.modules.agent.lib.state import new_agent_state
 
         s = new_agent_state()
         assert s["max_iterations"] == 100
@@ -174,13 +174,13 @@ class TestNewAgentState:
 
 class TestFormattingHelpers:
     def test_truncate_short(self):
-        from suijin.core.state import _truncate
+        from suijin.modules.agent.lib.state import _truncate
 
         assert _truncate("hello") == "hello"
         assert _truncate("") == ""
 
     def test_truncate_long(self):
-        from suijin.core.state import _truncate
+        from suijin.modules.agent.lib.state import _truncate
 
         long_text = "x" * 600
         result = _truncate(long_text, 500)
@@ -188,12 +188,12 @@ class TestFormattingHelpers:
         assert result.endswith("…")
 
     def test_format_execution_trace_empty(self):
-        from suijin.core.state import format_execution_trace
+        from suijin.modules.agent.lib.state import format_execution_trace
 
         assert format_execution_trace([]) == "No steps executed yet."
 
     def test_format_execution_trace_with_steps(self):
-        from suijin.core.state import format_execution_trace
+        from suijin.modules.agent.lib.state import format_execution_trace
 
         trace = [
             {
@@ -210,12 +210,12 @@ class TestFormattingHelpers:
         assert "new_info" in result
 
     def test_format_todo_list_empty(self):
-        from suijin.core.state import format_todo_list
+        from suijin.modules.agent.lib.state import format_todo_list
 
         assert format_todo_list([]) == "No tasks tracked."
 
     def test_format_todo_list_with_items(self):
-        from suijin.core.state import format_todo_list
+        from suijin.modules.agent.lib.state import format_todo_list
 
         items = [
             {"description": "scan ports", "status": "completed", "priority": "high"},
@@ -228,20 +228,20 @@ class TestFormattingHelpers:
         assert "🔄" in result
 
     def test_format_chain_context_empty(self):
-        from suijin.core.state import format_chain_context
+        from suijin.modules.agent.lib.state import format_chain_context
 
         result = format_chain_context([], [], [], [])
         assert "No chain context yet" in result
 
     def test_format_chain_context_with_findings(self):
-        from suijin.core.state import format_chain_context
+        from suijin.modules.agent.lib.state import format_chain_context
 
         findings = [{"title": "SQLi on /login", "severity": "high", "evidence": "sqlmap output"}]
         result = format_chain_context(findings, [], [], [])
         assert "SQLi on /login" in result
 
     def test_format_chain_context_with_failures(self):
-        from suijin.core.state import format_chain_context
+        from suijin.modules.agent.lib.state import format_chain_context
 
         failures = [{"tool_name": "nmap", "error_message": "timeout", "error_class": "transport_error"}]
         result = format_chain_context([], failures, [], [])
@@ -249,12 +249,12 @@ class TestFormattingHelpers:
         assert "nmap" in result
 
     def test_format_qa_history_empty(self):
-        from suijin.core.state import format_qa_history
+        from suijin.modules.agent.lib.state import format_qa_history
 
         assert format_qa_history([]) == ""
 
     def test_format_qa_history_with_entries(self):
-        from suijin.core.state import format_qa_history
+        from suijin.modules.agent.lib.state import format_qa_history
 
         qa = [{"question": "what port?", "answer": "443"}]
         result = format_qa_history(qa)
@@ -262,7 +262,7 @@ class TestFormattingHelpers:
         assert "443" in result
 
     def test_format_objective_history_empty(self):
-        from suijin.core.state import format_objective_history
+        from suijin.modules.agent.lib.state import format_objective_history
 
         assert format_objective_history([]) == ""
 
@@ -664,19 +664,19 @@ class TestProviders:
 
 class TestSupervisor:
     def test_supervisor_module_imports(self):
-        from suijin.core.supervisor import analyze_trace, get_phase_config
+        from suijin.modules.agent.lib.supervisor import analyze_trace, get_phase_config
 
         assert analyze_trace is not None
         assert get_phase_config is not None
 
     def test_analyze_trace_empty(self):
-        from suijin.core.supervisor import analyze_trace
+        from suijin.modules.agent.lib.supervisor import analyze_trace
 
         result = analyze_trace(trace=[])  # no extra kwargs
         assert result is None or isinstance(result, (dict, str))
 
     def test_repeating_tool_detection(self):
-        from suijin.core.supervisor import _detect_repeating_tool
+        from suijin.modules.agent.lib.supervisor import _detect_repeating_tool
 
         trace = [
             {"tool_name": "nmap"},
@@ -687,7 +687,7 @@ class TestSupervisor:
         assert result is not None
 
     def test_get_phase_config_returns_dict(self):
-        from suijin.core.supervisor import get_phase_config
+        from suijin.modules.agent.lib.supervisor import get_phase_config
 
         cfg = get_phase_config("informational")
         assert isinstance(cfg, dict)

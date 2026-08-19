@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from suijin.core.constants import BLUE_KG_PATH
+from suijin.modules.platform.lib.constants import BLUE_KG_PATH
 
 KG_PATH = BLUE_KG_PATH
 

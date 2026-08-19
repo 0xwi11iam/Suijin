@@ -87,7 +87,7 @@ class TestBlueTeamPipeline:
 
     def test_config_validation_roundtrip(self):
         """Verify config survives model_dump → model_validate roundtrip."""
-        from suijin.core.config_models import BlueConfig, RedConfig
+        from suijin.modules.platform.lib.config_models import BlueConfig, RedConfig
 
         blue = BlueConfig()
         blue2 = BlueConfig(**blue.model_dump())
@@ -173,7 +173,7 @@ class TestBlueTeamPipeline:
         # BlueConfig with invalid scorer weight
         from pydantic import ValidationError
 
-        from suijin.core.config_models import BlueConfig, RedConfig
+        from suijin.modules.platform.lib.config_models import BlueConfig, RedConfig
 
         with pytest.raises(ValidationError):
             BlueConfig(scorer={"critical_threshold": 999})  # Out of range

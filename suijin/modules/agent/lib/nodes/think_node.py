@@ -11,25 +11,45 @@ import asyncio
 import logging
 from uuid import uuid4
 
-from suijin.core.agent_context import set_phase_context, set_tenant_context
-from suijin.core.state import (
+from suijin.modules.agent.lib.state import (
     ExecutionStep,
     PhaseHistoryEntry,
     format_chain_context,
     format_qa_history,
     format_todo_list,
 )
-from suijin.modules.platform.lib.helpers.json_utils import json_dumps_safe
-from suijin.modules.platform.lib.helpers.parsing import try_parse_llm_decision
-from suijin.modules.platform.lib.helpers.productivity import (
-    audit_productivity_claim,
-    detect_state_growth,
-    downgrade_verdict_to_no_progress,
-    extract_axis,
-    update_stall_counters,
-)
 
 logger = logging.getLogger(__name__)
+
+
+def _tenant_ctx(user_id, project_id, session_id):
+    from suijin.modules.platform.lib.agent_context import set_tenant_context
+
+    return set_tenant_context(user_id, project_id, session_id)
+
+
+def _phase_ctx(phase):
+    from suijin.modules.platform.lib.agent_context import set_phase_context
+
+    return set_phase_context(phase)
+
+
+def _json_dumps_safe(*a, **k):
+    from suijin.modules.platform.lib.helpers.json_utils import json_dumps_safe
+
+    return json_dumps_safe(*a, **k)
+
+
+def _try_parse_llm_decision(*a, **k):
+    from suijin.modules.platform.lib.helpers.parsing import try_parse_llm_decision
+
+    return try_parse_llm_decision(*a, **k)
+
+
+def _productivity(name):
+    from suijin.modules.platform.lib.helpers import productivity
+
+    return getattr(productivity, name)
 
 
 def _run_auto_actions(auto_actions: list, updates: dict):
@@ -117,11 +137,11 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
 
     logger.info(f"THINK: iter {iteration}, phase {phase}")
 
-    set_tenant_context(user_id, project_id, session_id)
-    set_phase_context(phase)
+    _tenant_ctx(user_id, project_id, session_id)
+    _phase_ctx(phase)
 
     # Build system prompt using the new skill-based builder
-    from suijin.prompts.base import build_agent_system_prompt  # lazy import, breaks circular dep
+    from suijin.modules.agent.lib.prompts.base import build_agent_system_prompt  # lazy import, breaks circular dep
 
     system_prompt = build_agent_system_prompt(state)
 
@@ -169,7 +189,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
 {recent_msgs or "(none)"}
 
 ## TARGET INTELLIGENCE
-{json_dumps_safe(state.get("target_info", {}), indent=2)}
+{_json_dumps_safe(state.get("target_info", {}), indent=2)}
 
 ## TODO LIST
 {todo_context}
@@ -217,7 +237,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
                 "completion_reason": "llm_error",
             }
 
-        decision, parse_error = try_parse_llm_decision(raw_response)
+        decision, parse_error = _try_parse_llm_decision(raw_response)
         if decision is not None:
             break
 
@@ -300,7 +320,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         reasoning=reasoning,
         tool_name=decision.get("tool_name"),
         tool_args=decision.get("tool_args") or {},
-        output_analysis=json_dumps_safe(output_analysis) if output_analysis else None,
+        output_analysis=_json_dumps_safe(output_analysis) if output_analysis else None,
         productivity=productivity if productivity else None,
     ).model_dump()
 
@@ -308,14 +328,14 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
 
     # ── Productivity tracking ────────────────────────────────────────
     prev_target_info = state.get("target_info", {})
-    state_grew = detect_state_growth(
+    state_grew = _productivity("detect_state_growth")(
         {"target_info": prev_target_info},
         {"target_info": prev_target_info},  # will compare after tool runs
     )
 
     # ── Axis tracking (complete — not a stub) ────────────────────────
     tested_axes = dict(state.get("tested_axes", {}))
-    axis = extract_axis(step)
+    axis = _productivity("extract_axis")(step)
     if axis:
         # Pre-record the axis; success flag updated post-execution
         # via _tool_result in execute_tool_node
@@ -326,7 +346,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
 
     # ── Audit productivity claim ──────────────────────────────────────
     if productivity:
-        discrepancy = audit_productivity_claim(
+        discrepancy = _productivity("audit_productivity_claim")(
             productivity,
             {},
             [],
@@ -334,7 +354,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         )
         if discrepancy:
             # Downgrade: LLM lied about making progress
-            productivity = downgrade_verdict_to_no_progress(productivity, discrepancy)
+            productivity = _productivity("downgrade_verdict_to_no_progress")(productivity, discrepancy)
             step["productivity"] = productivity
 
     # ── Handle action types ──────────────────────────────────────────
@@ -495,8 +515,8 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
             )
 
             try:
+                from suijin.modules.agent.lib.nodes.subagent_node import spawn_and_collect
                 from suijin.modules.tools.lib.dispatch import get_tool_catalog, route_tool
-                from suijin.nodes.subagent_node import spawn_and_collect
 
                 # 65s total timeout (60s batch + 5s buffer) prevents main agent hang
                 results = await asyncio.wait_for(
@@ -589,7 +609,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         updates["chain_findings_memory"] = prev_findings + chain_findings
 
     # ── Stall counter update (with state_grew) ────────────────────────
-    stall = update_stall_counters(
+    stall = _productivity("update_stall_counters")(
         {
             **state,
             "_state_grew_this_turn": state_grew,

@@ -326,7 +326,7 @@ class TestSkillVersioning:
         skills.mkdir()
         (skills / "testskill.py").write_text('TESTSKILL_SKILL_PROMPT = """v1"""\n')
         hist = tmp_path / "skill_history"
-        monkeypatch.setattr(si, "BASE_DIR", tmp_path)
+        monkeypatch.setattr(si, "SKILLS_DIR", skills)  # v4.1: skills live in the agent module
         monkeypatch.setattr(si, "HISTORY_DIR", hist)
         return si
 
@@ -337,7 +337,7 @@ class TestSkillVersioning:
         snaps = si.skill_history("testskill")
         assert len(snaps) == 1
         assert "v1" in snaps[0].read_text()
-        assert "v2 content" in (si.BASE_DIR / "skills" / "testskill.py").read_text()
+        assert "v2 content" in (si._skills_dir() / "testskill.py").read_text()
 
     def test_diff_and_rollback(self, skill_env):
         si = skill_env
@@ -348,7 +348,7 @@ class TestSkillVersioning:
         assert "+v3 content" in diff
         msg = si.skill_rollback("testskill")
         assert "Rolled back" in msg
-        live = (si.BASE_DIR / "skills" / "testskill.py").read_text()
+        live = (si._skills_dir() / "testskill.py").read_text()
         assert "v2 content" in live  # rolled back to previous revision
 
 

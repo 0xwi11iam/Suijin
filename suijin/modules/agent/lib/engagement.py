@@ -18,7 +18,7 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-BASE_DIR = Path(__file__).resolve().parent.parent  # suijin/
+BASE_DIR = Path(__file__).resolve().parents[3]  # suijin/ package
 SCHEMA_PATH = BASE_DIR / "engagement_schema.json"
 RECOVERY_PATH = BASE_DIR / "operation_state_recovery.json"
 
