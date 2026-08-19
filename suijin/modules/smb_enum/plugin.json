@@ -1,0 +1,21 @@
+{
+  "id": "smb_enum",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.smb_enum",
+    "smb_check_null_session",
+    "smb_list_shares"
+  ],
+  "entry": "pack_entry:smb_enum",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "SMB share listing, null session detection"
+}

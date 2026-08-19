@@ -48,6 +48,9 @@ suijin = [
     "engagement_schema.json",
     "modules/agent/lib/prompts/*.py",
     "modules/agent/lib/skills/*.py",
+    "modules/*/plugin.json",
+    "modules/*/manifest.json",
+    "modules/*/skill.md",
     "tutorials/**/*.md",
     "tutorials/*.md",
 ]
@@ -68,7 +71,7 @@ asyncio_mode = "auto"
 
 [tool.coverage.run]
 source = ["suijin"]
-omit = ["suijin/lab/*", "suijin/tests/*", "suijin_agent/*"]
+omit = ["suijin/lab/*", "suijin/tests/*", "suijin_agent/*", "suijin/modules/*/main.py", "suijin/modules/*/entry.py"]
 
 [tool.coverage.report]
 fail_under = 56
@@ -92,6 +95,8 @@ select = ["E", "F", "W", "B", "SIM", "I"]
 ignore = ["E501", "B904", "B007", "E401", "E701", "E702", "E402"]
 
 [tool.ruff.lint.per-file-ignores]
+# Vendored third-party pack implementations (manifest.json = pack marker)
+"suijin/modules/*/main.py" = ["E", "F", "W", "B", "SIM", "I"]
 # Package __init__ files re-export via star imports by design.
 "**/__init__.py" = ["F403", "F401", "F405"]
 

@@ -60,7 +60,7 @@ class TestSimpleVerbs:
         code, out = run_cli(["modules"])
         assert code == 0
         assert "module packs:" in out
-        assert "Tools/nmap" in out
+        assert "nmap" in out  # v4.1: flat pack keys
         assert "tools total" in out
 
     def test_skills_lists_skills(self):

@@ -1,0 +1,24 @@
+{
+  "id": "metasploit",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.metasploit",
+    "msf_check",
+    "msf_command",
+    "msf_run",
+    "msf_sessions"
+  ],
+  "entry": "pack_entry:metasploit",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "Full Metasploit Framework integration via RPC or msfconsole fallback."
+}

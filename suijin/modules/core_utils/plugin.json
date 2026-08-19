@@ -1,0 +1,22 @@
+{
+  "id": "core_utils",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.core_utils",
+    "apply_patch",
+    "claim_flag",
+    "search_kb"
+  ],
+  "entry": "pack_entry:core_utils",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Knowledge base search, patch application, and objective claiming."
+}

@@ -1,0 +1,21 @@
+{
+  "id": "nuclei",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.nuclei",
+    "nuclei_scan"
+  ],
+  "entry": "pack_entry:nuclei",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "Template-based vulnerability scanner (8000+ community templates)"
+}

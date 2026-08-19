@@ -1,0 +1,21 @@
+{
+  "id": "kerberos_attacks",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.kerberos_attacks",
+    "kerberos_asrep_roast",
+    "kerberos_user_enum"
+  ],
+  "entry": "pack_entry:kerberos_attacks",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "AS-REP roasting, Kerberoasting, user enumeration"
+}

@@ -1,0 +1,20 @@
+{
+  "id": "execute_terminal",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.execute_terminal",
+    "execute_terminal"
+  ],
+  "entry": "pack_entry:execute_terminal",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Execute any shell command. Primary interface for CLI tools (gobuster, nmap, sqlmap, hydra, etc). Commands that modify the system (pip install, brew, sudo) require user approval."
+}

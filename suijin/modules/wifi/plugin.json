@@ -1,0 +1,23 @@
+{
+  "id": "wifi",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.wifi",
+    "wifi_capture",
+    "wifi_crack",
+    "wifi_scan"
+  ],
+  "entry": "pack_entry:wifi",
+  "category": "Mods",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "WiFi network scanning, handshake capture, and WPA/WPA2 cracking tools."
+}

@@ -1,0 +1,21 @@
+{
+  "id": "shodan",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.shodan",
+    "shodan_domain",
+    "shodan_host"
+  ],
+  "entry": "pack_entry:shodan",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Shodan internet scanner integration (requires SHODAN_API_KEY env var)"
+}

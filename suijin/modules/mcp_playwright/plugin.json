@@ -1,0 +1,28 @@
+{
+  "id": "mcp_playwright",
+  "version": "2.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.mcp_playwright",
+    "mcp_browser_click",
+    "mcp_browser_close",
+    "mcp_browser_exec",
+    "mcp_browser_extract",
+    "mcp_browser_get_html",
+    "mcp_browser_goto",
+    "mcp_browser_screenshot",
+    "mcp_browser_snapshot",
+    "mcp_browser_type"
+  ],
+  "entry": "pack_entry:mcp_playwright",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Headless Chromium browser with DOM snapshots for AI-driven browsing. Navigate, snapshot interactive elements, click by index, type, screenshot, extract text, execute JS."
+}

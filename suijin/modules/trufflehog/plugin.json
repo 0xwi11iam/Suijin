@@ -1,0 +1,21 @@
+{
+  "id": "trufflehog",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.trufflehog",
+    "trufflehog_scan"
+  ],
+  "entry": "pack_entry:trufflehog",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "Secret scanning with 700+ verified detectors"
+}

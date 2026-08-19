@@ -1,0 +1,21 @@
+{
+  "id": "curl",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.curl",
+    "curl_request"
+  ],
+  "entry": "pack_entry:curl",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "Manual HTTP request with curl for quick targeted payload testing. Use for single-request manual testing only \u2014 NOT for scanning."
+}

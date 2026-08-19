@@ -19,7 +19,10 @@ import sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent  # suijin/ root
-MODULES_DIR = BASE_DIR.parent / "Modules"
+# v4.1: packs are vendored INTO the module home (suijin/modules/<pack>/)
+# plus the user extension dir (~/.suijin/modules). The legacy repo-level
+# Modules/Tools tree is gone.
+PACK_ROOTS = [BASE_DIR / "modules", Path.home() / ".suijin" / "modules"]
 
 # Recon profiles, container images, DNS records — defined inline
 RECON_PROFILES = {
@@ -143,76 +146,75 @@ def load_local_module(mod_name: str):
 
 
 def discover_modules():
-    """Scan modules/ for valid module folders and load them.
+    """Scan the pack roots (vendored suijin/modules + ~/.suijin/modules) and load tool packs.
 
+    A pack = a directory with manifest.json (+ main.py / skill.md).
     Called once at startup. Safe to call multiple times (idempotent).
     """
     global _loaded_modules, _module_tools, _module_skills
-
-    if not MODULES_DIR.exists():
-        return
 
     _loaded_modules = {}
     _module_tools = {}
     _module_skills = []
 
-    # Scan one level deeper: modules/Tools/ and modules/Mods/
     total_modules = 0
     total_tools = 0
     total_skills = 0
 
-    for category in sorted(MODULES_DIR.iterdir()):
-        if not category.is_dir() or category.name.startswith("."):
+    pack_dirs: list[Path] = []
+    seen: set[str] = set()
+    for root in PACK_ROOTS:
+        if not root.is_dir():
+            continue
+        for folder in sorted(root.iterdir()):
+            if not folder.is_dir() or folder.name.startswith((".", "__pycache__")):
+                continue
+            if folder.name in seen:
+                continue  # vendored copy wins over a user dir of the same name
+            if (folder / "manifest.json").exists():
+                pack_dirs.append(folder)
+                seen.add(folder.name)
+
+    for folder in pack_dirs:
+        manifest_path = folder / "manifest.json"
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
             continue
 
-        for folder in sorted(category.iterdir()):
-            if not folder.is_dir() or folder.name.startswith(".") or folder.name == "__pycache__":
-                continue
+        key = folder.name
+        _loaded_modules[key] = {"manifest": manifest, "tools": {}, "skill": ""}
 
-            manifest_path = folder / "manifest.json"
-            if not manifest_path.exists():
-                continue
-
+        py_file = folder / "main.py"
+        tools_found = 0
+        if py_file.exists():
             try:
-                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            except Exception:
+                mod = _force_load_module(f"suijin_pack.{folder.name}", str(py_file))
+                for tool_name in manifest.get("tools") or {}:
+                    func = getattr(mod, tool_name, None)
+                    if callable(func):
+                        _module_tools[tool_name] = func
+                        _loaded_modules[key]["tools"][tool_name] = func
+                        tools_found += 1
+            except Exception as e:
+                if _verbose:
+                    print(f"[ModuleLoader] FAILED {key}: {e}")
                 continue
 
-            key = f"{category.name}/{folder.name}"
-            _loaded_modules[key] = {"manifest": manifest, "tools": {}, "skill": ""}
+        skill_path = folder / "skill.md"
+        if skill_path.exists():
+            try:
+                skill_text = skill_path.read_text(encoding="utf-8", errors="ignore")
+                _loaded_modules[key]["skill"] = skill_text
+                _module_skills.append((manifest.get("name", key), skill_text))
+            except Exception:
+                pass
 
-            # Load the Python entry point (main.py)
-            py_file = folder / "main.py"
-            tools_found = 0
-            if py_file.exists():
-                try:
-                    mod = _force_load_module(f"suijin_modules.{category.name}.{folder.name}", str(py_file))
-                    for tool_name in manifest.get("tools") or {}:
-                        func = getattr(mod, tool_name, None)
-                        if callable(func):
-                            _module_tools[tool_name] = func
-                            _loaded_modules[key]["tools"][tool_name] = func
-                            tools_found += 1
-                except Exception as e:
-                    if _verbose:
-                        print(f"[ModuleLoader] FAILED {key}: {e}")
-                    continue
-
-            # Load skill documentation
-            skill_path = folder / "skill.md"
-            if skill_path.exists():
-                try:
-                    skill_text = skill_path.read_text(encoding="utf-8", errors="ignore")
-                    _loaded_modules[key]["skill"] = skill_text
-                    _module_skills.append((manifest.get("name", key), skill_text))
-                except Exception:
-                    pass
-
-            if tools_found > 0 or _loaded_modules[key]["skill"]:
-                total_modules += 1
-                total_tools += tools_found
-                if _loaded_modules[key]["skill"]:
-                    total_skills += 1
+        if tools_found > 0 or _loaded_modules[key]["skill"]:
+            total_modules += 1
+            total_tools += tools_found
+            if _loaded_modules[key]["skill"]:
+                total_skills += 1
 
     if _verbose and total_modules > 0:
         print(f"[ModuleLoader] {total_modules} modules ({total_tools} tools, {total_skills} skills)")

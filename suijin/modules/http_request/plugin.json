@@ -1,0 +1,20 @@
+{
+  "id": "http_request",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.http_request",
+    "http_request"
+  ],
+  "entry": "pack_entry:http_request",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Send HTTP requests with full browser fingerprinting. For manual targeted payload testing only \u2014 use execute_terminal with gobuster/ffuf/nmap for scanning."
+}

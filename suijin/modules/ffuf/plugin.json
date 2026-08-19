@@ -1,0 +1,21 @@
+{
+  "id": "ffuf",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.ffuf",
+    "ffuf_fuzz"
+  ],
+  "entry": "pack_entry:ffuf",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "Fast web fuzzer for parameters, directories, and virtual hosts."
+}

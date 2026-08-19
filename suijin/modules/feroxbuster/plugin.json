@@ -1,0 +1,21 @@
+{
+  "id": "feroxbuster",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.feroxbuster",
+    "feroxbuster_scan"
+  ],
+  "entry": "pack_entry:feroxbuster",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "Recursive web content discovery (faster than gobuster for recursion)."
+}

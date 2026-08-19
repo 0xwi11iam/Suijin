@@ -1,0 +1,21 @@
+{
+  "id": "socat",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.socat",
+    "socat_relay"
+  ],
+  "entry": "pack_entry:socat",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "Bidirectional data relay for port forwarding, reverse shells, and TCP/UDP tunneling."
+}

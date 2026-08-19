@@ -66,6 +66,12 @@ class TestModuleBoundaries:
                 continue  # package init (empty)
             if py.name in _ALLOWLIST:
                 continue
+            # Vendored third-party packs (manifest.json = pack marker):
+            # externally authored units whose entry registration goes
+            # through the kernel. The boundary contract governs FIRST-
+            # PARTY module homes; packs are data-in/code-in bricks.
+            if (py.parent / "manifest.json").exists():
+                continue
             tree = ast.parse(py.read_text(errors="ignore"))
             # lib/ = module-INTERNAL implementation: stdlib + third-party +
             # own-module imports allowed at module level (that's what a

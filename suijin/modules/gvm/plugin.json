@@ -1,0 +1,22 @@
+{
+  "id": "gvm",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.gvm",
+    "gvm_get_results",
+    "gvm_list_tasks",
+    "gvm_scan"
+  ],
+  "entry": "pack_entry:gvm",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Greenbone Vulnerability Manager \u2014 170,000+ NVTs"
+}

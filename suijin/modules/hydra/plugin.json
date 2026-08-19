@@ -1,0 +1,21 @@
+{
+  "id": "hydra",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.hydra",
+    "hydra_brute"
+  ],
+  "entry": "pack_entry:hydra",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "Online password brute-forcing for HTTP, SSH, FTP, etc."
+}

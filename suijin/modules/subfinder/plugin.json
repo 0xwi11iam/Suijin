@@ -1,0 +1,21 @@
+{
+  "id": "subfinder",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.subfinder",
+    "subfinder_enum"
+  ],
+  "entry": "pack_entry:subfinder",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "Passive subdomain discovery tool"
+}

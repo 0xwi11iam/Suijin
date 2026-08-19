@@ -1,0 +1,22 @@
+{
+  "id": "credential_store",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.credential_store",
+    "creds_add",
+    "creds_get",
+    "creds_list"
+  ],
+  "entry": "pack_entry:credential_store",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Persist and retrieve discovered credentials (passwords, API keys, tokens)"
+}

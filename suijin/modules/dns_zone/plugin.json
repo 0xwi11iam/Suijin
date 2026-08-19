@@ -1,0 +1,22 @@
+{
+  "id": "dns_zone",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.dns_zone",
+    "dns_enum_nameservers",
+    "dns_zone_transfer"
+  ],
+  "entry": "pack_entry:dns_zone",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "DNS zone transfer (AXFR) and nameserver enumeration"
+}

@@ -1,0 +1,21 @@
+{
+  "id": "mcp_metasploit",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.mcp_metasploit",
+    "mcp_msf_console",
+    "mcp_msf_session"
+  ],
+  "entry": "pack_entry:mcp_metasploit",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "MCP server wrapper for stateful Metasploit console"
+}

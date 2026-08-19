@@ -1,0 +1,20 @@
+{
+  "id": "openapi_parser",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.openapi_parser",
+    "openapi_parse"
+  ],
+  "entry": "pack_entry:openapi_parser",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Parse OpenAPI/Swagger specs and generate test plans"
+}

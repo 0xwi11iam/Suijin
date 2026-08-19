@@ -1,0 +1,21 @@
+{
+  "id": "john",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.john",
+    "john_crack"
+  ],
+  "entry": "pack_entry:john",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "Offline password hash cracking. Supports MD5, SHA, NTLM, bcrypt, and more."
+}

@@ -1,0 +1,21 @@
+{
+  "id": "httpx",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.httpx",
+    "httpx_probe"
+  ],
+  "entry": "pack_entry:httpx",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "HTTP probing and technology detection"
+}

@@ -1,0 +1,20 @@
+{
+  "id": "write_note",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.write_note",
+    "write_note"
+  ],
+  "entry": "pack_entry:write_note",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Write timestamped engagement notes. MANDATORY \u2014 log every significant finding. Each engagement gets its own file."
+}

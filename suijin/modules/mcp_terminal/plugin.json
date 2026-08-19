@@ -1,0 +1,21 @@
+{
+  "id": "mcp_terminal",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.mcp_terminal",
+    "mcp_shell_cd",
+    "mcp_shell_exec"
+  ],
+  "entry": "pack_entry:mcp_terminal",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Interactive PTY shell with persistent session state"
+}

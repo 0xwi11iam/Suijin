@@ -1,0 +1,22 @@
+{
+  "id": "mcp_nuclei",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.mcp_nuclei",
+    "mcp_nuclei_scan",
+    "mcp_nuclei_update"
+  ],
+  "entry": "pack_entry:mcp_nuclei",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "Nuclei with structured JSON output and template management"
+}

@@ -1,0 +1,21 @@
+{
+  "id": "amass",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.amass",
+    "amass_enum"
+  ],
+  "entry": "pack_entry:amass",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "Subdomain enumeration and OSINT gathering."
+}

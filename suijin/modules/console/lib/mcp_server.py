@@ -42,7 +42,7 @@ def _server_version():
     return _v
 
 
-# Load the module packs (Modules/Tools, Modules/Mods) so every backend tool
+# Load the module packs (vendored suijin/modules/* + ~/.suijin/modules/*) so every backend tool
 # is dispatchable. Idempotent; must run before building the tool registry.
 def _module_tools():
     from suijin.modules.loader import get_module_tools

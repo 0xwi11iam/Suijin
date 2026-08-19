@@ -1,0 +1,22 @@
+{
+  "id": "iptables_control",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.iptables_control",
+    "iptables_block",
+    "iptables_list",
+    "iptables_unblock"
+  ],
+  "entry": "pack_entry:iptables_control",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Firewall rule management"
+}

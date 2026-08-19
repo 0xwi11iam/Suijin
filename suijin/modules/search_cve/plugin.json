@@ -1,0 +1,20 @@
+{
+  "id": "search_cve",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.search_cve",
+    "search_cve"
+  ],
+  "entry": "pack_entry:search_cve",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Query NIST NVD for CVEs by software and version. Returns CVSS scores, severity, CWE types, and exploit references."
+}

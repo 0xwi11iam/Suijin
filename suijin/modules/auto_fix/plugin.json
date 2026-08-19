@@ -1,0 +1,22 @@
+{
+  "id": "auto_fix",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.auto_fix",
+    "autofix_generate_fix",
+    "autofix_triage",
+    "autofix_verify_fix"
+  ],
+  "entry": "pack_entry:auto_fix",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Automated finding triage \u2192 code fix \u2192 PR pipeline (CypherFix-style)"
+}

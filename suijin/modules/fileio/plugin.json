@@ -1,0 +1,21 @@
+{
+  "id": "fileio",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.fileio",
+    "read_file",
+    "write_file"
+  ],
+  "entry": "pack_entry:fileio",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Read and write files scoped to suijin_agent/ workspace by default. Absolute paths allowed."
+}

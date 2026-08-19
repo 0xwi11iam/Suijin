@@ -1,0 +1,20 @@
+{
+  "id": "crtsh",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.crtsh",
+    "crtsh_domain"
+  ],
+  "entry": "pack_entry:crtsh",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Certificate Transparency log search via crt.sh"
+}

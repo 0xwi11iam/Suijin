@@ -1,0 +1,21 @@
+{
+  "id": "websocket_client",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.websocket_client",
+    "ws_connect",
+    "ws_send_receive"
+  ],
+  "entry": "pack_entry:websocket_client",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Connect to WebSocket endpoints, send/receive messages"
+}

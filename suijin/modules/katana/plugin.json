@@ -1,0 +1,21 @@
+{
+  "id": "katana",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.katana",
+    "katana_crawl"
+  ],
+  "entry": "pack_entry:katana",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "Headless crawler for endpoint and parameter discovery"
+}

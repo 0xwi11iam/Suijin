@@ -1,0 +1,21 @@
+{
+  "id": "sslscan",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.sslscan",
+    "sslscan_check"
+  ],
+  "entry": "pack_entry:sslscan",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "SSL/TLS cipher suite assessment."
+}

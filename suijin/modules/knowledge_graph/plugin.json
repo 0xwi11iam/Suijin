@@ -1,0 +1,21 @@
+{
+  "id": "knowledge_graph",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.knowledge_graph",
+    "check_knowledge",
+    "record_finding"
+  ],
+  "entry": "pack_entry:knowledge_graph",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Persistent target constraints. Check before generating payloads, record findings after verification."
+}

@@ -1,0 +1,21 @@
+{
+  "id": "graphql_diff",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.graphql_diff",
+    "graphql_diff",
+    "graphql_introspect"
+  ],
+  "entry": "pack_entry:graphql_diff",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Compare GraphQL introspection across users to find IDOR"
+}

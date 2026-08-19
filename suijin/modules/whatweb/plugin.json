@@ -1,0 +1,21 @@
+{
+  "id": "whatweb",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.whatweb",
+    "whatweb_scan"
+  ],
+  "entry": "pack_entry:whatweb",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "Web technology stack fingerprinting"
+}

@@ -1,0 +1,22 @@
+{
+  "id": "gobuster",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.gobuster",
+    "gobuster_dir",
+    "gobuster_dns"
+  ],
+  "entry": "pack_entry:gobuster",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "Directory and file brute-forcing for web servers."
+}

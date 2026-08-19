@@ -461,7 +461,7 @@ def run_modules_list() -> int:
     discover_modules()
     mods = get_loaded_modules() or {}
     if not mods:
-        print("No module packs found (expected under Modules/Tools and Modules/Mods).")
+        print("No module packs found (vendored packs live in the package; user packs under ~/.suijin/modules).")
         return 1
     total_tools = 0
     print(f"{len(mods)} module packs:")
@@ -1603,7 +1603,7 @@ def main(argv=None):
     mod_init.add_argument("name", help="module name (snake_case)")
     mod_init.set_defaults(func=run_module)
     mod_val = module_sub.add_parser("validate", help="validate a module pack (SDK)")
-    mod_val.add_argument("name", help="module directory name under Modules/Tools")
+    mod_val.add_argument("name", help="module directory name under ~/.suijin/modules")
     mod_val.set_defaults(func=run_module)
     module.set_defaults(func=run_module_manager)
 

@@ -1,0 +1,22 @@
+{
+  "id": "log_surgeon",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.log_surgeon",
+    "log_search",
+    "log_stats",
+    "log_tail"
+  ],
+  "entry": "pack_entry:log_surgeon",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Advanced log parsing and analysis"
+}

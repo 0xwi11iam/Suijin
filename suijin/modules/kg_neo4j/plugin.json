@@ -1,0 +1,22 @@
+{
+  "id": "kg_neo4j",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.kg_neo4j",
+    "kg_get_attack_paths",
+    "kg_insert_node",
+    "kg_query_graph"
+  ],
+  "entry": "pack_entry:kg_neo4j",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Neo4j-backed knowledge graph with 30+ node types, attack path visualization"
+}

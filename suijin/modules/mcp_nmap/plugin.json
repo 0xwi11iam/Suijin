@@ -1,0 +1,21 @@
+{
+  "id": "mcp_nmap",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.mcp_nmap",
+    "mcp_nmap_scan"
+  ],
+  "entry": "pack_entry:mcp_nmap",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "Structured nmap with XML output parsing"
+}

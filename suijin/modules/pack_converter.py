@@ -110,9 +110,9 @@ class PackModule(Module):
 
             def _bridge(args, _ctx, _fn=fn):
                 try:
-                    return str(_fn(**(args or {{}})))
+                    return str(_fn(**(args or {})))
                 except TypeError:
-                    return str(_fn(*(args or {{}}).values()))
+                    return str(_fn(*(args or {}).values()))
 
             ctx.register_tool(tool_name, _bridge, description=@@DESC@@,
                               owner="@@ID@@")
@@ -184,6 +184,11 @@ def convert_tree(source: Path, dest: Path) -> ConversionResult:
                 shutil.copy2(item, target) if item.is_file() else shutil.copytree(item, target)
             (out_dir / "plugin.json").write_text(json.dumps(plugin, indent=2))
             (out_dir / "entry.py").write_text(_ENTRY_TEMPLATE.replace("@@ID@@", pid).replace("@@DESC@@", repr(desc)))
+            # wheel-shippable: pack dirs are packages (setuptools find) and
+            # their non-.py assets ride via package-data
+            init = out_dir / "__init__.py"
+            if not init.exists():
+                init.write_text('"""Vendored third-party tool pack (converted).\n"""\n')
             result.converted.append(pid)
     return result
 

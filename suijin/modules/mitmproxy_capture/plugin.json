@@ -1,0 +1,22 @@
+{
+  "id": "mitmproxy_capture",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.mitmproxy_capture",
+    "mitm_analyze_flow",
+    "mitm_get_requests",
+    "mitm_start_capture"
+  ],
+  "entry": "pack_entry:mitmproxy_capture",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "HTTP/HTTPS transparent proxy for traffic analysis"
+}

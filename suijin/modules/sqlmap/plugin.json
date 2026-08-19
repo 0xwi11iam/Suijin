@@ -1,0 +1,21 @@
+{
+  "id": "sqlmap",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.sqlmap",
+    "sqlmap_scan"
+  ],
+  "entry": "pack_entry:sqlmap",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "Automated SQL injection detection and exploitation."
+}

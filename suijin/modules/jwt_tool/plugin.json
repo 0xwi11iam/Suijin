@@ -1,0 +1,23 @@
+{
+  "id": "jwt_tool",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.jwt_tool",
+    "jwt_crack",
+    "jwt_decode",
+    "jwt_forge_hs256",
+    "jwt_forge_none"
+  ],
+  "entry": "pack_entry:jwt_tool",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Decode, analyze, crack, and forge JSON Web Tokens"
+}

@@ -1,0 +1,21 @@
+{
+  "id": "nikto",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.nikto",
+    "nikto_scan"
+  ],
+  "entry": "pack_entry:nikto",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "Web server vulnerability scanner. Finds outdated software, misconfigurations, and known vulnerable files."
+}

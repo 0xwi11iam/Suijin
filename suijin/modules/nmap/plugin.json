@@ -1,0 +1,21 @@
+{
+  "id": "nmap",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.nmap",
+    "nmap_scan"
+  ],
+  "entry": "pack_entry:nmap",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network",
+    "shell"
+  ],
+  "description": "Port scanning and service detection."
+}

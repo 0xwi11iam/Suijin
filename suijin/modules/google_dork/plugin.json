@@ -1,0 +1,20 @@
+{
+  "id": "google_dork",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.google_dork",
+    "dork_search"
+  ],
+  "entry": "pack_entry:google_dork",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Google dorking and automated target-specific search queries"
+}

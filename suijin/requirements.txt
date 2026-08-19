@@ -12,7 +12,7 @@ flask>=2.3,<4.0
 flask_cors>=4.0,<5.0
 PyJWT>=2.8,<3.0
 
-# Module packs (Modules/Tools/google_dork)
+# Module packs (vendored: suijin/modules/google_dork)
 duckduckgo-search>=6.0
 
 # Optional providers (uncomment to enable)
