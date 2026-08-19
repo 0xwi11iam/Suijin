@@ -1,5 +1,5 @@
 {
-  "version": "4.3.0",
+  "version": "4.4.0",
   "codename": "Suijin OS",
   "release_date": "2026-08-19",
   "description": "Suijin OS v4.0.0 \u2014 the architecture release. A modular operating system for security automation: stdlib-only kernel (12 subsystems) with a compiled Rust core (DAG + VFS, pure-Python oracles), 61 modules booting from manifests across three tiers (core / recommended+49 packs / community-installed), Textual Module Manager with install system, quiet-boot scene analysis, disable-means-disappear at every tier. Same product, same commands, same look \u2014 now an OS. 1029+ tests green, architecture boundaries enforced in CI."

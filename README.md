@@ -14,7 +14,7 @@
 > written under the Medusa name.
 
 <p align="center">
-  <img height="20" src="https://img.shields.io/badge/v4.3.0-suijin-green?style=flat" alt="Version"/>
+  <img height="20" src="https://img.shields.io/badge/v4.4.0-suijin-green?style=flat" alt="Version"/>
   <img height="20" src="https://img.shields.io/badge/LICENSE-MIT-4169A1?style=flat" alt="License"/>
   <img height="20" src="https://img.shields.io/badge/PYTHON-3.10+-306998?style=flat&logo=python&logoColor=white" alt="Python"/>
   <img height="20" src="https://img.shields.io/badge/LangGraph-State%20Machine-FF6B35?style=flat" alt="LangGraph"/>
@@ -26,11 +26,10 @@ and a **Blue Team** agent that monitors live HTTP traffic, detects attacks, and
 responds with deception, blocking, and source patching. Both modes share one
 toolkit, one knowledge base, and one knowledge graph.
 
-> **v4.3.0 — STABLE AND READY.** 221 agent tools across 123 packs,
-> a self-critiquing agent that writes its own learnings to the
-> knowledge graph, sparring mode with detector regression gates, and
-> four turnkey install paths (native macOS/Linux, Docker, Windows-via-
-> Docker, existing-Kali). See `developer.md` to get started.
+> **v4.4.0 — STABLE AND READY.** 256 agent tools (the agent even
+> defines its own custom commands now), a hard cost governor, tool
+> recipes mined from its own successes, objective decomposition, and
+> author tooling (`module test`). See `developer.md` to get started.
 
 > **LEGAL DISCLAIMER**: This tool is intended for **authorized security
 > testing**, **educational purposes**, and **research only**. Never use this
@@ -156,7 +155,7 @@ hidden behind CLI flags.
 | `suijin status` | One-page summary: provider, KB, workspace, modules, lab port |
 | `suijin version` | Release, codename, python, platform, package path |
 | `suijin env` | API key presence by name — values are never printed |
-| `suijin tools` | All 221 agent tools with availability (missing binaries marked) |
+| `suijin tools` | All 256 agent tools with availability (missing binaries marked) |
 | `suijin modules` | Loaded module packs with tool counts and dependencies |
 | `suijin skills` | Agent-editable attack/defense skills |
 | `suijin config show` | Effective config (defaults merged), secrets redacted |

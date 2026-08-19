@@ -6,6 +6,37 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v4.4.0 — Wave 1: cost control, recipes, planning, author tooling
+
+**Status: stable and ready.** 1,104 tests, 149-unit / 256-tool boot,
+10 features (the first wave of the 50-feature roadmap).
+
+- **Cost governor**: hard per-engagement budget kill switch
+  (max_cost_usd) checked before every LLM call — over-budget runs end
+  with completion_reason=budget_exhausted; warn path steers the agent
+  to wrap up; unpriced tallies never brick a run.
+- **Efficiency leaderboard + forecast**: findings-per-dollar per
+  engagement + per-action cost projections in `suijin status`.
+- **Failover telemetry**: provider chain outcomes (primary-ok /
+  failovers / all-down / last event) in `suijin doctor`.
+- **Prompt budget profiler**: per-iteration token breakdown (system vs
+  history) trended in sessions; `suijin profile` renders the latest.
+- **Tool recipes**: named multi-tool macros (built-ins: recon_web,
+  subdomain_sweep, email_recon) with {target}/{prev} chaining; agent
+  tools recipe_run/list/define + `suijin recipes`.
+- **Auto-recipe miner**: `suijin recipes mine` n-gram-mines repeated
+  successful sequences from engagement history into adoptable macros.
+- **Objective decomposer**: `suijin plan` — LLM subtask graph with
+  heuristic fallback (recon->enumerate->test->verify->report spine).
+- **Plugin test harness**: `suijin module test <name>` — files, schema,
+  boot, registration, catalog, callable smokes; caught its first real
+  gap (encodesk docstrings) within minutes of existing.
+- **Wordlist hub**: curated SecLists subsets fetched sha256-verified
+  (`suijin wordlist list|fetch` + agent tools); mismatches rejected,
+  never fed to brute tools unverified.
+- Round-3 harness tools (v4.3.x): +30 tools incl. agent-defined
+  custom commands (cmdsmith) and inline python (pyrun) — 256 total.
+
 ## v4.3.0 — harness round 2 (+51 tools), self-critique, sparring, turnkey deploy
 
 **Status: stable and ready.** 1,053 tests, 137-unit / 221-tool boot

@@ -143,6 +143,14 @@ curated tools; metasploit behind `--build-arg WITH_METASPLOIT=1`).
   gives CI semantics.
 - **Audit trail** (`kernel/audit.py`): every tool call on every
   surface, append-only, arg digests only.
+- **Cost governor** (`platform/lib/governor.py`): hard budget stop in
+  the think loop (`max_cost_usd`); metering (`ops/lib/metering.py`)
+  powers the `suijin status` leaderboard/forecast.
+- **Recipes** (`tools/lib/recipes.py`): multi-tool macros + the miner
+  (`suijin recipes mine`); decomposer (`agent/lib/decompose.py`)
+  behind `suijin plan`.
+- **Pack authoring gate**: `suijin module test <name>` — run it before
+  publishing any pack.
 
 ## Test gates (run before every commit)
 
