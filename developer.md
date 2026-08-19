@@ -151,6 +151,9 @@ curated tools; metasploit behind `--build-arg WITH_METASPLOIT=1`).
   behind `suijin plan`.
 - **Pack authoring gate**: `suijin module test <name>` — run it before
   publishing any pack.
+- **Marketplace** (`modules/marketplace.py`): any URL can serve an
+  index; installs are hash-pinned; updates roll back. Publish by
+  adding an entry (id, version, url, sha256) to your index document.
 
 ## Test gates (run before every commit)
 

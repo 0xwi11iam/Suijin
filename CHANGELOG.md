@@ -6,6 +6,25 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v5.0.0 — Wave 6: the marketplace + learning loop — ALL 50 FEATURES COMPLETE
+
+The 50-feature roadmap is finished. Major version earned by the
+ecosystem:
+
+- **Marketplace (F41-F43)**: decentralized pack indexes — any URL
+  serves one; `suijin market search|install|update|list`. Installs
+  are hash-pinned (mismatch = refuse), updates roll back on failure.
+- **MCP mirror expansion (F46)**: typed input schemas from pack
+  manifests for every tool (no more generic args blobs).
+- **Self-promoted learnings (G47)**: critique tactics drafted as
+  dormant skill files for operator review.
+- **Skill decay pruning (G48)**: engagement-history overlap analysis.
+- **KG visualization (G49)**: mermaid export of the knowledge graph.
+- **Dead-drop exfil detection (G50)**: DNS-tunnel entropy + beacon
+  periodicity.
+
+1,160 tests.
+
 ## v4.8.0 — Wave 5: blue team depth
 
 - **Attack replay into blue**: red traces score against the real
