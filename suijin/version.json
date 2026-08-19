@@ -1,6 +1,6 @@
 {
-  "version": "3.12.0",
-  "codename": "Module Manager",
+  "version": "3.13.0",
+  "codename": "Kernel Audited",
   "release_date": "2026-08-18",
-  "description": "Suijin v3.12.0: PHASE 4 \u2014 the install system. Management API (install/uninstall/enable/disable/list/info; deps reported with exact pip commands, --with-deps opt-in; core-tier imposters refused; bundled modules uninstall-protected), Textual Module Manager TUI (tier-grouped table, detail pane, boot report screen), CLI verbs (suijin module list/info/enable/disable/install/uninstall \u2014 bare opens the TUI), and the boot honors enable/disable: disabled recommended modules vanish from tools/services/menus; disabled core aborts with a readable reason. 1010 tests green."
+  "description": "Suijin v3.13.0: FULL KERNEL AUDIT \u2014 7 real bugs found and fixed: (1) purity linter globbed a nonexistent path, vacuously green since Phase 1; (2) kernel\u2192modules inversion in controller (now dependency-inverted via enabled_check injection); (3) Journal flush lost entries racing the write (atomic drain + disk-failure requeue + drop accounting); (4) stale compiled core after cargo rebuild (mtime freshness); (5) event re-entrancy could blow the stack (depth-bounded); (6) LayeredConfig shallow merge wiped sibling keys (deep merge); (7) VFS rejected its own workspace root (absolute-path symlink normalization \u2014 macOS /tmp\u2192/private/tmp). Packs fully self-contained (_packbridge seam deleted). 1029 tests green, 179 kernel."
 }

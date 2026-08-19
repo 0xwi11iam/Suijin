@@ -35,11 +35,27 @@ class LayeredConfig:
     def __contains__(self, key: str) -> bool:
         return any(key in data for _name, data in self._layers)
 
+    @staticmethod
+    def _deep_merge(base: dict, overlay: dict) -> dict:
+        """Overlay onto base; nested dicts merge recursively so a layer
+        that overrides ONE key inside a section keeps the others (a
+        shallow update would wipe the whole section — kernel killer)."""
+        out = dict(base)
+        for key, value in overlay.items():
+            if key in out and isinstance(out[key], dict) and isinstance(value, dict):
+                out[key] = LayeredConfig._deep_merge(out[key], value)
+            else:
+                out[key] = value
+        return out
+
     def snapshot(self) -> dict:
-        """Merged view (new dict — mutating it never touches the layers)."""
+        """Merged view (new dict — mutating it never touches the layers).
+
+        Nested dicts DEEP-merge: a layer overriding one key inside a
+        section preserves that section's other keys."""
         merged: dict = {}
         for _name, data in self._layers:
-            merged.update(data)
+            merged = LayeredConfig._deep_merge(merged, data)
         return merged
 
     def layer_names(self) -> list[str]:

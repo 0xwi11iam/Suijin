@@ -39,7 +39,9 @@ def _try_load():
         if candidate.suffix not in (".dylib", ".so"):
             continue
         ext = candidate.with_name("suijin_core.abi3.so")
-        if not ext.exists():
+        # freshness check: cargo rebuilds produce a NEWER dylib; a stale
+        # copy would keep loading the old binary after every rebuild
+        if not ext.exists() or candidate.stat().st_mtime > ext.stat().st_mtime:
             import shutil
 
             shutil.copy2(candidate, ext)

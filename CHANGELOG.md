@@ -6,6 +6,42 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## [3.13.0] — 2026-08-19 — KERNEL AUDITED
+
+Full pre-assembly audit of every kernel subsystem; 7 real bugs found,
+fixed, and pinned by regression tests (test_audit_regressions.py):
+
+1. **The purity linter was vacuously green since Phase 1** — its glob
+   path resolved to a nonexistent directory, scanned zero files, and
+   passed forever while hiding TWO real violations. Now path-guarded
+   (fails if fewer than 6 files found) and violation-proving.
+2. **Kernel→modules inversion**: controller imported
+   suijin.modules.manager. Dependency-inverted — boot() accepts an
+   enabled_check callable; the modules-world injects, the kernel never
+   reaches out.
+3. **Journal.flush lost entries racing the write**: snapshot-then-clear
+   dropped anything appended in between. Now atomic drain (entries
+   leave the ring under the lock before the disk write), disk-failure
+   REQUEUES the batch (a journal never silently drops on I/O errors),
+   and flood displacement is COUNTED (journal.dropped) — the stress
+   test proves every entry is on disk, in the ring, or counted.
+4. **Stale compiled core after every cargo rebuild**: the native shim
+   only copied the dylib when the .so was absent — mtime-fresh now.
+5. **Re-entrant event emit blew the stack** (a subscriber emitting its
+   own event recursed to RecursionError). Depth-bounded (10) with a
+   drop warning; legitimate chains (a→b→c) unaffected.
+6. **LayeredConfig shallow merge wiped sibling keys**: a layer
+   overriding one key in a nested section erased the section's other
+   keys. Deep merge.
+7. **VFS rejected its own workspace root**: absolute paths weren't
+   symlink-normalized, so on macOS /tmp/ws ≠ resolved /private/tmp/ws.
+   Root and trailing-slash spellings allowed; escapes still blocked.
+
+Also: packs are now FULLY self-contained (each generated entry loads
+its own manifest.json + main.py by file path; the _packbridge seam is
+deleted — boundary test enforces its absence). The tools bridge
+excludes every booted pack's declared tools regardless of boot order.
+
 ## [3.12.0] — 2026-08-18 — MODULE MANAGER (PHASE 4)
 
 - **Management API** (`suijin/modules/manager.py`): install/uninstall/

@@ -20,9 +20,12 @@ class TestPackConverter:
     def test_converter_exists_and_runs(self, tmp_path):
         out = tmp_path / "packs"
         r = subprocess.run(
-            [sys.executable, str(CONVERTER), "--source", str(MODULES_ROOT),
-             "--dest", str(out)],
-            capture_output=True, text=True, timeout=120, cwd=str(REPO))
+            [sys.executable, str(CONVERTER), "--source", str(MODULES_ROOT), "--dest", str(out)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=str(REPO),
+        )
         assert r.returncode == 0, r.stderr
         manifests = list(out.rglob("plugin.json"))
         assert len(manifests) >= 40, f"expected ~49 packs, got {len(manifests)}"
@@ -30,9 +33,13 @@ class TestPackConverter:
     def test_converted_shape(self, tmp_path):
         out = tmp_path / "packs"
         subprocess.run(
-            [sys.executable, str(CONVERTER), "--source", str(MODULES_ROOT),
-             "--dest", str(out)],
-            capture_output=True, text=True, timeout=120, cwd=str(REPO), check=True)
+            [sys.executable, str(CONVERTER), "--source", str(MODULES_ROOT), "--dest", str(out)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            cwd=str(REPO),
+            check=True,
+        )
         nmap = json.loads((out / "nmap" / "plugin.json").read_text())
         assert nmap["id"] == "nmap"
         assert nmap["tier"] == "recommended"
@@ -45,12 +52,13 @@ class TestPackConverter:
 
         src = tmp_path / "src"
         (src / "Tools" / "dup").mkdir(parents=True)
-        (src / "Tools" / "dup" / "manifest.json").write_text(json.dumps(
-            {"name": "dup", "version": "1", "tools": {"dup_run": {"description": "x"}},
-             "dependencies": []}))
+        (src / "Tools" / "dup" / "manifest.json").write_text(
+            json.dumps({"name": "dup", "version": "1", "tools": {"dup_run": {"description": "x"}}, "dependencies": []})
+        )
         (src / "Mods" / "dup").mkdir(parents=True)
-        (src / "Mods" / "dup" / "manifest.json").write_text(json.dumps(
-            {"name": "dup", "version": "1", "tools": {}, "dependencies": []}))
+        (src / "Mods" / "dup" / "manifest.json").write_text(
+            json.dumps({"name": "dup", "version": "1", "tools": {}, "dependencies": []})
+        )
         result = convert_tree(src, tmp_path / "out")
         assert "dup" in result.collisions
 

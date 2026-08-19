@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -63,39 +64,60 @@ def _permissions_for(manifest: dict) -> list[str]:
 
 _ENTRY_TEMPLATE = '''"""Auto-generated pack entry — do not edit by hand.
 
-Registers the pack's tool callables (declared in manifest.json) on the
-Context at start(). Regenerate with suijin/modules/pack_converter.py.
+SELF-CONTAINED (Phase 5): loads this pack's own manifest.json + main.py
+directly from the pack directory. No shared bridge, no imports outside
+the pack — each plugin is a standalone lego brick.
 """
 
 from __future__ import annotations
 
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
 from suijin.kernel.contracts import Module, Tier
+
+_PACK_DIR = Path(__file__).resolve().parent
+
+
+def _load_tools() -> dict:
+    """Declared tools from this pack's own main.py, loaded by file path."""
+    manifest = json.loads((_PACK_DIR / "manifest.json").read_text())
+    declared = sorted((manifest.get("tools") or {}).keys())
+    canonical = f"suijin_pack.{_PACK_DIR.name.lower()}"
+    if canonical not in sys.modules:
+        spec = importlib.util.spec_from_file_location(canonical, _PACK_DIR / "main.py")
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[canonical] = mod
+        spec.loader.exec_module(mod)
+    mod = sys.modules[canonical]
+    return {n: getattr(mod, n) for n in declared if callable(getattr(mod, n, None))}
 
 
 class PackModule(Module):
-    id = "{id}"
+    id = "@@ID@@"
     tier = Tier.RECOMMENDED
 
     def register(self, ctx) -> None:
-        pass  # tools bridge at start (needs platform's runtime init)
+        pass
 
     def start(self, ctx) -> None:
-        from suijin.modules._packbridge import load_pack_tools
-
-        fns = load_pack_tools("{id}")
         bridged = 0
-        for tool_name in {tool_names!r}:
-            fn = fns.get(tool_name)
-            if fn is None or ctx.has_tool(tool_name):
+        for tool_name, fn in _load_tools().items():
+            if ctx.has_tool(tool_name):
                 continue
 
             def _bridge(args, _ctx, _fn=fn):
-                return str(_fn(**(args or {{}})))
+                try:
+                    return str(_fn(**(args or {{}})))
+                except TypeError:
+                    return str(_fn(*(args or {{}}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description={desc!r},
-                              owner="{id}")
+            ctx.register_tool(tool_name, _bridge, description=@@DESC@@,
+                              owner="@@ID@@")
             bridged += 1
-        ctx.journal.append("{id}", f"{{bridged}} tool(s) registered")
+        ctx.journal.append("@@ID@@", f"{bridged} tool(s) registered")
 
     def stop(self, ctx) -> None:
         pass
@@ -151,8 +173,17 @@ def convert_tree(source: Path, dest: Path) -> ConversionResult:
                 "permissions": _permissions_for(manifest),
                 "description": desc,
             }
+            # copy the pack's real source (manifest.json + main.py + extras)
+            # so the generated self-contained entry can load them
+            for item in pack_dir.iterdir():
+                if item.name in ("plugin.json", "entry.py", "__pycache__"):
+                    continue
+                target = out_dir / item.name
+                if target.exists():
+                    continue
+                shutil.copy2(item, target) if item.is_file() else shutil.copytree(item, target)
             (out_dir / "plugin.json").write_text(json.dumps(plugin, indent=2))
-            (out_dir / "entry.py").write_text(_ENTRY_TEMPLATE.format(id=pid, tool_names=tool_names, desc=desc))
+            (out_dir / "entry.py").write_text(_ENTRY_TEMPLATE.replace("@@ID@@", pid).replace("@@DESC@@", repr(desc)))
             result.converted.append(pid)
     return result
 

@@ -38,8 +38,7 @@ class TestManagerTUI:
             await pilot.pause()
             app._show("probe")
             # simulate row highlight for redteam
-            app.on_data_table_row_highlighted(
-                type("E", (), {"row_key": type("K", (), {"value": "redteam"})()})())
+            app.on_data_table_row_highlighted(type("E", (), {"row_key": type("K", (), {"value": "redteam"})()})())
             assert "redteam" in app._last_detail and "requires" in app._last_detail
 
     async def test_toggle_disables_and_refreshes(self, isolated_state):

@@ -15,7 +15,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from suijin.kernel.contracts import Module, Tier
-from suijin.tools.workspace import WORKSPACE_DIR, ensure_workspace_layout
 
 
 class PlatformModule(Module):
@@ -50,6 +49,7 @@ class PlatformModule(Module):
         if self._initialized:
             return
         from suijin.tools.runtime import init_runtime
+        from suijin.tools.workspace import ensure_workspace_layout
 
         init_runtime()
         ensure_workspace_layout()

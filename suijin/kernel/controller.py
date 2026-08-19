@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Callable
 
 from suijin.kernel.context import Context
 from suijin.kernel.health import HealthTracker
@@ -68,12 +69,20 @@ def boot(
     config: dict | None = None,
     workspace: str | Path | None = None,
     quiet: bool = True,
+    enabled_check: "Callable[[str], bool] | None" = None,
 ) -> tuple[Context, "object"]:
     """Compose the system. Returns (ctx, boot_report).
 
     entries: during migration, module objects are injected directly keyed
     by module id; ids without an entry fall back to importing the
     manifest's entry string. Phase 2+ makes manifests the only source.
+    enabled_check: optional callable(module_id) -> bool consulted for the
+    operator's enable/disable state (e.g. the module manager's
+    is_enabled). The KERNEL never imports the manager — callers inject
+    it (dependency inversion: modules-world reaches INTO the kernel, the
+    kernel never reaches out). Disabled units are dropped BEFORE
+    materialization — their tools/services/menus never exist this boot.
+    A disabled CORE unit aborts (that's a broken system).
     """
     global _LAST_BOOT_ENTRIES, _LAST_CONTEXT
 
@@ -82,14 +91,9 @@ def boot(
         reg.scan(Path(root))
     report = reg.resolve()
 
-    # operator enable/disable state (suijin module disable): disabled units
-    # are dropped BEFORE materialization — their tools/services/menus never
-    # exist this boot. Disabled CORE aborts (that's a broken system).
-    try:
-        from suijin.modules import manager as _mgmt
-
+    if enabled_check is not None:
         for uid in list(report.bootable):
-            if uid in report.units and not _mgmt.is_enabled(uid):
+            if uid in report.units and not enabled_check(uid):
                 unit = report.units[uid]
                 if unit.tier.value == 0:
                     raise RuntimeError(
@@ -99,8 +103,6 @@ def boot(
                 report.bootable.discard(uid)
                 report.boot_order = [u for u in report.boot_order if u.id != uid]
                 report.skipped[uid] = "disabled by operator"
-    except ImportError:
-        pass  # manager module unavailable (minimal installs) — no state to honor
     if report.aborted:
         raise RuntimeError(f"boot aborted — {report.abort_reason}")
 
@@ -123,6 +125,8 @@ def boot(
     ctx = Context(config=config, workspace=workspace)
     # stamped BEFORE start() so tools-start can see the booted pack set
     ctx._booted_unit_ids = {u.id for u in bootable_units}
+    # per-unit source dirs (pack manifest discovery, boundary-clean)
+    ctx._unit_sources = {u.id: (str(u.source) if u.source else "") for u in bootable_units}
     ctx.vfs = Vfs(ctx.workspace)
     ctx.jobs = JobScheduler()
     ctx.journal = Journal(ctx.workspace / "logs")

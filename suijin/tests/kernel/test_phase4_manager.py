@@ -36,16 +36,25 @@ def env(tmp_path, monkeypatch):
 def _make_community(env, mid="community"):
     d = env["src"] / mid
     d.mkdir(exist_ok=True)
-    (d / "plugin.json").write_text(json.dumps(
-        {"id": mid, "version": "1.0", "tier": "installed",
-         "requires": ["platform"], "entry": "pack_entry:community"}))
+    (d / "plugin.json").write_text(
+        json.dumps(
+            {
+                "id": mid,
+                "version": "1.0",
+                "tier": "installed",
+                "requires": ["platform"],
+                "entry": "pack_entry:community",
+            }
+        )
+    )
     (d / "entry.py").write_text(
         "from suijin.kernel.contracts import Module, Tier\n"
         "class PackModule(Module):\n"
         "    id = '%s'\n    tier = Tier.INSTALLED\n"
         "    def register(self, ctx): pass\n"
         "    def start(self, ctx): pass\n"
-        "    def stop(self, ctx): pass\n" % mid)
+        "    def stop(self, ctx): pass\n" % mid
+    )
     return d
 
 
@@ -82,17 +91,25 @@ class TestInstall:
     def test_install_rejects_core_tier(self, env):
         imp = env["src"] / "imposter"
         imp.mkdir()
-        (imp / "plugin.json").write_text(json.dumps(
-            {"id": "imposter", "version": "1", "tier": "core", "requires": []}))
+        (imp / "plugin.json").write_text(json.dumps({"id": "imposter", "version": "1", "tier": "core", "requires": []}))
         with pytest.raises(mgmt.InstallError, match="core"):
             mgmt.install(str(imp))
 
     def test_dependencies_reported(self, env):
         needy = env["src"] / "needy"
         needy.mkdir()
-        (needy / "plugin.json").write_text(json.dumps(
-            {"id": "needy", "version": "1.0", "tier": "installed",
-             "requires": ["ghost-dep"], "entry": "", "python_deps": ["pwntools"]}))
+        (needy / "plugin.json").write_text(
+            json.dumps(
+                {
+                    "id": "needy",
+                    "version": "1.0",
+                    "tier": "installed",
+                    "requires": ["ghost-dep"],
+                    "entry": "",
+                    "python_deps": ["pwntools"],
+                }
+            )
+        )
         report = mgmt.install(str(needy), with_deps=False)
         assert "ghost-dep" in report and "missing" in report
         assert "pip install pwntools" in report  # exact command shown

@@ -8,7 +8,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-KERNEL = Path(__file__).resolve().parents[2] / "suijin" / "kernel"
+KERNEL = Path(__file__).resolve().parents[3] / "suijin" / "kernel"
+
+# The compiled core: deliberately imported by the native shim (its whole
+# job). Everything else non-kernel is banned.
+_SANCTIONED = {"suijin_core"}
 
 STDLIB_ALLOWLIST_PREFIXES = ("suijin.kernel.",)
 # everything else suijin.* is banned; third-party is banned entirely
@@ -31,7 +35,7 @@ def test_kernel_imports_only_stdlib_and_kernel():
             continue
         tree = ast.parse(py.read_text())
         for mod in _imports(tree):
-            if mod.startswith("suijin.kernel"):
+            if mod in _SANCTIONED or mod.startswith("suijin.kernel"):
                 continue
             if mod.startswith("suijin"):
                 offenders.append(f"{py.name} imports {mod}")
@@ -41,6 +45,7 @@ def test_kernel_imports_only_stdlib_and_kernel():
             if root and root not in sys.stdlib_module_names and root != "":
                 offenders.append(f"{py.name} imports third-party {mod}")
     assert not offenders, "kernel purity violations:\n" + "\n".join(offenders)
+    assert len(list(KERNEL.glob("*.py"))) > 5, "purity scan found no files — path bug"
 
 
 def test_kernel_clean_interpreter_import():

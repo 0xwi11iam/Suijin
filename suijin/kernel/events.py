@@ -18,12 +18,22 @@ logger = logging.getLogger("suijin.kernel.events")
 Subscriber = Callable[[Any], None]
 
 
+# A subscriber that emits the SAME event re-entrantly would recurse until
+# the stack dies. Depth-bounded: legitimate fan-out chains are shallow;
+# anything past this is a loop, dropped with one warning (dmesg-style).
+_MAX_EMIT_DEPTH = 10
+
+
 class EventBus:
-    """Synchronous pub/sub. Thread-safe. Failures are logged, not raised."""
+    """Synchronous pub/sub. Thread-safe. Failures are logged, not raised.
+
+    Re-entrancy-bounded: emits nested deeper than _MAX_EMIT_DEPTH on one
+    thread (always a subscriber loop) are dropped, not recursed."""
 
     def __init__(self) -> None:
         self._subs: dict[str, list[Subscriber]] = defaultdict(list)
         self._lock = threading.Lock()
+        self._depth = threading.local()
 
     def on(self, event: str, fn: Subscriber) -> None:
         """Subscribe fn to event."""
@@ -38,13 +48,23 @@ class EventBus:
 
     def emit(self, event: str, payload: Any = None) -> None:
         """Deliver to every subscriber; each failure is isolated + logged."""
+        depth = getattr(self._depth, "n", 0)
+        if depth >= _MAX_EMIT_DEPTH:
+            logger.warning(
+                "event emit dropped (event=%s): re-entrancy depth %d — a subscriber is emitting in a loop", event, depth
+            )
+            return
         with self._lock:
             subscribers = list(self._subs.get(event, ()))
-        for fn in subscribers:
-            try:
-                fn(payload)
-            except Exception:  # noqa: BLE001 — isolation is the contract
-                logger.exception("event subscriber failed (event=%s)", event)
+        self._depth.n = depth + 1
+        try:
+            for fn in subscribers:
+                try:
+                    fn(payload)
+                except Exception:  # noqa: BLE001 — isolation is the contract
+                    logger.exception("event subscriber failed (event=%s)", event)
+        finally:
+            self._depth.n = depth
 
     def subscribers(self, event: str) -> int:
         """Introspection for tests + the boot report."""

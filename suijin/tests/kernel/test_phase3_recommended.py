@@ -21,9 +21,18 @@ class TestRecommendedTier:
         ctx, report = boot_all(tmp_path)
         order_ids = [u.id for u in report.boot_order]
         expected = {
-            "platform", "tools", "agent.graph", "agent.nodes", "agent.memory",
-            "agent", "console",  # core
-            "providers", "redteam", "blueteam", "knowledge", "ops",  # recommended
+            "platform",
+            "tools",
+            "agent.graph",
+            "agent.nodes",
+            "agent.memory",
+            "agent",
+            "console",  # core
+            "providers",
+            "redteam",
+            "blueteam",
+            "knowledge",
+            "ops",  # recommended
         }
         assert expected <= set(order_ids), f"missing: {expected - set(order_ids)}"
         assert not report.aborted
@@ -55,11 +64,9 @@ class TestRecommendedTier:
         from suijin.kernel import controller
 
         tree = tmp_path / "modules"
-        shutil.copytree(MODULES, tree, dirs_exist_ok=True,
-                        ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copytree(MODULES, tree, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
         shutil.rmtree(tree / "redteam")
-        ctx, report = controller.boot(module_roots=[tree], workspace=tmp_path / "ws",
-                                      quiet=True)
+        ctx, report = controller.boot(module_roots=[tree], workspace=tmp_path / "ws", quiet=True)
         assert "redteam" not in report.bootable
         hooks = ctx.service("console_hooks")
         assert [e["id"] for e in hooks.menu()] == ["blueteam", "ops"]
