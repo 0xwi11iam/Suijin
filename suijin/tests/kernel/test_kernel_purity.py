@@ -61,7 +61,7 @@ def test_kernel_clean_interpreter_import():
         "print('\\n'.join(bad))"
     )
     r = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, cwd=str(Path(__file__).resolve().parents[2])
+        [sys.executable, "-c", code], capture_output=True, text=True, cwd=str(Path(__file__).resolve().parents[3])
     )
     assert r.returncode == 0, r.stderr
     assert r.stdout.strip() == "", f"kernel dragged in: {r.stdout.strip()}"

@@ -45,9 +45,12 @@ class TestPurityLinterWasVacuous:
     def test_controller_has_no_suijin_imports_outside_kernel(self):
         src = (Path(__file__).resolve().parents[2] / "kernel" / "controller.py").read_text()
         for node in ast.walk(ast.parse(src)):
-            if (isinstance(node, ast.ImportFrom) and node.module
-                    and node.module.startswith("suijin")
-                    and not node.module.startswith("suijin.kernel")):
+            if (
+                isinstance(node, ast.ImportFrom)
+                and node.module
+                and node.module.startswith("suijin")
+                and not node.module.startswith("suijin.kernel")
+            ):
                 pytest.fail(f"kernel inversion: controller imports {node.module}")
 
 

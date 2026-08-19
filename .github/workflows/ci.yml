@@ -63,7 +63,7 @@ jobs:
 
       - name: Architecture boundaries (kernel purity + module boundaries)
         run: |
-          python -m pytest suijin/tests/kernel/test_kernel_purity.py \
+          PYTHONPATH="$PWD:$PYTHONPATH" python -m pytest suijin/tests/kernel/test_kernel_purity.py \
             suijin/tests/kernel/test_phase5_boundary.py \
             suijin/tests/kernel/test_audit_regressions.py -q
 
