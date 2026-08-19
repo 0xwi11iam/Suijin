@@ -43,7 +43,6 @@ exclude = ["suijin.tests*", "webui*"]
 # Non-Python assets the runtime reads — a wheel without these is broken.
 suijin = [
     "version.json",
-    "config.json",
     "modules/agent/lib/prompts/*.py",
     "modules/agent/lib/skills/*.py",
     "modules/*/plugin.json",

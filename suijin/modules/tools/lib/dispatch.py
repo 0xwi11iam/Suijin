@@ -731,6 +731,9 @@ def get_tool_catalog():
             "- **search_kb** — offline security KB (HackTricks, PayloadsAllTheThings, GTFOBins, "
             "LOLBAS, OWASP, SecLists). The operator enables it with `suijin pull kb`. "
             "Use web_search until then.\n"
+            "- **kb_stats / find_wordlist / suggest_exploit / extract_payloads** — same KB "
+            "toolkit; every one degrades gracefully to a 'not built' notice until the operator "
+            "runs `suijin pull kb`.\n"
         )
 
     # Strategy reminder
