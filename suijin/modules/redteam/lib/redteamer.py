@@ -367,6 +367,21 @@ async def run_red_team_async(config, objective, api_key=None):
 
             logging.getLogger("suijin").warning(f"Session save failed: {e}")
 
+        # Self-critique: the agent reviews its own engagement, writes a
+        # report + learnings (config-gated: self_critique=true default).
+        try:
+            from suijin.modules.agent.lib.critique import run_self_critique
+
+            critique = run_self_critique(
+                objective=objective, final_state=final_state, config=config, thread_id=thread_id
+            )
+            if critique:
+                console.print("[dim]Self-critique saved (outputs/reports/critique_*.md)[/dim]")
+        except Exception as e:
+            import logging
+
+            logging.getLogger("suijin").warning(f"Self-critique failed: {e}")
+
     except Exception as e:
         console.print(f"[bold red]Agent error: {e}[/bold red]")
         import traceback

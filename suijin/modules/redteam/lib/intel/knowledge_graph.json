@@ -41,5 +41,17 @@
       }
     ],
     "_updated": "2026-08-18T12:46:54.720722+00:00"
+  },
+  "lab-target": {
+    "behavior": [
+      {
+        "rule": "[self-critique] check /api/v2 before /api on this stack",
+        "evidence": "agent self-critique pass",
+        "confidence": 0.8,
+        "verified_at": "2026-08-19T10:36:43.640513+00:00",
+        "last_seen": "2026-08-19T10:36:51.912260+00:00"
+      }
+    ],
+    "_updated": "2026-08-19T10:36:51.912380+00:00"
   }
 }
