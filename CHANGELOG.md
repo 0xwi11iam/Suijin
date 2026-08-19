@@ -6,6 +6,19 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v4.7.0 — Wave 4: reporting & workflow
+
+- **Report templates**: exec / technical / compliance views of one
+  finding set; en/de/fr/es rendering presets.
+- **Engagement templates** + scheduling (idempotent crontab entries —
+  the system scheduler drives the CLI, no daemon).
+- **Webhook notifications** (Slack/Discord/generic JSON).
+- **Client portal**: self-contained offline HTML evidence bundle.
+- **Session time-travel**: fork any engagement at iteration N.
+- **Session theater**: animated ASCII replay.
+
+1,144 tests.
+
 ## v4.6.0 — Wave 3: knowledge & memory
 
 - **Engagement memory**: per-target operational history (what was
