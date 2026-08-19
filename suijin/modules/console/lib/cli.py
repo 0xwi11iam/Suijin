@@ -1663,7 +1663,27 @@ def main(argv=None):
         sub.choices[args.command].print_help()
         sys.exit(2)
 
+    _audit_cli_call(args)
     sys.exit(args.func(args))
+
+
+def _audit_cli_call(args):
+    """One audit line per CLI verb invocation (never raises)."""
+    try:
+        from suijin.kernel.audit import ToolAudit
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+        verb = getattr(args, "command", "") or "?"
+        tool_args = {
+            k: v
+            for k, v in vars(args).items()
+            if k not in ("func", "command") and isinstance(v, (str, int, bool, float))
+        }
+        ToolAudit(WORKSPACE_DIR / "outputs" / "audit_trails", "cli_calls.jsonl", flush_every=1).record(
+            surface="cli", name=verb, args=tool_args, outcome="invoked"
+        )
+    except Exception:  # noqa: BLE001 — audit must never break the CLI
+        pass
 
 
 if __name__ == "__main__":

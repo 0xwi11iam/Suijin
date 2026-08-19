@@ -183,6 +183,7 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
     output, _ = _maybe_offload(tool_name, str(result))
     duration_ms = int((_time.monotonic() - t0) * 1000)
     success = not output.startswith("Error:") and not output.startswith("Tool error:")
+    _audit_step(state, tool_name, tool_args, success, duration_ms)
     ec = _classify_error_class(
         success=success,
         tool_output=output,
@@ -197,3 +198,21 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
         "_tool_result": {"success": success, "output": output},
         "messages": [{"role": "user", "content": f"RESULT ({tool_name}):\n{_wrap_untrusted(output, 'TOOL_OUTPUT')}"}],
     }
+
+
+def _audit_step(state, tool_name, tool_args, success, duration_ms):
+    """Append the step to the engagement audit trail (never raises)."""
+    try:
+        from suijin.kernel.audit import ToolAudit
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+        ToolAudit(WORKSPACE_DIR / "outputs" / "audit_trails", "agent_steps.jsonl", flush_every=1).record(
+            surface="agent",
+            name=tool_name,
+            args=tool_args,
+            outcome="ok" if success else "tool-error",
+            duration_ms=duration_ms,
+            detail=f"iteration={state.get('current_iteration', '?')}",
+        )
+    except Exception:  # noqa: BLE001 — audit must never break execution
+        pass

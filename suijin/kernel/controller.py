@@ -130,6 +130,9 @@ def boot(
     ctx.vfs = Vfs(ctx.workspace)
     ctx.jobs = JobScheduler()
     ctx.journal = Journal(ctx.workspace / "logs")
+    from suijin.kernel.audit import ToolAudit
+
+    ctx.tool_audit = ToolAudit(ctx.workspace / "outputs" / "audit_trails", "tool_calls.jsonl")
     ctx.health = HealthTracker()
     ctx.journal.append("boot", report.summary())
     started: list[object] = []
@@ -161,10 +164,12 @@ def boot(
             ctx.health.record_boot(unit.id, status="failed", detail=str(e))
             ctx.journal.append("module.skip", f"{unit.id}: {e}")
 
+    ctx.tool_audit.flush()
     _LAST_BOOT_ENTRIES = {u.id: entries[u.id] for u in bootable_units if u.id in entries}
     _LAST_CONTEXT = ctx
 
     def _shutdown() -> list[str]:
+        ctx.tool_audit.flush()
         stopped = []
         for mod in reversed(started):
             try:

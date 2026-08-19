@@ -11,6 +11,7 @@ import logging
 from pathlib import Path
 from typing import Any, Callable
 
+from suijin.kernel.audit import NullAudit, ToolAudit
 from suijin.kernel.events import EventBus
 
 logger = logging.getLogger("suijin.kernel.context")
@@ -29,6 +30,10 @@ class Context:
         self._services: dict[str, Callable[[], Any]] = {}
         self._service_cache: dict[str, Any] = {}
         self._tools: dict[str, dict] = {}  # name -> {fn, description, owner}
+        # every tool invocation is audit-logged (append-only JSONL under
+        # <workspace>/outputs/audit_trails); controller.boot installs the
+        # real sink, direct constructions get the inert default
+        self.tool_audit: ToolAudit = NullAudit()
 
     # ── services (lazy singletons) ─────────────────────────────────
 
@@ -64,13 +69,35 @@ class Context:
         return name in self._tools
 
     def call_tool(self, name: str, args: dict) -> str:
+        import time as _time
+
         entry = self._tools.get(name)
         if entry is None:
+            self.tool_audit.record(surface="kernel", name=name, args=args, outcome="unknown-tool")
             return f"Error: unknown tool '{name}'"
+        t0 = _time.perf_counter()
         try:
-            return str(entry["fn"](args or {}, self))
+            out = str(entry["fn"](args or {}, self))
+            outcome = "tool-error" if out.startswith("Error:") else "ok"
+            self.tool_audit.record(
+                surface="kernel",
+                name=name,
+                owner=entry.get("owner", ""),
+                args=args,
+                outcome=outcome,
+                duration_ms=(_time.perf_counter() - t0) * 1000,
+            )
+            return out
         except Exception as e:  # noqa: BLE001 — tool failures are data
             logger.exception("tool %s failed", name)
+            self.tool_audit.record(
+                surface="kernel",
+                name=name,
+                owner=entry.get("owner", ""),
+                args=args,
+                outcome=f"exception:{type(e).__name__}",
+                duration_ms=(_time.perf_counter() - t0) * 1000,
+            )
             return f"Error: tool '{name}' failed: {e}"
 
     def tool_names(self, owner: str | None = None) -> list[str]:
