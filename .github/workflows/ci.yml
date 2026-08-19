@@ -61,6 +61,12 @@ jobs:
         run: |
           pip install ruff && ruff check suijin/
 
+      - name: Architecture boundaries (kernel purity + module boundaries)
+        run: |
+          python -m pytest suijin/tests/kernel/test_kernel_purity.py \
+            suijin/tests/kernel/test_phase5_boundary.py \
+            suijin/tests/kernel/test_audit_regressions.py -q
+
       - name: Dependency audit (non-blocking)
         continue-on-error: true
         run: |

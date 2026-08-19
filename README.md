@@ -889,7 +889,11 @@ symlink, auto-repaired at startup).
 
 ---
 
-## Architecture Roadmap — Suijin OS (v4.0)
+## Architecture — Suijin OS
+
+See **[ARCHITECTURE.md](ARCHITECTURE.md)** — the OS manual: kernel subsystems, boot sequence, tier model, and a copy-paste module recipe (one folder, one manifest, one entry).
+
+### Roadmap (complete)
 
 Suijin is being rebuilt as a modular **operating system for security
 automation** — same functionality, same look, same commands throughout;
@@ -923,7 +927,7 @@ modules (agent/graph, agent/nodes…) resolve as one flat dependency graph.
 | 2 | Core tier onto kernel | planned |
 | 3 | Recommended tier + 49 packs converted | planned |
 | 4 | Module Manager TUI + install system | planned |
-| 5 | Shims out, boundary linter in CI, ARCHITECTURE.md, v4.0.0 | planned |
+| 5 | Boundary linter blocking in CI · ARCHITECTURE.md (the OS manual) · packs self-contained (no seams) | ✅ **complete** |
 
 Every phase gates on: full suite green, ruff clean, behavior identical
 (old import paths keep working via shims until Phase 5).

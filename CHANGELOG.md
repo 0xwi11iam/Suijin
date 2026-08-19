@@ -6,6 +6,43 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## [4.0.0] — 2026-08-19 — SUIJIN OS
+
+The architecture release. Suijin is now a modular operating system for
+security automation — same product, same commands, same look; the
+internals compose like an OS:
+
+- **Kernel** (`suijin/kernel/`, 12 stdlib-only subsystems): contracts,
+  context (the syscall table), events (fault-isolated, depth-bounded
+  pub/sub), registry, controller (`boot()` scene analysis, quiet-boot),
+  jobs, vfs, security, config (deep-merge layers), health, journal
+  (atomic drain, counted drops), errors. Purity enforced two ways.
+- **Compiled core** (`native/suijin-core`, PyO3 abi3): resolve_dag +
+  check_paths — the only two pure data-in/data-out functions crossing
+  the boundary. Pure-Python oracles ship as permanent fallback and CI
+  asserts canonical equality (fixtures + 600-case fuzz).
+- **Three tiers**: core (platform, tools, agent — nested graph/nodes/
+  memory, console; boot-required), recommended (providers, redteam,
+  blueteam, knowledge, ops + all 49 packs — bundled, disableable),
+  installed (community, `~/.suijin/modules/`). 61-module full boot.
+- **Module Manager**: Textual TUI + CLI verbs (list/info/enable/
+  disable/install/uninstall) over one management API; install refuses
+  core imposters, reports python deps with exact pip commands,
+  `--with-deps` opt-in.
+- **Disable = disappear**, at every tier, end-to-end proven: tools,
+  services, AND menu entries never exist on a boot that excluded the
+  module.
+- **ARCHITECTURE.md** — the OS manual (subsystems, boot sequence, tier
+  model, copy-paste module recipe).
+- **Boundaries blocking in CI**: kernel purity (AST + clean
+  interpreter, path-guarded) + module boundary rule (module-level
+  imports: stdlib + kernel only).
+- Pre-release audit fixed 7 kernel bugs (see 3.13.0), including a
+  vacuously-green purity linter that had hidden two real violations.
+
+Built strangler-fig across v3.3–v3.14 with the suite green at every
+step — never a big-bang rewrite.
+
 ## [3.13.0] — 2026-08-19 — KERNEL AUDITED
 
 Full pre-assembly audit of every kernel subsystem; 7 real bugs found,
