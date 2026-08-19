@@ -14,7 +14,7 @@
 > written under the Medusa name.
 
 <p align="center">
-  <img height="20" src="https://img.shields.io/badge/v4.1.0-suijin-green?style=flat" alt="Version"/>
+  <img height="20" src="https://img.shields.io/badge/v4.2.0-suijin-green?style=flat" alt="Version"/>
   <img height="20" src="https://img.shields.io/badge/LICENSE-MIT-4169A1?style=flat" alt="License"/>
   <img height="20" src="https://img.shields.io/badge/PYTHON-3.10+-306998?style=flat&logo=python&logoColor=white" alt="Python"/>
   <img height="20" src="https://img.shields.io/badge/LangGraph-State%20Machine-FF6B35?style=flat" alt="LangGraph"/>
@@ -26,14 +26,14 @@ and a **Blue Team** agent that monitors live HTTP traffic, detects attacks, and
 responds with deception, blocking, and source patching. Both modes share one
 toolkit, one knowledge base, and one knowledge graph.
 
-> **v4.1.0 — STABLE AND READY.** The modularisation is complete: ALL code
-> lives in `suijin/modules/` (10 first-party module homes + 84 snap-in tool
-> packs) composed only through a stdlib-pure kernel. **172 agent tools** boot
-> by default (96 units, 0 skipped) and every one of them is advertised to
-> the model — catalog parity is a CI-enforced contract. 1,026 tests green;
-> Docker, install.sh, and the wheel verified against the final tree.
-> Runtime data (engagement state, KB, caches, blue/notify config) lives in
-> `suijin_agent/` — the one volume that matters.
+> **v4.2.0 — STABLE AND READY.** The modular OS is complete and now
+> extensible in four zero-overlap rungs: markdown **skills**
+> (`suijin/skills/*.md` -> prompt), **addons** (`suijin/addons/<name>/
+> main.py` -> auto-tools), **packs** (manifest bricks), and first-party
+> modules. Every tool call on every surface lands in an append-only
+> audit trail; every artifact lands under `suijin_agent/outputs/`;
+> deploy is turnkey (Docker volume-first + tiered installer). See
+> `developer.md` to get started.
 
 > **LEGAL DISCLAIMER**: This tool is intended for **authorized security
 > testing**, **educational purposes**, and **research only**. Never use this
@@ -112,15 +112,34 @@ pip install -r suijin/requirements.txt
 python3 suijin/main.py
 ```
 
-### Docker
+### Docker (turnkey)
 
 ```bash
-docker build -t suijin .
-docker run -it --rm \
-  -v $(pwd)/suijin_agent:/app/suijin_agent \
-  -e ZAI_API_KEY=$ZAI_API_KEY \
-  suijin
+docker compose run --rm suijin                 # interactive agent
+docker compose run --rm suijin version         # any CLI verb
+docker compose down                            # state survives (named volume)
 ```
+
+The workspace is a **named volume** (`suijin_workspace`): outputs, the
+knowledge base, caches, and operator configs survive container
+recreation. The image bakes the full Kali toolset plus pip extras
+(impacket, dnsrecon, wafw00f, dirsearch, medusa), health-checks itself
+with `suijin doctor`, and needs only `config.json` mounted read-only.
+
+---
+
+## Extending Suijin — the four rungs
+
+| Rung | You write | You get | Effort |
+|---|---|---|---|
+| **Skill** | `suijin/skills/foo.md` | boots into the agent's prompt | 30 seconds |
+| **Addon** | `suijin/addons/foo/main.py` — plain functions | auto-registered agent tools | 2 minutes |
+| **Pack** | `suijin module init foo` (scaffolded) | tools + skill doc + kernel unit | 5 minutes |
+| **Module** | plugin.json + lib/ (first-party) | full lifecycle + services | real work |
+
+Skills and addons need zero boilerplate — drop the file and reboot.
+`suijin module adopt foo` graduates an addon into a full pack. Details
+and examples: `developer.md`.
 
 ---
 
@@ -149,7 +168,6 @@ hidden behind CLI flags.
 | `suijin reports` | Engagement reports in `suijin_agent/reports/` (newest first) |
 | `suijin sessions` | Saved engagement sessions with objectives |
 | `suijin labs` | Built-in labs: list ports / `run` a capability campaign |
-| `suijin ui` | Launch the **web dashboard** on `127.0.0.1:7800` (see below) |
 | `suijin export` | Chain-of-custody evidence bundle: zip + SHA-256 manifest (`--with-creds`, `--verify <zip>`) |
 | `suijin debrief` | Engagement analytics from audit trails (`-v` for per-engagement detail) |
 | `suijin replay` | Step through an engagement timeline (`--list`, `--file`, `--export-md`) |
@@ -295,63 +313,6 @@ first workspace cleaner), `suijin notify` (file/command/macOS channels).
 
 ---
 
-## Web Dashboard (`suijin ui`)
-
-```bash
-suijin ui                # http://127.0.0.1:7800 — browser opens automatically
-suijin ui --port 8080    # custom port
-suijin ui --no-open      # don't auto-open the browser
-```
-
-A local-first, read-only operator console: React + TypeScript single-page app
-("Abyss" dark theme — glass morphism, neon accents, Instrument Serif display
-stats, JetBrains Mono terminals) served by a Flask backend with zero new
-Python dependencies. **Bound to 127.0.0.1 only** — it is an operator console,
-not a public service.
-
-### Views
-
-| View | What it shows |
-|:-----|:--------------|
-| **Dashboard** | Hero stats with rate sparkline, canvas attack map (vectors spawn from live attack signals), attack-pattern radar driven by **real detector counts**, delta-based activity feed (no duplicates), lab fleet liveness |
-| **Red Team** | Attack-pipeline flow (Recon → Exploit → Escalate → Flag → Report, stage derived from the newest audit trail), engagement log + findings tabs, tool arsenal with availability, subagent/supervisor/KB/failure-memory stat cards |
-| **Blue Team** | Three-tier traffic monitor with severity rails + triggering signals (scored with the *real* `anomaly_detector`), 18-detector grid counting live hits, tarpit controls + live tarpitted-IP table, session KG summary |
-| **Knowledge Graph** | Interactive force-directed graph (hand-rolled physics, no JS deps) of the blue session KG or persistent red constraints; click nodes for details |
-| **Labs** | Fleet table with live port probes, copy-to-clipboard attack commands for blue_target |
-| **Dossier** | Target search → knowledge-graph constraints, failed techniques, engagement + report history, richness count |
-| **Timeline** | Day-grouped unified feed across audits, sessions, and reports |
-| **Reports** | Audit summaries (actions/success/findings/cost per engagement) + report file browser with viewer |
-| **Settings** | Effective config (secrets redacted), KB inventory per source, design tokens |
-
-### Live data
-
-- **SSE stream** (`/api/events`) pushes a full snapshot every 3 s — no
-  refresh, no WebSocket server needed. A leading snapshot fires on connect so
-  first paint has data; keepalives hold proxies open.
-- REST surface: `/api/overview`, `/api/kb/search`, `/api/report`,
-  `/api/session`, `/api/config` (redacted).
-- Traffic entries are enriched server-side with `suijin.core.blue.traffic.
-  anomaly_detector` so dashboard tiers match TUI scoring exactly.
-- Path safety: report/session reads are workspace-confined (traversal
-  rejected), config values matching key/token/secret/password are redacted.
-
-### Frontend development
-
-Sources live in `webui/` (Vite + React 18 + TypeScript; the built bundle is
-committed at `suijin/ui/dist/` so `suijin ui` works without Node).
-
-```bash
-cd webui
-npm install
-npm run dev      # :5173 with hot reload, proxying /api to :7800
-npm run build    # rebuilds suijin/ui/dist (commit the result)
-```
-
-Fonts: Gotham Medium is commercial — the theme loads Montserrat as its
-stand-in (with Gotham used first when installed locally), plus Instrument
-Serif and JetBrains Mono from Google Fonts.
-
----
 
 ## First Engagement
 
@@ -832,7 +793,6 @@ python3 -m pytest suijin/tests/ -m "not ai" # skip live-API tests
 | `test_cli_commands.py` | All non-interactive CLI verbs: status/version/env/tools/modules/skills/labs/workspace, config show redaction + validate, reports/sessions listings, doctor workspace row |
 | `test_zai_provider.py` | Z.ai dual endpoints (coding default / paas / custom URL / 403 guidance), model remapping, retries, pricing, config validation, doctor row |
 | `test_kb_tools.py` | find_wordlist (search + tarball extraction), kb_stats, suggest_exploit (GTFOBins alias resolution), extract_payloads, wordlist_tool merge/filter, mine_failures clustering, anonymize_report scrubbing, search_kb phrase queries |
-| `test_ui_server.py` | WebUI backend: API contract, path-traversal safety, config redaction, SSE leading frame, SPA fallback vs asset 404s, traffic enrichment with the real anomaly detector |
 | `test_export_debrief_replay.py` | Evidence bundles (build/verify/tamper/extra-file/creds opt-in/redaction), debrief stats + fleet trends, replay listing/markdown/non-TTY |
 | `test_eval_battle.py` | Harness labeling (heuristic + labels.jsonl override), confusion-matrix math, threshold sweep, real-scorer replay; battle score math, watchdog detect/tarpit/block, report rendering |
 | `test_kb_v2_and_intel.py` | kb read (full docs, substring, ambiguity), kb diff staleness, fuzzy GTFOBins, KEV mirror + offline search_cve fallback, wordlist mutation + cewl |

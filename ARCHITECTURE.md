@@ -182,7 +182,7 @@ suijin/
 │   ├── ops/         #   engagement lifecycle verbs
 │   ├── blueteam/    #   defense stack
 │   ├── redteam/     #   offense stack + intel/KG
-│   ├── console/     #   CLI router, TUIs, web UI, MCP (+ webui source)
+│   ├── console/     #   CLI router, TUIs, MCP
 │   └── <84 snap-in tool packs>    # nmap, sqlmap, encodesk, sslprobe ... (manifest.json bricks)
 ├── tests/           # per-slice suites (reorganized per-module next)
 ├── lab/             # vulnerable target apps
@@ -196,6 +196,12 @@ Old import paths (`suijin.tools.*`, `suijin.core.*`, `suijin.helpers`,
 v4.1 with no compatibility shims. Cross-module coupling exists only as
 `requires` in manifests and Context services; the boundary test makes
 the spiderweb structurally impossible.
+
+v4.2 adds the extension ladder (skills drops -> addons -> packs ->
+modules), the append-only audit trail on every surface
+(`outputs/audit_trails/`, digested args — never raw values), and the
+outputs consolidation (all artifacts under `outputs/`). See
+`developer.md` for the full developer map.
 
 ## History
 

@@ -6,6 +6,60 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v4.2.0 — audit trail, outputs consolidation, skills & addons; turnkey deploy
+
+**Status: stable and ready.** 1,021 tests, 98-unit / 172-tool default
+boot (0 skipped), Docker + installer overhauled, docs rebuilt with a
+developer guide.
+
+### Audit trail v2
+Every tool invocation on every surface is recorded append-only under
+`outputs/audit_trails/` (tool_calls / agent_steps / cli_calls JSONL).
+Arg VALUES are never stored — key names + sha256 digest only, so
+secrets can never leak into the audit log. The kernel choke point
+(Context.call_tool) covers red, blue, MCP, and all packs; the agent
+loop and CLI verbs log their own streams.
+
+### Outputs consolidation
+ALL engagement artifacts nest under `suijin_agent/outputs/` (reports,
+dossiers, exports, sessions, audit_trails, blue_state,
+compliance_reports, wordlists, payloads, sandbox). One-time idempotent
+migration moves existing dirs; state/config stays at the workspace
+root. In Docker the workspace is a named volume — a rebuilt container
+picks up exactly where the last one left off.
+
+### Skills — drop-in markdown (new module)
+`suijin/skills/*.md` boots into the agent's system prompt (8KB/file,
+64KB budget, `<!-- skip` dormancy). No manifest, no code. Boot-gated:
+drop a file, build the prompt, assert it's there.
+
+### Addons — zero-boilerplate tools (new module)
+`suijin/addons/<name>/main.py`: every public callable becomes an agent
+tool at boot (docstring -> description, signature -> parameters,
+manifest synthesized in memory). Reachable through dispatch AND the
+kernel; catalog parity enforced. `suijin module adopt <name>` graduates
+an addon into a full pack.
+
+### Web UI removed
+The local web dashboard (React source + node_modules + dist + Flask
+server + `suijin ui`) is gone per operator decision. `_enrich_traffic`
+(blue scoring used by `suijin watch`) was preserved in the CLI. Flask
+remains a dependency for the lab targets.
+
+### Docker & installer overhaul
+- Dockerfile: OCI labels, pip extras baked (impacket/dnsrecon/wafw00f/
+  dirsearch/medusa), snmp + redis-tools, HEALTHCHECK (suijin doctor),
+  declared workspace VOLUME
+- docker-compose: named volume `suijin_workspace` (state survives
+  recreation), init:true, healthcheck, ZAI key, read-only config mount
+- install.sh tiers: core (default) / `--tools` / `--full` via brew or
+  apt, step-counter progress, post-install doctor; e2e-tested
+
+### Docs
+New `developer.md` (repo tour, module anatomy, extension ladder,
+gates, conventions, release checklist); README + ARCHITECTURE updated
+throughout.
+
 ## v4.1.0 — STABLE: harness expansion + hardened agent surface
 
 **Status: stable and ready.** 1,026 tests green, 96-unit / 172-tool
