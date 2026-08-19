@@ -26,6 +26,8 @@ ARTIFACT_DIRS = (
     "payloads",
     "sandbox",
     "spar_baselines",
+    "memory",
+    "evidence",
 )
 
 

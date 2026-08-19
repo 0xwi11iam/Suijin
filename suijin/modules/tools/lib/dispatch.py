@@ -357,6 +357,26 @@ def _build_routes(config):
     except Exception:  # noqa: BLE001 — addons never break route building
         pass
 
+    # Knowledge extras (B12/B18) + evidence (B13/B14/B15)
+    try:
+        from suijin.modules.knowledge.lib import advisor as _advisor
+        from suijin.modules.tools.lib import evidence as _ev
+
+        routes["cve_advise_tools"] = lambda a: _advisor.advise_tools(a.get("keyword", ""))
+        routes["kb_freshness"] = lambda a: _advisor.kb_freshness()
+        routes["evidence_capture"] = lambda a: (
+            "sealed " + (_ev.capture(a, a.get("evidence_text", "")) or {}).get("chain_hash", "")[:16]
+        )
+        routes["evidence_verify"] = lambda a: (
+            "CHAIN OK" if _ev.verify_chain()[0] else "CHAIN BROKEN: " + "; ".join(_ev.verify_chain()[1][:3])
+        )
+        routes["finding_dedup"] = lambda a: (
+            f"{len(_ev.dedup(a.get('findings', [])))} unique of {len(a.get('findings', []))}"
+        )
+        routes["attack_paths"] = lambda a: _ev.score_paths(a.get("findings", []))
+    except Exception:  # noqa: BLE001
+        pass
+
     # Recipes (A3): named multi-tool macros
     try:
         from suijin.modules.tools.lib import recipes as _recipes
@@ -646,6 +666,16 @@ def get_tool_catalog():
   ```json
   {"tool": "job_cancel", "args": {"job_id": "abc123"}}
   ```
+"""
+
+    # Knowledge extras + evidence (B12-B15, B18)
+    catalog += """## Knowledge & Evidence Tools
+- **cve_advise_tools** — map a CVE/keyword to the tools that verify or exploit it.
+- **kb_freshness** — KB age check; prompts a re-pull when stale.
+- **evidence_capture** — seal a finding's evidence into the tamper-evident hash chain.
+- **evidence_verify** — verify the evidence chain (tampering detection).
+- **finding_dedup** — collapse same-root-cause findings into one with occurrences.
+- **attack_paths** — probability-weighted attack-path scoring from findings.
 """
 
     # Recipes section (A3)

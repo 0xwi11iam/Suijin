@@ -64,6 +64,15 @@ DUMP_PATH = BASE_DIR / "operation_state_recovery.json"
 async def run_red_team_async(config, objective, api_key=None):
 
     providers.reset_usage()
+    # B11/B16: recall operational memory for the target; warn on drift
+    try:
+        from suijin.modules.agent.lib import memory as _mem
+
+        _target_hint = str(objective)[:120]
+        console.print(_mem.recall(_target_hint, limit=3))
+    except Exception:  # noqa: BLE001 — memory is best-effort
+        pass
+
     from suijin.modules.platform.lib import runtime as _runtime
 
     _runtime.reset_recon_state()
