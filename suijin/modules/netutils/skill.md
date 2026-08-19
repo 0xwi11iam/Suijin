@@ -1,0 +1,1 @@
+# netutils\n\ntcp_ping for latency baselines (timing attacks, rate limits); is_reachable to triage host lists before deep scans.\n

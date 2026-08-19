@@ -1,0 +1,1 @@
+# payloadpk\n\nCurated starters, not spray lists: pick by detected backend/context, verify each with evidence capture.\n

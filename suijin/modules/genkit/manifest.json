@@ -1,0 +1,28 @@
+{
+  "name": "Genkit",
+  "version": "1.0",
+  "description": "Generators: random tokens, strong passwords, UUIDs.",
+  "tools": {
+    "random_token": {
+      "description": "Cryptographically random token.",
+      "parameters": {
+        "length": "Length (default 32, max 256)",
+        "charset": "hex|alnum|full (default hex)"
+      }
+    },
+    "password_gen": {
+      "description": "Generate strong passwords meeting class requirements.",
+      "parameters": {
+        "count": "How many (default 3)",
+        "length": "Length (default 20)"
+      }
+    },
+    "uuid_gen": {
+      "description": "Generate UUID4 values.",
+      "parameters": {
+        "count": "How many (default 1, max 50)"
+      }
+    }
+  },
+  "dependencies": []
+}

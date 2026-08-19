@@ -1,0 +1,1 @@
+# reqtool\n\nraw_request_parse turns Burp/repeater captures into replayable dicts; curl_build hands findings to the client as copy-paste reproductions; http_download fetches artifacts into the workspace.\n

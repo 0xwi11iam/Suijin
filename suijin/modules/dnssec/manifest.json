@@ -1,0 +1,20 @@
+{
+  "name": "Dnssec",
+  "version": "1.0",
+  "description": "Email security records: SPF/DMARC/DKIM lookup and audit.",
+  "tools": {
+    "email_security_records": {
+      "description": "Fetch SPF, DMARC, and common DKIM selector records for a domain.",
+      "parameters": {
+        "domain": "Domain"
+      }
+    },
+    "spf_audit": {
+      "description": "Parse an SPF record: includes, mechanisms, and the all= policy hardness.",
+      "parameters": {
+        "domain": "Domain (record fetched for you)"
+      }
+    }
+  },
+  "dependencies": []
+}

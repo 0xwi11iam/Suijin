@@ -1,0 +1,21 @@
+{
+  "name": "Cronkit",
+  "version": "1.0",
+  "description": "Cron expression tools: next runs and human explanation.",
+  "tools": {
+    "cron_next": {
+      "description": "Compute the next N run times for a 5-field cron expression.",
+      "parameters": {
+        "expr": "Cron expression",
+        "n": "How many (default 3)"
+      }
+    },
+    "cron_explain": {
+      "description": "Explain a cron expression in plain words.",
+      "parameters": {
+        "expr": "Cron expression"
+      }
+    }
+  },
+  "dependencies": []
+}

@@ -1,0 +1,32 @@
+{
+  "name": "Cmdsmith",
+  "version": "1.0",
+  "description": "Agent-defined custom commands: define named command templates, run them, persist across sessions.",
+  "tools": {
+    "custom_cmd_define": {
+      "description": "Define a named custom command template with {placeholders} for args.",
+      "parameters": {
+        "name": "Command name",
+        "command": "Command template, e.g. 'nmap -p {port} {host}'"
+      }
+    },
+    "custom_cmd_run": {
+      "description": "Run a defined custom command with args (guardrail-checked, no shell).",
+      "parameters": {
+        "name": "Command name",
+        "args": "Placeholder values, e.g. 'port=80,host=10.0.0.1'"
+      }
+    },
+    "custom_cmd_list": {
+      "description": "List all defined custom commands.",
+      "parameters": {}
+    },
+    "custom_cmd_delete": {
+      "description": "Delete a custom command.",
+      "parameters": {
+        "name": "Command name"
+      }
+    }
+  },
+  "dependencies": []
+}

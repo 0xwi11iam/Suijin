@@ -1,0 +1,22 @@
+{
+  "id": "querykit",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.querykit",
+    "csv_query",
+    "json_query",
+    "table_markdown"
+  ],
+  "entry": "pack_entry:querykit",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Data querying: JSON paths, CSV filters, markdown tables."
+}

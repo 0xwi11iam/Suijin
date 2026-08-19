@@ -1,0 +1,22 @@
+{
+  "id": "reqtool",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.reqtool",
+    "curl_build",
+    "http_download",
+    "raw_request_parse"
+  ],
+  "entry": "pack_entry:reqtool",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Raw HTTP parsing, curl conversion, safe downloads."
+}

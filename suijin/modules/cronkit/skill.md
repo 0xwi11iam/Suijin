@@ -1,0 +1,1 @@
+# cronkit\n\nSanity-check cron schedules before wiring scheduled engagements (Phase C).\n

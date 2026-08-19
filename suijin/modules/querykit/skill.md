@@ -1,0 +1,1 @@
+# querykit\n\nSlice API responses and scan outputs: json_query for nested payloads, csv_query for tool exports, table_markdown to drop results straight into reports.\n

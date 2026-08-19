@@ -1,0 +1,21 @@
+{
+  "id": "dnssec",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.dnssec",
+    "email_security_records",
+    "spf_audit"
+  ],
+  "entry": "pack_entry:dnssec",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Email security records: SPF/DMARC/DKIM lookup and audit."
+}

@@ -1,0 +1,30 @@
+{
+  "name": "Reqtool",
+  "version": "1.0",
+  "description": "Raw HTTP parsing, curl conversion, safe downloads.",
+  "tools": {
+    "raw_request_parse": {
+      "description": "Parse raw HTTP request text (from a proxy) into a structured dict.",
+      "parameters": {
+        "raw": "Raw request text"
+      }
+    },
+    "curl_build": {
+      "description": "Build a curl command line from method/url/headers/body.",
+      "parameters": {
+        "method": "HTTP method",
+        "url": "URL",
+        "headers": "Header dict as JSON text",
+        "body": "Optional body"
+      }
+    },
+    "http_download": {
+      "description": "Download a URL to the workspace (size-capped).",
+      "parameters": {
+        "url": "URL",
+        "out": "Workspace-relative output path"
+      }
+    }
+  },
+  "dependencies": []
+}

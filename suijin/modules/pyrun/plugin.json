@@ -1,0 +1,21 @@
+{
+  "id": "pyrun",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.pyrun",
+    "python_eval",
+    "script_run"
+  ],
+  "entry": "pack_entry:pyrun",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Ad-hoc agent logic: inline python evaluation and workspace script execution."
+}

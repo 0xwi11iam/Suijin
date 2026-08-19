@@ -1,0 +1,20 @@
+{
+  "name": "Payloadpk",
+  "version": "1.0",
+  "description": "Curated payload sets: XSS and SQLi polyglots by context.",
+  "tools": {
+    "xss_polyglots": {
+      "description": "Curated XSS polyglots tagged by injection context.",
+      "parameters": {
+        "context": "html|attr|js|url (default all)"
+      }
+    },
+    "sqli_polyglots": {
+      "description": "Curated SQLi detection strings by backend.",
+      "parameters": {
+        "backend": "mysql|postgres|mssql|sqlite|generic (default generic)"
+      }
+    }
+  },
+  "dependencies": []
+}

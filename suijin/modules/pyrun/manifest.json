@@ -1,0 +1,21 @@
+{
+  "name": "Pyrun",
+  "version": "1.0",
+  "description": "Ad-hoc agent logic: inline python evaluation and workspace script execution.",
+  "tools": {
+    "python_eval": {
+      "description": "Evaluate a python expression or run a statement block; returns printed output.",
+      "parameters": {
+        "code": "Python code"
+      }
+    },
+    "script_run": {
+      "description": "Run a script from the workspace scripts/ folder (python or shell).",
+      "parameters": {
+        "path": "Script path (workspace-relative ok)",
+        "args": "Arguments string"
+      }
+    }
+  },
+  "dependencies": []
+}

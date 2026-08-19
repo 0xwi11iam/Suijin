@@ -1,0 +1,1 @@
+# genkit\n\nCheat-detection canaries, test credentials for auth flows, CSRF-token format probes.\n

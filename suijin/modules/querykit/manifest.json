@@ -1,0 +1,30 @@
+{
+  "name": "Querykit",
+  "version": "1.0",
+  "description": "Data querying: JSON paths, CSV filters, markdown tables.",
+  "tools": {
+    "json_query": {
+      "description": "Extract values from JSON via dotted paths and simple filters.",
+      "parameters": {
+        "json": "JSON text",
+        "path": "e.g. items[*].name or a.b.c"
+      }
+    },
+    "csv_query": {
+      "description": "Filter/sort CSV text by column.",
+      "parameters": {
+        "csv": "CSV text",
+        "where": "col=value filter",
+        "sort": "Column to sort by"
+      }
+    },
+    "table_markdown": {
+      "description": "Render list-of-dicts JSON as a markdown table.",
+      "parameters": {
+        "json": "JSON array of objects",
+        "columns": "Optional comma list of columns"
+      }
+    }
+  },
+  "dependencies": []
+}

@@ -1,0 +1,1 @@
+# pyrun\n\nWhen no tool fits, python_eval computes it inline (parse, transform, math). script_run executes anything you wrote to scripts/ — build a helper once, reuse it all engagement.\n

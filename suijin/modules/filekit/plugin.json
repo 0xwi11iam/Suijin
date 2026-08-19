@@ -1,0 +1,23 @@
+{
+  "id": "filekit",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.filekit",
+    "archive_extract",
+    "file_grep",
+    "file_stat",
+    "file_tree"
+  ],
+  "entry": "pack_entry:filekit",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Workspace file utilities: tree, grep, stat, archives."
+}

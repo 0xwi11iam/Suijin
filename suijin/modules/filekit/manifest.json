@@ -1,0 +1,35 @@
+{
+  "name": "Filekit",
+  "version": "1.0",
+  "description": "Workspace file utilities: tree, grep, stat, archives.",
+  "tools": {
+    "file_tree": {
+      "description": "Workspace tree listing with sizes (capped).",
+      "parameters": {
+        "subdir": "Optional subdirectory"
+      }
+    },
+    "file_grep": {
+      "description": "Regex search across workspace files (capped results).",
+      "parameters": {
+        "pattern": "Python regex",
+        "subdir": "Optional scope"
+      }
+    },
+    "file_stat": {
+      "description": "Path info: size, mtime, sha256.",
+      "parameters": {
+        "path": "File path"
+      }
+    },
+    "archive_extract": {
+      "description": "Safely list or extract a zip into the workspace (zip-slip protected).",
+      "parameters": {
+        "path": "Zip path",
+        "list_only": "true = list contents only",
+        "dest": "Extract subdir (default archives/)"
+      }
+    }
+  },
+  "dependencies": []
+}

@@ -1,0 +1,21 @@
+{
+  "id": "payloadpk",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.payloadpk",
+    "sqli_polyglots",
+    "xss_polyglots"
+  ],
+  "entry": "pack_entry:payloadpk",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Curated payload sets: XSS and SQLi polyglots by context."
+}

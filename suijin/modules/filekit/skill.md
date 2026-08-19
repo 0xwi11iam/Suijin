@@ -1,0 +1,1 @@
+# filekit\n\nWorkspace-aware file ops: file_grep finds that leaked credential across yesterday's outputs; archive_extract is zip-slip protected.\n

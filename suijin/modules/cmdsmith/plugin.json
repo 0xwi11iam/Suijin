@@ -1,0 +1,23 @@
+{
+  "id": "cmdsmith",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.cmdsmith",
+    "custom_cmd_define",
+    "custom_cmd_delete",
+    "custom_cmd_list",
+    "custom_cmd_run"
+  ],
+  "entry": "pack_entry:cmdsmith",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Agent-defined custom commands: define named command templates, run them, persist across sessions."
+}

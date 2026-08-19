@@ -1,0 +1,1 @@
+# hashkit\n\nhash_compute verifies downloads/wordlist integrity and fingerprints findings; hmac_sign forges/tests signed tokens (authorized targets only).\n

@@ -1,0 +1,1 @@
+# cmdsmith\n\nDefine your own recurring commands once (custom_cmd_define), then run them with per-target args. Templates use {placeholders}; provide values as 'port=80,host=x'. Stored in the workspace, survives sessions. Guardrails apply.\n

@@ -1,0 +1,22 @@
+{
+  "id": "netutils",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.netutils",
+    "is_reachable",
+    "port_range_expand",
+    "tcp_ping"
+  ],
+  "entry": "pack_entry:netutils",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "TCP reachability, port math, host liveness."
+}

@@ -1,0 +1,1 @@
+# dnssec\n\nEmail spoofing assessment: missing/weak SPF, DMARC p=none, and DKIM gaps are report findings.\n

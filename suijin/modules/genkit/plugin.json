@@ -1,0 +1,22 @@
+{
+  "id": "genkit",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.genkit",
+    "password_gen",
+    "random_token",
+    "uuid_gen"
+  ],
+  "entry": "pack_entry:genkit",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Generators: random tokens, strong passwords, UUIDs."
+}

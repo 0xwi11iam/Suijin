@@ -1,0 +1,28 @@
+{
+  "name": "Netutils",
+  "version": "1.0",
+  "description": "TCP reachability, port math, host liveness.",
+  "tools": {
+    "tcp_ping": {
+      "description": "TCP connect timing to host:port, repeated.",
+      "parameters": {
+        "host": "Target",
+        "port": "Port",
+        "count": "Attempts (default 3)"
+      }
+    },
+    "port_range_expand": {
+      "description": "Expand '80,443,8000-8005' into a port list.",
+      "parameters": {
+        "spec": "Port spec string"
+      }
+    },
+    "is_reachable": {
+      "description": "Batch TCP liveness check across hosts (one port each).",
+      "parameters": {
+        "targets": "Comma list of host:port"
+      }
+    }
+  },
+  "dependencies": []
+}

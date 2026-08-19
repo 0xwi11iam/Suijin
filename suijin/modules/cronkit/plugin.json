@@ -1,0 +1,21 @@
+{
+  "id": "cronkit",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.cronkit",
+    "cron_explain",
+    "cron_next"
+  ],
+  "entry": "pack_entry:cronkit",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Cron expression tools: next runs and human explanation."
+}

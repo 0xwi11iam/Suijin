@@ -1,0 +1,24 @@
+{
+  "name": "Hashkit",
+  "version": "1.0",
+  "description": "Hash computation and HMAC signing.",
+  "tools": {
+    "hash_compute": {
+      "description": "Hash text or a file with md5/sha1/sha256/sha512.",
+      "parameters": {
+        "text": "Text to hash (or use file)",
+        "file": "File path alternative",
+        "algo": "md5|sha1|sha256|sha512 (default sha256)"
+      }
+    },
+    "hmac_sign": {
+      "description": "HMAC-sign text with a key.",
+      "parameters": {
+        "text": "Text",
+        "key": "Secret key",
+        "algo": "sha256 default"
+      }
+    }
+  },
+  "dependencies": []
+}

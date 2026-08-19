@@ -1,0 +1,21 @@
+{
+  "id": "hashkit",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.hashkit",
+    "hash_compute",
+    "hmac_sign"
+  ],
+  "entry": "pack_entry:hashkit",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Hash computation and HMAC signing."
+}
