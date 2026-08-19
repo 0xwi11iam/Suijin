@@ -539,7 +539,7 @@ suijin_agent/
 ```
 
 The layout is **self-repairing**: on startup, `ensure_workspace_layout()`
-(`suijin/tools/workspace.py`) merges any legacy real `suijin/suijin_agent/`
+(`suijin/modules/platform/lib/workspace.py`) merges any legacy real `suijin/suijin_agent/`
 directory up into the root workspace and replaces the inner path with a
 symlink `-> ../suijin_agent`. All writes go through one anchor
 (`WORKSPACE_DIR`); absolute paths outside the workspace and `/tmp` allowlist
@@ -957,7 +957,7 @@ legal? Only against systems you own or have written permission to test.
 
 | Term | Meaning |
 |:-----|:--------|
-| Module pack | Self-contained tool bundle under `Modules/Tools` or `Modules/Mods` with a manifest |
+| Module pack | Self-contained tool bundle (a directory with `manifest.json`) — vendored under `suijin/modules/` or user-installed under `~/.suijin/modules/` |
 | Knowledge base (KB) | Offline FTS5 index of HackTricks/GTFOBins/etc., built by `suijin pull kb` |
 | Knowledge graph | Persistent store of findings, flags, patches, attacker profiles shared by both teams |
 | Supervisor | Zero-cost pattern detector watching the red team for loops and misses |

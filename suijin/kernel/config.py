@@ -7,6 +7,7 @@ Stdlib only.
 
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 
@@ -17,8 +18,11 @@ class LayeredConfig:
         self._layers: list[tuple[str, dict]] = []
 
     def add_layer(self, name: str, data: dict) -> None:
-        """Append a layer (later layers shadow earlier). Dicts are copied."""
-        self._layers.append((name, dict(data)))
+        """Append a layer (later layers shadow earlier). Dicts are copied
+        DEEPLY — mutating the caller's dict after this call never leaks
+        into the sealed layer (hardening: the old shallow dict() shared
+        nested sections with the caller)."""
+        self._layers.append((name, copy.deepcopy(data)))
 
     def __getitem__(self, key: str) -> Any:
         for _name, data in reversed(self._layers):
@@ -56,7 +60,9 @@ class LayeredConfig:
         merged: dict = {}
         for _name, data in self._layers:
             merged = LayeredConfig._deep_merge(merged, data)
-        return merged
+        # deep copy: mutating the returned snapshot (or its nested lists)
+        # never reaches the sealed layers
+        return copy.deepcopy(merged)
 
     def layer_names(self) -> list[str]:
         return [name for name, _ in self._layers]

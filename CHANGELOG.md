@@ -6,6 +6,21 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v4.0.0 — The Modularisation (everything is a module)
+
+The strangler-fig refactor completed: ALL code now lives in
+`suijin/modules/` under 10 first-party homes + 49 vendored tool packs,
+composed only through the kernel. **Breaking (deliberate):** the old
+import paths are gone with no shims — `suijin.tools.*`, `suijin.core.*`,
+`suijin.helpers`, `suijin.security`, `suijin.infra`, `suijin.nodes`,
+`suijin.prompts`, `suijin.skills`, `suijin.intel`, `suijin.kb`, and the
+repo-level `Modules/` tree. Runtime data (KB, KEV caches) moved to the
+workspace (`suijin_agent/caches/`) — in Docker the KB now survives
+container recreation. CLI verbs, entrypoints, Docker and install flows
+are unchanged. Kernel hardening: LayeredConfig deep-copy fix (layered
+config could be mutated through a shared nested dict), fault-injection
++ property suite.
+
 ## [4.0.0] — 2026-08-19 — SUIJIN OS
 
 The architecture release. Suijin is now a modular operating system for

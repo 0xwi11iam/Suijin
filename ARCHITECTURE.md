@@ -70,7 +70,7 @@ run). `pipx install suijin` never needs a Rust toolchain.
 
 `controller.boot(module_roots, workspace, enabled_check)`:
 
-1. **SCAN** every root (wheel modules → `~/.suijin/modules/` → dev
+1. **SCAN** every root (vendored `suijin/modules/` → `~/.suijin/modules/` → dev
    trees; later sources win). Nested manifests become dotted-id units
    (`agent/graph` → `agent.graph`) — first-class DAG members.
 2. **RESOLVE** the DAG (Rust core): boot order, cycles *named*,
@@ -167,6 +167,35 @@ core-tier imposters, reports python deps with exact pip commands;
 - **regression pins** — every audit bug has a named test
   (`test_audit_regressions.py`): journal atomic drain, event depth
   bound, deep merge, VFS root canonicalization, ...
+
+## Layout (v4.1 — everything is a module)
+
+```
+suijin/
+├── kernel/          # the OS core (stdlib-pure, frozen)
+├── modules/         # ALL code lives here
+│   ├── platform/    #   workspace, runtime, config, security, infra
+│   ├── tools/       #   recon/intel/http/dispatch/reporting lib
+│   ├── agent/       #   nodes, prompts, skills, the graph brain
+│   ├── providers/   #   LLM layer
+│   ├── knowledge/   #   offline KB + KEV
+│   ├── ops/         #   engagement lifecycle verbs
+│   ├── blueteam/    #   defense stack
+│   ├── redteam/     #   offense stack + intel/KG
+│   ├── console/     #   CLI router, TUIs, web UI, MCP (+ webui source)
+│   └── <49 vendored tool packs>   # nmap, sqlmap, ... (manifest.json bricks)
+├── tests/           # per-slice suites (reorganized per-module next)
+├── lab/             # vulnerable target apps
+└── main.py          # Docker entrypoint
+suijin_agent/        # THE workspace: all output + caches/ (kb, kev)
+```
+
+Old import paths (`suijin.tools.*`, `suijin.core.*`, `suijin.helpers`,
+`suijin.security`, `suijin.infra`, `suijin.nodes`, `suijin.prompts`,
+`suijin.skills`, `suijin.intel`) are **gone** — the clean break landed in
+v4.1 with no compatibility shims. Cross-module coupling exists only as
+`requires` in manifests and Context services; the boundary test makes
+the spiderweb structurally impossible.
 
 ## History
 
