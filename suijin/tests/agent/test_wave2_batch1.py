@@ -14,7 +14,11 @@ def _step(tool, ok=True, args=""):
 
 class TestDeadEnd:
     def test_same_tool_failing_variably(self):
-        trace = [_step("http_request", False, "url=1"), _step("http_request", False, "url=2"), _step("http_request", False, "url=3")]
+        trace = [
+            _step("http_request", False, "url=1"),
+            _step("http_request", False, "url=2"),
+            _step("http_request", False, "url=3"),
+        ]
         out = _detect_dead_end(trace)
         assert out and "DEAD END" in out and "strategy CLASS" in out
 
@@ -29,15 +33,25 @@ class TestDeadEnd:
 
 class TestPayloadEscalation:
     def test_reflected_grind_escalates(self):
-        trace = [_step("http_request", False, "body=' OR 1=1--"), _step("http_request", False, "body=<script>x</script>"),
-                 _step("http_request", False, "body=../../etc/passwd"), _step("http_request", False, "body=' OR 'a'='a")]
+        trace = [
+            _step("http_request", False, "body=' OR 1=1--"),
+            _step("http_request", False, "body=<script>x</script>"),
+            _step("http_request", False, "body=../../etc/passwd"),
+            _step("http_request", False, "body=' OR 'a'='a"),
+        ]
         out = _detect_payload_class_escalation(trace)
         assert out and "PAYLOAD CLASS ESCALATION" in out and "BLIND" in out
 
     def test_mixed_failure_not_injection_args(self):
-        trace = [_step("http_request", False, "timeout"), _step("http_request", False, "dns fail"),
-                 _step("http_request", False, "conn refused"), _step("http_request", False, "tls")]
-        assert _detect_payload_class_escalation(trace) is None or "escalate" not in (_detect_payload_class_escalation(trace) or "")
+        trace = [
+            _step("http_request", False, "timeout"),
+            _step("http_request", False, "dns fail"),
+            _step("http_request", False, "conn refused"),
+            _step("http_request", False, "tls"),
+        ]
+        assert _detect_payload_class_escalation(trace) is None or "escalate" not in (
+            _detect_payload_class_escalation(trace) or ""
+        )
 
 
 class TestConfidence:

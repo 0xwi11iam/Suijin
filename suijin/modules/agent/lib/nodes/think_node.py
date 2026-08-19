@@ -157,6 +157,19 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
     qa_context = format_qa_history(state.get("qa_history", []))
 
     # Feed the agent its own recent output so it sees all tool results
+    # Context compaction (A7): compress old history BEFORE it is embedded
+    # into the prompt (recent message slices + summaries below read the
+    # compacted list). Under budget this is a no-op.
+    try:
+        from suijin.modules.agent.lib.compact import compact as _compact_messages
+
+        _msgs = state.get("messages") or []
+        _compacted = _compact_messages(_msgs)
+        if _compacted is not _msgs:
+            state["messages"] = _compacted
+    except Exception:  # noqa: BLE001 — compaction must never break thinking
+        pass
+
     raw_msgs = state.get("messages", [])
     recent_msgs = ""
     for m in raw_msgs[-15:]:

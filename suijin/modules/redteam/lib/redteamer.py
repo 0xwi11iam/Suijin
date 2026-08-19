@@ -368,6 +368,25 @@ async def run_red_team_async(config, objective, api_key=None):
 
             logging.getLogger("suijin").warning(f"Session save failed: {e}")
 
+        # Finding verification + peer review (A1/A2): findings get an
+        # independent second pass and a skeptic/judge LLM review before
+        # anyone reads the report. Best-effort; never blocks completion.
+        try:
+            from suijin.modules.agent.lib.verify import peer_review, verify_findings
+
+            findings = final_state.get("findings") or []
+            if findings:
+                checked = verify_findings(findings)
+                reviewed = peer_review(checked, config)
+                final_state["findings"] = reviewed["reviewed"]
+                console.print(
+                    f"[dim]findings: verified/reviewed {len(reviewed['reviewed'])} (peer source: {reviewed['source']})[/dim]"
+                )
+        except Exception as e:
+            import logging
+
+            logging.getLogger("suijin").warning(f"finding verification skipped: {e}")
+
         # Self-critique: the agent reviews its own engagement, writes a
         # report + learnings (config-gated: self_critique=true default).
         try:
