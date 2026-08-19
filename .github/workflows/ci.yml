@@ -39,13 +39,17 @@ jobs:
           bash -n install.sh
           bash -n docker.sh
           bash -n kali-setup.sh
-          python -c "import yaml; yaml.safe_load(open('docker-compose.yml'))"
-          # .env.example keys must match compose env list exactly
+          # compose YAML parses + .env.example keys match compose env list exactly
+          python - <<'PYEOF'
           import re
-          env_list = yaml.safe_load(open('docker-compose.yml'))['services']['suijin']['environment']
-          compose_keys = {m.group(1) for e in env_list for m in [re.match(r'([A-Z_]+)=', str(e))] if m}
-          example_keys = set(re.findall(r'^([A-Z_]+)=', open('.env.example').read(), re.M))
+          import yaml
+          compose = yaml.safe_load(open("docker-compose.yml"))
+          env_list = compose["services"]["suijin"]["environment"]
+          compose_keys = {m.group(1) for e in env_list for m in [re.match(r"([A-Z_]+)=", str(e))] if m}
+          example_keys = set(re.findall(r"^([A-Z_]+)=", open(".env.example").read(), re.M))
           assert compose_keys == example_keys, f"env drift: {compose_keys ^ example_keys}"
+          print(f"deploy sanity ok: {len(compose_keys)} env keys match, compose parses")
+          PYEOF
 
       - name: Verify package imports
         run: |
