@@ -51,6 +51,7 @@ suijin = [
     "modules/*/skill.md",
     "skills/*.md",
     "skills/README.md",
+    "addons/README.md",
 ]
 "suijin.modules.console.lib.ui" = ["dist/*", "dist/assets/*"]
 

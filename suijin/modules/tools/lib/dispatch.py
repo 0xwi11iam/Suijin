@@ -348,6 +348,15 @@ def _build_routes(config):
     for t_name, t_func in get_module_tools().items():  # module attr — patchable seam
         routes[t_name] = lambda a, f=t_func: f(**a)
 
+    # Addon tools (suijin/addons/*/main.py — zero-boilerplate drops)
+    try:
+        from suijin.modules.addons.entry import get_addon_tools
+
+        for t_name, t_func in get_addon_tools().items():
+            routes.setdefault(t_name, lambda a, f=t_func: f(**(a or {})))
+    except Exception:  # noqa: BLE001 — addons never break route building
+        pass
+
     return routes
 
 
@@ -628,6 +637,16 @@ def get_tool_catalog():
   {"tool": "job_cancel", "args": {"job_id": "abc123"}}
   ```
 """
+
+    # Addon tools section (zero-boilerplate drops)
+    try:
+        from suijin.modules.addons.entry import catalog_text
+
+        _addon_cat = catalog_text()
+        if _addon_cat:
+            catalog += _addon_cat
+    except Exception:  # noqa: BLE001
+        pass
 
     # Analysis & utility routes that predate the curated prose above —
     # callable but previously invisible to the model (flexibility fix:

@@ -1,0 +1,10 @@
+{
+  "id": "addons",
+  "version": "1.0.0",
+  "tier": "recommended",
+  "requires": ["platform", "tools"],
+  "provides": ["addons"],
+  "entry": "pack_entry:addons",
+  "permissions": ["filesystem", "network", "shell"],
+  "description": "Zero-boilerplate addons: every public function in suijin/addons/*/main.py becomes an agent tool at boot."
+}

@@ -185,3 +185,133 @@ def validate_module(name: str, root: Path | None = None) -> tuple[bool, list[str
                 elif not (fn.__doc__ or "").strip():
                     problems.append(f"tool '{tname}' missing a docstring (agents need it)")
     return (not problems), problems
+
+
+def adopt_addon(name: str, addon_root: Path | None = None, dest_root: Path | None = None) -> Path:
+    """Graduate an addon (suijin/addons/<name>/main.py) into a full pack.
+
+    Introspects the addon's public callables and writes a pack layout
+    (manifest.json, plugin.json, entry.py, skill.md, __init__.py) into
+    dest_root/<name> (default: the vendored module home). The addon's
+    main.py is copied verbatim as the implementation.
+    """
+    import shutil
+
+    from suijin.modules.addons.entry import _doc_of, _params_of, addon_roots
+
+    roots = [Path(addon_root)] if addon_root else addon_roots()
+    src = None
+    for r in roots:
+        cand = r / name / "main.py"
+        if cand.is_file():
+            src = cand
+            break
+    if src is None:
+        raise FileNotFoundError(
+            f"addon '{name}' not found under {[str(r) for r in roots]} (looking for <name>/main.py)"
+        )
+
+    import importlib.util
+    import sys
+
+    mod_name = f"suijin_addon.{name}"
+    if mod_name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(mod_name, src)
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[mod_name] = mod
+        spec.loader.exec_module(mod)
+    mod = sys.modules[mod_name]
+
+    tools: dict[str, dict] = {}
+    for attr in dir(mod):
+        if attr.startswith("_"):
+            continue
+        fn = getattr(mod, attr, None)
+        if callable(fn) and getattr(fn, "__module__", None) == mod_name:
+            tools[attr] = {"description": _doc_of(fn), "parameters": {p: "value" for p in _params_of(fn)}}
+    if not tools:
+        raise ValueError(f"addon '{name}' exposes no public callables — nothing to adopt")
+
+    dest = (Path(dest_root) if dest_root else Path(__file__).resolve().parents[2]) / name
+    if dest.exists():
+        raise FileExistsError(f"pack already exists: {dest}")
+    dest.mkdir(parents=True)
+    (dest / "__init__.py").write_text('"""Adopted from an addon (suijin module adopt)."""\n')
+    shutil.copy2(src, dest / "main.py")
+
+    manifest = {
+        "name": name.title(),
+        "version": "1.0",
+        "description": f"{name} (adopted from addon)",
+        "tools": tools,
+        "dependencies": [],
+    }
+    (dest / "manifest.json").write_text(json.dumps(manifest, indent=2))
+    tool_names = sorted(tools)
+    plugin = {
+        "id": name,
+        "version": "1.0",
+        "tier": "recommended",
+        "requires": ["platform", "tools"],
+        "provides": [f"pack.{name}"] + tool_names,
+        "entry": f"pack_entry:{name}",
+        "permissions": ["filesystem", "network"],
+        "description": f"{name} (adopted from addon)",
+    }
+    (dest / "plugin.json").write_text(json.dumps(plugin, indent=2))
+    entry = '''"""Auto-generated pack entry (adopted from an addon)."""
+
+from __future__ import annotations
+
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+from suijin.kernel.contracts import Module, Tier
+
+_PACK_DIR = Path(__file__).resolve().parent
+
+
+def _load_tools() -> dict:
+    manifest = json.loads((_PACK_DIR / "manifest.json").read_text())
+    declared = sorted((manifest.get("tools") or {}).keys())
+    canonical = f"suijin_pack.{_PACK_DIR.name.lower()}"
+    if canonical not in sys.modules:
+        spec = importlib.util.spec_from_file_location(canonical, _PACK_DIR / "main.py")
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[canonical] = mod
+        spec.loader.exec_module(mod)
+    mod = sys.modules[canonical]
+    return {n: getattr(mod, n) for n in declared if callable(getattr(mod, n, None))}
+
+
+class PackModule(Module):
+    id = "@@ID@@"
+    tier = Tier.RECOMMENDED
+
+    def register(self, ctx) -> None:
+        pass
+
+    def start(self, ctx) -> None:
+        for tool_name, fn in _load_tools().items():
+            if ctx.has_tool(tool_name):
+                continue
+
+            def _bridge(args, _ctx, _fn=fn):
+                try:
+                    return str(_fn(**(args or {})))
+                except TypeError:
+                    return str(_fn(*(args or {}).values()))
+
+            ctx.register_tool(tool_name, _bridge, description=@@DESC@@,
+                              owner="@@ID@@")
+
+    def stop(self, ctx) -> None:
+        pass
+'''.replace("@@ID@@", name).replace("@@DESC@@", repr(f"{name} (adopted from addon)"))
+    (dest / "entry.py").write_text(entry)
+    (dest / "skill.md").write_text(
+        f"# {name}\n\nAdopted from an addon. Tools: " + ", ".join(f"`{t}`" for t in tool_names) + "\n"
+    )
+    return dest

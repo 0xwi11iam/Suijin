@@ -1195,6 +1195,15 @@ def run_module(args) -> int:
         print(f"scaffolded {mod_dir.name}/ (manifest.json, main.py, skill.md)")
         print("implement main.py, then validate: suijin module validate " + mod_dir.name)
         return 0
+    if action == "adopt":
+        try:
+            dest = module_sdk.adopt_addon(args.name)
+        except (FileNotFoundError, FileExistsError, ValueError) as e:
+            print(f"error: {e}")
+            return 1
+        print(f"adopted addon '{args.name}' -> {dest}")
+        print("it now boots as a full pack (manifest, entry, skill); delete the addon folder when ready")
+        return 0
     ok, problems = module_sdk.validate_module(args.name)
     if ok:
         print(f"[ok] module '{args.name}': manifest + implementation valid")
@@ -1599,6 +1608,8 @@ def main(argv=None):
     m_un.add_argument("id", help="module id")
     m_un.set_defaults(func=run_module_manager)
     mod_init = module_sub.add_parser("init", help="scaffold a new module pack (SDK)")
+    mod_adopt = module_sub.add_parser("adopt", help="graduate an addon (suijin/addons/<name>) into a full pack")
+    mod_adopt.add_argument("name", help="addon folder name under suijin/addons/")
     mod_init.add_argument("name", help="module name (snake_case)")
     mod_init.set_defaults(func=run_module)
     mod_val = module_sub.add_parser("validate", help="validate a module pack (SDK)")
