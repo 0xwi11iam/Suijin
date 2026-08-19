@@ -14,7 +14,7 @@ import pytest
 class TestVault:
     @pytest.fixture
     def vault_env(self, tmp_path, monkeypatch):
-        from suijin.tools import credential_vault as vault
+        from suijin.modules.ops.lib import credential_vault as vault
 
         monkeypatch.setattr(vault, "VAULT_PATH", tmp_path / "credentials.vault.json")
         monkeypatch.setattr(vault, "LEGACY_PATH", tmp_path / "credentials.json")
@@ -94,7 +94,7 @@ class TestDossier:
         return kg
 
     def test_build_and_render(self, tmp_path):
-        from suijin.tools.dossier import build_dossier, render_dossier
+        from suijin.modules.ops.lib.dossier import build_dossier, render_dossier
 
         kg = self._ws(tmp_path)
         d = build_dossier("target.example", workspace=tmp_path, red_kg=kg)
@@ -107,14 +107,14 @@ class TestDossier:
         assert "WAF 403" in out
 
     def test_unknown_target_is_empty(self, tmp_path):
-        from suijin.tools.dossier import build_dossier, render_dossier
+        from suijin.modules.ops.lib.dossier import build_dossier, render_dossier
 
         d = build_dossier("nope.example", workspace=tmp_path, red_kg=tmp_path / "intel" / "knowledge_graph.json")
         assert render_dossier(d).count("(none)") >= 2
 
     def test_agent_tool(self, tmp_path, monkeypatch):
+        from suijin.modules.ops.lib import dossier as dos
         from suijin.tools import dispatch
-        from suijin.tools import dossier as dos
 
         kg = self._ws(tmp_path)
         monkeypatch.setattr(dos, "WORKSPACE_DIR", tmp_path)
@@ -128,7 +128,7 @@ class TestDossier:
 
 class TestNotify:
     def test_file_channel(self, tmp_path):
-        from suijin.tools import notify
+        from suijin.modules.ops.lib import notify
 
         log = tmp_path / "notes.log"
         results = notify.send("title", "message body", config={"file": str(log)})
@@ -136,12 +136,12 @@ class TestNotify:
         assert "message body" in log.read_text()
 
     def test_no_config(self):
-        from suijin.tools import notify
+        from suijin.modules.ops.lib import notify
 
         assert notify.send("t", "m", config={}) == ["notify: no channels configured (suijin/notify.json)"]
 
     def test_command_channel_substitutes_message(self, tmp_path, monkeypatch):
-        from suijin.tools import notify
+        from suijin.modules.ops.lib import notify
 
         out = tmp_path / "cmd_out.txt"
         cfg = {"command": f"sh -c 'echo {{message}} > {out}'"}
@@ -154,7 +154,7 @@ class TestNotify:
 
 class TestRules:
     def test_validate_good_and_bad(self, tmp_path):
-        from suijin.tools.governance import validate_rules
+        from suijin.modules.ops.lib.governance import validate_rules
 
         good = tmp_path / "rules.json"
         good.write_text(json.dumps([{"name": "ok", "pattern": "/internal", "field": "path", "weight": 4}]))
@@ -167,7 +167,7 @@ class TestRules:
         assert any("weight" in p for p in problems)
 
     def test_match_rules(self, tmp_path):
-        from suijin.tools.governance import match_rules
+        from suijin.modules.ops.lib.governance import match_rules
 
         rules = [{"name": "webshell", "pattern": "c99shell", "field": "body", "weight": 5, "type": "webshell"}]
         hits = match_rules({"body": "upload c99shell.php"}, rules)
@@ -177,16 +177,16 @@ class TestRules:
 
 class TestPolicy:
     def test_no_policy_file_allows_everything(self, tmp_path, monkeypatch):
-        from suijin.tools import governance
-        from suijin.tools.governance import check_policy
+        from suijin.modules.ops.lib import governance
+        from suijin.modules.ops.lib.governance import check_policy
 
         monkeypatch.setattr(governance, "POLICY_PATH", tmp_path / "absent.json")
         ok, _ = check_policy("http_request", {"url": "http://203.0.113.9/"})
         assert ok  # opt-in: no file = no enforcement
 
     def test_policy_file_enforces_scopes(self, tmp_path, monkeypatch):
-        from suijin.tools import governance
-        from suijin.tools.governance import check_policy, load_policy
+        from suijin.modules.ops.lib import governance
+        from suijin.modules.ops.lib.governance import check_policy, load_policy
 
         pol_path = tmp_path / "policy.json"
         pol_path.write_text(json.dumps({"allowed_target_scopes": ["127.0.0.1"]}))
@@ -198,14 +198,14 @@ class TestPolicy:
         assert not denied and "outside allowed scopes" in reason
 
     def test_scope_exempt_intel_tools(self):
-        from suijin.tools.governance import _POLICY_DEFAULT, check_policy
+        from suijin.modules.ops.lib.governance import _POLICY_DEFAULT, check_policy
 
         pol = dict(_POLICY_DEFAULT)
         ok, _ = check_policy("target_dossier", {"target": "anything.example"}, pol)
         assert ok  # intel-only tools are never scope-gated
 
     def test_private_ranges_covered(self):
-        from suijin.tools.governance import _POLICY_DEFAULT, check_policy
+        from suijin.modules.ops.lib.governance import _POLICY_DEFAULT, check_policy
 
         pol = dict(_POLICY_DEFAULT)
         for host in ("10.1.2.3", "192.168.1.10", "172.20.0.5"):
@@ -213,7 +213,7 @@ class TestPolicy:
             assert ok, host
 
     def test_blocked_tool_and_arg_pattern(self):
-        from suijin.tools.governance import check_policy
+        from suijin.modules.ops.lib.governance import check_policy
 
         pol = {"allowed_target_scopes": [], "blocked_tools": ["msf_run"], "blocked_arg_patterns": ["rm\\s+-rf"]}
         denied, reason = check_policy("msf_run", {}, pol)
@@ -222,7 +222,8 @@ class TestPolicy:
         assert not denied and "blocked pattern" in reason
 
     def test_route_tool_enforces_policy(self, monkeypatch, tmp_path):
-        from suijin.tools import dispatch, governance
+        from suijin.modules.ops.lib import governance
+        from suijin.tools import dispatch
 
         monkeypatch.setattr(governance, "POLICY_PATH", tmp_path / "policy.json")
         (tmp_path / "policy.json").write_text(
@@ -232,7 +233,7 @@ class TestPolicy:
         assert "policy" in out.lower()
 
     def test_lint_bad_policy(self, tmp_path):
-        from suijin.tools.governance import validate_policy
+        from suijin.modules.ops.lib.governance import validate_policy
 
         bad = tmp_path / "policy.json"
         bad.write_text(json.dumps({"blocked_arg_patterns": ["(bad"]}))
@@ -356,7 +357,7 @@ class TestSkillVersioning:
 
 class TestCampaign:
     def test_probe_and_matrix(self):
-        from suijin.tools.housekeeping import render_campaign, run_campaign
+        from suijin.modules.ops.lib.housekeeping import render_campaign, run_campaign
 
         class _Resp:
             def __init__(self, text):
@@ -377,7 +378,7 @@ class TestCampaign:
         assert "fakelab" in out and "FLAG" not in out  # counts, not raw flags
 
     def test_unreachable_lab(self):
-        from suijin.tools.housekeeping import run_campaign
+        from suijin.modules.ops.lib.housekeeping import run_campaign
 
         class _Dead:
             def get(self, url, timeout):
@@ -389,7 +390,7 @@ class TestCampaign:
 
 class TestWatchLines:
     def test_scoring_lines(self):
-        from suijin.tools.housekeeping import watch_lines
+        from suijin.modules.ops.lib.housekeeping import watch_lines
 
         lines = [
             json.dumps({"timestamp": "2026-08-18T10:00:00", "method": "GET", "path": "/"}),
@@ -411,7 +412,7 @@ class TestWatchLines:
 
 class TestTimeline:
     def test_merges_artifacts(self, tmp_path):
-        from suijin.tools.housekeeping import build_timeline
+        from suijin.modules.ops.lib.housekeeping import build_timeline
 
         (tmp_path / "audit_trails").mkdir()
         (tmp_path / "audit_trails" / "a.json").write_text(
@@ -442,7 +443,7 @@ class TestClean:
         os.utime(p, (old, old))
 
     def test_dry_run_lists(self, tmp_path):
-        from suijin.tools.housekeeping import clean_workspace
+        from suijin.modules.ops.lib.housekeeping import clean_workspace
 
         self._old_file(tmp_path / "outputs" / "job.log")
         out = clean_workspace(apply=False, workspace=tmp_path)
@@ -452,7 +453,7 @@ class TestClean:
     def test_apply_archives_and_deletes(self, tmp_path):
         import zipfile
 
-        from suijin.tools.housekeeping import clean_workspace
+        from suijin.modules.ops.lib.housekeeping import clean_workspace
 
         self._old_file(tmp_path / "sandbox" / "x.txt")
         out = clean_workspace(apply=True, workspace=tmp_path)
@@ -462,7 +463,7 @@ class TestClean:
         assert zips and "sandbox/x.txt" in zipfile.ZipFile(zips[0]).namelist()
 
     def test_fresh_files_kept(self, tmp_path):
-        from suijin.tools.housekeeping import clean_workspace
+        from suijin.modules.ops.lib.housekeeping import clean_workspace
 
         (tmp_path / "outputs").mkdir()
         (tmp_path / "outputs" / "new.log").write_text("recent")

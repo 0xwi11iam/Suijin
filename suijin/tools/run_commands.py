@@ -195,12 +195,12 @@ def _default_handlers(box: RunBox) -> dict:
         )
 
     def approvals(_args):
-        from suijin.tools.approvals import render_list
+        from suijin.modules.ops.lib.approvals import render_list
 
         box._out.print(render_list())
 
     def approve(args):
-        from suijin.tools.approvals import decide
+        from suijin.modules.ops.lib.approvals import decide
 
         box._out.print(
             decide(int(args or 0), approve=True)
@@ -209,7 +209,7 @@ def _default_handlers(box: RunBox) -> dict:
         )
 
     def deny(args):
-        from suijin.tools.approvals import decide
+        from suijin.modules.ops.lib.approvals import decide
 
         box._out.print(
             decide(int(args or 0), approve=False)
@@ -218,7 +218,7 @@ def _default_handlers(box: RunBox) -> dict:
         )
 
     def scope(_args):
-        from suijin.tools.governance import load_policy
+        from suijin.modules.ops.lib.governance import load_policy
 
         pol = load_policy()
         scopes = pol.get("allowed_target_scopes") or []
@@ -234,7 +234,7 @@ def _default_handlers(box: RunBox) -> dict:
         box._out.print("[yellow]  ▸ pausing after the current step — guidance prompt next[/yellow]")
 
     def panic(_args):
-        from suijin.tools.panic import panic
+        from suijin.modules.ops.lib.panic import panic
 
         box._out.print(panic())
 

@@ -14,7 +14,7 @@ from suijin.tests.test_cli_commands import run_cli
 class TestApprovals:
     @pytest.fixture(autouse=True)
     def _files(self, tmp_path, monkeypatch):
-        from suijin.tools import approvals as ap
+        from suijin.modules.ops.lib import approvals as ap
 
         monkeypatch.setattr(ap, "APPROVALS_PATH", tmp_path / "approvals.json")
         monkeypatch.setattr(ap, "SESSION_PATH", tmp_path / "approved_tools.json")
@@ -69,7 +69,7 @@ class TestApprovals:
         assert len(self.ap.list_approvals()) == 1  # log preserved
 
     def test_blocked_hitl_call_creates_real_approval(self, monkeypatch, tmp_path):
-        from suijin.tools import approvals as ap
+        from suijin.modules.ops.lib import approvals as ap
 
         monkeypatch.setattr(ap, "APPROVALS_PATH", tmp_path / "a.json")
         monkeypatch.setattr(ap, "SESSION_PATH", tmp_path / "s.json")
@@ -80,7 +80,7 @@ class TestApprovals:
         assert any(i["tool"] == "msf_run" for i in items)
 
     def test_cli_list_approve_deny(self, monkeypatch, tmp_path):
-        from suijin.tools import approvals as ap
+        from suijin.modules.ops.lib import approvals as ap
 
         monkeypatch.setattr(ap, "APPROVALS_PATH", tmp_path / "a.json")
         monkeypatch.setattr(ap, "SESSION_PATH", tmp_path / "s.json")
@@ -100,7 +100,7 @@ class TestApprovals:
 
 class TestPanic:
     def test_dry_run_kills_nothing(self, monkeypatch):
-        from suijin.tools import panic as pk
+        from suijin.modules.ops.lib import panic as pk
 
         signalled = []
         monkeypatch.setattr(
@@ -113,7 +113,7 @@ class TestPanic:
     def test_clears_live_state(self, tmp_path, monkeypatch):
         import types
 
-        from suijin.tools import panic as pk
+        from suijin.modules.ops.lib import panic as pk
 
         monkeypatch.setattr(pk.subprocess, "run", lambda cmd, **k: type("R", (), {"returncode": 1})())
         state = tmp_path / "blue_kg.json"
@@ -124,7 +124,7 @@ class TestPanic:
         assert "cleared" in out and not state.exists()
 
     def test_cli_verb(self, monkeypatch):
-        from suijin.tools import panic as pk
+        from suijin.modules.ops.lib import panic as pk
 
         monkeypatch.setattr(pk, "panic", lambda dry_run=False: "PANIC — report")
         code, out = run_cli(["panic"])
@@ -138,7 +138,7 @@ class TestScopeDnsPinning:
     POL = {"allowed_target_scopes": ["lab.internal", "10.0.0.0/8"]}
 
     def test_ip_scope_unchanged(self):
-        from suijin.tools.governance import check_policy
+        from suijin.modules.ops.lib.governance import check_policy
 
         ok, _ = check_policy("http_request", {"url": "http://10.1.2.3/"}, self.POL)
         assert ok
@@ -146,21 +146,21 @@ class TestScopeDnsPinning:
         assert not ok and "outside allowed scopes" in why
 
     def test_scoped_host_resolving_in_scope_allowed(self, monkeypatch):
-        from suijin.tools import governance as gov
+        from suijin.modules.ops.lib import governance as gov
 
         monkeypatch.setattr(gov, "_resolve_host", lambda h: ["10.0.0.9"])
         ok, _ = gov.check_policy("http_request", {"url": "http://target.lab.internal/"}, self.POL)
         assert ok
 
     def test_scoped_host_resolving_out_of_scope_blocked(self, monkeypatch):
-        from suijin.tools import governance as gov
+        from suijin.modules.ops.lib import governance as gov
 
         monkeypatch.setattr(gov, "_resolve_host", lambda h: ["203.0.113.50"])
         ok, why = gov.check_policy("http_request", {"url": "http://target.lab.internal/"}, self.POL)
         assert not ok and "out-of-scope IP" in why
 
     def test_unresolvable_host_fails_closed(self, monkeypatch):
-        from suijin.tools import governance as gov
+        from suijin.modules.ops.lib import governance as gov
 
         def boom(h):
             raise OSError("no dns")
@@ -170,7 +170,7 @@ class TestScopeDnsPinning:
         assert not ok and "does not resolve" in why
 
     def test_allow_unresolvable_escape_hatch(self, monkeypatch):
-        from suijin.tools import governance as gov
+        from suijin.modules.ops.lib import governance as gov
 
         def boom(h):
             raise OSError("no dns")
@@ -181,7 +181,7 @@ class TestScopeDnsPinning:
         assert ok
 
     def test_dns_cache_memoizes(self, monkeypatch):
-        from suijin.tools import governance as gov
+        from suijin.modules.ops.lib import governance as gov
 
         calls = []
 
@@ -308,7 +308,7 @@ class TestBurpStyleScope:
     """Include/exclude lists + subdomain toggle — the `suijin scope` TUI model."""
 
     def test_exclude_wins_over_include(self):
-        from suijin.tools.governance import check_policy
+        from suijin.modules.ops.lib.governance import check_policy
 
         pol = {"allowed_target_scopes": ["10.0.0.0/8"], "excluded_scopes": ["10.0.0.66"]}
         ok, why = check_policy("http_request", {"url": "http://10.0.0.66/"}, pol)
@@ -317,7 +317,7 @@ class TestBurpStyleScope:
         assert ok
 
     def test_subdomains_toggle_off_blocks_subdomains(self):
-        from suijin.tools.governance import check_policy
+        from suijin.modules.ops.lib.governance import check_policy
 
         # allow_unresolvable: lab.internal has no DNS in tests — the toggle
         # under test is the SUBDOMAIN rule, not DNS pinning
@@ -328,21 +328,21 @@ class TestBurpStyleScope:
         assert not ok  # subdomain blocked with toggle OFF
 
     def test_subdomains_on_matches_subdomains(self):
-        from suijin.tools.governance import check_policy
+        from suijin.modules.ops.lib.governance import check_policy
 
         pol = {"allowed_target_scopes": ["lab.internal"], "allow_subdomains": True, "allow_unresolvable": True}
         ok, _ = check_policy("http_request", {"url": "http://deep.api.lab.internal/"}, pol)
         assert ok
 
     def test_explicit_wildcard_entry(self):
-        from suijin.tools.governance import _ip_in_scope
+        from suijin.modules.ops.lib.governance import _ip_in_scope
 
         assert _ip_in_scope("a.example.com", ["*.example.com"])
         assert _ip_in_scope("example.com", ["*.example.com"])
         assert not _ip_in_scope("example.org", ["*.example.com"])
 
     def test_default_policy_carries_new_keys(self):
-        from suijin.tools.governance import _POLICY_DEFAULT
+        from suijin.modules.ops.lib.governance import _POLICY_DEFAULT
 
         assert _POLICY_DEFAULT["allow_subdomains"] is True
         assert _POLICY_DEFAULT["excluded_scopes"] == []

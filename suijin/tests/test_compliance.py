@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from suijin.tools import compliance as comp
+from suijin.modules.ops.lib import compliance as comp
 
 
 class TestClassify:
@@ -107,7 +107,7 @@ class TestCliVerb:
     def test_compliance_cli(self, monkeypatch, tmp_path):
         from suijin.tests.test_cli_commands import run_cli
 
-        monkeypatch.setattr("suijin.tools.compliance.WORKSPACE_DIR", tmp_path)
+        monkeypatch.setattr("suijin.modules.platform.lib.workspace.WORKSPACE_DIR", tmp_path)
         code, out = run_cli(["compliance"])
         assert code == 0 and "No findings" in out
 

@@ -108,7 +108,7 @@ class TestPullCve:
 
 class TestCreds:
     def test_list_without_vault(self, monkeypatch):
-        from suijin.tools import credential_vault as vault
+        from suijin.modules.ops.lib import credential_vault as vault
 
         monkeypatch.setattr(vault, "VAULT_PATH", type("P", (), {"exists": lambda s: False})())
         code, out = run_cli(["creds", "list"])
@@ -118,7 +118,7 @@ class TestCreds:
     def test_init_list_get_roundtrip(self, monkeypatch, tmp_path):
         import getpass
 
-        from suijin.tools import credential_vault as vault
+        from suijin.modules.ops.lib import credential_vault as vault
 
         monkeypatch.setattr(vault, "VAULT_PATH", tmp_path / "v.json")
         monkeypatch.setattr(vault, "LEGACY_PATH", tmp_path / "legacy.json")
@@ -140,7 +140,7 @@ class TestCreds:
     def test_export_redacted(self, monkeypatch, tmp_path):
         import getpass
 
-        from suijin.tools import credential_vault as vault
+        from suijin.modules.ops.lib import credential_vault as vault
 
         monkeypatch.setattr(vault, "VAULT_PATH", tmp_path / "v.json")
         monkeypatch.setattr(vault, "LEGACY_PATH", tmp_path / "legacy.json")
@@ -161,7 +161,7 @@ class TestDossier:
         assert ei.value.code == 2
 
     def test_dossier_renders(self, monkeypatch):
-        from suijin.tools import dossier as dos
+        from suijin.modules.ops.lib import dossier as dos
 
         monkeypatch.setattr(
             dos,
@@ -175,14 +175,14 @@ class TestDossier:
 
 class TestTimelineWatchClean:
     def test_timeline_empty(self, monkeypatch):
-        from suijin.tools import housekeeping as hk
+        from suijin.modules.ops.lib import housekeeping as hk
 
         monkeypatch.setattr(hk, "build_timeline", lambda limit=60: [])
         code, out = run_cli(["timeline"])
         assert code == 0 and "No engagement history" in out
 
     def test_timeline_groups_days(self, monkeypatch):
-        from suijin.tools import housekeeping as hk
+        from suijin.modules.ops.lib import housekeeping as hk
 
         monkeypatch.setattr(
             hk,
@@ -202,7 +202,7 @@ class TestTimelineWatchClean:
         assert code == 1 and "No traffic log" in out
 
     def test_watch_processes_then_stops(self, monkeypatch, tmp_path):
-        from suijin.tools import housekeeping as hk
+        from suijin.modules.ops.lib import housekeeping as hk
 
         log = tmp_path / "t.jsonl"
         log.write_text(json.dumps({"timestamp": "2026-08-18T10:00:00", "method": "GET", "path": "/"}) + "\n")
@@ -218,8 +218,6 @@ class TestTimelineWatchClean:
     def test_clean_dry_run_vs_apply(self, monkeypatch, tmp_path):
         import time as _time
 
-        from suijin.tools import housekeeping as hk
-
         outputs = tmp_path / "outputs"
         outputs.mkdir()
         stale = outputs / "old.log"
@@ -228,7 +226,9 @@ class TestTimelineWatchClean:
         import os
 
         os.utime(stale, (old, old))
-        monkeypatch.setattr(hk, "WORKSPACE_DIR", tmp_path)
+        import suijin.modules.platform.lib.workspace as _pws
+
+        monkeypatch.setattr(_pws, "WORKSPACE_DIR", tmp_path)
 
         code, out = run_cli(["clean"])
         assert code == 0 and "dry-run" in out and stale.exists()
@@ -239,14 +239,14 @@ class TestTimelineWatchClean:
 
 class TestRulesPolicy:
     def test_rules_no_file(self, monkeypatch, tmp_path):
-        from suijin.tools import governance as gov
+        from suijin.modules.ops.lib import governance as gov
 
         monkeypatch.setattr(gov, "RULES_PATH", tmp_path / "rules.json")
         code, out = run_cli(["rules", "validate"])
         assert code == 0 and "no rules file" in out
 
     def test_rules_bad_regex_exits_1(self, monkeypatch, tmp_path):
-        from suijin.tools import governance as gov
+        from suijin.modules.ops.lib import governance as gov
 
         rf = tmp_path / "rules.json"
         rf.write_text(json.dumps([{"name": "x", "pattern": "(bad"}]))
@@ -255,7 +255,7 @@ class TestRulesPolicy:
         assert code == 1 and "bad regex" in out
 
     def test_rules_list(self, monkeypatch, tmp_path):
-        from suijin.tools import governance as gov
+        from suijin.modules.ops.lib import governance as gov
 
         rf = tmp_path / "rules.json"
         rf.write_text(json.dumps([{"name": "probe", "pattern": "/x", "field": "path", "weight": 4}]))
@@ -264,14 +264,14 @@ class TestRulesPolicy:
         assert code == 0 and "probe" in out
 
     def test_policy_no_file_hints(self, monkeypatch, tmp_path):
-        from suijin.tools import governance as gov
+        from suijin.modules.ops.lib import governance as gov
 
         monkeypatch.setattr(gov, "POLICY_PATH", tmp_path / "policy.json")
         code, out = run_cli(["policy", "check"])
         assert code == 0 and "no policy file" in out
 
     def test_policy_show_and_check(self, monkeypatch, tmp_path):
-        from suijin.tools import governance as gov
+        from suijin.modules.ops.lib import governance as gov
 
         pf = tmp_path / "policy.json"
         pf.write_text(json.dumps({"allowed_target_scopes": ["127.0.0.1"]}))
@@ -335,7 +335,7 @@ class TestModuleNotify:
         assert code == 1 and "error" in out
 
     def test_notify_send_file_channel(self, monkeypatch, tmp_path):
-        from suijin.tools import notify
+        from suijin.modules.ops.lib import notify
 
         monkeypatch.setattr(notify, "load_config", lambda: {"file": str(tmp_path / "n.log")})
         code, out = run_cli(["notify", "send", "engagement", "done"])
@@ -348,7 +348,7 @@ class TestModuleNotify:
         assert ei.value.code == 2
 
     def test_notify_test_with_example_config(self, monkeypatch, tmp_path):
-        from suijin.tools import notify
+        from suijin.modules.ops.lib import notify
 
         monkeypatch.setattr(notify, "load_config", lambda: {})
         monkeypatch.setattr(notify, "CONFIG_PATH", tmp_path / "notify.json")

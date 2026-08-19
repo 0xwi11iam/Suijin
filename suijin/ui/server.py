@@ -321,7 +321,7 @@ def create_app() -> Flask:
 
     @app.get("/api/dossier")
     def dossier():
-        from suijin.tools.dossier import build_dossier
+        from suijin.modules.ops.lib.dossier import build_dossier
 
         target = request.args.get("target", "").strip()
         if not target:
@@ -333,7 +333,7 @@ def create_app() -> Flask:
 
     @app.get("/api/timeline")
     def timeline():
-        from suijin.tools.housekeeping import build_timeline
+        from suijin.modules.ops.lib.housekeeping import build_timeline
 
         limit = min(int(request.args.get("limit", 60)), 200)
         return jsonify({"events": build_timeline(limit=limit)})

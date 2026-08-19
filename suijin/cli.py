@@ -627,7 +627,7 @@ def run_ui(args) -> int:
 
 def run_export(args) -> int:
     """`suijin export` — chain-of-custody evidence bundle."""
-    from suijin.tools.export_bundle import build_bundle, verify_bundle
+    from suijin.modules.ops.lib.export_bundle import build_bundle, verify_bundle
 
     verify = getattr(args, "verify", None)
     if verify:
@@ -652,7 +652,7 @@ def run_export(args) -> int:
 
 def run_debrief(args) -> int:
     """`suijin debrief` — engagement analytics from audit trails."""
-    from suijin.tools.debrief import load_audits, render_debrief
+    from suijin.modules.ops.lib.debrief import load_audits, render_debrief
 
     trails = load_audits()
     print(render_debrief(trails, verbose=bool(getattr(args, "verbose", False))))
@@ -661,7 +661,7 @@ def run_debrief(args) -> int:
 
 def run_replay(args) -> int:
     """`suijin replay` — step through an engagement timeline."""
-    from suijin.tools import replay as rp
+    from suijin.modules.ops.lib import replay as rp
 
     if getattr(args, "list_replays", False):
         trails = rp.list_replays()
@@ -746,7 +746,7 @@ def run_eval(args) -> int:
 
 def run_battle_cmd(args) -> int:
     """`suijin battle` — purple team: scripted red vs pattern blue, live scoreboard."""
-    from suijin.tools.battle import run_battle
+    from suijin.modules.ops.lib.battle import run_battle
 
     result = run_battle(port=int(getattr(args, "port", 0) or 5906))
     print(
@@ -984,7 +984,7 @@ def run_pull_cve(args) -> int:
 def run_creds(args) -> int:
     import getpass
 
-    from suijin.tools import credential_vault as vault
+    from suijin.modules.ops.lib import credential_vault as vault
 
     action = getattr(args, "creds_action", "list")
 
@@ -1024,7 +1024,7 @@ def run_creds(args) -> int:
 
 
 def run_dossier(args) -> int:
-    from suijin.tools.dossier import build_dossier, render_dossier
+    from suijin.modules.ops.lib.dossier import build_dossier, render_dossier
 
     try:
         print(render_dossier(build_dossier(args.target)))
@@ -1035,7 +1035,7 @@ def run_dossier(args) -> int:
 
 
 def run_rules(args) -> int:
-    from suijin.tools.governance import RULES_PATH, load_rules, validate_rules
+    from suijin.modules.ops.lib.governance import RULES_PATH, load_rules, validate_rules
 
     action = getattr(args, "rules_action", "validate")
     if action == "list":
@@ -1063,7 +1063,7 @@ def run_rules(args) -> int:
 
 
 def run_policy(args) -> int:
-    from suijin.tools.governance import POLICY_PATH, load_policy, validate_policy
+    from suijin.modules.ops.lib.governance import POLICY_PATH, load_policy, validate_policy
 
     action = getattr(args, "policy_action", "check")
     if action == "show":
@@ -1219,7 +1219,7 @@ def run_skills(args) -> int:
 
 
 def run_labs_campaign(args) -> int:
-    from suijin.tools.housekeeping import render_campaign, run_campaign
+    from suijin.modules.ops.lib.housekeeping import render_campaign, run_campaign
     from suijin.tools.workspace import WORKSPACE_DIR
 
     specs = []
@@ -1284,7 +1284,7 @@ def run_watch(args) -> int:
     import signal
 
     from suijin.core.constants import BLUE_TRAFFIC_LOG
-    from suijin.tools.housekeeping import tail_file, watch_lines
+    from suijin.modules.ops.lib.housekeeping import tail_file, watch_lines
     from suijin.ui.server import _enrich_traffic
 
     path = Path(getattr(args, "traffic", None) or BLUE_TRAFFIC_LOG)
@@ -1305,7 +1305,7 @@ def run_watch(args) -> int:
 
 
 def run_timeline() -> int:
-    from suijin.tools.housekeeping import build_timeline
+    from suijin.modules.ops.lib.housekeeping import build_timeline
 
     events = build_timeline()
     if not events:
@@ -1322,14 +1322,14 @@ def run_timeline() -> int:
 
 
 def run_clean(args) -> int:
-    from suijin.tools.housekeeping import clean_workspace
+    from suijin.modules.ops.lib.housekeeping import clean_workspace
 
     print(clean_workspace(apply=bool(getattr(args, "apply", False)), age_days=int(getattr(args, "days", 30))))
     return 0
 
 
 def run_notify(args) -> int:
-    from suijin.tools import notify
+    from suijin.modules.ops.lib import notify
 
     action = getattr(args, "notify_action", "send")
     if action == "test":
@@ -1366,7 +1366,7 @@ def run_scope(args) -> int:
 
 
 def run_approvals(args) -> int:
-    from suijin.tools import approvals as ap
+    from suijin.modules.ops.lib import approvals as ap
 
     action = getattr(args, "approvals_action", "list")
     if action == "list":
@@ -1387,14 +1387,14 @@ def run_approvals(args) -> int:
 
 
 def run_panic(args) -> int:
-    from suijin.tools.panic import panic
+    from suijin.modules.ops.lib.panic import panic
 
     print(panic(dry_run=bool(getattr(args, "dry_run", False))))
     return 0
 
 
 def run_compliance(args) -> int:
-    from suijin.tools.compliance import load_findings, map_findings, render
+    from suijin.modules.ops.lib.compliance import load_findings, map_findings, render
 
     findings = load_findings(getattr(args, "engagement", None))
     if not findings:

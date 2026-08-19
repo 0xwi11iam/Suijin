@@ -5,7 +5,7 @@ import json
 import pytest
 
 from suijin.core.blue.traffic import replay_harness as rh
-from suijin.tools import battle as bt
+from suijin.modules.ops.lib import battle as bt
 
 
 def _entry(method="GET", path="/", body="", ua="curl/8", ip="127.0.0.1"):

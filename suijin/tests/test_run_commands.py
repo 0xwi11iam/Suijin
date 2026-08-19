@@ -100,7 +100,7 @@ class TestLiveHandlers:
         assert "query required" in out.file.getvalue()
 
     def test_approve_deny_via_box(self, tmp_path, monkeypatch):
-        from suijin.tools import approvals as ap
+        from suijin.modules.ops.lib import approvals as ap
 
         monkeypatch.setattr(ap, "APPROVALS_PATH", tmp_path / "a.json")
         monkeypatch.setattr(ap, "SESSION_PATH", tmp_path / "s.json")
@@ -139,7 +139,7 @@ class TestLiveHandlers:
         _signal._suijin_interrupted = False
 
     def test_scope_reports_policy(self, monkeypatch, tmp_path):
-        import suijin.tools.governance as gov
+        import suijin.modules.ops.lib.governance as gov
 
         pol = tmp_path / "policy.json"
         pol.write_text('{"allowed_target_scopes": ["10.0.0.0/8"]}')
@@ -189,7 +189,7 @@ class TestHitlTerminalApprovals:
 
     @pytest.fixture(autouse=True)
     def _files(self, tmp_path, monkeypatch):
-        from suijin.tools import approvals as ap
+        from suijin.modules.ops.lib import approvals as ap
 
         monkeypatch.setattr(ap, "APPROVALS_PATH", tmp_path / "a.json")
         monkeypatch.setattr(ap, "SESSION_PATH", tmp_path / "s.json")
@@ -199,13 +199,13 @@ class TestHitlTerminalApprovals:
         from suijin.tools import dispatch
 
         dispatch.route_tool("execute_terminal", {"cmd": "hydra -l admin -P wl 10.0.0.1"}, {"mode_hitl": True})
-        from suijin.tools.approvals import list_approvals
+        from suijin.modules.ops.lib.approvals import list_approvals
 
         items = [i for i in list_approvals() if i["tool"] == "execute_terminal"]
         assert items and items[-1]["args"].get("blocked_binary") == "hydra"
 
     def test_approving_execute_terminal_allows_binary(self):
-        from suijin.tools import approvals as ap
+        from suijin.modules.ops.lib import approvals as ap
         from suijin.tools import dispatch, modes
 
         dispatch.route_tool("execute_terminal", {"cmd": "sqlmap -u http://10.0.0.1"}, {"mode_hitl": True})
@@ -218,7 +218,7 @@ class TestHitlTerminalApprovals:
         )
 
     def test_denying_reports_in_block_message(self):
-        from suijin.tools import approvals as ap
+        from suijin.modules.ops.lib import approvals as ap
         from suijin.tools import dispatch
 
         dispatch.route_tool("execute_terminal", {"cmd": "hydra x"}, {"mode_hitl": True})

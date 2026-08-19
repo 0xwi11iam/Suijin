@@ -107,7 +107,7 @@ class TestFirewall:
 
 class TestTailFile:
     def test_yields_appended_lines(self, tmp_path):
-        from suijin.tools.housekeeping import tail_file
+        from suijin.modules.ops.lib.housekeeping import tail_file
 
         log = tmp_path / "log.jsonl"
         log.write_text("one\ntwo\n")
@@ -115,7 +115,7 @@ class TestTailFile:
         assert [next(gen), next(gen)] == ["one", "two"]
 
     def test_truncation_resets_position(self, tmp_path):
-        from suijin.tools.housekeeping import tail_file
+        from suijin.modules.ops.lib.housekeeping import tail_file
 
         log = tmp_path / "log.jsonl"
         log.write_text("aa\nbb\n")
@@ -125,7 +125,7 @@ class TestTailFile:
         assert next(gen) == "cc"
 
     def test_missing_file_waits_then_reads(self, tmp_path):
-        from suijin.tools.housekeeping import tail_file
+        from suijin.modules.ops.lib.housekeeping import tail_file
 
         log = tmp_path / "late.jsonl"
         gen = tail_file(log, poll=0.01)

@@ -136,7 +136,7 @@ class TestDossierEndpoint:
         assert client.get("/api/dossier").status_code == 400
 
     def test_dossier_shape(self, client, monkeypatch):
-        from suijin.tools import dossier as dos
+        from suijin.modules.ops.lib import dossier as dos
 
         monkeypatch.setattr(
             dos,
@@ -154,7 +154,7 @@ class TestDossierEndpoint:
         assert d["constraints"]["blocks"] == ["x OR 1=1"]
 
     def test_invalid_target_400(self, client, monkeypatch):
-        from suijin.tools import dossier as dos
+        from suijin.modules.ops.lib import dossier as dos
 
         def boom(t):
             raise ValueError("target required")
@@ -165,7 +165,7 @@ class TestDossierEndpoint:
 
 class TestTimelineEndpoint:
     def test_events_listed(self, client, monkeypatch):
-        from suijin.tools import housekeeping as hk
+        from suijin.modules.ops.lib import housekeeping as hk
 
         monkeypatch.setattr(
             hk,
@@ -176,7 +176,7 @@ class TestTimelineEndpoint:
         assert d["events"][0]["kind"] == "engagement start"
 
     def test_limit_clamped(self, client, monkeypatch):
-        from suijin.tools import housekeeping as hk
+        from suijin.modules.ops.lib import housekeeping as hk
 
         seen = {}
 

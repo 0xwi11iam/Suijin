@@ -5,9 +5,9 @@ import zipfile
 
 import pytest
 
-from suijin.tools import debrief as db
-from suijin.tools import replay as rp
-from suijin.tools.export_bundle import build_bundle, verify_bundle
+from suijin.modules.ops.lib import debrief as db
+from suijin.modules.ops.lib import replay as rp
+from suijin.modules.ops.lib.export_bundle import build_bundle, verify_bundle
 
 
 @pytest.fixture

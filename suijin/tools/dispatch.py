@@ -29,6 +29,7 @@ from suijin.modules.knowledge.lib.kb_tools import (
     wordlist_tool,
 )
 from suijin.modules.loader import get_module_tools
+from suijin.modules.ops.lib.dossier import build_dossier, render_dossier
 from suijin.tools.aux_tools import (
     _edit_skill,
     _list_own_files,
@@ -37,7 +38,6 @@ from suijin.tools.aux_tools import (
     _web_search,
     _write_tool,
 )
-from suijin.tools.dossier import build_dossier, render_dossier
 
 # Re-exported for backwards compatibility — these names lived on dispatch.py
 # before the split and external callers still import them from here.
@@ -367,7 +367,7 @@ def route_tool(tool_name, args, config):
 
     # Engagement policy (suijin/policy.json): blocked tools/args and
     # out-of-scope targets. Opt-in — the default policy allows local ranges.
-    from suijin.tools.governance import check_policy
+    from suijin.modules.ops.lib.governance import check_policy
 
     allowed, reason = check_policy(tool_name, args)
     if not allowed:

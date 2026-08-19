@@ -147,7 +147,7 @@ def _segment_binaries(cmd: str) -> list[str]:
 
 def _hitl_check(tool_name: str, args: dict) -> str | None:
     # Session verdicts from `suijin approvals approve/deny` (file-based).
-    from suijin.tools.approvals import decision_for, record_pending
+    from suijin.modules.ops.lib.approvals import decision_for, record_pending
 
     verdict = decision_for(tool_name)
     if verdict == "denied":
