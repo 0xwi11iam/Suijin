@@ -1342,6 +1342,14 @@ def _enrich_traffic(entries: list) -> list:
     return entries
 
 
+def run_wordlist_cmd(action: str, name: str) -> int:
+    """`suijin wordlist list|fetch` — F45 hub."""
+    from suijin.modules.knowledge.lib import wordlist_hub
+
+    print(wordlist_hub.catalog() if action == "list" else wordlist_hub.fetch(name))
+    return 0
+
+
 def run_plan_cmd(args) -> int:
     """`suijin plan "<objective>"` — ordered subtask decomposition."""
     from suijin.modules.agent.lib.decompose import decompose, render
@@ -1584,6 +1592,14 @@ def main(argv=None):
     clean.add_argument("--apply", action="store_true", help="archive stale files then delete")
     clean.add_argument("--days", type=int, default=30, help="staleness threshold (default 30)")
     clean.set_defaults(func=run_clean)
+
+    wl = sub.add_parser("wordlist", help="curated wordlist hub (fetch checksummed SecLists subsets)")
+    wl_sub = wl.add_subparsers(dest="wl_action")
+    wl_sub.add_parser("list", help="catalog + local state").set_defaults(func=lambda a: run_wordlist_cmd("list", ""))
+    fetch_p = wl_sub.add_parser("fetch", help="fetch a curated wordlist")
+    fetch_p.add_argument("name", help="catalog name")
+    fetch_p.set_defaults(func=lambda a: run_wordlist_cmd("fetch", a.name))
+    wl.set_defaults(func=lambda a: run_wordlist_cmd("list", ""))
 
     plan = sub.add_parser("plan", help="decompose an objective into an ordered subtask plan")
     plan.add_argument("objective", help="the engagement objective")

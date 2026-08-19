@@ -1,0 +1,10 @@
+{
+  "name": "Wordlisthub",
+  "version": "1.0",
+  "description": "Curated SecLists subset fetcher with checksums — fetch known-good wordlists into the workspace.",
+  "tools": {
+    "wordlist_catalog": {"description": "List curated wordlists (name, size, source) and what's already fetched.", "parameters": {}},
+    "wordlist_fetch": {"description": "Fetch a curated wordlist by name into workspace wordlists/ (sha256-verified).", "parameters": {"name": "Wordlist name from the catalog"}}
+  },
+  "dependencies": []
+}

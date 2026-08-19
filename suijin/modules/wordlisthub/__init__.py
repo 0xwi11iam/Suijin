@@ -1,0 +1,1 @@
+"""Wordlist hub pack."""

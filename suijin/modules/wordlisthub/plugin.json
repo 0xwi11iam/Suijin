@@ -1,0 +1,10 @@
+{
+  "id": "wordlisthub",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": ["platform", "tools"],
+  "provides": ["pack.wordlisthub", "wordlist_catalog", "wordlist_fetch"],
+  "entry": "pack_entry:wordlisthub",
+  "permissions": ["filesystem", "network"],
+  "description": "Curated SecLists subset fetcher with checksums."
+}
