@@ -74,10 +74,10 @@ class TestInitRuntime:
         rt = __import__("suijin.modules.platform.lib.runtime", fromlist=["x"])
         # point workspace at a fresh tree and force a re-init
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
-        try:
+        import contextlib
+
+        with contextlib.suppress(AttributeError):  # v4.2: runtime reads the workspace module directly
             monkeypatch.setattr(rt, "WORKSPACE_DIR", tmp_path)
-        except AttributeError:
-            pass  # v4.2: runtime reads the workspace module directly
         rt.init_runtime(force=True)
         assert (tmp_path / "scripts").is_dir()
         assert (tmp_path / "outputs").is_dir()

@@ -1,0 +1,10 @@
+{
+  "id": "skills",
+  "version": "1.0.0",
+  "tier": "recommended",
+  "requires": ["platform"],
+  "provides": ["skills.docs"],
+  "entry": "pack_entry:skills",
+  "permissions": ["filesystem"],
+  "description": "Drop-in markdown skills: every .md under suijin/skills/ boots into the agent's system prompt."
+}

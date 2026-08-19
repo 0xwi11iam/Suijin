@@ -252,6 +252,16 @@ NEVER run sequential scans when you could deploy subagents instead.
     if ms:
         parts.append("\n## MODULE TOOL DOCS\n" + ms + "\n")
 
+    # 5b. Drop-in markdown skills (suijin/skills/*.md — no code, no manifest)
+    try:
+        from suijin.modules.skills.entry import scan_drop_skills
+
+        drop_text, _skipped = scan_drop_skills()
+        if drop_text:
+            parts.append("\n## SKILLS (drop-in)\n" + drop_text + "\n")
+    except Exception:  # noqa: BLE001 — prompt building must never fail on skills
+        pass
+
     # 6. Decision format
     parts.append("""## DECISION FORMAT
 
