@@ -78,6 +78,7 @@ async def run_red_team_async(config, objective, api_key=None):
         generate_fn=generate_async,
         route_tool_fn=_dispatch_mod().route_tool,
         max_iterations=config.get("max_iterations", 100),
+        run_config=config,
     )
 
     thread_id = f"redteam_{int(time.time())}"

@@ -70,10 +70,12 @@ class SuijinAgentGraph:
         route_tool_fn: Callable,
         max_iterations: int = 9999,
         checkpoint_saver=None,
+        run_config: dict | None = None,
     ):
         self.generate_fn = generate_fn
         self.route_tool_fn = route_tool_fn
         self.max_iterations = max_iterations
+        self.run_config = run_config or {}
         self.checkpointer = checkpoint_saver or MemorySaver()
         self._graph = None
         self._built = False  # per-instance, no module-level state
@@ -131,6 +133,24 @@ class SuijinAgentGraph:
         return result
 
     async def _think(self, state: dict) -> dict:
+        # Cost governor (D27): warn near budget, hard-stop past it — before
+        # the next LLM call spends more.
+        try:
+            from suijin.modules.platform.lib.governor import budget_guard
+
+            _cfg = state.get("_run_config") or self.run_config
+            _guard = budget_guard(_cfg)
+            if _guard and _guard.startswith("COST LIMIT REACHED"):
+                return {
+                    "messages": [{"role": "assistant", "content": _guard}],
+                    "completion_reason": "budget_exhausted",
+                    "final_summary": _guard,
+                    "current_iteration": state.get("current_iteration", 0) + 1,
+                }
+            if _guard:
+                state.setdefault("messages", []).append({"role": "user", "content": f"SYSTEM: {_guard}"})
+        except Exception:  # noqa: BLE001 — budgeting must never break the loop
+            pass
         try:
             result = await think_node(state, generate_fn=self.generate_fn)
             # Circuit breaker: track consecutive provider/parse failures
@@ -318,6 +338,7 @@ class SuijinAgentGraph:
         )
 
         initial_state = {
+            "_run_config": self.run_config,
             "_objective": objective,
             "user_id": user_id,
             "project_id": project_id,
