@@ -6,6 +6,19 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v4.6.0 — Wave 3: knowledge & memory
+
+- **Engagement memory**: per-target operational history (what was
+  tried, operator notes) recalled at engagement start.
+- **Target delta / drift**: fingerprint history with change detection.
+- **Evidence vault**: hash-chained, tamper-evident evidence per finding.
+- **Finding dedup**: same-root-cause collapse with occurrences.
+- **Attack-path scoring**: probability-weighted chains, full-chain
+  headline.
+- **CVE -> tool advisor** + **KB freshness** prompts.
+
+1,131 tests.
+
 ## v4.5.0 — Wave 2: agent intelligence
 
 - **Finding verifier**: independent second evidence path per finding
