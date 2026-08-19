@@ -1342,6 +1342,26 @@ def _enrich_traffic(entries: list) -> list:
     return entries
 
 
+def run_plan_cmd(args) -> int:
+    """`suijin plan "<objective>"` — ordered subtask decomposition."""
+    from suijin.modules.agent.lib.decompose import decompose, render
+
+    cfg = {}
+    try:
+        with open(os.path.join(_PKG_DIR, "config.json")) as f:
+            cfg = json.load(f)
+    except OSError:
+        pass
+
+    def _gen(messages, config=None, **kw):
+        from suijin.modules.providers.lib import generate
+
+        return generate(messages, {**cfg, **(config or {})})
+
+    print(render(decompose(getattr(args, "objective", ""), cfg, _gen)))
+    return 0
+
+
 def run_recipes_cmd(args) -> int:
     """`suijin recipes [list|mine]` — macros + mined proposals."""
     from suijin.modules.tools.lib.recipes import mine_recipes, recipe_list
@@ -1553,6 +1573,10 @@ def main(argv=None):
     clean.add_argument("--apply", action="store_true", help="archive stale files then delete")
     clean.add_argument("--days", type=int, default=30, help="staleness threshold (default 30)")
     clean.set_defaults(func=run_clean)
+
+    plan = sub.add_parser("plan", help="decompose an objective into an ordered subtask plan")
+    plan.add_argument("objective", help="the engagement objective")
+    plan.set_defaults(func=run_plan_cmd)
 
     recipes = sub.add_parser("recipes", help="tool recipes: list macros (or mine new ones from history)")
     recipes.add_argument("action", nargs="?", choices=["list", "mine"], default="list")
