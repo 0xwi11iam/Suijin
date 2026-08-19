@@ -1316,6 +1316,20 @@ def _enrich_traffic(entries: list) -> list:
     return entries
 
 
+def run_spar_cmd(args) -> int:
+    """`suijin spar` — detector practice volley, scored against a baseline."""
+    from suijin.modules.ops.lib.sparring import render_spar, run_spar
+
+    result, line = run_spar(
+        name=getattr(args, "name", "default") or "default",
+        save_baseline=bool(getattr(args, "save_baseline", False)),
+        fail_on_regression=bool(getattr(args, "fail_on_regression", False)),
+        threshold=int(getattr(args, "threshold", 5) or 5),
+    )
+    print(render_spar(result, line))
+    return 1 if result.get("fail") else 0
+
+
 def run_watch(args) -> int:
     import signal
 
@@ -1476,6 +1490,13 @@ def main(argv=None):
     clean.add_argument("--apply", action="store_true", help="archive stale files then delete")
     clean.add_argument("--days", type=int, default=30, help="staleness threshold (default 30)")
     clean.set_defaults(func=run_clean)
+
+    spar = sub.add_parser("spar", help="sparring mode: detector practice volley vs stored baseline")
+    spar.add_argument("--name", default="default", help="baseline name (default 'default')")
+    spar.add_argument("--save-baseline", action="store_true", help="store this run as the new baseline")
+    spar.add_argument("--fail-on-regression", action="store_true", help="exit 1 if F1 drops below baseline")
+    spar.add_argument("--threshold", type=int, default=5, help="detector threshold (default 5)")
+    spar.set_defaults(func=run_spar_cmd)
 
     watch = sub.add_parser("watch", help="live-score a traffic log as it grows (Ctrl+C to stop)")
     watch.add_argument("--traffic", help="traffic .jsonl (default: the live blue log)")

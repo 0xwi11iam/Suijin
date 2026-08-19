@@ -25,6 +25,7 @@ ARTIFACT_DIRS = (
     "wordlists",
     "payloads",
     "sandbox",
+    "spar_baselines",
 )
 
 
