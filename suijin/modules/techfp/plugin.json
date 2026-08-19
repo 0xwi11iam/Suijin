@@ -1,0 +1,20 @@
+{
+  "id": "techfp",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.techfp",
+    "fingerprint_headers"
+  ],
+  "entry": "pack_entry:techfp",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Passive tech fingerprinting from response headers + body markers."
+}

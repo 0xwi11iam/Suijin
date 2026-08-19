@@ -1,0 +1,16 @@
+{
+  "name": "Dnsreconp",
+  "version": "1.0",
+  "description": "DNS enumeration via dnsrecon (zone transfer, subdomains, records).",
+  "tools": {
+    "dnsrecon_run": {
+      "description": "dnsrecon standard + zone-transfer attempt against a domain.",
+      "parameters": {
+        "domain": "Target domain"
+      }
+    }
+  },
+  "dependencies": [
+    "dnsrecon"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "Wafw00F",
+  "version": "1.0",
+  "description": "WAF fingerprinting via wafw00f.",
+  "tools": {
+    "wafw00f_scan": {
+      "description": "Detect which WAF protects a URL.",
+      "parameters": {
+        "url": "Target URL"
+      }
+    }
+  },
+  "dependencies": [
+    "wafw00f"
+  ]
+}

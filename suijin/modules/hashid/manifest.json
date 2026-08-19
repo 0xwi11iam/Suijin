@@ -1,0 +1,14 @@
+{
+  "name": "Hashid",
+  "version": "1.0",
+  "description": "Identify hash types from their format (length/charset heuristics).",
+  "tools": {
+    "identify_hash": {
+      "description": "Identify likely hash type(s) from a hash string.",
+      "parameters": {
+        "hash": "The hash to identify"
+      }
+    }
+  },
+  "dependencies": []
+}

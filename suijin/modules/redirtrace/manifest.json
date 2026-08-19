@@ -1,0 +1,14 @@
+{
+  "name": "Redirtrace",
+  "version": "1.0",
+  "description": "Follow and record an HTTP redirect chain hop-by-hop.",
+  "tools": {
+    "trace_redirects": {
+      "description": "GET with redirects disabled, walking each Location manually (max 10).",
+      "parameters": {
+        "url": "Starting URL"
+      }
+    }
+  },
+  "dependencies": []
+}

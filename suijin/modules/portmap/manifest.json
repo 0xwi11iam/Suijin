@@ -1,0 +1,14 @@
+{
+  "name": "Portmap",
+  "version": "1.0",
+  "description": "Offline service/port knowledge base (common TCP/UDP services).",
+  "tools": {
+    "service_lookup": {
+      "description": "Look up what typically runs on a port (or which ports a service uses).",
+      "parameters": {
+        "query": "port number or service name"
+      }
+    }
+  },
+  "dependencies": []
+}

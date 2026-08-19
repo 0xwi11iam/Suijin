@@ -1,0 +1,21 @@
+{
+  "id": "ipmath",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.ipmath",
+    "cidr_expand",
+    "ip_info"
+  ],
+  "entry": "pack_entry:ipmath",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "IP/CIDR mathematics: expansion, subnets, range info, classification."
+}

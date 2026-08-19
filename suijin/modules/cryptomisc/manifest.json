@@ -1,0 +1,22 @@
+{
+  "name": "Cryptomisc",
+  "version": "1.0",
+  "description": "Small classic ciphers: ROT-N, XOR with key, repeated-key XOR analysis.",
+  "tools": {
+    "rot_n": {
+      "description": "ROT-N (any shift) decode/encode.",
+      "parameters": {
+        "text": "Text",
+        "shift": "Shift 1-25 (try all if omitted)"
+      }
+    },
+    "xor_decode": {
+      "description": "XOR data (hex) with a key (string or hex) -> printable result.",
+      "parameters": {
+        "data_hex": "Hex-encoded ciphertext",
+        "key": "Key string"
+      }
+    }
+  },
+  "dependencies": []
+}

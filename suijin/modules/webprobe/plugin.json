@@ -1,0 +1,22 @@
+{
+  "id": "webprobe",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.webprobe",
+    "cors_check",
+    "timing_stats",
+    "vhost_check"
+  ],
+  "entry": "pack_entry:webprobe",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Targeted single-purpose HTTP probes: CORS reflection, vhost routing, timing stats."
+}

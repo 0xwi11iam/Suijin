@@ -6,6 +6,43 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v4.1.0 — STABLE: harness expansion + hardened agent surface
+
+**Status: stable and ready.** 1,026 tests green, 96-unit / 172-tool
+default boot (0 skipped, 0 quarantined), every routed tool advertised
+to the model (catalog parity is now a CI-enforced contract), Docker /
+install / wheel verified against the final tree.
+
+### The agent's ceiling, raised
+- **+50 new tools across 35 new module packs** (suijin/modules/*):
+  24 pure-Python packs that work on ANY install (encoding/hash-id +
+  offline cracking, JWT audit, IP/CIDR math, port/KB, artifact
+  extraction, header/cookie/CORS/vhost/timing probes, TLS cert via
+  stdlib ssl, Wayback CDX, ASN lookup, robots/sitemap/form/comment
+  parsers, payload context-encoders, ROT-N/XOR, dev tooling, wordlist
+  IO, UA analysis, password heuristics) and 11 binary-wrapped packs
+  availability-gated with install hints (wafw00f, testssl, dirsearch,
+  dnsrecon, crackmapexec, impacket, hashcat, medusa, snmpwalk,
+  redis-cli). Total: 172 tools.
+- **ask_operator parse bug fixed** — the system prompt taught it, the
+  graph nodes handled it, the parser alone rejected it: every legal
+  ask burned all 3 retries (agent-log evidence). Prompt/parser/node
+  agreement now regression-pinned.
+- **Catalog parity contract**: a tool the model cannot see is a tool
+  that does not exist — every dispatch route must appear in the
+  catalog (tested; sole exception deploy_subagent, an action with
+  corrective routing).
+
+### Simplifications
+- The compiled Rust core (native/) RETIRED: the pure implementation
+  was byte-identical and resolves 96 units in milliseconds. Kernel
+  suite (180 tests) pins it directly.
+- Runtime/operator JSONs out of the package: engagement state,
+  blue_config, notify.json live in the workspace (the Docker volume);
+  the package ships only version.json + config.json.
+- Tests organized per-module (tests/{kernel,architecture,platform,
+  agent,tools,knowledge,providers,ops,blueteam,redteam,console}).
+
 ## v4.0.0 — The Modularisation (everything is a module)
 
 The strangler-fig refactor completed: ALL code now lives in

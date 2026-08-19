@@ -1,0 +1,15 @@
+{
+  "name": "Waybacker",
+  "version": "1.0",
+  "description": "Wayback Machine URL history via the public CDX API.",
+  "tools": {
+    "wayback_urls": {
+      "description": "Archived URLs for a domain (deduped, capped).",
+      "parameters": {
+        "domain": "Target domain",
+        "limit": "Max results (default 200)"
+      }
+    }
+  },
+  "dependencies": []
+}

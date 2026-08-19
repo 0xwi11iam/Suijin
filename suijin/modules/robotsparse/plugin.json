@@ -1,0 +1,20 @@
+{
+  "id": "robotsparse",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.robotsparse",
+    "analyze_robots"
+  ],
+  "entry": "pack_entry:robotsparse",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "robots.txt analyzer: interesting disallows + generates a probe wordlist."
+}

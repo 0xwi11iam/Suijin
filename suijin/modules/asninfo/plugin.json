@@ -1,0 +1,20 @@
+{
+  "id": "asninfo",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.asninfo",
+    "asn_lookup"
+  ],
+  "entry": "pack_entry:asninfo",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "ASN/IP ownership via the bgpview public API."
+}

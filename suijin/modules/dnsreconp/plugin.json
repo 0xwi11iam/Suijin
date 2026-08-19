@@ -1,0 +1,20 @@
+{
+  "id": "dnsreconp",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.dnsreconp",
+    "dnsrecon_run"
+  ],
+  "entry": "pack_entry:dnsreconp",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "DNS enumeration via dnsrecon (zone transfer, subdomains, records)."
+}

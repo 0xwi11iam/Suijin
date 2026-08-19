@@ -1,0 +1,20 @@
+{
+  "id": "hashid",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.hashid",
+    "identify_hash"
+  ],
+  "entry": "pack_entry:hashid",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Identify hash types from their format (length/charset heuristics)."
+}

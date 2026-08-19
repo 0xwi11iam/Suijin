@@ -1,0 +1,20 @@
+{
+  "id": "hashcatp",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.hashcatp",
+    "hashcat_crack"
+  ],
+  "entry": "pack_entry:hashcatp",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "GPU cracking via hashcat."
+}

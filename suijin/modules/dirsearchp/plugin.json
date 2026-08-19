@@ -1,0 +1,20 @@
+{
+  "id": "dirsearchp",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.dirsearchp",
+    "dirsearch_scan"
+  ],
+  "entry": "pack_entry:dirsearchp",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Web path discovery via dirsearch."
+}

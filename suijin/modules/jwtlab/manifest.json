@@ -1,0 +1,14 @@
+{
+  "name": "Jwtlab",
+  "version": "1.0",
+  "description": "JWT inspection: decode header/payload, expiry check, algorithm security notes.",
+  "tools": {
+    "jwt_inspect": {
+      "description": "Decode a JWT and audit its security posture (no forging).",
+      "parameters": {
+        "token": "The JWT string"
+      }
+    }
+  },
+  "dependencies": []
+}

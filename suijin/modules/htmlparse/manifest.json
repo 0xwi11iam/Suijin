@@ -1,0 +1,27 @@
+{
+  "name": "Htmlparse",
+  "version": "1.0",
+  "description": "HTML surface extraction: forms+inputs, links, comments \u2014 regex, no deps.",
+  "tools": {
+    "extract_forms": {
+      "description": "Every <form> with method/action and its input fields.",
+      "parameters": {
+        "html": "HTML body"
+      }
+    },
+    "extract_links": {
+      "description": "All href/src/action URLs (deduped, absolutized).",
+      "parameters": {
+        "html": "HTML body",
+        "base_url": "Base URL for absolutizing"
+      }
+    },
+    "extract_comments": {
+      "description": "HTML comments \u2014 debug notes, hidden endpoints, creds.",
+      "parameters": {
+        "html": "HTML body"
+      }
+    }
+  },
+  "dependencies": []
+}

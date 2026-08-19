@@ -1,0 +1,15 @@
+{
+  "name": "Robotsparse",
+  "version": "1.0",
+  "description": "robots.txt analyzer: interesting disallows + generates a probe wordlist.",
+  "tools": {
+    "analyze_robots": {
+      "description": "Parse robots.txt content: flag interesting paths, output a probe list.",
+      "parameters": {
+        "content": "robots.txt body",
+        "base_url": "Origin, to build absolute probe URLs"
+      }
+    }
+  },
+  "dependencies": []
+}

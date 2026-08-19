@@ -1,0 +1,20 @@
+{
+  "id": "sslprobe",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.sslprobe",
+    "ssl_cert_info"
+  ],
+  "entry": "pack_entry:sslprobe",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "TLS certificate inspection via stdlib ssl (no binary needed)."
+}

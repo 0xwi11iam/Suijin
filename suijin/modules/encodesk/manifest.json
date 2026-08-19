@@ -1,0 +1,22 @@
+{
+  "name": "Encodesk",
+  "version": "1.0",
+  "description": "Encoding toolkit: base64/base32/hex/url/rot13 encode and decode.",
+  "tools": {
+    "encode_text": {
+      "description": "Encode text (base64, base32, hex, url, rot13).",
+      "parameters": {
+        "text": "Text to encode",
+        "scheme": "base64|base32|hex|url|rot13"
+      }
+    },
+    "decode_text": {
+      "description": "Decode text (base64, base32, hex, url, rot13).",
+      "parameters": {
+        "text": "Encoded text",
+        "scheme": "base64|base32|hex|url|rot13"
+      }
+    }
+  },
+  "dependencies": []
+}

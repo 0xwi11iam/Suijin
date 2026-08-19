@@ -1,0 +1,20 @@
+{
+  "id": "hashcrack",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.hashcrack",
+    "crack_hash"
+  ],
+  "entry": "pack_entry:hashcrack",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Offline dictionary attack against MD5/SHA1/SHA256/SHA512 hashes using a wordlist."
+}

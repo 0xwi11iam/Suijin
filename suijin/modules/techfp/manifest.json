@@ -1,0 +1,15 @@
+{
+  "name": "Techfp",
+  "version": "1.0",
+  "description": "Passive tech fingerprinting from response headers + body markers.",
+  "tools": {
+    "fingerprint_headers": {
+      "description": "Guess the stack from headers and body markers.",
+      "parameters": {
+        "headers": "Response header dict",
+        "body": "First ~2KB of body (optional)"
+      }
+    }
+  },
+  "dependencies": []
+}

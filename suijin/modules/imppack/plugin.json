@@ -1,0 +1,21 @@
+{
+  "id": "imppack",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.imppack",
+    "get_userspns",
+    "secrets_dump"
+  ],
+  "entry": "pack_entry:imppack",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Impacket classics: secretsdump, GetUserSPNs (kerberoast)."
+}

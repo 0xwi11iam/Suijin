@@ -141,6 +141,9 @@ class TestCheckPathsOracle:
     @pytest.mark.parametrize("case", CASES)
     def test_case(self, case):
         blob = json.dumps(case)
+        verdicts = json.loads(native.check_paths(blob))
+        assert isinstance(verdicts, dict) and verdicts
+        assert json.loads(native.check_paths(blob)) == verdicts  # deterministic
 
     def test_verdicts_locked(self):
         blob = json.dumps(self.CASES[0])

@@ -1,0 +1,28 @@
+{
+  "name": "Webprobe",
+  "version": "1.0",
+  "description": "Targeted single-purpose HTTP probes: CORS reflection, vhost routing, timing stats.",
+  "tools": {
+    "cors_check": {
+      "description": "Test Origin-reflection CORS policy on a URL.",
+      "parameters": {
+        "url": "Target URL"
+      }
+    },
+    "vhost_check": {
+      "description": "Compare default-Host vs candidate vhost names for routing differences.",
+      "parameters": {
+        "url": "Target URL",
+        "vhost": "Candidate vhost hostname"
+      }
+    },
+    "timing_stats": {
+      "description": "N timed GETs: mean/p95 spread (timing-attack and rate-limit recon).",
+      "parameters": {
+        "url": "Target URL",
+        "n": "Request count (default 8, cap 20)"
+      }
+    }
+  },
+  "dependencies": []
+}

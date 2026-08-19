@@ -1,0 +1,20 @@
+{
+  "id": "cmepack",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.cmepack",
+    "cme_smb"
+  ],
+  "entry": "pack_entry:cmepack",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "CrackMapExec network validation (smb null sessions & shares)."
+}

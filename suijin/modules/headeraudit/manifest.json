@@ -1,0 +1,15 @@
+{
+  "name": "Headeraudit",
+  "version": "1.0",
+  "description": "HTTP response security-header audit (HSTS, CSP, cookies flags, info leaks).",
+  "tools": {
+    "audit_security_headers": {
+      "description": "Audit a dict of HTTP response headers for missing/weak security config.",
+      "parameters": {
+        "headers": "Header dict (from http_request)",
+        "url": "Optional page URL for context"
+      }
+    }
+  },
+  "dependencies": []
+}

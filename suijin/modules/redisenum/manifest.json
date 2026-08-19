@@ -1,0 +1,17 @@
+{
+  "name": "Redisenum",
+  "version": "1.0",
+  "description": "Redis INFO via redis-cli (unauthenticated recon).",
+  "tools": {
+    "redis_info": {
+      "description": "redis-cli INFO + CONFIG GET check (read-only).",
+      "parameters": {
+        "host": "Target host",
+        "port": "Port (default 6379)"
+      }
+    }
+  },
+  "dependencies": [
+    "redis-cli"
+  ]
+}

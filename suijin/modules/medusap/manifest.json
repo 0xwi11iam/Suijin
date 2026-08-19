@@ -1,0 +1,19 @@
+{
+  "name": "Medusap",
+  "version": "1.0",
+  "description": "Parallel network login brute via medusa.",
+  "tools": {
+    "medusa_brute": {
+      "description": "medusa against one service with a user+password list.",
+      "parameters": {
+        "host": "Target",
+        "service": "ssh|ftp|http...",
+        "users": "Username or user file",
+        "passwords": "Password or file"
+      }
+    }
+  },
+  "dependencies": [
+    "medusa"
+  ]
+}

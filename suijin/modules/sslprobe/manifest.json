@@ -1,0 +1,15 @@
+{
+  "name": "Sslprobe",
+  "version": "1.0",
+  "description": "TLS certificate inspection via stdlib ssl (no binary needed).",
+  "tools": {
+    "ssl_cert_info": {
+      "description": "Connect and dump peer cert: validity, SANs, issuer, self-signed check.",
+      "parameters": {
+        "host": "Host",
+        "port": "TLS port (default 443)"
+      }
+    }
+  },
+  "dependencies": []
+}

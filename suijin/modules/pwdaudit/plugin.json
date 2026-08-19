@@ -1,0 +1,20 @@
+{
+  "id": "pwdaudit",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.pwdaudit",
+    "check_password_strength"
+  ],
+  "entry": "pack_entry:pwdaudit",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Password/policy quick checks (offline heuristics)."
+}

@@ -183,7 +183,7 @@ suijin/
 │   ├── blueteam/    #   defense stack
 │   ├── redteam/     #   offense stack + intel/KG
 │   ├── console/     #   CLI router, TUIs, web UI, MCP (+ webui source)
-│   └── <49 vendored tool packs>   # nmap, sqlmap, ... (manifest.json bricks)
+│   └── <84 snap-in tool packs>    # nmap, sqlmap, encodesk, sslprobe ... (manifest.json bricks)
 ├── tests/           # per-slice suites (reorganized per-module next)
 ├── lab/             # vulnerable target apps
 └── main.py          # Docker entrypoint
@@ -200,9 +200,12 @@ the spiderweb structurally impossible.
 ## History
 
 The OS was built strangler-fig over v3.3–v3.13: Phase 0 de-coupled the
-legacy tree, Phase 1 landed the kernel, 1.5 the compiled core, 2–3
-moved every subsystem onto manifests (61-module full boot), Phase 4
-delivered the Module Manager + install system, and the pre-release
-audit fixed 7 kernel bugs — including a vacuous purity linter that had
-been green while hiding two real violations. Full detail in
-CHANGELOG.md.
+legacy tree, Phase 1 landed the kernel, 1.5 the compiled core (since
+RETIRED in v4.1 — the pure implementation was byte-identical and the
+DAG resolves in milliseconds), 2–3 moved every subsystem onto
+manifests, Phase 4 delivered the Module Manager + install system, and
+the pre-release audit fixed 7 kernel bugs — including a vacuous purity
+linter that had been green while hiding two real violations. v4.1
+completed the modularisation: everything is a module, the old import
+paths are gone, and 84 tool packs (49 legacy-converted + 35 new) give
+the agent 172 tools. Full detail in CHANGELOG.md.

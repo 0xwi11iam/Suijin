@@ -1,0 +1,16 @@
+{
+  "name": "Testssl",
+  "version": "1.0",
+  "description": "Deep TLS/SSL audit via testssl.sh.",
+  "tools": {
+    "testssl_scan": {
+      "description": "testssl.sh protocol/cipher/cert audit.",
+      "parameters": {
+        "host": "host:port (default :443)"
+      }
+    }
+  },
+  "dependencies": [
+    "testssl.sh"
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "id": "headeraudit",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.headeraudit",
+    "audit_security_headers"
+  ],
+  "entry": "pack_entry:headeraudit",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "HTTP response security-header audit (HSTS, CSP, cookies flags, info leaks)."
+}

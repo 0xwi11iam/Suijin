@@ -1,0 +1,14 @@
+{
+  "name": "Pwdaudit",
+  "version": "1.0",
+  "description": "Password/policy quick checks (offline heuristics).",
+  "tools": {
+    "check_password_strength": {
+      "description": "Heuristic strength + policy-fit report for a candidate password.",
+      "parameters": {
+        "password": "The password to check"
+      }
+    }
+  },
+  "dependencies": []
+}

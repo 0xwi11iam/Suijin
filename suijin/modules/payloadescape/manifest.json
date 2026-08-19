@@ -1,0 +1,15 @@
+{
+  "name": "Payloadescape",
+  "version": "1.0",
+  "description": "Context-aware payload encoders for HTML/JS/URL/SQL/LDAP contexts.",
+  "tools": {
+    "encode_payload_context": {
+      "description": "Encode a payload for a specific injection context.",
+      "parameters": {
+        "payload": "Raw payload",
+        "context": "html|html_attr|js|url|url_double|sql|ldap"
+      }
+    }
+  },
+  "dependencies": []
+}

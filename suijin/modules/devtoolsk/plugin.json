@@ -1,0 +1,25 @@
+{
+  "id": "devtoolsk",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.devtoolsk",
+    "basic_stats",
+    "convert_base",
+    "json_tool",
+    "regex_test",
+    "text_diff",
+    "ts_convert"
+  ],
+  "entry": "pack_entry:devtoolsk",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Agent-side dev utilities: JSON tooling, diffs, base conversion, stats, timestamps."
+}

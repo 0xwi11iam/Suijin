@@ -1,0 +1,20 @@
+{
+  "id": "snmpenum",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.snmpenum",
+    "snmp_walk"
+  ],
+  "entry": "pack_entry:snmpenum",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "SNMP walk via snmpwalk (v2c public first)."
+}

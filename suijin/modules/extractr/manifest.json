@@ -1,0 +1,14 @@
+{
+  "name": "Extractr",
+  "version": "1.0",
+  "description": "Extract artifacts from text: emails, IPs, URLs, hashes, API keys, internal paths.",
+  "tools": {
+    "extract_artifacts": {
+      "description": "Extract structured indicators from arbitrary text/HTML/response bodies.",
+      "parameters": {
+        "text": "Text to scan"
+      }
+    }
+  },
+  "dependencies": []
+}

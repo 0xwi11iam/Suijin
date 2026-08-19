@@ -1,0 +1,20 @@
+{
+  "id": "cookieaudit",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.cookieaudit",
+    "audit_cookies"
+  ],
+  "entry": "pack_entry:cookieaudit",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Set-Cookie security flag audit."
+}

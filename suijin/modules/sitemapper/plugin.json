@@ -1,0 +1,20 @@
+{
+  "id": "sitemapper",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.sitemapper",
+    "parse_sitemap"
+  ],
+  "entry": "pack_entry:sitemapper",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "sitemap.xml parser: full URL inventory from a sitemap (or sitemap index)."
+}

@@ -1,0 +1,20 @@
+{
+  "id": "payloadescape",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.payloadescape",
+    "encode_payload_context"
+  ],
+  "entry": "pack_entry:payloadescape",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Context-aware payload encoders for HTML/JS/URL/SQL/LDAP contexts."
+}

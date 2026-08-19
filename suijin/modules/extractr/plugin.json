@@ -1,0 +1,20 @@
+{
+  "id": "extractr",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.extractr",
+    "extract_artifacts"
+  ],
+  "entry": "pack_entry:extractr",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Extract artifacts from text: emails, IPs, URLs, hashes, API keys, internal paths."
+}

@@ -1,0 +1,20 @@
+{
+  "id": "portmap",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.portmap",
+    "service_lookup"
+  ],
+  "entry": "pack_entry:portmap",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Offline service/port knowledge base (common TCP/UDP services)."
+}

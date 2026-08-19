@@ -1,0 +1,21 @@
+{
+  "id": "cryptomisc",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.cryptomisc",
+    "rot_n",
+    "xor_decode"
+  ],
+  "entry": "pack_entry:cryptomisc",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Small classic ciphers: ROT-N, XOR with key, repeated-key XOR analysis."
+}

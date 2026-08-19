@@ -1,0 +1,21 @@
+{
+  "id": "dnssniff",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.dnssniff",
+    "resolve_host",
+    "reverse_dns"
+  ],
+  "entry": "pack_entry:dnssniff",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Pure-Python DNS: forward/reverse resolution over stdlib sockets."
+}

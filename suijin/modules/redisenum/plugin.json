@@ -1,0 +1,20 @@
+{
+  "id": "redisenum",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.redisenum",
+    "redis_info"
+  ],
+  "entry": "pack_entry:redisenum",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Redis INFO via redis-cli (unauthenticated recon)."
+}

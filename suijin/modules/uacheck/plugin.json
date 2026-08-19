@@ -1,0 +1,20 @@
+{
+  "id": "uacheck",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.uacheck",
+    "parse_user_agent"
+  ],
+  "entry": "pack_entry:uacheck",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "User-Agent string breakdown (browser/bot/library/attack-tool detection)."
+}

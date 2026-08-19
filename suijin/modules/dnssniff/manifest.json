@@ -1,0 +1,20 @@
+{
+  "name": "Dnssniff",
+  "version": "1.0",
+  "description": "Pure-Python DNS: forward/reverse resolution over stdlib sockets.",
+  "tools": {
+    "resolve_host": {
+      "description": "A/AAAA resolution for a hostname (all addresses).",
+      "parameters": {
+        "host": "Hostname"
+      }
+    },
+    "reverse_dns": {
+      "description": "PTR record for an IP.",
+      "parameters": {
+        "ip": "IP address"
+      }
+    }
+  },
+  "dependencies": []
+}

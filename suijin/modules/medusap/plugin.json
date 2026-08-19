@@ -1,0 +1,20 @@
+{
+  "id": "medusap",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.medusap",
+    "medusa_brute"
+  ],
+  "entry": "pack_entry:medusap",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Parallel network login brute via medusa."
+}

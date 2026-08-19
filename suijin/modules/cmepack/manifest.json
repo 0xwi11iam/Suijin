@@ -1,0 +1,16 @@
+{
+  "name": "Cmepack",
+  "version": "1.0",
+  "description": "CrackMapExec network validation (smb null sessions & shares).",
+  "tools": {
+    "cme_smb": {
+      "description": "CrackMapExec SMB null-session share enumeration.",
+      "parameters": {
+        "target": "IP or CIDR"
+      }
+    }
+  },
+  "dependencies": [
+    "crackmapexec"
+  ]
+}

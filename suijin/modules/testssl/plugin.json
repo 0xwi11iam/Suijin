@@ -1,0 +1,20 @@
+{
+  "id": "testssl",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.testssl",
+    "testssl_scan"
+  ],
+  "entry": "pack_entry:testssl",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Deep TLS/SSL audit via testssl.sh."
+}

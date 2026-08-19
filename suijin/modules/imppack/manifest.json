@@ -1,0 +1,24 @@
+{
+  "name": "Imppack",
+  "version": "1.0",
+  "description": "Impacket classics: secretsdump, GetUserSPNs (kerberoast).",
+  "tools": {
+    "secrets_dump": {
+      "description": "impacket-secretsdump with given credentials.",
+      "parameters": {
+        "target": "domain/user:pass@host",
+        "dc": "Optional -dc-ip"
+      }
+    },
+    "get_userspns": {
+      "description": "impacket-GetUserSPNs kerberoasting request.",
+      "parameters": {
+        "target": "domain/user:pass@host",
+        "dc": "Optional -dc-ip"
+      }
+    }
+  },
+  "dependencies": [
+    "impacket-secretsdump"
+  ]
+}

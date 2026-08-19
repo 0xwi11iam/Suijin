@@ -1,0 +1,16 @@
+{
+  "name": "Hashcrack",
+  "version": "1.0",
+  "description": "Offline dictionary attack against MD5/SHA1/SHA256/SHA512 hashes using a wordlist.",
+  "tools": {
+    "crack_hash": {
+      "description": "Crack a hash with a local wordlist (pure Python, offline).",
+      "parameters": {
+        "hash": "Hash to crack",
+        "wordlist": "Path to wordlist file",
+        "algo": "md5|sha1|sha256|sha512 (default auto by length)"
+      }
+    }
+  },
+  "dependencies": []
+}

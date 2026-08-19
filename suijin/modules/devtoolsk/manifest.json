@@ -1,0 +1,49 @@
+{
+  "name": "Devtoolsk",
+  "version": "1.0",
+  "description": "Agent-side dev utilities: JSON tooling, diffs, base conversion, stats, timestamps.",
+  "tools": {
+    "json_tool": {
+      "description": "Validate + pretty-print / minify JSON.",
+      "parameters": {
+        "text": "JSON text",
+        "mode": "pretty|minify|check (default pretty)"
+      }
+    },
+    "text_diff": {
+      "description": "Unified diff of two texts.",
+      "parameters": {
+        "a": "First text",
+        "b": "Second text"
+      }
+    },
+    "convert_base": {
+      "description": "Convert integers between bases (2/8/10/16/36).",
+      "parameters": {
+        "value": "The number",
+        "from_base": "Source base (default 10)",
+        "to_base": "Target base (default 16)"
+      }
+    },
+    "ts_convert": {
+      "description": "Unix timestamp <-> ISO-8601 UTC (now if omitted).",
+      "parameters": {
+        "value": "Unix ts or ISO datetime (default: now)"
+      }
+    },
+    "basic_stats": {
+      "description": "mean/median/min/max/stdev from a list of numbers.",
+      "parameters": {
+        "numbers": "Comma/space-separated numbers"
+      }
+    },
+    "regex_test": {
+      "description": "Test a regex against text: all matches + capture groups.",
+      "parameters": {
+        "pattern": "Python regex",
+        "text": "Text to match"
+      }
+    }
+  },
+  "dependencies": []
+}

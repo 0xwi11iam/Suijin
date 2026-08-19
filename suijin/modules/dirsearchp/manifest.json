@@ -1,0 +1,18 @@
+{
+  "name": "Dirsearchp",
+  "version": "1.0",
+  "description": "Web path discovery via dirsearch.",
+  "tools": {
+    "dirsearch_scan": {
+      "description": "dirsearch content discovery.",
+      "parameters": {
+        "url": "Base URL",
+        "extensions": "Comma list (default php,html,txt)",
+        "wordlist": "Optional wordlist path"
+      }
+    }
+  },
+  "dependencies": [
+    "dirsearch"
+  ]
+}

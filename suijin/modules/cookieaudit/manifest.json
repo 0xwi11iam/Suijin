@@ -1,0 +1,14 @@
+{
+  "name": "Cookieaudit",
+  "version": "1.0",
+  "description": "Set-Cookie security flag audit.",
+  "tools": {
+    "audit_cookies": {
+      "description": "Audit Set-Cookie header value(s) for missing Secure/HttpOnly/SameSite.",
+      "parameters": {
+        "set_cookie": "One Set-Cookie value or list of them"
+      }
+    }
+  },
+  "dependencies": []
+}

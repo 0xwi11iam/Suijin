@@ -1,0 +1,14 @@
+{
+  "name": "Uacheck",
+  "version": "1.0",
+  "description": "User-Agent string breakdown (browser/bot/library/attack-tool detection).",
+  "tools": {
+    "parse_user_agent": {
+      "description": "Classify a User-Agent: browser/OS/bot/library/crawler.",
+      "parameters": {
+        "ua": "User-Agent string"
+      }
+    }
+  },
+  "dependencies": []
+}

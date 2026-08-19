@@ -1,0 +1,23 @@
+{
+  "name": "Wordlistio",
+  "version": "1.0",
+  "description": "Wordlist file utilities: merge/dedupe/filter and sample.",
+  "tools": {
+    "merge_wordlists": {
+      "description": "Merge wordlist files: dedupe, optional regex filter, writes to the workspace.",
+      "parameters": {
+        "files": "Comma-separated paths",
+        "pattern": "Optional regex keep-filter",
+        "out": "Output path (workspace-relative ok)"
+      }
+    },
+    "sample_wordlist": {
+      "description": "Show N random lines + stats of a wordlist.",
+      "parameters": {
+        "file": "Wordlist path",
+        "n": "Sample size (default 10)"
+      }
+    }
+  },
+  "dependencies": []
+}

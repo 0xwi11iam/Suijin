@@ -1,0 +1,20 @@
+{
+  "id": "wafw00f",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.wafw00f",
+    "wafw00f_scan"
+  ],
+  "entry": "pack_entry:wafw00f",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "WAF fingerprinting via wafw00f."
+}

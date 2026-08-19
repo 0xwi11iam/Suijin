@@ -1,0 +1,21 @@
+{
+  "id": "wordlistio",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.wordlistio",
+    "merge_wordlists",
+    "sample_wordlist"
+  ],
+  "entry": "pack_entry:wordlistio",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Wordlist file utilities: merge/dedupe/filter and sample."
+}

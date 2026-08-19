@@ -1,0 +1,14 @@
+{
+  "name": "Sitemapper",
+  "version": "1.0",
+  "description": "sitemap.xml parser: full URL inventory from a sitemap (or sitemap index).",
+  "tools": {
+    "parse_sitemap": {
+      "description": "Extract every URL from sitemap.xml content.",
+      "parameters": {
+        "content": "sitemap.xml body"
+      }
+    }
+  },
+  "dependencies": []
+}

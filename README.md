@@ -14,7 +14,7 @@
 > written under the Medusa name.
 
 <p align="center">
-  <img height="20" src="https://img.shields.io/badge/v2.12.0-suijin-green?style=flat" alt="Version"/>
+  <img height="20" src="https://img.shields.io/badge/v4.1.0-suijin-green?style=flat" alt="Version"/>
   <img height="20" src="https://img.shields.io/badge/LICENSE-MIT-4169A1?style=flat" alt="License"/>
   <img height="20" src="https://img.shields.io/badge/PYTHON-3.10+-306998?style=flat&logo=python&logoColor=white" alt="Python"/>
   <img height="20" src="https://img.shields.io/badge/LangGraph-State%20Machine-FF6B35?style=flat" alt="LangGraph"/>
@@ -25,6 +25,15 @@ chains reconnaissance → exploitation → reporting over a LangGraph state mach
 and a **Blue Team** agent that monitors live HTTP traffic, detects attacks, and
 responds with deception, blocking, and source patching. Both modes share one
 toolkit, one knowledge base, and one knowledge graph.
+
+> **v4.1.0 — STABLE AND READY.** The modularisation is complete: ALL code
+> lives in `suijin/modules/` (10 first-party module homes + 84 snap-in tool
+> packs) composed only through a stdlib-pure kernel. **172 agent tools** boot
+> by default (96 units, 0 skipped) and every one of them is advertised to
+> the model — catalog parity is a CI-enforced contract. 1,026 tests green;
+> Docker, install.sh, and the wheel verified against the final tree.
+> Runtime data (engagement state, KB, caches, blue/notify config) lives in
+> `suijin_agent/` — the one volume that matters.
 
 > **LEGAL DISCLAIMER**: This tool is intended for **authorized security
 > testing**, **educational purposes**, and **research only**. Never use this
@@ -131,7 +140,7 @@ hidden behind CLI flags.
 | `suijin status` | One-page summary: provider, KB, workspace, modules, lab port |
 | `suijin version` | Release, codename, python, platform, package path |
 | `suijin env` | API key presence by name — values are never printed |
-| `suijin tools` | All 112+ agent tools with availability (missing binaries marked) |
+| `suijin tools` | All 172 agent tools with availability (missing binaries marked) |
 | `suijin modules` | Loaded module packs with tool counts and dependencies |
 | `suijin skills` | Agent-editable attack/defense skills |
 | `suijin config show` | Effective config (defaults merged), secrets redacted |

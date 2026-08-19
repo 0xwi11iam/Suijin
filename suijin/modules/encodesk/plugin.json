@@ -1,0 +1,21 @@
+{
+  "id": "encodesk",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.encodesk",
+    "decode_text",
+    "encode_text"
+  ],
+  "entry": "pack_entry:encodesk",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Encoding toolkit: base64/base32/hex/url/rot13 encode and decode."
+}

@@ -1,0 +1,20 @@
+{
+  "name": "Ipmath",
+  "version": "1.0",
+  "description": "IP/CIDR mathematics: expansion, subnets, range info, classification.",
+  "tools": {
+    "cidr_expand": {
+      "description": "Expand a CIDR into individual IPs (cap 4096) or list its subnets.",
+      "parameters": {
+        "cidr": "e.g. 10.0.0.0/28"
+      }
+    },
+    "ip_info": {
+      "description": "Classify an IP: private/public, reserved, version, int form.",
+      "parameters": {
+        "ip": "The address"
+      }
+    }
+  },
+  "dependencies": []
+}

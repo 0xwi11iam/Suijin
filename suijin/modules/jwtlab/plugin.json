@@ -1,0 +1,20 @@
+{
+  "id": "jwtlab",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.jwtlab",
+    "jwt_inspect"
+  ],
+  "entry": "pack_entry:jwtlab",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "JWT inspection: decode header/payload, expiry check, algorithm security notes."
+}

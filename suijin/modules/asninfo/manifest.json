@@ -1,0 +1,14 @@
+{
+  "name": "Asninfo",
+  "version": "1.0",
+  "description": "ASN/IP ownership via the bgpview public API.",
+  "tools": {
+    "asn_lookup": {
+      "description": "Who announces an IP? ASN, owner, prefixes, peers.",
+      "parameters": {
+        "ip": "IP address"
+      }
+    }
+  },
+  "dependencies": []
+}

@@ -1,0 +1,20 @@
+{
+  "id": "redirtrace",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.redirtrace",
+    "trace_redirects"
+  ],
+  "entry": "pack_entry:redirtrace",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Follow and record an HTTP redirect chain hop-by-hop."
+}

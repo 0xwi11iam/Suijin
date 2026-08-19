@@ -1,0 +1,20 @@
+{
+  "id": "waybacker",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.waybacker",
+    "wayback_urls"
+  ],
+  "entry": "pack_entry:waybacker",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "Wayback Machine URL history via the public CDX API."
+}

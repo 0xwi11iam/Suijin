@@ -1,0 +1,22 @@
+{
+  "id": "htmlparse",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": [
+    "platform",
+    "tools"
+  ],
+  "provides": [
+    "pack.htmlparse",
+    "extract_comments",
+    "extract_forms",
+    "extract_links"
+  ],
+  "entry": "pack_entry:htmlparse",
+  "category": "Tools",
+  "permissions": [
+    "filesystem",
+    "network"
+  ],
+  "description": "HTML surface extraction: forms+inputs, links, comments \u2014 regex, no deps."
+}
