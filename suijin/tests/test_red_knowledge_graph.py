@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from suijin.intel import knowledge_graph as kg
+from suijin.modules.redteam.lib.intel import knowledge_graph as kg
 
 
 @pytest.fixture(autouse=True)

@@ -187,11 +187,13 @@ class BlueKnowledgeGraph:
     def bridge_from_red_team(self):
         """Import intelligence from the red team knowledge graph.
 
-        Reads suijin/intel/knowledge_graph.json and imports WAF rules,
+        Reads the redteam module's knowledge_graph.json and imports WAF rules,
         blocked patterns, confirmed CVEs, and discovered endpoints into
         the blue team's intelligence nodes for defensive use.
         """
-        red_kg_path = Path(__file__).resolve().parents[3] / "intel" / "knowledge_graph.json"
+        red_kg_path = (
+            Path(__file__).resolve().parents[3] / "modules" / "redteam" / "lib" / "intel" / "knowledge_graph.json"
+        )
         if not red_kg_path.exists():
             return 0
         try:

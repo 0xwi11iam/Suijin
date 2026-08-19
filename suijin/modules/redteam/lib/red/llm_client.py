@@ -11,7 +11,7 @@ import asyncio
 
 from rich.console import Console
 
-from suijin.core.red.config_loader import active_model, load_config
+from suijin.modules.redteam.lib.red.config_loader import active_model, load_config
 
 console = Console()
 

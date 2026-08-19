@@ -285,7 +285,7 @@ class TestRulesPolicy:
 class TestProvidersProbe:
     def test_skip_without_key(self, monkeypatch):
 
-        from suijin.core.red import config_loader
+        from suijin.modules.redteam.lib.red import config_loader
 
         monkeypatch.setattr(config_loader, "load_config", lambda: {"provider": "zai"})
         monkeypatch.delenv("ZAI_API_KEY", raising=False)
@@ -294,8 +294,8 @@ class TestProvidersProbe:
 
     def test_ok_with_mocked_generate(self, monkeypatch):
 
-        from suijin.core.red import config_loader
         from suijin.modules.providers import lib as providers
+        from suijin.modules.redteam.lib.red import config_loader
 
         monkeypatch.setattr(config_loader, "load_config", lambda: {"provider": "zai"})
         monkeypatch.setenv("ZAI_API_KEY", "k")
@@ -305,8 +305,8 @@ class TestProvidersProbe:
 
     def test_failure_reported(self, monkeypatch):
 
-        from suijin.core.red import config_loader
         from suijin.modules.providers import lib as providers
+        from suijin.modules.redteam.lib.red import config_loader
 
         monkeypatch.setattr(config_loader, "load_config", lambda: {"provider": "zai"})
         monkeypatch.setenv("ZAI_API_KEY", "k")

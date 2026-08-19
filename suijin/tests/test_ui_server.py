@@ -110,7 +110,7 @@ class TestPathSafety:
 class TestRedaction:
     def test_config_secrets_redacted(self, client, monkeypatch):
         monkeypatch.setattr(
-            "suijin.core.red.config_loader.load_config",
+            "suijin.modules.redteam.lib.red.config_loader.load_config",
             lambda: {"provider": "zai", "api_key": "sk-live", "nested": {"hf_token": "t"}},
         )
         d = client.get("/api/config").get_json()

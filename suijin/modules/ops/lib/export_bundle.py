@@ -89,7 +89,11 @@ def build_bundle(
       kg/red.json          persistent red constraints graph
     """
     ws = Path(workspace) if workspace else _ws().WORKSPACE_DIR
-    red_kg = Path(red_kg_path) if red_kg_path else ws.parent / "suijin" / "intel" / "knowledge_graph.json"
+    red_kg = (
+        Path(red_kg_path)
+        if red_kg_path
+        else ws.parent / "suijin" / "modules" / "redteam" / "lib" / "intel" / "knowledge_graph.json"
+    )
     if blue_kg_path:
         blue_kg = Path(blue_kg_path)
     else:

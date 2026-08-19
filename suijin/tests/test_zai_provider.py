@@ -287,13 +287,13 @@ class TestActiveModelResolution:
     }
 
     def test_zai_shows_glm_not_final_model_id(self):
-        from suijin.core.red.config_loader import active_model
+        from suijin.modules.redteam.lib.red.config_loader import active_model
 
         cfg = {**self.DEFAULT_CFG, "provider": "zai"}
         assert active_model(cfg) == "glm-5.3"
 
     def test_every_provider_resolves_its_own_model(self):
-        from suijin.core.red.config_loader import active_model
+        from suijin.modules.redteam.lib.red.config_loader import active_model
 
         for provider, expected in (
             ("zai", "glm-5.3"),
@@ -304,18 +304,18 @@ class TestActiveModelResolution:
             assert active_model({**self.DEFAULT_CFG, "provider": provider}) == expected
 
     def test_huggingface_keeps_final_model_id(self):
-        from suijin.core.red.config_loader import active_model
+        from suijin.modules.redteam.lib.red.config_loader import active_model
 
         assert active_model({**self.DEFAULT_CFG, "provider": "huggingface"}) == "deepseek-ai/DeepSeek-V4-Flash"
 
     def test_zai_endpoint_variant_shows_model(self):
-        from suijin.core.red.config_loader import active_model
+        from suijin.modules.redteam.lib.red.config_loader import active_model
 
         cfg = {**self.DEFAULT_CFG, "provider": "zai", "zai_model": "glm-5-turbo", "zai_endpoint": "paas"}
         assert active_model(cfg) == "glm-5-turbo"
 
     def test_missing_everything_is_auto(self):
-        from suijin.core.red.config_loader import active_model
+        from suijin.modules.redteam.lib.red.config_loader import active_model
 
         assert active_model({}) == "auto"
         assert active_model(None) == "auto"
@@ -324,7 +324,7 @@ class TestActiveModelResolution:
         # the Thinking... spinner builds its label from active_model()
         import asyncio
 
-        from suijin.core.red import llm_client
+        from suijin.modules.redteam.lib.red import llm_client
 
         monkeypatch.setattr(llm_client, "_generate", lambda msgs, cfg: "ok")
         labels = []

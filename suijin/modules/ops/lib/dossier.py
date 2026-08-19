@@ -30,7 +30,7 @@ def _red_kg_path():
     v = globals().get("RED_KG_PATH")
     if v is not None:
         return v
-    return _workspace_dir().parent / "suijin" / "intel" / "knowledge_graph.json"
+    return _workspace_dir().parent / "suijin" / "modules" / "redteam" / "lib" / "intel" / "knowledge_graph.json"
 
 
 def __getattr__(name):

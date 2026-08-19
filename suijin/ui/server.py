@@ -222,7 +222,7 @@ def build_snapshot() -> dict:
         snap["blue_kg"] = None
 
     # red KG (engagement constraints)
-    snap["red_kg"] = _read_json(PKG_DIR / "intel" / "knowledge_graph.json", {})
+    snap["red_kg"] = _read_json(PKG_DIR / "modules" / "redteam" / "lib" / "intel" / "knowledge_graph.json", {})
 
     # reports / sessions / audits summaries
     ws = _workspace()
@@ -357,7 +357,7 @@ def create_app() -> Flask:
 
     @app.get("/api/config")
     def config_show():
-        from suijin.core.red.config_loader import load_config
+        from suijin.modules.redteam.lib.red.config_loader import load_config
 
         return jsonify(_redact(load_config()))
 

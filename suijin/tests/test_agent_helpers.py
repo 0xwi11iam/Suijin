@@ -308,7 +308,7 @@ def test_supervisor_patterns():
 
 
 def test_oracle_anomaly():
-    from suijin.intel.oracle import detect_anomaly, strip_response
+    from suijin.modules.redteam.lib.intel.oracle import detect_anomaly, strip_response
 
     # HTTP 500
     result = detect_anomaly("Internal Server Error", status_code=500)
@@ -327,7 +327,7 @@ def test_oracle_anomaly():
 
 
 def test_drift_analyser():
-    from suijin.intel.drift_analyser import analyse_drift
+    from suijin.modules.redteam.lib.intel.drift_analyser import analyse_drift
 
     result = analyse_drift(
         "Find SQL injection on target.com",

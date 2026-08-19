@@ -165,7 +165,7 @@ def test_response_time():
 
 def test_config_loading():
     """Test that config.json is loaded correctly."""
-    from suijin.core.redteamer import load_config
+    from suijin.modules.redteam.lib.redteamer import load_config
 
     config = load_config()
     assert "provider" in config
@@ -177,7 +177,7 @@ def test_config_loading():
 
 def test_env_loading():
     """Test that .env vars are loaded (skips if no .env file — CI-safe)."""
-    from suijin.core.redteamer import ENV_PATH, load_env
+    from suijin.modules.redteam.lib.redteamer import ENV_PATH, load_env
 
     # On CI / without .env, just verify ENV_PATH is a valid Path object
     if not ENV_PATH.exists():

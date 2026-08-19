@@ -25,11 +25,11 @@ import time
 from rich.console import Console
 from rich.panel import Panel
 
-from suijin.core.red import session_control as sc
+from suijin.modules.redteam.lib.red import session_control as sc
 
 # ENV_PATH / CONFIG_PATH re-exported for callers and tests that still import
 # them from redteamer (their real home is config_loader).
-from suijin.core.red.config_loader import (  # noqa: F401 — deliberate re-exports
+from suijin.modules.redteam.lib.red.config_loader import (  # noqa: F401 — deliberate re-exports
     BASE_DIR,
     CONFIG_PATH,
     ENV_PATH,
@@ -37,15 +37,15 @@ from suijin.core.red.config_loader import (  # noqa: F401 — deliberate re-expo
     load_config,
     load_env,
 )
-from suijin.core.red.llm_client import generate_async
-from suijin.modules.loader import discover_modules, load_local_module
-from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+from suijin.modules.redteam.lib.red.llm_client import generate_async
+
+_loader_mod = __import__("suijin.modules.loader", fromlist=["discover_modules", "load_local_module"])
+discover_modules = _loader_mod.discover_modules
+load_local_module = _loader_mod.load_local_module
 
 # Centralized force-load — shares ONE instance per module
 providers = load_local_module("providers")
 
-from suijin.modules.platform.lib import runtime as _runtime
-from suijin.modules.tools.lib import dispatch as _dispatch
 
 audit_mod = load_local_module("audit")
 supervisor = load_local_module("supervisor")
@@ -53,7 +53,6 @@ supervisor.set_providers(providers)
 oracle = load_local_module("oracle")
 oracle.set_providers(providers)
 
-from suijin.modules.agent.lib.agent_graph import SuijinAgentGraph
 
 console = Console()
 DUMP_PATH = BASE_DIR / "operation_state_recovery.json"
@@ -65,17 +64,19 @@ DUMP_PATH = BASE_DIR / "operation_state_recovery.json"
 async def run_red_team_async(config, objective, api_key=None):
 
     providers.reset_usage()
+    from suijin.modules.platform.lib import runtime as _runtime
+
     _runtime.reset_recon_state()
 
     # Apply proxy setting from config
     proxy_url = config.get("proxy_url", "")
     if proxy_url:
-        _dispatch.set_proxy(proxy_url)
+        _dispatch_mod().set_proxy(proxy_url)
         console.print(f"[dim]Proxy: {proxy_url}[/dim]")
 
-    agent = SuijinAgentGraph(
+    agent = _agent_graph_cls()(
         generate_fn=generate_async,
-        route_tool_fn=_dispatch.route_tool,
+        route_tool_fn=_dispatch_mod().route_tool,
         max_iterations=config.get("max_iterations", 100),
     )
 
@@ -376,6 +377,35 @@ async def run_red_team_async(config, objective, api_key=None):
 #  Helper functions — re-exported from session_control for backwards compat
 
 
+def _dispatch_mod():
+    """Tools dispatch module, lazily (boundary rule)."""
+    from suijin.modules.tools.lib import dispatch as _d
+
+    return _d
+
+
+def _agent_graph_cls():
+    """Agent graph class (honours a monkeypatched module attr)."""
+    v = globals().get("SuijinAgentGraph")
+    if v is not None:
+        return v
+    from suijin.modules.agent.lib.agent_graph import SuijinAgentGraph
+
+    return SuijinAgentGraph
+
+
+def __getattr__(name):
+    if name == "_dispatch":
+        from suijin.modules.tools.lib import dispatch as _d
+
+        return _d
+    if name == "SuijinAgentGraph":
+        from suijin.modules.agent.lib import agent_graph
+
+        return agent_graph.SuijinAgentGraph
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
 def _force_report(agent, thread_id, final_state, objective, config):
     return sc.force_report(agent, thread_id, final_state, objective, config)
 
@@ -423,6 +453,8 @@ def main():
     set_verbose(False)  # Silence for rest of run
 
     # Write SOUL.md to workspace if missing
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
     soul_path = WORKSPACE_DIR / "SOUL.md"
     if not soul_path.exists():
         soul_path.parent.mkdir(parents=True, exist_ok=True)

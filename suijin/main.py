@@ -15,7 +15,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from suijin.core.redteamer import main as redteamer_main
+from suijin.modules.redteam.lib.redteamer import main as redteamer_main
 
 console = Console()
 

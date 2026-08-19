@@ -182,7 +182,7 @@ class SuijinAgentGraph:
             # ── Oracle anomaly detection ───────────────────────────
             if iteration > 0 and iteration % 4 == 0:
                 try:
-                    from suijin.intel.oracle import detect_anomaly, generate_hypotheses_async
+                    from suijin.modules.redteam.lib.intel.oracle import detect_anomaly, generate_hypotheses_async
 
                     trace = result.get("execution_trace", state.get("execution_trace", []))
                     if trace:
@@ -204,7 +204,7 @@ class SuijinAgentGraph:
             # ── Drift analysis ─────────────────────────────────────
             if iteration > 0 and iteration % 7 == 0:
                 try:
-                    from suijin.intel.drift_analyser import analyse_drift
+                    from suijin.modules.redteam.lib.intel.drift_analyser import analyse_drift
 
                     objective = state.get("original_objective", "")
                     trace = result.get("execution_trace", state.get("execution_trace", []))

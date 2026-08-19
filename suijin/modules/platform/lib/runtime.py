@@ -67,23 +67,31 @@ def init_runtime(force: bool = False) -> None:
         )
         _services.register(
             "red_config",
-            lambda: __import__("suijin.core.red.config_loader", fromlist=["load_config"]).load_config(),
+            lambda: __import__("suijin.modules.redteam.lib.red.config_loader", fromlist=["load_config"]).load_config(),
         )
         _services.register(
             "red_active_model",
-            lambda: __import__("suijin.core.red.config_loader", fromlist=["active_model"]).active_model,
+            lambda: __import__("suijin.modules.redteam.lib.red.config_loader", fromlist=["active_model"]).active_model,
         )
         _services.register(
             "red_audit_printer",
-            lambda: __import__("suijin.core.red.session_control", fromlist=["print_audit_trail"]).print_audit_trail,
+            lambda: (
+                __import__(
+                    "suijin.modules.redteam.lib.red.session_control", fromlist=["print_audit_trail"]
+                ).print_audit_trail
+            ),
         )
         _services.register(
             "red_force_report",
-            lambda: __import__("suijin.core.red.session_control", fromlist=["force_report"]).force_report,
+            lambda: (
+                __import__("suijin.modules.redteam.lib.red.session_control", fromlist=["force_report"]).force_report
+            ),
         )
         _services.register(
             "red_list_sessions",
-            lambda: __import__("suijin.core.red.session_control", fromlist=["list_sessions"]).list_sessions,
+            lambda: (
+                __import__("suijin.modules.redteam.lib.red.session_control", fromlist=["list_sessions"]).list_sessions
+            ),
         )
         # Workspace layout: merge any legacy suijin/suijin_agent real dir
         # into the canonical root workspace and symlink the inner path.

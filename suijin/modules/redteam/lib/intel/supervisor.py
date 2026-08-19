@@ -35,7 +35,8 @@ from pathlib import Path
 from rich.console import Console
 from rich.panel import Panel
 
-from suijin.modules.loader import load_local_module
+_llm = __import__("suijin.modules.loader", fromlist=["load_local_module"])
+load_local_module = _llm.load_local_module
 
 BASE_DIR = Path(__file__).resolve().parent
 THOUGHTS_PATH = BASE_DIR / "thoughts.json"

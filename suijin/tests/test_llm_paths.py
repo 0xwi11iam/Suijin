@@ -436,47 +436,47 @@ class TestAIEngineActions:
 
 class TestOracleDetectAnomaly:
     def test_http_500_high(self):
-        from suijin.intel.oracle import detect_anomaly
+        from suijin.modules.redteam.lib.intel.oracle import detect_anomaly
 
         result = detect_anomaly("Internal Server Error", status_code=500)
         assert result["anomaly"] is True
         assert result["severity"] == "high"
 
     def test_http_403_waf(self):
-        from suijin.intel.oracle import detect_anomaly
+        from suijin.modules.redteam.lib.intel.oracle import detect_anomaly
 
         result = detect_anomaly("Forbidden", status_code=403)
         assert result["anomaly"] is True
         assert result["severity"] == "medium"
 
     def test_length_delta(self):
-        from suijin.intel.oracle import detect_anomaly
+        from suijin.modules.redteam.lib.intel.oracle import detect_anomaly
 
         result = detect_anomaly("a" * 500, baseline_len=100)
         assert result["anomaly"] is True
         assert any("body_length" in s for s in result["signals"])
 
     def test_elapsed_timeout(self):
-        from suijin.intel.oracle import detect_anomaly
+        from suijin.modules.redteam.lib.intel.oracle import detect_anomaly
 
         result = detect_anomaly("ok", elapsed=20)
         assert result["anomaly"] is True
 
     def test_error_keywords(self):
-        from suijin.intel.oracle import detect_anomaly
+        from suijin.modules.redteam.lib.intel.oracle import detect_anomaly
 
         result = detect_anomaly("SQL syntax error near SELECT")
         assert result["anomaly"] is True
         assert result["severity"] == "high"
 
     def test_payload_reflection(self):
-        from suijin.intel.oracle import detect_anomaly
+        from suijin.modules.redteam.lib.intel.oracle import detect_anomaly
 
         result = detect_anomaly("echo <script>alert(1)</script>")
         assert result["anomaly"] is True
 
     def test_clean_response(self):
-        from suijin.intel.oracle import detect_anomaly
+        from suijin.modules.redteam.lib.intel.oracle import detect_anomaly
 
         result = detect_anomaly("normal page content", status_code=200)
         assert result["anomaly"] is False
@@ -484,21 +484,21 @@ class TestOracleDetectAnomaly:
 
 class TestOraclePayloadMutations:
     def test_synonym_payload(self):
-        from suijin.intel.oracle import _make_synonym_payload
+        from suijin.modules.redteam.lib.intel.oracle import _make_synonym_payload
 
         result = _make_synonym_payload("OR 1=1")
         assert isinstance(result, str)
         assert len(result) > 0
 
     def test_escaped_payload(self):
-        from suijin.intel.oracle import _make_escaped_payload
+        from suijin.modules.redteam.lib.intel.oracle import _make_escaped_payload
 
         result = _make_escaped_payload("' OR 1=1")
         assert isinstance(result, str)
         assert "OR 1=1" in result
 
     def test_encoded_payload(self):
-        from suijin.intel.oracle import _make_encoded_payload
+        from suijin.modules.redteam.lib.intel.oracle import _make_encoded_payload
 
         result = _make_encoded_payload("' OR 1=1")
         assert isinstance(result, str)
@@ -507,7 +507,7 @@ class TestOraclePayloadMutations:
 
 class TestOracleHypotheses:
     def test_heuristic_fallback_returns_three(self):
-        from suijin.intel.oracle import _heuristic_hypotheses
+        from suijin.modules.redteam.lib.intel.oracle import _heuristic_hypotheses
 
         hyps = _heuristic_hypotheses("HTTP_500_backend_error: SQL syntax error", "' OR 1=1")
         assert isinstance(hyps, list)
@@ -517,14 +517,14 @@ class TestOracleHypotheses:
             assert "validation_payload" in h
 
     def test_generate_hypotheses_no_provider_uses_heuristic(self, monkeypatch):
-        from suijin.intel import oracle
+        from suijin.modules.redteam.lib.intel import oracle
 
         monkeypatch.setattr(oracle, "_generate", None)
         hyps = oracle.generate_hypotheses("SQL syntax error", "payload")
         assert len(hyps) >= 1
 
     def test_generate_hypotheses_with_mocked_llm(self, monkeypatch):
-        from suijin.intel import oracle
+        from suijin.modules.redteam.lib.intel import oracle
 
         def fake_generate(messages, config=None, **kwargs):
             return json.dumps(
@@ -547,7 +547,7 @@ class TestOracleHypotheses:
         assert hyps[0]["confidence"] == 0.8
 
     def test_generate_hypotheses_llm_error_falls_back(self, monkeypatch):
-        from suijin.intel import oracle
+        from suijin.modules.redteam.lib.intel import oracle
 
         def fake_generate(messages, config=None, **kwargs):
             return "Error: API down"
@@ -564,27 +564,27 @@ class TestOracleHypotheses:
 
 class TestSupervisorVerdict:
     def test_parse_verdict_json(self):
-        from suijin.intel.supervisor import _parse_verdict
+        from suijin.modules.redteam.lib.intel.supervisor import _parse_verdict
 
         v = _parse_verdict('{"stuck":true,"reason":"loop","new_directive":"change"}')
         assert v["stuck"] is True
         assert v["reason"] == "loop"
 
     def test_parse_verdict_garbage_defaults(self):
-        from suijin.intel.supervisor import _parse_verdict
+        from suijin.modules.redteam.lib.intel.supervisor import _parse_verdict
 
         v = _parse_verdict("not json")
         assert v["stuck"] is False
         assert v["new_directive"] == ""
 
     def test_parse_verdict_empty(self):
-        from suijin.intel.supervisor import _parse_verdict
+        from suijin.modules.redteam.lib.intel.supervisor import _parse_verdict
 
         v = _parse_verdict(None)
         assert v["stuck"] is False
 
     def test_format_spend(self):
-        from suijin.intel.supervisor import format_spend
+        from suijin.modules.redteam.lib.intel.supervisor import format_spend
 
         out = format_spend({"est_cost_usd": 0.5, "input_tokens": 100, "output_tokens": 50, "calls": 3, "priced": True})
         assert "0.5000" in out
@@ -593,7 +593,7 @@ class TestSupervisorVerdict:
 
 class TestSupervisorHeuristics:
     def test_repeated_action_flag(self):
-        from suijin.intel.supervisor import heuristic_stuck_check
+        from suijin.modules.redteam.lib.intel.supervisor import heuristic_stuck_check
 
         telemetry = {
             "max_repeat": 3,
@@ -605,7 +605,7 @@ class TestSupervisorHeuristics:
         assert "repeated_action" in flags
 
     def test_repeated_errors_flag(self):
-        from suijin.intel.supervisor import heuristic_stuck_check
+        from suijin.modules.redteam.lib.intel.supervisor import heuristic_stuck_check
 
         telemetry = {
             "max_repeat": 1,
@@ -617,7 +617,7 @@ class TestSupervisorHeuristics:
         assert "repeated_errors" in flags
 
     def test_cost_alert_flag(self):
-        from suijin.intel.supervisor import heuristic_stuck_check
+        from suijin.modules.redteam.lib.intel.supervisor import heuristic_stuck_check
 
         telemetry = {
             "max_repeat": 1,
@@ -629,7 +629,7 @@ class TestSupervisorHeuristics:
         assert "cost_alert" in flags
 
     def test_no_flags_when_healthy(self):
-        from suijin.intel.supervisor import heuristic_stuck_check
+        from suijin.modules.redteam.lib.intel.supervisor import heuristic_stuck_check
 
         telemetry = {
             "max_repeat": 1,
@@ -644,7 +644,7 @@ class TestSupervisorHeuristics:
 class TestSupervisorEvaluate:
     def test_heuristics_authoritative_for_loops(self, monkeypatch):
         """Repeated actions force stuck=True even if the LLM says otherwise."""
-        from suijin.intel import supervisor as sv
+        from suijin.modules.redteam.lib.intel import supervisor as sv
 
         def fake_generate(messages, config=None, **kwargs):
             return json.dumps({"stuck": False, "reason": "", "new_directive": ""})
@@ -652,7 +652,7 @@ class TestSupervisorEvaluate:
         monkeypatch.setattr(sv, "generate", fake_generate)
 
         # Build telemetry with max_repeat >= 3
-        import suijin.intel.supervisor as m
+        import suijin.modules.redteam.lib.intel.supervisor as m
 
         monkeypatch.setattr(
             m,
@@ -681,8 +681,8 @@ class TestSupervisorEvaluate:
         assert "repeated_action" in flags
 
     def test_cost_hard_cap_recommends_abort(self, monkeypatch):
-        import suijin.intel.supervisor as m
-        from suijin.intel import supervisor as sv
+        import suijin.modules.redteam.lib.intel.supervisor as m
+        from suijin.modules.redteam.lib.intel import supervisor as sv
 
         monkeypatch.setattr(sv, "generate", lambda *a, **k: json.dumps({}))
         monkeypatch.setattr(
@@ -713,8 +713,8 @@ class TestSupervisorEvaluate:
         assert verdict["stuck"] is True
 
     def test_evaluate_skips_llm_when_healthy(self, monkeypatch):
-        import suijin.intel.supervisor as m
-        from suijin.intel import supervisor as sv
+        import suijin.modules.redteam.lib.intel.supervisor as m
+        from suijin.modules.redteam.lib.intel import supervisor as sv
 
         called = []
 

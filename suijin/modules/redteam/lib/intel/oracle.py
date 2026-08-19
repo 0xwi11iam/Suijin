@@ -21,7 +21,8 @@ from pathlib import Path
 
 from rich.console import Console
 
-from suijin.modules.loader import load_local_module
+_llm = __import__("suijin.modules.loader", fromlist=["load_local_module"])
+load_local_module = _llm.load_local_module
 
 console = Console()
 BASE_DIR = Path(__file__).resolve().parent

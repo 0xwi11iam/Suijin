@@ -18,7 +18,7 @@ from pathlib import Path
 
 
 def _active_model():
-    from suijin.core.red.config_loader import active_model as _fn
+    from suijin.modules.redteam.lib.red.config_loader import active_model as _fn
 
     return _fn
 

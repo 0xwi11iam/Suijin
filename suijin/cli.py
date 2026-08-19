@@ -490,7 +490,7 @@ def _redact(obj):
 
 
 def _effective_config() -> dict:
-    from suijin.core.red.config_loader import load_config
+    from suijin.modules.redteam.lib.red.config_loader import load_config
 
     return load_config()
 
@@ -1086,8 +1086,8 @@ def run_policy(args) -> int:
 
 
 def run_providers(args) -> int:
-    from suijin.core.red.config_loader import load_config
     from suijin.modules.providers.lib import generate
+    from suijin.modules.redteam.lib.red.config_loader import load_config
 
     cfg = load_config()
     if getattr(args, "all", False):

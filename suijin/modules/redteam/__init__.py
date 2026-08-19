@@ -16,7 +16,8 @@ class RedTeamModule(Module):
 
     def register(self, ctx) -> None:
         ctx.register_service(
-            "mode.red", lambda: __import__("suijin.core.redteamer", fromlist=["run_red_team"]).run_red_team
+            "mode.red",
+            lambda: __import__("suijin.modules.redteam.lib.redteamer", fromlist=["run_red_team"]).run_red_team,
         )
 
     def start(self, ctx) -> None:
@@ -25,7 +26,7 @@ class RedTeamModule(Module):
             return  # console absent (headless boot) — silently fine
 
         def _launch():
-            from suijin.core.redteamer import main as rt_main
+            from suijin.modules.redteam.lib.redteamer import main as rt_main
 
             return rt_main()
 

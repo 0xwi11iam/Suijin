@@ -87,13 +87,17 @@ _local_cache: dict[str, object] = {}
 # Search order: root first, then subdirs. The canonical name for caching
 # is the resolved file's real import path (e.g. "suijin.modules.providers.lib"),
 # so force-loaded and normally-imported modules share sys.modules.
-SEARCH_DIRS = [BASE_DIR] + [BASE_DIR / d for d in ("intel", "core")]
+SEARCH_DIRS = [BASE_DIR]  # v4.1: all subsystems live in modules/ — by-name loads go through CANONICAL_ALIASES
 
 # v4.1 clean break: names whose old files are gone map straight to their
 # canonical module homes (dynamic load == normal import, always).
 CANONICAL_ALIASES = {
     "providers": "suijin.modules.providers.lib",
     "audit": "suijin.modules.platform.lib.security.audit",
+    "supervisor": "suijin.modules.redteam.lib.intel.supervisor",
+    "oracle": "suijin.modules.redteam.lib.intel.oracle",
+    "knowledge_graph": "suijin.modules.redteam.lib.intel.knowledge_graph",
+    "drift_analyser": "suijin.modules.redteam.lib.intel.drift_analyser",
 }
 
 

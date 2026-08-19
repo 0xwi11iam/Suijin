@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from suijin.core.red import session_control as sc
+from suijin.modules.redteam.lib.red import session_control as sc
 
 
 class TestBuildAttackChains:
