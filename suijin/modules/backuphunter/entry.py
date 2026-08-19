@@ -50,8 +50,7 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='Common backup/archive file probe.',
-                              owner="backuphunter")
+            ctx.register_tool(tool_name, _bridge, description="Common backup/archive file probe.", owner="backuphunter")
             bridged += 1
         ctx.journal.append("backuphunter", f"{bridged} tool(s) registered")
 

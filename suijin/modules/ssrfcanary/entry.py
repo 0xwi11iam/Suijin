@@ -50,8 +50,12 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='SSRF canary URL builders + callback-free detection.',
-                              owner="ssrfcanary")
+            ctx.register_tool(
+                tool_name,
+                _bridge,
+                description="SSRF canary URL builders + callback-free detection.",
+                owner="ssrfcanary",
+            )
             bridged += 1
         ctx.journal.append("ssrfcanary", f"{bridged} tool(s) registered")
 

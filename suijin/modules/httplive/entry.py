@@ -50,8 +50,7 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='Batch HTTP liveness checker.',
-                              owner="httplive")
+            ctx.register_tool(tool_name, _bridge, description="Batch HTTP liveness checker.", owner="httplive")
             bridged += 1
         ctx.journal.append("httplive", f"{bridged} tool(s) registered")
 

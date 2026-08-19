@@ -1,4 +1,3 @@
-
 import requests
 
 _T = (5, 20)
@@ -24,5 +23,6 @@ def proxy_check(proxy: str = "") -> str:
     except requests.RequestException as e:
         return f"direct egress: {direct}\nproxy {p}: FAILED ({type(e).__name__}) — dead, wrong scheme, or auth required"
     same = direct == via
-    return (f"direct egress: {direct}\nvia proxy:  {via}\n"
-            + ("WARNING: egress identical — proxy is NOT masking your IP" if same else "proxy working — egress differs"))
+    return f"direct egress: {direct}\nvia proxy:  {via}\n" + (
+        "WARNING: egress identical — proxy is NOT masking your IP" if same else "proxy working — egress differs"
+    )

@@ -50,8 +50,9 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='API logic probes: mass assignment, verb tampering.',
-                              owner="apifuzz")
+            ctx.register_tool(
+                tool_name, _bridge, description="API logic probes: mass assignment, verb tampering.", owner="apifuzz"
+            )
             bridged += 1
         ctx.journal.append("apifuzz", f"{bridged} tool(s) registered")
 

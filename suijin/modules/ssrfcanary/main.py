@@ -1,4 +1,3 @@
-
 import requests
 
 _T = (5, 20)
@@ -11,6 +10,7 @@ def _get(url, **kw):
 
 def ssrf_canary(token: str = "") -> str:
     import uuid
+
     t = (token or uuid.uuid4().hex[:10]).strip()
     return (
         f"canary token: {t}\n"
@@ -25,6 +25,7 @@ def ssrf_blind_probe(url: str = "") -> str:
         return "Error: url required (with a param value you control pointing at a BLACKHOLE ip:port)"
     try:
         import time
+
         t0 = time.perf_counter()
         r = _get(url.strip(), timeout=(5, 35))
         dt = time.perf_counter() - t0

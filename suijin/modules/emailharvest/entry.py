@@ -50,8 +50,9 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='Email harvest from page text (pure regex).',
-                              owner="emailharvest")
+            ctx.register_tool(
+                tool_name, _bridge, description="Email harvest from page text (pure regex).", owner="emailharvest"
+            )
             bridged += 1
         ctx.journal.append("emailharvest", f"{bridged} tool(s) registered")
 

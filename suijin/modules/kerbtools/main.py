@@ -29,6 +29,7 @@ def kerb_hash_format(hash_str: str = "", type: str = "") -> str:
     extra = ""
     if "etype" in h:
         import re
+
         m = re.search(r"etype(\d+)", h.replace(":", ""))
         if m:
             extra = f"\nfound etype {m.group(1)} in string"
@@ -40,8 +41,37 @@ def spn_candidates(domain: str = "") -> str:
         return "Error: domain required"
     d = domain.strip().lower().strip(".")
     base = d.split(".")[0]
-    svc = ["sql", "sqlserver", "mssql", "backup", "svc", "service", "app", "web", "ftp", "file", "exchange", "smtp", "http", "test", "dev", "sharepoint", "bi", "report", "ssrs", "adfs", "ldap"]
+    svc = [
+        "sql",
+        "sqlserver",
+        "mssql",
+        "backup",
+        "svc",
+        "service",
+        "app",
+        "web",
+        "ftp",
+        "file",
+        "exchange",
+        "smtp",
+        "http",
+        "test",
+        "dev",
+        "sharepoint",
+        "bi",
+        "report",
+        "ssrs",
+        "adfs",
+        "ldap",
+    ]
     cands = [f"{s}.{base}@{d}" if "." not in s else f"{s}@{d}" for s in svc]
-    return ("Likely SPN accounts (feed to GetUserSPNs with creds):\n  " +
-            "\n  ".join(cands) +
-            "\nAlso check: svc_" + base + ", " + base + "_svc, changeme, test_" + base)
+    return (
+        "Likely SPN accounts (feed to GetUserSPNs with creds):\n  "
+        + "\n  ".join(cands)
+        + "\nAlso check: svc_"
+        + base
+        + ", "
+        + base
+        + "_svc, changeme, test_"
+        + base
+    )

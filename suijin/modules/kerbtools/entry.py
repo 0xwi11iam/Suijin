@@ -50,8 +50,9 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='Kerberos ticket/hash format helpers (pure python).',
-                              owner="kerbtools")
+            ctx.register_tool(
+                tool_name, _bridge, description="Kerberos ticket/hash format helpers (pure python).", owner="kerbtools"
+            )
             bridged += 1
         ctx.journal.append("kerbtools", f"{bridged} tool(s) registered")
 

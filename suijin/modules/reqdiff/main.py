@@ -1,4 +1,3 @@
-
 import requests
 
 _T = (5, 20)
@@ -23,11 +22,19 @@ def response_diff(url_a: str = "", url_b: str = "") -> str:
     except requests.RequestException as e:
         return f"Error: {e}"
     import difflib
+
     out = [f"A: {sa} {len(ba):,}B | B: {sb} {len(bb):,}B"]
     hdr_delta = {k: (ha.get(k), hb.get(k)) for k in set(ha) | set(hb) if ha.get(k) != hb.get(k)}
     if hdr_delta:
-        out.append("header deltas: " + "; ".join(f"{k}: {v[0] or '-'} vs {v[1] or '-'}" for k, v in list(hdr_delta.items())[:8]))
-    diff = [d for d in difflib.unified_diff(ba.splitlines(), bb.splitlines(), lineterm="", n=0) if d[:1] in "+-" and d[1:2] not in ("+", "-")][:30]
+        out.append(
+            "header deltas: "
+            + "; ".join(f"{k}: {v[0] or '-'} vs {v[1] or '-'}" for k, v in list(hdr_delta.items())[:8])
+        )
+    diff = [
+        d
+        for d in difflib.unified_diff(ba.splitlines(), bb.splitlines(), lineterm="", n=0)
+        if d[:1] in "+-" and d[1:2] not in ("+", "-")
+    ][:30]
     if diff:
         out.append("body diff:\n  " + "\n  ".join(diff))
     return "\n".join(out)

@@ -50,8 +50,9 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='Current gcloud identity (authorized creds only).',
-                              owner="gcpenumer")
+            ctx.register_tool(
+                tool_name, _bridge, description="Current gcloud identity (authorized creds only).", owner="gcpenumer"
+            )
             bridged += 1
         ctx.journal.append("gcpenumer", f"{bridged} tool(s) registered")
 

@@ -1,4 +1,3 @@
-
 import requests
 
 _T = (5, 20)
@@ -16,10 +15,16 @@ def open_redirect_check(url: str = "", param: str = "") -> str:
     if not url:
         return "Error: url required (the endpoint with its redirect param, e.g. /login?next=/home)"
     import urllib.parse
+
     parts = urllib.parse.urlsplit(url.strip())
     qs = urllib.parse.parse_qs(parts.query)
     if not param:
-        cands = [k for k in qs if k.lower() in ("next", "url", "redirect", "return", "returnurl", "continue", "dest", "goto", "r", "u", "target")]
+        cands = [
+            k
+            for k in qs
+            if k.lower()
+            in ("next", "url", "redirect", "return", "returnurl", "continue", "dest", "goto", "r", "u", "target")
+        ]
         param = cands[0] if cands else (list(qs)[0] if qs else "")
     if not param:
         return "could not find a candidate param; pass param=<name>"

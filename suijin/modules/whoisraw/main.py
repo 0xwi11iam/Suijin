@@ -25,6 +25,7 @@ def whois_lookup(query: str = "", server: str = "") -> str:
 
 def _find_server(text: str) -> str:
     import re
+
     m = re.search(r"whois:\s*([\w.-]+)", text or "")
     return m.group(1) if m else ""
 

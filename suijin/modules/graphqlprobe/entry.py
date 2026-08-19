@@ -50,8 +50,12 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='GraphQL endpoint probing (introspection, field suggestions).',
-                              owner="graphqlprobe")
+            ctx.register_tool(
+                tool_name,
+                _bridge,
+                description="GraphQL endpoint probing (introspection, field suggestions).",
+                owner="graphqlprobe",
+            )
             bridged += 1
         ctx.journal.append("graphqlprobe", f"{bridged} tool(s) registered")
 

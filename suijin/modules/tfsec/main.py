@@ -1,8 +1,8 @@
 from pathlib import Path
 
 _TF_RULES = [
-    ("public ingress", 'ingress {', 'cidr_blocks = ["0.0.0.0/0"]'),
-    ("public egress", 'egress {', 'cidr_blocks = ["0.0.0.0/0"]'),
+    ("public ingress", "ingress {", 'cidr_blocks = ["0.0.0.0/0"]'),
+    ("public egress", "egress {", 'cidr_blocks = ["0.0.0.0/0"]'),
     ("open security group", "aws_security_group", "0.0.0.0/0"),
     ("plaintext secret", " = ", '"${var.'),
 ]
@@ -36,14 +36,21 @@ def tf_scan(text: str = "", file: str = "") -> str:
     if err or not src:
         return err or "Error: text or file required"
     import re
+
     findings = []
     for label, pat, _ in _TF_TEXT_RULES:
-        n = len(re.findall(pat, src)) if label != "s3 no encryption" else src.count('resource "aws_s3_bucket"') - src.count("server_side_encryption")
+        n = (
+            len(re.findall(pat, src))
+            if label != "s3 no encryption"
+            else src.count('resource "aws_s3_bucket"') - src.count("server_side_encryption")
+        )
         if n and n > 0:
             findings.append(f"{label} (~{max(n, 1)}x)")
     if "0.0.0.0/0" in src:
         findings.append("wildcard 0.0.0.0/0 present (check scope)")
-    return "\n".join(f"- {f}" for f in findings) or "No insecure terraform patterns matched (deep review still advised)."
+    return (
+        "\n".join(f"- {f}" for f in findings) or "No insecure terraform patterns matched (deep review still advised)."
+    )
 
 
 def dockerfile_scan(text: str = "", file: str = "") -> str:
@@ -51,6 +58,7 @@ def dockerfile_scan(text: str = "", file: str = "") -> str:
     if err or not src:
         return err or "Error: text or file required"
     import re
+
     findings = []
     for label, pat, fix in _DF_RULES:
         if re.search(pat, src, re.I):

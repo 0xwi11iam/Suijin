@@ -19,6 +19,7 @@ def takeover_fingerprint(hosts: str = "") -> str:
     if not hosts:
         return "Error: one or more hostnames required"
     import socket
+
     out = []
     for h in [x.strip() for x in hosts.split(",") if x.strip()][:20]:
         try:
@@ -30,8 +31,12 @@ def takeover_fingerprint(hosts: str = "") -> str:
             pass
         # no A record: check CNAME via DoH
         try:
-            r = requests.get("https://1.1.1.1/dns-query", params={"name": h, "type": "CNAME"},
-                             headers={"Accept": "application/dns-json"}, timeout=_T)
+            r = requests.get(
+                "https://1.1.1.1/dns-query",
+                params={"name": h, "type": "CNAME"},
+                headers={"Accept": "application/dns-json"},
+                timeout=_T,
+            )
             ans = r.json().get("Answer") or []
             cname = next((a["data"] for a in ans if a.get("type") == 5), None)
         except Exception:

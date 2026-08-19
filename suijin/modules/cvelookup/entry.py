@@ -50,8 +50,7 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='NVD CVE lookup by keyword/CPE.',
-                              owner="cvelookup")
+            ctx.register_tool(tool_name, _bridge, description="NVD CVE lookup by keyword/CPE.", owner="cvelookup")
             bridged += 1
         ctx.journal.append("cvelookup", f"{bridged} tool(s) registered")
 

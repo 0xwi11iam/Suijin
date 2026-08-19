@@ -50,8 +50,12 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='OpenAPI/Swagger spec parsing into endpoint inventories.',
-                              owner="openapik")
+            ctx.register_tool(
+                tool_name,
+                _bridge,
+                description="OpenAPI/Swagger spec parsing into endpoint inventories.",
+                owner="openapik",
+            )
             bridged += 1
         ctx.journal.append("openapik", f"{bridged} tool(s) registered")
 

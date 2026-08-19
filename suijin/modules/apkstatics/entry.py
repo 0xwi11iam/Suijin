@@ -50,8 +50,12 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='APK static analysis (pure python: unzip + pattern extraction).',
-                              owner="apkstatics")
+            ctx.register_tool(
+                tool_name,
+                _bridge,
+                description="APK static analysis (pure python: unzip + pattern extraction).",
+                owner="apkstatics",
+            )
             bridged += 1
         ctx.journal.append("apkstatics", f"{bridged} tool(s) registered")
 

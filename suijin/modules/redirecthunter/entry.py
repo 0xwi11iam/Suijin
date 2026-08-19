@@ -50,8 +50,7 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='Open redirect validation.',
-                              owner="redirecthunter")
+            ctx.register_tool(tool_name, _bridge, description="Open redirect validation.", owner="redirecthunter")
             bridged += 1
         ctx.journal.append("redirecthunter", f"{bridged} tool(s) registered")
 

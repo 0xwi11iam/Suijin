@@ -10,7 +10,10 @@ _RULES = [
     ("Stripe key", re.compile(r"\b[sr]k_live_[0-9a-zA-Z]{24,}\b")),
     ("Private key block", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
     ("JWT", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b")),
-    ("Generic assign", re.compile(r"(?i)(api[_-]?key|secret|passwd|password|token)\s*[:=]\s*['\"]?([\w./+-]{12,})['\"]?")),
+    (
+        "Generic assign",
+        re.compile(r"(?i)(api[_-]?key|secret|passwd|password|token)\s*[:=]\s*['\"]?([\w./+-]{12,})['\"]?"),
+    ),
     ("conn string", re.compile(r"(?i)(postgres|mysql|mongodb(\+srv)?|redis|amqp)://\S{8,}")),
 ]
 

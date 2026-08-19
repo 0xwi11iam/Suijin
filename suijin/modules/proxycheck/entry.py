@@ -50,8 +50,7 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='Proxy/egress-IP validation.',
-                              owner="proxycheck")
+            ctx.register_tool(tool_name, _bridge, description="Proxy/egress-IP validation.", owner="proxycheck")
             bridged += 1
         ctx.journal.append("proxycheck", f"{bridged} tool(s) registered")
 

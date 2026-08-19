@@ -31,12 +31,19 @@ def param_table(url: str = "") -> str:
     if not url:
         return "Error: url required"
     p = urllib.parse.urlsplit(url.strip() if "://" in url.strip() else "http://" + url.strip())
-    qs = urllib.parse.parse_qsl(p.query, keep_blank_values=True)
-    if not qs:
+    if not p.query:
         return "No query parameters."
+    # RAW pairs (parse_qsl pre-decodes, hiding the encoded flag)
+    raw = {}
+    for pair in p.query.split("&"):
+        if "=" in pair:
+            k, v = pair.split("=", 1)
+            raw[urllib.parse.unquote_plus(k)] = v
+        else:
+            raw[pair] = ""
     rows = []
-    for k, v in qs:
+    for k, v in raw.items():
         decoded = urllib.parse.unquote_plus(v)
-        kind = "empty" if not v else ("int" if v.isdigit() else ("encoded" if decoded != v else "str"))
+        kind = "empty" if not v else ("int" if decoded.isdigit() else ("encoded" if decoded != v else "str"))
         rows.append(f"  {k:24} = {decoded[:60]!r:64} [{kind}]")
-    return f"{len(qs)} params:\n" + "\n".join(rows)
+    return f"{len(raw)} params:\n" + "\n".join(rows)

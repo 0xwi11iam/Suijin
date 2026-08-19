@@ -1,5 +1,6 @@
 import requests
 
+
 def security_txt_check(url: str = "") -> str:
     if not url:
         return "Error: url required"

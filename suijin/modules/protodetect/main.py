@@ -1,4 +1,3 @@
-
 import requests
 
 _T = (5, 20)
@@ -16,8 +15,12 @@ def grpc_detect(host: str = "", port: int = 50051) -> str:
     out = []
     # grpc reflection probe (POST /grpc.reflection.v1alpha.ServerReflection/Info over h2)
     try:
-        r = requests.post(f"http://{h}:{int(port or 50051)}/grpc.reflection.v1alpha.ServerReflection/Info",
-                          data=b"", timeout=(3, 8), headers={**_UA, "Content-Type": "application/grpc", "TE": "trailers"})
+        r = requests.post(
+            f"http://{h}:{int(port or 50051)}/grpc.reflection.v1alpha.ServerReflection/Info",
+            data=b"",
+            timeout=(3, 8),
+            headers={**_UA, "Content-Type": "application/grpc", "TE": "trailers"},
+        )
         ct = r.headers.get("content-type", "")
         if "grpc" in ct:
             out.append(f"gRPC reflection endpoint ACTIVE on :{int(port or 50051)} (content-type={ct})")

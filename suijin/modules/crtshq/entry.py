@@ -50,8 +50,9 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='Certificate transparency subdomain discovery (crt.sh).',
-                              owner="crtshq")
+            ctx.register_tool(
+                tool_name, _bridge, description="Certificate transparency subdomain discovery (crt.sh).", owner="crtshq"
+            )
             bridged += 1
         ctx.journal.append("crtshq", f"{bridged} tool(s) registered")
 

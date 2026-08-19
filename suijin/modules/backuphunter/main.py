@@ -1,4 +1,3 @@
-
 import requests
 
 _T = (5, 20)
@@ -17,7 +16,11 @@ def backup_file_probe(url: str = "", path: str = "index.php") -> str:
         return "Error: url required"
     base = url.strip().rstrip("/") + "/" + (path.strip("/") or "index.php")
     stem = base.rsplit(".", 1)[0]
-    cands = [base + e for e in _EXTS] + [stem + e for e in _EXTS] + [base + ".php.bak", stem + ".2024", base.replace(".", "_")]
+    cands = (
+        [base + e for e in _EXTS]
+        + [stem + e for e in _EXTS]
+        + [base + ".php.bak", stem + ".2024", base.replace(".", "_")]
+    )
     found = []
     for u in cands[:26]:
         try:

@@ -1,4 +1,3 @@
-
 import requests
 
 _T = (5, 20)
@@ -11,6 +10,7 @@ def _get(url, **kw):
 
 def harvest_emails(text: str = "", url: str = "") -> str:
     import re
+
     if url and not text:
         try:
             text = _get(url.strip()).text
@@ -19,7 +19,13 @@ def harvest_emails(text: str = "", url: str = "") -> str:
     if not text:
         return "Error: text or url required"
     raw = set(re.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", text))
-    junk = {e for e in raw if any(x in e.lower() for x in ("example.", "sentry.io", "wixpress", ".png", ".jpg", ".gif", "noreply@localhost"))}
+    junk = {
+        e
+        for e in raw
+        if any(
+            x in e.lower() for x in ("example.", "sentry.io", "wixpress", ".png", ".jpg", ".gif", "noreply@localhost")
+        )
+    }
     good = sorted(raw - junk)
     if not good:
         return "No emails found"

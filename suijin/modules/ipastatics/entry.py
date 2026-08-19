@@ -50,8 +50,12 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='IPA static analysis (Info.plist + embedded.mobileprovision).',
-                              owner="ipastatics")
+            ctx.register_tool(
+                tool_name,
+                _bridge,
+                description="IPA static analysis (Info.plist + embedded.mobileprovision).",
+                owner="ipastatics",
+            )
             bridged += 1
         ctx.journal.append("ipastatics", f"{bridged} tool(s) registered")
 

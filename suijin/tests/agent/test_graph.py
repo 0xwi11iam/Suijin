@@ -11,8 +11,6 @@ import asyncio
 import os
 import sys
 
-import pytest
-
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
@@ -98,8 +96,13 @@ class TestErrorHandler:
         """The real error taxonomy entry point (was classify_error)."""
         from suijin.modules.platform.lib.helpers.error_class import classify_error_class
 
-        out = classify_error_class(success=False, tool_output="Error: timeout", error_message="timeout",
-                                   duration_ms=31000, tool_name="nmap_scan")
+        out = classify_error_class(
+            success=False,
+            tool_output="Error: timeout",
+            error_message="timeout",
+            duration_ms=31000,
+            tool_name="nmap_scan",
+        )
         assert isinstance(out, str) and out
 
     def test_hard_guardrail_contract(self):

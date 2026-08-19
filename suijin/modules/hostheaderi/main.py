@@ -1,4 +1,3 @@
-
 import requests
 
 _T = (5, 20)
@@ -15,6 +14,7 @@ def host_header_inject(url: str = "", host_value: str = "evil.example") -> str:
     hv = (host_value or "evil.example").strip()
     try:
         import requests as _rq
+
         r = _rq.get(url.strip(), timeout=_T, headers={"Host": hv, **_UA}, allow_redirects=False)
     except requests.RequestException as e:
         return f"Error: {e}"

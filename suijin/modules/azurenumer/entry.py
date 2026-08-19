@@ -50,8 +50,12 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='Azure subscription enumeration via az CLI (authorized creds only).',
-                              owner="azurenumer")
+            ctx.register_tool(
+                tool_name,
+                _bridge,
+                description="Azure subscription enumeration via az CLI (authorized creds only).",
+                owner="azurenumer",
+            )
             bridged += 1
         ctx.journal.append("azurenumer", f"{bridged} tool(s) registered")
 

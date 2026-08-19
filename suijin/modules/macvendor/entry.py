@@ -50,8 +50,12 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='MAC vendor lookup (offline mini-table + API fallback).',
-                              owner="macvendor")
+            ctx.register_tool(
+                tool_name,
+                _bridge,
+                description="MAC vendor lookup (offline mini-table + API fallback).",
+                owner="macvendor",
+            )
             bridged += 1
         ctx.journal.append("macvendor", f"{bridged} tool(s) registered")
 

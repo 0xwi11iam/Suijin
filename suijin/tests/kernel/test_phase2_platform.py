@@ -38,7 +38,7 @@ class TestPlatformModule:
         # start() ran: workspace dirs exist, journal recorded
         assert (tmp_path / "reports").is_dir()
         assert (tmp_path / "audit_trails").is_dir()
-        assert any("workspace ready" in ln for ln in ctx.journal.tail(200))  # 49 vendored packs journal too
+        assert any("workspace ready" in ln for ln in ctx.journal.tail(1000))  # 137 units journal at boot — ring is 1000 deep
         # quiet boot: healthy => silent
         assert capsys.readouterr().out == ""
         ctx.shutdown()

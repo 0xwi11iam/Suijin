@@ -50,8 +50,12 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='Public cloud bucket checker (AWS/GCP/Azure naming permutations).',
-                              owner="bucketprobe")
+            ctx.register_tool(
+                tool_name,
+                _bridge,
+                description="Public cloud bucket checker (AWS/GCP/Azure naming permutations).",
+                owner="bucketprobe",
+            )
             bridged += 1
         ctx.journal.append("bucketprobe", f"{bridged} tool(s) registered")
 

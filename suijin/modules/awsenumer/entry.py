@@ -50,8 +50,12 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='AWS identity + high-privilege enumeration via aws CLI (authorized creds only).',
-                              owner="awsenumer")
+            ctx.register_tool(
+                tool_name,
+                _bridge,
+                description="AWS identity + high-privilege enumeration via aws CLI (authorized creds only).",
+                owner="awsenumer",
+            )
             bridged += 1
         ctx.journal.append("awsenumer", f"{bridged} tool(s) registered")
 

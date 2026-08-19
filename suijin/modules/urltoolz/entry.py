@@ -50,8 +50,7 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='URL parsing utilities.',
-                              owner="urltoolz")
+            ctx.register_tool(tool_name, _bridge, description="URL parsing utilities.", owner="urltoolz")
             bridged += 1
         ctx.journal.append("urltoolz", f"{bridged} tool(s) registered")
 

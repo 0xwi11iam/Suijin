@@ -50,8 +50,9 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='Source map exposure checker (JS source recovery).',
-                              owner="sourcemap")
+            ctx.register_tool(
+                tool_name, _bridge, description="Source map exposure checker (JS source recovery).", owner="sourcemap"
+            )
             bridged += 1
         ctx.journal.append("sourcemap", f"{bridged} tool(s) registered")
 

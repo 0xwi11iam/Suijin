@@ -28,6 +28,7 @@ def cloud_metadata_probe(host: str = "", port: int = 0) -> str:
                 url = tpl.format(h=h if ":" in h else h)
                 # only probe ports implied by the template's port when port unset
                 import re as _re
+
                 m = _re.search(r":(\d+)/", tpl)
                 p = int(m.group(1)) if m else 80
                 if port:

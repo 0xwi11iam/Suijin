@@ -19,7 +19,14 @@ def ipa_info(ipa_path: str = "") -> str:
         try:
             info = plistlib.loads(z.read(a))
             out.append(f"{a}:")
-            for k in ("CFBundleIdentifier", "CFBundleDisplayName", "CFBundleVersion", "CFBundleShortVersionString", "ITSAppUsesNonExemptEncryption", "NSAppTransportSecurity"):
+            for k in (
+                "CFBundleIdentifier",
+                "CFBundleDisplayName",
+                "CFBundleVersion",
+                "CFBundleShortVersionString",
+                "ITSAppUsesNonExemptEncryption",
+                "NSAppTransportSecurity",
+            ):
                 if k in info:
                     out.append(f"  {k} = {info[k]}")
             ats = info.get("NSAppTransportSecurity") or {}
@@ -29,7 +36,10 @@ def ipa_info(ipa_path: str = "") -> str:
             out.append(f"{a}: plist parse failed ({e})")
     for pr in prov[:1]:
         blob = z.read(pr)
-        m = re.findall(rb"<key>(Name|TeamName|CreationDate|ExpirationDate|application-identifier)</key>\s*<(string|date)>([^<]+)<", blob)
+        m = re.findall(
+            rb"<key>(Name|TeamName|CreationDate|ExpirationDate|application-identifier)</key>\s*<(string|date)>([^<]+)<",
+            blob,
+        )
         out.append("provisioning:")
         for k, _t, v in m[:8]:
             out.append(f"  {k.decode()} = {v.decode(errors='replace')[:60]}")

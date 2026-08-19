@@ -50,8 +50,7 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='Response comparison pair-tools.',
-                              owner="reqdiff")
+            ctx.register_tool(tool_name, _bridge, description="Response comparison pair-tools.", owner="reqdiff")
             bridged += 1
         ctx.journal.append("reqdiff", f"{bridged} tool(s) registered")
 

@@ -1,4 +1,3 @@
-
 import requests
 
 _T = (5, 20)
@@ -13,7 +12,9 @@ _RECURSORS = ("1.1.1.1", "8.8.8.8")
 
 
 def _doh(name: str, rtype: str, server: str) -> list:
-    r = _get(f"https://{server}/dns-query", params={"name": name, "type": rtype}, headers={"Accept": "application/dns-json"})
+    r = _get(
+        f"https://{server}/dns-query", params={"name": name, "type": rtype}, headers={"Accept": "application/dns-json"}
+    )
     r.raise_for_status()
     return [a.get("data") for a in r.json().get("Answer") or []]
 

@@ -1,2 +1,1 @@
-"""Vendored third-party tool pack (converted).
-"""
+"""Vendored third-party tool pack (converted)."""

@@ -50,8 +50,9 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='Subdomain word-brute via DoH (passive transport).',
-                              owner="dnsbrute")
+            ctx.register_tool(
+                tool_name, _bridge, description="Subdomain word-brute via DoH (passive transport).", owner="dnsbrute"
+            )
             bridged += 1
         ctx.journal.append("dnsbrute", f"{bridged} tool(s) registered")
 

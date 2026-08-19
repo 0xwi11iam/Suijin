@@ -50,8 +50,12 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='Secret/credential scanning (regex + entropy), file or text.',
-                              owner="secretscanr")
+            ctx.register_tool(
+                tool_name,
+                _bridge,
+                description="Secret/credential scanning (regex + entropy), file or text.",
+                owner="secretscanr",
+            )
             bridged += 1
         ctx.journal.append("secretscanr", f"{bridged} tool(s) registered")
 

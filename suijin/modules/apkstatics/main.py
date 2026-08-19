@@ -3,7 +3,9 @@ import zipfile
 from pathlib import Path
 
 _URL = re.compile(r"https?://[\w.-]+[\w/.,%#?=&+-]{2,}")
-_KEY = re.compile(r"(AIza[0-9A-Za-z_-]{35}|SK[0-9a-fA-F]{32}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})")
+_KEY = re.compile(
+    r"(AIza[0-9A-Za-z_-]{35}|SK[0-9a-fA-F]{32}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})"
+)
 
 
 def _iter_apk(apk_path: str):
@@ -25,10 +27,14 @@ def apk_inventory(apk_path: str = "") -> str:
     native = [n for n in names if n.endswith((".so",))]
     assets = [n for n in names if n.startswith("assets/")][:20]
     meta = [n for n in names if n.startswith("META-INF/")]
-    interesting = [n for n in names if any(x in n.lower() for x in (".db", ".sqlite", ".json", "config", "secret", "key", "pass"))][:20]
-    return (f"{len(names)} entries | {len(dex)} dex | {len(native)} native libs\n"
-            f"assets: {assets}\ninteresting files: {interesting or '-'}\n"
-            f"signing: {[m for m in meta if m.endswith(('.RSA', '.SF', '.EC'))]}")
+    interesting = [
+        n for n in names if any(x in n.lower() for x in (".db", ".sqlite", ".json", "config", "secret", "key", "pass"))
+    ][:20]
+    return (
+        f"{len(names)} entries | {len(dex)} dex | {len(native)} native libs\n"
+        f"assets: {assets}\ninteresting files: {interesting or '-'}\n"
+        f"signing: {[m for m in meta if m.endswith(('.RSA', '.SF', '.EC'))]}"
+    )
 
 
 def apk_strings(apk_path: str = "", pattern: str = "") -> str:

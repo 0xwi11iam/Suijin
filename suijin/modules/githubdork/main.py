@@ -1,4 +1,3 @@
-
 import requests
 
 _T = (5, 20)
@@ -14,10 +13,20 @@ def github_dork_urls(org: str = "") -> str:
         return "Error: org required"
     o = org.strip()
     dorks = [
-        "filename:.env", "filename:config.php", "filename:id_rsa", "filename:.npmrc",
-        "filename:credentials", "filename:secrets.yml", "filename:.git-credentials",
-        "extension:pem private", "extension:sql password", "ORG api_key",
-        "ORG aws_secret", "ORG sendgrid", "ORG slack_token", "filename:wp-config.php",
+        "filename:.env",
+        "filename:config.php",
+        "filename:id_rsa",
+        "filename:.npmrc",
+        "filename:credentials",
+        "filename:secrets.yml",
+        "filename:.git-credentials",
+        "extension:pem private",
+        "extension:sql password",
+        "ORG api_key",
+        "ORG aws_secret",
+        "ORG sendgrid",
+        "ORG slack_token",
+        "filename:wp-config.php",
     ]
     urls = [f"https://github.com/search?q={d.replace('ORG', o).replace(' ', '+')}&type=code" for d in dorks]
     return "Open in a browser (search needs auth):\n  " + "\n  ".join(urls)

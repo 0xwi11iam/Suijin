@@ -50,8 +50,12 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='DNS-over-HTTPS queries (Cloudflare/Google) — passive, no local resolver.',
-                              owner="dohquery")
+            ctx.register_tool(
+                tool_name,
+                _bridge,
+                description="DNS-over-HTTPS queries (Cloudflare/Google) — passive, no local resolver.",
+                owner="dohquery",
+            )
             bridged += 1
         ctx.journal.append("dohquery", f"{bridged} tool(s) registered")
 

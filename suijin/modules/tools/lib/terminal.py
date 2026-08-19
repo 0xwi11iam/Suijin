@@ -6,8 +6,8 @@ Scoped to the agent workspace with destructive-command guardrails.
 from __future__ import annotations
 
 import os
-import sys
 import shlex
+import sys
 
 
 def _ws():

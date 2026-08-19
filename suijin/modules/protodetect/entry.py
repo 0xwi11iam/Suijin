@@ -50,8 +50,7 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='gRPC/protobuf service detection.',
-                              owner="protodetect")
+            ctx.register_tool(tool_name, _bridge, description="gRPC/protobuf service detection.", owner="protodetect")
             bridged += 1
         ctx.journal.append("protodetect", f"{bridged} tool(s) registered")
 

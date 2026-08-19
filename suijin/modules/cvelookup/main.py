@@ -1,4 +1,3 @@
-
 import requests
 
 _T = (5, 20)
@@ -16,8 +15,11 @@ def cve_search_nvd(keyword: str = "", api_key: str = "", limit: int = 10) -> str
     if api_key:
         hdrs["apiKey"] = api_key.strip()
     try:
-        r = _get("https://services.nvd.nist.gov/rest/json/cves/2.0",
-                 params={"keywordSearch": keyword.strip(), "resultsPerPage": min(int(limit or 10), 20)}, headers=hdrs)
+        r = _get(
+            "https://services.nvd.nist.gov/rest/json/cves/2.0",
+            params={"keywordSearch": keyword.strip(), "resultsPerPage": min(int(limit or 10), 20)},
+            headers=hdrs,
+        )
     except requests.RequestException as e:
         return f"Error: {e}"
     if r.status_code == 403:

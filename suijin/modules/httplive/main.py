@@ -1,5 +1,6 @@
 import requests
 
+
 def http_alive(urls: str = "") -> str:
     if not urls:
         return "Error: urls required"

@@ -50,8 +50,7 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='IP reputation lookups.',
-                              owner="iprepq")
+            ctx.register_tool(tool_name, _bridge, description="IP reputation lookups.", owner="iprepq")
             bridged += 1
         ctx.journal.append("iprepq", f"{bridged} tool(s) registered")
 

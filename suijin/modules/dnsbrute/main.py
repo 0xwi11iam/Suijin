@@ -2,6 +2,7 @@ import requests
 
 _DEFAULT = "www,mail,remote,blog,webmail,server,ns1,ns2,smtp,secure,vpn,m,shop,ftp,mail2,test,portal,ns,ww1,host,support,beta,admin,store,dev,api,git,ci,internal,intranet,staging,backup,s3,cdn,app,apps,dashboard,monitor,status,id,ldap,ad,wiki,docs,jenkins,grafana,kibana"
 
+
 def dns_brute(domain: str = "", words: str = "") -> str:
     if not domain:
         return "Error: domain required"
@@ -12,8 +13,12 @@ def dns_brute(domain: str = "", words: str = "") -> str:
     for w in wl:
         name = f"{w}.{d}"
         try:
-            r = sess.get("https://1.1.1.1/dns-query", params={"name": name, "type": "A"},
-                         headers={"Accept": "application/dns-json"}, timeout=(2, 6))
+            r = sess.get(
+                "https://1.1.1.1/dns-query",
+                params={"name": name, "type": "A"},
+                headers={"Accept": "application/dns-json"},
+                timeout=(2, 6),
+            )
             ans = r.json().get("Answer") or []
             if ans:
                 ips = [a.get("data") for a in ans if a.get("type") == 1][:3]

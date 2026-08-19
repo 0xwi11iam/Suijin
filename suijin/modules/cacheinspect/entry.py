@@ -50,8 +50,9 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='Cache behavior/poisoning pre-checks.',
-                              owner="cacheinspect")
+            ctx.register_tool(
+                tool_name, _bridge, description="Cache behavior/poisoning pre-checks.", owner="cacheinspect"
+            )
             bridged += 1
         ctx.journal.append("cacheinspect", f"{bridged} tool(s) registered")
 

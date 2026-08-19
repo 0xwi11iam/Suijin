@@ -50,8 +50,12 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='Host header injection probe (password-reset poisoning support).',
-                              owner="hostheaderi")
+            ctx.register_tool(
+                tool_name,
+                _bridge,
+                description="Host header injection probe (password-reset poisoning support).",
+                owner="hostheaderi",
+            )
             bridged += 1
         ctx.journal.append("hostheaderi", f"{bridged} tool(s) registered")
 

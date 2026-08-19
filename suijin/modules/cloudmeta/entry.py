@@ -50,8 +50,12 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='Cloud metadata endpoint probes (IMDS/SSRF validation targets).',
-                              owner="cloudmeta")
+            ctx.register_tool(
+                tool_name,
+                _bridge,
+                description="Cloud metadata endpoint probes (IMDS/SSRF validation targets).",
+                owner="cloudmeta",
+            )
             bridged += 1
         ctx.journal.append("cloudmeta", f"{bridged} tool(s) registered")
 

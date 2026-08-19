@@ -1,4 +1,3 @@
-
 import requests
 
 _T = (5, 20)
@@ -16,6 +15,7 @@ def method_scan(url: str = "") -> str:
     for m in ("OPTIONS", "TRACE", "PUT", "DELETE", "PATCH", "DEBUG"):
         try:
             import requests as _rq
+
             r = _rq.request(m, url.strip(), timeout=_T, headers={**_UA, "Allow": m}, allow_redirects=False)
             allow = r.headers.get("Allow") or r.headers.get("allow") or ""
             note = ""

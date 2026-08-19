@@ -50,8 +50,9 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='Raw WHOIS over port 43 (no external binary).',
-                              owner="whoisraw")
+            ctx.register_tool(
+                tool_name, _bridge, description="Raw WHOIS over port 43 (no external binary).", owner="whoisraw"
+            )
             bridged += 1
         ctx.journal.append("whoisraw", f"{bridged} tool(s) registered")
 

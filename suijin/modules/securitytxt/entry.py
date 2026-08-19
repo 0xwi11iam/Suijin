@@ -50,8 +50,7 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='security.txt policy checker.',
-                              owner="securitytxt")
+            ctx.register_tool(tool_name, _bridge, description="security.txt policy checker.", owner="securitytxt")
             bridged += 1
         ctx.journal.append("securitytxt", f"{bridged} tool(s) registered")
 

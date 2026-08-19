@@ -9,8 +9,6 @@ import json
 from pathlib import Path
 from unittest import mock
 
-import pytest
-
 MODULES = Path(__file__).resolve().parents[3] / "suijin" / "modules"
 
 
@@ -33,6 +31,7 @@ class FakeResp:
 
 
 # ── pure tools ─────────────────────────────────────────────────────────
+
 
 class TestKerbTools:
     def test_hash_format_detection(self):
@@ -82,8 +81,8 @@ class TestSecretScanr:
 
     def test_entropy_ranks_candidates(self):
         m = load_pack("secretscanr")
-        out = m.entropy_check(text="deadbeefdeadbeefdeadbeefdeadbeef short xx")
-        assert "deadbeef" in out
+        out = m.entropy_check(text="token=Z8fKq2mV9xQw4LpR7sTn3BhJ6cDyG1aU5eOiW0zM")
+        assert "Z8fKq2" in out
 
 
 class TestTfSecDockerfile:
@@ -103,13 +102,17 @@ class TestTfSecDockerfile:
 class TestApkStatics:
     def test_apk_strings_from_zip(self, tmp_path):
         import zipfile
+
         apk = tmp_path / "t.apk"
         with zipfile.ZipFile(apk, "w") as z:
-            z.writestr("classes.dex", 'const url = "https://api.target.example/v1"; const k = "AIza" + "A" * 35')
+            z.writestr(
+                "classes.dex",
+                'const url = "https://api.target.example/v1"; const k = "AIza" + "A" * 35; legacy = "AKIAIOSFODNN7EXAMPLE"',
+            )
         m = load_pack("apkstatics")
         out = m.apk_strings(str(apk))
         assert "api.target.example" in out
-        assert "SECRETS" in out or "AIza" in out
+        assert "SECRETS" in out and "AKIAIOSFODNN7EXAMPLE" in out
 
     def test_apk_missing(self):
         m = load_pack("apkstatics")
@@ -120,8 +123,11 @@ class TestIpaStatics:
     def test_info_plist(self, tmp_path):
         import plistlib
         import zipfile
+
         ipa = tmp_path / "t.ipa"
-        pl = plistlib.dumps({"CFBundleIdentifier": "com.acme.app", "NSAppTransportSecurity": {"NSAllowsArbitraryLoads": True}})
+        pl = plistlib.dumps(
+            {"CFBundleIdentifier": "com.acme.app", "NSAppTransportSecurity": {"NSAllowsArbitraryLoads": True}}
+        )
         with zipfile.ZipFile(ipa, "w") as z:
             z.writestr("Payload/A.app/Info.plist", pl)
         m = load_pack("ipastatics")
@@ -131,11 +137,21 @@ class TestIpaStatics:
 
 # ── network tools (mocked) ────────────────────────────────────────────
 
+
 class TestGraphql:
     def test_introspection_allowed(self):
         m = load_pack("graphqlprobe")
-        schema = json.dumps({"data": {"__schema": {"queryType": {"name": "Q"}, "mutationType": {"name": "M"},
-                                                    "types": [{"name": "User", "fields": [{"name": "email"}]}]}}})
+        schema = json.dumps(
+            {
+                "data": {
+                    "__schema": {
+                        "queryType": {"name": "Q"},
+                        "mutationType": {"name": "M"},
+                        "types": [{"name": "User", "fields": [{"name": "email"}]}],
+                    }
+                }
+            }
+        )
         with mock.patch.object(m.requests, "post", return_value=FakeResp(200, schema)):
             out = m.graphql_introspect("http://t/gql")
         assert "INTROSPECTION ALLOWED" in out and "User" in out
@@ -150,8 +166,12 @@ class TestGraphql:
 class TestOpenapi:
     def test_parse_endpoints(self):
         m = load_pack("openapik")
-        spec = json.dumps({"info": {"title": "API", "version": "1"},
-                           "paths": {"/admin/users": {"get": {}, "delete": {}}, "/ping": {"get": {}}}})
+        spec = json.dumps(
+            {
+                "info": {"title": "API", "version": "1"},
+                "paths": {"/admin/users": {"get": {}, "delete": {}}, "/ping": {"get": {}}},
+            }
+        )
         out = m.openapi_parse(spec, base_url="https://t")
         assert "/admin/users" in out and "high-value" in out and "https://t/ping" in out
 
@@ -159,7 +179,9 @@ class TestOpenapi:
 class TestRedirectHunter:
     def test_open_redirect_detected(self):
         m = load_pack("redirecthunter")
-        with mock.patch.object(m.requests, "get", return_value=FakeResp(302, "", headers={"Location": "https://example.org/safe-canary"})):
+        with mock.patch.object(
+            m.requests, "get", return_value=FakeResp(302, "", headers={"Location": "https://example.org/safe-canary"})
+        ):
             out = m.open_redirect_check("http://t/login?next=/home")
         assert "OPEN REDIRECT" in out
 
@@ -167,7 +189,15 @@ class TestRedirectHunter:
 class TestBackupHunter:
     def test_bak_found(self):
         m = load_pack("backuphunter")
-        with mock.patch.object(m.requests, "get", side_effect=lambda u, **k: FakeResp(200, "dbpass=x" * 40, {"content-type": "text/plain"}) if u.endswith(".bak") else FakeResp(404, "nope")):
+        with mock.patch.object(
+            m.requests,
+            "get",
+            side_effect=lambda u, **k: (
+                FakeResp(200, "dbpass=x" * 40, {"content-type": "text/plain"})
+                if u.endswith(".bak")
+                else FakeResp(404, "nope")
+            ),
+        ):
             out = m.backup_file_probe("http://t", "config.php")
         assert "config.php.bak" in out
 
@@ -184,17 +214,22 @@ class TestPortscan:
     def test_tcp_scan_reports_closed(self, monkeypatch):
         m = load_pack("portscanx")
         import socket as s
+
         class FakeSock:
             def __enter__(self):
                 return self
+
             def __exit__(self, *a):
                 return False
+
             def close(self):
                 pass
-        def boom(a, b, timeout=None):
-            if a[1] == 80:
+
+        def boom(addr, timeout=None, *args, **kw):
+            if addr[1] == 80:
                 return FakeSock()
             raise s.timeout()
+
         monkeypatch.setattr(s, "create_connection", boom)
         out = m.tcp_scan("10.10.10.10")
         assert "80" in out  # the open one is listed

@@ -50,8 +50,12 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='Subdomain takeover fingerprinting (CNAME + known-service signatures).',
-                              owner="takeoverfp")
+            ctx.register_tool(
+                tool_name,
+                _bridge,
+                description="Subdomain takeover fingerprinting (CNAME + known-service signatures).",
+                owner="takeoverfp",
+            )
             bridged += 1
         ctx.journal.append("takeoverfp", f"{bridged} tool(s) registered")
 

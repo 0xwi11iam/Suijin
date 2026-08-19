@@ -50,8 +50,12 @@ class PackModule(Module):
                 except TypeError:
                     return str(_fn(*(args or {}).values()))
 
-            ctx.register_tool(tool_name, _bridge, description='GitHub dorking helpers (search URL builders + optional API fetch).',
-                              owner="githubdork")
+            ctx.register_tool(
+                tool_name,
+                _bridge,
+                description="GitHub dorking helpers (search URL builders + optional API fetch).",
+                owner="githubdork",
+            )
             bridged += 1
         ctx.journal.append("githubdork", f"{bridged} tool(s) registered")
 
