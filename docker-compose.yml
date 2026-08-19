@@ -1,8 +1,16 @@
 # Suijin Security — Docker Compose
-# Usage:
-#   docker compose build
-#   docker compose run --rm suijin
-#   Or with env: DEEPSEEK_API_KEY=sk-xxx docker compose run --rm suijin
+#
+# One command, full stack:
+#   docker compose run --rm suijin                    # interactive agent
+#   DEEPSEEP_KEY set? pass env via .env or the environment list below
+#
+# Profiles:
+#   (default)  the agent + full Kali toolset + workspace volume
+#   --profile tools  adds nothing yet — reserved for split tool services
+#
+# The named volume `workspace` is THE state: outputs, the knowledge base,
+# caches, operator configs. `docker compose down` never loses it;
+# `docker compose down -v` wipes it deliberately.
 
 services:
   suijin:
@@ -11,23 +19,30 @@ services:
     container_name: suijin-agent
     stdin_open: true
     tty: true
+    init: true
+    restart: "no"
     volumes:
-      - ./suijin_agent:/app/suijin_agent
-      - ./suijin/config.json:/app/suijin/config.json
+      - workspace:/app/suijin_agent
+      - ./suijin/config.json:/app/suijin/config.json:ro
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - ZAI_API_KEY=${ZAI_API_KEY:-}
       - HF_TOKEN=${HF_TOKEN:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - AMD_API_KEY=${AMD_API_KEY:-}
       - SHODAN_API_KEY=${SHODAN_API_KEY:-}
       - CENSYS_API_ID=${CENSYS_API_ID:-}
       - CENSYS_SECRET=${CENSYS_SECRET:-}
       - VT_API_KEY=${VT_API_KEY:-}
       - NVD_API_KEY=${NVD_API_KEY:-}
-    networks:
-      - suijin-net
+      - SUIJIN_DOCKER=1
+    healthcheck:
+      test: ["CMD", "python3", "/app/suijin/modules/console/lib/cli.py", "doctor"]
+      interval: 5m
+      timeout: 30s
+      retries: 2
+      start_period: 30s
 
-networks:
-  suijin-net:
-    driver: bridge
+volumes:
+  workspace:
+    name: suijin_workspace

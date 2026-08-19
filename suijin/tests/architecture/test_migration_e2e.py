@@ -88,8 +88,14 @@ def test_medusa_to_suijin_migration(fake_machine, tmp_path):
     # 2. workspace data migrated: suijin_agent has the legacy reports
     installed_repo = home / ".suijin" / "repo"
     new_ws = installed_repo / "suijin_agent"
-    assert (new_ws / "reports" / "engagement.md").read_text() == "# legacy findings"
-    assert (new_ws / "sessions" / "s1.json").exists()
+    eng = (new_ws / "outputs" / "reports" / "engagement.md")
+    if not eng.exists():  # pre-first-run state (migration runs at runtime init)
+        eng = new_ws / "reports" / "engagement.md"
+    assert eng.read_text() == "# legacy findings"
+    sess = new_ws / "outputs" / "sessions" / "s1.json"
+    if not sess.exists():  # pre-first-run state
+        sess = new_ws / "sessions" / "s1.json"
+    assert sess.exists()
 
     # 3. launcher exists and points at suijin
     launcher = home / "bin" / "suijin"
