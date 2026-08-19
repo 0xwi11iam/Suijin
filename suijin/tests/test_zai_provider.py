@@ -241,7 +241,7 @@ class TestZaiConfig:
     def test_tui_settings_has_endpoint_choice(self):
         # Settings TUI must expose the picker so users can switch billing
         # surface without editing config.json by hand.
-        from suijin.tui_settings import ALL_FIELDS
+        from suijin.modules.console.lib.tui_settings import ALL_FIELDS
 
         field = ALL_FIELDS["zai_endpoint"]
         assert field[0] == "choice"
@@ -251,7 +251,7 @@ class TestZaiConfig:
     def test_doctor_shows_zai_endpoint(self, monkeypatch, tmp_path, capsys):
         import json as _json
 
-        from suijin import cli
+        from suijin.modules.console.lib import cli
 
         cfg = tmp_path / "config.json"
         cfg.write_text(_json.dumps({"provider": "zai", "zai_endpoint": "paas"}))

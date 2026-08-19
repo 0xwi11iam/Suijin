@@ -33,7 +33,7 @@ dependencies = [
 Homepage = "https://github.com/0xwi11iam/Suijin"
 
 [project.scripts]
-suijin = "suijin.cli:main"
+suijin = "suijin.modules.console.lib.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["suijin*"]
@@ -51,7 +51,7 @@ suijin = [
     "tutorials/**/*.md",
     "tutorials/*.md",
 ]
-"suijin.ui" = ["dist/*", "dist/assets/*"]
+"suijin.modules.console.lib.ui" = ["dist/*", "dist/assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["suijin/tests"]

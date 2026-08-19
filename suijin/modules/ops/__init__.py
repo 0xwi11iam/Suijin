@@ -32,7 +32,7 @@ class OpsModule(Module):
         for verb in _VERBS:
             ctx.register_service(
                 f"ops.{verb}",
-                lambda v=verb: __import__("suijin.cli", fromlist=["main"]).main,
+                lambda v=verb: __import__("suijin.modules.console.lib.cli", fromlist=["main"]).main,
             )
 
     def start(self, ctx) -> None:

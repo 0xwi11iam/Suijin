@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from suijin import cli
+from suijin.modules.console.lib import cli
 from suijin.tests.test_cli_commands import run_cli
 
 

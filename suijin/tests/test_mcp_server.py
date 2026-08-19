@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-SERVER = REPO_ROOT / "suijin" / "mcp_server.py"
+SERVER = REPO_ROOT / "suijin" / "modules" / "console" / "lib" / "mcp_server.py"
 
 
 def _call_server(lines):

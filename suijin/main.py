@@ -7,19 +7,16 @@ _pkg_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _pkg_parent not in sys.path:
     sys.path.insert(0, _pkg_parent)
 
-from suijin.modules.loader import load_local_module
-
-tui_settings = load_local_module("tui_settings")
-
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
+from suijin.modules.console.lib import tui_settings
 from suijin.modules.redteam.lib.redteamer import main as redteamer_main
 
 console = Console()
 
-CLI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cli.py")
+CLI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "modules", "console", "lib", "cli.py")
 
 OPERATOR_TOOLS = [
     ("Scope editor (Burp-style TUI)", ["scope"]),

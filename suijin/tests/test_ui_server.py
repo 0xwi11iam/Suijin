@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from suijin.ui import server as uis
+from suijin.modules.console.lib.ui import server as uis
 
 
 @pytest.fixture

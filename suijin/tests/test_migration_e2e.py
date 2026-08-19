@@ -95,7 +95,7 @@ def test_medusa_to_suijin_migration(fake_machine, tmp_path):
     launcher = home / "bin" / "suijin"
     assert launcher.exists()
     text = launcher.read_text()
-    assert "suijin/cli.py" in text
+    assert "suijin/modules/console/lib/cli.py" in text
 
     # 4. the symlink contract holds in the installed tree
     assert (installed_repo / "suijin" / "suijin_agent").is_symlink()

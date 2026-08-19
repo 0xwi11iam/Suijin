@@ -19,6 +19,7 @@ MODULES_DIR = Path(__file__).resolve().parents[2] / "modules"
 # Files exempt from the third-party/module-level rule, with reasons.
 _ALLOWLIST = {
     "manager_tui.py": "console surface — Textual is its toolkit (the console tier is the edge)",
+    "cli.py": "console surface — the CLI may launch any surface (the console tier is the edge)",
 }
 
 
@@ -90,7 +91,7 @@ class TestModuleBoundaries:
         """manager (the API) and manager_tui (the surface) stay separable:
         nothing in modules/ imports manager_tui; the TUI imports manager."""
         for py in sorted(MODULES_DIR.rglob("*.py")):
-            if py.name == "manager_tui.py":
+            if py.name in ("manager_tui.py", "cli.py"):  # surfaces may launch surfaces
                 continue
             src = py.read_text(errors="ignore")
             assert "manager_tui" not in src, f"{py.name} reaches into the TUI surface"

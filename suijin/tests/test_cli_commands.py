@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from suijin import cli
+from suijin.modules.console.lib import cli
 
 
 def run_cli(argv):

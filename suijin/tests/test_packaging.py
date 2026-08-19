@@ -37,7 +37,7 @@ def test_pyproject_version_matches_version_json():
 
 
 def test_console_script_module_exists():
-    spec = __import__("importlib.util", fromlist=["util"]).find_spec("suijin.cli")
+    spec = __import__("importlib.util", fromlist=["util"]).find_spec("suijin.modules.console.lib.cli")
     assert spec is not None
 
 
@@ -64,7 +64,7 @@ def test_declared_package_data_exists():
 
 def test_entry_point_invocable():
     """The console script target must be callable with no args (argparse path)."""
-    from suijin.cli import main
+    from suijin.modules.console.lib.cli import main
 
     assert callable(main)
 

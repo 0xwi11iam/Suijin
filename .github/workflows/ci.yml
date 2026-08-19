@@ -83,7 +83,7 @@ jobs:
 
       - name: Build frontend
         run: |
-          cd webui
+          cd suijin/modules/console/webui
           npm ci --no-audit --no-fund
           npm run build
 
