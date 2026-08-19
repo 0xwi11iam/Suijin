@@ -882,7 +882,7 @@ Module shape: one folder, `plugin.json` (`id`, `version`, `tier`,
 `requires`, `provides`, `permissions`, `overrides`), an entry module
 implementing `register(ctx)` / `start(ctx)` / `stop(ctx)`. Nested physical
 modules (agent/graph, agent/nodes…) resolve as one flat dependency graph.
-`suijin module new` scaffolds a conforming module.
+`suijin module init` scaffolds a conforming module.
 
 ### Status
 
@@ -890,14 +890,16 @@ modules (agent/graph, agent/nodes…) resolve as one flat dependency graph.
 |:------|:------|:-------|
 | 0 | De-couple in place: god-import split, split-brain loader, import-time side effects, one job registry, services seam (inversions = 0), lazy mkdirs | ✅ **complete** |
 | 1 | Kernel — ALL 12 subsystems live (contracts, events, context, registry, controller, jobs, vfs, security, config, health, journal, errors), full-boot POST test, purity linter | ✅ **complete** |
-| 1.5 | Rust core: crate live (resolve_dag + check_paths), pure oracle + fuzz oracle suite, registry delegates to compiled core; maturin wheel matrix pending network | **nearly complete** |
-| 2 | Core tier onto kernel | planned |
-| 3 | Recommended tier + 49 packs converted | planned |
-| 4 | Module Manager TUI + install system | planned |
+| 1.5 | Rust core (resolve_dag + check_paths) | ✅ **complete — then RETIRED in v4.1**: the pure implementation was byte-identical and faster to ship; kernel/native.py is the single core now |
+| 2 | Core tier onto kernel | ✅ **complete** |
+| 3 | Recommended tier + packs converted | ✅ **complete** (49 legacy packs vendored in v4.1; +35 new in v4.1.0, +39 in v4.3.0 — 123 total) |
+| 4 | Module Manager TUI + install system | ✅ **complete** |
 | 5 | Boundary linter blocking in CI · ARCHITECTURE.md (the OS manual) · packs self-contained (no seams) | ✅ **complete** |
+| 6 | Modularisation finish: clean break (shims deleted), everything-is-a-module, outputs consolidation, audit trail v2, skills/addons rungs, 4 install paths | ✅ **complete** (v4.1–v4.3) |
 
-Every phase gates on: full suite green, ruff clean, behavior identical
-(old import paths keep working via shims until Phase 5).
+Every phase gated on: full suite green, ruff clean, behavior verified.
+The old import paths were removed with no shims in the v4.1 clean
+break — see CHANGELOG.
 
 ---
 
