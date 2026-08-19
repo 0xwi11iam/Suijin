@@ -294,6 +294,8 @@ def analyze_trace(trace: list, **extra_kw) -> Optional[str]:
         _detect_subagents_failing,
         _detect_unverified_claim,
         _detect_no_progress,
+        _detect_dead_end,
+        _detect_payload_class_escalation,
     ]
 
     for detector in detectors:
@@ -382,3 +384,74 @@ async def analyze_trace_with_llm(
     if len(guidance) > 250:
         guidance = guidance[:250] + "..."
     return guidance
+
+
+# ── Wave 2 detectors (A6 dead-end, A9 payload-class escalation) ────────
+
+
+def _detect_dead_end(trace: list, fail_threshold: int = 3) -> Optional[str]:
+    """A6: same tool FAILING repeatedly with varying args — a dead end.
+    Distinct from _detect_repeating_tool (same args, any outcome): here
+    the agent IS varying its approach inside one tool and still losing.
+    The fix is not another variant — it's a different strategy CLASS.
+    """
+    if len(trace) < fail_threshold:
+        return None
+    recent = trace[-fail_threshold:]
+    tools = [s.get("tool_name", "") for s in recent]
+    if len(set(tools)) != 1 or not tools[0]:
+        return None
+    if all(not s.get("success", True) for s in recent):
+        return (
+            f"DEAD END: '{tools[0]}' failed {fail_threshold} times in a row with different inputs. "
+            "Do not call it again with minor variations. Switch strategy CLASS entirely: "
+            "different attack surface, different recon angle, or use deploy_subagent for a fresh pass. "
+            "Write a note about why this path is blocked, then move on."
+        )
+    return None
+
+
+_INJECTION_TOOLS = {"http_request", "execute_terminal", "custom_cmd_run"}
+_PAYLOAD_FAMILIES = {
+    "reflected": ("' OR 1=1", "<script>", "onerror=", "../../"),
+    "blind": ("SLEEP(", "WAITFOR", "BENCHMARK(", "pg_sleep"),
+    "timing": ("sleep", "waitfor", "delay"),
+}
+
+
+def _detect_payload_class_escalation(trace: list, fail_threshold: int = 4) -> Optional[str]:
+    """A9: injection-style failures repeating — escalate the PAYLOAD CLASS
+    (reflected -> blind -> timing/oob), not just the payload string."""
+    if len(trace) < fail_threshold:
+        return None
+    recent = trace[-fail_threshold:]
+    inj = [s for s in recent if s.get("tool_name") in _INJECTION_TOOLS]
+    if len(inj) < fail_threshold or any(s.get("success") for s in inj):
+        return None
+    fam = set()
+    for s in inj:
+        args = str(s.get("tool_args", ""))
+        for name, markers in _PAYLOAD_FAMILIES.items():
+            if any(m.lower() in args.lower() for m in markers):
+                fam.add(name)
+    hint = ""
+    if fam and fam <= {"reflected"}:
+        hint = " You keep testing REFLECTED variants — escalate to BLIND (boolean/time-based) or OUT-OF-BAND (DNS/callback canaries via ssrf_canary)."
+    elif fam and "reflected" in fam and "blind" in fam:
+        hint = " You've tried reflected and blind — move fully to TIMING-based or OOB confirmation, or accept the surface is hardened."
+    return (
+        f"PAYLOAD CLASS ESCALATION: {fail_threshold} injection attempts failed. "
+        "Varying the payload string is not working." + hint
+    ) or None
+
+
+def _confidence_from_decision(decision: dict) -> str:
+    """A8 helper: normalize a decision's confidence claim."""
+    raw = str(decision.get("confidence", "")).lower()
+    if raw in ("verified", "confirmed", "certain"):
+        return "verified"
+    if raw in ("probable", "likely", "high"):
+        return "probable"
+    if raw in ("suspected", "possible", "low", "maybe"):
+        return "suspected"
+    return "probable"  # default when unclaimed — findings are never 'verified' without proof

@@ -299,6 +299,15 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         "messages": [{"role": "assistant", "content": raw_response}],
     }
 
+    # A8: confidence tagging — normalize the decision's claim; the report
+    # writer and verifier consume it. Unclaimed findings are 'probable'.
+    try:
+        from suijin.modules.agent.lib.supervisor import _confidence_from_decision
+
+        updates["_finding_confidence"] = _confidence_from_decision(decision)
+    except Exception:  # noqa: BLE001 — tagging must never break thinking
+        pass
+
     # ── Output analysis & productivity ──────────────────────────────
     output_analysis = decision.get("output_analysis") or {}
     productivity = output_analysis.get("productivity") or {}
@@ -389,6 +398,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
             "phase": phase,
             "thought": thought,
             "reasoning": reasoning,
+            "confidence": updates.get("_finding_confidence", "probable"),
             "productivity": productivity,
         }
 

@@ -262,6 +262,16 @@ NEVER run sequential scans when you could deploy subagents instead.
     except Exception:  # noqa: BLE001 — prompt building must never fail on skills
         pass
 
+    # 5c. Adversary profile directive (A10)
+    try:
+        from suijin.modules.agent.lib.profiles import profile_directive
+
+        _pd = profile_directive(getattr(state, "get", lambda *a: None)("_run_config") or {})
+        if _pd:
+            parts.append(_pd)
+    except Exception:  # noqa: BLE001
+        pass
+
     # 6. Decision format
     parts.append("""## DECISION FORMAT
 
