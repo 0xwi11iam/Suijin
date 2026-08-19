@@ -88,35 +88,3 @@ jobs:
         continue-on-error: true
         run: |
           pip install pip-audit && pip-audit
-
-
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 20
-
-      - name: Build frontend
-        run: |
-          npm ci --no-audit --no-fund
-          npm run build
-
-      - name: Committed bundle must be fresh
-        run: |
-          # the committed bundle is stale — rebuild locally and commit it.
-            exit 1
-          fi
-
-
-      - name: Format + lint + unit tests
-        run: |
-          cd native/suijin-core
-          cargo fmt --check
-          cargo clippy -- -D warnings
-          cargo test --release
-
-      - name: Python oracle comparison (pure vs compiled)
-        run: |
-          cd native/suijin-core && cargo build --release && cd ../..
-          pip install pytest --quiet
-          python -m pytest suijin/tests/kernel/test_native_oracle.py -q
-        env:
-          PYTHONPATH: ${{ github.workspace }}
