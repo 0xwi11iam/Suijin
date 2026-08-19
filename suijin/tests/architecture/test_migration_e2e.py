@@ -81,8 +81,12 @@ def test_medusa_to_suijin_migration(fake_machine, tmp_path):
     # Own process group: on timeout, kill the WHOLE group — an orphaned
     # pip grandchild otherwise holds the stdout pipe and hangs the runner.
     proc = subprocess.Popen(
-        ["bash", str(INSTALL_SH)], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True, start_new_session=True,
+        ["bash", str(INSTALL_SH)],
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        start_new_session=True,
     )
     try:
         out, _ = proc.communicate(timeout=900)

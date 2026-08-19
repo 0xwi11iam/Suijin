@@ -1,0 +1,882 @@
+{
+  "name": "suijin-bundled",
+  "description": "The packs bundled with this Suijin distribution (catalog; already installed). Community entries carry url+sha256 for remote install.",
+  "packs": {
+    "addons": {
+      "version": "1.0.0",
+      "description": "Zero-boilerplate addons: every public function in suijin/addons/*/main.py becomes an agent tool at boot.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "adenum": {
+      "version": "1.0",
+      "description": "Active Directory enumeration helpers (impacket-backed).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "agent": {
+      "version": "1.0.0",
+      "description": "The run loop: LangGraph state machine orchestrating think/execute/respond",
+      "bundled": true,
+      "tier": "core"
+    },
+    "amass": {
+      "version": "1.0",
+      "description": "Subdomain enumeration and OSINT gathering.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "apifuzz": {
+      "version": "1.0",
+      "description": "API logic probes: mass assignment, verb tampering.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "apkstatics": {
+      "version": "1.0",
+      "description": "APK static analysis (pure python: unzip + pattern extraction).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "asninfo": {
+      "version": "1.0",
+      "description": "ASN/IP ownership via the bgpview public API.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "auto_fix": {
+      "version": "1.0",
+      "description": "Automated finding triage \u2192 code fix \u2192 PR pipeline (CypherFix-style)",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "awsenumer": {
+      "version": "1.0",
+      "description": "AWS identity + high-privilege enumeration via aws CLI (authorized creds only).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "azurenumer": {
+      "version": "1.0",
+      "description": "Azure subscription enumeration via az CLI (authorized creds only).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "backuphunter": {
+      "version": "1.0",
+      "description": "Common backup/archive file probe.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "blueteam": {
+      "version": "1.0.0",
+      "description": "Autonomous defense: traffic monitoring, detectors, subagents, deception arsenal",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "bucketprobe": {
+      "version": "1.0",
+      "description": "Public cloud bucket checker (AWS/GCP/Azure naming permutations).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "cacheinspect": {
+      "version": "1.0",
+      "description": "Cache behavior/poisoning pre-checks.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "cloudmeta": {
+      "version": "1.0",
+      "description": "Cloud metadata endpoint probes (IMDS/SSRF validation targets).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "cmdsmith": {
+      "version": "1.0",
+      "description": "Agent-defined custom commands: define named command templates, run them, persist across sessions.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "cmepack": {
+      "version": "1.0",
+      "description": "CrackMapExec network validation (smb null sessions & shares).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "console": {
+      "version": "1.0.0",
+      "description": "Surfaces: TUI menus, CLI verbs, WebUI, MCP \u2014 feature-blind, driven by registered hooks",
+      "bundled": true,
+      "tier": "core"
+    },
+    "cookieaudit": {
+      "version": "1.0",
+      "description": "Set-Cookie security flag audit.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "core_utils": {
+      "version": "1.0",
+      "description": "Knowledge base search, patch application, and objective claiming.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "credential_store": {
+      "version": "1.0",
+      "description": "Persist and retrieve discovered credentials (passwords, API keys, tokens)",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "cronkit": {
+      "version": "1.0",
+      "description": "Cron expression tools: next runs and human explanation.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "crtsh": {
+      "version": "1.0",
+      "description": "Certificate Transparency log search via crt.sh",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "crtshq": {
+      "version": "1.0",
+      "description": "Certificate transparency subdomain discovery (crt.sh).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "cryptomisc": {
+      "version": "1.0",
+      "description": "Small classic ciphers: ROT-N, XOR with key, repeated-key XOR analysis.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "curl": {
+      "version": "1.0",
+      "description": "Manual HTTP request with curl for quick targeted payload testing. Use for single-request manual testing only \u2014 NOT for scanning.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "cvelookup": {
+      "version": "1.0",
+      "description": "NVD CVE lookup by keyword/CPE.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "devtoolsk": {
+      "version": "1.0",
+      "description": "Agent-side dev utilities: JSON tooling, diffs, base conversion, stats, timestamps.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "dirsearchp": {
+      "version": "1.0",
+      "description": "Web path discovery via dirsearch.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "dns_zone": {
+      "version": "1.0",
+      "description": "DNS zone transfer (AXFR) and nameserver enumeration",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "dnsbrute": {
+      "version": "1.0",
+      "description": "Subdomain word-brute via DoH (passive transport).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "dnsreconp": {
+      "version": "1.0",
+      "description": "DNS enumeration via dnsrecon (zone transfer, subdomains, records).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "dnssec": {
+      "version": "1.0",
+      "description": "Email security records: SPF/DMARC/DKIM lookup and audit.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "dnssniff": {
+      "version": "1.0",
+      "description": "Pure-Python DNS: forward/reverse resolution over stdlib sockets.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "dohquery": {
+      "version": "1.0",
+      "description": "DNS-over-HTTPS queries (Cloudflare/Google) \u2014 passive, no local resolver.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "emailharvest": {
+      "version": "1.0",
+      "description": "Email harvest from page text (pure regex).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "encodesk": {
+      "version": "1.0",
+      "description": "Encoding toolkit: base64/base32/hex/url/rot13 encode and decode.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "execute_terminal": {
+      "version": "1.0",
+      "description": "Execute any shell command. Primary interface for CLI tools (gobuster, nmap, sqlmap, hydra, etc). Commands that modify the system (pip instal",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "exploitdbp": {
+      "version": "1.0",
+      "description": "searchsploit wrapper (local Exploit-DB).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "extractr": {
+      "version": "1.0",
+      "description": "Extract artifacts from text: emails, IPs, URLs, hashes, API keys, internal paths.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "feroxbuster": {
+      "version": "1.0",
+      "description": "Recursive web content discovery (faster than gobuster for recursion).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "ffuf": {
+      "version": "1.0",
+      "description": "Fast web fuzzer for parameters, directories, and virtual hosts.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "fileio": {
+      "version": "1.0",
+      "description": "Read and write files scoped to suijin_agent/ workspace by default. Absolute paths allowed.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "filekit": {
+      "version": "1.0",
+      "description": "Workspace file utilities: tree, grep, stat, archives.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "gcpenumer": {
+      "version": "1.0",
+      "description": "Current gcloud identity (authorized creds only).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "genkit": {
+      "version": "1.0",
+      "description": "Generators: random tokens, strong passwords, UUIDs.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "githubdork": {
+      "version": "1.0",
+      "description": "GitHub dorking helpers (search URL builders + optional API fetch).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "gobuster": {
+      "version": "1.0",
+      "description": "Directory and file brute-forcing for web servers.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "google_dork": {
+      "version": "1.0",
+      "description": "Google dorking and automated target-specific search queries",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "graphql_diff": {
+      "version": "1.0",
+      "description": "Compare GraphQL introspection across users to find IDOR",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "graphqlprobe": {
+      "version": "1.0",
+      "description": "GraphQL endpoint probing (introspection, field suggestions).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "gvm": {
+      "version": "1.0",
+      "description": "Greenbone Vulnerability Manager \u2014 170,000+ NVTs",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "hashcatp": {
+      "version": "1.0",
+      "description": "GPU cracking via hashcat.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "hashcrack": {
+      "version": "1.0",
+      "description": "Offline dictionary attack against MD5/SHA1/SHA256/SHA512 hashes using a wordlist.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "hashid": {
+      "version": "1.0",
+      "description": "Identify hash types from their format (length/charset heuristics).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "hashkit": {
+      "version": "1.0",
+      "description": "Hash computation and HMAC signing.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "headeraudit": {
+      "version": "1.0",
+      "description": "HTTP response security-header audit (HSTS, CSP, cookies flags, info leaks).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "hostheaderi": {
+      "version": "1.0",
+      "description": "Host header injection probe (password-reset poisoning support).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "htmlparse": {
+      "version": "1.0",
+      "description": "HTML surface extraction: forms+inputs, links, comments \u2014 regex, no deps.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "http_request": {
+      "version": "1.0",
+      "description": "Send HTTP requests with full browser fingerprinting. For manual targeted payload testing only \u2014 use execute_terminal with gobuster/ffuf/nmap",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "httplive": {
+      "version": "1.0",
+      "description": "Batch HTTP liveness checker.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "httpmethods": {
+      "version": "1.0",
+      "description": "HTTP method surface mapper.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "httpx": {
+      "version": "1.0",
+      "description": "HTTP probing and technology detection",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "hydra": {
+      "version": "1.0",
+      "description": "Online password brute-forcing for HTTP, SSH, FTP, etc.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "imppack": {
+      "version": "1.0",
+      "description": "Impacket classics: secretsdump, GetUserSPNs (kerberoast).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "ipastatics": {
+      "version": "1.0",
+      "description": "IPA static analysis (Info.plist + embedded.mobileprovision).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "ipmath": {
+      "version": "1.0",
+      "description": "IP/CIDR mathematics: expansion, subnets, range info, classification.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "iprepq": {
+      "version": "1.0",
+      "description": "IP reputation lookups.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "iptables_control": {
+      "version": "1.0",
+      "description": "Firewall rule management",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "john": {
+      "version": "1.0",
+      "description": "Offline password hash cracking. Supports MD5, SHA, NTLM, bcrypt, and more.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "jwt_tool": {
+      "version": "1.0",
+      "description": "Decode, analyze, crack, and forge JSON Web Tokens",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "jwtlab": {
+      "version": "1.0",
+      "description": "JWT inspection: decode header/payload, expiry check, algorithm security notes.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "katana": {
+      "version": "1.0",
+      "description": "Headless crawler for endpoint and parameter discovery",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "kerberos_attacks": {
+      "version": "1.0",
+      "description": "AS-REP roasting, Kerberoasting, user enumeration",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "kerbtools": {
+      "version": "1.0",
+      "description": "Kerberos ticket/hash format helpers (pure python).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "kg_neo4j": {
+      "version": "1.0",
+      "description": "Neo4j-backed knowledge graph with 30+ node types, attack path visualization",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "knowledge": {
+      "version": "1.0.0",
+      "description": "Offline knowledge base (HackTricks/GTFOBins/...) + CISA KEV mirror",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "knowledge_graph": {
+      "version": "1.0",
+      "description": "Persistent target constraints. Check before generating payloads, record findings after verification.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "log_surgeon": {
+      "version": "1.0",
+      "description": "Advanced log parsing and analysis",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "macvendor": {
+      "version": "1.0",
+      "description": "MAC vendor lookup (offline mini-table + API fallback).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "mcp_metasploit": {
+      "version": "1.0",
+      "description": "MCP server wrapper for stateful Metasploit console",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "mcp_nmap": {
+      "version": "1.0",
+      "description": "Structured nmap with XML output parsing",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "mcp_nuclei": {
+      "version": "1.0",
+      "description": "Nuclei with structured JSON output and template management",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "mcp_playwright": {
+      "version": "2.0",
+      "description": "Headless Chromium browser with DOM snapshots for AI-driven browsing. Navigate, snapshot interactive elements, click by index, type, screensh",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "mcp_terminal": {
+      "version": "1.0",
+      "description": "Interactive PTY shell with persistent session state",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "medusap": {
+      "version": "1.0",
+      "description": "Parallel network login brute via medusa.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "metasploit": {
+      "version": "1.0",
+      "description": "Full Metasploit Framework integration via RPC or msfconsole fallback.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "mitmproxy_capture": {
+      "version": "1.0",
+      "description": "HTTP/HTTPS transparent proxy for traffic analysis",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "netutils": {
+      "version": "1.0",
+      "description": "TCP reachability, port math, host liveness.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "nikto": {
+      "version": "1.0",
+      "description": "Web server vulnerability scanner. Finds outdated software, misconfigurations, and known vulnerable files.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "nmap": {
+      "version": "1.0",
+      "description": "Port scanning and service detection.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "nuclei": {
+      "version": "1.0",
+      "description": "Template-based vulnerability scanner (8000+ community templates)",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "openapi_parser": {
+      "version": "1.0",
+      "description": "Parse OpenAPI/Swagger specs and generate test plans",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "openapik": {
+      "version": "1.0",
+      "description": "OpenAPI/Swagger spec parsing into endpoint inventories.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "ops": {
+      "version": "1.0.0",
+      "description": "Operator tooling: export, debrief, replay, dossier, timeline, battle, approvals, panic, scope",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "payloadescape": {
+      "version": "1.0",
+      "description": "Context-aware payload encoders for HTML/JS/URL/SQL/LDAP contexts.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "payloadpk": {
+      "version": "1.0",
+      "description": "Curated payload sets: XSS and SQLi polyglots by context.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "platform": {
+      "version": "1.0.0",
+      "description": "Workspace, layered config, runtime init \u2014 the foundation core module",
+      "bundled": true,
+      "tier": "core"
+    },
+    "portmap": {
+      "version": "1.0",
+      "description": "Offline service/port knowledge base (common TCP/UDP services).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "portscanx": {
+      "version": "1.0",
+      "description": "Pure-python TCP connect scanner (top ports).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "protodetect": {
+      "version": "1.0",
+      "description": "gRPC/protobuf service detection.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "providers": {
+      "version": "1.0.0",
+      "description": "LLM abstraction: generate() across DeepSeek/Z.ai/Gemini/Anthropic/AMD/HF with failover chain",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "proxycheck": {
+      "version": "1.0",
+      "description": "Proxy/egress-IP validation.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "pwdaudit": {
+      "version": "1.0",
+      "description": "Password/policy quick checks (offline heuristics).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "pyrun": {
+      "version": "1.0",
+      "description": "Ad-hoc agent logic: inline python evaluation and workspace script execution.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "querykit": {
+      "version": "1.0",
+      "description": "Data querying: JSON paths, CSV filters, markdown tables.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "redirecthunter": {
+      "version": "1.0",
+      "description": "Open redirect validation.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "redirtrace": {
+      "version": "1.0",
+      "description": "Follow and record an HTTP redirect chain hop-by-hop.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "redisenum": {
+      "version": "1.0",
+      "description": "Redis INFO via redis-cli (unauthenticated recon).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "redteam": {
+      "version": "1.0.0",
+      "description": "Autonomous offensive agent: redteamer loop, run-command box, prompts, skills, intel hooks",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "reqdiff": {
+      "version": "1.0",
+      "description": "Response comparison pair-tools.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "reqtool": {
+      "version": "1.0",
+      "description": "Raw HTTP parsing, curl conversion, safe downloads.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "robotsparse": {
+      "version": "1.0",
+      "description": "robots.txt analyzer: interesting disallows + generates a probe wordlist.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "search_cve": {
+      "version": "1.0",
+      "description": "Query NIST NVD for CVEs by software and version. Returns CVSS scores, severity, CWE types, and exploit references.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "secretscanr": {
+      "version": "1.0",
+      "description": "Secret/credential scanning (regex + entropy), file or text.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "securitytxt": {
+      "version": "1.0",
+      "description": "security.txt policy checker.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "shodan": {
+      "version": "1.0",
+      "description": "Shodan internet scanner integration (requires SHODAN_API_KEY env var)",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "sitemapper": {
+      "version": "1.0",
+      "description": "sitemap.xml parser: full URL inventory from a sitemap (or sitemap index).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "skills": {
+      "version": "1.0.0",
+      "description": "Drop-in markdown skills: every .md under suijin/skills/ boots into the agent's system prompt.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "smb_enum": {
+      "version": "1.0",
+      "description": "SMB share listing, null session detection",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "snmpenum": {
+      "version": "1.0",
+      "description": "SNMP walk via snmpwalk (v2c public first).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "socat": {
+      "version": "1.0",
+      "description": "Bidirectional data relay for port forwarding, reverse shells, and TCP/UDP tunneling.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "sourcemap": {
+      "version": "1.0",
+      "description": "Source map exposure checker (JS source recovery).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "sqlmap": {
+      "version": "1.0",
+      "description": "Automated SQL injection detection and exploitation.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "sslprobe": {
+      "version": "1.0",
+      "description": "TLS certificate inspection via stdlib ssl (no binary needed).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "sslscan": {
+      "version": "1.0",
+      "description": "SSL/TLS cipher suite assessment.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "ssrfcanary": {
+      "version": "1.0",
+      "description": "SSRF canary URL builders + callback-free detection.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "subfinder": {
+      "version": "1.0",
+      "description": "Passive subdomain discovery tool",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "takeoverfp": {
+      "version": "1.0",
+      "description": "Subdomain takeover fingerprinting (CNAME + known-service signatures).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "techfp": {
+      "version": "1.0",
+      "description": "Passive tech fingerprinting from response headers + body markers.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "testssl": {
+      "version": "1.0",
+      "description": "Deep TLS/SSL audit via testssl.sh.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "tfsec": {
+      "version": "1.0",
+      "description": "Terraform & Dockerfile security review (pure pattern lints).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "tools": {
+      "version": "1.0.0",
+      "description": "The tool registry \u2014 bridges every core + pack tool onto the kernel Context",
+      "bundled": true,
+      "tier": "core"
+    },
+    "trufflehog": {
+      "version": "1.0",
+      "description": "Secret scanning with 700+ verified detectors",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "uacheck": {
+      "version": "1.0",
+      "description": "User-Agent string breakdown (browser/bot/library/attack-tool detection).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "urltoolz": {
+      "version": "1.0",
+      "description": "URL parsing utilities.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "wafw00f": {
+      "version": "1.0",
+      "description": "WAF fingerprinting via wafw00f.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "waybacker": {
+      "version": "1.0",
+      "description": "Wayback Machine URL history via the public CDX API.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "webprobe": {
+      "version": "1.0",
+      "description": "Targeted single-purpose HTTP probes: CORS reflection, vhost routing, timing stats.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "websocket_client": {
+      "version": "1.0",
+      "description": "Connect to WebSocket endpoints, send/receive messages",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "whatweb": {
+      "version": "1.0",
+      "description": "Web technology stack fingerprinting",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "whoisraw": {
+      "version": "1.0",
+      "description": "Raw WHOIS over port 43 (no external binary).",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "wifi": {
+      "version": "1.0",
+      "description": "WiFi network scanning, handshake capture, and WPA/WPA2 cracking tools.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "wordlisthub": {
+      "version": "1.0",
+      "description": "Curated SecLists subset fetcher with checksums \u2014 fetch known-good wordlists into the workspace.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "wordlistio": {
+      "version": "1.0",
+      "description": "Wordlist file utilities: merge/dedupe/filter and sample.",
+      "bundled": true,
+      "tier": "recommended"
+    },
+    "write_note": {
+      "version": "1.0",
+      "description": "Write timestamped engagement notes. MANDATORY \u2014 log every significant finding. Each engagement gets its own file.",
+      "bundled": true,
+      "tier": "recommended"
+    }
+  }
+}

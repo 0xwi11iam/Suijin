@@ -1232,6 +1232,23 @@ def run_module(args) -> int:
     return 1
 
 
+def run_skills_promote() -> int:
+    """`suijin skills promote` — G47: critique tactics -> draft skills."""
+    from suijin.modules.agent.lib.critique import promote_learnings
+
+    print(promote_learnings(dry_run=True))
+    print("\n(re-run programmatically with dry_run=False to write dormant _draft_*.md files)")
+    return 0
+
+
+def run_skills_decay() -> int:
+    """`suijin skills decay` — G48: retirement candidates."""
+    from suijin.modules.skills.entry import decay_report
+
+    print(decay_report())
+    return 0
+
+
 def run_skills(args) -> int:
     from suijin.modules.tools.lib import self_improve as si
 
@@ -1340,6 +1357,14 @@ def _enrich_traffic(entries: list) -> list:
             e.setdefault("ui_score", 0)
             e.setdefault("ui_signals", [])
     return entries
+
+
+def run_kg_graph() -> int:
+    """`suijin kg graph` — G49: mermaid export of the knowledge graph."""
+    from suijin.modules.redteam.lib.intel.knowledge_graph import export_mermaid
+
+    print(export_mermaid())
+    return 0
 
 
 def run_market_cmd(args) -> int:
@@ -1671,6 +1696,10 @@ def main(argv=None):
     fetch_p.set_defaults(func=lambda a: run_wordlist_cmd("fetch", a.name))
     wl.set_defaults(func=lambda a: run_wordlist_cmd("list", ""))
 
+    kggraph = sub.add_parser("kg", help="red knowledge graph: graph (mermaid) export")
+    kggraph.add_argument("kg_action", nargs="?", default="graph", choices=["graph"], help="export the mermaid graph")
+    kggraph.set_defaults(func=lambda _a: run_kg_graph())
+
     market = sub.add_parser("market", help="pack marketplace: search/install/update from index URLs")
     market.add_argument("action", choices=["search", "install", "update", "list"], help="marketplace action")
     market.add_argument("name", nargs="?", help="pack id (search term for 'search')")
@@ -1712,6 +1741,12 @@ def main(argv=None):
     skills = sub.add_parser("skills", help="agent-editable skills: list/history/diff/rollback")
     skills_sub = skills.add_subparsers(dest="skills_action")
     skills_sub.add_parser("list", help="list all skills").set_defaults(func=lambda _a: run_skills_list())
+    skills_sub.add_parser("promote", help="draft critique tactics as skills for operator review").set_defaults(
+        func=lambda _a: run_skills_promote()
+    )
+    skills_sub.add_parser("decay", help="flag drop-in skills no engagement ever referenced").set_defaults(
+        func=lambda _a: run_skills_decay()
+    )
     hist = skills_sub.add_parser("history", help="revision snapshots for a skill")
     hist.add_argument("name", help="skill name")
     hist.set_defaults(func=run_skills)

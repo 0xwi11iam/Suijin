@@ -129,7 +129,7 @@ class TestKGViz:
         from suijin.modules.redteam.lib.intel import knowledge_graph as kg
 
         monkeypatch.setattr(kg, "GRAPH_PATH", tmp_path / "kg.json")
-        kg._save({"targets": {"t.example": {"constraints": [{"type": "waf", "rule": "blocks ' OR 1=1"}]}}})
+        kg._save({"t.example": {"waf": [{"rule": "blocks ' OR 1=1"}]}})
         out = kg.export_mermaid()
         assert out.startswith("graph LR") and "t.example" in out and "waf" in out
 

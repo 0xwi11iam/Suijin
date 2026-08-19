@@ -24,10 +24,28 @@ from pathlib import Path
 DEFAULT_INDEX = "https://raw.githubusercontent.com/0xwi11iam/Suijin-marketplace/main/index.json"
 
 
+BUNDLED_INDEX = Path(__file__).resolve().parents[1] / "marketplace_index.json"  # ships in the wheel
+
+
 def fetch_index(url: str = DEFAULT_INDEX) -> dict:
-    """Download + parse an index document."""
-    with urllib.request.urlopen(url, timeout=15) as r:
-        data = json.loads(r.read().decode())
+    """Download + parse an index document.
+
+    Falls back to the BUNDLED catalog (the vendored estate) when the
+    remote index is unreachable — 'suijin market' works offline, first
+    try, out of the box."""
+    data = None
+    if url.startswith(("http://", "https://")):
+        try:
+            with urllib.request.urlopen(url, timeout=10) as r:
+                data = json.loads(r.read().decode())
+        except (OSError, ValueError):
+            data = None
+    else:
+        path = url[7:] if url.startswith("file://") else url
+        with open(path) as f:
+            data = json.load(f)
+    if data is None and BUNDLED_INDEX.exists():
+        data = json.loads(BUNDLED_INDEX.read_text())
     if not isinstance(data, dict) or "packs" not in data:
         raise ValueError("index document has no 'packs' map")
     return data
@@ -57,6 +75,8 @@ def install_pack(pack_id: str, url: str = DEFAULT_INDEX, into: Path | None = Non
     if meta is None:
         avail = ", ".join(sorted(idx["packs"])[:10])
         return f"Error: no pack '{pack_id}' in index (have: {avail}...)"
+    if meta.get("bundled"):
+        return f"'{pack_id}' ships with Suijin itself (vendored) — already installed; nothing to do"
     dest = into or _user_modules_dir() / pack_id
     if dest.exists():
         return f"Error: already installed at {dest} (module update {pack_id} to refresh)"

@@ -29,7 +29,7 @@ toolkit, one knowledge base, and one knowledge graph.
 > **v5.0.0 — ALL 50 ROADMAP FEATURES COMPLETE.** The marketplace
 > lands (decentralized indexes, hash-pinned installs), the agent
 > verifies its own findings, grades itself, mines its habits into
-> recipes, compacts its own context, and speaks 250+ tools with typed
+> recipes, compacts its own context, and speaks 262 tools with typed
 > MCP schemas. See `developer.md` to get started.
 
 > **LEGAL DISCLAIMER**: This tool is intended for **authorized security
@@ -156,7 +156,7 @@ hidden behind CLI flags.
 | `suijin status` | One-page summary: provider, KB, workspace, modules, lab port |
 | `suijin version` | Release, codename, python, platform, package path |
 | `suijin env` | API key presence by name — values are never printed |
-| `suijin tools` | All 250+ agent tools with availability (missing binaries marked) |
+| `suijin tools` | All 262 agent tools with availability (missing binaries marked) |
 | `suijin market` | Pack marketplace: search / install / update from any index URL |
 | `suijin engage` | Apply an engagement template to a target (recurring via schedule) |
 | `suijin modules` | Loaded module packs with tool counts and dependencies |

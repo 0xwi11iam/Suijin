@@ -151,17 +151,27 @@ def summary(target):
 
 
 def export_mermaid() -> str:
-    """Whole-graph mermaid diagram (targets -> constraints)."""
+    """Whole-graph mermaid diagram (targets -> constraints).
+
+    Schema: FLAT top-level target keys, each holding constraint-type
+    lists: data[target][constraint_type] = [{rule, evidence, ...}].
+    Metadata keys (starting with _) are skipped."""
     data = _load()
     lines = ["graph LR"]
-    targets = data.get("targets") or {}
-    for tname, tdata in targets.items():
+    for tname, tdata in data.items():
+        if tname.startswith("_") or not isinstance(tdata, dict):
+            continue
         node = "".join(c if c.isalnum() else "_" for c in tname)[:24]
         lines.append(f'  {node}["{tname[:20]}"]')
-        for c in tdata.get("constraints") or []:
-            ctype = c.get("type", "?")
-            rule = str(c.get("rule", ""))[:28].replace('"', "'")
-            lines.append(f'  {node} -->|{ctype}| {node}_{ctype}_{abs(hash(rule)) % 997}["{rule}"]')
+        for ctype, constraints in tdata.items():
+            if ctype.startswith("_") or not isinstance(constraints, list):
+                continue
+            for c in constraints[:4]:  # cap edges per type
+                if not isinstance(c, dict):
+                    continue
+                rule = str(c.get("rule", ""))[:28].replace('"', "'")
+                edge = f"{node}_{ctype}_{abs(hash(rule)) % 997}"
+                lines.append(f'  {node} -->|{ctype}| {edge}["{rule}"]')
     if len(lines) == 1:
         return "graph LR\n  empty[(knowledge graph is empty)]"
     return "\n".join(lines)
