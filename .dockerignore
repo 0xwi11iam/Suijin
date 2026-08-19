@@ -44,8 +44,6 @@ suijin/.notes/
 native/**/target/
 
 # Frontend toolchain
-suijin/modules/console/webui/node_modules/
-suijin/modules/console/webui/*.tsbuildinfo
 
 # Docker
 Dockerfile

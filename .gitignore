@@ -59,11 +59,6 @@ coverage.xml
 htmlcov/
 .vscode/
 
-# ── WebUI (React sources in webui/; built bundle IS committed at suijin/ui/dist) ──
-webui/node_modules/
-webui/*.tsbuildinfo
-webui/dist/
-
 # ── v2.10 runtime artifacts ───────────────────────────────────────
 
 suijin/policy.json

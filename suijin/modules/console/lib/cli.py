@@ -634,13 +634,6 @@ def run_sessions_list() -> int:
     return 0
 
 
-def run_ui(args) -> int:
-    """`suijin ui` — local-first web dashboard (127.0.0.1 only)."""
-    from suijin.modules.console.lib.ui.server import run_server
-
-    return run_server(port=int(getattr(args, "port", 0) or 7800), open_browser=not getattr(args, "no_open", False))
-
-
 def run_export(args) -> int:
     """`suijin export` — chain-of-custody evidence bundle."""
     from suijin.modules.ops.lib.export_bundle import build_bundle, verify_bundle
@@ -1302,10 +1295,30 @@ def run_labs_campaign(args) -> int:
     return 0
 
 
+def _enrich_traffic(entries: list) -> list:
+    """Score raw lab log entries with the blue team's real anomaly detector
+    (moved from the retired web UI; the watch verb tiers on it)."""
+    try:
+        from suijin.modules.blueteam.lib.blue.traffic.anomaly_detector import detect_anomalies
+
+        for e in entries:
+            try:
+                signals = detect_anomalies(e, {"methods": {e.get("method", "GET"): 1}})
+                e["ui_score"] = sum(sig[1] for sig in signals)
+                e["ui_signals"] = [sig[0] for sig in signals]
+            except Exception:
+                e.setdefault("ui_score", 0)
+                e.setdefault("ui_signals", [])
+    except Exception:
+        for e in entries:
+            e.setdefault("ui_score", 0)
+            e.setdefault("ui_signals", [])
+    return entries
+
+
 def run_watch(args) -> int:
     import signal
 
-    from suijin.modules.console.lib.ui.server import _enrich_traffic
     from suijin.modules.ops.lib.housekeeping import tail_file, watch_lines
     from suijin.modules.platform.lib.constants import BLUE_TRAFFIC_LOG
 
@@ -1491,11 +1504,6 @@ def main(argv=None):
     labs_sub.add_parser("list", help="list labs with ports").set_defaults(func=lambda _a: run_labs_list())
     labs_sub.add_parser("run", help="boot + probe every lab; capability matrix").set_defaults(func=run_labs_campaign)
     labs.set_defaults(func=lambda _a: run_labs_list())
-
-    ui = sub.add_parser("ui", help="launch the local web dashboard (127.0.0.1)")
-    ui.add_argument("--port", type=int, default=7800, help="listen port (default 7800)")
-    ui.add_argument("--no-open", action="store_true", help="do not auto-open the browser")
-    ui.set_defaults(func=run_ui)
 
     export = sub.add_parser("export", help="chain-of-custody evidence bundle (zip + SHA-256 manifest)")
     export.add_argument("--out", help="output zip path (default suijin_agent/exports/<ts>.zip)")

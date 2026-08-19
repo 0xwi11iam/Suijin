@@ -69,7 +69,8 @@ def test_entry_points_importable():
         "suijin.main",
         "suijin.modules.console.lib.cli",
         "suijin.modules.knowledge.lib.kb",
-        "suijin.modules.console.lib.ui.server",
+        "suijin.modules.skills.entry",
+        "suijin.modules.addons.entry",
     ):
         importlib.import_module(mod)
 

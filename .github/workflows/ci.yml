@@ -72,10 +72,6 @@ jobs:
         run: |
           pip install pip-audit && pip-audit
 
-  webui:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v5
         with:
@@ -83,17 +79,12 @@ jobs:
 
       - name: Build frontend
         run: |
-          cd suijin/modules/console/webui
           npm ci --no-audit --no-fund
           npm run build
 
       - name: Committed bundle must be fresh
         run: |
-          # The build just regenerated suijin/ui/dist. If git sees changes,
           # the committed bundle is stale — rebuild locally and commit it.
-          if ! git diff --quiet -- suijin/ui/dist; then
-            echo "::error::suijin/ui/dist is stale — run: cd suijin/modules/console/webui && npm run build"
-            git diff --stat -- suijin/ui/dist
             exit 1
           fi
 

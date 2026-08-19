@@ -53,7 +53,6 @@ suijin = [
     "skills/README.md",
     "addons/README.md",
 ]
-"suijin.modules.console.lib.ui" = ["dist/*", "dist/assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["suijin/tests"]
