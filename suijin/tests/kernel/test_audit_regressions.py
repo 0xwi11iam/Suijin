@@ -101,8 +101,12 @@ class TestJournalFlushRace:
         assert (tmp_path / "logs" / "journal.log").exists()
 
     def test_concurrent_append_flush_stress(self, tmp_path):
-        """Hammer it: 8 threads appending while flushing — nothing lost."""
-        j = Journal(tmp_path / "logs", ring_size=5000)
+        """Hammer it: 8 threads appending while flushing — nothing lost.
+
+        max_bytes is small enough to FORCE rotation mid-stress, so the
+        accounting covers every journal file (the active log + rotated
+        segments): disk + ring + dropped must equal every append."""
+        j = Journal(tmp_path / "logs", ring_size=5000, max_bytes=32 * 1024)
         stop = threading.Event()
         appended = {"n": 0}
 
@@ -119,23 +123,39 @@ class TestJournalFlushRace:
         threads = [threading.Thread(target=writer, args=(t,), daemon=True) for t in range(8)]
         [t.start() for t in threads]
         deadline = time.time() + 0.3
-        flushed = 0
         while time.time() < deadline:
             j.flush()
-            flushed += len(j.tail(1))
         stop.set()
         [t.join(timeout=2) for t in threads]
         j.flush()
         with count_lock:
             total = appended["n"]
-        disk = (tmp_path / "logs" / "journal.log").read_text().count("tick")
+        # account across the active log AND every rotated segment
+        log_dir = tmp_path / "logs"
+        disk = sum(p.read_text().count("tick") for p in sorted(log_dir.glob("journal*.log")))
         in_ring = len(j._ring)
         accounted = disk + in_ring + j.dropped
         assert accounted == total, (
             f"UNACCOUNTED {total - accounted} of {total} entries "
-            f"(disk={disk} ring={in_ring} dropped={j.dropped} — every entry must "
+            f"(disk={disk} ring={in_ring} dropped={j.dropped} across "
+            f"{len(list(log_dir.glob('journal*.log')))} journal files — every entry must "
             "be on disk, in the ring, or counted as dropped)"
         )
+
+    def test_rotation_same_second_never_overwrites(self, tmp_path):
+        """Repeated rotations (likely within one second) must not destroy
+        each other: rotation happens on the flush AFTER overflow, so
+        three bursts -> two rotations, all entries preserved."""
+        j = Journal(tmp_path / "logs", max_bytes=100)
+        for burst in range(3):
+            for i in range(50):
+                j.append("tick", f"burst{burst}-{i}")
+            j.flush()  # each burst alone exceeds 100B -> rotation follows
+        files = sorted((tmp_path / "logs").glob("journal*.log"))
+        # active log + rotated segments, none overwritten
+        all_ticks = sum(p.read_text().count("tick") for p in files)
+        assert all_ticks == 150, f"rotation lost entries: {all_ticks}/150 across {[f.name for f in files]}"
+        assert len(files) >= 3, f"expected rotation segments, got {[f.name for f in files]}"
 
 
 class TestNativeFreshness:

@@ -72,7 +72,7 @@ class Journal:
         try:
             self._dir.mkdir(parents=True, exist_ok=True)
             if self._path.exists() and self._path.stat().st_size > self._max_bytes:
-                rotated = self._dir / f"journal-{int(time.time())}.log"
+                rotated = self._rotated_name()
                 self._path.replace(rotated)
             stamp = time.strftime("%Y-%m-%dT%H:%M:%S")
             with open(self._path, "a") as f:
@@ -84,3 +84,16 @@ class Journal:
             with self._lock:
                 self._ring.extend(entries)
             raise
+
+    def _rotated_name(self) -> Path:
+        """Rotation target: timestamped, collision-proof within the same
+        second (an overwrite would silently destroy entries — two bursts
+        crossing the size cap inside one second is exactly the stress
+        case). First free suffix wins."""
+        base = int(time.time())
+        candidate = self._dir / f"journal-{base}.log"
+        n = 0
+        while candidate.exists():
+            n += 1
+            candidate = self._dir / f"journal-{base}-{n}.log"
+        return candidate
