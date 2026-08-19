@@ -6,6 +6,27 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v4.5.0 — Wave 2: agent intelligence
+
+- **Finding verifier**: independent second evidence path per finding
+  (artifact-match = verified; contradictions = dismissed) before the
+  report is written.
+- **Peer review**: hostile-reviewer + judge LLM passes — keep /
+  downgrade / dismiss with reasons; no-LLM degrades gracefully.
+- **Context compaction**: deterministic digest of old history past
+  ~30k tokens (failures marked do-not-repeat), tail preserved — long
+  engagements survive.
+- **Dead-end detector**: same tool failing with varying args forces a
+  strategy-CLASS switch.
+- **Payload-class escalation**: reflected -> blind -> timing/OOB ladder
+  hinted from failed-arg families.
+- **Confidence tagging**: every step carries verified/probable/
+  suspected (unclaimed = probable — never verified without proof).
+- **Adversary profiles**: stealth_apt / script_kiddie / insider
+  personas change tool preference, pacing, and noise posture.
+
+1,122 tests.
+
 ## v4.4.0 — Wave 1: cost control, recipes, planning, author tooling
 
 **Status: stable and ready.** 1,104 tests, 149-unit / 256-tool boot,
