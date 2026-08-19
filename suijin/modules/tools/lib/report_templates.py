@@ -9,7 +9,6 @@ Language presets adjust section headers + canned phrases (en/de/fr/es).
 
 from __future__ import annotations
 
-
 _LANG = {
     "en": {
         "title": "Security Assessment Report",
