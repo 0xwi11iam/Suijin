@@ -38,7 +38,7 @@ class PlatformModule(Module):
 
         # traffic services (blue scorer etc.) — the Phase 0 seam, reborn
         def _scorer():
-            from suijin.core.blue.traffic.scorer import score_request
+            from suijin.modules.blueteam.lib.blue.traffic.scorer import score_request
 
             return score_request
 

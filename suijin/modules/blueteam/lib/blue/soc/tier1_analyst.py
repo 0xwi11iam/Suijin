@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import time
 
-from suijin.modules.platform.lib.constants import RISK_HIGH
+
+def _risk_high():
+    from suijin.modules.platform.lib.constants import RISK_HIGH as _v
+
+    return _v
 
 
 class Tier1Analyst:
@@ -15,7 +19,7 @@ class Tier1Analyst:
 
     def triage(self, request: dict, score: int) -> dict:
         self.triaged += 1
-        if score >= RISK_HIGH:
+        if score >= _risk_high():
             self.escalated += 1
             return {"action": "escalate_to_tier2", "endpoint": self.endpoint, "score": score, "time": time.time()}
         return {"action": "log", "endpoint": self.endpoint, "score": score}

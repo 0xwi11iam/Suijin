@@ -53,12 +53,16 @@ def init_runtime(force: bool = False) -> None:
 
         _services.register(
             "traffic_scorer",
-            lambda: __import__("suijin.core.blue.traffic.scorer", fromlist=["score_request"]).score_request,
+            lambda: (
+                __import__("suijin.modules.blueteam.lib.blue.traffic.scorer", fromlist=["score_request"]).score_request
+            ),
         )
         _services.register(
             "traffic_anomaly_detector",
             lambda: (
-                __import__("suijin.core.blue.traffic.anomaly_detector", fromlist=["detect_anomalies"]).detect_anomalies
+                __import__(
+                    "suijin.modules.blueteam.lib.blue.traffic.anomaly_detector", fromlist=["detect_anomalies"]
+                ).detect_anomalies
             ),
         )
         _services.register(

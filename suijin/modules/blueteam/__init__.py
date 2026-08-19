@@ -10,7 +10,9 @@ class BlueTeamModule(Module):
     tier = Tier.RECOMMENDED
 
     def register(self, ctx) -> None:
-        ctx.register_service("mode.blue", lambda: __import__("suijin.core.blueteamer", fromlist=["main"]).main)
+        ctx.register_service(
+            "mode.blue", lambda: __import__("suijin.modules.blueteam.lib.blueteamer", fromlist=["main"]).main
+        )
 
     def start(self, ctx) -> None:
         hooks = ctx.service("console_hooks")
@@ -19,7 +21,7 @@ class BlueTeamModule(Module):
         hooks.register_menu("blueteam", label="Blue Team (Active Defense)", order=20, owner="blueteam")
 
         def _launch():
-            from suijin.core.blueteamer import main as bt_main
+            from suijin.modules.blueteam.lib.blueteamer import main as bt_main
 
             return bt_main()
 

@@ -710,7 +710,7 @@ def run_replay(args) -> int:
 
 def run_eval(args) -> int:
     """`suijin eval` — replay recorded traffic through the blue detector."""
-    from suijin.core.blue.traffic.replay_harness import (
+    from suijin.modules.blueteam.lib.blue.traffic.replay_harness import (
         label_entries,
         render_eval,
         replay_scores,

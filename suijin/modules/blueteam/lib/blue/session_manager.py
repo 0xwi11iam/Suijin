@@ -10,9 +10,14 @@ import threading
 from datetime import datetime, timezone
 from typing import Optional
 
-from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-STATE_DIR = WORKSPACE_DIR / "blue_state"
+def _workspace_dir():
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR as _v
+
+    return _v
+
+
+STATE_DIR = _workspace_dir() / "blue_state"
 
 
 def _ensure_dir() -> None:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from suijin.core.blue.traffic.anomaly_detector import detect_anomalies
+from suijin.modules.blueteam.lib.blue.traffic.anomaly_detector import detect_anomalies
 
 
 def score_request(request: dict, profile: dict, attacker_profile=None) -> dict:

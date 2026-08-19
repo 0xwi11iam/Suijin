@@ -16,8 +16,23 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from suijin.core.red.config_loader import active_model
-from suijin.modules.platform.lib.constants import DEFAULT_MODEL, RISK_HIGH
+
+def _active_model():
+    from suijin.core.red.config_loader import active_model as _fn
+
+    return _fn
+
+
+def _default_model():
+    from suijin.modules.platform.lib.constants import DEFAULT_MODEL as _v
+
+    return _v
+
+
+def _risk_high():
+    from suijin.modules.platform.lib.constants import RISK_HIGH as _v
+
+    return _v
 
 
 @dataclass
@@ -77,7 +92,7 @@ class BlueAIEngine:
         # ── Gather attacker history from knowledge graph ──
         attacker_context = ""
         try:
-            from suijin.core.blue.knowledge_graph import get_kg
+            from suijin.modules.blueteam.lib.blue.knowledge_graph import get_kg
 
             kg = get_kg()
             hist = kg.get_attacker_history(ip)
@@ -186,12 +201,12 @@ Respond ONLY with valid JSON. No markdown, no explanation outside JSON."""
             # Record cost
             usage = get_usage()
             result.llm_cost_usd = usage.get("est_cost_usd", 0.0)
-            result.llm_model = active_model(self.config) or DEFAULT_MODEL
+            result.llm_model = _active_model()(self.config) or _default_model()
 
         except Exception as e:
             result.reasoning = f"AI call failed: {e}"
             result.verdict = "FLAGGED"
-            result.score = RISK_HIGH
+            result.score = _risk_high()
             result.action = "REVIEW"
             result.attack_analysis = f"AI engine unavailable — request flagged for manual review. Error: {e}"
             result.commands_run = []

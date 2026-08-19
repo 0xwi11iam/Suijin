@@ -70,7 +70,7 @@ def _enrich_traffic(entries: list[dict]) -> list[dict]:
     """Score raw lab log entries with the blue team's real anomaly detector so
     the dashboard tiers (NORMAL/ANOMALOUS/INVESTIGATED) match the TUI."""
     try:
-        from suijin.core.blue.traffic.anomaly_detector import detect_anomalies
+        from suijin.modules.blueteam.lib.blue.traffic.anomaly_detector import detect_anomalies
 
         for e in entries:
             try:

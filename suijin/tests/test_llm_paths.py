@@ -201,7 +201,7 @@ class TestGenerateDeepSeek:
 
 class TestAIEngineParsing:
     def test_parse_direct_json(self):
-        from suijin.core.blue.ai_engine import BlueAIEngine
+        from suijin.modules.blueteam.lib.blue.ai_engine import BlueAIEngine
 
         engine = BlueAIEngine({})
         parsed = engine._parse_llm_response('{"verdict":"FLAGGED","score":9}')
@@ -209,7 +209,7 @@ class TestAIEngineParsing:
         assert parsed["score"] == 9
 
     def test_parse_markdown_fence(self):
-        from suijin.core.blue.ai_engine import BlueAIEngine
+        from suijin.modules.blueteam.lib.blue.ai_engine import BlueAIEngine
 
         engine = BlueAIEngine({})
         raw = '```json\n{"verdict":"NOT FLAGGED","score":2}\n```'
@@ -217,7 +217,7 @@ class TestAIEngineParsing:
         assert parsed["verdict"] == "NOT FLAGGED"
 
     def test_parse_brace_block(self):
-        from suijin.core.blue.ai_engine import BlueAIEngine
+        from suijin.modules.blueteam.lib.blue.ai_engine import BlueAIEngine
 
         engine = BlueAIEngine({})
         raw = 'text before {"verdict":"FLAGGED","score":7} text after'
@@ -225,14 +225,14 @@ class TestAIEngineParsing:
         assert parsed["score"] == 7
 
     def test_parse_fallback_to_reasoning(self):
-        from suijin.core.blue.ai_engine import BlueAIEngine
+        from suijin.modules.blueteam.lib.blue.ai_engine import BlueAIEngine
 
         engine = BlueAIEngine({})
         parsed = engine._parse_llm_response("just plain text")
         assert parsed == {"reasoning": "just plain text"}
 
     def test_parse_empty(self):
-        from suijin.core.blue.ai_engine import BlueAIEngine
+        from suijin.modules.blueteam.lib.blue.ai_engine import BlueAIEngine
 
         engine = BlueAIEngine({})
         assert engine._parse_llm_response("") == {}
@@ -240,7 +240,7 @@ class TestAIEngineParsing:
 
 class TestAIEnginePrompt:
     def test_prompt_contains_request_context(self):
-        from suijin.core.blue.ai_engine import BlueAIEngine
+        from suijin.modules.blueteam.lib.blue.ai_engine import BlueAIEngine
 
         engine = BlueAIEngine({})
         prompt = engine.build_analysis_prompt(
@@ -261,7 +261,7 @@ class TestAIEnginePrompt:
         assert "OR '1'='1" in prompt
 
     def test_prompt_includes_endpoint_info(self):
-        from suijin.core.blue.ai_engine import BlueAIEngine
+        from suijin.modules.blueteam.lib.blue.ai_engine import BlueAIEngine
 
         engine = BlueAIEngine({})
         prompt = engine.build_analysis_prompt(
@@ -272,7 +272,7 @@ class TestAIEnginePrompt:
         assert "flask" in prompt
 
     def test_prompt_includes_subagent_notes(self):
-        from suijin.core.blue.ai_engine import BlueAIEngine
+        from suijin.modules.blueteam.lib.blue.ai_engine import BlueAIEngine
 
         engine = BlueAIEngine({})
         prompt = engine.build_analysis_prompt(
@@ -300,7 +300,7 @@ class TestAIEngineAnalyze:
         monkeypatch.setattr("suijin.modules.providers.lib.generate", fake_generate)
 
     def test_analyze_flagged(self, monkeypatch):
-        from suijin.core.blue.ai_engine import BlueAIEngine
+        from suijin.modules.blueteam.lib.blue.ai_engine import BlueAIEngine
 
         self._mock_generate_flagged(monkeypatch)
         engine = BlueAIEngine({})
@@ -318,7 +318,7 @@ class TestAIEngineAnalyze:
 
     def test_analyze_api_error_fails_open_flagged(self, monkeypatch):
         """API errors must fail OPEN — FLAGGED, not silently allowed."""
-        from suijin.core.blue.ai_engine import BlueAIEngine
+        from suijin.modules.blueteam.lib.blue.ai_engine import BlueAIEngine
 
         def fake_generate(messages, config=None, **kwargs):
             return "Error: DeepSeek API key not set"
@@ -336,7 +336,7 @@ class TestAIEngineAnalyze:
         assert result.action == "REVIEW"
 
     def test_analyze_malformed_response_fails_open(self, monkeypatch):
-        from suijin.core.blue.ai_engine import BlueAIEngine
+        from suijin.modules.blueteam.lib.blue.ai_engine import BlueAIEngine
 
         def fake_generate(messages, config=None, **kwargs):
             return "garbage that is not json"
@@ -356,7 +356,7 @@ class TestAIEngineAnalyze:
 
 class TestAIEngineActions:
     def test_execute_actions_commands(self, monkeypatch, tmp_path):
-        from suijin.core.blue.ai_engine import AIAnalysisResult, BlueAIEngine
+        from suijin.modules.blueteam.lib.blue.ai_engine import AIAnalysisResult, BlueAIEngine
 
         engine = BlueAIEngine({})
 
@@ -385,7 +385,7 @@ class TestAIEngineActions:
     def test_execute_actions_command_timeout(self, monkeypatch, tmp_path):
         import subprocess
 
-        from suijin.core.blue.ai_engine import AIAnalysisResult, BlueAIEngine
+        from suijin.modules.blueteam.lib.blue.ai_engine import AIAnalysisResult, BlueAIEngine
 
         engine = BlueAIEngine({})
 
@@ -408,7 +408,7 @@ class TestAIEngineActions:
         assert executed[0]["error"] == "Timeout after 30s"
 
     def test_execute_actions_code_change_written(self, monkeypatch, tmp_path):
-        from suijin.core.blue.ai_engine import AIAnalysisResult, BlueAIEngine
+        from suijin.modules.blueteam.lib.blue.ai_engine import AIAnalysisResult, BlueAIEngine
 
         engine = BlueAIEngine({})
         target_file = tmp_path / "app.py"

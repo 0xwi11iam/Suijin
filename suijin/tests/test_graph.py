@@ -129,33 +129,33 @@ class TestDeception:
     """Verify deception engine components load and work."""
 
     def test_honeypot_factory(self):
-        from suijin.core.blue.deception.honeypot_factory import generate_honeypot_response
+        from suijin.modules.blueteam.lib.blue.deception.honeypot_factory import generate_honeypot_response
 
         resp = generate_honeypot_response({"path": "/admin"})
         assert isinstance(resp, dict)
         assert "body" in resp
 
     def test_time_sink(self):
-        from suijin.core.blue.deception.time_sink import TimeSink
+        from suijin.modules.blueteam.lib.blue.deception.time_sink import TimeSink
 
         ts = TimeSink()
         ts.tarpit("10.0.0.1", delay_seconds=0.1)
         assert ts.should_sink("10.0.0.1")
 
     def test_canary_token(self):
-        from suijin.core.blue.deception.canary_token import deploy_canary
+        from suijin.modules.blueteam.lib.blue.deception.canary_token import deploy_canary
 
         token = deploy_canary("api_key", "test_canary_12345")
         assert token is not None
 
     def test_shadow_redirect(self):
-        from suijin.core.blue.deception.shadow_redirect import redirect_to_shadow
+        from suijin.modules.blueteam.lib.blue.deception.shadow_redirect import redirect_to_shadow
 
         result = redirect_to_shadow("10.0.0.99")
         assert "10.0.0.99" in result
 
     def test_deception_engine(self):
-        from suijin.core.blue.defense.deception_engine import DeceptionEngine
+        from suijin.modules.blueteam.lib.blue.defense.deception_engine import DeceptionEngine
 
         engine = DeceptionEngine()
         resp = engine.decide_response("attacker-1", {"ip": "10.0.0.1", "path": "/login"}, 7)

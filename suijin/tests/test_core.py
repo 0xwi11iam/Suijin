@@ -112,7 +112,7 @@ class TestErrorTypes:
     """Verify structured error types work."""
 
     def test_blue_error_creation(self):
-        from suijin.core.blue.errors import BlueError, ErrorSeverity
+        from suijin.modules.blueteam.lib.blue.errors import BlueError, ErrorSeverity
 
         e = BlueError("test error", severity=ErrorSeverity.WARNING, source="test")
         d = e.to_dict()
@@ -121,21 +121,21 @@ class TestErrorTypes:
         assert d["recoverable"] is True
 
     def test_firewall_error(self):
-        from suijin.core.blue.errors import ErrorSeverity, FirewallError
+        from suijin.modules.blueteam.lib.blue.errors import ErrorSeverity, FirewallError
 
         e = FirewallError("block failed", severity=ErrorSeverity.CRITICAL)
         assert e.source == "firewall"
         assert e.severity == ErrorSeverity.CRITICAL
 
     def test_ok_result(self):
-        from suijin.core.blue.errors import ok
+        from suijin.modules.blueteam.lib.blue.errors import ok
 
         r = ok("done")
         assert r["status"] == "ok"
         assert r["result"] == "done"
 
     def test_err_result(self):
-        from suijin.core.blue.errors import BlueError, ErrorSeverity, err
+        from suijin.modules.blueteam.lib.blue.errors import BlueError, ErrorSeverity, err
 
         e = BlueError("failed", severity=ErrorSeverity.ERROR)
         r = err(e)

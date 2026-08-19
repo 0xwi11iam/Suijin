@@ -112,7 +112,7 @@ def main():
             if c == "1":
                 redteamer_main()
             elif c == "2":
-                from suijin.core.blueteamer import main as blueteam_main
+                from suijin.modules.blueteam.lib.blueteamer import main as blueteam_main
 
                 blueteam_main()
             elif c == "3":

@@ -50,7 +50,7 @@ class TestBlueTeamPipeline:
 
     def test_pattern_detector_finds_sqli(self, temp_traffic_log):
         """Verify attack pattern detector catches SQLi in traffic log."""
-        from suijin.core.blue.tui.feed import _detect_obvious_attack
+        from suijin.modules.blueteam.lib.blue.tui.feed import _detect_obvious_attack
 
         with open(temp_traffic_log) as f:
             for line in f:
@@ -71,7 +71,7 @@ class TestBlueTeamPipeline:
 
     def test_kg_records_attack_chain(self):
         """Verify knowledge graph records full attack → defense chain."""
-        from suijin.core.blue.knowledge_graph import BlueKnowledgeGraph
+        from suijin.modules.blueteam.lib.blue.knowledge_graph import BlueKnowledgeGraph
 
         kg = BlueKnowledgeGraph()
         kg.add_attack("10.0.0.1", "/login", "SQL Injection", 8, "payload")
@@ -100,7 +100,7 @@ class TestBlueTeamPipeline:
 
     def test_errors_module_wired(self):
         """Verify structured error types are importable and functional."""
-        from suijin.core.blue.errors import (
+        from suijin.modules.blueteam.lib.blue.errors import (
             ErrorSeverity,
             FirewallError,
             err,
@@ -118,7 +118,7 @@ class TestBlueTeamPipeline:
 
     def test_deception_engine_wired(self):
         """Verify deception engine loads and uses structured errors."""
-        from suijin.core.blue.defense.deception_engine import DeceptionEngine
+        from suijin.modules.blueteam.lib.blue.defense.deception_engine import DeceptionEngine
 
         engine = DeceptionEngine()
         r = engine.decide_response("attacker-1", {"ip": "1.2.3.4"}, 9)
@@ -135,7 +135,7 @@ class TestBlueTeamPipeline:
 
     def test_tarpit_uses_structured_errors(self):
         """Verify tarpit returns ok()/err() results."""
-        from suijin.core.blue.defense.tarpit import Tarpit
+        from suijin.modules.blueteam.lib.blue.defense.tarpit import Tarpit
 
         t = Tarpit()
         result = t.engage("10.0.0.1", delay=0.1)
@@ -143,14 +143,14 @@ class TestBlueTeamPipeline:
 
     def test_proxy_importable(self):
         """Verify proxy server is importable and configurable."""
-        from suijin.core.blue.proxy import ProxyServer, start_proxy
+        from suijin.modules.blueteam.lib.blue.proxy import ProxyServer, start_proxy
 
         assert ProxyServer is not None
         assert start_proxy is not None
 
     def test_subagent_manager_wired(self):
         """Verify subagent manager deploy + analyze flow imports."""
-        from suijin.core.blue.subagent_manager import EndpointSubagent, SubagentManager
+        from suijin.modules.blueteam.lib.blue.subagent_manager import EndpointSubagent, SubagentManager
 
         assert SubagentManager is not None
         # EndpointSubagent has all fields

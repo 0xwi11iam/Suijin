@@ -6,7 +6,7 @@ import logging
 import threading
 import time
 
-from suijin.core.blue.errors import DeceptionError, ErrorSeverity, err, ok
+from suijin.modules.blueteam.lib.blue.errors import DeceptionError, ErrorSeverity, err, ok
 
 
 class Tarpit:

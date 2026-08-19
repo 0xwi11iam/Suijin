@@ -20,10 +20,31 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from suijin.core.blue.config import load_blue_config
-from suijin.core.blue.session_manager import init_session
-from suijin.modules.loader import load_local_module
-from suijin.modules.platform.lib.constants import BLUE_LAB_PORT, BLUE_TRAFFIC_LOG, PROXY_DEFAULT_PORT
+from suijin.modules.blueteam.lib.blue.config import load_blue_config
+from suijin.modules.blueteam.lib.blue.session_manager import init_session
+
+
+def _const(name):
+    """Platform constant (honours a monkeypatched module attr)."""
+    v = globals().get(name)
+    if v is not None:
+        return v
+    from suijin.modules.platform.lib import constants
+
+    return getattr(constants, name)
+
+
+def __getattr__(name):
+    if name in ("BLUE_LAB_PORT", "BLUE_TRAFFIC_LOG", "PROXY_DEFAULT_PORT"):
+        return _const(name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def _load_local_module(name):
+    from suijin.modules.loader import load_local_module
+
+    return load_local_module(name)
+
 
 console = Console()
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -46,7 +67,7 @@ async def _run_async():
                     os.environ[k.strip()] = v.strip()
 
     config = load_blue_config()
-    load_local_module("providers")  # module-level registration side effects
+    _load_local_module("providers")  # module-level registration side effects
     provider = config.get("provider", "deepseek")
     key_var = f"{provider.upper()}_API_KEY"
     if not os.environ.get(key_var) and not os.environ.get("HF_TOKEN"):
@@ -63,7 +84,7 @@ async def _run_async():
     # Select target codebase
     console.print("\n[bold white]Select target codebase to defend:[/bold white]")
     console.print("  [bold]1.[/] Type path to codebase")
-    console.print("  [bold]2.[/] Use built-in lab (port {})".format(BLUE_LAB_PORT))
+    console.print("  [bold]2.[/] Use built-in lab (port {})".format(_const("BLUE_LAB_PORT")))
     console.print("  [bold]3.[/] Back to menu")
     try:
         choice = console.input("\n  Choice  ").strip()
@@ -71,8 +92,8 @@ async def _run_async():
         return
 
     target_path = ""
-    app_port = BLUE_LAB_PORT
-    traffic_log = str(BLUE_TRAFFIC_LOG)
+    app_port = _const("BLUE_LAB_PORT")
+    traffic_log = str(_const("BLUE_TRAFFIC_LOG"))
     blocking_enabled = False
     proxy_server = None  # Forward proxy for intercepting traffic
 
@@ -92,7 +113,7 @@ async def _run_async():
         traffic_log = f"/tmp/blue_proxy_{proxy_port}.jsonl"
 
         # Start the transparent forward proxy
-        from suijin.core.blue.proxy import start_proxy
+        from suijin.modules.blueteam.lib.blue.proxy import start_proxy
 
         try:
             proxy_server = start_proxy(
@@ -119,20 +140,22 @@ async def _run_async():
             console.input("\n  [dim]Press Enter to continue...[/dim]")
     elif choice == "2":
         target_path = str(BASE_DIR / "lab" / "blue_target")
-        traffic_log = str(BLUE_TRAFFIC_LOG)
-        app_port = BLUE_LAB_PORT
+        traffic_log = str(_const("BLUE_TRAFFIC_LOG"))
+        app_port = _const("BLUE_LAB_PORT")
 
         import subprocess
         import urllib.request
 
         # Kill any stale process on port 5906
         try:
-            result = subprocess.run(["lsof", "-ti", f":{BLUE_LAB_PORT}"], capture_output=True, text=True, timeout=3)
+            result = subprocess.run(
+                ["lsof", "-ti", f":{_const('BLUE_LAB_PORT')}"], capture_output=True, text=True, timeout=3
+            )
             for pid in result.stdout.strip().split("\n"):
                 pid = pid.strip()
                 if pid:
                     os.kill(int(pid), _signal.SIGTERM)
-                    console.print(f"[dim]Killed stale process on :{BLUE_LAB_PORT} (pid {pid})[/dim]")
+                    console.print(f"[dim]Killed stale process on :{_const('BLUE_LAB_PORT')} (pid {pid})[/dim]")
             time.sleep(0.5)
         except Exception:
             pass
@@ -148,13 +171,13 @@ async def _run_async():
         for _ in range(10):
             time.sleep(0.3)
             try:
-                urllib.request.urlopen(f"http://127.0.0.1:{BLUE_LAB_PORT}/", timeout=1)
-                console.print(f"[green]Vulnerable app ready on port {BLUE_LAB_PORT}[/green]")
+                urllib.request.urlopen(f"http://127.0.0.1:{_const('BLUE_LAB_PORT')}/", timeout=1)
+                console.print(f"[green]Vulnerable app ready on port {_const('BLUE_LAB_PORT')}[/green]")
                 break
             except Exception:
                 pass
         else:
-            console.print(f"[red]Failed to start vulnerable app on port {BLUE_LAB_PORT}[/red]")
+            console.print(f"[red]Failed to start vulnerable app on port {_const('BLUE_LAB_PORT')}[/red]")
             return
     else:
         return
@@ -170,7 +193,7 @@ async def _run_async():
 
     # Phase 1: Codebase analysis
     console.print("\n[bold cyan]Phase 1: Codebase Analysis[/bold cyan]")
-    from suijin.core.blue.codebase.scanner import scan_codebase
+    from suijin.modules.blueteam.lib.blue.codebase.scanner import scan_codebase
 
     endpoints = scan_codebase(target_path)
     session.endpoints_discovered = len(endpoints)
@@ -188,7 +211,7 @@ async def _run_async():
 
     # Phase 1.5: Subagent deployment — one AI subagent per endpoint
     console.print("\n[bold cyan]Phase 1.5: Deploying Endpoint Subagents[/bold cyan]")
-    from suijin.core.blue.subagent_manager import SubagentManager
+    from suijin.modules.blueteam.lib.blue.subagent_manager import SubagentManager
 
     subagent_mgr = SubagentManager(config, target_path)
     deployed = subagent_mgr.deploy_all(endpoints)
@@ -213,7 +236,7 @@ async def _run_async():
 
     # Phase 2: Watcher deployment
     console.print("\n[bold cyan]Phase 2: Deploying Watchers[/bold cyan]")
-    from suijin.core.blue.watchers.spawner import spawn_watchers
+    from suijin.modules.blueteam.lib.blue.watchers.spawner import spawn_watchers
 
     watchers = await spawn_watchers(endpoints, config)
     session.active_watchers = len(watchers)
@@ -221,11 +244,11 @@ async def _run_async():
 
     # Phase 3: SOC activation
     console.print("\n[bold cyan]Phase 3: SOC Team Activation[/bold cyan]")
-    from suijin.core.blue.soc.incident_commander import create_incident_commander
-    from suijin.core.blue.soc.soc_lead import activate_soc_lead
-    from suijin.core.blue.soc.threat_hunter import create_threat_hunter
-    from suijin.core.blue.soc.tier1_analyst import create_tier1
-    from suijin.core.blue.soc.tier2_analyst import create_tier2
+    from suijin.modules.blueteam.lib.blue.soc.incident_commander import create_incident_commander
+    from suijin.modules.blueteam.lib.blue.soc.soc_lead import activate_soc_lead
+    from suijin.modules.blueteam.lib.blue.soc.threat_hunter import create_threat_hunter
+    from suijin.modules.blueteam.lib.blue.soc.tier1_analyst import create_tier1
+    from suijin.modules.blueteam.lib.blue.soc.tier2_analyst import create_tier2
 
     soc_lead = await activate_soc_lead(config, asyncio.Queue())
     tier1_analysts = [create_tier1(ep["path"]) for ep in endpoints[:20]]
@@ -240,9 +263,9 @@ async def _run_async():
     console.print("  [green]Incident Commander ready[/green]")
 
     # ── Initialize AI Engine and Live Feed ──
-    from suijin.core.blue.ai_engine import BlueAIEngine
-    from suijin.core.blue.traffic.normalizer import SmartNormalizer, set_global_normalizer
-    from suijin.core.blue.tui.feed import FeedConfig, LiveFeed
+    from suijin.modules.blueteam.lib.blue.ai_engine import BlueAIEngine
+    from suijin.modules.blueteam.lib.blue.traffic.normalizer import SmartNormalizer, set_global_normalizer
+    from suijin.modules.blueteam.lib.blue.tui.feed import FeedConfig, LiveFeed
 
     ai_engine = BlueAIEngine(config)
     ai_engine.target_path = target_path  # For code change execution
@@ -417,7 +440,7 @@ async def _run_async():
     console.print("[dim]Blue team session ended.[/dim]")
 
 
-def _find_free_port(start: int = PROXY_DEFAULT_PORT, max_attempts: int = 20) -> int:
+def _find_free_port(start: int = _const("PROXY_DEFAULT_PORT"), max_attempts: int = 20) -> int:
     """Find a free TCP port."""
     import socket
 
@@ -430,7 +453,7 @@ def _find_free_port(start: int = PROXY_DEFAULT_PORT, max_attempts: int = 20) -> 
             return port
         except OSError:
             continue
-    return PROXY_DEFAULT_PORT  # fallback
+    return _const("PROXY_DEFAULT_PORT")  # fallback
 
 
 def _print_middleware_snippet(console, log_path: str):

@@ -10,7 +10,7 @@ class TestAttackPatterns:
     """Verify all 18 attack pattern detectors work correctly."""
 
     def test_sqli_detection(self):
-        from suijin.core.blue.tui.feed import _detect_obvious_attack
+        from suijin.modules.blueteam.lib.blue.tui.feed import _detect_obvious_attack
 
         result = _detect_obvious_attack(
             {
@@ -25,7 +25,7 @@ class TestAttackPatterns:
         assert any("SQL" in p[0] for p in result["patterns"])
 
     def test_xss_detection(self):
-        from suijin.core.blue.tui.feed import _detect_obvious_attack
+        from suijin.modules.blueteam.lib.blue.tui.feed import _detect_obvious_attack
 
         result = _detect_obvious_attack(
             {
@@ -39,7 +39,7 @@ class TestAttackPatterns:
         assert result["score"] >= 6
 
     def test_path_traversal_detection(self):
-        from suijin.core.blue.tui.feed import _detect_obvious_attack
+        from suijin.modules.blueteam.lib.blue.tui.feed import _detect_obvious_attack
 
         result = _detect_obvious_attack(
             {
@@ -53,7 +53,7 @@ class TestAttackPatterns:
         assert result["score"] >= 5
 
     def test_ssrf_detection(self):
-        from suijin.core.blue.tui.feed import _detect_obvious_attack
+        from suijin.modules.blueteam.lib.blue.tui.feed import _detect_obvious_attack
 
         result = _detect_obvious_attack(
             {
@@ -67,7 +67,7 @@ class TestAttackPatterns:
         assert result["score"] >= 6
 
     def test_scanner_ua_detection(self):
-        from suijin.core.blue.tui.feed import _detect_obvious_attack
+        from suijin.modules.blueteam.lib.blue.tui.feed import _detect_obvious_attack
 
         result = _detect_obvious_attack(
             {
@@ -81,7 +81,7 @@ class TestAttackPatterns:
         assert result["score"] >= 4
 
     def test_mass_assignment_detection(self):
-        from suijin.core.blue.tui.feed import _detect_obvious_attack
+        from suijin.modules.blueteam.lib.blue.tui.feed import _detect_obvious_attack
 
         result = _detect_obvious_attack(
             {
@@ -95,7 +95,7 @@ class TestAttackPatterns:
         assert result["score"] >= 5
 
     def test_auth_bypass_header(self):
-        from suijin.core.blue.tui.feed import _detect_obvious_attack
+        from suijin.modules.blueteam.lib.blue.tui.feed import _detect_obvious_attack
 
         result = _detect_obvious_attack(
             {
@@ -109,7 +109,7 @@ class TestAttackPatterns:
         assert result["score"] >= 5
 
     def test_clean_request_passes(self):
-        from suijin.core.blue.tui.feed import _detect_obvious_attack
+        from suijin.modules.blueteam.lib.blue.tui.feed import _detect_obvious_attack
 
         result = _detect_obvious_attack(
             {
@@ -125,7 +125,7 @@ class TestAttackPatterns:
     def test_all_18_patterns_compile(self):
         import re
 
-        from suijin.core.blue.tui.feed import _ATTACK_PATTERNS
+        from suijin.modules.blueteam.lib.blue.tui.feed import _ATTACK_PATTERNS
 
         assert len(_ATTACK_PATTERNS) == 18
         for name, pattern, weight in _ATTACK_PATTERNS:
@@ -136,7 +136,7 @@ class TestKnowledgeGraph:
     """Verify knowledge graph CRUD operations."""
 
     def test_add_attacker_and_attack(self):
-        from suijin.core.blue.knowledge_graph import BlueKnowledgeGraph
+        from suijin.modules.blueteam.lib.blue.knowledge_graph import BlueKnowledgeGraph
 
         kg = BlueKnowledgeGraph()
         kg.add_attack("10.0.0.1", "/login", "SQL Injection", 8, "admin' OR 1=1")
@@ -146,7 +146,7 @@ class TestKnowledgeGraph:
         assert hist["attacks"][0]["attack_type"] == "SQL Injection"
 
     def test_add_defense(self):
-        from suijin.core.blue.knowledge_graph import BlueKnowledgeGraph
+        from suijin.modules.blueteam.lib.blue.knowledge_graph import BlueKnowledgeGraph
 
         kg = BlueKnowledgeGraph()
         kg.add_attack("10.0.0.2", "/api/users", "IDOR", 6, "")
@@ -155,7 +155,7 @@ class TestKnowledgeGraph:
         assert len(hist["defenses"]) >= 1
 
     def test_attacker_flags_increment(self):
-        from suijin.core.blue.knowledge_graph import BlueKnowledgeGraph
+        from suijin.modules.blueteam.lib.blue.knowledge_graph import BlueKnowledgeGraph
 
         kg = BlueKnowledgeGraph()
         kg.add_attack("10.0.0.3", "/login", "SQLi", 6, "")
@@ -164,7 +164,7 @@ class TestKnowledgeGraph:
         assert hist["total_flags"] >= 2
 
     def test_bridge_from_red_team(self):
-        from suijin.core.blue.knowledge_graph import BlueKnowledgeGraph
+        from suijin.modules.blueteam.lib.blue.knowledge_graph import BlueKnowledgeGraph
 
         kg = BlueKnowledgeGraph()
         imported = kg.bridge_from_red_team()
@@ -175,7 +175,7 @@ class TestSmartNormalizer:
     """Verify traffic normalizer pattern hashing and baseline learning."""
 
     def test_hash_pattern_normalizes_ids(self):
-        from suijin.core.blue.traffic.normalizer import SmartNormalizer
+        from suijin.modules.blueteam.lib.blue.traffic.normalizer import SmartNormalizer
 
         n = SmartNormalizer()
         h1 = n._hash_pattern({"method": "GET", "path": "/api/users/42", "query": {}, "body": ""})
@@ -183,7 +183,7 @@ class TestSmartNormalizer:
         assert h1 == h2  # Same pattern, different IDs
 
     def test_hash_pattern_differentiates_methods(self):
-        from suijin.core.blue.traffic.normalizer import SmartNormalizer
+        from suijin.modules.blueteam.lib.blue.traffic.normalizer import SmartNormalizer
 
         n = SmartNormalizer()
         h1 = n._hash_pattern({"method": "GET", "path": "/login", "query": {}, "body": ""})
@@ -191,7 +191,7 @@ class TestSmartNormalizer:
         assert h1 != h2
 
     def test_is_known_normal(self):
-        from suijin.core.blue.traffic.normalizer import SmartNormalizer
+        from suijin.modules.blueteam.lib.blue.traffic.normalizer import SmartNormalizer
 
         n = SmartNormalizer()
         req = {"method": "GET", "path": "/", "query": {}, "body": "", "ip": "1.2.3.4"}
@@ -199,7 +199,7 @@ class TestSmartNormalizer:
         assert n.is_known_normal(req)
 
     def test_add_to_baseline(self):
-        from suijin.core.blue.traffic.normalizer import SmartNormalizer
+        from suijin.modules.blueteam.lib.blue.traffic.normalizer import SmartNormalizer
 
         n = SmartNormalizer()
         req = {"method": "POST", "path": "/api/data", "query": {"page": "1"}, "body": "x=1", "ip": "1.2.3.4"}

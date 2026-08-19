@@ -38,8 +38,8 @@ jobs:
         run: |
           PYTHONPATH="$PWD:$PYTHONPATH" python -c "
           import suijin.modules.agent.lib.state, suijin.modules.agent.lib.agent_graph, suijin.modules.agent.lib.supervisor, suijin.modules.platform.lib.error_handler
-          import suijin.core.blue.config, suijin.core.blue.knowledge_graph, suijin.core.blue.ai_engine
-          import suijin.modules.tools.lib.guardrails, suijin.modules.platform.lib.workspace, suijin.core.blue.errors
+          import suijin.modules.blueteam.lib.blue.config, suijin.modules.blueteam.lib.blue.knowledge_graph, suijin.modules.blueteam.lib.blue.ai_engine
+          import suijin.modules.tools.lib.guardrails, suijin.modules.platform.lib.workspace, suijin.modules.blueteam.lib.blue.errors
           import suijin.modules.platform.lib.config_models, suijin.modules.platform.lib.constants
           print('All imports OK')
           "

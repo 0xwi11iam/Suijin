@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from suijin.core.blue.traffic import replay_harness as rh
+from suijin.modules.blueteam.lib.blue.traffic import replay_harness as rh
 from suijin.modules.ops.lib import battle as bt
 
 

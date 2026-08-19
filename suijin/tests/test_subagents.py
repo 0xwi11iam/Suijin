@@ -5,7 +5,7 @@ real (that's the no-API-key experience)."""
 import asyncio
 import json
 
-from suijin.core.blue.subagent_manager import SubagentManager
+from suijin.modules.blueteam.lib.blue.subagent_manager import SubagentManager
 
 
 def make_mgr(tmp_path):
@@ -101,7 +101,7 @@ class TestAnalyzeEndpoint:
 
 class TestBatching:
     def test_analyze_all_batches_and_collects(self, tmp_path, monkeypatch):
-        import suijin.core.blue.subagent_manager as sm
+        import suijin.modules.blueteam.lib.blue.subagent_manager as sm
         from suijin.modules.providers import lib as _providers
 
         mgr = make_mgr(tmp_path)
@@ -185,7 +185,7 @@ class TestIntegrationWithFeed:
     verify the exact sequence it calls holds together."""
 
     def test_blueteamer_sequence(self, tmp_path, monkeypatch):
-        import suijin.core.blue.subagent_manager as sm
+        import suijin.modules.blueteam.lib.blue.subagent_manager as sm
         from suijin.modules.providers import lib as _providers
 
         mgr = make_mgr(tmp_path)

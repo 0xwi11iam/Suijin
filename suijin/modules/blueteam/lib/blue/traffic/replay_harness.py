@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from suijin.core.blue.traffic.scorer import score_request
+from suijin.modules.blueteam.lib.blue.traffic.scorer import score_request
 
 # ── Ground-truth labeling ───────────────────────────────────────────────
 # Strong, low-false-positive attack substrings checked against method+path+

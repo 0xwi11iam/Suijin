@@ -6,10 +6,10 @@ to a JSONL file for the blue team monitor, and forwards to the real target app.
 No middleware needed — just point your browser/curl at the proxy port.
 
 Usage:
-    from suijin.core.blue.proxy import start_proxy
-    from suijin.modules.platform.lib.constants import PROXY_DEFAULT_PORT, BLUE_LAB_PORT, BLUE_TRAFFIC_LOG
-    proxy = start_proxy(listen_port=PROXY_DEFAULT_PORT, target_port=BLUE_LAB_PORT,
-                        log_path=str(BLUE_TRAFFIC_LOG))
+    from suijin.modules.blueteam.lib.blue.proxy import start_proxy
+    from suijin.modules.platform.lib.constants import _proxy_default_port(), _blue_lab_port(), _blue_traffic_log()
+    proxy = start_proxy(listen_port=_proxy_default_port(), target_port=_blue_lab_port(),
+                        log_path=str(_blue_traffic_log()))
     # All traffic to :8080 gets logged then forwarded to :5906
 """
 
@@ -24,15 +24,37 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from suijin.modules.platform.lib.constants import BLUE_LAB_PORT, BLUE_TARPIT_FILE, BLUE_TRAFFIC_LOG, PROXY_DEFAULT_PORT
+
+def _blue_lab_port():
+    from suijin.modules.platform.lib.constants import BLUE_LAB_PORT as _v
+
+    return _v
+
+
+def _blue_tarpit_file():
+    from suijin.modules.platform.lib.constants import BLUE_TARPIT_FILE as _v
+
+    return _v
+
+
+def _blue_traffic_log():
+    from suijin.modules.platform.lib.constants import BLUE_TRAFFIC_LOG as _v
+
+    return _v
+
+
+def _proxy_default_port():
+    from suijin.modules.platform.lib.constants import PROXY_DEFAULT_PORT as _v
+
+    return _v
 
 
 class ProxyHandler(BaseHTTPRequestHandler):
     """Handles incoming HTTP requests — logs them, forwards them, returns the response."""
 
     target_host = "127.0.0.1"
-    target_port = BLUE_LAB_PORT
-    log_path = str(BLUE_TRAFFIC_LOG)
+    target_port = _blue_lab_port()
+    log_path = str(_blue_traffic_log())
 
     def _log_request(self, method, path, headers, body):
         """Write request to JSONL log for the blue team."""
@@ -114,7 +136,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
         # Proxy-level tarpit: check if this IP should be delayed
         try:
-            tarpit_file = str(BLUE_TARPIT_FILE)
+            tarpit_file = str(_blue_tarpit_file())
             if os.path.exists(tarpit_file):
                 with open(tarpit_file) as f:
                     tarpit_state = json.loads(f.read())
@@ -161,13 +183,13 @@ class ProxyServer:
 
     def __init__(
         self,
-        listen_port: int = PROXY_DEFAULT_PORT,
-        target_port: int = BLUE_LAB_PORT,
+        listen_port: int = _proxy_default_port(),
+        target_port: int = _blue_lab_port(),
         target_host: str = "127.0.0.1",
         log_path: str = None,
     ):
         if log_path is None:
-            log_path = str(BLUE_TRAFFIC_LOG)
+            log_path = str(_blue_traffic_log())
         self.listen_port = listen_port
         self.target_port = target_port
         self.log_path = log_path
@@ -197,13 +219,13 @@ class ProxyServer:
 
 
 def start_proxy(
-    listen_port: int = PROXY_DEFAULT_PORT,
-    target_port: int = BLUE_LAB_PORT,
+    listen_port: int = _proxy_default_port(),
+    target_port: int = _blue_lab_port(),
     target_host: str = "127.0.0.1",
     log_path: str = None,
 ) -> ProxyServer:
     if log_path is None:
-        log_path = str(BLUE_TRAFFIC_LOG)
+        log_path = str(_blue_traffic_log())
     """Start a forward proxy — returns the ProxyServer instance."""
     proxy = ProxyServer(listen_port, target_port, target_host, log_path)
     proxy.start()

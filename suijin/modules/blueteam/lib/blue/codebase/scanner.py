@@ -9,10 +9,10 @@ from pathlib import Path
 def scan_codebase(root_path: str) -> list:
     root = Path(root_path).resolve()
     endpoints = []
-    from suijin.core.blue.codebase.java_analyzer import extract_java_routes
-    from suijin.core.blue.codebase.javascript_analyzer import extract_js_routes
-    from suijin.core.blue.codebase.php_analyzer import extract_php_routes
-    from suijin.core.blue.codebase.python_analyzer import extract_python_routes
+    from suijin.modules.blueteam.lib.blue.codebase.java_analyzer import extract_java_routes
+    from suijin.modules.blueteam.lib.blue.codebase.javascript_analyzer import extract_js_routes
+    from suijin.modules.blueteam.lib.blue.codebase.php_analyzer import extract_php_routes
+    from suijin.modules.blueteam.lib.blue.codebase.python_analyzer import extract_python_routes
 
     endpoints.extend(extract_python_routes(root))
     endpoints.extend(extract_js_routes(root))

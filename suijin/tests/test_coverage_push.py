@@ -67,7 +67,7 @@ class TestObjectiveFile:
 
 class TestPythonAnalyzer:
     def test_flask_fastapi_django_extraction(self, tmp_path):
-        from suijin.core.blue.codebase.python_analyzer import extract_python_routes
+        from suijin.modules.blueteam.lib.blue.codebase.python_analyzer import extract_python_routes
 
         (tmp_path / "app.py").write_text(
             "from flask import Flask\napp = Flask(__name__)\n"
@@ -87,7 +87,7 @@ class TestPythonAnalyzer:
         assert by_fw["django"][0]["view"] == "admin"
 
     def test_excludes_noise_dirs(self, tmp_path):
-        from suijin.core.blue.codebase.python_analyzer import extract_python_routes
+        from suijin.modules.blueteam.lib.blue.codebase.python_analyzer import extract_python_routes
 
         noise = tmp_path / "__pycache__"
         noise.mkdir()
@@ -97,7 +97,7 @@ class TestPythonAnalyzer:
 
 class TestJsAnalyzer:
     def test_express_routes(self, tmp_path):
-        from suijin.core.blue.codebase.javascript_analyzer import extract_js_routes
+        from suijin.modules.blueteam.lib.blue.codebase.javascript_analyzer import extract_js_routes
 
         (tmp_path / "server.js").write_text("app.get('/health', handler)\nrouter.post('/api/users', h)\n")
         routes = extract_js_routes(tmp_path)
@@ -108,7 +108,7 @@ class TestJsAnalyzer:
 
 class TestScanCodebase:
     def test_scan_writes_summary_and_merges(self, tmp_path):
-        from suijin.core.blue.codebase.scanner import scan_codebase
+        from suijin.modules.blueteam.lib.blue.codebase.scanner import scan_codebase
 
         (tmp_path / "a.py").write_text("@app.route('/a')\ndef a(): pass\n")
         (tmp_path / "b.js").write_text("app.get('/b', h)\n")
@@ -122,7 +122,7 @@ class TestScanCodebase:
 class TestSubagentManager:
     @pytest.fixture
     def mgr(self):
-        from suijin.core.blue.subagent_manager import SubagentManager
+        from suijin.modules.blueteam.lib.blue.subagent_manager import SubagentManager
 
         return SubagentManager({}, "/tmp")
 

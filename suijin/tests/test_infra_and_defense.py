@@ -44,19 +44,19 @@ class TestOutputOffload:
 
 class TestFirewall:
     def test_validate_ip_accepts_valid(self):
-        from suijin.core.blue.defense import firewall as fw
+        from suijin.modules.blueteam.lib.blue.defense import firewall as fw
 
         assert fw._validate_ip(" 10.0.0.7 ") == "10.0.0.7"
         assert fw._validate_ip("::1") == "::1"
 
     def test_validate_ip_rejects_garbage(self):
-        from suijin.core.blue.defense import firewall as fw
+        from suijin.modules.blueteam.lib.blue.defense import firewall as fw
 
         with pytest.raises(ValueError, match="Invalid IP"):
             fw._validate_ip("not-an-ip; rm -rf")
 
     def test_block_ip_invalid_returns_error(self, monkeypatch):
-        from suijin.core.blue.defense import firewall as fw
+        from suijin.modules.blueteam.lib.blue.defense import firewall as fw
 
         calls = []
         monkeypatch.setattr(fw.subprocess, "run", lambda *a, **k: calls.append(a) or None)
@@ -65,7 +65,7 @@ class TestFirewall:
         assert calls == []  # validation happens BEFORE any subprocess call
 
     def test_block_ip_success_and_failure(self, monkeypatch):
-        from suijin.core.blue.defense import firewall as fw
+        from suijin.modules.blueteam.lib.blue.defense import firewall as fw
 
         calls = []
 
@@ -86,7 +86,7 @@ class TestFirewall:
         assert out.startswith("Failed to block")
 
     def test_unblock_uses_delete_rule(self, monkeypatch):
-        from suijin.core.blue.defense import firewall as fw
+        from suijin.modules.blueteam.lib.blue.defense import firewall as fw
 
         calls = []
         monkeypatch.setattr(fw.subprocess, "run", lambda cmd, **kw: calls.append(cmd))
@@ -95,7 +95,7 @@ class TestFirewall:
         assert calls[0][2] == "-D" and "172.16.0.4" in calls[0]
 
     def test_list_blocks_filters_drop_lines(self, monkeypatch):
-        from suijin.core.blue.defense import firewall as fw
+        from suijin.modules.blueteam.lib.blue.defense import firewall as fw
 
         class R:
             stdout = "Chain INPUT\nDROP       all -- 10.0.0.1\nACCEPT     all -- 0.0.0.0\nDROP       all -- 10.0.0.2\n"

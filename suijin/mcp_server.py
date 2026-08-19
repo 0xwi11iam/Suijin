@@ -317,14 +317,14 @@ def tool_execute_terminal(args):
 
 
 def tool_suijin_detect(args):
-    from suijin.core.blue.tui.feed import _detect_obvious_attack
+    from suijin.modules.blueteam.lib.blue.tui.feed import _detect_obvious_attack
 
     result = _detect_obvious_attack(args.get("request") or {})
     return json.dumps(result, indent=2)
 
 
 def tool_suijin_kg_attacker(args):
-    from suijin.core.blue.knowledge_graph import get_kg
+    from suijin.modules.blueteam.lib.blue.knowledge_graph import get_kg
 
     return json.dumps(get_kg().get_attacker_history(args.get("ip", "")), indent=2, default=str)
 

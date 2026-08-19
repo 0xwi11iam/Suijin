@@ -25,16 +25,34 @@ from typing import Optional
 from rich.console import Console
 from rich.panel import Panel
 
-from suijin.core.blue.ai_engine import AIAnalysisResult, BlueAIEngine
-from suijin.core.blue.knowledge_graph import get_kg
-from suijin.core.blue.subagent_manager import SubagentManager
-from suijin.core.blue.tui.request_panel import (
+from suijin.modules.blueteam.lib.blue.ai_engine import AIAnalysisResult, BlueAIEngine
+from suijin.modules.blueteam.lib.blue.knowledge_graph import get_kg
+from suijin.modules.blueteam.lib.blue.subagent_manager import SubagentManager
+from suijin.modules.blueteam.lib.blue.tui.request_panel import (
     render_anomalous_line,
     render_investigated_request,
     render_normal_line,
     render_subagent_assignment,
 )
-from suijin.modules.platform.lib.constants import BLUE_TARPIT_FILE, PATTERN_SCORE_THRESHOLD, RISK_HIGH
+
+
+def _blue_tarpit_file():
+    from suijin.modules.platform.lib.constants import BLUE_TARPIT_FILE as _v
+
+    return _v
+
+
+def _pattern_score_threshold():
+    from suijin.modules.platform.lib.constants import PATTERN_SCORE_THRESHOLD as _v
+
+    return _v
+
+
+def _risk_high():
+    from suijin.modules.platform.lib.constants import RISK_HIGH as _v
+
+    return _v
+
 
 console = Console()
 
@@ -121,7 +139,7 @@ class FeedConfig:
     baseline_requests: int = 25  # How many requests to establish baseline
     ai_analysis_enabled: bool = True  # Whether to send anomalies to AI
     show_all_normals: bool = True  # Show every normal request line
-    pattern_score_threshold: int = PATTERN_SCORE_THRESHOLD  # Auto-DECEIVE/BLOCK if pattern score >= threshold
+    pattern_score_threshold: int = _pattern_score_threshold()  # Auto-DECEIVE/BLOCK if pattern score >= threshold
     panel_width: int = 80
 
 
@@ -187,7 +205,7 @@ class LiveFeed:
                 return None
 
         # ── AFTER BASELINE: check if this is a known normal ──
-        from suijin.core.blue.traffic.normalizer import get_global_normalizer
+        from suijin.modules.blueteam.lib.blue.traffic.normalizer import get_global_normalizer
 
         normalizer = get_global_normalizer()
 
@@ -263,7 +281,7 @@ class LiveFeed:
             self.tier1_analysts[0].triage(request, effective_score)
 
         # SOC Tier-2 + Incident Commander: declare incident for severe/repeat attacks
-        if effective_score >= RISK_HIGH and self.incident_commander:
+        if effective_score >= _risk_high() and self.incident_commander:
             hist = kg.get_attacker_history(ip)
             if hist.get("total_flags", 0) >= 2:
                 self.incident_commander.declare_incident(ip, pattern_names[0], effective_score, [path])
@@ -282,7 +300,7 @@ class LiveFeed:
         # Run counter-recon on attacker IP (first time only)
         if prev == 0:
             try:
-                from suijin.core.blue.defense.counter_recon import recon_attacker
+                from suijin.modules.blueteam.lib.blue.defense.counter_recon import recon_attacker
 
                 recon = recon_attacker(ip)
                 if recon.get("hostname") and recon["hostname"] != "unknown":
@@ -354,7 +372,7 @@ class LiveFeed:
         return result
 
     # ── Execute AI's decision ────────────────────────────────────────
-    TARPIT_FILE = str(BLUE_TARPIT_FILE)
+    TARPIT_FILE = str(_blue_tarpit_file())
 
     def _execute_ai_decision(self, result: AIAnalysisResult, ip: str, patterns: list, score: int):
         """Execute whatever the AI decided — commands, code changes, REAL deception."""
@@ -400,7 +418,7 @@ class LiveFeed:
             sa = self.subagent_manager.find_for_request(result.path)
             if sa and sa.status == "active":
                 try:
-                    from suijin.core.blue.actions.deploy import (
+                    from suijin.modules.blueteam.lib.blue.actions.deploy import (
                         deploy_canary_tokens,
                         deploy_deception_data,
                         deploy_honeypot,
@@ -430,7 +448,7 @@ class LiveFeed:
             sa = self.subagent_manager.find_for_request(result.path)
             if sa and sa.patch_code:
                 try:
-                    from suijin.core.blue.actions.deploy import deploy_patch
+                    from suijin.modules.blueteam.lib.blue.actions.deploy import deploy_patch
 
                     pt = deploy_patch(target_path, sa)
                     if pt["status"] == "patched":

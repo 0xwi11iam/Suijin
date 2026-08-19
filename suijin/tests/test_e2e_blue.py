@@ -102,9 +102,9 @@ def lab_server():
 @pytest.fixture
 def blue_stack():
     """Build a LiveFeed stack with a mocked AI engine (no API keys needed)."""
-    from suijin.core.blue.ai_engine import AIAnalysisResult, BlueAIEngine
-    from suijin.core.blue.subagent_manager import SubagentManager
-    from suijin.core.blue.tui.feed import FeedConfig, LiveFeed
+    from suijin.modules.blueteam.lib.blue.ai_engine import AIAnalysisResult, BlueAIEngine
+    from suijin.modules.blueteam.lib.blue.subagent_manager import SubagentManager
+    from suijin.modules.blueteam.lib.blue.tui.feed import FeedConfig, LiveFeed
 
     engine = BlueAIEngine(config={})
 
@@ -171,7 +171,7 @@ def _read_last_log_entry(log_path: str) -> dict:
 @pytest.fixture
 def isolated_tarpit_path(lab_server, monkeypatch):
     """Point the LiveFeed's class-level tarpit file at the isolated tmpdir."""
-    from suijin.core.blue.tui.feed import LiveFeed
+    from suijin.modules.blueteam.lib.blue.tui.feed import LiveFeed
 
     monkeypatch.setattr(LiveFeed, "TARPIT_FILE", lab_server["tarpit_file"])
     yield lab_server["tarpit_file"]
@@ -259,7 +259,7 @@ class TestBlueTeamE2E:
 
     def test_scanner_ua_detected(self, lab_server, blue_stack):
         """Scanner user-agent should trigger pattern detection."""
-        from suijin.core.blue.tui.feed import _detect_obvious_attack
+        from suijin.modules.blueteam.lib.blue.tui.feed import _detect_obvious_attack
 
         req_data = {
             "method": "GET",
@@ -296,7 +296,7 @@ class TestBlueTeamE2E:
         """The knowledge graph must record the attack for cross-session tracking."""
         import requests as req
 
-        from suijin.core.blue.knowledge_graph import get_kg
+        from suijin.modules.blueteam.lib.blue.knowledge_graph import get_kg
 
         feed = blue_stack
         base = lab_server["base_url"]

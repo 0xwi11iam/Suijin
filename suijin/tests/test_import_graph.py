@@ -87,13 +87,13 @@ def test_blue_tree_only_contains_live_modules():
 @pytest.mark.parametrize(
     "module",
     [
-        "suijin.core.blue.traffic.anomaly_detector",
-        "suijin.core.blue.traffic.scorer",
-        "suijin.core.blue.traffic.replay_harness",
-        "suijin.core.blue.defense.firewall",
-        "suijin.core.blue.ai_engine",
-        "suijin.core.blue.knowledge_graph",
-        "suijin.core.blue.subagent_manager",
+        "suijin.modules.blueteam.lib.blue.traffic.anomaly_detector",
+        "suijin.modules.blueteam.lib.blue.traffic.scorer",
+        "suijin.modules.blueteam.lib.blue.traffic.replay_harness",
+        "suijin.modules.blueteam.lib.blue.defense.firewall",
+        "suijin.modules.blueteam.lib.blue.ai_engine",
+        "suijin.modules.blueteam.lib.blue.knowledge_graph",
+        "suijin.modules.blueteam.lib.blue.subagent_manager",
         "suijin.modules.agent.lib.prompts.blue_system",
     ],
 )

@@ -19,7 +19,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from suijin.modules.platform.lib.constants import RISK_HIGH
+
+def _risk_high():
+    from suijin.modules.platform.lib.constants import RISK_HIGH as _v
+
+    return _v
 
 
 @dataclass
@@ -261,7 +265,7 @@ Respond in JSON — provide ALL code as FULL strings ready to deploy:
         return {
             "total": len(agents),
             "active": sum(1 for a in agents if a.status == "active"),
-            "high_risk": sum(1 for a in agents if a.risk_score >= RISK_HIGH),
+            "high_risk": sum(1 for a in agents if a.risk_score >= _risk_high()),
             "total_anomalies": sum(a.anomalies_reported for a in agents),
             "total_blocked": sum(a.attacks_blocked for a in agents),
             "by_risk": sorted(

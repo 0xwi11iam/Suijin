@@ -15,7 +15,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-import suijin.core.blueteamer as bt
+import suijin.modules.blueteam.lib.blueteamer as bt
 
 
 def _scripted_input(answers):
@@ -52,7 +52,7 @@ def blue_mocks(monkeypatch, tmp_path):
 
     # Codebase scanner → 1 fake endpoint
     monkeypatch.setattr(
-        "suijin.core.blue.codebase.scanner.scan_codebase",
+        "suijin.modules.blueteam.lib.blue.codebase.scanner.scan_codebase",
         lambda root: [{"method": "GET", "path": "/health", "framework": "flask", "auth": "none"}],
     )
     mocks["endpoints"] = [{"method": "GET", "path": "/health", "framework": "flask", "auth": "none"}]
@@ -61,7 +61,7 @@ def blue_mocks(monkeypatch, tmp_path):
     async def fake_spawn(endpoints, config):
         return []
 
-    monkeypatch.setattr("suijin.core.blue.watchers.spawner.spawn_watchers", fake_spawn)
+    monkeypatch.setattr("suijin.modules.blueteam.lib.blue.watchers.spawner.spawn_watchers", fake_spawn)
 
     # SOC team → cheap fakes
     class FakeSOCLead:
@@ -70,14 +70,20 @@ def blue_mocks(monkeypatch, tmp_path):
     async def fake_activate(config, queue):
         return FakeSOCLead()
 
-    monkeypatch.setattr("suijin.core.blue.soc.soc_lead.activate_soc_lead", fake_activate)
+    monkeypatch.setattr("suijin.modules.blueteam.lib.blue.soc.soc_lead.activate_soc_lead", fake_activate)
     monkeypatch.setattr(
-        "suijin.core.blue.soc.tier1_analyst.create_tier1", lambda path: types.SimpleNamespace(endpoint=path)
+        "suijin.modules.blueteam.lib.blue.soc.tier1_analyst.create_tier1",
+        lambda path: types.SimpleNamespace(endpoint=path),
     )
-    monkeypatch.setattr("suijin.core.blue.soc.tier2_analyst.create_tier2", lambda: types.SimpleNamespace())
-    monkeypatch.setattr("suijin.core.blue.soc.threat_hunter.create_threat_hunter", lambda: types.SimpleNamespace())
     monkeypatch.setattr(
-        "suijin.core.blue.soc.incident_commander.create_incident_commander", lambda: types.SimpleNamespace()
+        "suijin.modules.blueteam.lib.blue.soc.tier2_analyst.create_tier2", lambda: types.SimpleNamespace()
+    )
+    monkeypatch.setattr(
+        "suijin.modules.blueteam.lib.blue.soc.threat_hunter.create_threat_hunter", lambda: types.SimpleNamespace()
+    )
+    monkeypatch.setattr(
+        "suijin.modules.blueteam.lib.blue.soc.incident_commander.create_incident_commander",
+        lambda: types.SimpleNamespace(),
     )
 
     # Proxy → fake
@@ -85,14 +91,16 @@ def blue_mocks(monkeypatch, tmp_path):
         def stop(self):
             pass
 
-    monkeypatch.setattr("suijin.core.blue.proxy.start_proxy", lambda **kwargs: FakeProxy())
+    monkeypatch.setattr("suijin.modules.blueteam.lib.blue.proxy.start_proxy", lambda **kwargs: FakeProxy())
     mocks["proxy"] = FakeProxy
 
     # Subagent analyze → empty (mock at class level)
     async def fake_analyze(self):
         return []
 
-    monkeypatch.setattr("suijin.core.blue.subagent_manager.SubagentManager.analyze_all_endpoints", fake_analyze)
+    monkeypatch.setattr(
+        "suijin.modules.blueteam.lib.blue.subagent_manager.SubagentManager.analyze_all_endpoints", fake_analyze
+    )
 
     # Isolate traffic log + lab port (don't touch real /tmp files)
     monkeypatch.setattr(bt, "BLUE_TRAFFIC_LOG", Path(str(tmp_path)) / "traffic.jsonl")

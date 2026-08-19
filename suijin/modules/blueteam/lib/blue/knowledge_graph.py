@@ -17,9 +17,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from suijin.modules.platform.lib.constants import BLUE_KG_PATH
 
-KG_PATH = BLUE_KG_PATH
+def _blue_kg_path():
+    from suijin.modules.platform.lib.constants import BLUE_KG_PATH as _v
+
+    return _v
+
+
+KG_PATH = _blue_kg_path()
 
 
 @dataclass
@@ -186,7 +191,7 @@ class BlueKnowledgeGraph:
         blocked patterns, confirmed CVEs, and discovered endpoints into
         the blue team's intelligence nodes for defensive use.
         """
-        red_kg_path = Path(__file__).resolve().parent.parent.parent / "intel" / "knowledge_graph.json"
+        red_kg_path = Path(__file__).resolve().parents[3] / "intel" / "knowledge_graph.json"
         if not red_kg_path.exists():
             return 0
         try:
