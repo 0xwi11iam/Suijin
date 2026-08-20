@@ -9,7 +9,6 @@
   <img height="20" src="https://img.shields.io/badge/v5.0.0-suijin-green?style=flat" alt="Version"/>
   <img height="20" src="https://img.shields.io/badge/LICENSE-MIT-4169A1?style=flat" alt="License"/>
   <img height="20" src="https://img.shields.io/badge/PYTHON-3.10+-306998?style=flat&logo=python&logoColor=white" alt="Python"/>
-  <img height="20" src="https://img.shields.io/badge/LangGraph-State%20Machine-FF6B35?style=flat" alt="LangGraph"/>
 </p>
 
 Suijin is a dual-mode autonomous security platform: a **Red Team** agent that
