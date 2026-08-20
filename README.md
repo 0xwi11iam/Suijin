@@ -1,5 +1,6 @@
+<h3 align="center">v5.0.0</h3> 
 <p align="center">
-  <img src="assets/suijin.png" alt="Suijin Logo" width="160"/>
+<img src="assets/suijin.png" alt="Suijin Logo" width="160"/>
 </p>
 <h1 align="center">Suijin</h1>
 
