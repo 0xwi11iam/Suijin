@@ -484,12 +484,16 @@ def get_tool_catalog():
     Dynamically includes core tools, Metasploit, CVE search, Oracle, notes,
     and any loaded module tools. Called from redteamer to build the prompt.
     """
-    from suijin.modules.loader import get_loaded_modules
 
     catalog = ""
 
     # ── MUST-USE TOOLS (these are NOT optional) ─────────────────────
-    catalog += """##  MANDATORY TOOLS — Use These Every Turn
+    catalog += """## HOW TO CALL ANY TOOL (read this first)
+Every tool below is called the same way — one JSON object per decision:
+  {"action": "use_tool", "tool_name": "<name>", "args": {"<arg>": "<value>", ...}, "thought": "..."}
+Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names exactly.
+
+##  MANDATORY TOOLS — Use These Every Turn
 - **write_note** — MANDATORY after EVERY action. Log what you did, what happened, and what you learned. Categories: recon, exploit, cve, blocked, finding, progress, complete. Your audit trail and final report depend on these notes. DO NOT SKIP.
   ```json
   {"tool": "write_note", "args": {"content": "Tested SQLi on /login with payload ' OR 1=1 --. Login bypass confirmed. Gained admin session.", "success": true, "category": "finding", "engagement": "target-name"}}
@@ -743,64 +747,81 @@ def get_tool_catalog():
   ```
 """
 
-    # Module tools — only advertise the ones whose binaries are present, and
-    # list the missing ones separately with install hints so the agent never
-    # wastes a turn calling a tool that cannot run.
-    from suijin.modules.tools.lib.availability import install_hint, missing_binaries
+    # ── THE KERNEL-RENDERED CAPABILITY SURFACE ──────────────────────
+    # Every registered tool, rendered by the kernel from the LIVE
+    # registry (Context.tool_reference) — what is registered is what
+    # the agent sees; drift is impossible by construction. Falls back
+    # to a manifest-derived rendering before any boot.
+    try:
+        from suijin.kernel.controller import last_context
 
-    unavailable = missing_binaries()
-    modules = get_loaded_modules()
-    if modules:
-        catalog += "## Module Tools\n"
-        for mod_name, mod_data in modules.items():
-            manifest = mod_data.get("manifest", {})
-            tools = manifest.get("tools", {})
-            deps = manifest.get("dependencies", [])
-            if tools:
-                catalog += f"### {mod_name}"
-                if deps:
-                    catalog += f" (requires: {', '.join(deps)})"
-                catalog += "\n"
-                for t_name, t_info in tools.items():
-                    if t_name in unavailable:
-                        continue
-                    desc = t_info.get("description", "")
-                    params = t_info.get("parameters", {})
-                    param_example = ", ".join(f'"{p}": "..."' for p in params)
-                    catalog += f"- **{t_name}** — {desc}\n"
-                    catalog += "  ```json\n"
-                    if param_example:
-                        catalog += f'  {{"tool": "{t_name}", "args": {{{param_example}}}}}\n'
-                    else:
-                        catalog += f'  {{"tool": "{t_name}", "args": {{}}}}\n'
-                    catalog += "  ```\n"
+        _ctx = last_context()
+        reference = _ctx.tool_reference(core_first=("tools", "platform", "knowledge", "providers")) if _ctx else None
+    except Exception:  # noqa: BLE001
+        reference = None
+    if reference is None:
+        reference = _manifest_reference()
+    catalog += "## ALL AVAILABLE TOOLS (complete — one line each)\n"
+    catalog += "Every tool below is registered and callable RIGHT NOW. Args in parentheses.\n\n"
+    catalog += reference + "\n\n"
 
-    if unavailable:
-        catalog += "## NOT INSTALLED — install these to unlock more tools\n"
-        for t_name, missing in sorted(unavailable.items()):
-            hints = "; ".join(install_hint(b) for b in missing)
-            catalog += f"- **{t_name}** — missing: {', '.join(missing)}. {hints}\n"
+    # ── skill docs: index only; detail via skill_read ────────────────
+    try:
+        from suijin.modules.skills.entry import skill_index
 
+        _idx = skill_index()
+        if _idx:
+            catalog += "## PACK GUIDES\n" + _idx + "\nUse skill_read(pack) for full usage docs.\n\n"
+    except Exception:  # noqa: BLE001
+        pass
+
+    # ── not-installed: one line, no wall ─────────────────────────────
+    try:
+        from suijin.modules.tools.lib.availability import missing_binaries
+
+        _un = missing_binaries()
+        if _un:
+            catalog += f"## AVAILABILITY\n{len(_un)} tool(s) need binaries not installed on this host — calling them returns install hints; `suijin doctor` lists them.\n"
+    except Exception:  # noqa: BLE001
+        pass
+
+    # KB feature gate: search_kb/kb_* degrade gracefully when not built
     if _kb is None:
         catalog += (
-            "## DISABLED — knowledge base not built\n"
-            "- **search_kb** — offline security KB (HackTricks, PayloadsAllTheThings, GTFOBins, "
-            "LOLBAS, OWASP, SecLists). The operator enables it with `suijin pull kb`. "
-            "Use web_search until then.\n"
-            "- **kb_stats / find_wordlist / suggest_exploit / extract_payloads** — same KB "
-            "toolkit; every one degrades gracefully to a 'not built' notice until the operator "
-            "runs `suijin pull kb`.\n"
+            "KB DISABLED — not built: search_kb, kb_stats, find_wordlist, suggest_exploit, "
+            "extract_payloads return a 'not built' notice. Tell the operator to run `suijin pull kb`. "
+            "Use web_search until then.\n\n"
         )
 
-    # Strategy reminder
     catalog += """
 ## Attack Strategy (MUST FOLLOW)
 1. **Recon first** — Always start with `execute_terminal` running gobuster/nmap/nikto before manual testing. Never start with raw curl.
-2. **Knowledge base before attacking** — `search_kb` BEFORE every new attack technique, payload class, privesc path, or wordlist choice. It contains HackTricks, PayloadsAllTheThings, GTFOBins, LOLBAS, OWASP and SecLists — offline, instant, richer than web_search. If it says the KB is not built, tell the operator to run `suijin pull kb`.
+2. **Knowledge base before attacking** — `search_kb` BEFORE every new attack technique, payload class, privesc path, or wordlist choice. If it says the KB is not built, tell the operator to run `suijin pull kb`.
 3. **CVE before exploit** — `search_cve` after fingerprinting a service. Don't guess.
 4. **Knowledge graph before payload** — `check_knowledge` before every new payload.
 5. **Verify before claiming** — Confirm exploits with tool-call evidence. No hallucinations.
 6. **Log everything** — `write_note` after every significant finding.
-7. **Module tools** — Use loaded module tools (above) when applicable instead of reinventing.
+7. **Tool not found?** — ONE guess maximum, then ASK THE OPERATOR (action: ask_operator) where it is or whether it exists. Never guess repeatedly.
 """
     return catalog
+
+
+def _manifest_reference() -> str:
+    """Pre-boot fallback rendering from pack manifests (same shape as
+    the kernel's tool_reference so the agent always sees tools)."""
+    from suijin.modules.loader import discover_modules, get_loaded_modules
+
+    discover_modules()
+    mods = get_loaded_modules() or {}
+    lines = []
+    for key in sorted(mods):
+        tools = mods[key].get("manifest", {}).get("tools") or {}
+        if not tools:
+            continue
+        lines.append(f"[{key}]")
+        for name, t in sorted(tools.items()):
+            params = list((t.get("parameters") or {}) if isinstance(t, dict) else {})
+            sig = f"{name}({', '.join(params)})" if params else f"{name}()"
+            one = " ".join(str(t.get("description", "") if isinstance(t, dict) else "").split())[:90]
+            lines.append(f"- {sig} — {one}")
+    return "\n".join(lines)

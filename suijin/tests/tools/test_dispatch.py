@@ -266,9 +266,9 @@ class TestRouteTool:
 class TestCatalogParity:
     def test_every_routed_tool_is_advertised(self):
         """Flexibility contract: a tool the model cannot see is a tool that
-        does not exist. Every dispatch route must appear in the catalog
-        text — except deploy_subagent (an ACTION; its route exists only to
-        return corrective guidance when the model miscalls it as a tool)."""
+        does not exist. v5.1: FULL parity — the kernel-rendered reference
+        includes every registered tool (deploy_subagent included; calling
+        it returns corrective ACTION guidance by design). Zero invisible."""
         from suijin.modules.loader import discover_modules
 
         discover_modules()
@@ -278,4 +278,4 @@ class TestCatalogParity:
         catalog = dispatch.get_tool_catalog()
         routes = set(dispatch._build_routes(None).keys())
         missing = sorted(n for n in routes if n not in catalog)
-        assert missing == ["deploy_subagent"], f"routed but invisible to the model: {missing}"
+        assert missing == [], f"routed but invisible to the model: {missing}"

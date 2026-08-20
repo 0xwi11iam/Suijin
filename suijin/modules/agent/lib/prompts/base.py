@@ -245,12 +245,14 @@ NEVER run sequential scans when you could deploy subagents instead.
     # 4. Tool catalog
     parts.append(build_tool_catalog_prompt(phase))
 
-    # 5. Module skill docs
-    from suijin.modules.loader import get_module_skills
+    # 5. Module skill docs: INDEX ONLY in the prompt (the tool catalog
+    # references skill_read); 16k tokens of always-on docs made the
+    # agent forget. Detail is fetched on demand.
+    from suijin.modules.skills.entry import skill_index
 
-    ms = get_module_skills()
-    if ms:
-        parts.append("\n## MODULE TOOL DOCS\n" + ms + "\n")
+    _si = skill_index()
+    if _si:
+        parts.append("\n## PACK GUIDES\n" + _si + "\n")
 
     # 5b. Drop-in markdown skills (suijin/skills/*.md — no code, no manifest)
     try:

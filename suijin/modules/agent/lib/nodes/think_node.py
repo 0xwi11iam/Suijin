@@ -172,10 +172,19 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
 
     raw_msgs = state.get("messages", [])
     recent_msgs = ""
-    for m in raw_msgs[-15:]:
+    # Token-budgeted embed: the newest messages verbatim, older ones
+    # truncated — the compaction digest covers the deep past. Unbounded
+    # embeds (15 x 5,000 chars) drowned the agent's attention.
+    embed_budget = 24_000  # chars (~6k tokens) for the recent window
+    for m in reversed(raw_msgs[-15:]):
         role = m.get("role", "?")
-        content = m.get("content", "")[:5000]
-        recent_msgs += f"[{role}]: {content}\n"
+        content = str(m.get("content", ""))
+        if len(recent_msgs) + len(content) + 12 > embed_budget:
+            room = max(0, embed_budget - len(recent_msgs) - 40)
+            if room > 200:
+                recent_msgs = f"[{role}]: {content[:room]}...(truncated)\n" + recent_msgs
+            break
+        recent_msgs = f"[{role}]: {content}\n" + recent_msgs
 
     # Build a summary of the last 8 tool actions (anti-repeat)
     trace = state.get("execution_trace", [])

@@ -28,7 +28,13 @@ def _load_tools() -> dict:
         sys.modules[canonical] = mod
         spec.loader.exec_module(mod)
     mod = sys.modules[canonical]
-    return {n: getattr(mod, n) for n in declared if callable(getattr(mod, n, None))}
+    out = {}
+    for n in declared:
+        fn = getattr(mod, n, None)
+        if callable(fn):
+            params = list((manifest.get("tools") or {}).get(n, {}).get("parameters", {}) or [])
+            out[n] = (fn, params)
+    return out
 
 
 class PackModule(Module):
@@ -40,7 +46,7 @@ class PackModule(Module):
 
     def start(self, ctx) -> None:
         bridged = 0
-        for tool_name, fn in _load_tools().items():
+        for tool_name, (fn, params) in _load_tools().items():
             if ctx.has_tool(tool_name):
                 continue
 
@@ -55,6 +61,7 @@ class PackModule(Module):
                 _bridge,
                 description="IPA static analysis (Info.plist + embedded.mobileprovision).",
                 owner="ipastatics",
+                params=params,
             )
             bridged += 1
         ctx.journal.append("ipastatics", f"{bridged} tool(s) registered")

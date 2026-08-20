@@ -63,6 +63,14 @@ class PackModule(Module):
         ctx.register_service("skills.docs", lambda: scan_drop_skills()[0])
 
     def start(self, ctx) -> None:
+        if not ctx.has_tool("skill_read"):
+            ctx.register_tool(
+                "skill_read",
+                lambda args, _ctx: read_skill(args.get("pack", "")),
+                description="Fetch a pack's full usage guide (see the skill index for names).",
+                owner="skills",
+                params=["pack"],
+            )
         _text, skipped = scan_drop_skills()
         n = len(_text.split("### Skill:")) - 1 if _text else 0
         ctx.journal.append(
@@ -108,3 +116,44 @@ def decay_report() -> str:
     if not stale:
         return "No stale skills detected."
     return "possibly stale (no keyword overlap with engagement history):\n  " + "\n  ".join(stale[:10])
+
+
+# ── on-demand skill docs: index in the prompt, full text on request ──
+
+
+def skill_index() -> str:
+    """One line per pack that ships a skill.md (the agent fetches detail
+    via skill_read instead of every doc living in the prompt)."""
+    from suijin.modules.loader import discover_modules, get_loaded_modules
+
+    discover_modules()
+    lines = []
+    for key, mod in sorted((get_loaded_modules() or {}).items()):
+        if mod.get("skill"):
+            lines.append(key)
+    if not lines:
+        return ""
+    return "packs with detailed usage guides (fetch with skill_read): " + ", ".join(lines[:80])
+
+
+def read_skill(pack: str = "") -> str:
+    """Return a pack's full skill.md (or the closest match)."""
+    from suijin.modules.loader import discover_modules, get_loaded_modules
+
+    if not pack.strip():
+        return "Error: pack name required (see the skill index for names)"
+    discover_modules()
+    mods = get_loaded_modules() or {}
+    name = pack.strip().lower()
+    hit = next((k for k in mods if k.lower() == name), None)
+    if hit is None:
+        import difflib
+
+        close = difflib.get_close_matches(name, [k.lower() for k in mods], n=1)
+        if close:
+            hit = next(k for k in mods if k.lower() == close[0])
+    if hit is None:
+        avail = ", ".join(sorted(mods)[:12])
+        return f"Error: no pack skill named '{pack}' (have: {avail}...)"
+    doc = mods[hit].get("skill") or ""
+    return f"# {hit}\n{doc[:8000]}" if doc else f"'{hit}' has no skill doc"

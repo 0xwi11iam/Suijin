@@ -26,6 +26,16 @@ _LAST_BOOT_ENTRIES: dict[str, object] = {}
 _LAST_CONTEXT: Context | None = None
 
 
+def last_context() -> Context | None:
+    """The most recently booted Context (None before first boot).
+
+    Surfaces (like the agent prompt) render the LIVE tool registry
+    through it — kernel-rendered capability surface, always in sync
+    with what is actually registered.
+    """
+    return _LAST_CONTEXT
+
+
 def _import_entry(entry: str, source: Path | None = None) -> object | None:
     """Resolve 'pkg.module:Class' to an instance. None on any failure —
     the caller quarantines with the reason.

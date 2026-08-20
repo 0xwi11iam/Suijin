@@ -60,10 +60,20 @@ class Context:
     # ── tools ──────────────────────────────────────────────────────
 
     def register_tool(
-        self, name: str, fn: Callable[[dict, "Context"], str], description: str = "", owner: str = ""
+        self,
+        name: str,
+        fn: Callable[[dict, "Context"], str],
+        description: str = "",
+        owner: str = "",
+        params: list[str] | None = None,
     ) -> None:
-        """Register a callable(args, ctx) under a namespaced name."""
-        self._tools[name] = {"fn": fn, "description": description, "owner": owner}
+        """Register a callable(args, ctx) under a namespaced name.
+
+        params: the tool's argument names (pack manifests declare them).
+        Feeds tool_reference() so the kernel itself can render what the
+        agent can call — the registry is the single source of truth.
+        """
+        self._tools[name] = {"fn": fn, "description": description, "owner": owner, "params": list(params or [])}
 
     def has_tool(self, name: str) -> bool:
         return name in self._tools
@@ -104,6 +114,38 @@ class Context:
         if owner is None:
             return sorted(self._tools)
         return sorted(n for n, e in self._tools.items() if e["owner"] == owner)
+
+    def tool_reference(self, core_first: tuple[str, ...] = ()) -> str:
+        """Render EVERY registered tool as the compact agent surface.
+
+        One line per tool: name(arg, arg?) — description, grouped by
+        owner. Rendered FROM the live registry: what is registered is
+        what the agent sees — drift is impossible by construction.
+        """
+        by_owner: dict[str, list[tuple[str, list[str], str]]] = {}
+        for name, entry in self._tools.items():
+            by_owner.setdefault(entry["owner"] or "?", []).append(
+                (name, entry.get("params") or [], entry.get("description") or "")
+            )
+        lines: list[str] = []
+
+        # core-first ordering: the owner modules the agent uses daily
+        def owner_key(owner: str) -> tuple[int, str]:
+            for i, want in enumerate(core_first):
+                if owner == want:
+                    return (i, owner)
+            return (len(core_first), owner)
+
+        for owner in sorted(by_owner, key=owner_key):
+            lines.append(f"[{owner}]")
+            for name, params, desc in sorted(by_owner[owner]):
+                args = ", ".join(params)
+                sig = f"{name}({args})" if args else f"{name}()"
+                one = " ".join(desc.split())  # collapse whitespace
+                if len(one) > 90:
+                    one = one[:87] + "..."
+                lines.append(f"- {sig} — {one}")
+        return "\n".join(lines)
 
     # ── events convenience ─────────────────────────────────────────
 
