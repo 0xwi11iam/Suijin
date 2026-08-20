@@ -24,12 +24,6 @@ You can expect:
 3. Reproduction steps or a minimal PoC
 4. Impact assessment (what an attacker could achieve)
 
-## Supported Versions
-
-| Version | Supported |
-|---|---|
-| 2.x (latest) | ✅ Yes |
-| 1.x | ❌ No (end of life) |
 
 ## Security Model
 

@@ -15,7 +15,7 @@ commands, same look throughout.
                  ┌─────────────────────────────────────────┐
                  │  console (TUI · CLI · WebUI · MCP)      │  ← surfaces, feature-blind
                  ├─────────────────────────────────────────┤
-   recommended ──┤  redteam · blueteam · knowledge · ops    │
+   recommended ──┤  redteam · blueteam · knowledge · ops   │
    + 49 packs    │  providers · nmap · sqlmap · ...        │  ← disableable, bundled
                  ├─────────────────────────────────────────┤
    core          │  platform · tools · agent (graph/       │  ← boot-required
@@ -25,9 +25,9 @@ commands, same look throughout.
                  │  contracts · context · events · registry│
                  │  controller · jobs · vfs · security     │
                  │  config · health · journal · errors     │
-                 │  ────────────────────────────────────   │
-                 │  suijin-core (Rust): resolve_dag,        │  ← compiled heart,
-                 │  check_paths + pure-Python oracles       │    optional wheel
+                 │  ───────────────────────────────────────│
+                 │  suijin-core (Rust): resolve_dag,       │  ← compiled heart,
+                 │  check_paths + pure-Python oracles      │    optional wheel
                  └─────────────────────────────────────────┘
 ```
 

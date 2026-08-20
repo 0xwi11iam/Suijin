@@ -3,15 +3,6 @@
 </p>
 <h1 align="center">Suijin</h1>
 
-> **NAME CHANGE — Medusa is now Suijin.** This project was renamed in full
-> (v2.12.0): the package (`medusa/` → `suijin/`), the CLI (`medusa` →
-> `suijin`), the agent workspace (`medusa_agent/` → `suijin_agent/`), the
-> installer (`~/.medusa` → `~/.suijin`), and every doc, prompt, and config
-> reference. Existing data migrates automatically on first run — your
-> `medusa_agent/` artifacts, KB database, and `~/.medusa` installation are
-> carried over, never dropped. Old `MEDUSA_*` environment overrides and the
-> `MEDUSA_TMP_DIR` variable still work. Prior releases in the changelog were
-> written under the Medusa name.
 
 <p align="center">
   <img height="20" src="https://img.shields.io/badge/v5.0.0-suijin-green?style=flat" alt="Version"/>
@@ -26,11 +17,6 @@ and a **Blue Team** agent that monitors live HTTP traffic, detects attacks, and
 responds with deception, blocking, and source patching. Both modes share one
 toolkit, one knowledge base, and one knowledge graph.
 
-> **v5.0.0 — ALL 50 ROADMAP FEATURES COMPLETE.** The marketplace
-> lands (decentralized indexes, hash-pinned installs), the agent
-> verifies its own findings, grades itself, mines its habits into
-> recipes, compacts its own context, and speaks 262 tools with typed
-> MCP schemas. See `developer.md` to get started.
 
 > **LEGAL DISCLAIMER**: This tool is intended for **authorized security
 > testing**, **educational purposes**, and **research only**. Never use this
@@ -412,11 +398,11 @@ accepts only `coding`, `paas`, or a full custom base URL.
 | Provider | Models | Env var |
 |:---------|:-------|:--------|
 | **Z.ai (GLM)** | `glm-5.3` (default), `glm-5-turbo`, `glm-4.7` | `ZAI_API_KEY` |
-| DeepSeek | `deepseek-v4-flash`, `deepseek-v4-pro` | `DEEPSEEK_API_KEY` |
-| HuggingFace | Qwen, GLM, DeepSeek via TGI | `HF_TOKEN` |
-| Gemini | `gemini-2.5-pro`, `gemini-2.5-flash` | `GEMINI_API_KEY` |
-| Anthropic | `claude-opus-4-7`, `claude-sonnet-4-6`, `claude-haiku-4-5` | `ANTHROPIC_API_KEY` |
-| AMD | via `amd_config.endpoint` | `AMD_API_KEY` |
+| **DeepSeek** | `deepseek-v4-flash`, `deepseek-v4-pro` | `DEEPSEEK_API_KEY` |
+| **HuggingFace** | Qwen, GLM, DeepSeek via TGI | `HF_TOKEN` |
+| **Gemini** | `gemini-2.5-pro`, `gemini-2.5-flash` | `GEMINI_API_KEY` |
+| **Anthropic** | `claude-opus-4-7`, `claude-sonnet-4-6`, `claude-haiku-4-5` | `ANTHROPIC_API_KEY` |
+| **AMD** | via `amd_config.endpoint` | `AMD_API_KEY` |
 
 `NVD_API_KEY` (optional) raises NVD rate limits for the `search_cve` tool.
 

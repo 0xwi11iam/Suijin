@@ -43,11 +43,57 @@ def normalize_content(content) -> str:
     return str(content)
 
 
+def extract_first_object(text: str) -> Optional[str]:
+    """Brace-matched FIRST complete top-level JSON object.
+
+    Handles nested braces inside values (tool_args) and multiple
+    objects (returns the first, not a greedy invalid span). Skips
+    code fences naturally: the fence chars are outside the object.
+    """
+    start = text.find("{")
+    if start < 0:
+        return None
+    depth = 0
+    in_string = False
+    escaped = False
+    for i in range(start, len(text)):
+        c = text[i]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif c == "\\":
+                escaped = True
+            elif c == '"':
+                in_string = False
+            continue
+        if c == '"':
+            in_string = True
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None  # unbalanced — caller repairs
+
+
 def extract_json(response_text: str) -> Optional[str]:
-    """Extract JSON from LLM response (may be wrapped in markdown)."""
+    """Extract JSON from LLM response (may be wrapped in markdown).
+
+    v5.1: brace-matched first-object extraction (nested tool_args
+    survive; multiple objects yield the first instead of a greedy
+    invalid span). Falls back to the legacy tail-repair path when
+    unbalanced.
+    """
+    first = extract_first_object(response_text)
+    if first is not None:
+        try:
+            json.loads(first)
+            return first
+        except json.JSONDecodeError:
+            pass  # complete but invalid — try legacy repair below
     json_start = response_text.find("{")
     json_end = response_text.rfind("}") + 1
-
     if json_start >= 0 and json_end > json_start:
         return response_text[json_start:json_end]
     if json_start >= 0:

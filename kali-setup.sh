@@ -131,13 +131,13 @@ ok "setup complete"
 ELAPSED=$(( $(date +%s) - T0 ))
 printf "\n${BOLD}${CYAN}"
 cat <<EOF
-  ┌──────────────────────────────────────────────┐
-  │   Kali setup complete — full arsenal         │
-  │   elapsed: ${ELAPSED}s   install: ${INSTALL_DIR}
-  ├──────────────────────────────────────────────┤
-  │   start:    suijin                            │
-  │   verify:   suijin doctor                     │
-  │   workspace:${REPO_DIR}/suijin_agent
-  └──────────────────────────────────────────────┘
+  ┌─────────────────────────────────────────────────┐
+  │   Kali setup complete                           │
+  │   elapsed: ${ELAPSED}s   install: ${INSTALL_DIR}│
+  ├─────────────────────────────────────────────────┤
+  │   start:    suijin                              │
+  │   verify:   suijin doctor                       │
+  │   workspace:${REPO_DIR}/suijin_agent            │
+  └─────────────────────────────────────────────────┘
 EOF
 printf "${OFF}\n"

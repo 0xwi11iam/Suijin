@@ -85,15 +85,15 @@ summary() {
   local secs=$(( ($(date +%s) - T_START) % 60 ))
   printf "\n${BOLD}${CYAN}"
   cat <<EOF
-  ┌─────────────────────────────────────────────┐
-  │   install complete — ${TIER} tier
-  │   elapsed: ${mins}m ${secs}s
-  ├─────────────────────────────────────────────┤
-  │   start:      suijin
-  │   verify:     suijin doctor
-  │   workspace:  ${INSTALL_DIR}/repo/suijin_agent
-  │   more tools: re-run with --tools or --full
-  └─────────────────────────────────────────────┘
+  ┌───────────────────────────────────────────────┐
+  │   install complete — ${TIER} tier             │
+  │   elapsed: ${mins}m ${secs}s                  │
+  ├───────────────────────────────────────────────┤
+  │   start:      suijin                          │
+  │   verify:     suijin doctor                   │
+  │   workspace:  ${INSTALL_DIR}/repo/suijin_agent│
+  │   more tools: re-run with --tools or --full.  │
+  └───────────────────────────────────────────────┘
 EOF
   printf "${OFF}\n"
 }

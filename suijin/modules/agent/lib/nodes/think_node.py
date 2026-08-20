@@ -291,8 +291,12 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
             messages.append(
                 {
                     "role": "user",
-                    "content": f"Your response was not valid JSON. Error: {parse_error}\n"
-                    f"Please output EXACTLY ONE valid JSON object with the required fields.",
+                    "content": (
+                        f"Your response could not be parsed. Error: {parse_error}\n"
+                        "Respond with EXACTLY ONE JSON object and NOTHING else:\n"
+                        '{"action": "use_tool", "tool_name": "<tool>", "tool_args": {...}, "thought": "..."}\n'
+                        "Pick a tool from the tool list."
+                    ),
                 }
             )
 

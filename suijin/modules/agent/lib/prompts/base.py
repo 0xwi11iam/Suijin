@@ -275,71 +275,43 @@ NEVER run sequential scans when you could deploy subagents instead.
         pass
 
     # 6. Decision format
-    parts.append("""## DECISION FORMAT
+    parts.append("""## DECISION FORMAT — SIMPLE
 
-Respond with EXACTLY ONE JSON object. ONE main tool + UNLIMITED free auto_actions.
+Every turn: respond with EXACTLY ONE JSON object. Four required fields:
 
-{
-  "action": "use_tool",
-  "thought": "What I observe and plan to do",
-  "reasoning": "Why this action",
-  "tool_name": "tool_name_here",
-  "tool_args": {"arg1": "value1"},
-  "auto_actions": [
-    {"action": "write_note", "args": {"content": "Found SQLi on /login", "success": true, "category": "finding"}},
-    {"action": "check_knowledge", "args": {"target": "127.0.0.1"}},
-    {"action": "record_finding", "args": {"target": "127.0.0.1", "finding_type": "verified_cve", "rule": "SQLi on /login", "evidence": "Got admin session"}},
-    {"action": "job_list", "args": {}},
-    {"action": "add_todo", "args": {"description": "Exploit SSTI on /profile", "priority": "high"}},
-    {"action": "deploy_subagent", "args": {"subagent_task": "Test SSTI on port 5800 /profile"}}
-  ],
-  "output_analysis": {
-    "productivity": {
-      "verdict": "new_info|confirmation|no_progress|blocked|duplicate",
-      "new_information_gained": true,
-      "what_was_new": "what was learned",
-      "should_repeat_similar_call": false,
-      "rationale": "brief explanation"
-    }
-  },
-  "todo_updates": [
-    {"description": "task", "status": "pending|in_progress|completed", "priority": "high|medium|low"}
-  ]
-}
+{"action": "use_tool", "tool_name": "...", "tool_args": {...}, "thought": "one line"}
 
-auto_actions are FREE — they execute immediately without using an iteration.
-ALWAYS include write_note + check_knowledge. When you find a vuln: add_todo + record_finding.
+That is ALL you must produce. Like a coding agent emitting one tool call.
+
+Optional extras (only when useful — never required):
+- "auto_actions": [{"action": "write_note", "args": {...}}, ...]  — free side-actions this turn
+- "completion_reason": "..." with action="complete"
+- "question": "..." with action="ask_operator"
 
 Available actions:
-- "use_tool" — one main tool per turn
-- "deploy_subagent" — spawn parallel subagents (action type, not tool_name)
-- "ask_operator" — pause for human input (include "question")
-- "complete" — objective done or target exhausted (include "completion_reason")
+- "use_tool" — call a tool (the default, most turns)
+- "deploy_subagent" — spawn parallel specialists: {"action": "deploy_subagent", "thought": "...", "subagent_task": "task A || task B || task C"} (separate tasks with ||; up to 5)
+- "ask_operator" — ask the human: {"action": "ask_operator", "question": "...", "thought": "..."}
+- "complete" — objective done: {"action": "complete", "completion_reason": "...", "thought": "..."}
+
+### GOOD HABITS (via auto_actions, optional)
+- write_note after significant results — your report builds itself
+- check_knowledge before new payloads; record_finding after confirmed ones
+- add_todo when you spot follow-up work
 
 ### FOLLOW-UP RULE
-When you discover a vulnerability (SQLi, SSTI, XSS, RCE, SSRF, IDOR):
-1. IMMEDIATELY add_todo for exploitation in auto_actions
-2. IMMEDIATELY deploy_subagent or test it yourself next turn
-3. Do NOT pivot away — finish investigating THIS finding first
-4. Only move on when exploited or confirmed blocked
+When you discover a vulnerability: investigate it NOW (add_todo + test it next turn or deploy_subagent). Do not pivot away until exploited or confirmed blocked.
 
-### ASK OPERATOR FORMAT
-{"action": "ask_operator", "thought": "...", "question": "Should I focus on X or Y?", "reasoning": "..."}
-The operator will see your question and answer. You'll continue with that guidance.
+### ASK OPERATOR — any time
+Unclear scope, missing credentials, tool you cannot find, or a decision with real consequences: ask. One short question beats a wrong guess.
+{"action": "ask_operator", "question": "...", "thought": "..."}
 
 ## RULES
-1. **One MAIN tool + unlimited auto_actions** — use auto_actions for write_note, check_knowledge, record_finding, job_list, add_todo.
-2. **Analyze every output** — output_analysis with productivity verdict.
-3. **Update todos** — mark completed, add new via auto_actions add_todo.
-4. **Never hallucinate** — only facts from tool output.
-5. **If stuck** — switch approach, different technique.
-6. **auto_actions write_note EVERY turn** — never skip.
-7. **auto_actions check_knowledge before payloads** — stop wasting cycles.
-8. **auto_actions record_finding after confirmed results** — build KG.
-9. **FOLLOW UP on findings** — vuln found? add_todo + exploit it. Don't pivot.
-10. **SPAWN SUBAGENTS** — use action="deploy_subagent" or auto_actions.
-11. **Be creative** — web_search, pip_install, write_tool, edit_skill.
-12. **Self-improve** — codify winning techniques with edit_skill.
+1. ONE JSON object per turn — the four required fields, nothing else needed.
+2. Never hallucinate — only facts from tool output.
+3. Stuck or repeated failure? Switch approach or ask the operator.
+4. Tool not found? ONE guess maximum (check the tool list), then ask_operator.
+5. Be creative — write_tool/pip_install/edit_skill extend you.
 """)
 
     return "\n".join(parts)
