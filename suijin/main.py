@@ -89,7 +89,14 @@ def main():
     console.print(Panel(Text("Welcome to Suijin", style="bold #e6b47c"), border_style="#e6b47c", expand=False))
     print("\n")
     console.print(" [dim]Press [bold #58a6ff]Enter[/] to continue...", end="")
-    input()
+    try:
+        input()
+    except KeyboardInterrupt:
+        # Ctrl+C at the welcome prompt: leave quietly, no traceback
+        console.print("\n[dim]cancelled[/dim]")
+        return
+    except EOFError:
+        return
 
     while True:
         print(chr(27) + "[2J\033[H", end="")

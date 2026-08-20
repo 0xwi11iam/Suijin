@@ -1935,7 +1935,13 @@ def main(argv=None):
         # Default: launch the classic Rich TUI
         from suijin.main import main as tui_main
 
-        tui_main()
+        try:
+            tui_main()
+        except KeyboardInterrupt:
+            # Ctrl+C anywhere in the TUI: quiet exit (130 = SIGINT),
+            # never a traceback
+            print("\ncancelled")
+            sys.exit(130)
         return
 
     if getattr(args, "func", None) is None:
