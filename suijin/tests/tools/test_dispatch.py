@@ -217,7 +217,7 @@ class TestRouteTool:
         from suijin.modules.tools.lib.dispatch import route_tool
 
         result = route_tool("nonexistent_tool_xyz", {}, {})
-        assert "Invalid Tool" in result
+        assert "TOOL NOT FOUND" in result and "ASK THE OPERATOR" in result
 
     def test_route_http_request_mocked(self, monkeypatch):
         """route_tool('http_request') uses the mocked module function.
@@ -279,3 +279,25 @@ class TestCatalogParity:
         routes = set(dispatch._build_routes(None).keys())
         missing = sorted(n for n in routes if n not in catalog)
         assert missing == [], f"routed but invisible to the model: {missing}"
+
+
+class TestToolNotFound:
+    def test_close_match_suggested(self):
+        from suijin.modules.tools.lib.dispatch import route_tool
+
+        out = route_tool("nmap_scanx", {}, {})
+        assert "TOOL NOT FOUND" in out and "nmap_scan" in out and "ask_operator".upper() in out.upper()
+
+    def test_no_match_points_at_operator(self):
+        from suijin.modules.tools.lib.dispatch import route_tool
+
+        out = route_tool("zzz_totally_unknown", {}, {})
+        assert "TOOL NOT FOUND" in out and "ASK THE OPERATOR" in out and "Do NOT guess" in out
+
+    def test_ask_operator_rule_in_prompt(self):
+        from suijin.modules.loader import discover_modules
+
+        discover_modules()
+        from suijin.modules.tools.lib import dispatch
+
+        assert "ONE guess maximum" in dispatch.get_tool_catalog()

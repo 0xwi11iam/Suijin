@@ -475,7 +475,22 @@ def route_tool(tool_name, args, config):
 
     if tool_name in routes:
         return _execute_with_healing(routes[tool_name], args, tool_name)
-    return f"Invalid Tool: {tool_name}"
+    # Not found — suggest close matches; if none, point at the operator.
+    # One guess maximum: guessing repeatedly burns the engagement.
+    import difflib
+
+    close = difflib.get_close_matches(tool_name, list(routes), n=3, cutoff=0.6)
+    if close:
+        return (
+            f"TOOL NOT FOUND: {tool_name}. Closest matches: {', '.join(close)}. "
+            "Use one of these, or if none is what you need, ASK THE OPERATOR "
+            "(action: ask_operator) whether the tool exists."
+        )
+    return (
+        f"TOOL NOT FOUND: {tool_name} — nothing similar is registered. Do NOT guess again. "
+        "ASK THE OPERATOR (action: ask_operator, include your question) whether this tool "
+        "exists or where to find it."
+    )
 
 
 def get_tool_catalog():
@@ -807,21 +822,30 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
 
 
 def _manifest_reference() -> str:
-    """Pre-boot fallback rendering from pack manifests (same shape as
-    the kernel's tool_reference so the agent always sees tools)."""
-    from suijin.modules.loader import discover_modules, get_loaded_modules
+    """Pre-boot fallback rendering (same shape as the kernel's
+    tool_reference so the agent ALWAYS sees tools, even before any
+    boot): pack manifests + every dispatch route not pack-owned."""
+    from suijin.modules.loader import discover_modules, get_loaded_modules, get_module_tools
 
     discover_modules()
     mods = get_loaded_modules() or {}
     lines = []
+    covered = set()
     for key in sorted(mods):
         tools = mods[key].get("manifest", {}).get("tools") or {}
         if not tools:
             continue
         lines.append(f"[{key}]")
         for name, t in sorted(tools.items()):
+            covered.add(name)
             params = list((t.get("parameters") or {}) if isinstance(t, dict) else {})
             sig = f"{name}({', '.join(params)})" if params else f"{name}()"
             one = " ".join(str(t.get("description", "") if isinstance(t, dict) else "").split())[:90]
             lines.append(f"- {sig} — {one}")
+    # core dispatch routes the packs don't own (deploy_subagent etc.) —
+    # the contract is zero invisible tools in EVERY rendering mode
+    leftover = sorted(set(list_route_tools()) - covered - set(get_module_tools()))
+    if leftover:
+        lines.append("[core]")
+        lines += [f"- {n}()" for n in leftover]
     return "\n".join(lines)
