@@ -1,0 +1,10 @@
+{
+  "name": "Bugscope",
+  "version": "1.0",
+  "description": "Bug-bounty scope scraper (bbscope-style): pull program scopes from HackerOne, Bugcrowd, YesWeHack, Intigriti, Immunefi. SSL-verified, paginated, stealth identity.",
+  "tools": {
+    "scope_pull": {"description": "Pull program scopes from a bug-bounty platform.", "parameters": {"platform": "h1|bugcrowd|ywh|intigriti|immunefi", "token": "API token (h1: username:token)", "programs": "Optional comma list of program handles (default: all)"}},
+    "scope_search": {"description": "Search already-pulled scopes by keyword.", "parameters": {"keyword": "Domain/asset keyword", "in_scope": "true = only in-scope (default true)"}}
+  },
+  "dependencies": []
+}

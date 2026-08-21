@@ -1,0 +1,10 @@
+{
+  "id": "bugscope",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": ["platform", "tools"],
+  "provides": ["pack.bugscope", "scope_pull", "scope_search"],
+  "entry": "pack_entry:bugscope",
+  "permissions": ["network"],
+  "description": "Bug-bounty scope scraper (bbscope-style, 5 platforms)."
+}

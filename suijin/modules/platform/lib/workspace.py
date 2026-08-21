@@ -30,6 +30,7 @@ ARTIFACT_DIRS = (
     "evidence",
     "engagement_templates",
     "portal",
+    "bugscope",
 )
 
 
