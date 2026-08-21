@@ -71,6 +71,16 @@ def execute_terminal(cmd, timeout=30):
         except ValueError:
             cmd_parts = ["/bin/sh", "-c", cmd]
 
+        # Stealth (v5.1): loud tools get tool-level rate caps — same work,
+        # same parallelism, just not machine-gun fast. Benign commands
+        # and operator-throttled invocations pass through untouched.
+        try:
+            from suijin.modules.platform.lib.stealth import sanitize_command
+
+            if len(cmd_parts) > 1:
+                cmd_parts = sanitize_command(cmd_parts)
+        except Exception:  # noqa: BLE001 — never block execution
+            pass
         result = run_command(
             cmd_parts if len(cmd_parts) > 1 else ["/bin/sh", "-c", cmd],
             timeout=timeout,

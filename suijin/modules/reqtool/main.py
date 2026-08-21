@@ -5,6 +5,15 @@ from pathlib import Path
 import requests
 
 
+def _stealth_ua() -> str:
+    try:
+        from suijin.modules.platform.lib.stealth import user_agent
+
+        return user_agent()
+    except Exception:  # standalone fallback
+        return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+
 def raw_request_parse(raw: str = "") -> str:
     if not raw.strip():
         return "Error: raw request text required"
@@ -46,9 +55,7 @@ def http_download(url: str = "", out: str = "") -> str:
 
     target = resolve_workspace_path(out or "downloads/" + url.rstrip("/").split("/")[-1].split("?")[0])
     try:
-        r = requests.get(
-            url.strip(), timeout=(5, 60), stream=True, headers={"User-Agent": "Mozilla/5.0 (suijin download)"}
-        )
+        r = requests.get(url.strip(), timeout=(5, 60), stream=True, headers={"User-Agent": _stealth_ua()})
         r.raise_for_status()
     except requests.RequestException as e:
         return f"Error: {e}"

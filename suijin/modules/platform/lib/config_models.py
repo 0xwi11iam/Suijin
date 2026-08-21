@@ -98,6 +98,7 @@ class RedConfig(BaseModel):
     final_model_id: str = ""
     sentinel_model_id: str = ""
     max_tokens_per_request: int = Field(default=8000, ge=100)
+    stealth: bool = Field(default=True)  # v5.1: quiet by default (masked identity, pacing, tool rate caps)
 
     @field_validator("zai_endpoint")
     @classmethod

@@ -312,6 +312,7 @@ Unclear scope, missing credentials, tool you cannot find, or a decision with rea
 3. Stuck or repeated failure? Switch approach or ask the operator.
 4. Tool not found? ONE guess maximum (check the tool list), then ask_operator.
 5. Be creative — write_tool/pip_install/edit_skill extend you.
+6. STEALTH IS ON — you browse as a normal browser identity; loud tools are auto rate-capped. Do NOT defeat this (no mega-fast brute flags, no curl loops without sleep) unless the operator asks. Quiet work finds more.
 """)
 
     return "\n".join(parts)

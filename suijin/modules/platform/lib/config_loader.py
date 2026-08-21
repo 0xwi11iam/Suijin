@@ -54,6 +54,7 @@ def load_config() -> dict:
     """Load config.json, creating defaults if missing. Validates with Pydantic."""
     if not CONFIG_PATH.exists():
         default_config = {
+            "stealth": True,  # v5.1: quiet by default
             "provider": "deepseek",
             "expert_models": EXPERT_MODELS,
             "final_model_id": "deepseek-ai/DeepSeek-V4-Flash",

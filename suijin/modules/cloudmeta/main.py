@@ -1,5 +1,15 @@
 import requests
 
+
+def _stealth_ua() -> str:
+    try:
+        from suijin.modules.platform.lib.stealth import user_agent
+
+        return user_agent()
+    except Exception:  # standalone fallback
+        return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+
 _IMDS = [
     ("aws-v1", "http://{h}:80/latest/meta-data/", 200, True),
     ("aws-v2", "http://{h}:80/latest/api/token", 403, False),
@@ -35,7 +45,7 @@ def cloud_metadata_probe(host: str = "", port: int = 0) -> str:
                     url = tpl.format(h=h).replace(f":{p}/", f":{int(port)}/", 1) if p != int(port) else tpl.format(h=h)
                 elif p not in ports:
                     continue
-                r = requests.get(url, timeout=(2, 6), headers={"User-Agent": "suijin-imds-probe"})
+                r = requests.get(url, timeout=(2, 6), headers={"User-Agent": _stealth_ua()})
                 if r.status_code == want:
                     hits.append(f"EXPOSED {name} -> {url} ({r.status_code}, {len(r.content)}B)")
                 elif r.status_code not in (404, 405, 502, 503, -1):

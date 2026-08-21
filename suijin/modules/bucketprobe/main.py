@@ -1,5 +1,15 @@
 import requests
 
+
+def _stealth_ua() -> str:
+    try:
+        from suijin.modules.platform.lib.stealth import user_agent
+
+        return user_agent()
+    except Exception:  # standalone fallback
+        return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+
 _T = (3, 8)
 
 
@@ -28,7 +38,7 @@ def bucket_check(name: str = "") -> str:
     found = []
     for u in urls[:32]:
         try:
-            r = requests.get(u, timeout=_T, headers={"User-Agent": "suijin-bucket-probe"})
+            r = requests.get(u, timeout=_T, headers={"User-Agent": _stealth_ua()})
             if r.status_code == 200 and (
                 "<ListBucketResult" in r.text[:2000] or "Items" in r.text[:500] or "EnumerationResults" in r.text[:2000]
             ):

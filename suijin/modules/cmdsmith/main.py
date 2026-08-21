@@ -79,6 +79,12 @@ def custom_cmd_run(name: str = "", args: str = "") -> str:
     if not argv:
         return "Error: rendered command is empty"
     try:
+        try:  # Stealth (v5.1): loud tools rate-capped, benign untouched
+            from suijin.modules.platform.lib.stealth import sanitize_command
+
+            argv = sanitize_command(argv)
+        except Exception:  # noqa: BLE001 — never block a custom command
+            pass
         r = subprocess.run(argv, capture_output=True, text=True, timeout=180)
     except FileNotFoundError:
         return f"Error: '{argv[0]}' not installed"

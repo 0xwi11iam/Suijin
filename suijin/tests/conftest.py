@@ -8,6 +8,10 @@ import pytest
 # Ensure project root is on path (3 levels up: tests -> suijin -> repo root)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+# Stealth pacing off in tests: burst-limiter sleeps are real time; the
+# logic itself is unit-tested with an injected clock.
+os.environ.setdefault("SUIJIN_STEALTH_PACING", "0")
+
 
 @pytest.fixture(scope="session", autouse=True)
 def _runtime_once():

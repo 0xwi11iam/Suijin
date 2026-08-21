@@ -48,18 +48,23 @@ def http_request(method, url, headers=None, body=""):
             return f"RATE LIMITED: Target {url} is throttling requests. Wait and retry with jitter."
 
         req_headers = headers if headers else {}
-        default_headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-            "Sec-Ch-Ua-Mobile": "?0",
-            "Sec-Ch-Ua-Platform": '"macOS"',
-            "Upgrade-Insecure-Requests": "1",
-        }
-        for k, v in default_headers.items():
-            if k not in req_headers:
-                req_headers[k] = v
+        # Stealth identity (v5.1): one sticky realistic browser per
+        # process, full header set. Caller-supplied headers always win.
+        try:
+            from suijin.modules.platform.lib.stealth import browser_identity, pace
+
+            for k, v in browser_identity().items():
+                req_headers.setdefault(k, v)
+            pace()  # burst limiter — manual probes pay 0s, bursts get spaced
+        except Exception:  # noqa: BLE001 — stealth never breaks a request
+            default_headers = {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Upgrade-Insecure-Requests": "1",
+            }
+            for k, v in default_headers.items():
+                req_headers.setdefault(k, v)
 
         # Track session cookies
         session = get_session(url)

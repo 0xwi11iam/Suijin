@@ -1,7 +1,7 @@
 import requests
 
 _T = (5, 20)
-_UA = {"User-Agent": "Mozilla/5.0 (suijin recon)"}
+_UA = {"User-Agent": "_stealth_ua()"}
 
 
 def _get(url, **kw):
@@ -30,3 +30,12 @@ def sourcemap_check(urls: str = "") -> str:
 
 
 import re
+
+
+def _stealth_ua() -> str:
+    try:
+        from suijin.modules.platform.lib.stealth import user_agent
+
+        return user_agent()
+    except Exception:  # standalone fallback
+        return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
