@@ -14,12 +14,20 @@ from suijin.modules.platform.lib.helpers.parsing import try_parse_llm_decision
 
 class TestTolerantParsing:
     def test_minimal_call_parses(self):
-        d, e = try_parse_llm_decision('{"action":"use_tool","tool_name":"search_kb","tool_args":{"keyword":"sqli"},"thought":"t"}')
+        d, e = try_parse_llm_decision(
+            '{"action":"use_tool","tool_name":"search_kb","tool_args":{"keyword":"sqli"},"thought":"t"}'
+        )
         assert d and d["tool_name"] == "search_kb", e
 
     def test_nested_args_survive(self):
-        raw = json.dumps({"action": "use_tool", "tool_name": "http_request",
-                          "tool_args": {"url": "http://t/x?json={a:1}", "body": {"k": [1, {"n": 2}]}}, "thought": "t"})
+        raw = json.dumps(
+            {
+                "action": "use_tool",
+                "tool_name": "http_request",
+                "tool_args": {"url": "http://t/x?json={a:1}", "body": {"k": [1, {"n": 2}]}},
+                "thought": "t",
+            }
+        )
         d, _ = try_parse_llm_decision(f"prose ```json\n{raw}\n``` more prose")
         assert d["tool_args"]["body"]["k"][1]["n"] == 2
 
@@ -59,11 +67,14 @@ class TestThinkLoop:
         assert out.get("completion_reason") == "parse_failure"
 
     def test_garbage_then_valid_recovers(self):
-        out = self._think(["garbage", '{"action":"use_tool","tool_name":"search_kb","tool_args":{"keyword":"x"},"thought":"r"}'])
+        out = self._think(
+            ["garbage", '{"action":"use_tool","tool_name":"search_kb","tool_args":{"keyword":"x"},"thought":"r"}']
+        )
         assert out["_current_step"]["tool_name"] == "search_kb"
 
     def test_retry_message_teaches_minimal_format(self):
         from suijin.modules.agent.lib.nodes.think_node import think_node
+
         seen = []
 
         async def gen(messages, config=None, **kw):

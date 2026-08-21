@@ -290,7 +290,7 @@ Optional extras (only when useful — never required):
 
 Available actions:
 - "use_tool" — call a tool (the default, most turns)
-- "deploy_subagent" — spawn parallel specialists: {"action": "deploy_subagent", "thought": "...", "subagent_task": "task A || task B || task C"} (separate tasks with ||; up to 5)
+- "deploy_subagent" — spawn parallel specialists: {"action": "deploy_subagent", "thought": "...", "subagent_task": "task A || task B || task C"} (separate tasks with ||; up to 5). Worth it for parallel/independent/long tasks — NOT single trivial calls (do those with use_tool); vague or duplicate tasks are auto-rejected.
 - "ask_operator" — ask the human: {"action": "ask_operator", "question": "...", "thought": "..."}
 - "complete" — objective done: {"action": "complete", "completion_reason": "...", "thought": "..."}
 

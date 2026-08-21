@@ -240,6 +240,16 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         },
     ]
 
+    # Fireteam (v5.1): drain finished background specialists into the
+    # conversation — their findings arrive as messages on this turn.
+    try:
+        from suijin.modules.agent.lib.nodes.subagent_node import collect_finished_teams
+
+        for _msg in collect_finished_teams():
+            state.setdefault("messages", []).append({"role": "user", "content": _msg})
+    except Exception:  # noqa: BLE001 — collection must never break thinking
+        pass
+
     # Prompt profile (D31): snapshot token breakdown before the call
     try:
         from suijin.modules.agent.lib.profiler import record as _record_profile
@@ -522,121 +532,51 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         )
 
     elif action == "deploy_subagent":
-        # Spawn focused subagents for parallel work.
-        # Timeout-protected, _current_step set for TUI, errors isolated from main loop.
+        # Fireteam (v5.1): NON-BLOCKING. The team runs in the background;
+        # this turn returns instantly with a team id. Results arrive as
+        # FIRETEAM RESULT messages on future turns (drained at think start);
+        # fireteam_status() polls progress.
         subagent_task = decision.get("subagent_task", "")
         if not subagent_task:
             updates["messages"].append(
                 {
                     "role": "user",
-                    "content": "SYSTEM: deploy_subagent requires a subagent_task field.",
+                    "content": "SYSTEM: deploy_subagent requires a subagent_task field (tasks separated by ||).",
                 }
             )
         else:
-            tasks = [t.strip() for t in subagent_task.split("||") if t.strip()]
-            if not tasks:
-                tasks = [subagent_task.strip()]
-            if len(tasks) > 5:
-                tasks = tasks[:5]  # cap at 5
-
-            # Set _current_step for TUI display only — do NOT set tool_name
-            # (subagent execution is inline, must NOT route to execute_tool)
+            tasks = [t.strip() for t in subagent_task.split("||") if t.strip()][:5]
             updates["_current_step"] = {
-                "tool_name": "",  # empty = router sends back to think, not execute_tool
+                "tool_name": "",  # empty = router sends back to think (no execute hop)
                 "tool_args": {"tasks": len(tasks), "preview": tasks[0][:100]},
                 "iteration": iteration,
                 "phase": phase,
                 "thought": thought,
                 "reasoning": reasoning,
-                "tool_output": f"Deploying {len(tasks)} subagent(s)...",
+                "tool_output": f"Fireteam deployed: {len(tasks)} specialist(s)",
             }
-
-            updates["messages"].append(
-                {
-                    "role": "user",
-                    "content": f"DEPLOYING {len(tasks)} SUBAGENT(S):\n" + "\n".join(f"  - {t[:200]}" for t in tasks),
-                }
-            )
-
             try:
-                from suijin.modules.agent.lib.nodes.subagent_node import spawn_and_collect
-                from suijin.modules.tools.lib.dispatch import get_tool_catalog, route_tool
+                from suijin.modules.agent.lib.nodes.subagent_node import deploy_fireteam
+                from suijin.modules.tools.lib.dispatch import route_tool
 
-                # 65s total timeout (60s batch + 5s buffer) prevents main agent hang
-                results = await asyncio.wait_for(
-                    spawn_and_collect(
-                        tasks,
-                        generate_fn=generate_fn,
-                        route_tool_fn=route_tool,
-                        tool_catalog_fn=get_tool_catalog,
-                        max_concurrent=3,
-                        total_timeout=60.0,
-                    ),
-                    timeout=65.0,
-                )
-
-                summary_parts = []
-                for r in results:
-                    status = "OK" if r.success else ("TIMEOUT" if getattr(r, "partial", False) else "PARTIAL")
-                    summary_parts.append(f"[{status}] {r.task[:80]} ({r.steps} steps)")
-                    findings_text = r.findings[:2000] if r.findings else "(empty)"
-                    updates["messages"].append(
-                        {
-                            "role": "user",
-                            "content": (
-                                f"SUBAGENT [{r.subagent_id}] COMPLETE ({status}, {r.steps} steps):\n"
-                                f"Task: {r.task[:200]}\nFindings:\n{findings_text}"
-                            ),
-                        }
+                dep = deploy_fireteam(tasks, generate_fn=generate_fn, route_tool_fn=route_tool)
+                if dep.get("team_id"):
+                    content = (
+                        f"FIRETEAM {dep['team_id']} DEPLOYED — {len(dep['spawned'])} specialist(s) running in the background:\n"
+                        + "\n".join(f"  - {t[:160]}" for t in dep["spawned"])
+                        + "\nResults arrive automatically on your next turns. Keep working meanwhile."
                     )
-                    chain_findings.append(
-                        {
-                            "source": f"subagent_{r.subagent_id}",
-                            "task": r.task[:200],
-                            "success": r.success,
-                            "findings": r.findings[:2000],
-                            "steps": r.steps,
-                        }
-                    )
-                    if r.success:
-                        updates["messages"].append(
-                            {
-                                "role": "user",
-                                "content": "ACTION: Subagent completed successfully. Record findings to knowledge graph with record_finding.",
-                            }
-                        )
-                    elif getattr(r, "partial", False):
-                        updates["messages"].append(
-                            {
-                                "role": "user",
-                                "content": "ACTION: Subagent timed out. Check partial findings above. If useful, incorporate. Otherwise, run the task yourself.",
-                            }
-                        )
-
-                updates["_current_step"]["tool_output"] = "Subagents done:\n" + "\n".join(summary_parts)
-                updates["_current_step"]["success"] = any(r.success for r in results) if results else False
-
-            except asyncio.TimeoutError:
-                logger.warning("Subagent deployment timed out after 65s")
-                updates["_current_step"]["tool_output"] = "TIMEOUT: Subagents did not complete within 65s."
-                updates["_current_step"]["success"] = False
-                updates["messages"].append(
-                    {
-                        "role": "user",
-                        "content": "SYSTEM: Subagent deployment timed out. Continue with main agent tasks.",
-                    }
-                )
-            except Exception as e:
-                logger.error(f"Subagent deployment crashed: {e}")
-                updates["_current_step"]["tool_output"] = f"ERROR: {e}"
-                updates["_current_step"]["success"] = False
-                updates["messages"].append(
-                    {
-                        "role": "user",
-                        "content": f"SYSTEM: Subagent deployment error: {e}. Continue with main agent tasks.",
-                    }
-                )
-
+                    for t, reason in dep.get("skipped", []):
+                        content += f"\n  SKIPPED (not deployed): {t[:80]} — {reason}"
+                else:
+                    # every task rejected — the message teaches why
+                    content = "FIRETEAM NOT DEPLOYED — every task was rejected as wasted effort:\n"
+                    content += "\n".join(f"  - {t[:80]} — {reason}" for t, reason in dep.get("skipped", []))
+                    content += "\nDo single trivial calls yourself with use_tool; make specialist tasks specific (target + what to test)."
+                updates["messages"].append({"role": "user", "content": content})
+            except RuntimeError as e:
+                # no running loop (defensive — think_node is always in one)
+                updates["messages"].append({"role": "user", "content": f"Fireteam deploy failed: {e}"})
     elif action == "switch_skill":
         ss = decision.get("skill_switch") or {}
         to_skill = ss.get("to_skill", "")

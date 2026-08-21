@@ -377,6 +377,14 @@ def _build_routes(config):
     except Exception:  # noqa: BLE001
         pass
 
+    # Fireteam status (v5.1): poll background specialist teams
+    try:
+        from suijin.modules.agent.lib.nodes.subagent_node import fireteam_status
+
+        routes["fireteam_status"] = lambda a: fireteam_status()
+    except Exception:  # noqa: BLE001
+        pass
+
     # Recipes (A3): named multi-tool macros
     try:
         from suijin.modules.tools.lib import recipes as _recipes
@@ -695,6 +703,11 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
 - **evidence_verify** — verify the evidence chain (tampering detection).
 - **finding_dedup** — collapse same-root-cause findings into one with occurrences.
 - **attack_paths** — probability-weighted attack-path scoring from findings.
+"""
+
+    # Fireteam (v5.1)
+    catalog += """## Fireteam
+- **fireteam_status** — check background specialist teams (deployed via action=deploy_subagent; results arrive automatically).
 """
 
     # Recipes section (A3)

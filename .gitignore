@@ -68,7 +68,7 @@ native/suijin-core/target/**/suijin_core.abi3.so
 # kernel journal (default-workspace boots in tests write here)
 logs/
 .opencode/
-
+references/
 
 # Added by cargo
 
