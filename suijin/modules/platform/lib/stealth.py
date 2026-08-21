@@ -53,7 +53,6 @@ def browser_identity() -> dict[str, str]:
     if "headers" not in _STICKY:
         ua = random.choice(_UA_POOL)  # noqa: S311 - not crypto
         chrome = "Chrome" in ua or "Edg" in ua
-        safari = "Safari" in ua and not chrome
         accept = (
             "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
             if not chrome

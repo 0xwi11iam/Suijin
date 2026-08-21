@@ -11,7 +11,7 @@ def _stealth_ua() -> str:
 
 
 _T = (5, 20)
-_UA = {"User-Agent": "_stealth_ua()"}
+_UA = {"User-Agent": _stealth_ua()}
 
 
 def _get(url, **kw):

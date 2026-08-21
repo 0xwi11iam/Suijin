@@ -18,7 +18,7 @@ def _get_tools():
     if _tools is None:
         p = os.path.abspath(
             os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", _stealth_ua(), "modules", "tools", "lib", "dispatch.py"
+                os.path.dirname(__file__), "..", "..", "..", "suijin", "modules", "tools", "lib", "dispatch.py"
             )
         )
         spec = importlib.util.spec_from_file_location("tools_msf", p)
@@ -30,9 +30,7 @@ def _get_tools():
 def msf_check(config=None):
     import json
 
-    with open(
-        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", _stealth_ua(), "config.json"))
-    ) as f:
+    with open(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "suijin", "config.json"))) as f:
         cfg = json.load(f)
     return _get_tools().msf_check(cfg)
 
@@ -40,9 +38,7 @@ def msf_check(config=None):
 def msf_command(cmd=None, command=None):
     import json
 
-    with open(
-        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", _stealth_ua(), "config.json"))
-    ) as f:
+    with open(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "suijin", "config.json"))) as f:
         cfg = json.load(f)
     return _get_tools().msf_command(cmd or command or "", cfg)
 
@@ -50,9 +46,7 @@ def msf_command(cmd=None, command=None):
 def msf_run(module, payload=None, options=None):
     import json
 
-    with open(
-        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", _stealth_ua(), "config.json"))
-    ) as f:
+    with open(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "suijin", "config.json"))) as f:
         cfg = json.load(f)
     return _get_tools().msf_run(module, payload, options or {}, cfg)
 
@@ -60,8 +54,6 @@ def msf_run(module, payload=None, options=None):
 def msf_sessions(action="list", id=None):
     import json
 
-    with open(
-        os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", _stealth_ua(), "config.json"))
-    ) as f:
+    with open(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "suijin", "config.json"))) as f:
         cfg = json.load(f)
     return _get_tools().msf_sessions(action, id, cfg)

@@ -102,8 +102,10 @@ class TestHttpRequestTool:
         assert "Status: 200" in out
         assert "Body:" in out and "ok" in out
         assert sent["method"] == "GET"
-        # browser-mimicry defaults applied
-        assert "User-Agent" in sent["headers"] and "Chrome" in sent["headers"]["User-Agent"]
+        # browser-mimicry defaults applied (any realistic sticky browser)
+        ua = sent["headers"].get("User-Agent", "")
+        assert ua.startswith("Mozilla/5.0 (") and ("Chrome" in ua or "Firefox" in ua or "Safari" in ua)
+        assert "suijin" not in ua.lower() and "python" not in ua.lower()
 
     def test_rate_limited_short_circuits(self, monkeypatch):
         self._patch_session(monkeypatch, _FakeResp())

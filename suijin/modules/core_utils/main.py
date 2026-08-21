@@ -18,7 +18,7 @@ def _get_tools():
     if _tools is None:
         p = os.path.abspath(
             os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", _stealth_ua(), "modules", "tools", "lib", "dispatch.py"
+                os.path.dirname(__file__), "..", "..", "..", "suijin", "modules", "tools", "lib", "dispatch.py"
             )
         )
         spec = importlib.util.spec_from_file_location("tools_core_utils", p)

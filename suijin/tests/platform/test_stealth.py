@@ -113,7 +113,7 @@ class TestLiveHeaders:
 
             out = http_request("GET", "http://127.0.0.1:5909/api/login")
             assert not str(out).startswith("RATE LIMITED"), out
-            entries = [json.loads(l) for l in log.read_text().splitlines()]
+            entries = [json.loads(ln) for ln in log.read_text().splitlines()]
             sent = entries[-1]
             ua = sent.get("user_agent", "")
             assert "Mozilla/5.0" in ua and "suijin" not in ua.lower()
