@@ -777,8 +777,23 @@ def run_eval(args) -> int:
     return 0
 
 
+def run_real_battle_cmd(args) -> int:
+    """`suijin battle --real|--mock` — the actual red agent vs the live lab."""
+    from suijin.modules.ops.lib.real_battle import render_real_verdict, run_real_battle
+
+    mock = not getattr(args, "real", False)  # default --mock semantics unless --real
+    port = getattr(args, "port", 0) or 0
+    if port == 5906:
+        port = None  # default scripted port not for real battles
+    v = run_real_battle(port=port, mock=mock, objective=getattr(args, "objective", "") or "")
+    print(render_real_verdict(v))
+    return 0
+
+
 def run_battle_cmd(args) -> int:
     """`suijin battle` — purple team: scripted red vs pattern blue, live scoreboard."""
+    if getattr(args, "real", False) or getattr(args, "mock", False):
+        return run_real_battle_cmd(args)
     from suijin.modules.ops.lib.battle import run_battle
 
     result = run_battle(port=int(getattr(args, "port", 0) or 5906))
@@ -1359,6 +1374,30 @@ def _enrich_traffic(entries: list) -> list:
     return entries
 
 
+def run_tokens_cmd(args) -> int:
+    """`suijin tokens` — the true token tally with source attribution."""
+    from suijin.modules.providers.lib import get_usage
+
+    u = get_usage()
+    if not u.get("calls"):
+        print("no LLM calls recorded this session")
+        return 0
+    api_n = u.get("api_reported_calls", 0)
+    est_n = u.get("estimated_calls", 0)
+    print(f"calls: {u['calls']}  ({api_n} API-reported, {est_n} client-estimated)")
+    print(f"tokens: {u['input_tokens']:,} in + {u['output_tokens']:,} out = {u['input_tokens'] + u['output_tokens']:,}")
+    print(
+        f"cost:   ${u['est_cost_usd']:.4f}" + ("" if u.get("priced") else "  (fallback rates — some models unpriced)")
+    )
+    for prov, d in sorted(u.get("by_provider", {}).items()):
+        print(f"  {prov:10} {d['calls']:>4} calls  {d['input']:,} in  {d['output']:,} out  ${d['cost_usd']:.4f}")
+    if est_n:
+        print(
+            "note: estimated calls use a client-side approximation (the API omitted usage); treat their share as +/-20%"
+        )
+    return 0
+
+
 def run_kg_graph() -> int:
     """`suijin kg graph` — G49: mermaid export of the knowledge graph."""
     from suijin.modules.redteam.lib.intel.knowledge_graph import export_mermaid
@@ -1696,6 +1735,9 @@ def main(argv=None):
     fetch_p.set_defaults(func=lambda a: run_wordlist_cmd("fetch", a.name))
     wl.set_defaults(func=lambda a: run_wordlist_cmd("list", ""))
 
+    tokens_p = sub.add_parser("tokens", help="exact token usage: API-reported vs estimated, per provider, cost")
+    tokens_p.set_defaults(func=run_tokens_cmd)
+
     kggraph = sub.add_parser("kg", help="red knowledge graph: graph (mermaid) export")
     kggraph.add_argument("kg_action", nargs="?", default="graph", choices=["graph"], help="export the mermaid graph")
     kggraph.set_defaults(func=lambda _a: run_kg_graph())
@@ -1790,8 +1832,17 @@ def main(argv=None):
     ev.add_argument("--no-sweep", action="store_true", help="skip the threshold sweep")
     ev.set_defaults(func=run_eval)
 
-    battle = sub.add_parser("battle", help="purple team: scripted red vs pattern blue on the lab")
-    battle.add_argument("--port", type=int, default=5906, help="lab port (default 5906)")
+    battle = sub.add_parser("battle", help="red vs blue on the lab: --real drives the actual LLM agent")
+    battle.add_argument("--port", type=int, default=5906, help="lab port (default 5906; --real/--mock use 5907)")
+    battle.add_argument(
+        "--real",
+        action="store_true",
+        help="REAL battle: the LLM red agent attacks the live lab; blue scores every request (uses your configured provider)",
+    )
+    battle.add_argument(
+        "--mock", action="store_true", help="real battle pipeline with a scripted red (offline, deterministic)"
+    )
+    battle.add_argument("--objective", default="", help="override the red objective (--real)")
     battle.set_defaults(func=run_battle_cmd)
 
     # kb: read full docs + diff build vs cache

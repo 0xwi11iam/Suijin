@@ -24,6 +24,10 @@ USAGE = {
     "output_tokens": 0,
     "est_cost_usd": 0.0,
     "priced": False,  # False if any model was missing from MODEL_PRICING
+    # v5.1 accuracy accounting:
+    "api_reported_calls": 0,  # calls whose tokens came from the API response
+    "estimated_calls": 0,  # calls whose tokens were client-side estimated
+    "by_provider": {},  # provider -> {calls, input, output, cost_usd}
 }
 
 # Rough public list prices in USD per 1,000,000 tokens (input, output).
@@ -82,24 +86,68 @@ def _price_for(model):
     return None
 
 
-def _record_usage(provider, model, in_tok, out_tok):
-    """Add one call's token usage to the running tally. Never raises."""
+def estimate_tokens(text) -> int:
+    """Client-side token ESTIMATE for when an API omits usage.
+
+    Word+punctuation-aware (a real approximation, not chars/4):
+    Germanic text averages ~1.3 tokens/word for BPE vocabularies;
+    JSON/code punctuation splits into per-symbol tokens. CJK counts
+    roughly one token per character.
+    """
+    if not text:
+        return 0
+    if not isinstance(text, str):
+        try:
+            import json as _json
+
+            text = _json.dumps(text)
+        except Exception:  # noqa: BLE001
+            text = str(text)
+    cjk = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff" or "\u3040" <= ch <= "\u30ff")
+    rest = "".join(ch for ch in text if not ("\u4e00" <= ch <= "\u9fff" or "\u3040" <= ch <= "\u30ff"))
+    words = len(rest.split())
+    punct = sum(1 for ch in rest if not ch.isalnum() and not ch.isspace())
+    return int(cjk + words * 1.3 + punct * 0.5)
+
+
+def _record_usage(provider, model, in_tok, out_tok, estimated: bool = False):
+    """Add one call's token usage to the running tally. Never raises.
+
+    estimated=True marks tokens counted client-side (the API omitted
+    usage) — surfaced by get_usage()/`suijin tokens` so accuracy is
+    never silently overstated."""
     try:
         in_tok = int(in_tok or 0)
         out_tok = int(out_tok or 0)
         USAGE["calls"] += 1
         USAGE["input_tokens"] += in_tok
         USAGE["output_tokens"] += out_tok
+        USAGE["estimated_calls" if estimated else "api_reported_calls"] += 1
         price = _price_for(model)
         if price is not None:
             USAGE["priced"] = True  # at least one exact price was used
         else:
             price = DEFAULT_RATE  # estimate anyway so the guardrail works
         in_rate, out_rate = price
-        USAGE["est_cost_usd"] += (in_tok * in_rate + out_tok * out_rate) / 1_000_000
+        cost = (in_tok * in_rate + out_tok * out_rate) / 1_000_000
+        USAGE["est_cost_usd"] += cost
+        slot = USAGE["by_provider"].setdefault(str(provider), {"calls": 0, "input": 0, "output": 0, "cost_usd": 0.0})
+        slot["calls"] += 1
+        slot["input"] += in_tok
+        slot["output"] += out_tok
+        slot["cost_usd"] += cost
     except Exception:
         # Cost accounting must never break an actual model call.
         pass
+
+
+def record_missing_usage(messages, response_text, provider, model) -> None:
+    """Called when an API response omitted usage: client-side estimate,
+    clearly flagged. Previously such calls recorded ZERO tokens — a
+    silent undercount that made the governor under-stop."""
+    est_in = estimate_tokens(" ".join(str(m.get("content", "")) for m in (messages or [])))
+    est_out = estimate_tokens(response_text)
+    _record_usage(provider, model, est_in, est_out, estimated=True)
 
 
 def get_usage():
@@ -116,6 +164,9 @@ def reset_usage():
             "output_tokens": 0,
             "est_cost_usd": 0.0,
             "priced": False,
+            "api_reported_calls": 0,
+            "estimated_calls": 0,
+            "by_provider": {},
         }
     )
 
@@ -480,7 +531,11 @@ def generate(
                     data = resp.json()
                     try:
                         u = data.get("usage") or {}
-                        _record_usage("amd", amd_model, u.get("prompt_tokens", 0), u.get("completion_tokens", 0))
+                        if u.get("prompt_tokens") is None:
+                            # gateway omitted usage — estimate, never zero-count
+                            record_missing_usage(messages, text, "amd", amd_model)
+                        else:
+                            _record_usage("amd", amd_model, u.get("prompt_tokens", 0), u.get("completion_tokens", 0))
                     except Exception:
                         pass
                     return data["choices"][0]["message"]["content"]
@@ -525,7 +580,13 @@ def generate(
                     data = resp.json()
                     try:
                         u = data.get("usage") or {}
-                        _record_usage("deepseek", ds_model, u.get("prompt_tokens", 0), u.get("completion_tokens", 0))
+                        if u.get("prompt_tokens") is None:
+                            # gateway omitted usage — estimate, never zero-count
+                            record_missing_usage(messages, text, "deepseek", ds_model)
+                        else:
+                            _record_usage(
+                                "deepseek", ds_model, u.get("prompt_tokens", 0), u.get("completion_tokens", 0)
+                            )
                     except Exception:
                         pass
                     msg = data["choices"][0]["message"]
@@ -577,7 +638,11 @@ def generate(
                     data = resp.json()
                     try:
                         u = data.get("usage") or {}
-                        _record_usage("zai", zai_model, u.get("prompt_tokens", 0), u.get("completion_tokens", 0))
+                        if u.get("prompt_tokens") is None:
+                            # gateway omitted usage — estimate, never zero-count
+                            record_missing_usage(messages, text, "zai", zai_model)
+                        else:
+                            _record_usage("zai", zai_model, u.get("prompt_tokens", 0), u.get("completion_tokens", 0))
                     except Exception:
                         pass
                     msg = data["choices"][0]["message"]
