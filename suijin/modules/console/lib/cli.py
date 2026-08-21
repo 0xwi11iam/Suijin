@@ -1382,6 +1382,18 @@ def _enrich_traffic(entries: list) -> list:
     return entries
 
 
+def run_gateway_cmd(args) -> int:
+    """`suijin gateway` — serve the desktop API. Prints the session token ONCE."""
+    from suijin.modules.console.lib.gateway import serve
+
+    serve(
+        host=getattr(args, "host", "127.0.0.1"),
+        port=int(getattr(args, "port", 7331)),
+        token=getattr(args, "token", None),
+    )
+    return 0
+
+
 def run_tokens_cmd(args) -> int:
     """`suijin tokens` — the true token tally with source attribution."""
     from suijin.modules.providers.lib import get_usage
@@ -1742,6 +1754,14 @@ def main(argv=None):
     fetch_p.add_argument("name", help="catalog name")
     fetch_p.set_defaults(func=lambda a: run_wordlist_cmd("fetch", a.name))
     wl.set_defaults(func=lambda a: run_wordlist_cmd("list", ""))
+
+    gateway_p = sub.add_parser("gateway", help="run the desktop-app gateway (typed API + live event stream)")
+    gateway_p.add_argument(
+        "--host", default="127.0.0.1", help="bind host (default localhost; remote = explicit opt-in)"
+    )
+    gateway_p.add_argument("--port", type=int, default=7331)
+    gateway_p.add_argument("--token", default=None, help="fixed session token (sidecar mode); default: random per boot")
+    gateway_p.set_defaults(func=run_gateway_cmd)
 
     tokens_p = sub.add_parser("tokens", help="exact token usage: API-reported vs estimated, per provider, cost")
     tokens_p.set_defaults(func=run_tokens_cmd)
