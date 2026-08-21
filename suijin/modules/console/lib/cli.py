@@ -111,6 +111,14 @@ def run_doctor() -> int:
         rows.append(_fail("dependencies", "missing: " + ", ".join(missing_deps)))
         critical += 1
 
+    # KG backend status — which storage answers (json default / neo4j switch)
+    try:
+        from suijin.modules.redteam.lib.intel.kg_backend import backend_status
+
+        rows.append(_ok("knowledge graph", backend_status()))
+    except Exception as e:
+        rows.append(_warn("knowledge graph", str(e)[:60]))
+
     # Provider failover telemetry (D29) — informational
     try:
         from suijin.modules.providers.lib import FAILOVER_STATS as _fs

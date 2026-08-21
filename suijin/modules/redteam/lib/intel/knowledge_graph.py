@@ -7,17 +7,26 @@ Every verified hypothesis, blocked pattern, confirmed CVE, and false-positive
 finding is stored here. All attack branches consult this graph BEFORE generating
 payloads — we never waste cycles on strings we already know get blocked.
 
-Storage: JSON file at suijin/knowledge_graph.json (human-readable, git-friendly)
+Storage backends (v5.1):
+  json   — the default: knowledge_graph.json in this directory (human-
+           readable, git-friendly) — unchanged behavior.
+  neo4j  — flip config.json "kg_backend": "neo4j" (+ neo4j_uri/user/
+           password, or SUIJIN_NEO4J_* env vars) to switch. Same API,
+           same result shapes; see kg_backend.py for the schema and the
+           switch contract.
 """
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
+
+from suijin.modules.redteam.lib.intel.kg_backend import get_backend
 
 BASE_DIR = Path(__file__).resolve().parent
 GRAPH_PATH = BASE_DIR / "knowledge_graph.json"
 
 
+# Back-compat file ops (tests and tooling use these directly on the JSON
+# store; the neo4j backend is exercised through the public API below).
 def _load():
     if not GRAPH_PATH.exists():
         return {}
@@ -31,8 +40,14 @@ def _save(data):
     GRAPH_PATH.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
 
 
+def _kg():
+    """The configured backend. GRAPH_PATH is resolved at EVERY call so
+    monkeypatching it (tests) keeps working through the seam."""
+    return get_backend(lambda: GRAPH_PATH)
+
+
 # ---------------------------------------------------------------------------
-# Public API
+# Public API — signatures unchanged; every function is backend-agnostic
 # ---------------------------------------------------------------------------
 
 
@@ -47,36 +62,16 @@ def add_constraint(target, constraint_type, rule, evidence="", confidence=1.0):
         evidence:        what proved this constraint (response diff, status, etc.)
         confidence:      0.0–1.0, only 1.0 if binary-verified
     """
-    data = _load()
-    entry = data.setdefault(target, {})
-    category = entry.setdefault(constraint_type, [])
-
-    # Deduplicate
-    existing = [c for c in category if c.get("rule") == rule]
-    if existing:
-        existing[0]["evidence"] = evidence
-        existing[0]["confidence"] = max(existing[0].get("confidence", 0), confidence)
-        existing[0]["last_seen"] = datetime.now(timezone.utc).isoformat()
-    else:
-        category.append(
-            {
-                "rule": rule,
-                "evidence": evidence,
-                "confidence": confidence,
-                "verified_at": datetime.now(timezone.utc).isoformat(),
-                "last_seen": datetime.now(timezone.utc).isoformat(),
-            }
-        )
-
-    # Update global metadata
-    entry["_updated"] = datetime.now(timezone.utc).isoformat()
-    _save(data)
+    _kg().add_constraint(target, constraint_type, rule, evidence=evidence, confidence=confidence)
 
 
 def get_constraints(target):
-    """Return all known constraints for a target."""
-    data = _load()
-    return data.get(target, {})
+    """Return all known constraints for a target.
+
+    Shape (identical on every backend):
+        {ctype: [{rule, evidence, confidence, verified_at, last_seen}, ...]}
+    """
+    return _kg().get_constraints(target)
 
 
 def check_payload(target, payload):
@@ -111,21 +106,17 @@ def check_cve(target, cve_id):
 
 def get_bypass_strategies(target):
     """Return known working bypass strategies for this target."""
-    constraints = get_constraints(target)
-    return constraints.get("bypass", [])
+    return get_constraints(target).get("bypass", [])
 
 
 def get_all_targets():
     """List all targets that have knowledge graph entries."""
-    data = _load()
-    return [k for k in data if not k.startswith("_")]
+    return _kg().get_all_targets()
 
 
 def clear_target(target):
     """Remove all constraints for a target (for fresh recon)."""
-    data = _load()
-    data.pop(target, None)
-    _save(data)
+    _kg().clear_target(target)
 
 
 def summary(target):
@@ -153,14 +144,12 @@ def summary(target):
 def export_mermaid() -> str:
     """Whole-graph mermaid diagram (targets -> constraints).
 
-    Schema: FLAT top-level target keys, each holding constraint-type
-    lists: data[target][constraint_type] = [{rule, evidence, ...}].
-    Metadata keys (starting with _) are skipped."""
-    data = _load()
+    Reads through the backend (works on neo4j too): targets ->
+    {ctype: [constraints]} rows, metadata keys skipped."""
+    targets = get_all_targets()
     lines = ["graph LR"]
-    for tname, tdata in data.items():
-        if tname.startswith("_") or not isinstance(tdata, dict):
-            continue
+    for tname in targets:
+        tdata = get_constraints(tname)
         node = "".join(c if c.isalnum() else "_" for c in tname)[:24]
         lines.append(f'  {node}["{tname[:20]}"]')
         for ctype, constraints in tdata.items():
