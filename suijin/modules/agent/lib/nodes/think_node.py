@@ -240,6 +240,18 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         },
     ]
 
+    # Scratchpad (C2): first turn of an engagement re-orients the agent
+    # with its own notes (external memory — survives compaction).
+    if int(state.get("current_iteration", 0) or 0) <= 1:
+        try:
+            from suijin.modules.agent.lib.scratchpad import scratchpad_message
+
+            _pad = scratchpad_message()
+            if _pad:
+                state.setdefault("messages", []).append({"role": "user", "content": _pad})
+        except Exception:  # noqa: BLE001
+            pass
+
     # Fireteam (v5.1): drain finished background specialists into the
     # conversation — their findings arrive as messages on this turn.
     try:

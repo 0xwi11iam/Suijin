@@ -196,7 +196,15 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
     return {
         "_current_step": step_data,
         "_tool_result": {"success": success, "output": output},
-        "messages": [{"role": "user", "content": f"RESULT ({tool_name}):\n{_wrap_untrusted(output, 'TOOL_OUTPUT')}"}],
+        "messages": [
+            {
+                "role": "user",
+                "content": (
+                    f"RESULT ({tool_name}, {duration_ms}ms, iteration {step_data.get('iteration', '?')}):\n"
+                    f"{_wrap_untrusted(output, 'TOOL_OUTPUT')}"
+                ),
+            }
+        ],
     }
 
 

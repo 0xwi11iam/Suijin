@@ -368,6 +368,15 @@ def write_note(content, success=True, category="general", engagement=None, confi
     """Write a timestamped note to a per-engagement log file."""
     import datetime
 
+    # Agent scratchpad hook (C2): the pad is re-injected on every
+    # engagement's first turn — notes become persistent memory.
+    try:
+        from suijin.modules.agent.lib.scratchpad import append_note
+
+        append_note(content, category=category)
+    except Exception:  # noqa: BLE001 — never break note-taking
+        pass
+
     NOTES_DIR.mkdir(parents=True, exist_ok=True)
 
     now = datetime.datetime.now()

@@ -31,10 +31,12 @@ def _summarize_older(messages: list) -> str:
     for m in messages:
         c = str(m.get("content", ""))
         role = m.get("role")
-        if role == "user" and c.startswith("TOOL_RESULT:"):
-            head = c[len("TOOL_RESULT:") :].strip().splitlines()
+        if role == "user" and c.startswith("RESULT ("):
+            # header like: RESULT (nmap_scan, 840ms, iteration 3):
+            head = c.splitlines()
             first = head[0][:80] if head else ""
-            (tools_ok if "Error" not in first else tools_fail).append(first)
+            ok_step = "Error" not in c[:200] and "FAIL" not in first
+            (tools_ok if ok_step else tools_fail).append(first)
         elif role == "user" and "NOTE:" in c[:12]:
             notes.append(c[:120])
     lines = ["[CONTEXT COMPACTED — digest of earlier steps]"]

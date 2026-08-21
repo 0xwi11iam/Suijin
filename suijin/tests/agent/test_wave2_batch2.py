@@ -82,7 +82,7 @@ class TestCompaction:
         msgs = [{"role": "system", "content": "sys"}]
         for i in range(n):
             tag = "ok" if i % 3 else "Error: boom"
-            msgs.append({"role": "user", "content": f"TOOL_RESULT: {tag} " + "x" * size})
+            msgs.append({"role": "user", "content": f"RESULT (tool_{i % 5}, 100ms, iteration 1): {tag} " + "x" * size})
         return msgs
 
     def test_under_budget_noop(self):
