@@ -112,79 +112,142 @@ def _h1_scope(handle: str, hdr: dict) -> list[dict]:
 
 
 def _pull_bugcrowd(token: str, want: set[str] | None) -> list[dict]:
+    """Bugcrowd: engagements.json list (paginationMeta.totalCount), then
+    per-program scope from the brief's version document (data.scope[].
+    targets[] with inScope). Reference-accurate; WAF 403/406 surfaces
+    as a clear error."""
     hdr = _headers()
     hdr["Cookie"] = f"_crowdcontrol_session={token}"
+    handles = []
+    page = 1
+    total = 0
+    while page <= _MAX_PAGES:
+        data = _get(
+            f"https://bugcrowd.com/engagements.json?category=&sort_by=promoted&sort_direction=desc&page={page}", hdr
+        ).json()
+        engagements = data.get("engagements", [])
+        if not engagements:
+            break
+        total = total or int(data.get("paginationMeta", {}).get("totalCount", 0))
+        for e in engagements:
+            url_path = (e.get("briefUrl") or "").strip()
+            if url_path:
+                handles.append(url_path)
+        if total and len(handles) >= total:
+            break
+        page += 1
     out = []
-    url = "https://bugcrowd.com/api/programs.json?page=1"
-    pages = 0
-    while url and pages < _MAX_PAGES:
-        data = _get(url, hdr).json()
-        progs = data if isinstance(data, list) else data.get("programs", data.get("data", []))
-        for prog in progs:
-            name = prog.get("name") or prog.get("code") or prog.get("slug", "")
-            if want and name not in want:
+    for path in handles:
+        name = path.strip("/").split("/")[-1]
+        if want and name not in want:
+            continue
+        try:
+            out += _bugcrowd_scope(path, hdr)
+        except Exception:  # noqa: BLE001 — skip failing programs
+            continue
+    return out
+
+
+def _bugcrowd_scope(path: str, hdr: dict) -> list[dict]:
+    """Per-program scope: fetch the page, locate the brief's version
+    document API endpoint, read data.scope[].targets[]."""
+    import re as _re
+
+    page = _get(f"https://bugcrowd.com{path}" if path.startswith("/") else path, hdr)
+    m = _re.search(r'"engagementBriefApi":\{[^}]*"getBriefVersionDocument":"([^"]+)"', page.text)
+    if not m:
+        return []
+    doc_url = m.group(1).replace("\\/", "/")
+    detail = _get(f"https://bugcrowd.com{doc_url}" if doc_url.startswith("/") else doc_url, hdr).json()
+    out = []
+    for group in detail.get("data", {}).get("scope", []):
+        if not isinstance(group, dict):
+            continue
+        in_scope = bool(group.get("inScope"))
+        for t in group.get("targets", []):
+            if not isinstance(t, dict):
                 continue
-            # Bugcrowd embeds scope in the program object
-            for scope in prog.get("taxonomy_terms", []) or prog.get("in_scope", []) or []:
-                if isinstance(scope, dict):
-                    out.append(
-                        {
-                            "program": name,
-                            "asset": scope.get("name") or scope.get("target", ""),
-                            "type": scope.get("category") or scope.get("type", ""),
-                            "eligible": scope.get("eligible_for_bounty", True),
-                            "instruction": "",
-                            "source": f"https://bugcrowd.com/{prog.get('code', prog.get('slug', name))}",
-                        }
-                    )
-        nxt = data.get("next") if isinstance(data, dict) else None
-        url = f"https://bugcrowd.com/api/programs.json?page={pages + 2}" if nxt else None
-        pages += 1
+            asset = t.get("uri") or t.get("name", "")
+            out.append(
+                {
+                    "program": path.strip("/").split("/")[-1],
+                    "asset": asset,
+                    "type": t.get("category", ""),
+                    "eligible": in_scope,
+                    "instruction": str(t.get("description", ""))[:120],
+                    "source": f"https://bugcrowd.com{path}",
+                }
+            )
     return out
 
 
 def _pull_ywh(token: str, want: set[str] | None) -> list[dict]:
+    """YesWeHack: list program slugs, then per-program detail for scopes.
+
+    Reference shape: detail has scopes[] ({scope, scope_type, ...}) and
+    out_of_scope[]; the list endpoint only carries the slug."""
     hdr = _headers(token)
-    out = []
-    url = "https://api.yeswehack.com/programs?page=1&size=100"
+    slugs = []
+    url = "https://api.yeswehack.com/programs?page=1"
     pages = 0
     while url and pages < _MAX_PAGES:
         data = _get(url, hdr).json()
         for prog in data.get("items", []):
             slug = prog.get("slug", "")
-            if want and slug not in want:
-                continue
-            for s in prog.get("scope", []):
-                out.append(
-                    {
-                        "program": slug,
-                        "asset": s.get("target", ""),
-                        "type": s.get("scope_type", ""),
-                        "eligible": s.get("eligible", True),
-                        "instruction": "",
-                        "source": f"https://yeswehack.com/programs/{slug}",
-                    }
-                )
+            if slug and (want is None or slug in want):
+                slugs.append(slug)
         page = data.get("pagination", {})
         url = page.get("next_page_url") if page.get("next") else None
         pages += 1
+    out = []
+    for slug in slugs:
+        try:
+            detail = _get(f"https://api.yeswehack.com/programs/{slug}", hdr).json()
+        except Exception:  # noqa: BLE001 — one program failing is not the batch
+            continue
+        oos = {o.get("scope", "") for o in detail.get("out_of_scope", []) if isinstance(o, dict)}
+        for sc in detail.get("scopes", []):
+            if not isinstance(sc, dict):
+                continue
+            asset = sc.get("scope", "")
+            out.append(
+                {
+                    "program": slug,
+                    "asset": asset,
+                    "type": sc.get("scope_type", ""),
+                    "eligible": asset not in oos and sc.get("enabled", True),
+                    "instruction": "",
+                    "source": f"https://yeswehack.com/programs/{slug}",
+                }
+            )
     return out
 
 
 def _pull_intigriti(token: str, want: set[str] | None) -> list[dict]:
+    """Intigriti: external/researcher/v1, offset accumulates by page size
+    until >= total. Scope = domains.content[].endpoint."""
     hdr = _headers(token)
     out = []
-    url = "https://api.intigriti.com/core/v1/programs?take=100&skip=0"
+    offset = 0
+    total = None
     pages = 0
-    while url and pages < _MAX_PAGES:
-        data = _get(url, hdr).json()
+    while pages < _MAX_PAGES:
+        data = _get(f"https://api.intigriti.com/external/researcher/v1/programs?limit=100&offset={offset}", hdr).json()
+        if total is None and isinstance(data, dict):
+            total = int(data.get("total") or data.get("totalCount") or 0)
         records = data.get("records", []) if isinstance(data, dict) else data
+        if not records:
+            break
         for prog in records:
             handle = prog.get("handle", "")
             if want and handle not in want:
                 continue
             for dom in prog.get("domains", []):
-                for content in dom.get("content", []) or [{}]:
+                if not isinstance(dom, dict):
+                    continue
+                for content in dom.get("content", []) or []:
+                    if not isinstance(content, dict):
+                        continue
                     out.append(
                         {
                             "program": handle,
@@ -195,37 +258,90 @@ def _pull_intigriti(token: str, want: set[str] | None) -> list[dict]:
                             "source": f"https://app.intigriti.com/programs/{handle}",
                         }
                     )
-        if isinstance(data, dict) and len(records) == 100:
-            skip = pages * 100
-            url = f"https://api.intigriti.com/core/v1/programs?take=100&skip={skip}"
-        else:
-            url = None
+        offset += len(records)
+        if total and offset >= total:
+            break
         pages += 1
     return out
 
 
 def _pull_immunefi(token: str, want: set[str] | None) -> list[dict]:
+    """Immunefi (unofficial, like bbscope): scrape the public bug-bounty
+    page's RSC payload for the bounties list (slug per program), then
+    each program page's embedded \"assets\":[...] array ({url, type,
+    description, category}). Bearer token kept for authenticated pulls
+    if the page requires one."""
     hdr = _headers(token)
+    import re as _re
+
+    page = _get("https://immunefi.com/bug-bounty/", hdr)
+    m = _re.search(r'"bounties":\[', page.text)
+    slugs = []
+    if m:
+        blob = _extract_json_array(page.text[m.end() - 1 :])
+        try:
+            for prog in json.loads(blob):
+                slug = prog.get("slug", "")
+                if slug and not prog.get("inviteOnly", False):
+                    slugs.append(slug)
+        except Exception:  # noqa: BLE001 — RSC payload drift is data, not fatal
+            pass
     out = []
-    data = _get("https://immunefi.com/api/bounties.json", hdr).json()
-    for prog in data if isinstance(data, list) else [data]:
-        name = prog.get("name", "")
-        if want and name not in want:
+    for slug in slugs:
+        if want and slug not in want:
             continue
-        for impact in prog.get("impact", {}).values():
-            for target in impact.get("targets", []) if isinstance(impact, dict) else []:
-                if isinstance(target, dict):
-                    out.append(
-                        {
-                            "program": name,
-                            "asset": target.get("target", ""),
-                            "type": "blockchain" if target.get("target", "").startswith("0x") else "web",
-                            "eligible": True,
-                            "instruction": "",
-                            "source": "https://immunefi.com/bugbounty/",
-                        }
-                    )
+        try:
+            prog_page = _get(f"https://immunefi.com/bug-bounty/{slug}/information/", hdr)
+        except Exception:  # noqa: BLE001
+            continue
+        am = _re.search(r'"assets":\[', prog_page.text)
+        if not am:
+            continue
+        ablob = _extract_json_array(prog_page.text[am.end() - 1 :])
+        try:
+            for asset in json.loads(ablob):
+                if not isinstance(asset, dict):
+                    continue
+                url_a = asset.get("url", "")
+                out.append(
+                    {
+                        "program": slug,
+                        "asset": url_a,
+                        "type": asset.get("category") or asset.get("type", ""),
+                        "eligible": True,
+                        "instruction": str(asset.get("description", ""))[:120],
+                        "source": f"https://immunefi.com/bug-bounty/{slug}/",
+                    }
+                )
+        except Exception:  # noqa: BLE001
+            continue
     return out
+
+
+def _extract_json_array(text_from_bracket: str) -> str:
+    """Return the first complete JSON array starting at text[0]=='['.
+    Balanced-bracket scan, string-aware (RSC payloads embed JSON in JS)."""
+    depth = 0
+    in_str = False
+    esc = False
+    for i, ch in enumerate(text_from_bracket):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth -= 1
+            if depth == 0:
+                return text_from_bracket[: i + 1]
+    return ""
 
 
 _PLATFORMS = {

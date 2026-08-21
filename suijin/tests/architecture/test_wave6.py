@@ -1,10 +1,13 @@
 """Wave 6: F41-F43 marketplace, G47-G50 learning finishers + exfil."""
 
 import json
+import os
 import zipfile
 from unittest import mock
 
 from suijin.modules.blueteam.lib.blue import exfil
+
+os.environ["SUIJIN_KG_BACKEND"] = "json"  # these tests pin JSON-backend semantics
 
 
 class TestMarketplace:

@@ -4,10 +4,13 @@ route to. All file I/O monkeypatched into tmp_path.
 """
 
 import json
+import os
 
 import pytest
 
 from suijin.modules.redteam.lib.intel import knowledge_graph as kg
+
+os.environ["SUIJIN_KG_BACKEND"] = "json"  # these tests pin JSON-backend semantics
 
 
 @pytest.fixture(autouse=True)

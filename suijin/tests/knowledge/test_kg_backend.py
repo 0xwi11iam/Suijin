@@ -136,6 +136,11 @@ class TestNeo4jBackend:
 
 
 class TestBackendSelection:
+    import pytest as _pytest
+
+    def setup_method(self):
+        kb._invalidate_backend_cache()
+
     def test_default_is_json(self, tmp_path, monkeypatch):
         monkeypatch.delenv("SUIJIN_KG_BACKEND", raising=False)
         monkeypatch.setattr(kb, "_config_backend", lambda: "json")

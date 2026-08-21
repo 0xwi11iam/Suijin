@@ -130,13 +130,13 @@ TOOL_REGISTRY = {
             "is already known to be blocked/WAF'd. Saves wasted attempts."
         ),
         "args_format": '"target": "TARGET_HOST", "payload": "optional specific payload to check"',
-        "description": "**check_knowledge** — queries knowledge_graph.json for known blocked patterns, WAF rules, and verified CVEs.",
+        "description": "**check_knowledge** — queries the knowledge graph for known blocked patterns, WAF rules, and verified CVEs.",
     },
     "record_finding": {
         "purpose": "Persist a verified finding to the knowledge graph",
         "when_to_use": "After you CONFIRM a constraint (WAF blocks X, CVE Y works, parameter Z is injectable). Log EVERY verified fact.",
         "args_format": '"target": "TARGET", "finding_type": "blocks|verified_cve|bypass|behavior", "rule": "the rule", "evidence": "what proved it"',
-        "description": "**record_finding** — writes to knowledge_graph.json. Deduplicates automatically. Confidence 1.0 for binary-verified findings.",
+        "description": "**record_finding** — writes to the knowledge graph. Deduplicates automatically. Confidence 1.0 for binary-verified findings.",
     },
     "write_note": {
         "purpose": "MANDATORY — Log EVERY action, finding, and decision to the engagement file",

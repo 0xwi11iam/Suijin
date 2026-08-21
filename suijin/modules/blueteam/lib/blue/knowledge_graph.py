@@ -14,7 +14,6 @@ import json
 import threading
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Optional
 
 
@@ -187,29 +186,29 @@ class BlueKnowledgeGraph:
     def bridge_from_red_team(self):
         """Import intelligence from the red team knowledge graph.
 
-        Reads the redteam module's knowledge_graph.json and imports WAF rules,
-        blocked patterns, confirmed CVEs, and discovered endpoints into
-        the blue team's intelligence nodes for defensive use.
+        Reads through the KG's PUBLIC API (get_all_targets +
+        get_constraints) — backend-agnostic (works on json AND neo4j).
+        Old version parsed a flat list shape the KG never actually had:
+        it has been importing zero findings even on JSON; this fixes it.
         """
-        red_kg_path = (
-            Path(__file__).resolve().parents[3] / "modules" / "redteam" / "lib" / "intel" / "knowledge_graph.json"
-        )
-        if not red_kg_path.exists():
-            return 0
         try:
-            red_data = json.loads(red_kg_path.read_text())
+            from suijin.modules.redteam.lib.intel import knowledge_graph as red_kg
+
             imported = 0
-            # Import findings that are relevant for defense
-            for _target, findings in red_data.items() if isinstance(red_data, dict) else []:
-                if isinstance(findings, list):
-                    for finding in findings:
-                        if isinstance(finding, dict):
-                            cve = finding.get("cve") or finding.get("vulnerability")
-                            if cve:
-                                self.add_intelligence("red_team", f"CVE: {cve} — {finding.get('description', '')}")
-                                imported += 1
+            for target in red_kg.get_all_targets():
+                cons = red_kg.get_constraints(target)
+                for ctype, rows in cons.items():
+                    if ctype.startswith("_") or not isinstance(rows, list):
+                        continue
+                    for row in rows:
+                        if not isinstance(row, dict):
+                            continue
+                        note = f"[{ctype}] {target}: {row.get('rule', '')[:100]}"
+                        self.add_intelligence("red_team", note)
+                        imported += 1
+                        break  # one line per (target, ctype) keeps the blue KB tight
             return imported
-        except Exception:
+        except Exception:  # noqa: BLE001 — bridging is best-effort
             return 0
 
 

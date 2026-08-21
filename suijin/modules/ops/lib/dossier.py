@@ -49,15 +49,27 @@ def build_dossier(target: str, workspace: Path | None = None, red_kg: Path | Non
     kg_path = Path(red_kg) if red_kg else _red_kg_path()
     d: dict = {"target": target}
 
-    # red KG constraints
+    # red KG constraints — via the PUBLIC API (backend-agnostic: json or
+    # neo4j). The explicit red_kg= file override stays for tests/fixed exports.
     constraints: dict[str, list] = {}
     try:
-        kg = json.loads(kg_path.read_text())
-        node = kg.get(target) or kg.get(target.split("//")[-1].split("/")[0])
-        if node:
-            for ctype, rules in node.items():
-                if isinstance(rules, list):
-                    constraints[ctype] = [r.get("rule", str(r))[:120] for r in rules if isinstance(r, dict)]
+        if red_kg is not None:
+            kg = json.loads(kg_path.read_text())
+            node = kg.get(target) or kg.get(target.split("//")[-1].split("/")[0])
+            if node:
+                for ctype, rules in node.items():
+                    if isinstance(rules, list):
+                        constraints[ctype] = [r.get("rule", str(r))[:120] for r in rules if isinstance(r, dict)]
+        else:
+            from suijin.modules.redteam.lib.intel import knowledge_graph as red_kg_api
+
+            for lookup in (target, target.split("//")[-1].split("/")[0]):
+                cons = red_kg_api.get_constraints(lookup)
+                if cons:
+                    for ctype, rows in cons.items():
+                        if isinstance(rows, list) and not ctype.startswith("_"):
+                            constraints[ctype] = [r.get("rule", str(r))[:120] for r in rows if isinstance(r, dict)]
+                    break
     except (OSError, ValueError):
         pass
     d["constraints"] = constraints

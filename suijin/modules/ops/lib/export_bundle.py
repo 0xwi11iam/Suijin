@@ -137,9 +137,25 @@ def build_bundle(
         if include_credentials and (ws / "credentials.json").is_file():
             add_file(ws / "credentials.json", "workspace/credentials.json")
 
-        # knowledge graphs
+        # knowledge graphs: blue from its file; red SNAPSHOTTED through
+        # the KG public API (backend-agnostic — works on json and neo4j;
+        # the explicit red_kg_path override remains for fixed exports)
         add_file(blue_kg, "kg/blue.json")
-        add_file(red_kg, "kg/red.json")
+        if red_kg_path is not None:
+            add_file(red_kg, "kg/red.json")
+        else:
+            try:
+                from suijin.modules.redteam.lib.intel import knowledge_graph as red_kg_api
+
+                snap = {}
+                for t in red_kg_api.get_all_targets():
+                    snap[t] = red_kg_api.get_constraints(t)
+                tmp = ws / "outputs" / "exports" / f".kg_snapshot_{ts.strftime('%Y%m%d_%H%M%S')}.json"
+                tmp.parent.mkdir(parents=True, exist_ok=True)
+                tmp.write_text(json.dumps(snap, indent=2, default=str))
+                add_file(tmp, "kg/red.json")
+            except Exception:  # noqa: BLE001 — KG snap never blocks a bundle
+                pass
 
         # redacted config (tracked in the manifest like every other file)
         if cfg.is_file():

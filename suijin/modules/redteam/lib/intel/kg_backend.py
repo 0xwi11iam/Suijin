@@ -151,7 +151,8 @@ class Neo4jKG:
             ON CREATE SET c.evidence = $evidence,
                           c.confidence = $confidence,
                           c.verified_at = datetime(),
-                          c.last_seen = datetime()
+                          c.last_seen = datetime(),
+                          t._updated = datetime()
             ON MATCH SET  c.evidence = $evidence,
                           c.confidence = CASE WHEN c.confidence < $confidence
                                               THEN $confidence ELSE c.confidence END,
@@ -215,6 +216,14 @@ class Neo4jKG:
 # ── backend selection ─────────────────────────────────────────────────────
 
 
+_BACKEND_CACHE: dict = {}
+
+
+def _invalidate_backend_cache() -> None:
+    """Test hook: re-select on the next get_backend call."""
+    _BACKEND_CACHE.clear()
+
+
 def get_backend(json_path_fn):
     """Return the configured KG backend (config kg_backend / env override).
 
@@ -225,6 +234,8 @@ def get_backend(json_path_fn):
     """
     import os
 
+    if "json" in _BACKEND_CACHE:
+        return _BACKEND_CACHE["json"]  # memoized: selection reads config once
     backend = os.environ.get("SUIJIN_KG_BACKEND", "").lower()
     if not backend:
         try:
@@ -235,7 +246,9 @@ def get_backend(json_path_fn):
             backend = "json"
 
     if backend != "neo4j":
-        return JsonKG(json_path_fn)
+        kg = JsonKG(json_path_fn)
+        _BACKEND_CACHE["json"] = kg
+        return kg
 
     uri = os.environ.get("SUIJIN_NEO4J_URI", "")
     user = os.environ.get("SUIJIN_NEO4J_USER", "neo4j")
@@ -257,10 +270,13 @@ def get_backend(json_path_fn):
     try:
         kg = Neo4jKG(uri, user, password)
         kg._connect()  # verify BEFORE the engagement starts, not mid-payload
+        _BACKEND_CACHE["json"] = kg
         return kg
     except Exception as e:  # noqa: BLE001 — ImportError (no driver) or connection refused
         logger.error("Neo4j backend unavailable (%s) — staying on JSON. Fix the server and restart.", e)
-        return JsonKG(json_path_fn)
+        kg = JsonKG(json_path_fn)
+        _BACKEND_CACHE["json"] = kg
+        return kg
 
 
 def backend_status() -> str:
