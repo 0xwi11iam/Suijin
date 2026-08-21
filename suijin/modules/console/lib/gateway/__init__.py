@@ -188,18 +188,18 @@ def create_app(token: str | None = None) -> FastAPI:
 
     @app.get("/api/approvals")
     def approvals_list(_: None = Depends(require_token)) -> list[dict]:
-        return _approvals_read()
+        from suijin.modules.ops.lib.approvals import list_approvals
+
+        return list_approvals()
 
     @app.post("/api/approvals/{item_id}")
     def approvals_decide(item_id: int, body: ApproveBody, _: None = Depends(require_token)) -> dict:
-        items = _approvals_read()
-        hit = next((a for a in items if a["id"] == item_id), None)
+        from suijin.modules.ops.lib.approvals import decide, list_approvals
+
+        msg = decide(item_id, body.action == "approve", note=body.note)
+        hit = next((a for a in list_approvals() if a["id"] == item_id), None)
         if hit is None:
-            raise HTTPException(404, "no such approval")
-        hit["status"] = "approved" if body.action == "approve" else "denied"
-        if body.note:
-            hit["note"] = body.note
-        _approvals_write(items)
+            raise HTTPException(404, msg or "no such approval")
         return hit
 
     @app.get("/api/questions")
@@ -290,7 +290,12 @@ def create_app(token: str | None = None) -> FastAPI:
                 except Exception:  # noqa: BLE001
                     pass
                 # approvals/questions snapshots (cheap, small)
-                await ws.send_json({"kind": "approvals", "items": _approvals_read()})
+                try:
+                    from suijin.modules.ops.lib.approvals import list_approvals
+
+                    await ws.send_json({"kind": "approvals", "items": list_approvals()})
+                except Exception:  # noqa: BLE001
+                    await ws.send_json({"kind": "approvals", "items": []})
                 await ws.send_json({"kind": "questions", "items": _questions_read()})
                 await asyncio.sleep(0.6)
 
@@ -351,6 +356,37 @@ def _questions_read() -> list[dict]:
             except ValueError:
                 continue
     return out
+
+
+def push_question(question: str) -> int:
+    """Agent-side bridge: persist an ask_operator question where the
+    gateway serves it; returns its id. Used when stdin isn't a TTY
+    (detached/desktop engagements) so the operator can answer from
+    the Approvals screen."""
+    items = _questions_read()
+    next_id = max((q.get("id", 0) for q in items), default=0) + 1
+    items.append({"id": next_id, "question": question[:500], "answered": False, "asked_at": _now_iso()})
+    _questions_write(items)
+    return next_id
+
+
+def fetch_answer(question_id: int, timeout_s: float = 600.0, poll_s: float = 1.0) -> str | None:
+    """Poll for the operator's answer (gateway writes it). None on timeout."""
+    import time as _t
+
+    deadline = _t.monotonic() + timeout_s
+    while _t.monotonic() < deadline:
+        hit = next((q for q in _questions_read() if q.get("id") == question_id), None)
+        if hit and hit.get("answered"):
+            return str(hit.get("answer", "")).strip() or None
+        _t.sleep(poll_s)
+    return None
+
+
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _questions_write(items: list[dict]) -> None:

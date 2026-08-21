@@ -65,14 +65,13 @@ class TestReadOnlyRoutes:
 
 class TestHitlRoundTrip:
     def _seed(self, tmp_path):
-        d = tmp_path / "outputs" / "audit_trails"
-        d.mkdir(parents=True, exist_ok=True)  # not used; approvals live in outputs/
-        (tmp_path / "outputs" / "approvals.jsonl").write_text(
-            json.dumps({"id": 1, "command": "nmap -sS 10.0.0.0/8", "status": "pending"})
-            + "\n"
-            + json.dumps({"id": 2, "command": "rm -rf /", "status": "pending"})
-            + "\n"
-        )
+        # v5.1: the gateway reads/writes the REAL agent store (ops approvals
+        # module). Seed it through the same API the agent uses.
+        from suijin.modules.ops.lib import approvals as ap
+
+        ap.APPROVALS_PATH = tmp_path / "approvals.json"
+        ap.record_pending("nmap", {"cmd": "nmap -sS 10.0.0.0/8"})
+        ap.record_pending("rm", {"cmd": "rm -rf /"})
 
     def test_list_decide_roundtrip(self, client, tmp_path):
         self._seed(tmp_path)
@@ -85,11 +84,17 @@ class TestHitlRoundTrip:
         r = c.post("/api/approvals/2", headers=h, json={"action": "deny", "note": "too broad"})
         d = r.json()
         assert d["status"] == "denied" and d["note"] == "too broad"
-        # persisted
-        disk = [json.loads(ln) for ln in (tmp_path / "outputs" / "approvals.jsonl").read_text().splitlines()]
-        assert [x["status"] for x in disk] == ["approved", "denied"]
+        # persisted in the REAL store the agent polls
+        from suijin.modules.ops.lib import approvals as ap
 
-    def test_decide_missing_404(self, client):
+        disk = ap.list_approvals()
+        assert [x["status"] for x in sorted(disk, key=lambda i: i["id"])] == ["approved", "denied"]
+        assert ap.decision_for("nmap") == "approved"
+
+    def test_decide_missing_404(self, client, tmp_path):
+        from suijin.modules.ops.lib import approvals as ap
+
+        ap.APPROVALS_PATH = tmp_path / "empty.json"
         c, h = client
         assert c.post("/api/approvals/99", headers=h, json={"action": "approve"}).status_code == 404
 

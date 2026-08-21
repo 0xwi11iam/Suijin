@@ -46,7 +46,10 @@ export function ApprovalsScreen({
 
       <div className="hitl-stack">
         {pending.map((a) => {
-          const cmd = String(a.command ?? a.action ?? a.rule ?? "");
+          const args = (a.args ?? {}) as Record<string, unknown>;
+          const cmd =
+            String(args.cmd ?? args.command ?? a.command ?? "") ||
+            JSON.stringify(args, null, 2);
           const danger = /\b(rm|mkfs|dd|shutdown|:(){|fork)\b/.test(cmd) || /\/8|\/16$/.test(cmd);
           return (
             <div key={a.id} className={`hitl ${danger ? "severity-danger" : ""}`}>

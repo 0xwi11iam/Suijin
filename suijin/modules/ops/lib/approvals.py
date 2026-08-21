@@ -110,14 +110,19 @@ def decision_for(tool: str) -> str:
     return "none"
 
 
-def decide(approval_id: int, approve: bool) -> str:
-    """Approve/deny a pending item; updates both files. Returns a message."""
+def decide(approval_id: int, approve: bool, note: str = "") -> str:
+    """Approve/deny a pending item; updates both files. Returns a message.
+
+    note (v5.1): operator rationale recorded with the decision — the
+    desktop gateway passes it from the Approvals card."""
     data = _read(_approvals_path(), {"next_id": 1, "items": []})
     item = next((i for i in data.get("items", []) if i.get("id") == approval_id), None)
     if item is None:
         return f"No approval request #{approval_id}."
     verb = "approved" if approve else "denied"
     item["status"] = verb
+    if note:
+        item["note"] = note[:300]
     item["decided_at"] = datetime.now(timezone.utc).isoformat()
     _write(_approvals_path(), data)
 

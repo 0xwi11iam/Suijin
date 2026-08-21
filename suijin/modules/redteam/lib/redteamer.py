@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 import time
 
 from rich.console import Console
@@ -149,11 +150,23 @@ async def run_red_team_async(config, objective, api_key=None):
                     out = step["tool_output"]
                     if ec == "ask_operator":
                         console.print(f"  [bold #e6b47c] {out}[/bold #e6b47c]")
-                        # Pause graph, ask operator, inject answer, resume
-                        try:
-                            answer = console.input("[bold cyan]Answer  [/bold cyan]").strip()
-                        except (KeyboardInterrupt, EOFError):
-                            answer = ""
+                        # Pause graph, ask operator, inject answer, resume.
+                        # Interactive console OR the desktop bridge (detached
+                        # engagements: stdin is dead — the question lands on
+                        # the gateway's Approvals screen instead).
+                        if sys.stdin is not None and sys.stdin.isatty():
+                            try:
+                                answer = console.input("[bold cyan]Answer  [/bold cyan]").strip()
+                            except (KeyboardInterrupt, EOFError):
+                                answer = ""
+                        else:
+                            from suijin.modules.console.lib.gateway import fetch_answer, push_question
+
+                            qid = push_question(out)
+                            console.print(
+                                "[dim]question sent to the desktop/mcp surface — waiting for the operator (10m)...[/dim]"
+                            )
+                            answer = fetch_answer(qid, timeout_s=600.0) or ""
                         if not answer:
                             answer = "Continue as you see fit."
                         agent._graph.update_state(
