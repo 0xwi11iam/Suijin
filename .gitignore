@@ -74,3 +74,9 @@ references/
 
 /target
 scripts/
+
+# Desktop app (Tauri/React)
+desktop/node_modules/
+desktop/dist/
+desktop/src-tauri/target/
+desktop/src/lib/api-types.ts

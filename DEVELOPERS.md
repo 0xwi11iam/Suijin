@@ -122,6 +122,14 @@ Every tool invocation on every surface is recorded, append-only:
 values are never stored (key names + sha256 digest). Extend surfaces by
 calling `ToolAudit.record(...)` — never raise from audit code.
 
+## Desktop app (`desktop/`)
+
+A Tauri+React client of the gateway (`suijin gateway`): approvals/
+ask-operator inbox (interactive-first), live engagement stream,
+dashboard. Types generated from the gateway's OpenAPI (`npm run gen`
+inside desktop/) — core and UI share one schema by construction. See
+desktop/README.md.
+
 ## Deploy paths (four, all tested)
 
 | Platform | Script | Notes |

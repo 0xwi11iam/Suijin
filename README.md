@@ -32,7 +32,7 @@ The v5.0.1 **Stable** line is the maintenance surface. What's being built next:
 
 | Priority | Thing | Status |
 |---|---|---|
-| 1 | **Suijin Console** — full terminal UI: theme-from-terminal (matches YOUR terminal's palette automatically), live engagement monitor, fireteam view, clickable approvals & HITL, command palette, mouse everywhere (Textual — Python's Bubble Tea) | designed & locked, **on hold** |
+| 1 | **Suijin Desktop** — native Tauri app (cold-cyan instrument design, Instrument Serif + Geist + Fira Code): approvals & ask-operator inbox, live engagement stream, dashboard; typed client generated from the gateway's OpenAPI — the core ships the gateway module, the app contains zero agent code | gateway + app **landed (technical preview)**; polishing |
 | 2 | **Tool packs round 3** — cloud enum depth, AD/kerberos chains, mobile statics (+30) | queued |
 | 3 | **Marketplace community index** — the decentralized pack index goes live (hash-pinned installs already ship) | queued |
 | 4 | **`suijin bench`** — graded lab runs, agent performance tracked per release | queued |

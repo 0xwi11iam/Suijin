@@ -6,6 +6,28 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v5.1.0 — Desktop (technical preview)
+
+The gateway + Tauri client: the agent gets a GUI without the GUI
+containing any agent code.
+
+- **Gateway module** (`suijin gateway`): typed FastAPI surface over
+  the kernel ctx — status/tools/usage/findings/spar reads, HITL
+  approvals + ask-operator writes (the ONLY writes), detached
+  engagement launch, and a WebSocket live stream (audit-trail tail,
+  cost ticker, HITL snapshots). Per-boot bearer token, localhost by
+  default. /openapi.json is the contract.
+- **Desktop app** (`desktop/`): React+TS+Vite + Tauri shell.
+  Approvals inbox (approve/deny on a live blocked agent), ask-operator
+  answers, live engagement stream + launcher, dashboard (units/tools/
+  KB/posture, spend with api-vs-estimated accuracy, arsenal-by-owner,
+  KG targets). Design system: cold cyan on near-black; Geist /
+  Instrument Serif / Fira Code (OFL via Fontsource); icons generated
+  from the project logo. TS types generated from the gateway's
+  OpenAPI — zero drift by construction.
+
+1,245 tests (10 gateway); desktop builds clean under strict TS.
+
 ## v5.0.1 — STABLE
 
 The stabilization release. Architecture frozen in green; everything
