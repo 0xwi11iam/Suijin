@@ -15,8 +15,14 @@ npm install
 npm run dev          # opens http://localhost:5174 — paste the token
 
 # production build (Tauri native shell)
-npm run tauri build  # -> installable app bundle
+npm run tauri build  # -> Suijin.app + dmg in src-tauri/target/release/bundle/
 ```
+
+Built artifacts (this machine, arm64): `dist-desktop/Suijin_0.1.0_aarch64.dmg`
+(4 MB, UDZO). The .app embeds the frontend; connect it to a running
+`suijin gateway` with the session token. If the dmg beautification step
+(create-dmg) fails on your machine, the raw rw.*.dmg next to Suijin.app
+converts with: `hdiutil convert <rw>.dmg -format UDZO -o out.dmg`.
 
 ## Architecture
 
