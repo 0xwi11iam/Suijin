@@ -53,7 +53,9 @@ class TestThinkLoop:
         assert out["_current_step"]["tool_name"] == "search_kb"
 
     def test_garbage_one_retry_then_clean_failure(self):
-        out = self._think(["total garbage not json", "still garbage"])
+        # three parse retries -> all garbage -> clean parse_failure (never
+        # an exception leaking through the mock as llm_error)
+        out = self._think(["total garbage not json", "still garbage", "more garbage"])
         assert out.get("completion_reason") == "parse_failure"
 
     def test_garbage_then_valid_recovers(self):
