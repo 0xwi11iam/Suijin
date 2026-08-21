@@ -6,6 +6,45 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v5.0.1 — STABLE
+
+The stabilization release. Architecture frozen in green; everything
+since v5.0.0 is hardening + capability, zero churn.
+
+- **Stealth mode** — ON by default, zero performance loss: sticky
+  realistic browser identity (UA-hopping is itself a tell), burst-
+  limited pacing (manual probes pay 0s), tool-level rate caps for
+  loud tools; 33 packs swept clean of scanner UAs. Env kill switch:
+  SUIJIN_STEALTH=off.
+- **Agent competence rebuild** — coding-agent-simple decision loop
+  (4-field JSON, tolerant nested parser, harness-computed
+  productivity); fireteam sub-agents rebuilt (12 steps, per-agent
+  budgets, full tool visibility, usefulness gates: vague/duplicate
+  tasks rejected, findings compressed to evidence, non-blocking
+  teams); scratchpad + structured RESULT observations.
+- **Kernel-rendered capability surface** — the kernel renders its live
+  tool registry into the agent prompt (262→265 tools with args in
+  ~6.4k tokens, was 28k); zero-invisible parity enforced in both
+  booted and pre-boot modes; 10k prompt budget gate.
+- **REAL battle** — the actual agent graph attacks the live vulnerable
+  lab; blue recall scored against ground truth derived from red's own
+  requests; verdict persisted. `suijin battle --real|--mock`.
+- **Genuine token counter** — APIs omitting usage counted ZERO before;
+  now client-estimated (word/CJK-aware) and attributed;
+  `suijin tokens` shows the honest tally per provider.
+- **bugscope** — 5-platform bug-bounty scope scraper (bbscope method,
+  SSL-verified, adapters cross-checked against the reference source).
+- **Neo4j-ready KG** — same API, one config switch, fail-safe to
+  JSON; blue bridge/dossier/export routed through the public API (the
+  bridge was dead code even on JSON — fixed).
+- **Local == CI** — scripts/verify-ci.sh replays GitHub's exact steps
+  on a fresh worktree + clean venv; three incident classes
+  mechanized away.
+- Ctrl-C clean everywhere; tool-not-found asks the operator.
+
+1,235 fast tests / 1,238 collected. Boot: 150 units / 265 tools /
+136 packs, 0 skipped.
+
 ## v5.0.0 — Wave 6: the marketplace + learning loop — ALL 50 FEATURES COMPLETE
 
 The 50-feature roadmap is finished. Major version earned by the

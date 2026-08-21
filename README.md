@@ -1,4 +1,4 @@
-<h3 align="center">v5.0.0</h3> 
+<h3 align="center">v5.0.1 — STABLE</h3> 
 <p align="center">
 <img src="assets/suijin.png" alt="Suijin Logo" width="160"/>
 </p>
@@ -6,7 +6,7 @@
 
 
 <p align="center">
-  <img height="20" src="https://img.shields.io/badge/v5.0.0-suijin-green?style=flat" alt="Version"/>
+  <img height="20" src="https://img.shields.io/badge/v5.0.1-suijin-green?style=flat" alt="Version"/>
   <img height="20" src="https://img.shields.io/badge/LICENSE-MIT-4169A1?style=flat" alt="License"/>
   <img height="20" src="https://img.shields.io/badge/PYTHON-3.10+-306998?style=flat&logo=python&logoColor=white" alt="Python"/>
 </p>
@@ -23,6 +23,23 @@ toolkit, one knowledge base, and one knowledge graph.
 > system to scan, probe, or attack any system you do not own or have explicit
 > written permission to test. Unauthorized access is **illegal**. By using this
 > tool you accept full responsibility for your actions.
+
+---
+
+## What's Next
+
+The v5.0.1 **Stable** line is the maintenance surface. What's being built next:
+
+| Priority | Thing | Status |
+|---|---|---|
+| 1 | **Suijin Console** — full terminal UI: theme-from-terminal (matches YOUR terminal's palette automatically), live engagement monitor, fireteam view, clickable approvals & HITL, command palette, mouse everywhere (Textual — Python's Bubble Tea) | designed & locked, **on hold** |
+| 2 | **Tool packs round 3** — cloud enum depth, AD/kerberos chains, mobile statics (+30) | queued |
+| 3 | **Marketplace community index** — the decentralized pack index goes live (hash-pinned installs already ship) | queued |
+| 4 | **`suijin bench`** — graded lab runs, agent performance tracked per release | queued |
+
+Everything above builds on the stable core without churn: the kernel,
+module boundaries, prompt budget, and catalog parity are enforced
+contracts.
 
 ---
 
@@ -142,7 +159,7 @@ hidden behind CLI flags.
 | `suijin status` | One-page summary: provider, KB, workspace, modules, lab port |
 | `suijin version` | Release, codename, python, platform, package path |
 | `suijin env` | API key presence by name — values are never printed |
-| `suijin tools` | All 262 agent tools with availability (missing binaries marked) |
+| `suijin tools` | All 265 agent tools with availability (missing binaries marked) |
 | `suijin market` | Pack marketplace: search / install / update from any index URL |
 | `suijin engage` | Apply an engagement template to a target (recurring via schedule) |
 | `suijin modules` | Loaded module packs with tool counts and dependencies |
