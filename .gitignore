@@ -73,3 +73,4 @@ references/
 # Added by cargo
 
 /target
+scripts/
