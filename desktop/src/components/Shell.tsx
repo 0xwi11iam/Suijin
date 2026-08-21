@@ -71,6 +71,22 @@ export function Shell({
   const pendingA = approvals.filter((a) => a.status === "pending").length;
   const pendingQ = questions.filter((q) => !q.answered).length;
 
+  // keyboard: 1-3 tabs; A/D decide the FIRST pending approval
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return;
+      if (e.key >= "1" && e.key <= String(TABS.length)) {
+        setTab(TABS[Number(e.key) - 1]);
+      } else if (e.key.toLowerCase() === "a" || e.key.toLowerCase() === "d") {
+        const first = approvals.find((a) => a.status === "pending");
+        if (first) gw.decide(first.id, e.key.toLowerCase() === "a" ? "approve" : "deny").catch(() => {});
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [approvals, gw]);
+
   return (
     <div className="shell">
       <header className="topbar">

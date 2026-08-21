@@ -26,7 +26,13 @@ containing any agent code.
   from the project logo. TS types generated from the gateway's
   OpenAPI — zero drift by construction.
 
-1,245 tests (10 gateway); desktop builds clean under strict TS.
+- **HITL bridge made real**: gateway approvals/questions now read-write
+  the agent's actual stores — approving on the desktop unblocks the
+  running agent; ask_operator from detached engagements lands on the
+  Approvals screen and polls for the operator's answer (10m).
+- **Keyboard**: 1-3 tabs, A/D decide the top pending approval.
+
+1,251 tests (10 gateway + 6 bridge); desktop builds clean under strict TS.
 
 ## v5.0.1 — STABLE
 
