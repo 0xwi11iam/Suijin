@@ -7,7 +7,7 @@ name = "suijin"
 version = "5.0.1"
 description = "Suijin — autonomous red & blue teaming (formerly Medusa)"
 readme = "README.md"
-license = { text = "MIT" }
+license = { text = "AGPL-3.0-or-later" }
 requires-python = ">=3.10"
 authors = [{ name = "William Jiang" }]
 keywords = ["security", "pentesting", "red-team", "blue-team", "agent", "llm"]

@@ -15,7 +15,7 @@ FROM kalilinux/kali-rolling:latest
 LABEL org.opencontainers.image.title="Suijin" \
       org.opencontainers.image.description="Autonomous red & blue teaming agent (kernel + modules)" \
       org.opencontainers.image.version="4.3.0" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.licenses="AGPL-3.0-or-later"
 
 # Heavy extras are opt-in at build time (minimum footprint by default)
 ARG WITH_METASPLOIT=0
