@@ -1,33 +1,42 @@
 {
-    "name": "WiFi Cracking",
-    "version": "1.0",
-    "description": "WiFi network scanning, handshake capture, and WPA/WPA2 cracking tools.",
-    "author": "Suijin",
-    "tools": {
-        "wifi_scan": {
-            "description": "Scan for nearby WiFi networks and return BSSID, channel, signal strength, and encryption type.",
-            "parameters": {
-                "interface": "Wireless interface (e.g. wlan0, en0). Default: auto-detect."
-            }
-        },
-        "wifi_capture": {
-            "description": "Capture WPA handshake for a target network. Requires a client to connect or deauth.",
-            "parameters": {
-                "bssid": "Target network BSSID (MAC address).",
-                "channel": "Channel to listen on.",
-                "interface": "Wireless interface. Default: auto-detect.",
-                "timeout": "Seconds to wait for handshake. Default: 60."
-            }
-        },
-        "wifi_crack": {
-            "description": "Attempt to crack a captured WPA handshake using a wordlist.",
-            "parameters": {
-                "handshake_file": "Path to .cap file with captured handshake.",
-                "wordlist": "Path to wordlist file (e.g. rockyou.txt)."
-            }
-        }
+  "name": "WiFi Cracking",
+  "version": "1.0",
+  "description": "WiFi network scanning, handshake capture, and WPA/WPA2 cracking tools.",
+  "author": "Suijin",
+  "tools": {
+    "wifi_scan": {
+      "description": "Scan for nearby WiFi networks and return BSSID, channel, signal strength, and encryption type.",
+      "parameters": {
+        "interface": "Wireless interface (e.g. wlan0, en0). Default: auto-detect."
+      }
     },
-    "dependencies": ["aircrack-ng", "airodump-ng"],
-    "platforms": ["linux"],
-    "requires_root": true
+    "wifi_capture": {
+      "description": "Capture WPA handshake for a target network. Requires a client to connect or deauth.",
+      "parameters": {
+        "bssid": "Target network BSSID (MAC address).",
+        "channel": "Channel to listen on.",
+        "interface": "Wireless interface. Default: auto-detect.",
+        "timeout": "Seconds to wait for handshake. Default: 60."
+      }
+    },
+    "wifi_crack": {
+      "description": "Attempt to crack a captured WPA handshake using a wordlist.",
+      "parameters": {
+        "handshake_file": "Path to .cap file with captured handshake.",
+        "wordlist": "Path to wordlist file (e.g. rockyou.txt)."
+      }
+    },
+    "sudo_available": {
+      "description": "Check if passwordless sudo works for wifi tools.",
+      "parameters": {}
+    }
+  },
+  "dependencies": [
+    "aircrack-ng",
+    "airodump-ng"
+  ],
+  "platforms": [
+    "linux"
+  ],
+  "requires_root": true
 }
