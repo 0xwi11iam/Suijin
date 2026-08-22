@@ -160,7 +160,39 @@ ARCH="$(uname -m)"
 PKG="none"
 [ "$CHOSEN_OS" = "macos" ] && PKG="brew"
 [ "$CHOSEN_OS" = "linux" ] && PKG="apt"
-ok "$CHOSEN_OS ($ARCH), packages via $PKG, pip: $PIP_BIN"
+
+# Dev-mode question: use the released tool, or install from a local
+# source tree (for contributors working on Suijin itself)?
+DEV_MODE="use"
+DEV_SOURCE=""
+if [ -t 0 ] && [ -t 1 ]; then
+  printf "  a couple of questions — Enter accepts the detected default\n"
+  ask_default "install mode: (use) the released tool, or (dev) from a local source tree?" "use"
+  case "$ANSWER" in
+    dev|d|developer)
+      DEV_MODE="dev"
+      ask_default "path to your local Suijin source tree" "$PWD"
+      RAW_PATH="$ANSWER"
+      # sanitize: expand, resolve, validate structure
+      DEV_SOURCE="$(printf '%s' "$RAW_PATH" | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+      DEV_SOURCE="${DEV_SOURCE/#\~/$HOME}"
+      if [ -z "$DEV_SOURCE" ] || [ "$DEV_SOURCE" = "/" ] || [ "$DEV_SOURCE" = "$HOME" ]; then
+        fail "invalid source path: '$DEV_SOURCE'"
+      fi
+      DEV_SOURCE="$(cd "$DEV_SOURCE" 2>/dev/null && pwd)" || fail "cannot access: '$RAW_PATH'"
+      if [ ! -f "$DEV_SOURCE/pyproject.toml" ] || [ ! -d "$DEV_SOURCE/suijin" ]; then
+        fail "not a Suijin source tree (needs pyproject.toml + suijin/): '$DEV_SOURCE'"
+      fi
+      note "dev install from: $DEV_SOURCE"
+      ;;
+    use|u|*)
+      DEV_MODE="use"
+      ;;
+  esac
+else
+  note "non-interactive run — install mode: use (released)"
+fi
+ok "$CHOSEN_OS ($ARCH), packages via $PKG, pip: $PIP_BIN, mode: $DEV_MODE"
 
 # ── 2/8 prerequisites — fully resolved, nothing left to the user ───────
 step "resolving prerequisites (git, python3, build headers)"
@@ -219,7 +251,13 @@ if [ ! -d "$INSTALL_DIR" ] && [ -d "$HOME/.medusa" ]; then
 fi
 mkdir -p "$INSTALL_DIR"
 REPO_DIR="$INSTALL_DIR/repo"
-if [ -d "$REPO_URL/.git" ]; then
+if [ "$DEV_MODE" = "dev" ]; then
+  # dev mode: symlink the local source (live-editable; no copying)
+  note "dev mode: linking $DEV_SOURCE"
+  rm -rf "$REPO_DIR"
+  ln -sfn "$DEV_SOURCE" "$REPO_DIR"
+  ok "linked to local source (edits are live)"
+elif [ -d "$REPO_URL/.git" ]; then
   note "local source: $REPO_URL"
   rm -rf "$REPO_DIR"; cp -R "$REPO_URL" "$REPO_DIR"
   ok "copied local checkout"
