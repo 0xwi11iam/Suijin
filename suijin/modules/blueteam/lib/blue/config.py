@@ -4,6 +4,7 @@ suijin/core/blue/config.py — Blue team operational configuration.
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 
@@ -32,8 +33,34 @@ def __getattr__(name):
 DEFAULT_BLUE_CONFIG = {
     "traffic_normalization_turns": 10,
     "scorer": {
+        # Authoritative per-signal weights (keyed by detector signal name).
+        # Defaults mirror the detector's built-ins exactly — tuning happens
+        # HERE, not in code. Legacy *_weight keys below still apply for any
+        # signal missing from signal_weights (older config files).
+        "signal_weights": {
+            "sql_injection": 4,
+            "xss_attempt": 4,
+            "path_traversal": 3,
+            "ssrf_attempt": 4,
+            "ssti_attempt": 4,
+            "xxe_attempt": 5,
+            "auth_bypass_header": 5,
+            "scanner_ua": 3,
+            "unusual_method": 2,
+            "command_injection": 4,
+            "jwt_attack": 3,
+            "deserialization": 5,
+            "ldap_injection": 4,
+            "nosql_injection": 4,
+            "mass_assignment": 4,
+            "file_inclusion": 5,
+            "graphql_recon": 3,
+            "brute_force": 3,
+            "new_ip": 2,
+            "body_anomaly": 1,
+        },
         "sql_keywords_weight": 4,
-        "xss_pattern_weight": 3,
+        "xss_pattern_weight": 4,
         "path_traversal_weight": 3,
         "unknown_param_weight": 2,
         "new_ip_weight": 2,
@@ -84,12 +111,14 @@ DEFAULT_BLUE_CONFIG = {
 
 
 def load_blue_config() -> dict:
+    # deepcopy: dict() is a SHALLOW copy — _deep_merge would write operator
+    # overrides straight into module-level DEFAULT_BLUE_CONFIG, poisoning
+    # every later load in the process (found by the wave-A scorer tests).
+    merged = copy.deepcopy(DEFAULT_BLUE_CONFIG)
     if _config_path().exists():
         loaded = json.loads(_config_path().read_text())
-        merged = dict(DEFAULT_BLUE_CONFIG)
         _deep_merge(merged, loaded)
     else:
-        merged = dict(DEFAULT_BLUE_CONFIG)
         _config_path().write_text(json.dumps(DEFAULT_BLUE_CONFIG, indent=2))
 
     # Validate with Pydantic model — catches typos and bad values at startup

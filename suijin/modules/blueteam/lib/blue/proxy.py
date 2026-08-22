@@ -16,7 +16,6 @@ Usage:
 from __future__ import annotations
 
 import json
-import os
 import socket
 import threading
 import time
@@ -136,16 +135,11 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
         # Proxy-level tarpit: check if this IP should be delayed
         try:
-            tarpit_file = str(_blue_tarpit_file())
-            if os.path.exists(tarpit_file):
-                with open(tarpit_file) as f:
-                    tarpit_state = json.loads(f.read())
-                client_ip = self.client_address[0]
-                if client_ip in tarpit_state:
-                    delay = tarpit_state[client_ip].get("delay", 5.0)
-                    since = tarpit_state[client_ip].get("since", 0)
-                    if time.time() - since < 1800:
-                        time.sleep(min(delay, 15.0))
+            from suijin.modules.blueteam.lib.blue.defense.tarpit import delay_for
+
+            wait = delay_for(self.client_address[0], path=_blue_tarpit_file())
+            if wait > 0:
+                time.sleep(wait)
         except Exception:
             pass
 

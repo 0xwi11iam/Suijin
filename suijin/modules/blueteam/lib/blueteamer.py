@@ -47,7 +47,9 @@ def _load_local_module(name):
 
 
 console = Console()
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parents[3]  # the suijin/ package dir —
+# lab apps live at <pkg>/lab, .env at <pkg>/.env (parents[1] pointed into
+# modules/blueteam where none of that exists)
 
 
 def main():

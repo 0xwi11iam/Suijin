@@ -126,14 +126,20 @@ class BlueWatchdog:
         if ip and ip not in self._tarpitted:
             self._tarpitted.add(ip)
             self.state.blue_tarpitted += 1
-        state = {}
-        if self.tarpit_file.exists():
-            try:
-                state = json.loads(self.tarpit_file.read_text())
-            except ValueError:
-                state = {}
-        state[ip] = {"delay": min(3.0 + score * 0.5, 15.0), "set_at": time.time()}
-        self.tarpit_file.write_text(json.dumps(state))
+        try:
+            from suijin.modules.blueteam.lib.blue.defense import tarpit as _tarpit_protocol
+
+            _tarpit_protocol.engage(ip, delay=min(3.0 + score * 0.5, 15.0), path=self.tarpit_file)
+        except Exception:  # noqa: BLE001 — never break a battle
+            # inline fallback, same protocol shape ({"delay", "since"})
+            state = {}
+            if self.tarpit_file.exists():
+                try:
+                    state = json.loads(self.tarpit_file.read_text())
+                except ValueError:
+                    state = {}
+            state[ip] = {"delay": min(3.0 + score * 0.5, 15.0), "since": time.time()}
+            self.tarpit_file.write_text(json.dumps(state))
 
     def is_blocked(self, ip: str) -> bool:
         return ip in self._blocked_ips

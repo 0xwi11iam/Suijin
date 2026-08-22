@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class ScorerConfig(BaseModel):
+    signal_weights: dict[str, int] = Field(default_factory=dict)
     sql_keywords_weight: int = Field(default=4, ge=0, le=10)
     xss_pattern_weight: int = Field(default=3, ge=0, le=10)
     path_traversal_weight: int = Field(default=3, ge=0, le=10)

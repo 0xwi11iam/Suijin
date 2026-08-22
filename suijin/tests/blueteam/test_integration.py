@@ -134,12 +134,20 @@ class TestBlueTeamPipeline:
         assert r4["status"] == "ok"
 
     def test_tarpit_uses_structured_errors(self):
-        """Verify tarpit returns ok()/err() results."""
-        from suijin.modules.blueteam.lib.blue.defense.tarpit import Tarpit
+        """Tarpit file protocol: engage/delay_for round-trip on a tmp file."""
+        import json
+        import tempfile
+        from pathlib import Path
 
-        t = Tarpit()
-        result = t.engage("10.0.0.1", delay=0.1)
-        assert result["status"] == "ok"
+        from suijin.modules.blueteam.lib.blue.defense import tarpit
+
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "tarpit.json"
+            tarpit.engage("10.0.0.1", delay=0.1, path=f)
+            state = json.loads(f.read_text())
+            assert "since" in state["10.0.0.1"]  # the key every reader honors
+            assert tarpit.delay_for("10.0.0.1", path=f) == 0.1
+            assert tarpit.delay_for("10.0.0.2", path=f) == 0.0  # other IP untouched
 
     def test_proxy_importable(self):
         """Verify proxy server is importable and configurable."""

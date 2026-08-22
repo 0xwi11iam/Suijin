@@ -15,10 +15,8 @@ and the action is recorded in the shared knowledge graph.
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import re
-import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -128,6 +126,18 @@ def _detect_obvious_attack(request: dict) -> dict:
         if re.search(pattern, scan_text):
             score = min(10, score + weight)
             patterns_found.append((name, weight))
+
+    # Operator-authored detector rules (suijin/detector_rules.json) — the
+    # file existing IS the opt-in; absent file changes nothing.
+    try:
+        from suijin.modules.ops.lib.governance import load_rules, match_rules
+
+        if load_rules():
+            for rtype, weight in match_rules(request):
+                score = min(10, score + weight)
+                patterns_found.append((f"rule:{rtype}", weight))
+    except Exception:  # noqa: BLE001 — rules must never break the fast path
+        pass
 
     return {"score": score, "patterns": patterns_found}
 
@@ -475,14 +485,11 @@ class LiveFeed:
     def _apply_tarpit(self, ip: str, score: int, patterns: list):
         """Apply tarpit — write state file Flask checks on each request."""
         try:
-            state = {}
-            if os.path.exists(self.TARPIT_FILE):
-                with open(self.TARPIT_FILE) as f:
-                    state = json.loads(f.read())
-            state[ip] = {"delay": min(8.0, 1.0 + score * 0.8), "since": time.time(), "patterns": patterns}
-            with open(self.TARPIT_FILE, "w") as f:
-                json.dump(state, f)
-            console.print(f"  [yellow]TARPIT:[/yellow] {ip} — {state[ip]['delay']:.1f}s delay per request")
+            from suijin.modules.blueteam.lib.blue.defense import tarpit as _tarpit_protocol
+
+            _tarpit_protocol.engage(ip, delay=min(8.0, 1.0 + score * 0.8), path=self.TARPIT_FILE, patterns=patterns)
+            delay = _tarpit_protocol.delay_for(ip, path=self.TARPIT_FILE)
+            console.print(f"  [yellow]TARPIT:[/yellow] {ip} — {delay:.1f}s delay per request")
         except Exception as e:
             console.print(f"  [red]TARPIT FAILED:[/red] {e}")
 
