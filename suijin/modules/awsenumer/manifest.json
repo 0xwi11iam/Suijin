@@ -1,14 +1,37 @@
 {
   "name": "Awsenumer",
   "version": "1.0",
-  "description": "AWS identity + high-privilege enumeration via aws CLI (authorized creds only).",
+  "description": "AWS enumeration: identity, S3 buckets (+public-read check), IAM roles/users, EC2 instances, Secrets Manager names, Lambda functions. Requires aws CLI with valid credentials.",
   "tools": {
     "aws_enum": {
-      "description": "AWS identity + high-privilege enumeration via aws CLI (authorized creds only).",
+      "description": "Full AWS enumeration (identity, S3, IAM, EC2, Secrets, Lambda).",
       "parameters": {
-        "profile": "AWS profile (default default)",
-        "region": "Region (default us-east-1)"
+        "full": "true for full scan, false for identity+S3 only"
       }
+    },
+    "aws_identity": {
+      "description": "Current caller identity (account, ARN).",
+      "parameters": {}
+    },
+    "aws_s3": {
+      "description": "List S3 buckets and check public-read ACLs.",
+      "parameters": {}
+    },
+    "aws_iam": {
+      "description": "List IAM roles and users.",
+      "parameters": {}
+    },
+    "aws_ec2": {
+      "description": "List EC2 instances.",
+      "parameters": {}
+    },
+    "aws_secrets": {
+      "description": "List Secrets Manager names (values NOT read).",
+      "parameters": {}
+    },
+    "aws_lambda": {
+      "description": "List Lambda functions.",
+      "parameters": {}
     }
   },
   "dependencies": [
