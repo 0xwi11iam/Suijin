@@ -206,7 +206,7 @@ class TestVulnGatedPacks:
     def test_binary_tool_reports_missing(self):
         m = load_pack("awsenumer")
         with mock.patch("subprocess.run", side_effect=FileNotFoundError()):
-            out = m.aws_enum(profile="default", region="us-east-1")
+            out = m.aws_identity()
             assert "not installed" in out
 
 

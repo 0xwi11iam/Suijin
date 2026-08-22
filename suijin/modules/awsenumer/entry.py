@@ -59,7 +59,7 @@ class PackModule(Module):
             ctx.register_tool(
                 tool_name,
                 _bridge,
-                description="AWS identity + high-privilege enumeration via aws CLI (authorized creds only).",
+                description="AWS enumeration: identity, S3 buckets (+public-read check), IAM roles/users, EC2 instances, Secrets Manager names, Lambda functions. Requires aws CLI with valid credentials.",
                 owner="awsenumer",
                 params=params,
             )
