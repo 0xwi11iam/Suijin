@@ -12,7 +12,7 @@
 </p>
 
 Suijin is a dual-mode autonomous security platform: a **Red Team** agent that
-chains reconnaissance → exploitation → reporting over a LangGraph state machine,
+chains reconnaissance -> exploitation -> reporting over a LangGraph state machine,
 and a **Blue Team** agent that monitors live HTTP traffic, detects attacks, and
 responds with deception, blocking, and source patching. Both modes share one
 toolkit, one knowledge base, and one knowledge graph.
@@ -256,14 +256,14 @@ precision/recall/F1 at the production threshold plus a full sweep:
 
 This harness found and fixed real detector gaps (body-only scanning missed
 all query-string attacks; XXE bodies and X-Admin headers were never
-scanned) — production recall on battle traffic went 0.14 → 0.57 at the
+scanned) — production recall on battle traffic went 0.14 -> 0.57 at the
 same threshold with precision held at 0.80.
 
 ### Battle mode (`suijin battle`)
 
 Purple-team in one command: boots the blue_target lab, clears blue state,
-then runs a scripted red campaign (recon → auth attacks → access attacks →
-injection chain → final sweep) while an embedded blue watchdog tails the
+then runs a scripted red campaign (recon -> auth attacks -> access attacks ->
+injection chain -> final sweep) while an embedded blue watchdog tails the
 live traffic log, scores every request with the production scorer, and
 deploys real defenses — tarpits the lab actually enforces (measurable
 latency), network blocks that deny subsequent red requests. Live Rich
@@ -280,10 +280,10 @@ New agent tools, all offline:
 |:-----|:-------------|
 | `kb_read` | Full untruncated KB documents (the FTS copy is capped); substring paths OK |
 | `target_dossier` | Per-target intel: blocked patterns, failed techniques, history — consult before re-attacking |
-| `mutate_wordlist` | Seed words → leet/years/suffixes wordlist (cap 50k) into `suijin_agent/wordlists/` |
+| `mutate_wordlist` | Seed words -> leet/years/suffixes wordlist (cap 50k) into `suijin_agent/wordlists/` |
 | `cewl_words` | Harvest a wordlist from a target page's visible words |
 
-`suggest_exploit` now fuzzy-matches GTFOBins bins (`finnd` → `find`), and
+`suggest_exploit` now fuzzy-matches GTFOBins bins (`finnd` -> `find`), and
 `recon_chain` automatically appends offline exploit leads for fingerprinted
 services. `search_cve` falls back to the local KEV mirror when NVD is
 unreachable. Provider failover: set `"fallback_providers": ["deepseek"]`
@@ -309,7 +309,7 @@ in config — hard failures roll to the next provider.
 
 `suijin providers` (live provider probe), `suijin module init|validate`
 (module SDK), `suijin skills history|diff|rollback` (every agent
-self-edit is snapshotted), `suijin labs run` (boot + probe every lab →
+self-edit is snapshotted), `suijin labs run` (boot + probe every lab ->
 capability matrix), `suijin watch` (live-scored traffic tail),
 `suijin timeline` (unified artifact history), `suijin clean` (dry-run
 first workspace cleaner), `suijin notify` (file/command/macOS channels).
@@ -338,7 +338,7 @@ audit trail and `.notes/`, and finishes with a report in
 
 ```bash
 # Terminal 1: Blue Team starts and watches the built-in lab
-python3 suijin/main.py   # choose [2] Blue Team → 2 (built-in lab :5906)
+python3 suijin/main.py   # choose [2] Blue Team -> 2 (built-in lab :5906)
 
 # Terminal 2: attack it once the baseline locks (after 25 requests)
 python3 suijin/lab/blue_target/attack_simulator.py
@@ -427,7 +427,7 @@ accepts only `coding`, `paas`, or a full custom base URL.
 
 Z.ai serves **two separate chat-completions endpoints** that accept the same
 `ZAI_API_KEY` but bill differently. Pick with `zai_endpoint` in
-`suijin/config.json` (Settings TUI → provider `zai` → `zai_endpoint`, or
+`suijin/config.json` (Settings TUI -> provider `zai` -> `zai_endpoint`, or
 `suijin config validate` catches typos):
 
 | `zai_endpoint` | Base URL | Billing |
@@ -468,7 +468,7 @@ suijin pull kb --force      # ignore cached tarballs
 | **Honest status** | Only sources that actually indexed docs are counted; a source that downloads but matches 0 files is a **failure** with a pattern hint, never a silent gap |
 | **Resilient pulls** | 3 download attempts per ref with backoff, stale `.part` files discarded (never resumed), progress logging every 50 MB, 600 s timeout |
 
-The agent's attack rhythm is KB-first: *fingerprint → search_kb → search_cve →
+The agent's attack rhythm is KB-first: *fingerprint -> search_kb -> search_cve ->
 attack*. One dead source never kills a pull — failures are skipped, reported,
 and retryable with `--sources <name>`. `suijin doctor` shows per-source doc
 counts and a STALE warning when the build is older than 30 days.
@@ -476,14 +476,14 @@ counts and a STALE warning when the build is older than 30 days.
 ### Agent toolkit built on the KB
 
 Beyond `search_kb`, the agent gets seven offline tools (all work without any
-API key; the four marked ★ need the KB built):
+API key; the four marked  need the KB built):
 
 | Tool | What it does |
 |:-----|:-------------|
-| ★ `suggest_exploit` | Fingerprinted service → exact GTFOBins privesc page + HackTricks + PayloadsAllTheThings leads, offline |
-| ★ `find_wordlist` | Keyword → matching SecLists wordlists, **materialized** into `suijin_agent/wordlists/` ready for `ffuf -w` |
-| ★ `extract_payloads` | Pulls runnable code blocks from KB docs into `suijin_agent/payloads/` |
-| ★ `kb_stats` | Per-source inventory, build age, failed sources |
+|  `suggest_exploit` | Fingerprinted service -> exact GTFOBins privesc page + HackTricks + PayloadsAllTheThings leads, offline |
+|  `find_wordlist` | Keyword -> matching SecLists wordlists, **materialized** into `suijin_agent/wordlists/` ready for `ffuf -w` |
+|  `extract_payloads` | Pulls runnable code blocks from KB docs into `suijin_agent/payloads/` |
+|  `kb_stats` | Per-source inventory, build age, failed sources |
 | `wordlist_tool` | Merge / dedupe / length-filter wordlists |
 | `mine_failures` | Clusters `failure_db.json` into technique/reason patterns to stop repeating |
 | `anonymize_report` | Scrubs IPs/emails/tokens/JWTs/keys from a report before sharing (localhost + `FLAG{}` preserved) |
@@ -571,7 +571,7 @@ Dual-mode summary:
 
 ### Pipeline
 
-`recon → vuln discovery → exploit → escalate → flag → report`, driven by the
+`recon -> vuln discovery -> exploit -> escalate -> flag -> report`, driven by the
 think node (ReAct) over a LangGraph state machine. Every step's tool call and
 raw output is persisted to the audit trail.
 
@@ -586,7 +586,7 @@ time, the run never stops:
 | `/note <text>` | Write an engagement note immediately |
 | `/kb <query>` | Quick knowledge-base search (top 3) |
 | `/cost` | Token + spend tally so far |
-| `/approvals` | HITL queue → `/approve <id>` / `/deny <id>` decide mid-run |
+| `/approvals` | HITL queue -> `/approve <id>` / `/deny <id>` decide mid-run |
 | `/scope` | Current target scopes |
 | `/audit` / `/sessions` | Audit summary / saved sessions |
 | `/report` | Generate + save the report without stopping |
@@ -646,7 +646,7 @@ LLM calls, zero API cost.
 | Tier | Trigger | AI Cost | Response |
 |:-----|:--------|:--------|:---------|
 | **NORMAL** | Matches known-safe baseline | $0.00 | Logged for audit only |
-| **ANOMALOUS** | Deviates from baseline, no attack pattern | ~$0.001 | AI classifies → baseline or INVESTIGATED |
+| **ANOMALOUS** | Deviates from baseline, no attack pattern | ~$0.001 | AI classifies -> baseline or INVESTIGATED |
 | **INVESTIGATED** | Attack pattern detected or AI flagged | ~$0.002 | AI decides: BLOCK / DECEIVE / PATCH / LOG / REDIRECT |
 
 **Baseline learning:** the first 25 requests build pattern profiles
@@ -705,15 +705,15 @@ decision:
 
 Commands are executed, code changes written to the target filesystem, and
 everything recorded in the knowledge graph. Escalation doctrine: novel
-attacker → DECEIVE (gather intelligence); repeat offender → BLOCK; critical
-vuln (RCE/data exfil) → BLOCK + PATCH; benign anomaly → LOG and baseline. If
+attacker -> DECEIVE (gather intelligence); repeat offender -> BLOCK; critical
+vuln (RCE/data exfil) -> BLOCK + PATCH; benign anomaly -> LOG and baseline. If
 the AI is unreachable (bad key, quota, network), pattern-based fallback
 defense still deploys — defense never depends on the AI being available.
 
 ### Deception arsenal
 
 - **Tarpit** — flagged IPs get real `time.sleep(delay)` per request via
-  `/tmp/blue_tarpit.json` (measured: 0.018 s normal → 5.8 s at score 6 →
+  `/tmp/blue_tarpit.json` (measured: 0.018 s normal -> 5.8 s at score 6 ->
   8.0 s at score 10). Expires after 30 minutes.
 - **Network blocking** — score 8+ triggers `pfctl -t blue_blocked -T add <IP>`
   (iptables fallback on Linux).
@@ -776,8 +776,8 @@ ports and launch commands.
 | Health/Debug | `/health`, `/debug/state` | Info disclosure |
 | Landing | `/` | Full endpoint enumeration |
 
-Example attack chain: register as admin (mass assignment) → admin JWT → IDOR
-user dump → UNION-inject search → path-traversal file read → RCE via
+Example attack chain: register as admin (mass assignment) -> admin JWT -> IDOR
+user dump -> UNION-inject search -> path-traversal file read -> RCE via
 `/api/execute`.
 
 ---
@@ -801,7 +801,7 @@ python3 -m pytest suijin/tests/ -m "not ai" # skip live-API tests
 | `test_kb_v2_and_intel.py` | kb read (full docs, substring, ambiguity), kb diff staleness, fuzzy GTFOBins, KEV mirror + offline search_cve fallback, wordlist mutation + cewl |
 | `test_cli_v210.py` | CLI-level exit codes/output for all v2.10 verbs: kb, pull cve, creds, dossier, timeline, watch, clean, rules, policy, providers, module, notify |
 | `test_compliance.py` | Compliance mapping: known classes, specificity ordering, snake_case normalization, fallback, summaries, engagement loading, CLI verb |
-| `test_red_knowledge_graph.py` | The agent's persistent memory: constraint dedupe + confidence merging, payload-block checks, CVE/bypass queries, corrupt-JSON recovery, record_finding→check_knowledge roundtrip |
+| `test_red_knowledge_graph.py` | The agent's persistent memory: constraint dedupe + confidence merging, payload-block checks, CVE/bypass queries, corrupt-JSON recovery, record_finding->check_knowledge roundtrip |
 | `test_infra_and_defense.py` | Output offloading (thresholds, previews), firewall (validate-before-exec, rule ops, DROP filtering), traffic-log tailing (append/rotation), msf availability probing |
 | `test_http_session_tools.py` | Session state (cookies/CSRF/auth), rate-limit tracking (429, Retry-After, domain isolation), UA rotation, http_request with mocked transport |
 | `test_import_graph.py` | Import-graph guard: every `suijin.*` import resolves to a real file, entry points importable, pruned packages stay pruned |
@@ -813,7 +813,7 @@ python3 -m pytest suijin/tests/ -m "not ai" # skip live-API tests
 | `test_dispatch.py` | Tool routing, guardrails, file ops, CVSS/KEV parsing, jobs |
 | `test_state_helpers.py` | State models, parsing, productivity, guardrails, provider routing |
 | `test_blue_team.py` | AI engine, feed, scorer, deception, firewall, SOC, tarpit |
-| `test_e2e_blue.py` | Live-lab integration: real SQLi → detection → tarpit delay |
+| `test_e2e_blue.py` | Live-lab integration: real SQLi -> detection -> tarpit delay |
 | `test_graph.py`, `test_integration.py`, `test_core.py`, `test_tools.py`, `test_agent_helpers.py`, `test_ai_calls.py` | State machine, pipelines, guardrails, workspace FS, config loading |
 
 **CI:** GitHub Actions matrix (Python 3.10/3.11/3.12) — pytest + coverage,
@@ -881,7 +881,7 @@ bundled apps + installable community software.
 | **Core tier** | Cannot be disabled (boot aborts without them): `platform` (workspace/config/runtime), `tools` (registry + dispatch), `agent` (graph/nodes/memory), `console` (CLI/TUIs/UI/MCP — menus and verbs are hook-registered, so a disabled module's menu entries genuinely disappear) | `suijin/modules/` |
 | **Recommended tier** | Bundled, individually disableable: `providers`, `redteam`, `blueteam`, `knowledge`, `ops` + the 49 tool packs (converted, namespaced — shadowing a builtin requires an explicit `overrides` flag) | in-wheel |
 | **Installed tier** | Community modules in `~/.suijin/modules/`, discovered at every boot; deps reported with exact pip commands (`--with-deps` opt-in); broken modules quarantined — boot continues | `~/.suijin/modules/` |
-| **Module Manager** | Textual TUI (`suijin module`): tiered list, per-module detail (deps ✓/✗, tools, permissions, last boot), enable/disable, install/uninstall, boot report. Quiet boot: silent when healthy | Phase 4 |
+| **Module Manager** | Textual TUI (`suijin module`): tiered list, per-module detail (deps /, tools, permissions, last boot), enable/disable, install/uninstall, boot report. Quiet boot: silent when healthy | Phase 4 |
 
 Module shape: one folder, `plugin.json` (`id`, `version`, `tier`,
 `requires`, `provides`, `permissions`, `overrides`), an entry module
@@ -893,14 +893,14 @@ modules (agent/graph, agent/nodes…) resolve as one flat dependency graph.
 
 | Phase | Scope | Status |
 |:------|:------|:-------|
-| 0 | De-couple in place: god-import split, split-brain loader, import-time side effects, one job registry, services seam (inversions = 0), lazy mkdirs | ✅ **complete** |
-| 1 | Kernel — ALL 12 subsystems live (contracts, events, context, registry, controller, jobs, vfs, security, config, health, journal, errors), full-boot POST test, purity linter | ✅ **complete** |
-| 1.5 | Rust core (resolve_dag + check_paths) | ✅ **complete — then RETIRED in v4.1**: the pure implementation was byte-identical and faster to ship; kernel/native.py is the single core now |
-| 2 | Core tier onto kernel | ✅ **complete** |
-| 3 | Recommended tier + packs converted | ✅ **complete** (49 legacy packs vendored in v4.1; +35 new in v4.1.0, +39 in v4.3.0 — 123 total) |
-| 4 | Module Manager TUI + install system | ✅ **complete** |
-| 5 | Boundary linter blocking in CI · ARCHITECTURE.md (the OS manual) · packs self-contained (no seams) | ✅ **complete** |
-| 6 | Modularisation finish: clean break (shims deleted), everything-is-a-module, outputs consolidation, audit trail v2, skills/addons rungs, 4 install paths | ✅ **complete** (v4.1–v4.3) |
+| 0 | De-couple in place: god-import split, split-brain loader, import-time side effects, one job registry, services seam (inversions = 0), lazy mkdirs | [done] **complete** |
+| 1 | Kernel — ALL 12 subsystems live (contracts, events, context, registry, controller, jobs, vfs, security, config, health, journal, errors), full-boot POST test, purity linter | [done] **complete** |
+| 1.5 | Rust core (resolve_dag + check_paths) | [done] **complete — then RETIRED in v4.1**: the pure implementation was byte-identical and faster to ship; kernel/native.py is the single core now |
+| 2 | Core tier onto kernel | [done] **complete** |
+| 3 | Recommended tier + packs converted | [done] **complete** (49 legacy packs vendored in v4.1; +35 new in v4.1.0, +39 in v4.3.0 — 123 total) |
+| 4 | Module Manager TUI + install system | [done] **complete** |
+| 5 | Boundary linter blocking in CI · ARCHITECTURE.md (the OS manual) · packs self-contained (no seams) | [done] **complete** |
+| 6 | Modularisation finish: clean break (shims deleted), everything-is-a-module, outputs consolidation, audit trail v2, skills/addons rungs, 4 install paths | [done] **complete** (v4.1–v4.3) |
 
 Every phase gated on: full suite green, ruff clean, behavior verified.
 The old import paths were removed with no shims in the v4.1 clean

@@ -1,6 +1,6 @@
 # GVM/OpenVAS
 
-> ⚠️ **EXTREMELY LONG-RUNNING** (10-60 min) — always use `"background": true`
+> [warn] **EXTREMELY LONG-RUNNING** (10-60 min) — always use `"background": true`
 
 170,000+ Network Vulnerability Tests via Greenbone Community Feed. Requires GVM installed and running.
 

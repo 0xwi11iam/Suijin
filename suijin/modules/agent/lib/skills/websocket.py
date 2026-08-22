@@ -8,7 +8,7 @@ WEBSOCKET_SKILL_PROMPT = """
 ### MANDATORY WORKFLOW
 
 #### STEP 1: DETECTION
-Find WebSocket connections: `ws://` or `wss://` in JavaScript, `Upgrade: websocket` in request headers, DevTools Network tab → WS filter.
+Find WebSocket connections: `ws://` or `wss://` in JavaScript, `Upgrade: websocket` in request headers, DevTools Network tab -> WS filter.
 
 #### STEP 2: CSWSH (Cross-Site WebSocket Hijacking)
 If WebSocket handshake doesn't validate Origin header:

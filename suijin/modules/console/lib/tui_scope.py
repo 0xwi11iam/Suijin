@@ -9,7 +9,7 @@ Edits suijin/policy.json interactively:
   - allow-unresolvable-hosts toggle (offline labs)
   - enforcement on/off (no policy file = nothing enforced)
 
-↑↓ move   a add include   x add exclude   d delete selected
+ move   a add include   x add exclude   d delete selected
 s subdomains   u unresolvable   e enforcement   q save   esc cancel
 """
 
@@ -124,7 +124,7 @@ def run(stdscr):
         stdscr.addstr(
             h - 3,
             2,
-            "↑↓ select   a include   x exclude   d delete   s subdomains   u unresolvable   e enforce   q save   esc cancel",
+            " select   a include   x exclude   d delete   s subdomains   u unresolvable   e enforce   q save   esc cancel",
             curses.A_DIM,
         )
         if status:

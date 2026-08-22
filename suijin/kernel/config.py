@@ -1,4 +1,4 @@
-"""Kernel layered config — kernel defaults → module defaults → user → env.
+"""Kernel layered config — kernel defaults -> module defaults -> user -> env.
 
 Defined ONCE here so configuration stops depending on import order.
 Layers are immutable after sealing; later layers shadow earlier ones.

@@ -1,8 +1,8 @@
 """Service seam — the proto-Context (Phase 0, item 5).
 
 Tool modules must never import suijin.core upward (the recon found 8 such
-inversions: battle/housekeeping → blue scorer, run_commands → red
-session_control, providers → red config_loader). Instead, core registers
+inversions: battle/housekeeping -> blue scorer, run_commands -> red
+session_control, providers -> red config_loader). Instead, core registers
 its capabilities here at runtime-init, and tools import ONLY this seam.
 
 This is deliberately tiny: in Phase 1 it becomes kernel Context.services.
@@ -10,7 +10,7 @@ Contract:
   - register(name, producer): producer is a ZERO-ARG callable invoked at
     get() time — registration never executes anything (no import side
     effects, no cycles)
-  - get(name) → value or None (missing services are the caller's problem
+  - get(name) -> value or None (missing services are the caller's problem
     to degrade gracefully)
   - has(name) / producer(name) for introspection and tests
 

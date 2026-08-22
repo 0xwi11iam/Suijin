@@ -1,6 +1,6 @@
 # SQLMap
 
-> ⚠️ **LONG-RUNNING** — Always use `"background": true`. SQL injection testing takes minutes per parameter.
+> [warn] **LONG-RUNNING** — Always use `"background": true`. SQL injection testing takes minutes per parameter.
 > `{"tool_name": "sqlmap_scan", "tool_args": {"url": "...", "flags": "--batch --random-agent", "background": true}}` (`sqlmap_scan`)
 
 Automated SQL injection detection and exploitation. Use after finding a parameter.

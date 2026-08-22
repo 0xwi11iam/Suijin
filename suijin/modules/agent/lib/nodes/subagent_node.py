@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 # ── Tunables (config keys: subagent_max_steps / subagent_timeout_s) ────────
 LLM_TIMEOUT = 30  # seconds per subagent LLM call (was 15 — too tight)
 TOOL_TIMEOUT = 60  # seconds per tool execution (was 30)
-MAX_SUBAGENT_STEPS = 12  # was 3 — a specialist needs recon→test→verify→report
+MAX_SUBAGENT_STEPS = 12  # was 3 — a specialist needs recon->test->verify->report
 SUBAGENT_TIMEOUT = 300  # per-subagent budget (was 60s for the WHOLE batch)
 MAX_TEAM_SIZE = 5
 
@@ -175,7 +175,7 @@ async def run_subagent(
     max_steps: int | None = None,
     budget_s: float | None = None,
 ) -> SubagentResult:
-    """Run one focused subagent: tight think→execute loop, tolerant parsing."""
+    """Run one focused subagent: tight think->execute loop, tolerant parsing."""
     from suijin.modules.platform.lib.helpers.parsing import try_parse_llm_decision
 
     subagent_id = uuid.uuid4().hex[:8]

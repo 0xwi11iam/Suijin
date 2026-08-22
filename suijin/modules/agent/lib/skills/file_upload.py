@@ -30,9 +30,9 @@ Look for:
 
 **Double extension:**
 ```
-shell.php.jpg    →  server may parse last extension (.jpg) but execute first (.php)
-shell.php%00.jpg  →  null byte truncation (older PHP)
-shell.asp;.jpg    →  IIS semicolon truncation
+shell.php.jpg    ->  server may parse last extension (.jpg) but execute first (.php)
+shell.php%00.jpg  ->  null byte truncation (older PHP)
+shell.asp;.jpg    ->  IIS semicolon truncation
 ```
 
 **Case manipulation:**
@@ -52,7 +52,7 @@ shell.pHp, shell.PhP5, shell.pHP, shell.phtml
 
 Change Content-Type header while uploading:
 ```
-Content-Type: image/jpeg   →  Content-Type: application/x-php
+Content-Type: image/jpeg   ->  Content-Type: application/x-php
 ```
 
 Or upload with valid magic bytes prepended:
@@ -68,7 +68,7 @@ open('shell.png.php','wb').write(png_header + payload)
 "
 ```
 
-#### STEP 4: SVG → XSS / SSRF
+#### STEP 4: SVG -> XSS / SSRF
 
 SVG files are XML — they can contain JavaScript:
 ```xml

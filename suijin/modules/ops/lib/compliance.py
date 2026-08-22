@@ -52,7 +52,7 @@ MAPPING: list[tuple[str, str, str, str, str]] = [
     ("credential", "CWE-798", "A07 Identification and Authentication", "T1552"),
     ("secret", "CWE-798", "A07 Identification and Authentication", "T1552"),
 ]
-_FALLBACK = ("CWE-693", "A05 Security Misconfiguration", "T1595")  # unmapped → generic
+_FALLBACK = ("CWE-693", "A05 Security Misconfiguration", "T1595")  # unmapped -> generic
 
 
 def classify_finding(finding_type: str, description: str = "") -> tuple[str, str, str]:

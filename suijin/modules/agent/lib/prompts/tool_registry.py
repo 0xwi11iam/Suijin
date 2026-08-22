@@ -30,7 +30,7 @@ TOOL_REGISTRY = {
             "- Dangerous commands (pip install, sudo, rm -rf /) trigger user confirmation.\n"
             "- DO NOT chain with && excessively — keep commands focused.\n"
             "- Output is truncated at 8000 chars. Use write_file to save full output if needed.\n"
-            "- ⚠️ LONG-RUNNING — for scans/brute-force, set '\"background\": true' in tool_args to run async."
+            "- [warn] LONG-RUNNING — for scans/brute-force, set '\"background\": true' in tool_args to run async."
         ),
     },
     # ===== HTTP =====
@@ -117,7 +117,7 @@ TOOL_REGISTRY = {
         "purpose": "Query NVD for CVEs by software name and version",
         "when_to_use": (
             "After fingerprinting a service with nmap or whatweb. Always search CVEs BEFORE "
-            "attempting exploitation — don't guess. Example: found Apache 2.4.49 → search_cve "
+            "attempting exploitation — don't guess. Example: found Apache 2.4.49 -> search_cve "
             "for path traversal CVE-2021-41773."
         ),
         "args_format": '"software": "apache httpd", "version": "2.4.49", "limit": 5',
@@ -205,7 +205,7 @@ TOOL_REGISTRY = {
         "purpose": "Improve your own hacking methodology by editing skill prompts",
         "when_to_use": "When you discover a better technique, codify it into the appropriate skill file.",
         "args_format": '"skill_name": "sql_injection", "new_content": "improved workflow"',
-        "description": "**edit_skill** — overwrites an attack skill. Self-improvement: learn→codify→improve.",
+        "description": "**edit_skill** — overwrites an attack skill. Self-improvement: learn->codify->improve.",
     },
     "write_tool": {
         "purpose": "Create new Python tools to extend your capabilities",
@@ -364,19 +364,19 @@ def build_tool_catalog_prompt(phase: str = "informational") -> str:
             continue
         lines.append(f"### {tool_name}")
         if info.get("long_running"):
-            lines.append('⚠️  **LONG-RUNNING TOOL** — ALWAYS use `"background": true` in args!')
+            lines.append('[warn]  **LONG-RUNNING TOOL** — ALWAYS use `"background": true` in args!')
         lines.append(f"**Purpose**: {info['purpose']}")
         lines.append(f"**When to use**: {info['when_to_use']}")
         lines.append(f"**Args**: `{info['args_format']}`")
         lines.append("")
 
-    lines.append("## ⚠️ BACKGROUND EXECUTION (CRITICAL)")
+    lines.append("## [warn] BACKGROUND EXECUTION (CRITICAL)")
     lines.append("Some tools take 30s–10min to complete. You MUST run them as background jobs")
     lines.append('to avoid blocking the agent loop. Set `"background": true` in tool_args.')
     lines.append("")
     lines.append("**Tools that ALWAYS need background**:")
     lines.append(
-        '- `nmap_scan` with -p- or --script flags → `{"target": "...", "flags": "-sV -sC -p-", "background": true}`'
+        '- `nmap_scan` with -p- or --script flags -> `{"target": "...", "flags": "-sV -sC -p-", "background": true}`'
     )
     lines.append("- `gobuster_dir` / `gobuster_dns` with large wordlists")
     lines.append("- `ffuf_fuzz` with large wordlists")

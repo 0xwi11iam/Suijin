@@ -1,6 +1,6 @@
 # Auto-Fix Pipeline
 
-CypherFix-style automated remediation pipeline: triage → fix → verify.
+CypherFix-style automated remediation pipeline: triage -> fix -> verify.
 
 ```json
 {"tool": "autofix_triage", "args": {"findings_json": "[{\"type\":\"sqli\",\"severity\":\"critical\",\"endpoint\":\"/login\"}]"}}

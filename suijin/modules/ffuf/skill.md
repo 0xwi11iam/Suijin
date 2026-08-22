@@ -1,6 +1,6 @@
 # FFUF
 
-> ⚠️ **LONG-RUNNING** — Always use `"background": true`. Fuzzing with large wordlists takes minutes.
+> [warn] **LONG-RUNNING** — Always use `"background": true`. Fuzzing with large wordlists takes minutes.
 > `{"tool_name": "ffuf_fuzz", "tool_args": {"url": "...", "wordlist": "...", "background": true}}` (`ffuf_fuzz`)
 
 Fast web fuzzer. For parameters, dirs, vhosts, headers.

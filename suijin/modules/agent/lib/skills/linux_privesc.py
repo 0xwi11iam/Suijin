@@ -31,7 +31,7 @@ Cross-reference with GTFOBins for exploitable SUID binaries.
 
 #### STEP 4: KERNEL EXPLOITS
 ```bash
-uname -r  →  2.6.32 → dirtycow, 4.4.0 → overlayfs, 5.8+ → seccomp
+uname -r  ->  2.6.32 -> dirtycow, 4.4.0 -> overlayfs, 5.8+ -> seccomp
 cat /proc/version
 ```
 Search exploit-db: `searchsploit linux kernel VERSION`

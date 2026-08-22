@@ -34,7 +34,7 @@ Then test if the target makes outbound requests:
 2. `http://YOUR_IP:8888/{{endpoint}}` — check what path is requested
 3. `http://[YOUR_IP]:8888/test` — IPv6 literal (bypass some filters)
 
-If you receive a connection → SSRF CONFIRMED.
+If you receive a connection -> SSRF CONFIRMED.
 
 #### STEP 2: INTERNAL SCANNING
 
@@ -51,10 +51,10 @@ Once confirmed, probe internal services:
 10. `http://169.254.169.254/latest/meta-data/` — AWS metadata (cloud)
 
 **Port scan via SSRF**: Test common internal ports and note response differences:
-- Timeout → port closed
-- Connection refused → port closed (service not listening)
-- HTTP response → port open with web service
-- Non-HTTP response → port open with other service
+- Timeout -> port closed
+- Connection refused -> port closed (service not listening)
+- HTTP response -> port open with web service
+- Non-HTTP response -> port open with other service
 
 #### STEP 3: CLOUD METADATA
 

@@ -205,7 +205,7 @@ class TestZaiPricing:
             assert providers._price_for(m) is not None, m
 
     def test_unknown_model_unpriced(self):
-        # Not in MODEL_PRICING and no substring match → _record_usage falls
+        # Not in MODEL_PRICING and no substring match -> _record_usage falls
         # back to DEFAULT_RATE and flags USAGE["priced"] = False.
         assert providers._price_for("totally-unknown-model") is None
 

@@ -1,5 +1,5 @@
-"""Subagent system end-to-end — deploy → analyze (AI + fallback) → route
-traffic → aggregate. The AI provider is mocked; the fallback path runs for
+"""Subagent system end-to-end — deploy -> analyze (AI + fallback) -> route
+traffic -> aggregate. The AI provider is mocked; the fallback path runs for
 real (that's the no-API-key experience)."""
 
 import asyncio

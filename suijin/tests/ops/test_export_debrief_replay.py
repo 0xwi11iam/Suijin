@@ -186,8 +186,8 @@ class TestReplay:
         trail = rp.list_replays(ws["ws"] / "outputs" / "audit_trails")[0]
         md = rp.render_markdown(trail)
         assert "# Replay — testlab" in md
-        assert "## Step 1 — recon [✔]" in md
-        assert "## Step 3 — exploit [✘]" in md
+        assert "## Step 1 — recon [[ok]]" in md
+        assert "## Step 3 — exploit [[no]]" in md
         assert "nmap_scan" in md
         assert "FLAG{x}" in md
 

@@ -1,6 +1,6 @@
 # Hydra
 
-> ⚠️ **LONG-RUNNING** — Always use `"background": true`. Brute-force attacks take minutes to hours.
+> [warn] **LONG-RUNNING** — Always use `"background": true`. Brute-force attacks take minutes to hours.
 > `{"tool_name": "hydra_brute", "tool_args": {"target": "...", "service": "...", "options": "...", "background": true}}` (`hydra_brute`)
 
 Online password brute-forcing for SSH, HTTP, FTP, and many other services.

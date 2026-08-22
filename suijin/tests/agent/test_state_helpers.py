@@ -224,8 +224,8 @@ class TestFormattingHelpers:
         result = format_todo_list(items)
         assert "scan ports" in result
         assert "exploit sqli" in result
-        assert "✅" in result
-        assert "🔄" in result
+        assert "[done]" in result
+        assert "" in result
 
     def test_format_chain_context_empty(self):
         from suijin.modules.agent.lib.state import format_chain_context

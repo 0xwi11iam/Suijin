@@ -12,14 +12,14 @@ Look for: `?redirect=`, `?url=`, `?next=`, `?return=`, `?goto=`, `?target=`, `?c
 
 #### STEP 2: BYPASS TECHNIQUES
 ```
-//evil.com          → protocol-relative bypass
-\evil.com           → backslash bypass (some parsers)
-https:evil.com      → colon without slashes
-https%3A%2F%2Fevil.com → URL-encoded
-https://target.com@evil.com → userinfo confusion
-https://target.com.evil.com → subdomain-like bypass
-https://target.com%40evil.com → URL parser confusion
-javascript:alert(1) → XSS chain (if redirect uses javascript:)
+//evil.com          -> protocol-relative bypass
+\evil.com           -> backslash bypass (some parsers)
+https:evil.com      -> colon without slashes
+https%3A%2F%2Fevil.com -> URL-encoded
+https://target.com@evil.com -> userinfo confusion
+https://target.com.evil.com -> subdomain-like bypass
+https://target.com%40evil.com -> URL parser confusion
+javascript:alert(1) -> XSS chain (if redirect uses javascript:)
 ```
 
 #### STEP 3: REFERER-BASED REDIRECT

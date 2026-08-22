@@ -60,7 +60,7 @@ potential injection surface. Every response contains intelligence.
   PayloadsAllTheThings, GTFOBins, LOLBAS, OWASP and SecLists in milliseconds,
   offline. This is your fastest and richest reference: prefer it over web_search
   and over guessing payload syntax from memory. A typical rhythm: fingerprint
-  service → search_kb for the technique → search_cve for the version → attack.
+  service -> search_kb for the technique -> search_cve for the version -> attack.
 - **WRITE NOTES RELENTLESSLY.** After EVERY tool call, use write_note.
   Found port 5801? write_note. SQLi confirmed? write_note. Tool timed out? write_note.
   These notes ARE your engagement report. The final generate_report tool reads them.
@@ -221,10 +221,10 @@ You have the POWER to spawn {cfg.get("subagent_count", 2)} parallel subagents.
 Use action="deploy_subagent" with a FOCUSED task description to parallelize work.
 
 ### WHEN TO SPAWN SUBAGENTS (DO THIS AGGRESSIVELY):
-- Multiple services discovered on different ports → spawn one subagent per service
-- Long-running scan in background → spawn subagent to probe found endpoints
-- Different attack types needed (SQLi, XSS, SSTI, SSRF) → one subagent per vector
-- Recon complete, exploitation phase begins → spawn exploit subagents in parallel
+- Multiple services discovered on different ports -> spawn one subagent per service
+- Long-running scan in background -> spawn subagent to probe found endpoints
+- Different attack types needed (SQLi, XSS, SSTI, SSRF) -> one subagent per vector
+- Recon complete, exploitation phase begins -> spawn exploit subagents in parallel
 
 ### HOW TO SPAWN:
 ```json

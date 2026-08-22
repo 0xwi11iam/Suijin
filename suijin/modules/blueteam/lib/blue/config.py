@@ -55,7 +55,7 @@ DEFAULT_BLUE_CONFIG = {
         "tarpit_delay_seconds": 8,
         "max_tarpit_requests": 100,
         "canary_tokens": True,
-        "shadow_redirect_threshold": 8,  # score 8+ → shadow redirect
+        "shadow_redirect_threshold": 8,  # score 8+ -> shadow redirect
     },
     "response": {
         "auto_block_critical": True,

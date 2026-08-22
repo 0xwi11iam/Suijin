@@ -77,7 +77,7 @@ class RedRecorder:
 
 def _mock_generate(port: int):
     """Scripted LLM: every response is a REAL tool call into the lab.
-    Exercises the full decision→dispatch→lab→observe pipeline offline."""
+    Exercises the full decision->dispatch->lab->observe pipeline offline."""
     script = [
         {
             "action": "use_tool",

@@ -40,7 +40,7 @@ Test accessing other users' resources:
 3. Check if responses contain other users' data
 4. Try common admin IDs: 1, 0, 100, 1000, admin
 
-If you can see another user's data → IDOR CONFIRMED.
+If you can see another user's data -> IDOR CONFIRMED.
 
 #### STEP 3: VERTICAL PRIVILEGE ESCALATION
 
@@ -69,10 +69,10 @@ Test login/auth mechanisms:
    - Weak secret: try `secret`, `password`, `key` as HMAC secret
    - Change `role` claim from `user` to `admin`
 5. **Path normalization bypass**:
-   - `/admin` → `/admin/` (trailing slash)
-   - `/admin` → `/./admin/` (dot segment)
-   - `/admin` → `/admin%2f` (encoded slash)
-   - `/admin` → `/admin..;/` (semicolon trick)
+   - `/admin` -> `/admin/` (trailing slash)
+   - `/admin` -> `/./admin/` (dot segment)
+   - `/admin` -> `/admin%2f` (encoded slash)
+   - `/admin` -> `/admin..;/` (semicolon trick)
 6. **Header-based bypass**:
    - `X-Original-URL: /admin`
    - `X-Rewrite-URL: /admin`

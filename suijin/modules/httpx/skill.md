@@ -1,6 +1,6 @@
 # HTTPX
 
-> ⚠️ **LONG-RUNNING** with many URLs — use `"background": true`
+> [warn] **LONG-RUNNING** with many URLs — use `"background": true`
 
 HTTP probing and fingerprinting. Returns status code, title, tech stack, server, content-length, redirect location.
 

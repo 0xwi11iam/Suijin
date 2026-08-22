@@ -17,7 +17,7 @@ Check for frame-busting headers: `X-Frame-Options: DENY` or `SAMEORIGIN`, `Conte
 <button style="position:absolute; top:200px; left:200px;">Click for Prize!</button>
 </body></html>
 ```
-→ Victim clicks "Prize" but actually clicks "Delete Account" behind the invisible iframe.
+-> Victim clicks "Prize" but actually clicks "Delete Account" behind the invisible iframe.
 
 #### STEP 3: FRAME-BUSTING BYPASS
 - `sandbox="allow-forms allow-scripts"` attribute on iframe
@@ -28,7 +28,7 @@ Check for frame-busting headers: `X-Frame-Options: DENY` or `SAMEORIGIN`, `Conte
 ```css
 #target { cursor: url('fake-cursor.png'), auto; }
 ```
-→ Display fake cursor, real cursor clicks something else.
+-> Display fake cursor, real cursor clicks something else.
 
 #### ANTI-PATTERNS: Check headers first. If X-Frame-Options is missing, clickjacking is viable immediately.
 """

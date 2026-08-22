@@ -48,7 +48,7 @@ Built-in. No installation needed. Notes go to `.notes/{engagement}_notes.md`.
 
 ### Log completion
 ```json
-{"tool": "write_note", "args": {"content": "OBJECTIVE COMPLETE\nFull chain: nmap → search_cve → msf_run → shell → cat /flag.txt\nFlag: flag{pwn3d}", "success": true, "category": "complete", "engagement": "client-name"}}
+{"tool": "write_note", "args": {"content": "OBJECTIVE COMPLETE\nFull chain: nmap -> search_cve -> msf_run -> shell -> cat /flag.txt\nFlag: flag{pwn3d}", "success": true, "category": "complete", "engagement": "client-name"}}
 ```
 
 ## Notes File Format
@@ -59,7 +59,7 @@ Started: 2026-06-25 10:54:21
 ---
 
 ---
-### 2026-06-25 10:54:21 — ✅ SUCCESS
+### 2026-06-25 10:54:21 — [done] SUCCESS
 **Category:** recon
 
 nmap scan of 10.0.0.1...

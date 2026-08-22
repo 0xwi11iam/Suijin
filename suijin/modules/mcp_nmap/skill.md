@@ -1,6 +1,6 @@
 # MCP Nmap
 
-> ⚠️ **LONG-RUNNING** — use `"background": true`
+> [warn] **LONG-RUNNING** — use `"background": true`
 
 Structured nmap with XML output parsed into JSON. Returns IP, ports, services, versions.
 

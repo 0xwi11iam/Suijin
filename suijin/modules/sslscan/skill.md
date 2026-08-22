@@ -1,6 +1,6 @@
 # SSLScan
 
-> ⚠️ **LONG-RUNNING** — Use `"background": true` for full cipher enumeration.
+> [warn] **LONG-RUNNING** — Use `"background": true` for full cipher enumeration.
 > `{"tool_name": "sslscan_check", "tool_args": {"target": "...", "background": true}}` (`sslscan_check`)
 
 SSL/TLS cipher assessment. Identifies weak ciphers, outdated protocols, cert issues.

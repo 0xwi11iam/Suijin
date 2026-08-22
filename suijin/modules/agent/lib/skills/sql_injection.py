@@ -86,7 +86,7 @@ Or manual UNION-based extraction:
 
 After extracting credentials:
 1. Try them on /login, /admin
-2. Check if password hashes are crackable (MD5, SHA1 without salt → john/hashcat)
+2. Check if password hashes are crackable (MD5, SHA1 without salt -> john/hashcat)
 3. Look for admin flags, API keys, other sensitive data in the database
 4. Record findings with `record_finding` and `write_note`
 

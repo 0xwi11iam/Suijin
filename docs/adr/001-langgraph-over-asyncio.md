@@ -6,7 +6,7 @@
 
 ## Context
 
-Suijin Red Team needs to orchestrate a multi-step attack pipeline: initialize context → think (LLM reasoning) → execute tool → generate response → loop. Each step may take seconds to minutes (LLM calls, network scans, exploitation attempts). The pipeline must:
+Suijin Red Team needs to orchestrate a multi-step attack pipeline: initialize context -> think (LLM reasoning) -> execute tool -> generate response -> loop. Each step may take seconds to minutes (LLM calls, network scans, exploitation attempts). The pipeline must:
 
 1. **Persist state** across iterations (findings, flags, audit trail, tool outputs, cost tracking)
 2. **Handle interruptions** gracefully (Ctrl+C pause, user guidance injection)
@@ -28,7 +28,7 @@ Suijin Red Team needs to orchestrate a multi-step attack pipeline: initialize co
 
 ### Option B: LangGraph State Machine
 
-- Declarative graph definition: `initialize → think → execute_tool → generate_response`
+- Declarative graph definition: `initialize -> think -> execute_tool -> generate_response`
 - Typed state (`AgentState`) with Pydantic validation
 - Built-in checkpointing, state snapshots, and replay
 - Native subgraph support for parallel execution
@@ -44,7 +44,7 @@ Suijin Red Team needs to orchestrate a multi-step attack pipeline: initialize co
 The deciding factors:
 1. **Checkpointing is free** — LangGraph snapshots state at every node transition without any manual serialization code
 2. **Subgraph isolation** — one subagent crash doesn't kill the parent graph; LangGraph handles error boundaries natively
-3. **Interrupt/resume** — `interrupt()` primitive maps perfectly to the Ctrl+C pause → guidance injection → resume flow
+3. **Interrupt/resume** — `interrupt()` primitive maps perfectly to the Ctrl+C pause -> guidance injection -> resume flow
 4. **Development velocity** — 4 graph nodes + 1 state class vs. hundreds of lines of custom event loop code
 5. **Observability** — LangGraph's built-in tracing makes debugging multi-step chains trivial compared to raw asyncio logs
 
@@ -59,7 +59,7 @@ The dependency footprint (~2MB) is negligible relative to the value of not build
 - Supervisor can inject guidance at any node without race conditions
 
 ### Negative
-- LangGraph API churn (v0.x → v1.x migration required effort)
+- LangGraph API churn (v0.x -> v1.x migration required effort)
 - Opaque error messages when graph compilation fails
 - Harder to reason about performance (graph traversal overhead vs. raw loop)
 - Lock-in to LangChain ecosystem (mitigated by thin abstraction layer in `state.py`)

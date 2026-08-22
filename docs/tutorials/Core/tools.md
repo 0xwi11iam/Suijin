@@ -1,6 +1,6 @@
 # Advanced Pentesting & Analytical Tool Methodology
 
-**⚠️ MANDATORY: Use these external CLI tools via `execute_terminal` for ALL scanning and brute-forcing. NEVER use raw `curl` loops or `http_request` when a dedicated tool exists. This is not optional — it dramatically improves speed, accuracy, and coverage. `http_request` is for manual payload testing only.**
+**[warn] MANDATORY: Use these external CLI tools via `execute_terminal` for ALL scanning and brute-forcing. NEVER use raw `curl` loops or `http_request` when a dedicated tool exists. This is not optional — it dramatically improves speed, accuracy, and coverage. `http_request` is for manual payload testing only.**
 
 This document outlines the standard operating procedures and terminal commands for advanced penetration testing, cloud auditing, and binary analysis tools. An autonomous agent can execute these via terminal commands to gather intelligence and audit systems.
 

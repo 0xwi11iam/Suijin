@@ -11,12 +11,12 @@ Built-in. No installation needed.
 ### read_file
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `file_path` | Yes | Path to read. Relative → `suijin_agent/{path}`. Absolute → anywhere on system |
+| `file_path` | Yes | Path to read. Relative -> `suijin_agent/{path}`. Absolute -> anywhere on system |
 
 ### write_file
 | Parameter | Required | Description |
 |-----------|----------|-------------|
-| `file_path` | Yes | Path to write. Relative → `suijin_agent/{path}`. Absolute → anywhere |
+| `file_path` | Yes | Path to write. Relative -> `suijin_agent/{path}`. Absolute -> anywhere |
 | `content` | Yes | String content to write. Overwrites existing file |
 
 ## Workflows

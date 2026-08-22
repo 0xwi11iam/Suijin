@@ -19,7 +19,7 @@ def test_provider_routing():
 
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
     if not api_key:
-        print("  ⏭️  DeepSeek: no DEEPSEEK_API_KEY set — skipped")
+        print("  ⏭  DeepSeek: no DEEPSEEK_API_KEY set — skipped")
         return
 
     start = time.time()
@@ -29,7 +29,7 @@ def test_provider_routing():
     assert result is not None, "generate() returned None"
     assert not result.startswith("Error:"), f"API error: {result[:200]}"
     assert len(result) > 0, "Empty response"
-    print(f"  ✅ DeepSeek: {len(result)} chars in {elapsed:.1f}s")
+    print(f"  [done] DeepSeek: {len(result)} chars in {elapsed:.1f}s")
 
 
 def test_deepseek_specific():
@@ -38,7 +38,7 @@ def test_deepseek_specific():
 
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
     if not api_key:
-        print("  ⏭️  DeepSeek direct: no key — skipped")
+        print("  ⏭  DeepSeek direct: no key — skipped")
         return
 
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -59,8 +59,8 @@ def test_deepseek_specific():
     assert len(content) > 0
     usage = data.get("usage", {})
     print(
-        f"  ✅ DeepSeek direct: '{content[:50]}' in {elapsed:.1f}s, "
-        f"tokens: {usage.get('prompt_tokens', 0)}→{usage.get('completion_tokens', 0)}"
+        f"  [done] DeepSeek direct: '{content[:50]}' in {elapsed:.1f}s, "
+        f"tokens: {usage.get('prompt_tokens', 0)}->{usage.get('completion_tokens', 0)}"
     )
 
 
@@ -68,7 +68,7 @@ def test_huggingface():
     """Test HuggingFace provider if configured."""
     token = os.environ.get("HF_TOKEN", "")
     if not token:
-        print("  ⏭️  HuggingFace: no HF_TOKEN — skipped")
+        print("  ⏭  HuggingFace: no HF_TOKEN — skipped")
         return
 
     from suijin.modules.providers.lib import generate
@@ -86,9 +86,9 @@ def test_huggingface():
     elapsed = time.time() - start
 
     if result.startswith("Error:"):
-        print(f"  ⚠️  HuggingFace: {result[:100]}")
+        print(f"  [warn]  HuggingFace: {result[:100]}")
     else:
-        print(f"  ✅ HuggingFace: {len(result)} chars in {elapsed:.1f}s")
+        print(f"  [done] HuggingFace: {len(result)} chars in {elapsed:.1f}s")
 
 
 def test_error_handling():
@@ -100,7 +100,7 @@ def test_error_handling():
     messages = [{"role": "user", "content": "test"}]
     result = generate(messages, config)
     assert "Unknown provider" in result or "Error" in result
-    print(f"  ✅ Unknown provider: '{result[:60]}'")
+    print(f"  [done] Unknown provider: '{result[:60]}'")
 
     # Missing API key — should error, not crash
     orig_key = os.environ.pop("DEEPSEEK_API_KEY", None)
@@ -108,7 +108,7 @@ def test_error_handling():
         config2 = {"provider": "deepseek", "temperature": 0}
         result2 = generate(messages, config2)
         assert "Error" in result2 or "API" in result2
-        print(f"  ✅ Missing key: '{result2[:60]}'")
+        print(f"  [done] Missing key: '{result2[:60]}'")
     finally:
         if orig_key:
             os.environ["DEEPSEEK_API_KEY"] = orig_key
@@ -124,7 +124,7 @@ def test_token_counting():
 
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
     if not api_key:
-        print("  ⏭️  Token counting: no key — skipped")
+        print("  ⏭  Token counting: no key — skipped")
         return
 
     config = {"provider": "deepseek", "temperature": 0, "max_tokens_per_request": 50}
@@ -136,8 +136,8 @@ def test_token_counting():
     assert USAGE["output_tokens"] > 0
     assert USAGE["est_cost_usd"] > 0
     print(
-        f"  ✅ Token counting: {USAGE['calls']} calls, "
-        f"{USAGE['input_tokens']}→{USAGE['output_tokens']} tokens, "
+        f"  [done] Token counting: {USAGE['calls']} calls, "
+        f"{USAGE['input_tokens']}->{USAGE['output_tokens']} tokens, "
         f"${USAGE['est_cost_usd']:.6f}"
     )
 
@@ -146,7 +146,7 @@ def test_response_time():
     """Verify response time is reasonable (<30s for simple prompt)."""
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
     if not api_key:
-        print("  ⏭️  Response time: no key — skipped")
+        print("  ⏭  Response time: no key — skipped")
         return
 
     from suijin.modules.providers.lib import generate
@@ -160,7 +160,7 @@ def test_response_time():
 
     assert elapsed < 30, f"Response took {elapsed:.1f}s — too slow!"
     assert "pong" in result.lower() or "PONG" in result.upper() or len(result) > 0
-    print(f"  ✅ Response time: {elapsed:.1f}s (limit: 30s)")
+    print(f"  [done] Response time: {elapsed:.1f}s (limit: 30s)")
 
 
 def test_config_loading():
@@ -172,7 +172,7 @@ def test_config_loading():
     assert "temperature" in config
     assert "max_tokens_per_request" in config
     assert isinstance(config["temperature"], (int, float))
-    print(f"  ✅ Config: provider={config['provider']}, temp={config['temperature']}")
+    print(f"  [done] Config: provider={config['provider']}, temp={config['temperature']}")
 
 
 def test_env_loading():
@@ -181,12 +181,12 @@ def test_env_loading():
 
     # On CI / without .env, just verify ENV_PATH is a valid Path object
     if not ENV_PATH.exists():
-        print("  ⏭️  No .env file — skipped")
+        print("  ⏭  No .env file — skipped")
         return
     load_env()
     keys = ["DEEPSEEK_API_KEY", "HF_TOKEN", "GEMINI_API_KEY", "ANTHROPIC_API_KEY"]
     found = [k for k in keys if os.environ.get(k)]
-    print(f"  ✅ Env: {len(found)}/{len(keys)} keys found: {found}")
+    print(f"  [done] Env: {len(found)}/{len(keys)} keys found: {found}")
 
 
 def run_all():
@@ -210,13 +210,13 @@ def run_all():
             fn()
             passed += 1
         except AssertionError as e:
-            print(f"  ❌ {name}: {e}")
+            print(f"  [fail] {name}: {e}")
             failed += 1
         except Exception as e:
             if "skipped" in str(getattr(fn, "__name__", "")).lower():
                 skipped += 1
             else:
-                print(f"  ❌ {name}: {type(e).__name__}: {e}")
+                print(f"  [fail] {name}: {type(e).__name__}: {e}")
                 failed += 1
 
     print(f"\n{'=' * 50}")

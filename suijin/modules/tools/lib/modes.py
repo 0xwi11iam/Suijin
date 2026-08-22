@@ -4,9 +4,9 @@
 module enforces the same modes at the `route_tool` chokepoint so a prompt
 injection or model misread cannot bypass them:
 
-- mode_hitl      → recon/read-only tools only; exploits must be documented
+- mode_hitl      -> recon/read-only tools only; exploits must be documented
                    for the human operator, never executed.
-- mode_guardrail → no filesystem-mutating or process-killing commands.
+- mode_guardrail -> no filesystem-mutating or process-killing commands.
 
 Both flags are read from the loaded config (values may be bools after Pydantic
 validation or strings straight from config.json, so coercion handles both).

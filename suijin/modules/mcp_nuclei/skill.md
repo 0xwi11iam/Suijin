@@ -1,6 +1,6 @@
 # MCP Nuclei
 
-> ⚠️ **LONG-RUNNING** — use `"background": true`
+> [warn] **LONG-RUNNING** — use `"background": true`
 
 Structured JSON output, auto-deduplicated by template ID. Severity-ranked findings.
 

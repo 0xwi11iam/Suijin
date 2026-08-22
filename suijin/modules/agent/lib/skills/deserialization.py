@@ -15,11 +15,11 @@ DESERIALIZATION_SKILL_PROMPT = """
 #### STEP 1: DETECTION — Identify Serialization Format
 
 Look for base64-encoded data in cookies, headers, hidden fields, API bodies:
-- **PHP**: `Tzo0OiJVc2VyIjoyOntzOjQ6Im5hbWUiO...` → `O:4:"User"` → PHP serialize
-- **Java**: `rO0ABXNy...` → `ac ed 00 05` magic bytes → Java ObjectInputStream
+- **PHP**: `Tzo0OiJVc2VyIjoyOntzOjQ6Im5hbWUiO...` -> `O:4:"User"` -> PHP serialize
+- **Java**: `rO0ABXNy...` -> `ac ed 00 05` magic bytes -> Java ObjectInputStream
 - **.NET**: Base64 with type info `<ResourceDictionary`, `<BinaryFormatter`
-- **Python**: Base64 starting with `gASV` → pickle
-- **Ruby**: Base64 starting with `BAhv` → Marshal
+- **Python**: Base64 starting with `gASV` -> pickle
+- **Ruby**: Base64 starting with `BAhv` -> Marshal
 - **Node.js**: JSON with `__type`, `__className`, or `node-serialize` prefix
 
 ```bash

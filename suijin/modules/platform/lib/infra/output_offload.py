@@ -36,5 +36,5 @@ def maybe_offload(tool_name: str, output: str) -> tuple[str, bool]:
     filepath.write_text(output, encoding="utf-8", errors="ignore")
 
     preview = output[:500] + ("…" if len(output) > 500 else "")
-    summary = f"[OUTPUT OFFLOADED: {len(output)} chars → {filepath}]\nPreview:\n{preview}"
+    summary = f"[OUTPUT OFFLOADED: {len(output)} chars -> {filepath}]\nPreview:\n{preview}"
     return summary, True

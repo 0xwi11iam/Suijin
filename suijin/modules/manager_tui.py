@@ -119,7 +119,7 @@ class ModuleManager(App):
         report = mgmt._all_units(self._roots)
         lines = [f"dependencies of {mid}:"]
         for dep in info["requires"]:
-            mark = "✓" if dep in report.bootable else "✗"
+            mark = "" if dep in report.bootable else ""
             lines.append(f"  {mark} {dep}" + (f" (skipped: {report.skipped[dep]})" if dep in report.skipped else ""))
         dependents = [u.id for u in report.units.values() if mid in u.requires]
         if dependents:

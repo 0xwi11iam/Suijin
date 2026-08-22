@@ -12,15 +12,15 @@ CORS_SKILL_PROMPT = """
 #### STEP 1: DETECTION
 
 Add `Origin: https://evil.com` to every API request. If the response contains:
-- `Access-Control-Allow-Origin: https://evil.com` → origin reflected, CORS is broken
-- `Access-Control-Allow-Credentials: true` → cookies sent cross-origin
+- `Access-Control-Allow-Origin: https://evil.com` -> origin reflected, CORS is broken
+- `Access-Control-Allow-Credentials: true` -> cookies sent cross-origin
 Test these origin values:
 ```
 Origin: https://evil.com
-Origin: https://target.com.evil.com  →  subdomain bypass if wildcard-like match
-Origin: null  →  sandboxed iframe bypass
-Origin: https://evil.target.com  →  subdomain takeovers
-Origin: https://target.com%40evil.com  →  URL parser confusion
+Origin: https://target.com.evil.com  ->  subdomain bypass if wildcard-like match
+Origin: null  ->  sandboxed iframe bypass
+Origin: https://evil.target.com  ->  subdomain takeovers
+Origin: https://target.com%40evil.com  ->  URL parser confusion
 ```
 
 #### STEP 2: EXPLOITATION

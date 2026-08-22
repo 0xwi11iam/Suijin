@@ -1,6 +1,6 @@
 # Katana
 
-> ⚠️ **LONG-RUNNING** on large sites — use `"background": true`
+> [warn] **LONG-RUNNING** on large sites — use `"background": true`
 
 Headless crawler for JS-rendered endpoint discovery.
 

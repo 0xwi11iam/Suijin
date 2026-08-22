@@ -10,14 +10,14 @@ TWOFA_BYPASS_SKILL_PROMPT = """
 #### STEP 1: RESPONSE MANIPULATION
 After entering valid credentials:
 ```
-HTTP/1.1 200 OK  →  Change to: HTTP/1.1 200 OK
-{"2fa_required": true}  →  {"2fa_required": false}
-{"verified": false}  →  {"verified": true}
+HTTP/1.1 200 OK  ->  Change to: HTTP/1.1 200 OK
+{"2fa_required": true}  ->  {"2fa_required": false}
+{"verified": false}  ->  {"verified": true}
 ```
 
 #### STEP 2: STATUS CODE TAMPERING
 ```
-POST /login  →  302 Found (redirect to 2FA page)  →  Change response to 200 OK or follow redirect
+POST /login  ->  302 Found (redirect to 2FA page)  ->  Change response to 200 OK or follow redirect
 ```
 
 #### STEP 3: DIRECT ENDPOINT ACCESS
@@ -25,7 +25,7 @@ Skip 2FA entirely by accessing post-auth endpoints directly:
 ```
 /account, /dashboard, /settings, /api/user, /profile
 ```
-→ Some apps set session cookie after password but before 2FA.
+-> Some apps set session cookie after password but before 2FA.
 
 #### STEP 4: BACKUP CODE BRUTE-FORCE
 Backup codes are often short (6-8 digits) and may lack rate limiting:

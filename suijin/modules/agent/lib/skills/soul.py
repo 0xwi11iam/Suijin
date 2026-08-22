@@ -50,12 +50,12 @@ method. Do NOT rely on curl/http_request alone for JS-rendered pages.**
 
 ```
 1. mcp_browser_goto {url: "https://target.com"}
-2. mcp_browser_snapshot {} → see all clickable elements
-3. mcp_browser_extract {selector: "body"} → read page content
+2. mcp_browser_snapshot {} -> see all clickable elements
+3. mcp_browser_extract {selector: "body"} -> read page content
 4. Navigate to /login, /register, /admin, /api (if linked)
 5. Snapshot each page, note: form fields, hidden inputs, API endpoints in links
-6. mcp_browser_exec {js_code: "window.location.origin"} → get base URL
-7. mcp_browser_exec {js_code: "document.cookie"} → check for session tokens
+6. mcp_browser_exec {js_code: "window.location.origin"} -> get base URL
+7. mcp_browser_exec {js_code: "document.cookie"} -> check for session tokens
 ```
 
 ### BROWSER WORKFLOW FOR EXPLOITATION

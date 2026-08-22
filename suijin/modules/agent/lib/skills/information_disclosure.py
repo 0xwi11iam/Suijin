@@ -25,9 +25,9 @@ INFO_DISCLOSURE_SKILL_PROMPT = """
 #### STEP 2: VERBOSE ERRORS
 Trigger errors to leak stack traces, paths, DB versions:
 - Submit invalid data types (string where int expected)
-- Send oversized payloads → memory errors
-- Access non-existent IDs → SQL errors
-- Null byte injection → path processing errors
+- Send oversized payloads -> memory errors
+- Access non-existent IDs -> SQL errors
+- Null byte injection -> path processing errors
 
 #### STEP 3: SOURCE CODE DISCLOSURE
 Check: `file.php~`, `file.php.bak`, `file.php.old`, `file.php.swp`, `file.php.save`, `.file.php.swp`

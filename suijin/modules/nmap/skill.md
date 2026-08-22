@@ -1,6 +1,6 @@
 # Nmap (`nmap_scan`)
 
-> ⚠️ **LONG-RUNNING** — Always use `"background": true` for full port scans (-p-), script scans, or UDP scans.
+> [warn] **LONG-RUNNING** — Always use `"background": true` for full port scans (-p-), script scans, or UDP scans.
 > Background usage: `{"tool_name": "nmap_scan", "tool_args": {"target": "X", "flags": "-sV -sC -p-", "background": true}}`
 > Check results with `job_status` / `job_wait` / `job_output`.
 

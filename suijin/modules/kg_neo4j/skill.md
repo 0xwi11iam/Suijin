@@ -1,6 +1,6 @@
 # Knowledge Graph Neo4j
 
-30+ node types: Domain→Subdomain→IP→Port→Service→Technology→Endpoint→Parameter→CVE→Vulnerability→Exploit.
+30+ node types: Domain->Subdomain->IP->Port->Service->Technology->Endpoint->Parameter->CVE->Vulnerability->Exploit.
 
 Requires: Neo4j running, env vars `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD`.
 

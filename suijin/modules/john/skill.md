@@ -1,6 +1,6 @@
 # John the Ripper
 
-> ⚠️ **LONG-RUNNING** — Always use `"background": true`. Password cracking can take hours.
+> [warn] **LONG-RUNNING** — Always use `"background": true`. Password cracking can take hours.
 > `{"tool_name": "john_crack", "tool_args": {"hashfile": "...", "wordlist": "...", "background": true}}` (`john_crack`)
 
 Offline hash cracker. Supports MD5, SHA, NTLM, bcrypt, descrypt, SSH keys, archives.

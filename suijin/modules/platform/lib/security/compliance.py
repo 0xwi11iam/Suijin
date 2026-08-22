@@ -293,7 +293,7 @@ def _write_txt_report(report: dict, path: Path):
         "=" * 70,
         f"  Report ID   : {report['report_id']}",
         f"  Generated   : {report['generated_at'][:19]}",
-        f"  Period      : {report['period']['start']}  →  {report['period']['end']}",
+        f"  Period      : {report['period']['start']}  ->  {report['period']['end']}",
         f"  Status      : {report['overall_status']}",
         "",
         "─" * 70,

@@ -23,7 +23,7 @@ Inject `%0d%0a` (CRLF) into URL parameters or request headers:
 ```
 User-Agent: Mozilla%0d%0aAdmin-Action:delete-all
 ```
-→ Injects false log entries, can poison log-based alerting or forensic tools.
+-> Injects false log entries, can poison log-based alerting or forensic tools.
 
 #### ANTI-PATTERNS: Don't forget URL-encoded variants (%0d%0a, %0D%0A). Test both GET and POST parameters.
 """

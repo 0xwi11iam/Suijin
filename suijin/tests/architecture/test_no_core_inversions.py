@@ -44,7 +44,7 @@ def test_no_tools_to_core_inversions():
         for lineno, mod in _imports(tree):
             if mod.startswith(_BANNED) and not mod.startswith(_ALLOWED_PREFIX):
                 offenders.append(f"{py.name}:{lineno} imports {mod}")
-    assert not offenders, "tools→core inversions:\n" + "\n".join(offenders)
+    assert not offenders, "tools->core inversions:\n" + "\n".join(offenders)
 
 
 class TestServiceSeam:

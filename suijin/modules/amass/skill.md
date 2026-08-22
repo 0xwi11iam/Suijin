@@ -1,6 +1,6 @@
 # Amass
 
-> ⚠️ **LONG-RUNNING** — Use `"background": true` for active enumeration (-active flag). Passive mode is fast.
+> [warn] **LONG-RUNNING** — Use `"background": true` for active enumeration (-active flag). Passive mode is fast.
 > `{"tool_name": "amass_enum", "tool_args": {"domain": "...", "flags": "-active", "background": true}}` (`amass_enum`)
 
 Subdomain enumeration via OSINT + DNS.

@@ -30,7 +30,7 @@ Generate your own CSRF token from your own session, use it in the victim's reque
 If `?csrf_token=xxx` appears in URL, it may be logged in referer headers.
 
 **Token validation skipped for certain methods:**
-Change `POST` → `GET` — some frameworks only validate POST.
+Change `POST` -> `GET` — some frameworks only validate POST.
 Add `_method=GET` parameter to bypass method-based validation.
 
 **CORS misconfig + CSRF chain:**
@@ -66,9 +66,9 @@ If CORS allows your origin, read the CSRF token via XHR first, then submit.
 #### STEP 4: SAME-SITE COOKIE BYPASS
 
 Check cookie attributes:
-- `SameSite=None` → always sent cross-origin (needs `Secure`)
-- `SameSite=Lax` → sent on top-level GET navigations only
-- `SameSite=Strict` → never sent cross-origin
+- `SameSite=None` -> always sent cross-origin (needs `Secure`)
+- `SameSite=Lax` -> sent on top-level GET navigations only
+- `SameSite=Strict` -> never sent cross-origin
 
 **Lax bypass via GET:** If the endpoint accepts GET for state changes:
 ```html
@@ -87,7 +87,7 @@ Force victim to log into YOUR account:
   <input name="password" value="attacker_pass">
 </form>
 ```
-→ Victim's actions (searches, purchases) are attributed to your account — you can see them.
+-> Victim's actions (searches, purchases) are attributed to your account — you can see them.
 
 #### ANTI-PATTERNS (DO NOT DO):
 - Do NOT assume CSRF is dead because of SameSite cookies — there are bypasses.

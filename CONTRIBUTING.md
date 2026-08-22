@@ -84,7 +84,7 @@ pre-commit run --all-files
 ### Red Team Pipeline
 
 ```
-main.py → redteamer.py → LangGraph State Machine
+main.py -> redteamer.py -> LangGraph State Machine
   ├── initialize     # Load config, skills, tools
   ├── think          # LLM ReAct loop with 7 action types
   ├── execute_tool   # Dispatch to 85 tools
@@ -94,10 +94,10 @@ main.py → redteamer.py → LangGraph State Machine
 ### Blue Team Pipeline
 
 ```
-main.py → blueteamer.py → Traffic Interception
-  ├── proxy.py       # HTTP forward proxy (port 8080 → port 5906)
-  ├── tui/feed.py    # LiveFeed tier router (18 pattern detectors → AI engine)
-  ├── ai_engine.py   # LLM decision maker (FLAGGED/NOT_FLAGGED → DECEIVE/BLOCK/PATCH)
+main.py -> blueteamer.py -> Traffic Interception
+  ├── proxy.py       # HTTP forward proxy (port 8080 -> port 5906)
+  ├── tui/feed.py    # LiveFeed tier router (18 pattern detectors -> AI engine)
+  ├── ai_engine.py   # LLM decision maker (FLAGGED/NOT_FLAGGED -> DECEIVE/BLOCK/PATCH)
   └── defense/       # Tarpit, firewall, WAF, deception engine
 ```
 

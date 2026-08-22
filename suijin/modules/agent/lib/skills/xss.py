@@ -22,10 +22,10 @@ A parameter is a CANDIDATE for XSS if:
 #### STEP 1: CONTEXT DETECTION
 
 Determine WHERE your input appears in the response:
-1. **HTML body**: `<div>YOUR_INPUT</div>` → try `<script>alert(1)</script>`
-2. **HTML attribute**: `<input value="YOUR_INPUT">` → try `" onfocus=alert(1) autofocus="`
-3. **JavaScript string**: `var x = "YOUR_INPUT";` → try `"; alert(1);//`
-4. **URL/href**: `<a href="YOUR_INPUT">` → try `javascript:alert(1)`
+1. **HTML body**: `<div>YOUR_INPUT</div>` -> try `<script>alert(1)</script>`
+2. **HTML attribute**: `<input value="YOUR_INPUT">` -> try `" onfocus=alert(1) autofocus="`
+3. **JavaScript string**: `var x = "YOUR_INPUT";` -> try `"; alert(1);//`
+4. **URL/href**: `<a href="YOUR_INPUT">` -> try `javascript:alert(1)`
 
 #### STEP 2: PAYLOAD MATRIX (try in order)
 

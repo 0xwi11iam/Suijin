@@ -572,7 +572,7 @@ def _check_evidence(result, confirm_clue, disconfirm_clue, payload):
 # Top-level diagnostic pipeline
 # ---------------------------------------------------------------------------
 def diagnose(response_text, status_code, original_payload, target_url, config, http_request_fn, execute_terminal_fn):
-    """Full diagnostic pipeline: detect → hypothesize → verify → record.
+    """Full diagnostic pipeline: detect -> hypothesize -> verify -> record.
 
     Called from redteamer.py when a tool result looks anomalous.
 
@@ -637,20 +637,20 @@ def diagnose(response_text, status_code, original_payload, target_url, config, h
             )
 
             verdict_lines.append(
-                f"✅ {h['id']} CONFIRMED: {h['hypothesis']}\n   Evidence: {result['evidence'][:200]}\n"
+                f"[done] {h['id']} CONFIRMED: {h['hypothesis']}\n   Evidence: {result['evidence'][:200]}\n"
             )
-            console.print(f"[green][Oracle] {h['id']} CONFIRMED ✓[/green]")
+            console.print(f"[green][Oracle] {h['id']} CONFIRMED [/green]")
 
             # Record the finding as a constraint
             break  # Stop after first confirmed hypothesis
         else:
-            verdict_lines.append(f"❌ {h['id']} DISPROVEN: {h['hypothesis']}\n")
-            console.print(f"[red][Oracle] {h['id']} disproven ✗[/red]")
+            verdict_lines.append(f"[fail] {h['id']} DISPROVEN: {h['hypothesis']}\n")
+            console.print(f"[red][Oracle] {h['id']} disproven [/red]")
 
     # Step 5: If all disproven, flag as false positive / unknown anomaly
     if not verified_any:
         verdict_lines.append(
-            "\n⚠️  ALL HYPOTHESES DISPROVEN — unknown anomaly. Falling back to baseline methodology. Supervisor alerted."
+            "\n[warn]  ALL HYPOTHESES DISPROVEN — unknown anomaly. Falling back to baseline methodology. Supervisor alerted."
         )
         kg.add_constraint(
             target=target_url or "unknown",

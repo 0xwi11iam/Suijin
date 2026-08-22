@@ -1,6 +1,6 @@
 # Feroxbuster
 
-> ⚠️ **LONG-RUNNING** — Always use `"background": true`. Recursive content discovery takes minutes.
+> [warn] **LONG-RUNNING** — Always use `"background": true`. Recursive content discovery takes minutes.
 > `{"tool_name": "feroxbuster_scan", "tool_args": {"url": "...", "wordlist": "...", "background": true}}` (`feroxbuster_scan`)
 
 Recursive directory brute-forcing (Rust). Better than gobuster for deep sites.

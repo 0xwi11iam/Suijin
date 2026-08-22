@@ -359,4 +359,4 @@ def render_panel(verdict, flags, usage):
         f"[bold]Directive:[/bold] {directive}\n"
         f"[dim]{format_spend(usage)}[/dim]"
     )
-    console.print(Panel(body, title="🧭 SUPERVISOR OVERRIDE", border_style="magenta"))
+    console.print(Panel(body, title=" SUPERVISOR OVERRIDE", border_style="magenta"))

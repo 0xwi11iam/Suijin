@@ -8,8 +8,8 @@
 
 Suijin needs to persist relationships between entities across a security engagement:
 
-- **Red Team**: Targets → Ports → Services → Vulnerabilities → Exploits → Flags
-- **Blue Team**: Attackers → Attacks → Defenses → Intelligence → Countermeasures
+- **Red Team**: Targets -> Ports -> Services -> Vulnerabilities -> Exploits -> Flags
+- **Blue Team**: Attackers -> Attacks -> Defenses -> Intelligence -> Countermeasures
 
 The knowledge graph is queried in the hot path — every LLM prompt includes attacker history, every feed decision checks previous flags. It must be:
 
@@ -58,7 +58,7 @@ The Neo4j code that existed in early versions was dead code — the operational 
 - `get_attacker_history()` returns in <1ms (single dict lookup)
 - Knowledge graph file is human-readable and grep-able
 - Zero operational overhead — no server to start, stop, backup, or upgrade
-- Bridging red→blue is a single method call merging two JSON structures
+- Bridging red->blue is a single method call merging two JSON structures
 
 ### Negative
 - Complex graph queries (e.g., "find all attackers who used SQLi AND XSS within 5 minutes") require O(n) Python loops

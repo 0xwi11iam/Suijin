@@ -59,7 +59,7 @@ class PackModule(Module):
             ctx.register_tool(
                 tool_name,
                 _bridge,
-                description="Automated finding triage → code fix → PR pipeline (CypherFix-style)",
+                description="Automated finding triage -> code fix -> PR pipeline (CypherFix-style)",
                 owner="auto_fix",
                 params=params,
             )

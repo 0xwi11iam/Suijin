@@ -187,14 +187,12 @@ class TestCostFrameTokens:
 class TestTUICounterFormat:
     def test_iteration_line_with_counter(self, capsys):
         """The TUI iteration line carries a right-aligned tok+cost counter."""
-        from rich.console import Console
 
         from suijin.modules.providers.lib import _record_usage, reset_usage
 
         reset_usage()
         _record_usage("test", "m", 2500, 700)
 
-        console = Console(width=80, force_terminal=False, file=__import__("io").StringIO())
         providers = type("P", (), {"USAGE": {}})
         from suijin.modules.providers.lib import get_usage
 

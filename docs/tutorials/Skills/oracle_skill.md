@@ -18,14 +18,14 @@ When an anomaly is detected:
 
 ```
 Anomaly detected (500 / 403 / timeout / body length delta)
-    ↓
+    
 Oracle generates 3 concrete hypotheses (H1, H2, H3)
-    ↓          ↓          ↓
+                        
   Test H1    Test H2    Test H3  (sequential, binary gate)
-    ↓
-CONFIRMED → Record to Knowledge Graph → Use finding to adapt payload
+    
+CONFIRMED -> Record to Knowledge Graph -> Use finding to adapt payload
     OR
-ALL DISPROVEN → Flag as unknown → Alert supervisor → Fallback to baseline
+ALL DISPROVEN -> Flag as unknown -> Alert supervisor -> Fallback to baseline
 ```
 
 ---
@@ -51,8 +51,8 @@ This returns ALL known constraints for the target:
 {"tool": "check_knowledge", "args": {"target": "10.0.0.5", "payload": "' OR 1=1 --"}}
 ```
 
-If blocked: `⛔ BLOCKED: Known block: 'OR 1=1' (verified 2024-06-24T...)` — modify your payload.
-If clear: `✅ Payload not in any known blocked pattern` — safe to proceed.
+If blocked: ` BLOCKED: Known block: 'OR 1=1' (verified 2024-06-24T...)` — modify your payload.
+If clear: `[done] Payload not in any known blocked pattern` — safe to proceed.
 
 ### AFTER confirming a finding:
 
@@ -110,7 +110,7 @@ If the Oracle injects a `[ORACLE DIAGNOSIS]` message into your conversation:
 
 **Every claim about the target MUST have tool-call evidence backing it.**
 
-- ❌ "The WAF is blocking `' OR 1=1`" — without testing a synonym payload
-- ✅ "The WAF is blocking `' OR 1=1` — confirmed: `\" OR 1=1 --` bypassed with 200, recorded to knowledge graph"
+- [fail] "The WAF is blocking `' OR 1=1`" — without testing a synonym payload
+- [done] "The WAF is blocking `' OR 1=1` — confirmed: `\" OR 1=1 --` bypassed with 200, recorded to knowledge graph"
 
 If you find yourself about to state a fact about the target that wasn't returned by a tool call, STOP. Run a verification tool call first.

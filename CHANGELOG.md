@@ -2,7 +2,7 @@
 
 All notable changes to Suijin.
 
-> **Note**: this project was renamed **Medusa → Suijin** at v2.12.0.
+> **Note**: this project was renamed **Medusa -> Suijin** at v2.12.0.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
@@ -51,7 +51,7 @@ since v5.0.0 is hardening + capability, zero churn.
   tasks rejected, findings compressed to evidence, non-blocking
   teams); scratchpad + structured RESULT observations.
 - **Kernel-rendered capability surface** — the kernel renders its live
-  tool registry into the agent prompt (262→265 tools with args in
+  tool registry into the agent prompt (262->265 tools with args in
   ~6.4k tokens, was 28k); zero-invisible parity enforced in both
   booted and pre-boot modes; 10k prompt budget gate.
 - **REAL battle** — the actual agent graph attacks the live vulnerable
@@ -381,7 +381,7 @@ fixed, and pinned by regression tests (test_audit_regressions.py):
    path resolved to a nonexistent directory, scanned zero files, and
    passed forever while hiding TWO real violations. Now path-guarded
    (fails if fewer than 6 files found) and violation-proving.
-2. **Kernel→modules inversion**: controller imported
+2. **Kernel->modules inversion**: controller imported
    suijin.modules.manager. Dependency-inverted — boot() accepts an
    enabled_check callable; the modules-world injects, the kernel never
    reaches out.
@@ -395,7 +395,7 @@ fixed, and pinned by regression tests (test_audit_regressions.py):
    only copied the dylib when the .so was absent — mtime-fresh now.
 5. **Re-entrant event emit blew the stack** (a subscriber emitting its
    own event recursed to RecursionError). Depth-bounded (10) with a
-   drop warning; legitimate chains (a→b→c) unaffected.
+   drop warning; legitimate chains (a->b->c) unaffected.
 6. **LayeredConfig shallow merge wiped sibling keys**: a layer
    overriding one key in a nested section erased the section's other
    keys. Deep merge.
@@ -417,7 +417,7 @@ excludes every booted pack's declared tools regardless of boot order.
   and report python deps with the exact pip command (`--with-deps`
   opts in; nothing executes implicitly).
 - **Textual Module Manager** (`suijin module`, bare): tier-grouped
-  table + detail pane (deps ✓/✗, permissions, source), keys for
+  table + detail pane (deps /, permissions, source), keys for
   toggle/install/uninstall/info/deps/perms/boot-report. Driven
   headlessly in tests via Textual's run_test pilot.
 - **CLI verbs**: `suijin module list | info <id> | enable <id> |
@@ -512,9 +512,9 @@ whole system from manifests alone:
   exactly why tests come first.
 - Context is now the source of truth for the workspace path: the module
   honors ctx.workspace (was returning the global — test caught it).
-- Boot sequence proven end-to-end: scan suijin/modules → resolve →
-  materialize from entry string → register → start → services
-  materialize → shutdown. No injected objects anywhere.
+- Boot sequence proven end-to-end: scan suijin/modules -> resolve ->
+  materialize from entry string -> register -> start -> services
+  materialize -> shutdown. No injected objects anywhere.
 
 ## [3.7.0] — 2026-08-18 — RUST HEART (PHASE 1.5)
 
@@ -525,7 +525,7 @@ The compiled core exists and the kernel uses it:
   JSON-in/JSON-out, zero Python object graph. 5 Rust unit tests; builds
   warning-free; deterministic BTreeMap serialization.
 - **Pure-Python oracle** (`kernel/_pure.py`): permanent fallback AND test
-  oracle. **Native shim** (`kernel/native.py`): wheel → dev-build →
+  oracle. **Native shim** (`kernel/native.py`): wheel -> dev-build ->
   pure, the only file that may touch the compiled module.
 - **Oracle suite** (`test_native_oracle.py`): 15 fixtures + 600-case
   fuzz (generated trees + path strings), canonical-JSON equality. On its
@@ -552,7 +552,7 @@ All 12 kernel subsystems live; controller boots with a full POST:
 - **security**: the permission vocabulary (network/shell/filesystem/
   provider/events.*) — declared in manifests, validated at parse,
   enforced at one point, renderable by the Module Manager.
-- **config**: LayeredConfig — kernel → module → user → env shadowing,
+- **config**: LayeredConfig — kernel -> module -> user -> env shadowing,
   immutable snapshots; import-order-dependent config state dies here.
 - **health**: per-module last-boot status feeding boot report + doctor.
 - **journal**: dmesg analog — ring buffer + rotated disk log; the boot,
@@ -586,8 +586,8 @@ All 12 kernel subsystems live; controller boots with a full POST:
   fixpoint availability resolution, BootReport with human summary.
   Boot-simulator fixtures cover healthy/missing-dep/circular/collision/
   broken trees.
-- **controller.boot()**: the composition root — scan → resolve →
-  register (all) → start (topological order). Core failures abort;
+- **controller.boot()**: the composition root — scan -> resolve ->
+  register (all) -> start (topological order). Core failures abort;
   recommended/installed failures skip + report. Quiet-boot contract:
   silent when healthy, report exactly when degraded. ctx.shutdown()
   stops in reverse order, best-effort.
@@ -604,15 +604,15 @@ Behavior identical throughout; 865 tests green.
   one lived as privates in nodes/execute_tool_node.py, which tools/jobs.py
   reached into. The registry is now a proper module (spawn/get/status/
   wait/output/list/cancel, capped at 200 tracked jobs); the node spawns
-  through it, the job tools read through it, and the sync→background
+  through it, the job tools read through it, and the sync->background
   auto-promotion path adopts its thread into it (a ruff-caught dangling
   uuid reference exposed that path was still hand-rolling entries).
-- **All 8 tools→core inversions eliminated** via `tools/services.py` — a
+- **All 8 tools->core inversions eliminated** via `tools/services.py` — a
   stdlib service seam (proto-Context): core registers lazy producers at
   runtime-init; battle/housekeeping (blue scorer), providers (config
   loader, active model), and run_commands (audit/report/sessions) now
   import only the seam. Enforced by `test_no_core_inversions.py`, which
-  AST-fails on any future tools→core import beyond core.constants.
+  AST-fails on any future tools->core import beyond core.constants.
 - **Import-time mkdirs made lazy**: audit_trail and report_exporter now
   create their directories on first write; session_manager documents why
   its module-init mkdir is its documented purpose (it IS the state owner).
@@ -630,7 +630,7 @@ First structural commit of the Suijin OS refactor — behavior identical,
   migration. Now a PEP 562 lazy facade with submodule fallback; enforced
   by import-purity tests (`test_phase0_purity.py`) that run leaf imports
   in clean interpreters and assert nothing heavy loads.
-- **Import-time side effects → `init_runtime()`**: module discovery, TLS
+- **Import-time side effects -> `init_runtime()`**: module discovery, TLS
   suppression, workspace migration, mkdirs were import side effects of
   `tools/runtime.py`; now an explicit, idempotent, thread-safe call made
   by the entry points (cli doctor, TUI main, MCP main, test conftest).
@@ -674,7 +674,7 @@ First structural commit of the Suijin OS refactor — behavior identical,
 ### Verified stable (this release's gate)
 836 tests green · ruff clean · doctor/selftest pass · battle E2E (red 375,
 blue 135, live block) · WebUI boot + API responses · approvals
-approve→deny→clear roundtrip · packaging guard suite.
+approve->deny->clear roundtrip · packaging guard suite.
 
 ## [3.1.0] — 2026-08-18 — RUN BOX
 
@@ -698,7 +698,7 @@ approve→deny→clear roundtrip · packaging guard suite.
   sensitive-path scoring), batch analysis with crash isolation (one
   exploding subagent can't kill the batch), anomaly/block counters,
   notes rendering, risk-ordered summaries, and the exact
-  deploy→analyze→route sequence blueteamer drives.
+  deploy->analyze->route sequence blueteamer drives.
 
 ### Fixed
 - **HITL approvals gap**: `execute_terminal` calls blocked by the recon
@@ -721,7 +721,7 @@ approve→deny→clear roundtrip · packaging guard suite.
   runtime asset (version/config/prompts/skills/tutorials/ui dist). `pipx
   install suijin` / `uv tool install suijin` now work; the wheel is
   verified complete by tests (no tests shipped, entry point live).
-  Packaging guards lock pyproject↔version.json (the 2.3.0-beta drift
+  Packaging guards lock pyproject<->version.json (the 2.3.0-beta drift
   class), verify every package-data glob matches real files (caught a
   stale templates/* on day one), and require requirements.txt deps to be
   declared.
@@ -761,10 +761,10 @@ approve→deny→clear roundtrip · packaging guard suite.
 
 ### Added — tests & coverage
 - 49 new tests (safety/resilience, coverage push on subagent_manager,
-  codebase scanners, session_control; packaging guards; Medusa→Suijin
+  codebase scanners, session_control; packaging guards; Medusa->Suijin
   migration E2E incl. a full install.sh run against a fake $HOME with a
   legacy ~/.medusa — marked `slow`, CI runs it).
-- Coverage 54% → **60%**; gate raised 48 → 56.
+- Coverage 54% -> **60%**; gate raised 48 -> 56.
 
 ### Not built (asset/liability filter — see 2.11.0's list)
 - Per-tool output parsers beyond nmap/dirs (LLM reads text fine; offload
@@ -774,13 +774,13 @@ approve→deny→clear roundtrip · packaging guard suite.
 ## [2.12.0] — 2026-08-18 — SUIJIN (FULL PRODUCT RENAME)
 
 ### Changed — Medusa is now Suijin, everywhere
-- **Package**: `medusa/` → `suijin/` (git-tracked rename; history kept).
+- **Package**: `medusa/` -> `suijin/` (git-tracked rename; history kept).
   Every `from medusa…`/`import medusa` across code, tests, CI, Docker, and
   docs now targets `suijin`.
 - **CLI**: the `medusa` command is now `suijin` (`suijin doctor`,
   `suijin pull kb`, `suijin ui`, …). argparse prog, help text, and every
   doc example updated.
-- **Workspace**: `medusa_agent/` → `suijin_agent/` with automatic data
+- **Workspace**: `medusa_agent/` -> `suijin_agent/` with automatic data
   migration — `ensure_workspace_layout()` renames (or merges, when both
   exist) a legacy `medusa_agent/` root, merges legacy inner real dirs,
   and removes stale legacy symlinks. Existing engagements, reports, and
@@ -854,7 +854,7 @@ smoke-verified post-sweep.
   substring blocking + non-string/empty-rule safety, CVE/bypass queries,
   summary formatting (partial-confidence annotation only), corrupt-JSON
   resilience and recovery-on-write, and the real agent surface
-  (record_finding → check_knowledge roundtrip, invalid finding types).
+  (record_finding -> check_knowledge roundtrip, invalid finding types).
 - **Infrastructure & defense** (`test_infra_and_defense.py`, 17): output
   offload (never-policy passthrough, threshold boundary, file write +
   500-char preview + ellipsis), firewall (IP validation BEFORE any
@@ -894,10 +894,10 @@ smoke-verified post-sweep.
   build`, then a git-diff freshness check on `suijin/ui/dist`: a stale
   committed bundle fails the build (permanently closes the v2.9.2-class
   regression). Build verified byte-deterministic locally.
-- **Coverage floor** 40 → 48 (measured 52%, 4-point buffer).
+- **Coverage floor** 40 -> 48 (measured 52%, 4-point buffer).
 
 ### Added — WebUI
-- **Dossier view**: target search → constraint/failure/history/report
+- **Dossier view**: target search -> constraint/failure/history/report
   cards with richness count (`/api/dossier?target=`).
 - **Timeline view**: day-grouped unified feed across audits, sessions,
   and reports with kind-colored badges (`/api/timeline?limit=`).
@@ -924,9 +924,9 @@ smoke-verified post-sweep.
 - **KB v2**: `suijin kb read <path>` dumps full untruncated documents from
   the cached tarballs (the FTS copy is 256k-capped); substring paths and
   cross-source ambiguity handling; agent tool `kb_read`. `suijin kb diff`
-  reports per-source index-vs-cache staleness (newer tarball → rebuild,
-  unindexed cache → pull). `suggest_exploit` fuzzy-matches GTFOBins bins
-  (difflib, cutoff 0.75 — `finnd` → `find`).
+  reports per-source index-vs-cache staleness (newer tarball -> rebuild,
+  unindexed cache -> pull). `suggest_exploit` fuzzy-matches GTFOBins bins
+  (difflib, cutoff 0.75 — `finnd` -> `find`).
 - **CISA KEV mirror** (`suijin pull cve`, no API key): 24h-cached catalog
   in `suijin/cve_cache/`; `search_cve` falls back to it offline with
   `[KEV offline]` attribution when NVD is unreachable.
@@ -953,7 +953,7 @@ smoke-verified post-sweep.
   / file channels) — battle mode fires on flag captures and network
   blocks.
 - **`suijin labs run`**: boots and probes every lab (reachability, landing
-  flags, route hints, latency) → capability-matrix baseline.
+  flags, route hints, latency) -> capability-matrix baseline.
 
 ### Added — governance (opt-in)
 - **Policy engine** (`suijin/policy.json` + `suijin policy check|show`):
@@ -1072,8 +1072,8 @@ smoke-verified post-sweep.
   production threshold + full sweep + best operating point. Unlabeled
   entries are excluded, never silently benign.
 - **`suijin battle`** — purple-team mode (`tools/battle.py`): boots the
-  blue_target lab fresh, runs a scripted red campaign (recon → auth →
-  access → injection chain → sweep; 12 attack classes, flag capture) while
+  blue_target lab fresh, runs a scripted red campaign (recon -> auth ->
+  access -> injection chain -> sweep; 12 attack classes, flag capture) while
   a BlueWatchdog tails the live traffic log, scores with the production
   scorer, and deploys real defenses — tarpits written to the file the LAB
   enforces (measurable latency), blocks that deny later red requests.
@@ -1086,12 +1086,12 @@ smoke-verified post-sweep.
 - `anomaly_detector.detect_anomalies` scanned ONLY the request body:
   query-string attacks (`?data={{...}}`, `?path=../../`, GraphQL recon)
   were invisible. Now scans body + query + path. Production recall on
-  battle traffic: 0.14 → 0.57 at threshold 5 (0.86 at threshold 2),
+  battle traffic: 0.14 -> 0.57 at threshold 5 (0.86 at threshold 2),
   precision held ≥ 0.80.
 - XXE bodies (`<!ENTITY`) and privilege-spoofing headers (`X-Admin: true`,
   `X-Role: admin`) were never inspected — both now signal at weight 5.
 - Battle-time effect: blue score vs the same scripted campaign went
-  35 → 135 with an actual network block landing mid-campaign.
+  35 -> 135 with an actual network block landing mid-campaign.
 
 ## [2.8.0] — 2026-08-17 — ABYSS CONSOLE (WEB DASHBOARD)
 
@@ -1102,7 +1102,7 @@ smoke-verified post-sweep.
     "Abyss" design system: glass-morphism cards, neon-accent interactions,
     no shadows/eyebrow-lines, Gotham Medium (Montserrat stand-in — Gotham is
     commercial), Instrument Serif display stats, JetBrains Mono terminals.
-    Dark theme only, responsive (12-col → 2-col → 1-col).
+    Dark theme only, responsive (12-col -> 2-col -> 1-col).
   - **Views**: Dashboard (hero stats, canvas attack map with animated
     vectors spawned by suspect traffic, attack-pattern radar, live activity
     feed, lab fleet liveness), Red Team (stage-derived pipeline flow,
@@ -1136,14 +1136,14 @@ smoke-verified post-sweep.
 
 ### Added
 - **KB-powered agent toolkit** (`tools/kb_tools.py`, 7 new offline tools):
-  `suggest_exploit` (fingerprint → GTFOBins privesc page + HackTricks +
+  `suggest_exploit` (fingerprint -> GTFOBins privesc page + HackTricks +
   PayloadsAllTheThings leads), `find_wordlist` (SecLists keyword search that
   **materializes** files into `suijin_agent/wordlists/` from the cached
   tarball — the DB copy can be truncated), `extract_payloads` (KB code
-  blocks → `suijin_agent/payloads/`, 8-16k size window), `kb_stats`
+  blocks -> `suijin_agent/payloads/`, 8-16k size window), `kb_stats`
   (inventory), `wordlist_tool` (merge/dedupe/length-filter), `mine_failures`
   (SequenceMatcher clustering of `failure_db.json`), `anonymize_report`
-  (regex scrubber for IPs/emails/bearer tokens/api keys/JWTs/private keys →
+  (regex scrubber for IPs/emails/bearer tokens/api keys/JWTs/private keys ->
   `suijin_agent/reports/anonymized/`, localhost + FLAG{} preserved). Wired
   into dispatch routes, tool catalog (KB-dependent tools gated on the build),
   tool registry, MCP descriptions, and the HITL allowlist. 21 tests.
@@ -1185,7 +1185,7 @@ smoke-verified post-sweep.
   returning `Error: DeepSeek API Timeout` (regression test added).
 
 ### Changed
-- **README rewritten documentation-first** — 1,429 marketing-heavy lines →
+- **README rewritten documentation-first** — 1,429 marketing-heavy lines ->
   ~600 lines of reference: full CLI table, configuration key reference,
   provider docs (incl. the Z.ai coding/paas explainer), KB / workspace /
   architecture / red / blue reference sections, real labs table (the old
@@ -1310,7 +1310,7 @@ smoke-verified post-sweep.
   (`runtime`, `terminal`, `http_tools`, `metasploit`, `intel`, `reporting`,
   `jobs`, `aux_tools`) with a thin dispatcher and full back-compat re-exports.
 - `suijin/mcp_server.py` retained as an optional headless MCP bridge.
-- version.json → 2.4.0 (codename Back To Roots).
+- version.json -> 2.4.0 (codename Back To Roots).
 
 ### Removed (emojis)
 - Last emojis stripped from tool output strings per project style.
@@ -1346,8 +1346,8 @@ smoke-verified post-sweep.
   broken install after package pruning).
 
 ### Changed
-- Test suite: 345 → 360 tests.
-- version.json → 2.3.0-beta (codename Shellforge).
+- Test suite: 345 -> 360 tests.
+- version.json -> 2.3.0-beta (codename Shellforge).
 - TUI theme palette rebuilt: green base, blue/red accents.
 
 ## [2.0.2] — 2026-08-13 — STABLE
@@ -1362,9 +1362,9 @@ smoke-verified post-sweep.
 - **redteamer.py graph-crash handling** — exceptions from the agent graph propagated out of `run_red_team_async` and killed the whole app. Now caught, reported, and the engagement ends cleanly.
 
 ### Changed
-- **Test suite: 286 → 345 tests** (14 files)
-- **Coverage: 35% → 40%**; CI floor raised to 35%
-- version.json → 2.0.2 stable
+- **Test suite: 286 -> 345 tests** (14 files)
+- **Coverage: 35% -> 40%**; CI floor raised to 35%
+- version.json -> 2.0.2 stable
 
 ## [2.0.1] — 2026-08-12
 
@@ -1386,7 +1386,7 @@ smoke-verified post-sweep.
 
 ### Changed
 - **Constants wired into 12 files**: proxy.py, blueteamer.py, ai_engine.py, deception_engine.py, tier1_analyst.py, escalation_policy.py, subagent_manager.py, redteamer.py, knowledge_graph.py, feed.py, capture.py, dispatch.py
-- **Test suite: 83 → 134 tests** (7 test files)
+- **Test suite: 83 -> 134 tests** (7 test files)
 - README updated: accurate test counts, new file structure, pytest command, links to CONTRIBUTING.md and ADRs
 - README table of contents: added Contributing + ADRs links
 
@@ -1397,7 +1397,7 @@ smoke-verified post-sweep.
 - **HTTP Forward Proxy** — transparent traffic interception for any app
 - **18 Attack Pattern Detectors** — SQLi, XSS, SSRF, SSTI, XXE, CMDi, LFI, JWT, deserialization, LDAP, NoSQL, mass assignment, auth bypass, brute force, file inclusion, GraphQL, scanner UA
 - **Per-Endpoint AI Subagents** — one per discovered endpoint, full codebase ingestion
-- **Live Tarpit** — real request delays (0.018s → 5.8s) via shared state file
+- **Live Tarpit** — real request delays (0.018s -> 5.8s) via shared state file
 - **Deception Arsenal** — honeypot endpoints, canary tokens, breadcrumb trails, shadow redirect
 - **25-Endpoint Vulnerable Lab** — JWT auth, SQLi, XSS, SSTI, XXE, CMDi, IDOR, SSRF, race condition
 - **Session Knowledge Graph** — attackers, attacks, defenses, intelligence nodes with typed edges

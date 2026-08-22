@@ -1,6 +1,6 @@
 # Nikto
 
-> ⚠️ **LONG-RUNNING** — Always use `"background": true`. Full web server scan takes 2-10 minutes.
+> [warn] **LONG-RUNNING** — Always use `"background": true`. Full web server scan takes 2-10 minutes.
 > `{"tool_name": "nikto_scan", "tool_args": {"url": "...", "background": true}}` (`nikto_scan`)
 
 Web server vulnerability scanner. Finds outdated software, misconfigurations, default files.

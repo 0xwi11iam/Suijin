@@ -181,7 +181,7 @@ class TestFetchSource:
             kbmod.fetch_source("nope")
 
     def test_uses_cache_without_network(self, fake_env):
-        # cached tarball exists → returns immediately with a null session
+        # cached tarball exists -> returns immediately with a null session
         path = kbmod.fetch_source("payloads", cache_dir=fake_env["cache"], session=object(), log=lambda *_: None)
         assert path.name == "payloads.tar.gz"
 
@@ -432,7 +432,7 @@ class TestPartialFailureResilience:
     """One dead source must not kill the whole pull."""
 
     def test_failed_source_skipped_and_reported(self, fake_env, monkeypatch):
-        # Second source's cached tarball missing and no network → fails,
+        # Second source's cached tarball missing and no network -> fails,
         # but payloads still compiles into the DB.
         (fake_env["cache"] / "seclists.tar.gz").unlink()
 

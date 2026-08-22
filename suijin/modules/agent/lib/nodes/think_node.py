@@ -222,7 +222,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
 ## Q&A HISTORY
 {qa_context or "(none)"}
 
-## ⚠️ RULES
+## [warn] RULES
 - NEVER repeat a FAILED action. If a tool failed, try a DIFFERENT approach.
 - NEVER install tools you already tried to install. Use what's available.
 - NEVER check job_status/job_list twice in a row without acting on results.

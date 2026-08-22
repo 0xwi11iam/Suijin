@@ -3,7 +3,7 @@
 Boots the real vulnerable app on a random port, fires real HTTP attacks,
 feeds traffic through the LiveFeed tier router, and asserts the defense
 pipeline works end-to-end:
-    request → traffic log → pattern detection → flag → tarpit → real delay
+    request -> traffic log -> pattern detection -> flag -> tarpit -> real delay
 
 CI-safe: random ports, temp files, mocked AI (no API key needed).
 """
@@ -189,7 +189,7 @@ def clean_tarpit_state(lab_server):
 
 
 class TestBlueTeamE2E:
-    """Full pipeline: real HTTP attack → detection → tarpit → real delay."""
+    """Full pipeline: real HTTP attack -> detection -> tarpit -> real delay."""
 
     def test_sqli_attack_detected_and_tarpitted(self, lab_server, blue_stack, isolated_tarpit_path):
         """Fire a real SQLi at the lab, assert detection and tarpit deployment."""

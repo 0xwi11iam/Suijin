@@ -113,7 +113,7 @@ def render_debrief(trails: list[dict], verbose: bool = False) -> str:
     if not trails:
         return (
             "No audit trails found — run an engagement first "
-            "(suijin → Red Team). Artifacts land in suijin_agent/audit_trails/."
+            "(suijin -> Red Team). Artifacts land in suijin_agent/audit_trails/."
         )
     lines: list[str] = []
     stats = [engagement_stats(t) for t in trails]

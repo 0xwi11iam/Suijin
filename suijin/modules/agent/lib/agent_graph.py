@@ -4,16 +4,16 @@ Suijin Agent Graph — LangGraph state machine for autonomous red teaming.
 Replaces the synchronous while-loop in redteamer.py with a proper
 LangGraph state machine that provides:
 
-- Structured state flow (initialize → think → execute_tool → think → ...)
+- Structured state flow (initialize -> think -> execute_tool -> think -> ...)
 - Automatic checkpointing via MemorySaver
 - Clean separation of reasoning (think) and action (execute_tool)
 - Productivity scoring and stall detection
 - Structured output parsing with retry
 
 Architecture:
-    initialize ──→ think ──→ execute_tool ──→ think (loop)
+    initialize ──-> think ──-> execute_tool ──-> think (loop)
                       │                          │
-                      └──→ generate_response ──→ END
+                      └──-> generate_response ──-> END
 """
 
 from __future__ import annotations
@@ -81,7 +81,7 @@ class SuijinAgentGraph:
         self._built = False  # per-instance, no module-level state
 
     def _route_after_think(self, state: dict) -> str:
-        # Circuit breaker: 3+ consecutive failures → force end
+        # Circuit breaker: 3+ consecutive failures -> force end
         if state.get("_consecutive_failures", 0) >= 3:
             return "generate_response"
         if state.get("completion_reason"):

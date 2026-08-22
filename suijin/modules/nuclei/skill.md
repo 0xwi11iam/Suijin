@@ -1,6 +1,6 @@
 # Nuclei
 
-> ⚠️ **LONG-RUNNING** — always use `"background": true`
+> [warn] **LONG-RUNNING** — always use `"background": true`
 
 Template-based vulnerability scanner with 8000+ community templates.
 

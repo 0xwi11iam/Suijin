@@ -13,12 +13,12 @@ commands, same look throughout.
 
 ```
                  ┌─────────────────────────────────────────┐
-                 │  console (TUI · CLI · WebUI · MCP)      │  ← surfaces, feature-blind
+                 │  console (TUI · CLI · WebUI · MCP)      │  <- surfaces, feature-blind
                  ├─────────────────────────────────────────┤
    recommended ──┤  redteam · blueteam · knowledge · ops   │
-   + 49 packs    │  providers · nmap · sqlmap · ...        │  ← disableable, bundled
+   + 49 packs    │  providers · nmap · sqlmap · ...        │  <- disableable, bundled
                  ├─────────────────────────────────────────┤
-   core          │  platform · tools · agent (graph/       │  ← boot-required
+   core          │  platform · tools · agent (graph/       │  <- boot-required
                  │              nodes/ memory)             │
                  ├─────────────────────────────────────────┤
                  │  KERNEL  (12 subsystems, stdlib-only)   │
@@ -26,7 +26,7 @@ commands, same look throughout.
                  │  controller · jobs · vfs · security     │
                  │  config · health · journal · errors     │
                  │  ───────────────────────────────────────│
-                 │  suijin-core (Rust): resolve_dag,       │  ← compiled heart,
+                 │  suijin-core (Rust): resolve_dag,       │  <- compiled heart,
                  │  check_paths + pure-Python oracles      │    optional wheel
                  └─────────────────────────────────────────┘
 ```
@@ -49,8 +49,8 @@ without kernel changes.
 | `jobs` | scheduler | spawn/status/wait/cancel, capped |
 | `vfs` | VFS | the single file chokepoint — workspace-anchored, symlink-normalized, allowlist |
 | `security` | security subsystem | permission vocabulary, declared in manifests, enforced at one point |
-| `config` | /etc | layered shadowing (kernel→module→user→env), **deep** merge |
-| `health` | watchdog | per-module last-boot status → boot report, doctor, Module Manager |
+| `config` | /etc | layered shadowing (kernel->module->user->env), **deep** merge |
+| `health` | watchdog | per-module last-boot status -> boot report, doctor, Module Manager |
 | `journal` | dmesg | ring + rotated disk log; atomic drain; drops are counted, never silent |
 | `errors` | — | BootError / DependencyError / PermissionDenied / QuarantinedModule |
 | `_pure` + `native` | — | pure-Python oracles + the ONLY file that may touch the compiled core |
@@ -70,9 +70,9 @@ run). `pipx install suijin` never needs a Rust toolchain.
 
 `controller.boot(module_roots, workspace, enabled_check)`:
 
-1. **SCAN** every root (vendored `suijin/modules/` → `~/.suijin/modules/` → dev
+1. **SCAN** every root (vendored `suijin/modules/` -> `~/.suijin/modules/` -> dev
    trees; later sources win). Nested manifests become dotted-id units
-   (`agent/graph` → `agent.graph`) — first-class DAG members.
+   (`agent/graph` -> `agent.graph`) — first-class DAG members.
 2. **RESOLVE** the DAG (Rust core): boot order, cycles *named*,
    missing deps skip, tier collisions (later tier loses unless the
    manifest declares `overrides`), broken manifests quarantined.

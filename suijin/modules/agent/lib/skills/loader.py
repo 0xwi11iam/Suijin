@@ -193,7 +193,7 @@ BEFORE attempting any exploitation.
 
 ### EXPLORATION RULES:
 - Test EVERY endpoint you find — /login, /api, /admin, /reset, /debug
-- When you find one endpoint, check for similar ones (/v1/ → also try /v2/, /internal/)
+- When you find one endpoint, check for similar ones (/v1/ -> also try /v2/, /internal/)
 - Surface multiply: SQLi on /login failed? Try /search, /api/users, /profile?id=
 - NEVER run exploits (sqlmap, hydra, msf_run) until 3+ recon steps are complete
 - Log everything with write_note — negative results prevent expensive re-testing
@@ -213,7 +213,7 @@ def get_skill_prompt(attack_path_type: str) -> str:
     if not attack_path_type:
         return DEFAULT_RECON_PROMPT
 
-    # Normalize: handle 'sqli-unclassified' → 'sqli'
+    # Normalize: handle 'sqli-unclassified' -> 'sqli'
     normalized = attack_path_type.lower().replace("-unclassified", "").replace(" ", "_")
     prompt = SKILL_MAP.get(normalized)
     if prompt:

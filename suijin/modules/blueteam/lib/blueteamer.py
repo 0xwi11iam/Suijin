@@ -123,7 +123,7 @@ async def _run_async():
                 log_path=traffic_log,
             )
             console.print(
-                f"[green]Proxy started on :{proxy_port}[/green] [dim]→ forwarding to your app on :{app_port}[/dim]"
+                f"[green]Proxy started on :{proxy_port}[/green] [dim]-> forwarding to your app on :{app_port}[/dim]"
             )
             console.print(
                 f"[bold yellow]Send ALL traffic to http://127.0.0.1:{proxy_port}[/bold yellow] [dim](not :{app_port})[/dim]"

@@ -178,7 +178,7 @@ def wifi_capture(bssid, channel, interface=None, timeout=60):
         handshakes = check.stdout.strip()
         if handshakes and handshakes != "0":
             return (
-                f"✅ Handshake captured: {cap_file}\n"
+                f"[done] Handshake captured: {cap_file}\n"
                 f"Network: {bssid} | Channel: {channel}\n"
                 f"Next: use wifi_crack to attempt password recovery."
             )
@@ -220,5 +220,5 @@ def wifi_crack(handshake_file, wordlist):
         for line in output.splitlines():
             if "KEY FOUND!" in line:
                 key = line.split("KEY FOUND!")[-1].strip().strip("[]").strip()
-                return f"✅ KEY FOUND: {key}\n\nFull output:\n{output[-500:]}"
+                return f"[done] KEY FOUND: {key}\n\nFull output:\n{output[-500:]}"
     return f"No key found in wordlist.\n\nLast output:\n{output[-500:]}"

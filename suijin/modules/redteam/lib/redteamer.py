@@ -1,7 +1,7 @@
 """
 Suijin Red Team Agent — LangGraph-powered autonomous red teaming.
 
-Orchestrates the LangGraph state machine: think → execute_tool → generate_response.
+Orchestrates the LangGraph state machine: think -> execute_tool -> generate_response.
 Support modules extracted for maintainability:
   suijin/core/red/config_loader.py   — config.json / .env management
   suijin/core/red/llm_client.py      — async LLM wrapper with timeout

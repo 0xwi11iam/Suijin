@@ -1,7 +1,7 @@
 """Purple-team battle mode — red vs blue on one lab, shared scoreboard.
 
 `suijin battle` boots the blue_target lab, clears blue-team state, then runs
-a scripted red campaign (recon → auth attacks → access attacks → injection
+a scripted red campaign (recon -> auth attacks -> access attacks -> injection
 chain) while an embedded blue watchdog tails the live traffic log, scores
 every request with the REAL production scorer, and deploys real defenses
 (tarpits are enforced by the lab itself; blocks are simulated at battle
@@ -24,7 +24,7 @@ from rich.table import Table
 
 
 def score_request(req, profile, **kw):
-    """Blue scorer via the service seam (no tools→core import)."""
+    """Blue scorer via the service seam (no tools->core import)."""
     from suijin.modules.tools.lib.services import get as _service
 
     fn = _service("traffic_scorer")

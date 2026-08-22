@@ -1,6 +1,6 @@
 # TruffleHog
 
-> ⚠️ **LONG-RUNNING** — always use `"background": true`
+> [warn] **LONG-RUNNING** — always use `"background": true`
 
 Scans for 700+ types of secrets: AWS keys, GCP SA keys, GitHub tokens, JWT, private keys, database creds, Slack webhooks, etc.
 

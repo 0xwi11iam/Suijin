@@ -26,7 +26,7 @@ wpscan --url https://TARGET --enumerate p,t,u --api-token $WPSCAN_TOKEN
 ```
 
 #### STEP 4: PLUGIN/THEME VULNS
-Check: `/wp-content/plugins/PLUGIN/readme.txt` → version → CVE lookup.
+Check: `/wp-content/plugins/PLUGIN/readme.txt` -> version -> CVE lookup.
 Common: `wp-file-manager` (RCE), `elementor` (auth bypass), `duplicator` (file read).
 
 #### ANTI-PATTERNS: Don't skip xmlrpc.php — it enables password brute-force with 1 request per 1000 passwords.

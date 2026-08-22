@@ -39,7 +39,7 @@ def deploy_honeypot(target_path: str, subagent, attacker_ip: str) -> dict:
         return {"status": "skipped", "reason": f"Source file not found: {file_path}"}
 
     try:
-        # Generate a honeypot route path (e.g., /api/users → /api/users_backup)
+        # Generate a honeypot route path (e.g., /api/users -> /api/users_backup)
         honeypot_path = _make_honeypot_path(original_path)
 
         # Adapt the honeypot code for the framework

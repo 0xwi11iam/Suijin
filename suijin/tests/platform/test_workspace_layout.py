@@ -99,7 +99,7 @@ class TestCanonicalLayout:
 
 
 class TestRenameMigration:
-    """Medusa → Suijin rename: legacy medusa_agent data must carry over."""
+    """Medusa -> Suijin rename: legacy medusa_agent data must carry over."""
 
     def test_legacy_root_renamed_when_new_absent(self, tmp_path):
         base = tmp_path / "suijin"

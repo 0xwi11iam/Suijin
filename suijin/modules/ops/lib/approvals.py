@@ -152,7 +152,7 @@ def render_list() -> str:
     if not items:
         return (
             "No HITL blocks recorded. Approvals appear here when "
-            "mode_hitl blocks a tool call.\nEnable: suijin config → mode_hitl: true"
+            "mode_hitl blocks a tool call.\nEnable: suijin config -> mode_hitl: true"
         )
     lines = [f"{len(items)} approval request(s) (newest last):"]
     for it in items:

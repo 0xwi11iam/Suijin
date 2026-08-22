@@ -176,11 +176,11 @@ class LiveFeed:
         """Process a single incoming request through the tier system.
 
         Flow:
-          1. Baseline mode → all NORMAL (building patterns)
-          2. Known normal → NORMAL (one-line, zero cost)
-          3. Pre-AI pattern check → if SQLi/XSS/etc detected → BLOCK/DECEIVE now
-          4. AI analysis → INVESTIGATED (flagged) or ANOMALOUS (benign)
-          5. AI failure → shown as ANOMALOUS with error visible
+          1. Baseline mode -> all NORMAL (building patterns)
+          2. Known normal -> NORMAL (one-line, zero cost)
+          3. Pre-AI pattern check -> if SQLi/XSS/etc detected -> BLOCK/DECEIVE now
+          4. AI analysis -> INVESTIGATED (flagged) or ANOMALOUS (benign)
+          5. AI failure -> shown as ANOMALOUS with error visible
         """
         self.request_count += 1
         rid = self.request_count

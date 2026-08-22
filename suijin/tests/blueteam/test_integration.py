@@ -70,7 +70,7 @@ class TestBlueTeamPipeline:
                     assert result["score"] >= 6  # SQLi detected
 
     def test_kg_records_attack_chain(self):
-        """Verify knowledge graph records full attack → defense chain."""
+        """Verify knowledge graph records full attack -> defense chain."""
         from suijin.modules.blueteam.lib.blue.knowledge_graph import BlueKnowledgeGraph
 
         kg = BlueKnowledgeGraph()
@@ -86,7 +86,7 @@ class TestBlueTeamPipeline:
         assert any("block" in str(d).lower() for d in hist["defenses"])
 
     def test_config_validation_roundtrip(self):
-        """Verify config survives model_dump → model_validate roundtrip."""
+        """Verify config survives model_dump -> model_validate roundtrip."""
         from suijin.modules.platform.lib.config_models import BlueConfig, RedConfig
 
         blue = BlueConfig()
@@ -123,13 +123,13 @@ class TestBlueTeamPipeline:
         engine = DeceptionEngine()
         r = engine.decide_response("attacker-1", {"ip": "1.2.3.4"}, 9)
         assert r["status"] == "ok"
-        # Score 7 → tarpit
+        # Score 7 -> tarpit
         r2 = engine.decide_response("attacker-2", {"ip": "2.3.4.5"}, 7)
         assert r2["status"] == "ok"
-        # Score 5 → honeypot
+        # Score 5 -> honeypot
         r3 = engine.decide_response("attacker-3", {"ip": "3.4.5.6"}, 5)
         assert r3["status"] == "ok"
-        # Score 3 → observe
+        # Score 3 -> observe
         r4 = engine.decide_response("attacker-4", {"ip": "4.5.6.7"}, 3)
         assert r4["status"] == "ok"
 

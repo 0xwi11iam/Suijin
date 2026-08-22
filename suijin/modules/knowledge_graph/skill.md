@@ -37,7 +37,7 @@ Built-in. Data stored in `knowledge_graph.json`.
 
 ## SOP
 
-1. Fingerprint → `search_cve`
-2. Before payload → `check_knowledge`
-3. After verify → `record_finding`
+1. Fingerprint -> `search_cve`
+2. Before payload -> `check_knowledge`
+3. After verify -> `record_finding`
 4. Never repeat blocked patterns

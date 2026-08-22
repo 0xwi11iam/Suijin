@@ -49,7 +49,7 @@ class FakeAgent:
 
 
 def _happy_events():
-    """Scripted events: think → execute_tool → generate_response (complete)."""
+    """Scripted events: think -> execute_tool -> generate_response (complete)."""
     trace1 = [
         {
             "iteration": 1,
@@ -117,7 +117,7 @@ class TestRedTeamSmoke:
         assert data["objective"] == "test target"
 
     def test_proxy_config_applied(self, red_mocks, monkeypatch):
-        """proxy_url in config → set_proxy called with it."""
+        """proxy_url in config -> set_proxy called with it."""
         seen = {}
         monkeypatch.setattr(rt._dispatch, "set_proxy", lambda url: seen.update(url=url))
         _run_smoke({"provider": "deepseek", "max_iterations": 5, "proxy_url": "http://proxy.local:8080"})

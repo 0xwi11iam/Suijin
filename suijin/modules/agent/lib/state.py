@@ -2,7 +2,7 @@
 Suijin Agent State — Pydantic models for the LangGraph state machine.
 
 Defines the structured state that flows through the agent graph:
-think → execute_tool → generate_response. Every field is serializable
+think -> execute_tool -> generate_response. Every field is serializable
 so state can be checkpointed (MemorySaver) and recovered.
 
 Ported and simplified from redamon/agentic/state.py.
@@ -336,11 +336,11 @@ def format_execution_trace(
         ec = step.get("error_class", "")
         prod = step.get("productivity", {})
 
-        status = "✓" if step.get("success", True) else "✗"
+        status = "" if step.get("success", True) else ""
         verdict = prod.get("verdict", "") if isinstance(prod, dict) else ""
 
         lines.append(
-            f"Step {step.get('iteration', '?')}: {status} {tn} ({verdict or ec or 'ok'}) → {_truncate(str(ta), 100)}"
+            f"Step {step.get('iteration', '?')}: {status} {tn} ({verdict or ec or 'ok'}) -> {_truncate(str(ta), 100)}"
         )
         if to:
             lines.append(f"  Output: {_truncate(to, 300)}")
@@ -355,15 +355,15 @@ def format_todo_list(todo_list: list) -> str:
 
     lines = []
     status_icons = {
-        "pending": "⬜",
-        "in_progress": "🔄",
-        "completed": "✅",
-        "blocked": "🚫",
+        "pending": "",
+        "in_progress": "",
+        "completed": "[done]",
+        "blocked": "",
     }
     for item in todo_list:
         if not isinstance(item, dict):
             continue
-        icon = status_icons.get(item.get("status", "pending"), "❓")
+        icon = status_icons.get(item.get("status", "pending"), "")
         priority = item.get("priority", "medium")
         desc = item.get("description", "")[:100]
         lines.append(f"  {icon} [{priority}] {desc}")
@@ -419,7 +419,7 @@ def format_chain_context(
             tag = verdict if verdict != "?" else (ec or "ok")
             parts.append(
                 f"- [{tag}] iter {s.get('iteration', '?')}: "
-                f"{s.get('tool_name', '?')} → {_truncate(s.get('output_summary', s.get('tool_output', '')), 200)}"
+                f"{s.get('tool_name', '?')} -> {_truncate(s.get('output_summary', s.get('tool_output', '')), 200)}"
             )
 
     return "\n\n".join(parts) if parts else "No chain context yet."
@@ -445,5 +445,5 @@ def format_objective_history(objective_history: list) -> str:
     lines = ["## Completed Objectives"]
     for obj in objective_history[-5:]:
         if isinstance(obj, dict):
-            lines.append(f"- [{obj.get('success', True) and '✓' or '✗'}] {_truncate(obj.get('content', ''), 150)}")
+            lines.append(f"- [{obj.get('success', True) and '' or ''}] {_truncate(obj.get('content', ''), 150)}")
     return "\n".join(lines)

@@ -118,7 +118,7 @@ def edit_skill(skill_name: str, new_content: str) -> str:
 
         skill_path.write_text(new_content)
         snap_note = f" snapshot {snap.name}" if snap else ""
-        return f"✅ Skill '{skill_name}' updated ({len(new_content)} chars).{snap_note}"
+        return f"[done] Skill '{skill_name}' updated ({len(new_content)} chars).{snap_note}"
     except Exception as e:
         return f"Error updating skill: {e}"
 
@@ -143,7 +143,7 @@ def write_tool(tool_name: str, code: str) -> str:
     tool_path = BASE_DIR / "tools" / f"{safe_name}.py"
     try:
         tool_path.write_text(code)
-        return f"✅ Tool '{safe_name}' written to tools/{safe_name}.py ({len(code)} chars)."
+        return f"[done] Tool '{safe_name}' written to tools/{safe_name}.py ({len(code)} chars)."
     except Exception as e:
         return f"Error writing tool: {e}"
 

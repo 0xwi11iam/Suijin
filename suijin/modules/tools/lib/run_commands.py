@@ -129,7 +129,7 @@ def _default_handlers(box: RunBox) -> dict:
             "    /report      force report generation\n"
             "    /sessions    saved sessions\n"
             "    /cost        token + cost tally\n"
-            "    /approvals   HITL queue  →  /approve <id> | /deny <id>\n"
+            "    /approvals   HITL queue  ->  /approve <id> | /deny <id>\n"
             "    /scope       current target scopes\n"
             "    /pause       pause agent into guidance mode\n"
             "    /panic       kill everything now (suijin panic)\n"

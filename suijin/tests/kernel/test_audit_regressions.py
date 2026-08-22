@@ -3,7 +3,7 @@
 Each test pins a REAL defect found in the Phase 5 audit:
   1. the purity linter globbed a nonexistent path (vacuously green
      since Phase 1) — now path-guarded and violation-proving
-  2. controller imported suijin.modules (kernel→modules inversion) —
+  2. controller imported suijin.modules (kernel->modules inversion) —
      now dependency-inverted via enabled_check injection
   3. Journal.flush snapshot-then-clear lost entries racing the write —
      now atomic drain, with disk-failure requeue

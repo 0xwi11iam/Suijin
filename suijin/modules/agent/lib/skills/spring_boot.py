@@ -13,8 +13,8 @@ Spring Boot Actuator endpoints to probe:
 /actuator, /actuator/env, /actuator/configprops, /actuator/beans
 /actuator/heapdump, /actuator/threaddump, /actuator/mappings
 /actuator/gateway/routes, /actuator/conditions
-/actuator/env → DATABASE_PASSWORD, SECRET_KEY, AWS_KEYS
-/heapdump → download and analyze with jhat/Eclipse MAT for creds
+/actuator/env -> DATABASE_PASSWORD, SECRET_KEY, AWS_KEYS
+/heapdump -> download and analyze with jhat/Eclipse MAT for creds
 ```
 
 #### STEP 2: ENV/PROPERTIES EXPOSURE

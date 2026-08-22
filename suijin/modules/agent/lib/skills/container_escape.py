@@ -37,10 +37,10 @@ echo "|/cmd" > /sys/kernel/security/lsm
 #### STEP 4: CAPABILITIES ABUSE
 ```bash
 capsh --print  # list current capabilities
-# CAP_SYS_ADMIN → mount, cgroups, kernel modules
-# CAP_SYS_PTRACE → inject into host processes
-# CAP_DAC_READ_SEARCH → read any file
-# CAP_NET_RAW → packet sniffing
+# CAP_SYS_ADMIN -> mount, cgroups, kernel modules
+# CAP_SYS_PTRACE -> inject into host processes
+# CAP_DAC_READ_SEARCH -> read any file
+# CAP_NET_RAW -> packet sniffing
 ```
 
 #### STEP 5: KUBERNETES ESCAPE

@@ -1,6 +1,6 @@
 # Gobuster
 
-> ⚠️ **LONG-RUNNING** — Always use `"background": true`. Directory brute-force with large wordlists takes minutes.
+> [warn] **LONG-RUNNING** — Always use `"background": true`. Directory brute-force with large wordlists takes minutes.
 > `{"tool_name": "gobuster_dir", "tool_args": {"url": "...", "wordlist": "...", "background": true}}` (`gobuster_dir`, `gobuster_dns`)
 
 Directory/file brute-forcing for web servers and DNS subdomain enumeration.

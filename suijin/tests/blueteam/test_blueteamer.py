@@ -50,20 +50,20 @@ def blue_mocks(monkeypatch, tmp_path):
     monkeypatch.setattr(bt, "init_session", lambda target: fake_session)
     mocks["session"] = fake_session
 
-    # Codebase scanner → 1 fake endpoint
+    # Codebase scanner -> 1 fake endpoint
     monkeypatch.setattr(
         "suijin.modules.blueteam.lib.blue.codebase.scanner.scan_codebase",
         lambda root: [{"method": "GET", "path": "/health", "framework": "flask", "auth": "none"}],
     )
     mocks["endpoints"] = [{"method": "GET", "path": "/health", "framework": "flask", "auth": "none"}]
 
-    # Watchers → async no-op
+    # Watchers -> async no-op
     async def fake_spawn(endpoints, config):
         return []
 
     monkeypatch.setattr("suijin.modules.blueteam.lib.blue.watchers.spawner.spawn_watchers", fake_spawn)
 
-    # SOC team → cheap fakes
+    # SOC team -> cheap fakes
     class FakeSOCLead:
         campaigns = {}
 
@@ -86,7 +86,7 @@ def blue_mocks(monkeypatch, tmp_path):
         lambda: types.SimpleNamespace(),
     )
 
-    # Proxy → fake
+    # Proxy -> fake
     class FakeProxy:
         def stop(self):
             pass
@@ -94,7 +94,7 @@ def blue_mocks(monkeypatch, tmp_path):
     monkeypatch.setattr("suijin.modules.blueteam.lib.blue.proxy.start_proxy", lambda **kwargs: FakeProxy())
     mocks["proxy"] = FakeProxy
 
-    # Subagent analyze → empty (mock at class level)
+    # Subagent analyze -> empty (mock at class level)
     async def fake_analyze(self):
         return []
 
@@ -239,14 +239,14 @@ class TestRunAsyncBranches:
         asyncio.run(bt._run_async())
 
     def test_choice_1_full_flow_reaches_monitor(self, blue_mocks, monkeypatch, auto_quit_sleep, tmp_path):
-        """Choice 1 with a valid path + port → proxy starts → monitor loop → /quit."""
+        """Choice 1 with a valid path + port -> proxy starts -> monitor loop -> /quit."""
         monkeypatch.setattr(bt.console, "input", _scripted_input(["1", str(tmp_path), "8001", "/quit"]))
         monkeypatch.setattr(bt, "_find_free_port", lambda: 18080)
         asyncio.run(bt._run_async())
         assert blue_mocks["session"].endpoints_discovered == 1
 
     def test_choice_2_full_flow_reaches_monitor(self, blue_mocks, monkeypatch, auto_quit_sleep):
-        """Choice 2 (built-in lab) → mocked lab launch → monitor loop → /quit."""
+        """Choice 2 (built-in lab) -> mocked lab launch -> monitor loop -> /quit."""
         monkeypatch.setattr(bt.console, "input", _scripted_input(["2", "/quit"]))
 
         # Mock subprocess (lsof + Popen)

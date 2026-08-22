@@ -155,9 +155,9 @@ def _merge_tree(src: Path, dst: Path) -> None:
 def resolve_workspace_path(file_path: str | Path) -> Path:
     """Resolve a file path relative to the agent workspace.
 
-    - Relative paths → resolved from WORKSPACE_DIR
-    - Absolute paths → REJECTED unless within WORKSPACE_DIR or allowlisted
-    - Symlinks → resolved to real path before boundary check
+    - Relative paths -> resolved from WORKSPACE_DIR
+    - Absolute paths -> REJECTED unless within WORKSPACE_DIR or allowlisted
+    - Symlinks -> resolved to real path before boundary check
     """
     p = Path(file_path)
     if p.is_absolute():
