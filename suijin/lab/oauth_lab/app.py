@@ -162,8 +162,10 @@ def token():
         if username in USERS:
             user = USERS[username]
             token = secrets.token_urlsafe(24)
-            tokens_issued[token] = {"user": username, "scopes": "openid profile email", "client": "resource_owner"}
-            return jsonify({"access_token": token, "token_type": "Bearer", "scope": "openid profile email"})
+            # FLAW 6: scope escalation — whatever scope is requested is granted, unchecked
+            scopes = request.form.get("scope", "openid profile email")
+            tokens_issued[token] = {"user": username, "scopes": scopes, "client": "resource_owner"}
+            return jsonify({"access_token": token, "token_type": "Bearer", "scope": scopes})
 
     return jsonify({"error": "unsupported_grant_type"}), 400
 
