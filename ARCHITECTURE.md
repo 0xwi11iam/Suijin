@@ -182,7 +182,7 @@ suijin/
 │   ├── ops/         #   engagement lifecycle verbs
 │   ├── blueteam/    #   defense stack
 │   ├── redteam/     #   offense stack + intel/KG
-│   ├── console/     #   CLI router, TUIs, MCP
+│   ├── console/     #   CLI router, TUIs, MCP, gateway (desktop API)
 │   └── <123 snap-in tool packs>    # nmap, sqlmap, encodesk, sslprobe ... (manifest.json bricks)
 ├── tests/           # per-slice suites (reorganized per-module next)
 ├── lab/             # vulnerable target apps

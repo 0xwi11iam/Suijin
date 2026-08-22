@@ -84,3 +84,29 @@ def test_dependencies_pinned_like_requirements():
     declared = " ".join(tomllib.loads((REPO / "pyproject.toml").read_text())["project"]["dependencies"])
     missing = [r for r in reqs if r.split(">=")[0].strip().lower() not in declared.lower()]
     assert not missing, f"requirements.txt deps missing from pyproject: {missing}"
+
+
+class TestDocsSync:
+    def test_readme_badge_matches_version(self):
+        """Documentation lag is a build failure: the README version badge
+        must equal suijin/version.json in the same commit."""
+        import json
+        import re
+
+        version = json.loads((REPO / "suijin" / "version.json").read_text())["version"]
+        readme = (REPO / "README.md").read_text()
+        badges = re.findall(r"badge/v([\d.]+)-suijin-green", readme)
+        assert badges, "README has no version badge"
+        assert all(b == version for b in badges), (
+            f"README badge(s) {badges} != version.json {version} — update the badge in the same commit"
+        )
+
+    def test_pyproject_matches_version(self):
+        import json
+        import tomllib
+
+        version = json.loads((REPO / "suijin" / "version.json").read_text())["version"]
+        data = tomllib.loads((REPO / "pyproject.toml").read_text())
+        assert data["project"]["version"] == version, (
+            f"pyproject {data['project']['version']} != version.json {version}"
+        )
