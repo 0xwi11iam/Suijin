@@ -1,12 +1,49 @@
 {
   "name": "Adenum",
   "version": "1.0",
-  "description": "Active Directory enumeration helpers (impacket-backed).",
+  "description": "AD enumeration: LDAP port check, AS-REP roasting (GetNPUsers), Kerberoasting (GetUserSPNs), SMB share enumeration, LDAP search. Requires impacket + ldap-utils.",
   "tools": {
     "ad_null_session": {
-      "description": "Anonymous LDAP bind + rootDSE dump via impacket (no creds).",
+      "description": "Check if LDAP port 389 is open on a DC.",
       "parameters": {
-        "dc": "Domain controller host"
+        "dc": "Domain controller hostname/IP"
+      }
+    },
+    "ad_asrep_roast": {
+      "description": "AS-REP roasting: find accounts with pre-auth disabled (returns crackable hashes).",
+      "parameters": {
+        "dc": "Domain (domain.com or user@domain.com)",
+        "users": "Optional path to username list file"
+      }
+    },
+    "ad_kerberoast": {
+      "description": "Kerberoasting: request SPN tickets crackable offline.",
+      "parameters": {
+        "dc": "Domain controller",
+        "user": "DOMAIN\\username",
+        "password": "Password (empty for null)"
+      }
+    },
+    "ad_smb_shares": {
+      "description": "Enumerate SMB shares on a host.",
+      "parameters": {
+        "host": "Target hostname/IP"
+      }
+    },
+    "ad_ldap_search": {
+      "description": "LDAP search against a DC.",
+      "parameters": {
+        "dc": "Domain controller",
+        "query": "LDAP filter (default: all users)",
+        "attrs": "Optional space-separated attributes"
+      }
+    },
+    "ad_full": {
+      "description": "Full AD recon: port + AS-REP + SMB + LDAP (+ Kerberoast if creds).",
+      "parameters": {
+        "dc": "Domain controller",
+        "user": "Optional DOMAIN\\user",
+        "password": "Optional password"
       }
     }
   },
