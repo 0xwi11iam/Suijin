@@ -1,40 +1,68 @@
-"""Tarpit — slow-loris style connection draining."""
+"""Tarpit — the /tmp/blue_tarpit.json file protocol, unified.
+
+One writer shape, three readers (blue_target lab app, the forward proxy,
+the TUI feed). Protocol: a JSON object keyed by IP —
+
+    {"<ip>": {"delay": <seconds>, "since": <epoch>, ...extra}}
+
+`delay` is capped at 15s per request; entries expire 30 minutes after
+`since`. The key is "since" — a battle watchdog once wrote "set_at",
+which every reader ignored (tarpits moved the scoreboard but never
+delayed red). All writers now go through engage() so that cannot
+recur; readers use delay_for() or the same tolerant semantics inline
+(the lab app stays dependency-free on purpose).
+"""
 
 from __future__ import annotations
 
-import logging
-import threading
+import json
 import time
 
-from suijin.modules.blueteam.lib.blue.errors import DeceptionError, ErrorSeverity, err, ok
+WINDOW_S = 1800  # tarpit entries live 30 minutes
+MAX_DELAY_S = 15.0
 
 
-class Tarpit:
-    def __init__(self):
-        self.active = {}
-        self._lock = threading.Lock()
+def _tarpit_file(path=None):
+    if path is not None:
+        return path
+    from suijin.modules.platform.lib.constants import BLUE_TARPIT_FILE
 
-    def engage(self, ip: str, delay: float = 8.0):
-        try:
-            with self._lock:
-                self.active[ip] = {"delay": delay, "count": 0, "started": time.time()}
-            return ok(f"Tarpit engaged for {ip}")
-        except Exception as e:
-            logging.getLogger("suijin").warning(f"Tarpit engage failed: {e}")
-            return err(DeceptionError(f"Tarpit failed: {e}", severity=ErrorSeverity.WARNING))
+    return BLUE_TARPIT_FILE
 
-    def is_engaged(self, ip: str) -> bool:
-        return ip in self.active
 
-    def process(self, ip: str):
-        if ip in self.active:
-            self.active[ip]["count"] += 1
-            time.sleep(self.active[ip]["delay"])
+def engage(ip: str, delay: float, path=None, **extra) -> None:
+    """Engage (or refresh) the tarpit for one IP. Tolerant: never raises."""
+    try:
+        from pathlib import Path
 
-    def disengage(self, ip: str):
-        try:
-            with self._lock:
-                if ip in self.active:
-                    del self.active[ip]
-        except Exception as e:
-            logging.getLogger("suijin").warning(f"Tarpit disengage failed: {e}")
+        p = Path(_tarpit_file(path))
+        state = {}
+        if p.exists():
+            try:
+                state = json.loads(p.read_text())
+            except ValueError:
+                state = {}
+        state[ip] = {"delay": min(float(delay), MAX_DELAY_S), "since": time.time(), **extra}
+        p.write_text(json.dumps(state))
+    except Exception:  # noqa: BLE001 — deception must never break the loop
+        pass
+
+
+def delay_for(ip: str, path=None, now: float | None = None) -> float:
+    """Seconds the reader should sleep for this IP (0 = no tarpit)."""
+    try:
+        from pathlib import Path
+
+        p = Path(_tarpit_file(path))
+        if not p.exists():
+            return 0.0
+        state = json.loads(p.read_text())
+        entry = state.get(ip)
+        if not isinstance(entry, dict):
+            return 0.0
+        since = entry.get("since", 0)
+        if (now if now is not None else time.time()) - since >= WINDOW_S:
+            return 0.0  # expired
+        return min(float(entry.get("delay", 5.0)), MAX_DELAY_S)
+    except Exception:  # noqa: BLE001 — malformed state = no delay
+        return 0.0
