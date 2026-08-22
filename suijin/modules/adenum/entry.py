@@ -59,7 +59,7 @@ class PackModule(Module):
             ctx.register_tool(
                 tool_name,
                 _bridge,
-                description="Active Directory enumeration helpers (impacket-backed).",
+                description="AD enumeration: LDAP port check, AS-REP roasting (GetNPUsers), Kerberoasting (GetUserSPNs), SMB share enumeration, LDAP search. Requires impacket + ldap-utils.",
                 owner="adenum",
                 params=params,
             )

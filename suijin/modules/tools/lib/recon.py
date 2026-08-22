@@ -75,12 +75,39 @@ def recon_chain(target: str, config=None, ports: str | None = None) -> str:
     for s in services:
         lines.append(f"- {s['port']}/{s['proto']} {s['service']} {s['banner']}")
 
+    # v5.2: whatweb fingerprint on HTTP services (banner-grab depth)
+    web_fingerprint = _fingerprint_web(target, services)
+    if web_fingerprint:
+        lines.append("\n## Web fingerprint (whatweb)")
+        lines.append(web_fingerprint)
+
     lines.append("\n## CVE matches (version-based)")
     for port, product, version, cves in version_to_cves(services, config or {}):
         lines.append(f"\n### {port}: {product} {version}\n{cves}")
 
     lines.append(_exploit_leads(services))
     return "\n".join(lines)
+
+
+def _fingerprint_web(target: str, services: list[dict]) -> str:
+    """Run whatweb on the first HTTP(S) port found (if the tool is available)."""
+    from suijin.modules.loader import get_module_tools
+
+    whatweb = get_module_tools().get("whatweb_scan")
+    if whatweb is None:
+        return ""
+    for s in services:
+        port = str(s.get("port", ""))
+        svc = str(s.get("service", "")).lower()
+        if "http" in svc or port in ("80", "443", "8080", "8443"):
+            scheme = "https" if "https" in svc or port in ("443", "8443") else "http"
+            url = f"{scheme}://{target}:{port}" if port not in ("80", "443") else f"{scheme}://{target}"
+            try:
+                out = whatweb(url=url)
+                return str(out)[:2000]
+            except Exception:  # noqa: BLE001 — fingerprinting is best-effort
+                return ""
+    return ""
 
 
 def _exploit_leads(services: list[dict], max_leads: int = 3) -> str:
