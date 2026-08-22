@@ -531,3 +531,112 @@ class TestConstantsTmpDir:
 
             os.environ.pop("SUIJIN_TMP_DIR", None)
             importlib.reload(c)
+
+
+class TestExecuteTerminalShellRouting:
+    """v5.2 CRITICAL fix: shell metacharacters route through /bin/sh -c.
+
+    The old code shlex.split 'a; b' successfully and exec'd argv-style —
+    the ';' became a literal argument. Three documented field engagements
+    (drfrost.org, playtorrio.xyz) hit this and burned iterations."""
+
+    def test_semicolon_chain(self):
+        from suijin.modules.tools.lib.terminal import execute_terminal
+
+        out = execute_terminal("echo alpha; echo beta")
+        assert "alpha" in out and "beta" in out, out
+
+    def test_pipe(self):
+        from suijin.modules.tools.lib.terminal import execute_terminal
+
+        out = execute_terminal("echo hello-world | tr a-z A-Z")
+        assert "HELLO-WORLD" in out, out
+
+    def test_redirect_and_read(self, tmp_path):
+        from suijin.modules.tools.lib.terminal import execute_terminal
+
+        f = tmp_path / "rt.txt"
+        out = execute_terminal(f"echo marker > {f} && cat {f}")
+        assert "marker" in out, out
+
+    def test_subshell(self):
+        from suijin.modules.tools.lib.terminal import execute_terminal
+
+        out = execute_terminal("echo $(echo nested)")
+        assert "nested" in out, out
+
+    def test_plain_command_unchanged(self):
+        from suijin.modules.tools.lib.terminal import execute_terminal
+
+        out = execute_terminal("echo standalone")
+        assert "standalone" in out and "Error" not in out, out
+
+
+class TestMcpTerminalPtyRead:
+    """v5.2: mcp_terminal captures full output from slow commands.
+
+    The old pipe + sleep(0.5) + readline approach lost everything past
+    0.5 seconds (and readline on an empty pipe blocked forever)."""
+
+    def test_slow_command_fully_captured(self):
+        import time
+
+        from suijin.modules.mcp_terminal.main import mcp_shell_close, mcp_shell_exec
+
+        try:
+            t0 = time.time()
+            out = mcp_shell_exec("sleep 2 && echo slow-marker-ok")
+            dt = time.time() - t0
+            assert "slow-marker-ok" in out, out
+            assert 2 <= dt < 15, f"took {dt:.1f}s — expected ~2s"
+        finally:
+            mcp_shell_close()
+
+    def test_fast_command_instant(self):
+        import time
+
+        from suijin.modules.mcp_terminal.main import mcp_shell_close, mcp_shell_exec
+
+        try:
+            t0 = time.time()
+            out = mcp_shell_exec("echo fast-ok")
+            dt = time.time() - t0
+            assert "fast-ok" in out, out
+            assert dt < 5
+        finally:
+            mcp_shell_close()
+
+    def test_pipe_chain_in_session(self):
+        from suijin.modules.mcp_terminal.main import mcp_shell_close, mcp_shell_exec
+
+        try:
+            out = mcp_shell_exec("echo chain-data | tr a-z A-Z")
+            assert "CHAIN-DATA" in out, out
+        finally:
+            mcp_shell_close()
+
+
+class TestJobCancelKills:
+    """v5.2: cancel actually kills the subprocess (was cosmetic-only)."""
+
+    def test_cancel_kills_process(self):
+        import time
+
+        from suijin.modules.tools.lib import job_registry as jr
+        from suijin.modules.tools.lib.terminal import execute_terminal
+
+        jid = jr.spawn("sleep_job", {"cmd": "sleep 30"}, lambda n, a, c: execute_terminal(a["cmd"]))
+        time.sleep(1.5)
+        job = jr.get(jid)
+        assert job["status"] == "running"
+        proc = job.get("_proc")
+        assert proc is not None, "subprocess not tracked"
+
+        assert jr.cancel(jid)
+        time.sleep(0.5)
+        assert proc.poll() is not None, "process still alive after cancel"
+
+    def test_cancel_unknown_id(self):
+        from suijin.modules.tools.lib import job_registry as jr
+
+        assert jr.cancel("nonexistent") is False

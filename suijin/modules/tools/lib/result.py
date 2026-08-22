@@ -135,7 +135,14 @@ def _run_streaming(cmd, *, timeout, cwd, env, shell, display, sink) -> CommandRe
             cwd=cwd,
             env=env,
             shell=shell,
+            start_new_session=True,  # own process group: job cancel can killpg
         )
+        # register with the active background job (if any) so cancel()
+        # can kill this process group — v5.2
+        with contextlib.suppress(Exception):
+            from suijin.modules.tools.lib.job_registry import _register_proc
+
+            _register_proc(proc)
     except FileNotFoundError as e:
         return CommandResult(display, -1, "", f"command not found: {e}", int((time.time() - start) * 1000))
     except Exception as e:
