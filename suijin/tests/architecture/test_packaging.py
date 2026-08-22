@@ -103,6 +103,7 @@ class TestDocsSync:
 
     def test_pyproject_matches_version(self):
         import json
+
         import tomllib
 
         version = json.loads((REPO / "suijin" / "version.json").read_text())["version"]
