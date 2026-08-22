@@ -25,50 +25,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent  # suijin/ root
 PACK_ROOTS = [BASE_DIR / "modules", Path.home() / ".suijin" / "modules"]
 
 # Recon profiles, container images, DNS records — defined inline
-RECON_PROFILES = {
-    "balanced": {
-        "nmap_flags": "-sV -sC -T4",
-        "gobuster_threads": 40,
-        "ffuf_rate": 50,
-        "delay_between_requests_ms": 200,
-        "max_parallel_scans": 4,
-    },
-    "stealth": {
-        "nmap_flags": "-sS -T2 --max-retries 1",
-        "gobuster_threads": 10,
-        "ffuf_rate": 5,
-        "delay_between_requests_ms": 2000,
-        "max_parallel_scans": 1,
-    },
-    "aggressive": {
-        "nmap_flags": "-sV -sC -T5 --min-rate 1000",
-        "gobuster_threads": 80,
-        "ffuf_rate": 200,
-        "delay_between_requests_ms": 50,
-        "max_parallel_scans": 8,
-    },
-}
 
 
-def get_profile(profile_name: str = "balanced") -> dict:
-    return RECON_PROFILES.get(profile_name, RECON_PROFILES["balanced"])
-
-
-TOOL_IMAGES = {}
-
-
-def get_tool_image(tool_name: str) -> str:
-    return TOOL_IMAGES.get(tool_name)
-
-
-DNS_RECON_RECORDS = ["A", "AAAA", "CNAME", "MX", "NS", "TXT", "SOA", "PTR", "SRV"]
-SUBDOMAIN_TIERS = {"tier1_always": ["www", "mail", "ftp", "admin", "api", "dev", "staging"]}
-
-# Loaded module registry
-_loaded_modules = {}
-_module_tools = {}
-_module_skills = []
-_verbose = False  # Silent by default — redteamer.main() enables on startup
+_verbose = False
 
 
 def set_verbose(v: bool):

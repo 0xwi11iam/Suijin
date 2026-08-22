@@ -44,7 +44,7 @@ def apk_strings(apk_path: str = "", pattern: str = "") -> str:
     custom = re.compile(pattern) if pattern else None
     urls, keys, customs = set(), set(), set()
     for n in z.namelist():
-        if not n.endswith((".dex", ".xml", ".json", ".properties", ".txt", "")):
+        if not n.endswith((".dex", ".xml", ".json", ".properties", ".txt")):
             continue
         try:
             blob = z.read(n)[:2_000_000]

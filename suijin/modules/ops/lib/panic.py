@@ -19,7 +19,6 @@ _PATTERNS = [
     "suijin/cli.py ui",
     "suijin/lab/",
     "vulnerable_app.py",
-    "attack_simulator.py",
 ]
 
 # Live blue-team state in /tmp (constants are session-scoped by design).
