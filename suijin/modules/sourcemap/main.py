@@ -4,6 +4,17 @@ _T = (5, 20)
 _UA = {"User-Agent": _stealth_ua()}
 
 
+def _stealth_ua() -> str:
+    """Stealth identity (lazy import, fallback to a realistic browser)."""
+    try:
+        from suijin.modules.platform.lib.stealth import user_agent
+
+        return user_agent()
+    except Exception:
+        return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+
+
 def _get(url, **kw):
     return requests.get(url, timeout=_T, headers=_UA, **kw)
 
