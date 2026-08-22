@@ -1,0 +1,11 @@
+{
+  "name": "Payloadforge",
+  "version": "1.0",
+  "description": "Real payload generation: reverse shells (5 context types), encoder chains (base64/gzip/hex/URI), and stager builders. All output is runnable code.",
+  "tools": {
+    "rev_shell": {"description": "Generate a reverse shell one-liner for a given context.", "parameters": {"lhost": "Listener IP/hostname", "lport": "Listener port (default 4444)", "context": "bash|python|nc|php|powershell (default bash)"}},
+    "encode_chain": {"description": "Layer-encode a payload: base64 -> gzip -> base64 -> hex.", "parameters": {"payload": "The raw payload text", "layers": "Number of layers 1-4 (default 2)"}},
+    "stager": {"description": "Build a download-and-execute stager command.", "parameters": {"url": "URL of the payload to fetch", "method": "curl|wget|python (default curl)", "output": "Filename to save as (default /tmp/s)"}}
+  },
+  "dependencies": []
+}

@@ -1,0 +1,10 @@
+{
+  "id": "containerbreak",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": ["platform", "tools"],
+  "provides": ["pack.containerbreak", "docker_analyze", "escape_check"],
+  "entry": "pack_entry:containerbreak",
+  "permissions": ["filesystem", "network"],
+  "description": "Container escape analysis from real configs."
+}

@@ -1,0 +1,10 @@
+{
+  "id": "payloadforge",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": ["platform", "tools"],
+  "provides": ["pack.payloadforge", "rev_shell", "encode_chain", "stager"],
+  "entry": "pack_entry:payloadforge",
+  "permissions": ["filesystem"],
+  "description": "Real payload generation: reverse shells, encoder chains, stagers."
+}

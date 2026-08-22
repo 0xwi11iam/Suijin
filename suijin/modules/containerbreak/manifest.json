@@ -1,0 +1,10 @@
+{
+  "name": "Containerbreak",
+  "version": "1.0",
+  "description": "Container escape analysis: inspect exposed Docker API configs (privileged, capabilities, mounts) and generate concrete escape commands from real config analysis.",
+  "tools": {
+    "docker_analyze": {"description": "Analyze a Docker API endpoint for escape vectors.", "parameters": {"url": "Docker API URL (default http://127.0.0.1:2375)"}},
+    "escape_check": {"description": "Check if the current container has escape vectors (self-analysis).", "parameters": {}}
+  },
+  "dependencies": []
+}

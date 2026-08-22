@@ -15,6 +15,27 @@ import shlex
 from pathlib import Path
 
 
+def sudo_available() -> str:
+    """v5.2: check if passwordless sudo works; if not, say so honestly
+    instead of silently dead-ending at a password prompt that never appears."""
+    import subprocess
+
+    try:
+        r = subprocess.run(["sudo", "-n", "true"], capture_output=True, text=True, timeout=5)
+        if r.returncode == 0:
+            return "passwordless sudo: YES — monitor mode and packet capture available"
+        return (
+            "passwordless sudo: NO — wifi tools need root. Options:\n"
+            "  1. sudo visudo: add 'user ALL=(ALL) NOPASSWD: /usr/sbin/airodump-ng, /usr/sbin/aireplay-ng, /usr/bin/aircrack-ng'\n"
+            "  2. run the agent as root (not recommended)\n"
+            "  3. use a dedicated wifi adapter in a VM with USB passthrough"
+        )
+    except FileNotFoundError:
+        return "Error: sudo not installed — wifi tools unavailable"
+    except subprocess.TimeoutExpired:
+        return "Error: sudo check timed out"
+
+
 def _find_interface():
     """Auto-detect the first wireless interface."""
     # macOS
