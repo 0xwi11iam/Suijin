@@ -195,10 +195,29 @@ async def run_red_team_async(config, objective, api_key=None):
                         success = latest.get("success", True)
                         phase = latest.get("phase", node_output.get("current_phase", "?"))
 
+                        # token counter — right side, live from USAGE
+                        _tok_in = int(providers.USAGE.get("input_tokens", 0))
+                        _tok_out = int(providers.USAGE.get("output_tokens", 0))
+                        _tok = _tok_in + _tok_out
+                        _tok_str = f"{_tok / 1000:.1f}k" if _tok >= 1000 else str(_tok)
+                        _cost = float(providers.USAGE.get("est_cost_usd", 0))
+                        _line = (
+                            f"\n[bold white]#{iteration}[/bold white] "
+                            f"[{'green' if success else 'red'}]{'+' if success else '!'}[/{'green' if success else 'red'}] "
+                            f"[dim]{phase}[/dim]"
+                        )
+                        # right-align the counter using a fixed-width pad
+                        from rich.text import Text as _RT
+
+                        _rt = _RT(_line, markup=True)
+                        _left = f"#{iteration} {'+' if success else '!'} {phase}"
+                        _right = f"{_tok_str} tok | ${_cost:.4f}"
+                        _pad = max(1, console.width - len(_left) - len(_right) - 2)
                         console.print(
                             f"\n[bold white]#{iteration}[/bold white] "
                             f"[{'green' if success else 'red'}]{'+' if success else '!'}[/{'green' if success else 'red'}] "
                             f"[dim]{phase}[/dim]"
+                            f"{' ' * _pad}[dim cyan]{_right}[/dim cyan]"
                         )
 
                         if thought:

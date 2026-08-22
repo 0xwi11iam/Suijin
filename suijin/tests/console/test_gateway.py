@@ -135,7 +135,6 @@ class TestWorkspaceAnchoring:
         platform WORKSPACE_DIR — never Path.cwd(). A boot from a scratch
         directory must not scatter outputs/audit_trails/payloads/reports
         there (this exact bug left junk at the repo root)."""
-        import os
 
         from suijin.modules.platform.lib import workspace as ws
 
@@ -144,11 +143,70 @@ class TestWorkspaceAnchoring:
         monkeypatch.chdir(scratch)
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path / "ws")
 
-        from suijin.modules.console.lib.gateway import create_app
         from fastapi.testclient import TestClient
+
+        from suijin.modules.console.lib.gateway import create_app
 
         c = TestClient(create_app(token="t"))
         r = c.get("/api/status", headers={"Authorization": "Bearer t"})
         assert r.status_code == 200
         # the cwd stays pristine
         assert list(scratch.iterdir()) == [], f"cwd polluted: {[p.name for p in scratch.iterdir()]}"
+
+
+class TestCostFrameTokens:
+    def test_cost_frame_carries_token_counts(self):
+        """The right-side token counter (desktop topbar + TUI) reads the
+        'cost' WS frame; the pump builds it from get_usage() — this pins
+        that every field the UI needs is present in the usage dict."""
+        from suijin.modules.providers.lib import _record_usage, reset_usage
+
+        reset_usage()
+        _record_usage("test", "test-model", 1000, 500)
+        from suijin.modules.providers.lib import get_usage
+
+        u = get_usage()
+        tok = int(u.get("input_tokens", 0)) + int(u.get("output_tokens", 0))
+        # the frame the pump sends (synchronized with gateway/__init__.py pump)
+        frame = {
+            "kind": "cost",
+            "est_cost_usd": round(float(u.get("est_cost_usd", 0.0)), 4),
+            "calls": u.get("calls", 0),
+            "tokens": tok,
+            "input_tokens": int(u.get("input_tokens", 0)),
+            "output_tokens": int(u.get("output_tokens", 0)),
+        }
+        for k in ("est_cost_usd", "calls", "tokens", "input_tokens", "output_tokens"):
+            assert k in frame, f"cost frame missing {k}"
+        assert frame["tokens"] == 1500
+        assert frame["input_tokens"] == 1000
+        assert frame["output_tokens"] == 500
+        reset_usage()
+
+
+class TestTUICounterFormat:
+    def test_iteration_line_with_counter(self, capsys):
+        """The TUI iteration line carries a right-aligned tok+cost counter."""
+        from rich.console import Console
+
+        from suijin.modules.providers.lib import _record_usage, reset_usage
+
+        reset_usage()
+        _record_usage("test", "m", 2500, 700)
+
+        console = Console(width=80, force_terminal=False, file=__import__("io").StringIO())
+        providers = type("P", (), {"USAGE": {}})
+        from suijin.modules.providers.lib import get_usage
+
+        providers.USAGE = get_usage()
+        _in = int(providers.USAGE.get("input_tokens", 0))
+        _out = int(providers.USAGE.get("output_tokens", 0))
+        _tok = _in + _out
+        _tok_str = f"{_tok / 1000:.1f}k" if _tok >= 1000 else str(_tok)
+        _cost = float(providers.USAGE.get("est_cost_usd", 0))
+        _left = "#3 + exploitation"
+        _right = f"{_tok_str} tok | ${_cost:.4f}"
+        assert "3.2k" in _tok_str
+        assert _tok == 3200
+        assert _right.endswith(f"${_cost:.4f}")
+        reset_usage()

@@ -311,9 +311,19 @@ def create_app(token: str | None = None) -> FastAPI:
 
                     u = get_usage()
                     cost = round(float(u.get("est_cost_usd", 0.0)), 4)
+                    tok = int(u.get("input_tokens", 0)) + int(u.get("output_tokens", 0))
                     if cost != last_cost:
                         last_cost = cost
-                        await ws.send_json({"kind": "cost", "est_cost_usd": cost, "calls": u.get("calls", 0)})
+                        await ws.send_json(
+                            {
+                                "kind": "cost",
+                                "est_cost_usd": cost,
+                                "calls": u.get("calls", 0),
+                                "tokens": tok,
+                                "input_tokens": int(u.get("input_tokens", 0)),
+                                "output_tokens": int(u.get("output_tokens", 0)),
+                            }
+                        )
                 except Exception:  # noqa: BLE001
                     pass
                 # approvals/questions snapshots (cheap, small)

@@ -22,6 +22,7 @@ export function Shell({
   const [live, setLive] = useState(false);
   const [status, setStatus] = useState<Status | null>(null);
   const [cost, setCost] = useState(0);
+  const [tokens, setTokens] = useState(0);
   const [costTick, setCostTick] = useState(false);
   const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
@@ -58,6 +59,7 @@ export function Shell({
         setLive(true);
         if (f.kind === "cost") {
           setCost(f.est_cost_usd);
+          setTokens(f.tokens ?? 0);
           setCostTick(true);
           setTimeout(() => setCostTick(false), 400);
         } else if (f.kind === "approvals") setApprovals(f.items);
@@ -108,7 +110,8 @@ export function Shell({
           </span>
         )}
         <div className={`cost ${costTick ? "tick" : ""}`}>
-          <span className="cur">$</span>
+          {tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}k tok` : `${tokens} tok`}
+          <span className="cur"> · </span>$
           {cost.toFixed(4)}
         </div>
         <button className="btn small" onClick={onDisconnect}>

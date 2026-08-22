@@ -37,7 +37,7 @@ export interface FireteamTeam {
 
 export type StreamFrame =
   | { kind: "step"; stream: string; entry: Record<string, unknown> }
-  | { kind: "cost"; est_cost_usd: number; calls: number }
+  | { kind: "cost"; est_cost_usd: number; calls: number; tokens?: number; input_tokens?: number; output_tokens?: number }
   | { kind: "approvals"; items: ApprovalItem[] }
   | { kind: "questions"; items: QuestionItem[] }
   | { kind: "fireteam"; teams: FireteamTeam[]; updated: string };
