@@ -26,6 +26,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -342,8 +343,58 @@ async def spawn_and_collect(
 # The main loop NEVER blocks on a team: deploy returns a team id instantly;
 # background asyncio tasks run the specialists; each think turn drains
 # finished results into the conversation as messages.
+#
+# State mirror: a JSON snapshot in the workspace so OTHER PROCESSES (the
+# desktop gateway) can serve live fireteam status — the in-memory dict
+# stays the source of truth inside the agent process.
 
 _FIRETEAMS: dict[str, dict] = {}
+_STATE_FILE_NAME = "fireteam.json"
+
+
+def _state_path() -> Path:
+    from suijin.modules.platform.lib.workspace import artifact_dir
+
+    return artifact_dir("fireteam") / "registry.json"
+
+
+def _persist_state() -> None:
+    """Mirror the registry to outputs/fireteam/registry.json. Never raises."""
+    try:
+        import json as _json
+
+        p = _state_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(_json.dumps(_snapshot(), indent=2), encoding="utf-8")
+    except Exception:  # noqa: BLE001 — mirroring must never break a team
+        pass
+
+
+def _snapshot() -> dict:
+    """Serializable registry snapshot: teams with per-task live status."""
+    teams = []
+    for tid, t in sorted(_FIRETEAMS.items()):
+        running = len(t["futures"])
+        tasks = []
+        results_by_task = {r.task: r for r in t["results"]}
+        for task in t["tasks"]:
+            r = results_by_task.get(task)
+            if r is not None:
+                tasks.append(
+                    {
+                        "task": task,
+                        "state": "done",
+                        "success": r.success,
+                        "steps": r.steps,
+                        "findings": r.findings[:1000],
+                    }
+                )
+            elif running:
+                tasks.append({"task": task, "state": "running", "success": None, "steps": None, "findings": ""})
+            else:
+                tasks.append({"task": task, "state": "queued", "success": None, "steps": None, "findings": ""})
+        teams.append({"team_id": tid, "started": t["started"], "running": running, "tasks": tasks})
+    return {"teams": teams, "updated": datetime.now(timezone.utc).isoformat()}
 
 
 def deploy_fireteam(
@@ -394,6 +445,7 @@ def deploy_fireteam(
         "started": datetime.now(timezone.utc).isoformat(),
         "results": [],
     }
+    _persist_state()
     logger.info("Fireteam %s deployed: %d specialist(s), %d rejected", team_id, len(spawned), len(skipped))
     return {"team_id": team_id, "spawned": spawned, "skipped": skipped}
 
@@ -423,9 +475,11 @@ def collect_finished_teams(max_messages: int = 6) -> list[str]:
                 f"Task: {r.task[:200]}\nFindings:\n{r.findings[:2000]}"
             )
             if len(messages) >= max_messages:
+                _persist_state()
                 return messages
         if not team["futures"] and team_id in _FIRETEAMS:
             del _FIRETEAMS[team_id]  # fully drained — forget it
+    _persist_state()
     return messages
 
 
@@ -462,6 +516,7 @@ def _reset_fireteams() -> None:
         for fut in team["futures"]:
             fut.cancel()
     _FIRETEAMS.clear()
+    _persist_state()
     _RECENT_TASKS.clear()
     global _LAST_STATUS_SIG
     _LAST_STATUS_SIG = None

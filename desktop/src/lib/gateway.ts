@@ -20,11 +20,27 @@ export interface QuestionItem {
   answer?: string;
 }
 
+export interface FireteamTask {
+  task: string;
+  state: "running" | "done" | "queued";
+  success: boolean | null;
+  steps: number | null;
+  findings: string;
+}
+
+export interface FireteamTeam {
+  team_id: string;
+  started: string;
+  running: number;
+  tasks: FireteamTask[];
+}
+
 export type StreamFrame =
   | { kind: "step"; stream: string; entry: Record<string, unknown> }
   | { kind: "cost"; est_cost_usd: number; calls: number }
   | { kind: "approvals"; items: ApprovalItem[] }
-  | { kind: "questions"; items: QuestionItem[] };
+  | { kind: "questions"; items: QuestionItem[] }
+  | { kind: "fireteam"; teams: FireteamTeam[]; updated: string };
 
 export class Gateway {
   constructor(private base: string, private token: string) {}
@@ -63,6 +79,9 @@ export class Gateway {
   }
   spar() {
     return this.get<Record<string, number | string[]>>("/api/spar");
+  }
+  fireteam() {
+    return this.get<{ teams: FireteamTeam[]; updated: string }>("/api/fireteam");
   }
   approvals() {
     return this.get<ApprovalItem[]>("/api/approvals");

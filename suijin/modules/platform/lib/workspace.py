@@ -31,6 +31,7 @@ ARTIFACT_DIRS = (
     "engagement_templates",
     "portal",
     "bugscope",
+    "fireteam",
 )
 
 

@@ -341,3 +341,32 @@ body {
 .pill.ok { border-color: rgba(52,211,153,0.4); color: var(--ok); }
 .pill.warn { border-color: rgba(251,191,36,0.4); color: var(--warn); }
 .pill.danger { border-color: rgba(248,113,113,0.4); color: var(--danger); }
+
+/* ── micro-interactions (v5.1.1 polish) ─────────────────── */
+
+@keyframes streamIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.stream-row { animation: streamIn 0.18s ease-out; }
+
+@keyframes hitlResolve {
+  to { opacity: 0.55; transform: scale(0.98); }
+}
+.hitl.resolved { animation: hitlResolve 0.25s ease-out forwards; }
+
+.cost { transition: color 0.3s; }
+.cost.tick { text-shadow: 0 0 12px var(--cyan-glow); }
+
+.pill.live { animation: pulse 2.2s ease-in-out infinite; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+.btn { transition: border-color 0.15s, color 0.15s, background 0.15s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .stream-row, .hitl.resolved, .pill.live { animation: none; }
+  .cost.tick { text-shadow: none; }
+}

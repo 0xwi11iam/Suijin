@@ -1,5 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Gateway } from "../lib/gateway";
+
+// Tauri fs bridge (present only in the native shell; undefined in browser dev)
+declare global {
+  interface Window {
+    __TAURI__?: {
+      core: { invoke: <T>(cmd: string) => Promise<T> };
+    };
+  }
+}
 
 export function Connect({
   onConnected,
@@ -10,6 +19,23 @@ export function Connect({
   const [token, setToken] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [detected, setDetected] = useState<string | null>(null);
+
+  // one-click: read the discovery file through the Tauri shell
+  useEffect(() => {
+    const t = window.__TAURI__;
+    if (!t) return;
+    t.core
+      .invoke<{ url?: string; token?: string } | null>("read_discovery")
+      .then((d) => {
+        if (d?.url && d?.token) {
+          setDetected(d.url);
+          setBase(d.url);
+          setToken(d.token);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   async function go(e: React.FormEvent) {
     e.preventDefault();
@@ -37,6 +63,14 @@ export function Connect({
           Suijin<span style={{ color: "var(--cyan)" }}>.</span>
         </h1>
         <div className="sub">Connect to a running gateway</div>
+        {detected && (
+          <div
+            className="pill live"
+            style={{ display: "inline-block", marginBottom: 14 }}
+          >
+            gateway detected — ready
+          </div>
+        )}
         <div className="field">
           <label>Gateway</label>
           <input value={base} onChange={(e) => setBase(e.target.value)} spellCheck={false} />
@@ -52,7 +86,7 @@ export function Connect({
           />
         </div>
         <button className="btn primary" style={{ width: "100%", marginTop: 8 }} disabled={busy || !token}>
-          {busy ? "Connecting…" : "Connect"}
+          {busy ? "Connecting…" : detected ? "Connect to detected gateway" : "Connect"}
         </button>
         <div className="connect-err">{err}</div>
       </form>

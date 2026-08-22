@@ -3,8 +3,9 @@ import { Gateway, type ApprovalItem, type QuestionItem, type StreamFrame, type S
 import { ApprovalsScreen } from "../screens/Approvals";
 import { EngagementScreen } from "../screens/Engagement";
 import { DashboardScreen } from "../screens/Dashboard";
+import { FireteamScreen, type FireteamTeam } from "../screens/Fireteam";
 
-const TABS = ["Approvals", "Engagement", "Dashboard"] as const;
+const TABS = ["Approvals", "Engagement", "Fireteam", "Dashboard"] as const;
 type Tab = (typeof TABS)[number];
 
 export function Shell({
@@ -25,6 +26,7 @@ export function Shell({
   const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [steps, setSteps] = useState<{ stream: string; entry: Record<string, unknown> }[]>([]);
+  const [fireteam, setFireteam] = useState<{ teams: FireteamTeam[] } | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   // initial snapshot + status refresh
@@ -61,6 +63,7 @@ export function Shell({
         } else if (f.kind === "approvals") setApprovals(f.items);
         else if (f.kind === "questions") setQuestions(f.items);
         else if (f.kind === "step") setSteps((prev) => [...prev.slice(-400), { stream: f.stream, entry: f.entry }]);
+        else if (f.kind === "fireteam") setFireteam({ teams: f.teams ?? [] });
       },
       () => setLive(false)
     );
@@ -127,12 +130,13 @@ export function Shell({
           <ApprovalsScreen gw={gw} approvals={approvals} questions={questions} />
         )}
         {tab === "Engagement" && <EngagementScreen gw={gw} steps={steps} />}
+        {tab === "Fireteam" && <FireteamScreen gw={gw} snapshot={fireteam} />}
         {tab === "Dashboard" && <DashboardScreen gw={gw} status={status} />}
       </main>
 
       <footer className="keybar">
         <span>
-          <kbd>1-3</kbd> tabs
+          <kbd>1-4</kbd> tabs
         </span>
         <span>
           <kbd>A</kbd> approve · <kbd>D</kbd> deny

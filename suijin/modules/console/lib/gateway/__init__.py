@@ -184,6 +184,20 @@ def create_app(token: str | None = None) -> FastAPI:
 
         return _score_volley()
 
+    @app.get("/api/fireteam")
+    def fireteam(_: None = Depends(require_token)) -> dict:
+        """Live fireteam registry (file mirror written by the agent process)."""
+        from suijin.modules.agent.lib.nodes.subagent_node import _snapshot, _state_path
+
+        try:
+            if _state_path().exists():
+                import json as _json
+
+                return _json.loads(_state_path().read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001 — fall through to the in-memory snapshot
+            pass
+        return _snapshot()
+
     # ── REST: operator actions (the ONLY writes) ─────────────────────
 
     @app.get("/api/approvals")
@@ -257,8 +271,12 @@ def create_app(token: str | None = None) -> FastAPI:
             from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
             trails = WORKSPACE_DIR / "outputs" / "audit_trails"
+            from suijin.modules.agent.lib.nodes.subagent_node import _state_path as _ft_path
+
+            ft_path = _ft_path()
             offsets: dict[str, int] = {}
             last_cost = -1.0
+            last_ft = ""
             while True:
                 if trails.is_dir():
                     for f in sorted(trails.glob("*.jsonl")):
@@ -296,6 +314,15 @@ def create_app(token: str | None = None) -> FastAPI:
                     await ws.send_json({"kind": "approvals", "items": list_approvals()})
                 except Exception:  # noqa: BLE001
                     await ws.send_json({"kind": "approvals", "items": []})
+                # fireteam snapshot (file mirror; skip if unchanged)
+                try:
+                    if ft_path.exists():
+                        blob = ft_path.read_text(encoding="utf-8")
+                        if blob != last_ft:
+                            last_ft = blob
+                            await ws.send_json({"kind": "fireteam", **json.loads(blob)})
+                except Exception:  # noqa: BLE001
+                    pass
                 await ws.send_json({"kind": "questions", "items": _questions_read()})
                 await asyncio.sleep(0.6)
 
@@ -394,15 +421,69 @@ def _questions_write(items: list[dict]) -> None:
     (_ws_dir() / "questions.jsonl").write_text("\n".join(json.dumps(i) for i in items) + "\n")
 
 
+def _discovery_path() -> Path:
+    """Where running gateways advertise themselves (one-click connect).
+
+    ~/.suijin/gateway.json — the desktop app's connect screen reads it to
+    pre-fill host/port/token. Written on serve(), removed on clean exit.
+    SECURITY: 0600, contains the session token; only readable by the
+    local user (the gateway is localhost-bound by default anyway)."""
+    return Path.home() / ".suijin" / "gateway.json"
+
+
+def _write_discovery(host: str, port: int, token: str) -> None:
+    try:
+        p = _discovery_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps({"url": f"http://{host}:{port}", "token": token, "pid": __import__("os").getpid()}))
+        p.chmod(0o600)
+    except Exception:  # noqa: BLE001 — discovery is best-effort
+        pass
+
+
+def _clear_discovery() -> None:
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        _discovery_path().unlink(missing_ok=True)
+
+
 def serve(host: str = "127.0.0.1", port: int = 7331, token: str | None = None, quiet: bool = False) -> None:
-    """Run the gateway. Prints the session token ONCE (the desktop app
-    reads it from the sidecar handshake stdout)."""
+    """Run the gateway. Prints the session token ONCE and advertises in
+    ~/.suijin/gateway.json (the desktop app's one-click connect reads it).
+
+    Discovery cleanup is belt-and-braces: the app lifespan shutdown hook
+    (uvicorn graceful exit), an atexit fallback, and SIGINT/SIGTERM
+    handlers — a stale file points a desktop client at a dead port
+    otherwise."""
+    import atexit
+    import signal as _signal
+
     import uvicorn
 
     app = create_app(token=token)
+
+    @app.on_event("shutdown")
+    def _cleanup() -> None:
+        _clear_discovery()
+
+    _write_discovery(host, port, app.state.token)
+    atexit.register(_clear_discovery)
+
+    def _term(signum, frame):  # noqa: ANN001
+        import contextlib
+
+        with contextlib.suppress(Exception):
+            _clear_discovery()
+        raise SystemExit(0)
+
+    _signal.signal(_signal.SIGTERM, _term)
     if not quiet:
         print(f"[suijin-gateway] http://{host}:{port}  token={app.state.token}", flush=True)
-    uvicorn.run(app, host=host, port=port, log_level="error")
+    try:
+        uvicorn.run(app, host=host, port=port, log_level="error")
+    finally:
+        _clear_discovery()
 
 
 def main() -> int:
