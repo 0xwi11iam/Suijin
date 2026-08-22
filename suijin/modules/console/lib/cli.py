@@ -798,6 +798,32 @@ def run_real_battle_cmd(args) -> int:
     return 0
 
 
+def run_bench_cmd(args) -> int:
+    """`suijin bench` — graded lab runs: flags/tools/cost score per release."""
+    from suijin.modules.ops.lib.bench import render_history, run_all, run_bench
+
+    if getattr(args, "history", False):
+        print(render_history())
+        return 0
+    live = bool(getattr(args, "live", False))
+    lab = getattr(args, "lab", "") or ""
+    scores = [run_bench(lab, mock=not live)] if lab else run_all(mock=not live)
+    ok = True
+    for s in scores:
+        if "error" in s:
+            ok = False
+            print(f"bench error ({s.get('lab', '?')}): {s['error']}")
+            continue
+        print(
+            f"{s['lab']:12} {s['mode']:4} flags {s['flags_captured']}/{s['flags_known']} "
+            f"({s['capture_rate']:.0%})  calls {s['tool_calls']}  iters {s['iterations']}  cost ${s['cost_usd']:.4f}"
+        )
+        if s["flags_detail"]:
+            print("  captured: " + ", ".join(s["flags_detail"]))
+    print("\nhistory: suijin bench --history")
+    return 0 if ok else 1
+
+
 def run_battle_cmd(args) -> int:
     """`suijin battle` — purple team: scripted red vs pattern blue, live scoreboard."""
     if getattr(args, "real", False) or getattr(args, "mock", False):
@@ -1872,6 +1898,13 @@ def main(argv=None):
     )
     battle.add_argument("--objective", default="", help="override the red objective (--real)")
     battle.set_defaults(func=run_battle_cmd)
+
+    # bench: graded lab benchmark (flags/tools/cost) with persisted history
+    bench_p = sub.add_parser("bench", help="graded lab benchmark: agent vs lab, flags/tools/cost score")
+    bench_p.add_argument("--lab", default="", help="one lab (log4shell, wordpress, oauth); default = all")
+    bench_p.add_argument("--live", action="store_true", help="use the configured LLM provider (default: scripted mock)")
+    bench_p.add_argument("--history", action="store_true", help="show past bench runs")
+    bench_p.set_defaults(func=run_bench_cmd)
 
     # kb: read full docs + diff build vs cache
     kb = sub.add_parser("kb", help="knowledge base: read full docs / diff build")
