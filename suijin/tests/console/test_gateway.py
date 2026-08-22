@@ -127,3 +127,28 @@ class TestOpenAPI:
             assert must in paths, must
         # typed: status response schema exists
         assert spec["paths"]["/api/status"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+
+
+class TestWorkspaceAnchoring:
+    def test_boot_does_not_pollute_cwd(self, tmp_path, monkeypatch):
+        """Root-cause regression: the gateway boots the kernel with the
+        platform WORKSPACE_DIR — never Path.cwd(). A boot from a scratch
+        directory must not scatter outputs/audit_trails/payloads/reports
+        there (this exact bug left junk at the repo root)."""
+        import os
+
+        from suijin.modules.platform.lib import workspace as ws
+
+        scratch = tmp_path / "scratch-cwd"
+        scratch.mkdir()
+        monkeypatch.chdir(scratch)
+        monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path / "ws")
+
+        from suijin.modules.console.lib.gateway import create_app
+        from fastapi.testclient import TestClient
+
+        c = TestClient(create_app(token="t"))
+        r = c.get("/api/status", headers={"Authorization": "Bearer t"})
+        assert r.status_code == 200
+        # the cwd stays pristine
+        assert list(scratch.iterdir()) == [], f"cwd polluted: {[p.name for p in scratch.iterdir()]}"

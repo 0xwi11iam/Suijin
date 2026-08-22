@@ -96,6 +96,10 @@ def create_app(token: str | None = None) -> FastAPI:
     # ── helpers: lazy ctx access (kernel boots on demand) ───────────
 
     def _ctx():
+        """Kernel ctx for tool serving. CRITICAL: workspace is ALWAYS the
+        platform WORKSPACE_DIR (suijin_agent) — an unanchored boot defaults
+        to Path.cwd() and scatters outputs/audit_trails/payloads/reports
+        into whatever directory the gateway was started from."""
         from suijin.kernel.controller import last_context
 
         ctx = last_context()
@@ -103,8 +107,13 @@ def create_app(token: str | None = None) -> FastAPI:
             from pathlib import Path as _P
 
             from suijin.kernel import controller
+            from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-            ctx, _rep = controller.boot(module_roots=[_P(__file__).resolve().parents[3]], quiet=True)
+            ctx, _rep = controller.boot(
+                module_roots=[_P(__file__).resolve().parents[3]],
+                workspace=WORKSPACE_DIR,
+                quiet=True,
+            )
         return ctx
 
     # ── REST: read ───────────────────────────────────────────────────

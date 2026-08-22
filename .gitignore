@@ -81,3 +81,11 @@ desktop/dist/
 desktop/src-tauri/target/
 desktop/src/lib/api-types.ts
 dist-desktop/
+
+# ── Root hygiene: runtime artifacts never at repo root (gateway/workspace fix guards creation) ──
+/logs/
+/outputs/
+/audit_trails/
+/payloads/
+/reports/
+dist-desktop/
