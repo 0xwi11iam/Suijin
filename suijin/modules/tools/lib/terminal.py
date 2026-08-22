@@ -65,11 +65,22 @@ def execute_terminal(cmd, timeout=30):
                 current_path = f"{bp}:{current_path}"
         env["PATH"] = current_path
 
-        # Tokenize; fall back to a shell one-liner for quoted/compound commands
-        try:
-            cmd_parts = shlex.split(cmd)
-        except ValueError:
+        # CRITICAL (v5.2): commands containing shell metacharacters
+        # (;|&><$`() must run through a shell — shlex.split succeeds on
+        # them but the tokens are meaningless as argv, so "a; b" was
+        # exec'd as a literal ";" argument. This broke every pipeline
+        # and chained command in three documented field engagements.
+        import re as _re
+
+        needs_shell = bool(_re.search(r"[;|&><$`()]", cmd))
+        if needs_shell:
             cmd_parts = ["/bin/sh", "-c", cmd]
+        else:
+            # Tokenize; fall back to a shell one-liner for quoted/compound commands
+            try:
+                cmd_parts = shlex.split(cmd)
+            except ValueError:
+                cmd_parts = ["/bin/sh", "-c", cmd]
 
         # Stealth (v5.1): loud tools get tool-level rate caps — same work,
         # same parallelism, just not machine-gun fast. Benign commands
@@ -77,7 +88,7 @@ def execute_terminal(cmd, timeout=30):
         try:
             from suijin.modules.platform.lib.stealth import sanitize_command
 
-            if len(cmd_parts) > 1:
+            if len(cmd_parts) > 1 and cmd_parts[0] != "/bin/sh":
                 cmd_parts = sanitize_command(cmd_parts)
         except Exception:  # noqa: BLE001 — never block execution
             pass

@@ -11,6 +11,7 @@ Pure stdlib; thread-safe; the thread target is injectable for tests.
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 import uuid
@@ -54,6 +55,7 @@ def spawn(tool_name: str, tool_args: dict, fn, label: str = "") -> str:
                     _jobs[job_id]["output"] = (_jobs[job_id].get("output") or "") + line
 
         set_stream_sink(sink)
+        _active_job_id.value = job_id
         try:
             result = fn(tool_name, tool_args, {})
             with _job_lock:
@@ -67,6 +69,7 @@ def spawn(tool_name: str, tool_args: dict, fn, label: str = "") -> str:
                     _jobs[job_id]["status"] = "failed"
         finally:
             clear_stream_sink()
+            _active_job_id.value = None
 
     t = threading.Thread(target=_run, daemon=True, name=f"job-{job_id}")
     t.start()
@@ -120,12 +123,45 @@ def list_jobs() -> list[dict]:
         return [dict(v) for v in _jobs.values()]
 
 
+_active_job_id = threading.local()
+
+
+def _register_proc(proc) -> None:
+    """Called by result.py when a subprocess starts on this thread: attach
+    it to the currently-running job so cancel() can killpg it."""
+    jid = getattr(_active_job_id, "value", None)
+    if jid is None:
+        return
+    with _job_lock:
+        j = _jobs.get(jid)
+        if j is not None:
+            j["_proc"] = proc
+
+
 def cancel(job_id: str) -> bool:
+    """Cancel a job. v5.2: actually KILLS the subprocess process-group.
+
+    The old version only flipped a status label (cooperative-only) —
+    a cancelled nmap kept scanning in the background, invisible. Now:
+    kill the process group of any tracked subprocess, then mark
+    cancelled. Thread continues but its work dies with the process."""
+    import signal
+
     with _job_lock:
         j = _jobs.get(job_id)
         if not j:
             return False
         if j["status"] == "running":
-            j["status"] = "cancelled"  # cooperative: the thread finishes but is ignored
+            # kill the subprocess if one is tracked for this job
+            proc = j.get("_proc")
+            if proc is not None and proc.poll() is None:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except (ProcessLookupError, PermissionError, OSError):
+                    import contextlib
+
+                    with contextlib.suppress(OSError):
+                        proc.kill()  # fallback: direct kill
+            j["status"] = "cancelled"
             return True
         return True  # already terminal — idempotent success
