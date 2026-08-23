@@ -27,10 +27,14 @@ def _get_tools():
     return _tools
 
 
-def search_kb(keyword):
+def search_kb(keyword, limit=5):
+    """Core forwarding shim — accepts the SAME signature the prompt
+    registry documents (keyword + limit). The pack loader registers this
+    in the flat tool namespace, shadowing the core search_kb; a narrower
+    signature here made every documented call with limit= throw."""
     if not keyword:
         return "Error: keyword required"
-    return _get_tools().search_kb(keyword)
+    return _get_tools().search_kb(keyword, limit=limit)
 
 
 def apply_patch(vulnerability, file_path="lab.py"):
