@@ -31,11 +31,37 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 # ── Tunables (config keys: subagent_max_steps / subagent_timeout_s) ────────
-LLM_TIMEOUT = 30  # seconds per subagent LLM call (was 15 — too tight)
+LLM_TIMEOUT = 60  # seconds per subagent LLM call (was 15, then 30 — field
+# runs still showed timeouts on slow providers; config: subagent_llm_timeout_s,
+# env: SUIJIN_SUBAGENT_LLM_TIMEOUT). One timeout triggers a single retry
+# before it counts as a failure (three strikes still auto-stop).
 TOOL_TIMEOUT = 60  # seconds per tool execution (was 30)
 MAX_SUBAGENT_STEPS = 12  # was 3 — a specialist needs recon->test->verify->report
 SUBAGENT_TIMEOUT = 300  # per-subagent budget (was 60s for the WHOLE batch)
 MAX_TEAM_SIZE = 5
+
+
+def _llm_timeout() -> int:
+    """Effective per-call timeout: env > config > default."""
+    import os
+
+    env = os.environ.get("SUIJIN_SUBAGENT_LLM_TIMEOUT")
+    if env:
+        try:
+            return max(5, int(env))
+        except ValueError:
+            pass
+    try:
+        from suijin.modules.tools.lib.services import get as _service
+
+        cfg = _service("red_config") or {}
+        v = cfg.get("subagent_llm_timeout_s")
+        if v:
+            return max(5, int(v))
+    except Exception:  # noqa: BLE001 — tuning must never break a subagent
+        pass
+    return LLM_TIMEOUT
+
 
 # ── Usefulness gates: a wasted specialist is worse than none ──────────────
 # Deploy-time: vague or duplicate tasks are rejected with a REASON the
@@ -205,12 +231,18 @@ async def run_subagent(
             break
 
         try:
+            timeout = _llm_timeout()
             try:
-                response = await asyncio.wait_for(generate_fn(messages, {}), timeout=LLM_TIMEOUT)
+                response = await asyncio.wait_for(generate_fn(messages, {}), timeout=timeout)
             except asyncio.TimeoutError:
-                findings_parts.append(f"[step {step_num}] LLM timed out ({LLM_TIMEOUT}s)")
-                consecutive_failures += 1
-                continue
+                # one patient retry — slow providers (big prompts, cold
+                # caches) commonly blow a single tight window
+                try:
+                    response = await asyncio.wait_for(generate_fn(messages, {}), timeout=timeout)
+                except asyncio.TimeoutError:
+                    findings_parts.append(f"[step {step_num}] LLM timed out ({timeout}s, retried once)")
+                    consecutive_failures += 1
+                    continue
             except Exception as e:  # noqa: BLE001 — provider errors are data
                 findings_parts.append(f"[step {step_num}] LLM error: {e}")
                 consecutive_failures += 1

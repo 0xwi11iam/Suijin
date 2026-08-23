@@ -429,6 +429,9 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         tool_args = decision.get("tool_args") or {}
 
         if not tool_name:
+            # clear the stale step — the router must NOT re-execute the
+            # previous turn's tool on a malformed use_tool decision
+            updates["_current_step"] = {}
             updates["messages"].append(
                 {
                     "role": "user",
@@ -488,6 +491,10 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         to_phase = pt.get("to_phase", phase)
         reason = pt.get("reason", "")
 
+        # clear the stale step — a pure bookkeeping turn must not re-execute
+        # the previous tool (router keys on _current_step.tool_name)
+        updates["_current_step"] = {}
+
         # ── FREEDOM: no phase-transition gating. Agent decides when to move. ──
 
         if to_phase == phase:
@@ -523,6 +530,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
 
     elif action == "complete":
         completion_reason = decision.get("completion_reason", "Objective complete")
+        updates["_current_step"] = {}  # no execute hop on completion
         updates["completion_reason"] = completion_reason
         updates["messages"].append(
             {
@@ -535,6 +543,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         uq = decision.get("user_question") or {}
         question = uq.get("question", "No question specified")
         pending = state.get("pending_questions", []) + [uq]
+        updates["_current_step"] = {}  # pure question turn — no execute hop
         updates["pending_questions"] = pending
         updates["messages"].append(
             {
@@ -592,6 +601,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
     elif action == "switch_skill":
         ss = decision.get("skill_switch") or {}
         to_skill = ss.get("to_skill", "")
+        updates["_current_step"] = {}  # pure bookkeeping turn — no execute hop
         updates["attack_path_type"] = to_skill
         updates["messages"].append(
             {

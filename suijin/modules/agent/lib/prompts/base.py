@@ -284,6 +284,7 @@ Every turn: respond with EXACTLY ONE JSON object. Four required fields:
 That is ALL you must produce. Like a coding agent emitting one tool call.
 
 Optional extras (only when useful — never required):
+- "reasoning": "1-2 sentences: WHY this step advances the objective" — the operator reads this
 - "auto_actions": [{"action": "write_note", "args": {...}}, ...]  — free side-actions this turn
 - "completion_reason": "..." with action="complete"
 - "question": "..." with action="ask_operator"
