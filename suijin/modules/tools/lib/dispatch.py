@@ -109,6 +109,7 @@ from suijin.modules.tools.lib.jobs import (
     _job_status,
     _job_wait,
 )
+from suijin.modules.tools.lib.js_tools import google_key_probe, js_bundle_analyze, source_map_probe
 from suijin.modules.tools.lib.output_normalizer import normalize_output
 
 
@@ -254,6 +255,10 @@ def _build_routes(config):
             a.get("cmd") or a.get("command"), timeout=int(a.get("timeout", 30))
         ),
         "search_kb": lambda a: _intel.search_kb(a.get("keyword"), limit=a.get("limit") or 5),
+        # SPA attack-surface mining (one call instead of hand-rolled curl+grep)
+        "js_bundle_analyze": lambda a: js_bundle_analyze(a.get("url", "")),
+        "google_key_probe": lambda a: google_key_probe(a.get("key", "")),
+        "source_map_probe": lambda a: source_map_probe(a.get("url", "")),
         "kb_read": lambda a: _kb_read_tool(a.get("path", "")),
         "normalize_output": lambda a: normalize_output(a.get("output", ""), kind=a.get("kind", "auto")),
         "target_dossier": lambda a: _target_dossier_tool(a.get("target", "")),

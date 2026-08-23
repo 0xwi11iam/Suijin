@@ -80,10 +80,7 @@ async def run_red_team_async(config, objective, api_key=None):
     from suijin.modules.platform.lib.config_models import CostCapWarning
 
     warnings.filterwarnings("ignore", category=CostCapWarning)
-    _cap = float(config.get("cost_hard_cap_usd", 0) or 0)
-    if _cap > 50.0 and not globals().get("_COST_CAP_WARNED"):
-        globals()["_COST_CAP_WARNED"] = True  # dim, once per process — the cap is deliberate
-        console.print(f"[dim]cost cap ${_cap:.2f} is high (cost_hard_cap_usd)[/dim]")
+    # no cost-cap console notice — the operator's cap is deliberate
 
     providers.reset_usage()
     # B11/B16: recall operational memory for the target — silent (the
@@ -422,6 +419,18 @@ async def run_red_team_async(config, objective, api_key=None):
             import traceback
 
             traceback.print_exc()
+            try:  # field crashes must be diagnosable after the fact
+                from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+                _d = WORKSPACE_DIR / "outputs" / "logs"
+                _d.mkdir(parents=True, exist_ok=True)
+                (_d / "engage_crash.log").open("a").write(
+                    f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {objective[:80]}\\n"
+                    + traceback.format_exc()
+                    + "\\n"
+                )
+            except Exception:  # noqa: BLE001
+                pass
             final_state = agent.get_state(thread_id) or {}
             break
 
