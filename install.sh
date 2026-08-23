@@ -307,14 +307,27 @@ else
 fi
 
 # ── 4/8 workspace ──────────────────────────────────────────────────────
-step "preparing agent workspace"
-mkdir -p "$REPO_DIR/suijin_agent"
+step "preparing agent workspace (durable — survives reinstalls)"
+# The workspace lives at ~/.suijin/workspace, OUTSIDE any repo copy:
+# sessions, memory, the authorization ledger, bugscope pulls and reports
+# survive re-clones, reinstalls and dev-tree wipes. The repo-local
+# suijin_agent path symlinks to it for back-compat.
+DURABLE_WS="$INSTALL_DIR/workspace"
+mkdir -p "$DURABLE_WS"
+# migrate legacy repo-local workspace content into the durable home (merge)
+for _ws in "$REPO_DIR/suijin_agent" "$REPO_DIR/suijin/suijin_agent"; do
+  if [ -d "$_ws" ] && [ ! -L "$_ws" ] && [ "$(ls -A "$_ws" 2>/dev/null)" ]; then
+    cp -R "$_ws/." "$DURABLE_WS/" 2>/dev/null || true
+  fi
+done
+rm -rf "$REPO_DIR/suijin_agent"
+ln -sfn "$DURABLE_WS" "$REPO_DIR/suijin_agent"
 if [ -d "$REPO_DIR/suijin/suijin_agent" ] && [ ! -L "$REPO_DIR/suijin/suijin_agent" ]; then
-  cp -R "$REPO_DIR/suijin/suijin_agent/." "$REPO_DIR/suijin_agent/" 2>/dev/null || true
   rm -rf "$REPO_DIR/suijin/suijin_agent"
 fi
-ln -sfn ../suijin_agent "$REPO_DIR/suijin/suijin_agent"
-ok "workspace ready at suijin_agent/"
+ln -sfn ../../suijin_agent "$REPO_DIR/suijin/suijin_agent" 2>/dev/null || \
+  ln -sfn "$DURABLE_WS" "$REPO_DIR/suijin/suijin_agent"
+ok "workspace ready at $DURABLE_WS (reinstall-safe)"
 
 # ── 5/8 python deps (venv health check + build-header retry) ───────────
 step "creating virtualenv + installing python deps"
