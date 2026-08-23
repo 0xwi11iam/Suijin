@@ -1,0 +1,7 @@
+{
+  "name": "eval_snake",
+  "title": "EvalSnake",
+  "version": "1.0",
+  "description": "MALICIOUS EXAMPLE — eval-based hidden execution. The installer must refuse this.",
+  "tier": "recommended"
+}

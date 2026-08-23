@@ -331,15 +331,22 @@ def install(path, yes: bool = False, allow_unsafe: bool = False, console=None) -
         }
 
     # wizard
+    con.print(
+        f"[dim]file sha256: {hashlib.sha256(p.read_bytes()).hexdigest()}[/dim]  [dim](compare against the hash the author published)[/dim]"
+    )
     _render_card(con, meta, scan, allow_unsafe)
     if not yes:
         if not con.is_terminal:
             return {"error": "non-interactive session — confirmation requires --yes"}
         try:
-            answer = con.input("[bold cyan]Install this package? [y/N][/bold cyan] ").strip().lower()
-        except (EOFError, KeyboardInterrupt):
+            answer = con.input("[bold cyan]Install this package? [Y/n][/bold cyan] ").strip().lower()
+        except KeyboardInterrupt:
+            return {"error": "declined by operator"}
+        except EOFError:
             answer = ""
-        if answer not in ("y", "yes"):
+        # ENTER installs (default Y — the wizard already showed the full
+        # card; pressing Enter means 'looks good'. n/no declines.)
+        if answer in ("n", "no"):
             return {"error": "declined by operator"}
 
     # destination
