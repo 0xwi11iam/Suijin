@@ -31,10 +31,18 @@ def _resolve_workspace() -> Path:
         return durable
     local = PROJECT_DIR / "suijin_agent"
     if local.is_symlink():
+        # installed/dev layout wires suijin_agent -> the durable home.
+        # Follow it ONLY when the target exists — a dangling symlink (a
+        # fresh clone of a repo that accidentally committed the link)
+        # must not leak an un-creatable path into module-level mkdirs
+        # (CI died creating '/Users' on Linux). Dangling -> durable.
         try:
-            return local.resolve()
+            resolved = local.resolve()
+            if resolved.is_dir() and not resolved.is_symlink():
+                return resolved
         except OSError:
             pass
+        return durable
     return local
 
 

@@ -100,6 +100,13 @@ class TestCanonicalLayout:
         # env: explicit override beats everything
         monkeypatch.setenv("SUIJIN_WORKSPACE", str(tmp_path / "explicit"))
         assert ws._resolve_workspace() == tmp_path / "explicit"
+        # dangling committed symlink (CI incident): repo/suijin_agent ->
+        # an absolute path that does not exist must NOT leak into mkdirs;
+        # it falls back to the HOME-based durable home
+        monkeypatch.delenv("SUIJIN_WORKSPACE")
+
+        (scratch / "suijin_agent").symlink_to("/definitely/not/anywhere")
+        assert ws._resolve_workspace() == durable
 
     def test_sandbox_inside_workspace(self):
         from suijin.modules.platform.lib.infra import job_runner

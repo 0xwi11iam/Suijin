@@ -22,8 +22,9 @@ dist/
 *.egg-info/
 
 # ── Runtime agent data (generated, never commit) ───────────────────
-suijin_agent/
-suijin/suijin_agent/
+suijin_agent
+suijin/suijin_agent
+
 suijin/knowledge_graph.json
 suijin/operation_state_recovery.json
 suijin/.notes/
