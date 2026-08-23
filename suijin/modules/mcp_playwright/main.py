@@ -43,7 +43,9 @@ def _browser_loop():
     from suijin.modules.platform.lib.stealth import browser_identity
 
     ident = browser_identity()
-    ctx = browser.new_context(viewport={"width": 1280, "height": 800}, user_agent=ident.get("User-Agent", "Mozilla/5.0"))
+    ctx = browser.new_context(
+        viewport={"width": 1280, "height": 800}, user_agent=ident.get("User-Agent", "Mozilla/5.0")
+    )
     page = ctx.new_page()
     _browser_ready.set()
     try:
@@ -141,6 +143,8 @@ def _dispatch(page, cmd, kw):
     elif cmd == "get_html":
         return page.content()[:10000]
     return f"Unknown: {cmd}"
+
+
 def _snap(page, max_el):
     global _snapshot_elements
     els = page.evaluate("""() => {

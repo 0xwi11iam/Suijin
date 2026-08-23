@@ -820,13 +820,16 @@ def run_authorize_cmd(args) -> int:
         print(f"removed: {out['removed']}")
         return 0
     if not getattr(args, "target", ""):
-        print("usage: suijin authorize <domain> [--program h1] [--id <auth-id>] [--days N] | --list | --remove <domain>")
+        print(
+            "usage: suijin authorize <domain> [--program h1] [--id <auth-id>] [--days N] | --list | --remove <domain>"
+        )
         return 1
     rec = auth.add_authorization(
         args.target,
         program=getattr(args, "program", ""),
         authorization_id=getattr(args, "authorization_id", ""),
         days=getattr(args, "days", 0) or auth.DEFAULT_DAYS,
+        page=getattr(args, "page", ""),
     )
     if "error" in rec:
         print(rec["error"])
@@ -2006,6 +2009,9 @@ def main(argv=None):
     auth_p.add_argument("--program", default="", help="program name (h1, bugcrowd, ...)")
     auth_p.add_argument("--id", dest="authorization_id", default="", help="authorization / program-member id")
     auth_p.add_argument("--days", type=int, default=0, help="days until the attestation expires (default 90)")
+    auth_p.add_argument(
+        "--page", default="", help="bug-bounty program page URL (optional; the agent can fetch it for verification)"
+    )
     auth_p.add_argument("--list", action="store_true", help="list ledger entries")
     auth_p.add_argument("--remove", default="", help="remove the entry for this target")
     auth_p.set_defaults(func=run_authorize_cmd)

@@ -257,6 +257,7 @@ def _build_routes(config):
         "search_kb": lambda a: _intel.search_kb(a.get("keyword"), limit=a.get("limit") or 5),
         # SPA attack-surface mining (one call instead of hand-rolled curl+grep)
         "js_bundle_analyze": lambda a: js_bundle_analyze(a.get("url", "")),
+        "fetch_authorization_page": lambda a: _fetch_auth_page(a.get("target", ""), a.get("url", "")),
         "google_key_probe": lambda a: google_key_probe(a.get("key", "")),
         "source_map_probe": lambda a: source_map_probe(a.get("url", "")),
         "kb_read": lambda a: _kb_read_tool(a.get("path", "")),
@@ -449,6 +450,12 @@ def _execute_with_healing(fn, args: dict, tool_name: str):
                 return f"Tool Error ({tool_name}): {e} [{label}, attempt {i + 1}/{attempts}]"
             _time.sleep(_RETRY_BACKOFF_S[i])
     return f"Tool Error ({tool_name}): unreachable"
+
+
+def _fetch_auth_page(target, url):
+    from suijin.modules.ops.lib.authorizations import fetch_page
+
+    return fetch_page(target, url)
 
 
 def route_tool(tool_name, args, config):
