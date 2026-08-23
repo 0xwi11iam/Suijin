@@ -133,7 +133,56 @@ sys_install() {
 banner
 
 # ── 1/8 platform + preferences ─────────────────────────────────────────
-step "platform + preferences"
+step "install type + platform"
+
+# FIRST question: normal (released) or dev (local tree) install?
+#   --dev[=PATH] forces dev non-interactively; run from inside a
+#   checkout and dev is the interactive DEFAULT.
+DEV_MODE="use"
+DEV_SOURCE=""
+MODE_DEFAULT="use"
+[ "$RUNS_FROM_CHECKOUT" = "1" ] && MODE_DEFAULT="dev"
+if [ -n "$DEV_FLAG_SOURCE" ]; then
+  DEV_MODE="dev"
+  if [ "$DEV_FLAG_SOURCE" = "auto" ]; then
+    [ "$RUNS_FROM_CHECKOUT" = "1" ] || fail "--dev passed but the script is not inside a Suijin checkout — use --dev=/path/to/tree"
+    DEV_FLAG_SOURCE="$SCRIPT_DIR"
+  fi
+  DEV_SOURCE="$DEV_FLAG_SOURCE"
+  if [ ! -f "$DEV_SOURCE/pyproject.toml" ] || [ ! -d "$DEV_SOURCE/suijin" ]; then
+    fail "not a Suijin source tree (needs pyproject.toml + suijin/): '$DEV_SOURCE'"
+  fi
+  note "dev install from: $DEV_SOURCE"
+elif [ -t 0 ] && [ -t 1 ]; then
+  printf "  first things first — just press Enter to accept the detected default\n"
+  ask_default "install type: (normal) released tool, or (dev) from a local source tree?" "$MODE_DEFAULT"
+  case "$ANSWER" in
+    dev|d|developer)
+      DEV_MODE="dev"
+      PATH_DEFAULT="$PWD"
+      [ "$RUNS_FROM_CHECKOUT" = "1" ] && PATH_DEFAULT="$SCRIPT_DIR"
+      ask_default "path to your local Suijin source tree" "$PATH_DEFAULT"
+      RAW_PATH="$ANSWER"
+      # sanitize: expand, resolve, validate structure
+      DEV_SOURCE="$(printf '%s' "$RAW_PATH" | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
+      DEV_SOURCE="${DEV_SOURCE/#\~/$HOME}"
+      if [ -z "$DEV_SOURCE" ] || [ "$DEV_SOURCE" = "/" ] || [ "$DEV_SOURCE" = "$HOME" ]; then
+        fail "invalid source path: '$DEV_SOURCE'"
+      fi
+      DEV_SOURCE="$(cd "$DEV_SOURCE" 2>/dev/null && pwd)" || fail "cannot access: '$RAW_PATH'"
+      if [ ! -f "$DEV_SOURCE/pyproject.toml" ] || [ ! -d "$DEV_SOURCE/suijin" ]; then
+        fail "not a Suijin source tree (needs pyproject.toml + suijin/): '$DEV_SOURCE'"
+      fi
+      note "dev install from: $DEV_SOURCE (live symlink — edits are picked up)"
+      ;;
+    normal|n|use|u|*)
+      DEV_MODE="use"
+      ;;
+  esac
+else
+  note "non-interactive run — install type: normal (released); use --dev for a local tree"
+fi
+
 DETECTED_OS="$(uname -s)"
 case "$DETECTED_OS" in
   Darwin) DETECTED_LABEL="macos" ;;
@@ -142,7 +191,6 @@ case "$DETECTED_OS" in
 esac
 
 if [ -t 0 ] && [ -t 1 ]; then
-  printf "  a couple of questions — Enter accepts the detected default\n"
   ask_default "which OS are you installing on? (macos/linux)" "$DETECTED_LABEL"
   case "$ANSWER" in
     macos|mac|darwin|osx) CHOSEN_OS="macos" ;;
@@ -176,57 +224,6 @@ PKG="none"
 [ "$CHOSEN_OS" = "macos" ] && PKG="brew"
 [ "$CHOSEN_OS" = "linux" ] && PKG="apt"
 
-# Dev-mode question: use the released tool, or install from a local
-# source tree (for contributors working on Suijin itself)? When the
-# installer is run from inside a checkout, dev from that copy is the
-# default. --dev[=PATH] forces it non-interactively.
-DEV_MODE="use"
-DEV_SOURCE=""
-MODE_DEFAULT="use"
-[ "$RUNS_FROM_CHECKOUT" = "1" ] && MODE_DEFAULT="dev"
-if [ -n "$DEV_FLAG_SOURCE" ]; then
-  DEV_MODE="dev"
-  if [ "$DEV_FLAG_SOURCE" = "auto" ]; then
-    [ "$RUNS_FROM_CHECKOUT" = "1" ] || fail "--dev passed but the script is not inside a Suijin checkout — use --dev=/path/to/tree"
-    DEV_FLAG_SOURCE="$SCRIPT_DIR"
-  fi
-  DEV_SOURCE="$DEV_FLAG_SOURCE"
-  if [ ! -f "$DEV_SOURCE/pyproject.toml" ] || [ ! -d "$DEV_SOURCE/suijin" ]; then
-    fail "not a Suijin source tree (needs pyproject.toml + suijin/): '$DEV_SOURCE'"
-  fi
-  note "dev install from: $DEV_SOURCE"
-elif [ -t 0 ] && [ -t 1 ]; then
-  ask_default "install mode: (use) the released tool, or (dev) from a local source tree?" "$MODE_DEFAULT"
-  case "$ANSWER" in
-    dev|d|developer)
-      DEV_MODE="dev"
-      PATH_DEFAULT="$PWD"
-      [ "$RUNS_FROM_CHECKOUT" = "1" ] && PATH_DEFAULT="$SCRIPT_DIR"
-      ask_default "path to your local Suijin source tree" "$PATH_DEFAULT"
-      RAW_PATH="$ANSWER"
-      # sanitize: expand, resolve, validate structure
-      DEV_SOURCE="$(printf '%s' "$RAW_PATH" | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
-      DEV_SOURCE="${DEV_SOURCE/#\~/$HOME}"
-      if [ -z "$DEV_SOURCE" ] || [ "$DEV_SOURCE" = "/" ] || [ "$DEV_SOURCE" = "$HOME" ]; then
-        fail "invalid source path: '$DEV_SOURCE'"
-      fi
-      DEV_SOURCE="$(cd "$DEV_SOURCE" 2>/dev/null && pwd)" || fail "cannot access: '$RAW_PATH'"
-      if [ ! -f "$DEV_SOURCE/pyproject.toml" ] || [ ! -d "$DEV_SOURCE/suijin" ]; then
-        fail "not a Suijin source tree (needs pyproject.toml + suijin/): '$DEV_SOURCE'"
-      fi
-      note "dev install from: $DEV_SOURCE"
-      ;;
-    use|u|*)
-      DEV_MODE="use"
-      ;;
-  esac
-else
-  if [ "$DEV_MODE" = "dev" ]; then
-    note "non-interactive run -- dev mode from: $DEV_SOURCE"
-  else
-    note "non-interactive run — install mode: use (released)"
-  fi
-fi
 ok "$CHOSEN_OS ($ARCH), packages via $PKG, pip: $PIP_BIN, mode: $DEV_MODE"
 
 # ── 2/8 prerequisites — fully resolved, nothing left to the user ───────
