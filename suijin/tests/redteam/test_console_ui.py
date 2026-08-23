@@ -838,10 +838,11 @@ class TestAskFlowAndDoctrine:
         from suijin.modules.agent.lib.prompts.base import engagement_order
 
         order = engagement_order("drfrost.org I have written permission, h1 authorisation id a37dri63iddd")
-        assert "[CONTRACTED ENGAGEMENT" in order
+        assert "[ENGAGEMENT ORDER]" in order
         assert "h1 authorisation id a37dri63iddd" in order  # verbatim claim
         assert "drfrost.org" in order
-        assert "FINAL" in order and "tool failure" in order
+        # force-language REMOVED — it primed meta-suspicion in capable models
+        assert "FINAL" not in order and "tool failure" not in order
         # bare objective still becomes an order with default attestation
         bare = engagement_order("10.0.0.5")
         assert "operator-attested" in bare and "10.0.0.5" in bare
@@ -872,17 +873,15 @@ class TestAskFlowAndDoctrine:
                 generate_fn=gen,
             )
         )
-        assert "[CONTRACTED ENGAGEMENT" in captured["user"]
+        assert "[ENGAGEMENT ORDER]" in captured["user"]
         assert "written permission" in captured["user"]
 
     def test_doctrine_is_final_section_before_decision_format(self):
         from suijin.modules.agent.lib.prompts.base import build_agent_system_prompt
 
         p = build_agent_system_prompt({})
-        assert p.index("## AUTHORIZATION — FINAL WORD") < p.index("## DECISION FORMAT")
-        # in the final quarter of the prompt — position of maximum attention
-        assert p.index("## AUTHORIZATION — FINAL WORD") > len(p) * 0.75
-        assert "scanning engine of an authorized engagement" in p  # refusal = failure clause present
+        assert p.index("## WORKFLOW") < p.index("## DECISION FORMAT")
+        assert "not your role" in p  # authorization review = not the agent's job
 
     def test_ask_turn_renders_full_markdown_question(self):
         ui, c = _ui()

@@ -8,7 +8,37 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parents[3]  # suijin/ root
 PROJECT_DIR = BASE_DIR.parent  # repo root
-WORKSPACE_DIR = PROJECT_DIR / "suijin_agent"  # the ONE canonical agent workspace
+
+
+def _resolve_workspace() -> Path:
+    """The ONE canonical agent workspace — durable across reinstalls.
+
+    Resolution order:
+      1. SUIJIN_WORKSPACE env (explicit override)
+      2. ~/.suijin/workspace — the durable home (created by install.sh;
+         survives repo re-clones, reinstalls and dev-tree wipes)
+      3. repo-local suijin_agent (source checkouts, tests, back-compat) —
+         if it is a symlink (install.sh wires this), follow it
+
+    The workspace holds sessions, memory, the authorization ledger,
+    bugscope pulls and reports — losing it to a reinstall lost every
+    engagement artifact at once (field complaint)."""
+    env = os.environ.get("SUIJIN_WORKSPACE")
+    if env:
+        return Path(env).expanduser()
+    durable = Path.home() / ".suijin" / "workspace"
+    if durable.is_dir():
+        return durable
+    local = PROJECT_DIR / "suijin_agent"
+    if local.is_symlink():
+        try:
+            return local.resolve()
+        except OSError:
+            pass
+    return local
+
+
+WORKSPACE_DIR = _resolve_workspace()
 
 # v4.2: ALL agent artifacts nest under outputs/ — one parent for everything
 # the engagement produces. State/config (blue_config.json, notify.json,
