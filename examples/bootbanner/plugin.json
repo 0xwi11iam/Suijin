@@ -1,0 +1,10 @@
+{
+  "id": "bootbanner",
+  "version": "1.0",
+  "tier": "recommended",
+  "requires": ["platform"],
+  "provides": ["boot.banner"],
+  "entry": "pack_entry:bootbanner",
+  "permissions": [],
+  "description": "Example kernel plugin: prints one dim boot line. Demonstrates the .sjp tier-gated install path and the Module lifecycle contract."
+}

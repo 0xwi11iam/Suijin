@@ -388,7 +388,11 @@ class EngagementUI:
                 continue
             setattr(self, _name, types.MethodType(_guarded(_name, _fn), self))
         self._live: Live | None = None
-        self._spinner = Spinner("dots", style=GOLD, speed=0.15)  # fast, npm-snappy
+        # Rich speed is a MULTIPLIER over the spinner's base interval
+        # (dots = 80ms/frame): 3.0 → ~27ms/frame ≈ 37fps. (Earlier values
+        # 0.4→0.05 read as "faster" but divided the rate — 0.05 was 20x
+        # SLOWER than default; that's why the spinner looked dead.)
+        self._spinner = Spinner("dots", style=GOLD, speed=3.0)
         self.iteration = 0
         self.phase = "starting"
         self._cur: _Iteration | None = None
@@ -417,7 +421,7 @@ class EngagementUI:
             (f"{approx}${cost:.4f}", "cyan"),
             *([(" | ", "dim"), (f"FLAG {len(UI_STATE['flags'])}", f"bold {GOLD}")] if UI_STATE["flags"] else []),
             *([(" | ", "dim"), (f"CRED {len(UI_STATE['creds'])}", "bold green")] if UI_STATE["creds"] else []),
-            *([(" | ", "dim"), (f"FT {UI_STATE['fireteams']}", "bold magenta")] if UI_STATE["fireteams"] else []),
+            *([(" | ", "dim"), (f"FT {UI_STATE['fireteams']} live", "bold magenta")] if UI_STATE["fireteams"] else []),
         )
         t = Table.grid(expand=True, padding=(0, 1))
         t.add_row(left, Text(), right)
@@ -426,7 +430,7 @@ class EngagementUI:
 
     def start(self) -> None:
         if self._live is None:
-            self._live = Live(self._strip(), console=self.console, refresh_per_second=20)
+            self._live = Live(self._strip(), console=self.console, refresh_per_second=60)
             self._live.start()
 
     def stop(self) -> None:

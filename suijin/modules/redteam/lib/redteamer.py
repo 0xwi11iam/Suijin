@@ -253,6 +253,9 @@ async def run_red_team_async(config, objective, api_key=None):
         get_state=lambda: agent.get_state(thread_id) or {},
         thread_id=thread_id,
         config=config,
+        console=console,  # ONE console — a second one interleaves mid-refresh
+        # with the live strip (field garbling: 'queued as guidance' painted
+        # over the spinner line)
     ).start()
 
     # Engagement console UI — transcript + pinned strip (Rich only)
