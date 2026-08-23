@@ -3,7 +3,17 @@
 Uses Playwright sync API in a dedicated background thread with its own
 event loop to avoid the sync/async conflict with the main asyncio loop.
 All tool functions are sync (called via route_tool) and communicate with
-the browser thread via a thread-safe queue.
+the browser thread via thread-safe queues.
+
+Field-hardened (ocular-app.tech run):
+- playwright NOT installed -> instant actionable message (the old code
+  hung 30s and said 'Browser timeout' for a missing dependency)
+- wait_until default is domcontentloaded — networkidle NEVER fires on SPAs
+  with analytics/websockets (amplitude etc), guaranteeing 30s timeouts
+- generation counter: a late result from a dead/timeout generation can
+  never be served to the next call (stale-result corruption)
+- queues drained on (re)start; real stealth UA instead of a truncated
+  scanner-tell string
 """
 
 import json, os, re, tempfile, threading, queue, time
@@ -13,7 +23,13 @@ _cmd_queue = queue.Queue()
 _result_queue = queue.Queue()
 _browser_ready = threading.Event()
 _browser_thread = None
-_snapshot_elements = []
+_generation = 0  # bumped on every (re)start; stale results are discarded
+PLAYWRIGHT_MISSING = (
+    "playwright is not installed. Install it, then fetch the browser:\n"
+    "  pip install playwright\n"
+    "  playwright install chromium\n"
+    "Then retry this tool."
+)
 
 
 def _browser_loop():
@@ -24,10 +40,10 @@ def _browser_loop():
         return
     pw = sync_playwright().start()
     browser = pw.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"])
-    ctx = browser.new_context(
-        viewport={"width": 1280, "height": 800},
-        user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-    )
+    from suijin.modules.platform.lib.stealth import browser_identity
+
+    ident = browser_identity()
+    ctx = browser.new_context(viewport={"width": 1280, "height": 800}, user_agent=ident.get("User-Agent", "Mozilla/5.0"))
     page = ctx.new_page()
     _browser_ready.set()
     try:
@@ -35,12 +51,12 @@ def _browser_loop():
             item = _cmd_queue.get()
             if item is None:
                 break
-            cmd, kwargs = item
+            gen, cmd, kwargs = item
             try:
                 result = _dispatch(page, cmd, kwargs)
-                _result_queue.put(("ok", result))
+                _result_queue.put((gen, "ok", result))
             except Exception as e:
-                _result_queue.put(("err", str(e)))
+                _result_queue.put((gen, "err", str(e)))
     finally:
         try:
             ctx.close()
@@ -57,28 +73,51 @@ def _browser_loop():
 
 
 def _start():
-    global _browser_thread
+    """Ensure the browser thread is alive and the dependency is present.
+    Returns an error string immediately when playwright is missing."""
+    global _browser_thread, _generation
+    try:
+        import playwright  # noqa: F401
+    except ImportError:
+        return PLAYWRIGHT_MISSING
     if _browser_thread and _browser_thread.is_alive():
-        return
+        return None
+    # fresh generation: drain stale queues so a late result from the dead
+    # thread can never be served to a new call
+    _generation += 1
+    for q in (_cmd_queue, _result_queue):
+        with q.mutex:
+            q.queue.clear()
     _browser_ready.clear()
     _browser_thread = threading.Thread(target=_browser_loop, daemon=True)
     _browser_thread.start()
-    _browser_ready.wait(timeout=15)
+    if not _browser_ready.wait(timeout=30):
+        return "Browser startup timed out (chromium may need `playwright install chromium`)"
+    return None
 
 
 def _call(cmd, **kw):
-    _start()
-    _cmd_queue.put((cmd, kw))
-    try:
-        status, result = _result_queue.get(timeout=30)
+    err = _start()
+    if err:
+        return err
+    gen = _generation
+    _cmd_queue.put((gen, cmd, kw))
+    deadline = time.monotonic() + 90  # comfortably above the 20s goto cap
+    while time.monotonic() < deadline:
+        try:
+            rgen, status, result = _result_queue.get(timeout=max(0.1, deadline - time.monotonic()))
+        except queue.Empty:
+            return "Browser timeout (90s) — the page may be hung; retry or use http_request"
+        if rgen != gen:
+            continue  # stale result from a previous generation — discard
         return str(result) if status == "ok" else f"Browser error: {result}"
-    except queue.Empty:
-        return "Browser timeout"
+    return "Browser timeout (90s)"
 
 
 def _dispatch(page, cmd, kw):
     if cmd == "goto":
-        page.goto(kw["url"], wait_until="networkidle", timeout=30000)
+        # domcontentloaded: networkidle never fires on analytics-heavy SPAs
+        page.goto(kw["url"], wait_until=kw.get("wait_until", "domcontentloaded"), timeout=kw.get("timeout", 20000))
         return f"Loaded: {page.title()}\nURL: {page.url}"
     elif cmd == "snapshot":
         return _snap(page, kw.get("max_elements", 60))
@@ -102,8 +141,6 @@ def _dispatch(page, cmd, kw):
     elif cmd == "get_html":
         return page.content()[:10000]
     return f"Unknown: {cmd}"
-
-
 def _snap(page, max_el):
     global _snapshot_elements
     els = page.evaluate("""() => {
@@ -178,8 +215,8 @@ def _type(page, sel, text):
 
 
 # Public tool functions (sync — called via route_tool)
-def mcp_browser_goto(url, wait_until="networkidle", timeout=30000):
-    return _call("goto", url=url)
+def mcp_browser_goto(url, wait_until="domcontentloaded", timeout=20000):
+    return _call("goto", url=url, wait_until=wait_until, timeout=timeout)
 
 
 def mcp_browser_snapshot(max_elements=60):
@@ -211,7 +248,8 @@ def mcp_browser_get_html():
 
 
 def mcp_browser_close():
-    global _browser_thread
+    global _browser_thread, _generation
+    _generation += 1  # invalidate any in-flight results
     try:
         _cmd_queue.put(None)
     except:
