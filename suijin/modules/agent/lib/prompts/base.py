@@ -391,6 +391,8 @@ Optional extras (only when useful — never required):
 
 Available actions:
 - "use_tool" — call a tool (the default, most turns)
+- "plan_tools" — emit a multi-step tool plan ONCE, steps run in order: {"action": "plan_tools", "tool_plan": {"steps": [{"tool_name": "...", "tool_args": {...}}, ...]}, "thought": "..."} — the queue stays visible until done or you change course
+- "switch_skill" — switch your attack methodology: {"action": "switch_skill", "skill_switch": {"to_skill": "sql_injection", "reason": "login form found"}, "thought": "..."} — the skill library (sqli, xss, ssrf, jwt, ad, cloud, privesc, ...) carries per-class playbooks; switch when the fingerprint says so
 - "deploy_subagent" — spawn parallel specialists: {"action": "deploy_subagent", "thought": "...", "subagent_task": "task A || task B || task C"} (separate tasks with ||; up to 5). Worth it for parallel/independent/long tasks — NOT single trivial calls (do those with use_tool); vague or duplicate tasks are auto-rejected.
 - "ask_operator" — ask the human: {"action": "ask_operator", "question": "...", "thought": "..."}
 - "complete" — objective done: {"action": "complete", "completion_reason": "...", "thought": "..."}
