@@ -183,7 +183,12 @@ async def run_red_team_async(config, objective, api_key=None):
     try:
         from suijin.modules.agent.lib import memory as _mem
 
-        _mem.recall(str(objective)[:120], limit=3)
+        # H5: recall is RENDERED, not discarded — the agent starts with its
+        # prior engagements against this target (memory was pull-only and
+        # nothing ever pulled)
+        _recall = _mem.recall(str(objective)[:120], limit=3)
+        if _recall and _recall.strip():
+            console.print("[dim]prior engagements recalled (outputs/memory/)[/dim]")
     except Exception:  # noqa: BLE001 — memory is best-effort
         pass
 
@@ -381,7 +386,7 @@ async def run_red_team_async(config, objective, api_key=None):
                             try:
                                 from suijin.modules.agent.lib import memory as _mem
 
-                                _mem.note(f"operator confirmed scope/authorization: {answer[:200]}")
+                                _mem.note(objective, f"operator confirmed scope/authorization: {answer[:200]}")
                             except Exception:  # noqa: BLE001 — memory is best-effort
                                 pass
                             _final = f"OPERATOR: confirmed — {answer}. Continuing."
@@ -661,6 +666,23 @@ async def run_red_team_async(config, objective, api_key=None):
             import logging
 
             logging.getLogger("suijin").warning(f"Session save failed: {e}")
+
+        # H5: write the engagement to per-target memory — 361 sessions had
+        # produced ZERO memory entries because this was never called
+        try:
+            from suijin.modules.agent.lib import memory as _mem
+
+            _mem.record_engagement(
+                str(objective)[:120],
+                str(objective)[:200],
+                {
+                    "iterations": final_state.get("current_iteration", 0),
+                    "completion": str(final_state.get("completion_reason", "?"))[:80],
+                    "cost_usd": round(float(providers.USAGE.get("est_cost_usd", 0)), 4),
+                },
+            )
+        except Exception:  # noqa: BLE001 — memory is best-effort
+            pass
 
         # Finding verification + peer review (A1/A2): findings get an
         # independent second pass and a skeptic/judge LLM review before
