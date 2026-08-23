@@ -60,6 +60,121 @@ class TestLoot:
         assert loot_in("FLAG{has space}") == ([], [])
 
 
+# every CORE (non-pack) tool with representative args — the render
+# contract: no crash, tool name shown, content-bearing tools show content,
+# no-arg tools show NO command block
+CORE_TOOLS = [
+    ("execute_terminal", {"cmd": "nmap -sV 10.0.0.1"}, "nmap -sV 10.0.0.1"),
+    ("http_request", {"method": "GET", "url": "http://t/x"}, "http://t/x"),
+    ("read_file", {"file_path": "loot/creds.txt"}, "loot/creds.txt"),
+    ("write_file", {"file_path": "s.py", "content": "print('hi')"}, "print('hi')"),
+    ("apply_patch", {"vulnerability": "sqli", "file_path": "app.py"}, "vulnerability=sqli"),
+    ("claim_flag", {"flag": "FLAG{X}"}, "flag=FLAG{X}"),
+    ("recon_chain", {"target": "10.0.0.1", "ports": "80,443"}, "target=10.0.0.1"),
+    ("msf_command", {"cmd": "search type:auxiliary"}, "search type:auxiliary"),
+    ("msf_run", {"module": "auxiliary/scanner/ssh", "payload": "", "options": {"RHOSTS": "10.0.0.1"}}, "RHOSTS"),
+    ("search_cve", {"software": "apache", "version": "2.4.49", "limit": 5}, "software=apache"),
+    ("search_kb", {"keyword": "ssh", "limit": 5}, "keyword=ssh"),
+    ("kb_read", {"path": "_gtfobins/awk"}, "_gtfobins/awk"),
+    ("check_knowledge", {"target": "10.0.0.1", "payload": "admin'--"}, "target=10.0.0.1"),
+    (
+        "record_finding",
+        {"target": "10.0.0.1", "finding_type": "sqli", "rule": "blocked", "evidence": "err"},
+        "finding_type=sqli",
+    ),
+    ("write_note", {"content": "## Findings\n- sqli on /search", "category": "findings"}, "## Findings"),
+    ("web_search", {"query": "apache 2.4.49 exploit", "max_results": 5}, "apache 2.4.49"),
+    ("edit_skill", {"skill_name": "sqli", "new_content": "def run(): pass"}, "def run(): pass"),
+    ("write_tool", {"tool_name": "mytool", "code": "def run(): pass"}, "def run(): pass"),
+    ("pip_install", {"package": "requests"}, "package=requests"),
+    ("job_status", {"job_id": "abc123"}, "job_id=abc123"),
+    ("job_wait", {"job_id": "abc123", "timeout": 60}, "job_id=abc123"),
+    ("job_output", {"job_id": "abc123"}, "job_id=abc123"),
+    ("job_cancel", {"job_id": "abc123"}, "job_id=abc123"),
+    ("payload_generate", {"type": "rev_shell", "lhost": "10.0.0.2"}, "rev_shell"),
+    ("diff_response", {"url_a": "http://t/a", "url_b": "http://t/b"}, "url_a=http://t/a"),
+    ("rate_limit_check", {"endpoint": "http://t/api"}, "endpoint=http://t/api"),
+    ("attack_tree", {"objective": "get shell"}, "objective=get shell"),
+    ("anonymize_report", {"file_path": "r.md"}, "file_path=r.md"),
+    ("extract_payloads", {"source": "reqs.txt"}, "source=reqs.txt"),
+    ("mine_failures", {"engagement": "test"}, "engagement=test"),
+    ("normalize_output", {"mode": "clean"}, "mode=clean"),
+    ("target_dossier", {"target": "10.0.0.1"}, "target=10.0.0.1"),
+    ("mutate_wordlist", {"wordlist": "w.txt", "mutations": "case"}, "wordlist=w.txt"),
+    ("cewl_words", {"url": "http://t", "depth": 2}, "url=http://t"),
+    ("find_wordlist", {"kind": "dir", "pattern": "api"}, "kind=dir"),
+    ("wordlist_tool", {"mode": "count", "path": "w.txt"}, "mode=count"),
+    ("suggest_exploit", {"service": "ssh", "version": "7.2"}, "service=ssh"),
+    ("evidence_capture", {"label": "sqli-proof", "path": "e/"}, "label=sqli-proof"),
+    ("evidence_verify", {"bundle": "e.zip"}, "bundle=e.zip"),
+    ("recipe_define", {"name": "mychain", "steps_json": '[{"tool":"nmap"}]'}, "mychain"),
+    ("recipe_run", {"name": "recon_web", "target": "example.com"}, "name=recon_web"),
+    ("cve_advise_tools", {"keyword": "CVE-2021-44228"}, "keyword=CVE-2021-44228"),
+    ("job_list", {}, None),
+    ("list_skills", {}, None),
+    ("list_own_files", {}, None),
+    ("fireteam_status", {}, None),
+    ("recipe_list", {}, None),
+    ("kb_stats", {}, None),
+    ("kb_freshness", {}, None),
+    ("msf_check", {}, None),
+    ("msf_sessions", {}, None),
+    ("rate_limit_all", {}, None),
+    ("generate_report", {}, None),
+    ("deploy_subagent", {"subagent_task": "probe a || probe b"}, None),
+]
+
+CORE_TOOL_NAMES = {name for name, _, _ in CORE_TOOLS}
+
+
+class TestEveryCoreToolRenders:
+    @pytest.mark.parametrize("name,args,expect", CORE_TOOLS, ids=[c[0] for c in CORE_TOOLS])
+    def test_renders(self, name, args, expect):
+        ui, c = _ui()
+        ui.iteration_header(1, "informational")
+        ui.thinking("step thought")
+        ui.reasoning("step reasoning")
+        ui.tool(name, args)
+        ui.output("Status: 200\nok")
+        out = c.export_text()
+        assert name in out, name  # the ❯ line
+        assert "#1 · informational" in out
+        if expect is not None:
+            assert expect in out, (name, out[:400])  # the arg content, not a dict dump
+        else:
+            # no-arg tools: no '{}' block noise under the tool line
+            assert "{}" not in out, name
+
+    def test_core_tool_inventory_covers_dispatch_routes(self):
+        """Every explicit dispatch route renders with a dedicated style or
+        the JSON fallback — and the no-args set is exactly the argless ones."""
+        from suijin.modules.redteam.lib.red.console_ui import _LEXERS, _NO_ARGS_TOOLS
+
+        for name, _, expect in CORE_TOOLS:
+            if expect is not None:
+                assert name in _LEXERS, f"{name} needs a lexer entry"
+            else:
+                assert name in _NO_ARGS_TOOLS, f"{name} must be in _NO_ARGS_TOOLS"
+        assert not (_NO_ARGS_TOOLS & set(_LEXERS)), "a tool is both no-args and lexered"
+
+    def test_write_note_renders_markdown_not_dict(self):
+        ui, c = _ui()
+        ui.iteration_header(2, "informational")
+        ui.tool("write_note", {"content": "# Loot\nfound creds", "success": True, "category": "loot"})
+        ui.flush_open()
+        out = c.export_text()
+        assert "# Loot" in out
+        assert "'success': True" not in out and '"success"' not in out  # no dict dump
+
+    def test_fireteam_renders_in_box(self):
+        ui, c = _ui()
+        ui.iteration_header(3, "informational")
+        ui.fireteam("Fireteam deployed: 2 specialist(s)")
+        ui.flush_open()
+        out = c.export_text()
+        assert "Fireteam deployed" in out and "#3" in out
+
+
 class TestTranscript:
     def test_iteration_renders_as_one_panel(self):
         ui, c = _ui()
@@ -144,8 +259,9 @@ class TestTranscript:
             "(Caused by NameResolutionError(\"Failed to resolve 'nope.invalid'\"))"
         )
         out = c.export_text()
-        assert "error" in out and "could not resolve nope.invalid (DNS)" in out
-        assert "HTTPSConnectionPool" not in out
+        assert "could not resolve nope.invalid (DNS)" in out
+        assert "HTTPSConnectionPool" not in out  # graceful, not the raw blob
+        assert ui._cur is None  # flushed
 
     def test_fireteam_and_strip_counters(self):
         ui, c = _ui()
@@ -217,6 +333,70 @@ class TestTranscript:
         ui.waiting(True)
         assert ui._strip() is not None
         ui.stop()
+
+    def test_no_truncation_anywhere(self):
+        """Field order: never clip thinking/reasoning/questions/outputs."""
+        ui, c = _ui()
+        long_thought = "x" * 900
+        long_out = "y" * 4000
+        ui.iteration_header(9, "informational")
+        ui.thinking(long_thought)
+        ui.reasoning("r" * 900)
+        ui.tool("execute_terminal", {"cmd": "echo hi"})
+        ui.output(long_out)
+        out = c.export_text()
+        assert "…" not in out and "+900 chars" not in out and "+4000 chars" not in out
+        assert out.count("y") >= 4000  # full output body rendered (wrapped, nothing dropped)
+
+    def test_ask_operator_answer_via_runbox(self):
+        """Regression for the field hang: the answer MUST come through the
+        RunBox guidance queue (stdin's single owner). A slash command must
+        NOT be consumed as the answer; the next plain line is."""
+        import threading
+        import time
+
+        from suijin.modules.redteam.lib.red.console_ui import ask_operator_answer
+        from suijin.modules.tools.lib.run_commands import RunBox
+
+        box = RunBox().start()
+        box.take_guidance()  # drain
+
+        def typer():
+            time.sleep(0.2)
+            box.dispatch("/state")  # operator checks state first — not an answer
+            time.sleep(0.2)
+            box.dispatch("yes, I own the target")  # the actual answer
+
+        threading.Thread(target=typer, daemon=True).start()
+        t0 = time.monotonic()
+        answer = ask_operator_answer(box, Console(record=True, width=90), "authorized?", timeout_s=5)
+        elapsed = time.monotonic() - t0
+        box.stop()
+        assert answer == "yes, I own the target"
+        assert elapsed < 4  # slash line skipped, not stalled to timeout
+
+    def test_ask_operator_answer_timeout_returns_empty(self):
+        from suijin.modules.redteam.lib.red.console_ui import ask_operator_answer
+        from suijin.modules.tools.lib.run_commands import RunBox
+
+        box = RunBox().start()
+        box.take_guidance()
+        answer = ask_operator_answer(box, Console(record=True, width=90), "anyone?", timeout_s=0.4)
+        box.stop()
+        assert answer == ""
+
+    def test_cost_cap_warning_is_clean(self):
+        """The pydantic wall of text is silenced; a custom category exists."""
+        import warnings
+
+        from suijin.modules.platform.lib.config_models import CostCapWarning, RedConfig
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            RedConfig(cost_hard_cap_usd=500.0)
+        assert any(issubclass(x.category, CostCapWarning) for x in w)
+        # and the message itself carries no source-line echo when filtered
+        assert any("Cost cap $500.00" in str(x.message) for x in w)
 
 
 class TestPricing:
@@ -416,3 +596,164 @@ class TestInstallScript:
         repo = Path(__file__).resolve().parents[3]
         r = subprocess.run(["bash", str(repo / "install.sh"), "--help"], capture_output=True, text=True)
         assert "--dev[=PATH]" in r.stdout
+
+
+class TestPauseConsole:
+    """The 15 pause commands, driven through the extracted pause_console."""
+
+    def _ctx(self, console=None, **kw):
+        from suijin.modules.redteam.lib.red.session_control import PauseContext
+
+        c = console or Console(record=True, width=100, force_terminal=True)
+        ctx = PauseContext(console=c, loot={"flags": ["FLAG{A}"], "creds": [("AWS key", "AKIA" + "X" * 16)]}, **kw)
+        return ctx, c
+
+    def test_all_fifteen_commands_registered(self):
+        from suijin.modules.redteam.lib.red.session_control import build_pause_handlers
+
+        ctx, _ = self._ctx()
+        h = build_pause_handlers(ctx)
+        assert len(h) == 15
+        assert set(h) == {
+            "/report",
+            "/audit",
+            "/state",
+            "/sessions",
+            "/template",
+            "/health",
+            "/objective",
+            "/phase",
+            "/focus",
+            "/skip",
+            "/finish",
+            "/loot",
+            "/jobs",
+            "/kill",
+            "/cost",
+        }
+
+    def test_plain_line_is_guidance(self):
+        from suijin.modules.redteam.lib.red.session_control import pause_console
+
+        ctx, _ = self._ctx()
+        g = pause_console(ctx, lambda prompt="": "try harder on the login form")
+        assert g == "try harder on the login form"
+
+    def test_empty_input_becomes_continue(self):
+        from suijin.modules.redteam.lib.red.session_control import pause_console
+
+        ctx, _ = self._ctx()
+        assert pause_console(ctx, lambda prompt="": "") == "Continue what you were doing."
+
+    def test_commands_dispatch_then_guidance(self):
+        from suijin.modules.redteam.lib.red.session_control import pause_console
+
+        ctx, c = self._ctx()
+        inputs = iter(["/loot", "/cost", "pivot to smtp"])
+        g = pause_console(ctx, lambda prompt="": next(inputs))
+        out = c.export_text()
+        assert "FLAG{A}" in out and "AWS key" in out  # /loot
+        assert "tok" in out  # /cost
+        assert g == "pivot to smtp"  # non-slash line ends the loop
+
+    def test_focus_skip_finish_merge_into_guidance(self):
+        from suijin.modules.redteam.lib.red.session_control import pause_console
+
+        ctx, _ = self._ctx()
+        inputs = iter(["/skip", "/focus the upload endpoint", "/finish", ""])
+        g = pause_console(ctx, lambda prompt="": next(inputs))
+        assert "Abandon the current approach" in g
+        assert "Focus on: the upload endpoint" in g
+        assert "Wrap up NOW" in g
+
+    def test_objective_changes_course(self):
+        from suijin.modules.redteam.lib.red.session_control import pause_console
+
+        updated = {}
+
+        class FakeGraph:
+            def update_state(self, cfg, payload):
+                updated.update(payload)
+
+        class FakeAgent:
+            _graph = FakeGraph()
+
+        ctx, _ = self._ctx(agent=FakeAgent(), langgraph_config={"configurable": {}})
+        inputs = iter(["/objective pivot to the API at api.target.com", "go"])
+        g = pause_console(ctx, lambda prompt="": next(inputs))
+        assert updated["original_objective"] == "pivot to the API at api.target.com"
+        assert ctx.objective == "pivot to the API at api.target.com"
+        assert g == "go"
+
+    def test_objective_requires_arg(self):
+        from suijin.modules.redteam.lib.red.session_control import pause_console
+
+        ctx, c = self._ctx()
+        inputs = iter(["/objective", ""])
+        pause_console(ctx, lambda prompt="": next(inputs))
+        assert "usage: /objective" in c.export_text()
+
+    def test_phase_validates(self):
+        from suijin.modules.redteam.lib.red.session_control import pause_console
+
+        class FakeGraph:
+            def update_state(self, cfg, payload):
+                payload["ok"] = True
+
+        class FakeAgent:
+            _graph = FakeGraph()
+
+        ctx, c = self._ctx(agent=FakeAgent(), langgraph_config={})
+        inputs = iter(["/phase exploitation", "/phase bogus", ""])
+        pause_console(ctx, lambda prompt="": next(inputs))
+        out = c.export_text()
+        assert "phase -> exploitation" in out
+        assert "usage: /phase" in out
+
+    def test_kill_and_jobs_route(self):
+        from suijin.modules.redteam.lib.red.session_control import pause_console
+
+        routed = []
+
+        def fake_route(name, args):
+            routed.append((name, args))
+            return f"ok {name}"
+
+        ctx, c = self._ctx(route_tool_fn=fake_route)
+        inputs = iter(["/jobs", "/kill abc123", ""])
+        pause_console(ctx, lambda prompt="": next(inputs))
+        assert ("job_list", {}) in routed
+        assert ("job_cancel", {"job_id": "abc123"}) in routed
+
+    def test_kill_requires_arg(self):
+        from suijin.modules.redteam.lib.red.session_control import pause_console
+
+        ctx, c = self._ctx()
+        inputs = iter(["/kill", ""])
+        pause_console(ctx, lambda prompt="": next(inputs))
+        assert "usage: /kill" in c.export_text()
+
+    def test_cost_formats_usage(self):
+        from suijin.modules.redteam.lib.red.session_control import pause_console
+
+        ctx, c = self._ctx(
+            usage_fn=lambda: {
+                "calls": 3,
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "api_reported_calls": 2,
+                "estimated_calls": 1,
+                "est_cost_usd": 0.05,
+            }
+        )
+        inputs = iter(["/cost", ""])
+        pause_console(ctx, lambda prompt="": next(inputs))
+        out = c.export_text()
+        assert "calls 3" in out and "1.5k tok" in out and "$0.0500" in out
+
+    def test_state_without_agent_is_safe(self):
+        from suijin.modules.redteam.lib.red.session_control import build_pause_handlers
+
+        ctx, _ = self._ctx(agent=None)
+        h = build_pause_handlers(ctx)
+        h["/state"]("")  # no agent -> no crash, prints nothing fatal

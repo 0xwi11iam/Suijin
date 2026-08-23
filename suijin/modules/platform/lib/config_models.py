@@ -82,6 +82,12 @@ class BlueConfig(BaseModel):
     provider: str = Field(default="deepseek")
 
 
+class CostCapWarning(UserWarning):
+    """Configured cost cap is high — advisory only. Silenced by default at
+    the entrypoints (the raw UserWarning echoed pydantic internals as a
+    wall of text on every boot); the engagement path shows ONE red line."""
+
+
 class RedConfig(BaseModel):
     """Validates config.json at load time."""
 
@@ -120,5 +126,5 @@ class RedConfig(BaseModel):
         if v > 50.0:
             import warnings
 
-            warnings.warn(f"Cost cap ${v:.2f} is high. Consider setting a lower limit.", stacklevel=2)
+            warnings.warn(f"Cost cap ${v:.2f} is high.", CostCapWarning, stacklevel=2)
         return v

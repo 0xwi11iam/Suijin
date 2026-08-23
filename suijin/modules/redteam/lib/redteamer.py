@@ -63,6 +63,18 @@ DUMP_PATH = BASE_DIR / "operation_state_recovery.json"
 
 
 async def run_red_team_async(config, objective, api_key=None):
+    # the pydantic cost-cap warning echoes validator internals as a wall of
+    # text — silenced everywhere; ONE red line below instead
+    import warnings
+
+    from suijin.modules.platform.lib.config_models import CostCapWarning
+
+    warnings.filterwarnings("ignore", category=CostCapWarning)
+    _cap = float(config.get("cost_hard_cap_usd", 0) or 0)
+    if _cap > 50.0:
+        console.print(
+            f"[bold red]cost cap ${_cap:.2f} is high — lower 'cost_hard_cap_usd' unless this is intentional[/bold red]"
+        )
 
     providers.reset_usage()
     # B11/B16: recall operational memory for the target; warn on drift
@@ -134,6 +146,19 @@ async def run_red_team_async(config, objective, api_key=None):
 
     ui = EngagementUI(console, objective=objective)
     ui.start()
+
+    from suijin.modules.redteam.lib.red.console_ui import ask_operator_answer as _ask_op
+
+    def _operator_input(label: str, timeout_s: float = 600.0) -> str:
+        """Operator text through the RunBox reader (stdin's ONE owner) —
+        console.input on the main thread raced the reader and hung."""
+        if run_box.alive:
+            return _ask_op(run_box, console, "", timeout_s=timeout_s, label=label.strip())
+        try:
+            return console.input(f"[bold cyan]{label}[/bold cyan] ")
+        except (KeyboardInterrupt, EOFError):
+            return ""
+
     run_box.register(
         "think",
         lambda _a: toggle_reasoning(console),
@@ -161,11 +186,16 @@ async def run_red_team_async(config, objective, api_key=None):
                     out = str(step["tool_output"])
                     if ec == "ask_operator":
                         ui.ask(out)
+                        ui.waiting(False)  # static strip — no spinner while a human is thinking
                         # Pause graph, ask operator, inject answer, resume.
-                        # Interactive console OR the desktop bridge (detached
-                        # engagements: stdin is dead — the question lands on
-                        # the gateway's Approvals screen instead).
-                        if sys.stdin is not None and sys.stdin.isatty():
+                        # The RunBox reader thread owns stdin — the answer is
+                        # taken through its guidance queue (input() on the
+                        # main thread raced the reader and hung the agent).
+                        # Detached engagements (stdin dead) use the desktop
+                        # bridge instead.
+                        if run_box.alive:
+                            answer = _operator_input("Answer", 600.0)
+                        elif sys.stdin is not None and sys.stdin.isatty():
                             try:
                                 answer = console.input("[bold cyan]Answer  [/bold cyan]").strip()
                             except (KeyboardInterrupt, EOFError):
@@ -291,11 +321,27 @@ async def run_red_team_async(config, objective, api_key=None):
             _signal.signal(_signal.SIGINT, _signal.SIG_DFL)
             ui.flush_open()
             ui.waiting(False)
+
+            # ── pause console: 15 course-changing commands + guidance ───
+            from suijin.modules.redteam.lib.red.console_ui import UI_STATE as _UI_LOOT
+
+            _pause_ctx = sc.PauseContext(
+                console=console,
+                agent=agent,
+                langgraph_config=langgraph_config,
+                thread_id=thread_id,
+                config=config,
+                objective=objective,
+                route_tool_fn=lambda name, args: _dispatch_mod().route_tool(name, args, {}),
+                usage_fn=providers.get_usage,
+                loot=_UI_LOOT,
+                force_report_fn=lambda _a=agent, _t=thread_id, _f=final_state, _o=objective, _c=config: sc.force_report(
+                    _a, _t, _f, _o, _c
+                ),
+            )
             try:
-                console.print(
-                    "\n[bold yellow]  Paused[/bold yellow] [dim](type guidance, /report, /audit, /state, /sessions, /template, /health, or Ctrl+C to quit)[/dim]"
-                )
-                guidance = console.input("[bold cyan]  Guidance  [/bold cyan]").strip()
+                guidance = sc.pause_console(_pause_ctx, lambda label, timeout=600.0: _operator_input(label, timeout))
+                objective = _pause_ctx.objective  # /objective may have changed course
             except (KeyboardInterrupt, EOFError):
                 console.print("\n[bold red]  Force quit.[/bold red]")
                 ui.stop()
@@ -304,53 +350,6 @@ async def run_red_team_async(config, objective, api_key=None):
             finally:
                 # Re-arm the interrupt flag mechanism
                 _signal.signal(_signal.SIGINT, lambda sig, frame: setattr(_signal, "_suijin_interrupted", True))
-
-            if guidance.lower().startswith("/report"):
-                console.print("[dim]  Generating report...[/dim]")
-                sc.force_report(agent, thread_id, final_state, objective, config)
-                console.print("[dim]  Report saved. Enter guidance or press Enter to continue.[/dim]")
-                try:
-                    guidance = console.input("[bold cyan]  Guidance  [/bold cyan]").strip()
-                except (KeyboardInterrupt, EOFError):
-                    break
-            elif guidance.lower().startswith("/audit"):
-                sc.print_audit_trail()
-                try:
-                    guidance = console.input("[bold cyan]  Guidance  [/bold cyan]").strip()
-                except (KeyboardInterrupt, EOFError):
-                    break
-            elif guidance.lower().startswith("/state"):
-                sc.print_state_summary(agent, thread_id)
-                try:
-                    guidance = console.input("[bold cyan]  Guidance  [/bold cyan]").strip()
-                except (KeyboardInterrupt, EOFError):
-                    break
-            elif guidance.lower().startswith("/sessions"):
-                sc.list_sessions()
-                try:
-                    guidance = console.input("[bold cyan]  Guidance  [/bold cyan]").strip()
-                except (KeyboardInterrupt, EOFError):
-                    break
-            elif guidance.lower().startswith("/template"):
-                sc.handle_template(config)
-                try:
-                    guidance = console.input("[bold cyan]  Guidance  [/bold cyan]").strip()
-                except (KeyboardInterrupt, EOFError):
-                    break
-            elif guidance.lower().startswith("/health"):
-                from suijin.modules.platform.lib.templates import print_health_check
-
-                print_health_check(console)
-                try:
-                    guidance = console.input("[bold cyan]  Guidance  [/bold cyan]").strip()
-                except (KeyboardInterrupt, EOFError):
-                    break
-
-            if not guidance:
-                guidance = "Continue what you were doing."
-
-            # Re-arm signal handler before resuming
-            _signal.signal(_signal.SIGINT, lambda sig, frame: setattr(_signal, "_suijin_interrupted", True))
 
             # Inject guidance into graph state
             try:
