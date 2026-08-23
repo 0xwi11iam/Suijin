@@ -199,8 +199,9 @@ class SuijinAgentGraph:
 
                     trace = result.get("execution_trace", state.get("execution_trace", []))
 
-                    # Pattern-based check (zero cost, always runs)
-                    guidance = analyze_trace(trace[-15:])
+                    # Pattern-based check (zero cost, always runs; iteration
+                    # enables per-detector cooldowns so nothing nags twice)
+                    guidance = analyze_trace(trace[-15:], iteration=iteration)
                     if guidance:
                         logger.info(f"Supervisor pattern intervention at iteration {iteration}: {guidance[:80]}")
                         result.setdefault("messages", []).append(
@@ -210,8 +211,10 @@ class SuijinAgentGraph:
                             }
                         )
                         result["_supervisor_guidance"] = guidance
-                    else:
-                        # LLM-powered deep analysis (runs less frequently)
+                    elif iteration % 15 == 0:
+                        # LLM deep analysis — RARELY (was: every silent check,
+                        # i.e. every 5th iteration — constant chatter that
+                        # derailed exploitation runs). Every 15th, max.
                         try:
                             llm_guidance = await analyze_trace_with_llm(trace, state, self.generate_fn)
                             if llm_guidance:
@@ -238,7 +241,12 @@ class SuijinAgentGraph:
                     if trace:
                         last_step = trace[-1]
                         tool_output = str(last_step.get("tool_output", ""))
-                        if detect_anomaly(tool_output):
+                        # Oracle scope: RESPONSE triage. It parses HTTP-response
+                        # anomalies (status/baseline/error text) — firing it on
+                        # terminal dumps and JS bundles (field run: a 518KB
+                        # bundle 'anomaly' produced an irrelevant SQLi
+                        # hypothesis mid-recon) is pure interference.
+                        if last_step.get("tool_name") == "http_request" and detect_anomaly(tool_output):
                             hypotheses = await generate_hypotheses_async(tool_output, state, self.generate_fn)
                             if hypotheses:
                                 result.setdefault("messages", []).append(

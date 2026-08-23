@@ -397,11 +397,10 @@ class EngagementUI:
         tok = int(USAGE.get("input_tokens", 0)) + int(USAGE.get("output_tokens", 0))
         cost = float(USAGE.get("est_cost_usd", 0.0))
         approx = "" if USAGE.get("priced", True) else "~"
-        if self._waiting and self.iteration == 0:
-            left = self._spinner
-        elif self._waiting:
+        if self._waiting:
+            # thinking + dots — the label the operator asked for
             g = Table.grid(padding=(0, 1))
-            g.add_row(self._spinner, Text(self.phase, style="dim"))
+            g.add_row(self._spinner, Text("thinking", style=f"bold {GOLD}"))
             left = g
         else:
             left = Text(f"suijin {self.phase} #{self.iteration}", style=f"bold {GOLD}")
