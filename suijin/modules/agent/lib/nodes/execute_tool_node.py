@@ -291,18 +291,24 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
 
 
 def _audit_step(state, tool_name, tool_args, success, duration_ms):
-    """Append the step to the engagement audit trail (never raises)."""
+    """Append the step to the engagement audit trail (never raises).
+
+    H6: iteration comes from the EXECUTING STEP first — current_iteration
+    isn't set in state at execute time, so every row in every
+    agent_steps.jsonl read 'iteration=?' (per-iteration forensics were
+    impossible)."""
     try:
         from suijin.kernel.audit import ToolAudit
         from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
+        iteration = (state.get("_current_step") or {}).get("iteration") or state.get("current_iteration") or "?"
         ToolAudit(WORKSPACE_DIR / "outputs" / "audit_trails", "agent_steps.jsonl", flush_every=1).record(
             surface="agent",
             name=tool_name,
             args=tool_args,
             outcome="ok" if success else "tool-error",
             duration_ms=duration_ms,
-            detail=f"iteration={state.get('current_iteration', '?')}",
+            detail=f"iteration={iteration}",
         )
     except Exception:  # noqa: BLE001 — audit must never break execution
         pass
