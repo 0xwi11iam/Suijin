@@ -1011,3 +1011,169 @@ class TestLabelFreeTranscript:
 
         src = inspect.getsource(mod.run_scope)
         assert "from suijin.modules.console.lib import tui_scope" in src
+
+
+class TestUncrashableUI:
+    """The silent mid-render crash: an exception in ANY render path killed
+    the engagement and returned to the menu with zero output."""
+
+    def test_render_crash_never_propagates(self, monkeypatch):
+        from rich.console import Console
+
+        import suijin.modules.redteam.lib.red.console_ui as m
+
+        def boom(text, style="none"):
+            raise RuntimeError("simulated renderer crash")
+
+        monkeypatch.setattr(m, "_md", boom)
+        c = Console(record=True, width=90, force_terminal=True)
+        ui = m.EngagementUI(c)
+        ui.iteration_header(1, "informational")  # must not raise
+        ui.thinking("a thought that would have crashed")
+        ui.output("fine output")
+        out = c.export_text()
+        assert "a thought that would have crashed" in out  # plain-text fallback
+
+    def test_crash_log_written(self, tmp_path, monkeypatch):
+        from rich.console import Console
+
+        import suijin.modules.redteam.lib.red.console_ui as m
+        from suijin.modules.platform.lib import workspace as ws
+
+        monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        c = Console(record=True, width=90)
+        ui = m.EngagementUI(c)
+        ui.tool("execute_terminal", {"cmd": "x"})  # no open iteration — fine
+        # force a guarded failure
+        ui._section = None  # break internals
+        ui.thinking("t")  # guarded wrapper catches AttributeError
+        log = tmp_path / "outputs" / "logs" / "ui_crash.log"
+        assert log.exists()
+
+    def test_langgraph_import_caged(self):
+        """The advisory is filtered AT the import site — immune to any
+        warnings-registry reset by other libraries."""
+        import subprocess
+        import sys
+
+        code = (
+            "import warnings\n"
+            "warnings.simplefilter('default')\n"  # simulate a library resetting
+            "import suijin.modules.agent.lib.agent_graph as ag\n"
+            "print('caged-clean')\n"
+        )
+        r = subprocess.run([sys.executable, "-W", "default", "-c", code], capture_output=True, text=True)
+        assert "caged-clean" in r.stdout, r.stderr
+        assert "allowed_objects" not in r.stderr
+
+
+class TestJsSurfaceTools:
+    """js_bundle_analyze / google_key_probe / source_map_probe — the tools
+    that replace the 3-iteration hand-rolled curl+grep chain."""
+
+    def test_bundle_mining(self, monkeypatch):
+        from suijin.modules.tools.lib import js_tools
+
+        fake_bundle = (
+            'fetch("/api/v1/login",{method:"POST"});'
+            '"/admin/panel";'
+            '"https://evil-cdn.example.com/x.js"'
+            'const KEY="AIzaSyANwe_3zpMHBwFvCwC3vqyp0A4PUDWrsKw";'
+            '"626244387316-s9i3efsdc4omr5mbbm9tjkug92k5f35i.apps.googleusercontent.com"'
+            '"https://pxxabc.supabase.co"'
+            'import("./lib-CLGniJ1T.js")'
+            "//# sourceMappingURL=index.js.map"
+        )
+
+        class R:
+            status_code = 200
+            text = fake_bundle
+
+        monkeypatch.setattr(js_tools, "_get", lambda url, timeout=20: R())
+        out = js_tools.js_bundle_analyze("https://t/assets/index.js")
+        assert "/api/v1/login" in out and "/admin/panel" in out
+        assert "AIzaSyANwe_3zpMHBwFvCwC3vqyp0A4PUDWrsKw" in out
+        assert "google-oauth-client-id" in out
+        assert "supabase" in out and "index.js.map" in out
+        assert "lib-CLGniJ1T.js" in out
+
+    def test_routes_regex_handles_minified_quotes(self):
+        from suijin.modules.tools.lib.js_tools import PATH_RE
+
+        for lit in ['"/api/users"', "'/admin'", "`/v2/search?q=${x}`", '"/api/v1/files/${t}/export"']:
+            assert PATH_RE.search(lit), lit  # the field-run hand regex failed exactly here
+
+    def test_google_key_probe_requires_aiza(self):
+        from suijin.modules.tools.lib.js_tools import google_key_probe
+
+        assert google_key_probe("not-a-key").startswith("Error")
+
+    def test_google_key_probe_reports_verdicts(self, monkeypatch):
+        from suijin.modules.tools.lib import js_tools
+
+        class R:
+            status_code = 200
+            headers = {"Content-Type": "application/json"}
+            text = "{}"
+
+            def json(self):
+                return {}
+
+        monkeypatch.setattr(js_tools.requests, "get", lambda *a, **k: R())
+        out = js_tools.google_key_probe("AIza" + "a" * 35)
+        assert "[ACTIVE]" in out
+
+    def test_source_map_probe_detects_map(self, monkeypatch):
+        from suijin.modules.tools.lib import js_tools
+
+        asset = type("R", (), {"status_code": 200, "text": "console.log(1)\n//# sourceMappingURL=index.js.map"})()
+        import json as _json
+
+        the_map = type(
+            "R",
+            (),
+            {
+                "status_code": 200,
+                "text": _json.dumps({"sources": ["webpack://app/src/api.js", "src/auth.ts", "<runtime>"]}),
+            },
+        )()
+
+        def fake_get(url, timeout=20):
+            return the_map if url.endswith(".map") else asset
+
+        monkeypatch.setattr(js_tools, "_get", fake_get)
+        out = js_tools.source_map_probe("https://t/assets/index.js")
+        assert "SOURCE MAP EXPOSED" in out and "src/auth.ts" in out
+        assert "webpack://" not in out.split("sources")[1]
+
+    def test_source_map_probe_negative(self, monkeypatch):
+        from suijin.modules.tools.lib import js_tools
+
+        asset = type("R", (), {"status_code": 200, "text": "console.log(1)"})()
+        nomap = type("R", (), {"status_code": 404, "text": ""})()
+
+        def fake_get(url, timeout=20):
+            return asset if not url.endswith(".map") else nomap
+
+        monkeypatch.setattr(js_tools, "_get", fake_get)
+        assert "No source map exposed" in js_tools.source_map_probe("https://t/a.js")
+
+    def test_tools_registered_and_documented(self):
+        from suijin.modules.agent.lib.prompts.tool_registry import _ALL_TOOLS, TOOL_REGISTRY
+        from suijin.modules.tools.lib.js_tools import google_key_probe, js_bundle_analyze, source_map_probe
+
+        for t in (js_bundle_analyze, google_key_probe, source_map_probe):
+            route_name = t.__name__
+            assert route_name in _ALL_TOOLS, route_name
+            assert route_name in TOOL_REGISTRY, route_name
+
+    def test_new_tools_render_in_tui(self):
+        ui, c = _ui()
+        ui.iteration_header(1, "informational")
+        ui.tool("js_bundle_analyze", {"url": "https://t/assets/index.js"})
+        ui.tool("google_key_probe", {"key": "AIzaX" + "x" * 34})
+        ui.tool("source_map_probe", {"url": "https://t/a.js"})
+        ui.flush_open()
+        out = c.export_text()
+        assert "url=https://t/assets/index.js" in out
+        assert "AIzaX" in out

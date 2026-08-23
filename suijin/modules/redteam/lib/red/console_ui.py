@@ -26,6 +26,7 @@ from __future__ import annotations
 import contextlib
 import json
 import re
+import time
 
 from rich.console import Console, Group
 from rich.live import Live
@@ -193,6 +194,9 @@ _LEXERS: dict[str, tuple[str, object]] = {
     "write_tool": ("python", lambda a: str(a.get("code", ""))),
     "read_file": ("text", lambda a: str(a.get("file_path", ""))),
     "kb_read": ("text", lambda a: str(a.get("path", ""))),
+    "js_bundle_analyze": ("text", _kv_args(("url",))),
+    "google_key_probe": ("text", _kv_args(("key",))),
+    "source_map_probe": ("text", _kv_args(("url",))),
     # key=value one-liners
     "search_cve": ("text", _kv_args(("software", "version", "limit"))),
     "search_kb": ("text", _kv_args(("keyword", "limit"))),
@@ -274,6 +278,23 @@ def _fmt_tok(n: int) -> str:
     return f"{n / 1000:.1f}k" if n >= 1000 else str(n)
 
 
+def _crash_log(where: str, exc: BaseException) -> None:
+    """Field crashes died silently and took the diagnosis with them —
+    every guarded render failure lands here: outputs/logs/ui_crash.log"""
+    import traceback
+
+    try:
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+        d = WORKSPACE_DIR / "outputs" / "logs"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "ui_crash.log").open("a").write(
+            f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} [{where}] {exc!r}\n" + traceback.format_exc() + "\n"
+        )
+    except Exception:  # noqa: BLE001 — logging must never raise
+        pass
+
+
 def _md(text: str, style: str = "none") -> Markdown:
     """Markdown render for model-authored text (thinking/said/findings/
     plain tool output) — the model writes markdown; show it as markdown."""
@@ -286,6 +307,26 @@ _BLOCKED_PREFIXES = ("TOOL NOT FOUND", "policy:", "BLOCKED", "Error: tool")
 def _is_blocked(out: str) -> bool:
     o = (out or "").lstrip()
     return any(o.startswith(p) for p in _BLOCKED_PREFIXES)
+
+
+def _guarded(name: str, fn):
+    """Wrap a UI method: on exception, log + plain-text fallback, never raise.
+    `fn` is the UNBOUND class function; `self` rides in *a (the wrapper is
+    instance-bound exactly once)."""
+
+    def wrapper(self, *a, **kw):
+        try:
+            return fn(self, *a, **kw)
+        except Exception as e:  # noqa: BLE001 — the UI must never kill a run
+            _crash_log(name, e)
+            try:
+                txt = " ".join(str(x)[:200] for x in a if isinstance(x, str))
+                if txt:
+                    self.console.print(Text(txt[:400], style="dim"))
+            except Exception:  # noqa: BLE001
+                pass
+
+    return wrapper
 
 
 class _Iteration:
@@ -310,6 +351,35 @@ class EngagementUI:
     def __init__(self, console: Console, objective: str = ""):
         self.console = console
         self.objective = objective
+        # UNCRASHABLE: a render bug must never kill an engagement (a field
+        # run died mid-render back to the menu with zero output). Every
+        # public method is guarded; failures log to outputs/logs/ui_crash.log
+        # and fall back to plain text.
+        import types
+
+        for _name in (
+            "iteration_header",
+            "thinking",
+            "reasoning",
+            "tool",
+            "planned_steps",
+            "parse_note",
+            "output",
+            "loot",
+            "supervisor",
+            "oracle",
+            "drift",
+            "fireteam",
+            "phase_transition",
+            "ask",
+            "done",
+            "failure",
+            "flush_open",
+        ):
+            _fn = getattr(type(self), _name, None)  # UNBOUND class function
+            if _fn is None:
+                continue
+            setattr(self, _name, types.MethodType(_guarded(_name, _fn), self))
         self._live: Live | None = None
         self._spinner = Spinner("dots", style=GOLD, speed=0.4)
         self.iteration = 0
