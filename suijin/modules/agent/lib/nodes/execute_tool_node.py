@@ -68,7 +68,15 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
     logger.info(f"EXECUTE: {tool_name} bg={want_bg}")
 
     if not tool_name:
-        return {"_current_step": {"tool_output": "No tool", "success": False}, "_tool_result": {"success": False}}
+        return {
+            "_current_step": {"tool_output": "No tool", "success": False},
+            "_tool_result": {"success": False},
+        }
+
+    # every outcome below returns the enriched step so the state merge can
+    # REPLACE the trace entry think_node opened for this iteration — the
+    # trace's success/error_class/tool_output finally reflect reality
+    # (supervisor dead-end detection + truthful TUI failure markers)
 
     # ── Meta-action: ask operator a question ─────────────────────────
     if tool_name == "ask_operator":
@@ -76,6 +84,7 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
         step_data.update({"tool_output": question, "success": True, "error_class": "ask_operator"})
         return {
             "_current_step": step_data,
+            "execution_trace": [dict(step_data)],
             "_tool_result": {"success": True, "output": question},
             "_ask_operator": True,
             "messages": [{"role": "user", "content": f"AGENT QUESTION: {question}"}],
@@ -97,6 +106,7 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
         )
         return {
             "_current_step": step_data,
+            "execution_trace": [dict(step_data)],
             "_tool_result": {"success": True, "output": output},
             "messages": [{"role": "user", "content": f"BG JOB {job_id}: {tool_name}"}],
         }
@@ -171,6 +181,7 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
         )
         return {
             "_current_step": step_data,
+            "execution_trace": [dict(step_data)],
             "_tool_result": {"success": True, "output": output},
             "messages": [
                 {"role": "user", "content": f"AUTO-BG {job_id}: {tool_name} was too slow, moved to background."}
@@ -195,6 +206,7 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
     step_data.update({"tool_output": output, "success": success, "duration_ms": duration_ms, "error_class": ec})
     return {
         "_current_step": step_data,
+        "execution_trace": [dict(step_data)],
         "_tool_result": {"success": success, "output": output},
         "messages": [
             {

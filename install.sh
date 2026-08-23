@@ -20,7 +20,10 @@
 # Windows? Do NOT use this script — run install.ps1 (Docker-based).
 # Existing Kali container? Use kali-setup.sh instead.
 #
-# Flags:  --tools | --full | --no-tools | -h/--help
+# Flags:  --tools | --full | --no-tools | --dev[=PATH] | -h/--help
+#         --dev installs from the local source tree the script lives in
+#         (or PATH when given) — live symlink, edits are picked up. Run
+#         interactively from inside a checkout and dev is the DEFAULT.
 # Env:    SUIJIN_INSTALL_DIR (default ~/.suijin), SUIJIN_BIN_DIR
 #         (default ~/.local/bin), SUIJIN_REPO (default GitHub; may be local),
 #         SUIJIN_NO_PATH_EDIT=1 skips shell rc edits
@@ -33,15 +36,27 @@ BIN_DIR="${SUIJIN_BIN_DIR:-${MEDUSA_BIN_DIR:-$HOME/.local/bin}}"
 export SUIJIN_NO_PATH_EDIT="${SUIJIN_NO_PATH_EDIT:-${MEDUSA_NO_PATH_EDIT:-0}}"
 
 TIER="core"
+DEV_FLAG_SOURCE=""   # set when --dev[=PATH] passed
 for arg in "$@"; do
   case "$arg" in
     --tools) TIER="tools" ;;
     --full)  TIER="full" ;;
     --no-tools) TIER="core" ;;
+    --dev) DEV_FLAG_SOURCE="auto" ;;
+    --dev=*) DEV_FLAG_SOURCE="${arg#--dev=}" ;;
     -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
     *) printf '[suijin] unknown flag: %s (see --help)\n' "$arg"; exit 1 ;;
   esac
 done
+
+# Running from inside a checkout? (script dir has pyproject.toml + suijin/)
+# Then dev mode — installing from THIS local copy — becomes the default,
+# and the source path defaults to the script's dir (not $PWD).
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)"
+RUNS_FROM_CHECKOUT=0
+if [ -f "$SCRIPT_DIR/pyproject.toml" ] && [ -d "$SCRIPT_DIR/suijin" ]; then
+  RUNS_FROM_CHECKOUT=1
+fi
 
 # ── output helpers ─────────────────────────────────────────────────────
 BOLD=""; CYAN=""; GREEN=""; YELLOW=""; RED=""; DIM=""; OFF=""
@@ -162,16 +177,32 @@ PKG="none"
 [ "$CHOSEN_OS" = "linux" ] && PKG="apt"
 
 # Dev-mode question: use the released tool, or install from a local
-# source tree (for contributors working on Suijin itself)?
+# source tree (for contributors working on Suijin itself)? When the
+# installer is run from inside a checkout, dev from that copy is the
+# default. --dev[=PATH] forces it non-interactively.
 DEV_MODE="use"
 DEV_SOURCE=""
-if [ -t 0 ] && [ -t 1 ]; then
-  printf "  a couple of questions — Enter accepts the detected default\n"
-  ask_default "install mode: (use) the released tool, or (dev) from a local source tree?" "use"
+MODE_DEFAULT="use"
+[ "$RUNS_FROM_CHECKOUT" = "1" ] && MODE_DEFAULT="dev"
+if [ -n "$DEV_FLAG_SOURCE" ]; then
+  DEV_MODE="dev"
+  if [ "$DEV_FLAG_SOURCE" = "auto" ]; then
+    [ "$RUNS_FROM_CHECKOUT" = "1" ] || fail "--dev passed but the script is not inside a Suijin checkout — use --dev=/path/to/tree"
+    DEV_FLAG_SOURCE="$SCRIPT_DIR"
+  fi
+  DEV_SOURCE="$DEV_FLAG_SOURCE"
+  if [ ! -f "$DEV_SOURCE/pyproject.toml" ] || [ ! -d "$DEV_SOURCE/suijin" ]; then
+    fail "not a Suijin source tree (needs pyproject.toml + suijin/): '$DEV_SOURCE'"
+  fi
+  note "dev install from: $DEV_SOURCE"
+elif [ -t 0 ] && [ -t 1 ]; then
+  ask_default "install mode: (use) the released tool, or (dev) from a local source tree?" "$MODE_DEFAULT"
   case "$ANSWER" in
     dev|d|developer)
       DEV_MODE="dev"
-      ask_default "path to your local Suijin source tree" "$PWD"
+      PATH_DEFAULT="$PWD"
+      [ "$RUNS_FROM_CHECKOUT" = "1" ] && PATH_DEFAULT="$SCRIPT_DIR"
+      ask_default "path to your local Suijin source tree" "$PATH_DEFAULT"
       RAW_PATH="$ANSWER"
       # sanitize: expand, resolve, validate structure
       DEV_SOURCE="$(printf '%s' "$RAW_PATH" | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')"
@@ -190,7 +221,11 @@ if [ -t 0 ] && [ -t 1 ]; then
       ;;
   esac
 else
-  note "non-interactive run — install mode: use (released)"
+  if [ "$DEV_MODE" = "dev" ]; then
+    note "non-interactive run -- dev mode from: $DEV_SOURCE"
+  else
+    note "non-interactive run — install mode: use (released)"
+  fi
 fi
 ok "$CHOSEN_OS ($ARCH), packages via $PKG, pip: $PIP_BIN, mode: $DEV_MODE"
 

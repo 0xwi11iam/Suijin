@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import os
 import time
 
@@ -23,7 +24,7 @@ USAGE = {
     "input_tokens": 0,
     "output_tokens": 0,
     "est_cost_usd": 0.0,
-    "priced": False,  # False if any model was missing from MODEL_PRICING
+    "priced": True,  # False once any call uses DEFAULT_RATE (label as approximate)
     # v5.1 accuracy accounting:
     "api_reported_calls": 0,  # calls whose tokens came from the API response
     "estimated_calls": 0,  # calls whose tokens were client-side estimated
@@ -50,6 +51,8 @@ MODEL_PRICING = {
     "meta-llama/Llama-3.1-8B-Instruct": (0.10, 0.20),
     "mistralai/Mistral-7B-Instruct-v0.3": (0.10, 0.20),
     "deepseek-ai/DeepSeek-V3": (0.30, 0.90),
+    "Qwen/Qwen3-Coder-480B-A35B-Instruct": (0.20, 0.60),
+    "zai-org/GLM-5.1": (0.60, 2.20),
     "deepseek-v4-flash": (0.27, 1.10),
     "deepseek-v4-pro": (0.55, 2.19),
     # Z.ai GLM (coding-plan models; requests for older GLM ids are
@@ -61,6 +64,7 @@ MODEL_PRICING = {
     "glm-5.1-flash": (0.11, 0.58),
     "glm-4.7": (0.60, 2.20),
     "glm-4.7-flash": (0.11, 0.58),
+    "glm-4.6": (0.60, 2.20),
     # Legacy
     "deepseek-chat": (0.27, 1.10),
     "deepseek-reasoner": (0.55, 2.19),
@@ -77,11 +81,14 @@ def _price_for(model):
     """Return (input_$per_1M, output_$per_1M) for a model id, or None."""
     if not model:
         return None
-    if model in MODEL_PRICING:
-        return MODEL_PRICING[model]
+    m = str(model).strip()
+    if m in MODEL_PRICING:
+        return MODEL_PRICING[m]
     # tolerate provider prefixes / suffixes (e.g. "anthropic/claude-opus-4-8")
+    # and case drift ("deepseek-ai/DeepSeek-V4-Flash" vs "deepseek-v4-flash")
+    m_lower = m.lower()
     for key, price in MODEL_PRICING.items():
-        if key in model:
+        if key.lower() in m_lower:
             return price
     return None
 
@@ -125,8 +132,9 @@ def _record_usage(provider, model, in_tok, out_tok, estimated: bool = False):
         USAGE["estimated_calls" if estimated else "api_reported_calls"] += 1
         price = _price_for(model)
         if price is not None:
-            USAGE["priced"] = True  # at least one exact price was used
+            USAGE["priced"] = USAGE["priced"] and True  # exact price used
         else:
+            USAGE["priced"] = False  # fallback rate in play — cost is approximate
             price = DEFAULT_RATE  # estimate anyway so the guardrail works
         in_rate, out_rate = price
         cost = (in_tok * in_rate + out_tok * out_rate) / 1_000_000
@@ -163,7 +171,7 @@ def reset_usage():
             "input_tokens": 0,
             "output_tokens": 0,
             "est_cost_usd": 0.0,
-            "priced": False,
+            "priced": True,
             "api_reported_calls": 0,
             "estimated_calls": 0,
             "by_provider": {},
@@ -323,6 +331,10 @@ def generate(
         lt_model = model_id or _service("red_active_model")(config)
         lt_result = _call_via_lobstertrap(messages, lt_model, temp, mtokens)
         if lt_result is not None:
+            # proxy path strips usage metadata — estimate so cost is never
+            # silently zero while LobsterTrap is active
+            with contextlib.suppress(Exception):
+                record_missing_usage(messages, lt_result, "lobstertrap", lt_model)
             if lt_result.startswith("Error: LobsterTrap DENIED"):
                 console.print(f"[bold red]{lt_result}[/bold red]")
                 return lt_result
@@ -375,13 +387,15 @@ def generate(
                 )
                 try:
                     um = getattr(response, "usage_metadata", None)
-                    if um is not None:
+                    if um is not None and getattr(um, "prompt_token_count", None) is not None:
                         _record_usage(
                             "gemini",
                             model_name,
                             getattr(um, "prompt_token_count", 0),
                             getattr(um, "candidates_token_count", 0),
                         )
+                    else:
+                        record_missing_usage(messages, response.text, "gemini", model_name)
                 except Exception:
                     pass
                 return response.text
@@ -409,10 +423,13 @@ def generate(
                 )
                 try:
                     u = getattr(response, "usage", None)
-                    if u is not None:
+                    if u is not None and getattr(u, "prompt_tokens", None) is not None:
                         _record_usage(
                             "huggingface", hf_model, getattr(u, "prompt_tokens", 0), getattr(u, "completion_tokens", 0)
                         )
+                    else:
+                        msg0 = response.choices[0].message
+                        record_missing_usage(messages, msg0.content or "", "huggingface", hf_model)
                 except Exception:
                     pass
                 msg = response.choices[0].message
@@ -477,7 +494,7 @@ def generate(
                 response = client.messages.create(**request_kwargs)
                 try:
                     u = getattr(response, "usage", None)
-                    if u is not None:
+                    if u is not None and getattr(u, "input_tokens", None) is not None:
                         # count cache reads/writes as input tokens for cost
                         in_tok = (
                             getattr(u, "input_tokens", 0)
@@ -485,6 +502,9 @@ def generate(
                             + getattr(u, "cache_read_input_tokens", 0)
                         )
                         _record_usage("anthropic", model_name, in_tok, getattr(u, "output_tokens", 0))
+                    else:
+                        text_parts0 = [b.text for b in response.content if getattr(b, "type", None) == "text"]
+                        record_missing_usage(messages, "".join(text_parts0), "anthropic", model_name)
                 except Exception:
                     pass
                 text_parts = []
@@ -529,16 +549,17 @@ def generate(
                 )
                 if resp.status_code == 200:
                     data = resp.json()
+                    content = data["choices"][0]["message"]["content"]
                     try:
                         u = data.get("usage") or {}
                         if u.get("prompt_tokens") is None:
                             # gateway omitted usage — estimate, never zero-count
-                            record_missing_usage(messages, text, "amd", amd_model)
+                            record_missing_usage(messages, content, "amd", amd_model)
                         else:
                             _record_usage("amd", amd_model, u.get("prompt_tokens", 0), u.get("completion_tokens", 0))
                     except Exception:
                         pass
-                    return data["choices"][0]["message"]["content"]
+                    return content
                 elif resp.status_code == 402:
                     return "Error: 402"
                 else:
@@ -578,19 +599,20 @@ def generate(
                 )
                 if resp.status_code == 200:
                     data = resp.json()
+                    msg = data["choices"][0]["message"]
+                    content = msg.get("content") or msg.get("reasoning_content", "") or "(empty response)"
                     try:
                         u = data.get("usage") or {}
                         if u.get("prompt_tokens") is None:
                             # gateway omitted usage — estimate, never zero-count
-                            record_missing_usage(messages, text, "deepseek", ds_model)
+                            record_missing_usage(messages, content, "deepseek", ds_model)
                         else:
                             _record_usage(
                                 "deepseek", ds_model, u.get("prompt_tokens", 0), u.get("completion_tokens", 0)
                             )
                     except Exception:
                         pass
-                    msg = data["choices"][0]["message"]
-                    return msg.get("content") or msg.get("reasoning_content", "") or "(empty response)"
+                    return content
                 elif resp.status_code == 401:
                     return "Error: Invalid DeepSeek API Key"
                 elif resp.status_code == 402:
@@ -636,17 +658,18 @@ def generate(
                 )
                 if resp.status_code == 200:
                     data = resp.json()
+                    msg = data["choices"][0]["message"]
+                    content = msg.get("content") or msg.get("reasoning_content", "") or "(empty response)"
                     try:
                         u = data.get("usage") or {}
                         if u.get("prompt_tokens") is None:
                             # gateway omitted usage — estimate, never zero-count
-                            record_missing_usage(messages, text, "zai", zai_model)
+                            record_missing_usage(messages, content, "zai", zai_model)
                         else:
                             _record_usage("zai", zai_model, u.get("prompt_tokens", 0), u.get("completion_tokens", 0))
                     except Exception:
                         pass
-                    msg = data["choices"][0]["message"]
-                    return msg.get("content") or msg.get("reasoning_content", "") or "(empty response)"
+                    return content
                 elif resp.status_code == 401:
                     return "Error: Invalid Z.ai API Key"
                 elif resp.status_code == 402:

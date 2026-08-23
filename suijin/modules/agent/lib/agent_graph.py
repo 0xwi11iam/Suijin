@@ -39,11 +39,27 @@ logger = logging.getLogger(__name__)
 
 
 def _merge_state(left: dict, right: dict) -> dict:
-    """Shallow merge. Lists like 'messages' + 'execution_trace' accumulate with caps."""
+    """Shallow merge. Lists like 'messages' accumulate with caps.
+
+    execution_trace: steps are keyed by iteration — an update whose step
+    iteration already exists REPLACES it in place (execute_tool_node
+    back-fills success/error_class/tool_output onto the step think_node
+    opened); new iterations append. Cap 25 either way."""
     merged = dict(left)
     for k, v in right.items():
         if k in ("messages", "execution_trace") and k in merged and isinstance(merged[k], list) and isinstance(v, list):
-            merged[k] = (merged[k] + v)[-25:]  # cap at 25 to prevent OOM
+            if k == "execution_trace":
+                out = list(merged[k])
+                by_iter = {s.get("iteration"): i for i, s in enumerate(out) if isinstance(s, dict)}
+                for s in v:
+                    if isinstance(s, dict) and s.get("iteration") in by_iter:
+                        out[by_iter[s["iteration"]]] = s  # back-fill / update
+                    else:
+                        by_iter[s.get("iteration")] = len(out)
+                        out.append(s)
+                merged[k] = out[-25:]
+            else:
+                merged[k] = (merged[k] + v)[-25:]  # cap at 25 to prevent OOM
         else:
             merged[k] = v
     return merged

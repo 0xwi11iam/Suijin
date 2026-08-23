@@ -128,7 +128,17 @@ async def run_red_team_async(config, objective, api_key=None):
         thread_id=thread_id,
         config=config,
     ).start()
-    console.print(HINT)
+
+    # Engagement console UI — transcript + pinned strip (Rich only)
+    from suijin.modules.redteam.lib.red.console_ui import EngagementUI, toggle_reasoning
+
+    ui = EngagementUI(console, objective=objective)
+    ui.start()
+    run_box.register(
+        "think",
+        lambda _a: toggle_reasoning(console),
+    )
+    console.print(HINT + " [dim]/think (toggle reasoning)[/dim]")
 
     while True:
         try:
@@ -144,12 +154,30 @@ async def run_red_team_async(config, objective, api_key=None):
                 trace = node_output.get("execution_trace", [])
                 step = node_output.get("_current_step", {})
 
-                # Show output from execute_tool_node (background spawn, blocked, etc.)
+                # ── think-side signals that are not tool calls ──────────
+                if node_name == "think":
+                    _jt = node_output.get("_just_transitioned_to", "")
+                    if _jt:
+                        ui.phase_transition(_jt)
+                    _sv = node_output.get("_supervisor_guidance", "")
+                    if _sv:
+                        ui.supervisor(_sv)
+                    _or = node_output.get("_oracle_hypotheses")
+                    if _or:
+                        ui.oracle(_or)
+                    _dw = node_output.get("_drift_warning", "")
+                    if _dw:
+                        ui.drift(_dw)
+                    # fireteam deploy confirmation rides on think steps
+                    if step.get("tool_output") and str(step.get("tool_args", {}).get("tasks", "")):
+                        ui.fireteam(str(step["tool_output"]))
+
+                # Show output from execute_tool_node (sync result, bg spawn, blocked…)
                 if node_name == "execute_tool" and step.get("tool_output"):
                     ec = step.get("error_class", "")
-                    out = step["tool_output"]
+                    out = str(step["tool_output"])
                     if ec == "ask_operator":
-                        console.print(f"  [bold #e6b47c] {out}[/bold #e6b47c]")
+                        ui.ask(out)
                         # Pause graph, ask operator, inject answer, resume.
                         # Interactive console OR the desktop bridge (detached
                         # engagements: stdin is dead — the question lands on
@@ -178,10 +206,26 @@ async def run_red_team_async(config, objective, api_key=None):
                         )
                         console.print("[dim]Answer sent. Resuming...[/dim]\n")
                         continue
-                    else:
-                        prefix = "[bold red]BLOCKED[/bold red]" if "duplicate" in ec else "[dim]output[/dim]"
-                        display = out[:2000] + (f"... [+{len(out) - 2000} chars]" if len(out) > 2000 else "")
-                        console.print(f"  {prefix} {display}", markup=True)
+                    ui.output(out, ec)
+                    # Audit the FULL observation from the execute event — the
+                    # old think-side log raced ahead of execution and logged
+                    # every observation empty.
+                    try:
+                        from suijin.modules.tools.lib.audit_trail import log_iteration
+
+                        log_iteration(
+                            iteration=step.get("iteration", 0),
+                            thought=step.get("thought", ""),
+                            reasoning=step.get("reasoning", ""),
+                            tool_name=step.get("tool_name", ""),
+                            tool_args=dict(step.get("tool_args") or {}),
+                            tool_output=out,
+                            success=bool(step.get("success", True)),
+                            phase=step.get("phase", ""),
+                            completion_reason=node_output.get("completion_reason", ""),
+                        )
+                    except Exception:
+                        pass
 
                 if trace:
                     latest = trace[-1]
@@ -195,68 +239,36 @@ async def run_red_team_async(config, objective, api_key=None):
                         success = latest.get("success", True)
                         phase = latest.get("phase", node_output.get("current_phase", "?"))
 
-                        # token counter — right side, live from USAGE
-                        _tok_in = int(providers.USAGE.get("input_tokens", 0))
-                        _tok_out = int(providers.USAGE.get("output_tokens", 0))
-                        _tok = _tok_in + _tok_out
-                        _tok_str = f"{_tok / 1000:.1f}k" if _tok >= 1000 else str(_tok)
-                        _cost = float(providers.USAGE.get("est_cost_usd", 0))
-                        _line = (
-                            f"\n[bold white]#{iteration}[/bold white] "
-                            f"[{'green' if success else 'red'}]{'+' if success else '!'}[/{'green' if success else 'red'}] "
-                            f"[dim]{phase}[/dim]"
-                        )
-                        # right-align the counter using a fixed-width pad
-                        from rich.text import Text as _RT
-
-                        _rt = _RT(_line, markup=True)
-                        _left = f"#{iteration} {'+' if success else '!'} {phase}"
-                        _right = f"{_tok_str} tok | ${_cost:.4f}"
-                        _pad = max(1, console.width - len(_left) - len(_right) - 2)
-                        console.print(
-                            f"\n[bold white]#{iteration}[/bold white] "
-                            f"[{'green' if success else 'red'}]{'+' if success else '!'}[/{'green' if success else 'red'}] "
-                            f"[dim]{phase}[/dim]"
-                            f"{' ' * _pad}[dim cyan]{_right}[/dim cyan]"
-                        )
-
+                        ui.iteration_header(iteration, phase)
                         if thought:
-                            console.print(f"  [cyan]  {thought[:500]}[/cyan]")
-
+                            ui.thinking(thought)
+                        ui.reasoning(reasoning)
                         if tool_name:
-                            cmd = str(
-                                tool_args.get("cmd")
-                                or tool_args.get("command")
-                                or tool_args.get("url")
-                                or str(tool_args)
-                            )[:200]
-                            console.print(f"  [yellow]> {tool_name}[/yellow] [dim]{cmd}[/dim]")
+                            ui.tool(tool_name, tool_args)
+                        _plan = latest.get("_plan_remaining") or (tool_args or {}).get("_plan_remaining") or []
+                        if _plan and isinstance(_plan, list):
+                            ui.planned_steps(_plan)
 
-                        # ── Supervisor intervention display ──────────
-                        sv_guidance = node_output.get("_supervisor_guidance", "")
-                        if sv_guidance:
-                            console.print(
-                                f"  [bold magenta]Supervisor:[/bold magenta] [dim italic]{sv_guidance[:300]}[/dim italic]"
-                            )
+                        # Audit the decision (think side): bookkeeping turns
+                        # (transition/ask_user/switch_skill/complete) never
+                        # reach execute_tool, so they log here.
+                        if not tool_name:
+                            try:
+                                from suijin.modules.tools.lib.audit_trail import log_iteration
 
-                        # Audit trail: log AI thought + action
-                        try:
-                            from suijin.modules.tools.lib.audit_trail import log_iteration
-
-                            tool_out = step.get("tool_output", "")
-                            log_iteration(
-                                iteration=iteration,
-                                thought=thought,
-                                reasoning=reasoning,
-                                tool_name=tool_name,
-                                tool_args=dict(tool_args),
-                                tool_output=tool_out,
-                                success=success,
-                                phase=phase,
-                                completion_reason=node_output.get("completion_reason", ""),
-                            )
-                        except Exception:
-                            pass
+                                log_iteration(
+                                    iteration=iteration,
+                                    thought=thought,
+                                    reasoning=reasoning,
+                                    tool_name=tool_name,
+                                    tool_args=dict(tool_args),
+                                    tool_output="",
+                                    success=success,
+                                    phase=phase,
+                                    completion_reason=node_output.get("completion_reason", ""),
+                                )
+                            except Exception:
+                                pass
 
                 # Check completion
                 if node_output.get("completion_reason"):
@@ -279,6 +291,7 @@ async def run_red_team_async(config, objective, api_key=None):
                 guidance = console.input("[bold cyan]  Guidance  [/bold cyan]").strip()
             except (KeyboardInterrupt, EOFError):
                 console.print("\n[bold red]  Force quit.[/bold red]")
+                ui.stop()
                 run_box.stop()
                 break
             finally:
@@ -351,6 +364,7 @@ async def run_red_team_async(config, objective, api_key=None):
             # Graph crashed (bug, not operator interrupt) — report and end
             # the engagement instead of killing the whole application.
             console.print(f"\n[bold red]  Agent loop error: {e}[/bold red]")
+            ui.stop()
             run_box.stop()
             import traceback
 
@@ -371,11 +385,12 @@ async def run_red_team_async(config, objective, api_key=None):
         total = len(trace)
         ok = sum(1 for s in trace if s.get("success", True))
         spend = providers.USAGE.get("est_cost_usd", 0)
-        console.print(
-            f"\n[bold]Done:[/bold] {ok}/{total} steps | "
-            f"phase={final_state.get('current_phase', '?')} | "
-            f"${spend:.4f} | "
-            f"{final_state.get('completion_reason', '?')}"
+        ui.done(
+            ok,
+            total,
+            str(final_state.get("current_phase", "?")),
+            float(spend),
+            str(final_state.get("completion_reason", "?")),
         )
 
         # Save state
