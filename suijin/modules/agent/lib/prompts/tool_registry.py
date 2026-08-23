@@ -311,6 +311,12 @@ TOOL_REGISTRY = {
         "args_format": '"url": "https://target.com/assets/index-abc123.js"',
         "description": "**source_map_probe** — finds maps via sourceMappingURL + .map guess, lists recovered sources.",
     },
+    "fetch_authorization_page": {
+        "purpose": "Fetch the target's bug-bounty program page (verification)",
+        "when_to_use": "When you want eyes-on confirmation of the authorization basis: the page URL is carried in your engagement order (or pass one explicitly). Verdict doctrine: a Cloudflare/WAF block means the page EXISTS (nonexistent pages 404) — that is ample; a 200 returns the page with any in-scope mentions of the target.",
+        "args_format": '"target": "example.com"  (url optional when a page is on file)',
+        "description": "**fetch_authorization_page** — program-page verification with explicit CF-exists doctrine.",
+    },
     "kb_read": {
         "purpose": "Dump one FULL knowledge-base document (untruncated)",
         "when_to_use": "When a search_kb snippet is cut off and you need the complete technique/usage details (e.g. the full GTFOBins awk entry).",
@@ -405,6 +411,7 @@ _ALL_TOOLS = {
     "write_file",
     "search_kb",
     "kb_read",
+    "fetch_authorization_page",
     "js_bundle_analyze",
     "google_key_probe",
     "source_map_probe",

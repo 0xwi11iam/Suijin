@@ -412,3 +412,104 @@ class TestProviderRecovery:
         assert "ENGAGEMENT FAILED" in text
         assert "non-JSON 3 times" in text  # what happened + what to do
         assert "switch provider" in text
+
+
+class TestProgramPage:
+    """Optional program page on authorize records + agent-side fetch with
+    the Cloudflare-exists doctrine + URL-in-answer persistence."""
+
+    def test_page_field_and_line(self):
+        rec = auth.add_authorization("acme.com", program="h1", authorization_id="z1", page="https://hackerone.com/acme")
+        assert rec["page"] == "https://hackerone.com/acme"
+        line = auth.authorization_line("acme.com")
+        assert "program page https://hackerone.com/acme" in line
+        assert "Cloudflare block" in line and "ample" in line  # CF doctrine rides the order
+        # no page -> no page clause
+        auth.add_authorization("plain.io")
+        assert "program page" not in auth.authorization_line("plain.io")
+
+    def test_invalid_page_rejected(self):
+        assert "error" in auth.add_authorization("x.io", page="not a url")
+
+    def test_set_page_on_existing_record(self):
+        auth.add_authorization("acme.com", page="https://old.example")
+        out = auth.set_page("acme.com", "https://new.example/program")
+        assert out["page"] == "https://new.example/program"
+        assert auth.page_on_file("acme.com") == "https://new.example/program"
+        assert "error" in auth.set_page("unknown.io", "https://x.example")  # needs a record
+
+    def test_fetch_cloudflare_block_is_ample(self, monkeypatch):
+        import requests as _rq
+
+        import suijin.modules.ops.lib.authorizations as A
+
+        class R:
+            status_code = 403
+            text = "<html><title>Just a moment...</title><script>cf_chl_opt={}</script></html>"
+
+        monkeypatch.setattr(_rq, "get", lambda *a, **k: R())  # fetch_page imports the same module
+        out = A.fetch_page(url="https://hackerone.com/acme")
+        assert "PROTECTED" in out
+        assert "EXISTS" in out and "ample" in out
+        assert "404" in out  # the doctrine explains WHY a block means exists
+
+    def test_fetch_200_extracts_mentions(self, monkeypatch):
+        import requests as _rq
+
+        import suijin.modules.ops.lib.authorizations as A
+
+        class R:
+            status_code = 200
+            text = "<html><title>Acme bounty</title>scope: acme.com, api.acme.com eligible</html>"
+
+        monkeypatch.setattr(_rq, "get", lambda *a, **k: R())
+        out = A.fetch_page(target="acme.com", url="https://hackerone.com/acme")
+        assert "page fetched" in out and "Acme bounty" in out
+        assert "acme.com" in out
+
+    def test_fetch_404_means_missing(self, monkeypatch):
+        import requests as _rq
+
+        import suijin.modules.ops.lib.authorizations as A
+
+        class R:
+            status_code = 404
+            text = "not found"
+
+        monkeypatch.setattr(_rq, "get", lambda *a, **k: R())
+        out = A.fetch_page(url="https://hackerone.com/nope")
+        assert "does not exist" in out and "ask_operator" in out
+
+    def test_fetch_no_page_on_file_gives_guidance(self):
+        out = auth.fetch_page(target="nothing-here.io")
+        assert "No program page on file" in out
+
+    def test_answer_url_regex(self):
+        from suijin.modules.redteam.lib.redteamer import _URL_IN_ANSWER_RE
+
+        m = _URL_IN_ANSWER_RE.search("sure — https://hackerone.com/acme covers it")
+        assert m and m.group(0) == "https://hackerone.com/acme"
+        assert not _URL_IN_ANSWER_RE.search("no link here")
+
+    def test_tool_registered_and_documented(self):
+        from suijin.modules.agent.lib.prompts.tool_registry import _ALL_TOOLS, TOOL_REGISTRY
+
+        assert "fetch_authorization_page" in _ALL_TOOLS
+        entry = TOOL_REGISTRY["fetch_authorization_page"]
+        assert "Cloudflare" in entry["when_to_use"] and "404" in entry["when_to_use"]
+
+    def test_workflow_doctrine_carries_cf_clause(self):
+        from suijin.modules.agent.lib.prompts.base import build_agent_system_prompt
+
+        p = build_agent_system_prompt({})
+        assert "fetch_authorization_page" in p
+        assert "page EXISTS" in p and "ample" in p
+
+    def test_cli_page_flag(self, capsys):
+        assert (
+            TestCli._run(self, "authorize", "page-test.io", "--program", "h1", "--page", "https://hackerone.com/pt")
+            == 0
+        )
+        out = capsys.readouterr().out
+        assert "authorization on file: page-test.io" in out
+        assert auth.page_on_file("page-test.io") == "https://hackerone.com/pt"

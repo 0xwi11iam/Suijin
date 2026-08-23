@@ -197,6 +197,7 @@ _LEXERS: dict[str, tuple[str, object]] = {
     "write_tool": ("python", lambda a: str(a.get("code", ""))),
     "read_file": ("text", lambda a: str(a.get("file_path", ""))),
     "kb_read": ("text", lambda a: str(a.get("path", ""))),
+    "fetch_authorization_page": ("text", _kv_args(("target", "url"))),
     "js_bundle_analyze": ("text", _kv_args(("url",))),
     "google_key_probe": ("text", _kv_args(("key",))),
     "source_map_probe": ("text", _kv_args(("url",))),

@@ -314,8 +314,11 @@ step "preparing agent workspace (durable — survives reinstalls)"
 # suijin_agent path symlinks to it for back-compat.
 DURABLE_WS="$INSTALL_DIR/workspace"
 mkdir -p "$DURABLE_WS"
-# migrate legacy repo-local workspace content into the durable home (merge)
-for _ws in "$REPO_DIR/suijin_agent" "$REPO_DIR/suijin/suijin_agent"; do
+# migrate legacy workspace content into the durable home (merge):
+# repo-local suijin_agent, the pre-split inner suijin/suijin_agent, and the
+# Medusa-era medusa_agent (previously merged at runtime, which no longer
+# sees it now that suijin_agent is a symlink)
+for _ws in "$REPO_DIR/suijin_agent" "$REPO_DIR/suijin/suijin_agent" "$REPO_DIR/medusa_agent"; do
   if [ -d "$_ws" ] && [ ! -L "$_ws" ] && [ "$(ls -A "$_ws" 2>/dev/null)" ]; then
     cp -R "$_ws/." "$DURABLE_WS/" 2>/dev/null || true
   fi
