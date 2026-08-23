@@ -151,26 +151,9 @@ async def run_red_team_async(config, objective, api_key=None):
                 node_name = list(event.keys())[0]
                 node_output = event[node_name]
 
+                ui.waiting(False)  # an event arrived — spinner off
                 trace = node_output.get("execution_trace", [])
                 step = node_output.get("_current_step", {})
-
-                # ── think-side signals that are not tool calls ──────────
-                if node_name == "think":
-                    _jt = node_output.get("_just_transitioned_to", "")
-                    if _jt:
-                        ui.phase_transition(_jt)
-                    _sv = node_output.get("_supervisor_guidance", "")
-                    if _sv:
-                        ui.supervisor(_sv)
-                    _or = node_output.get("_oracle_hypotheses")
-                    if _or:
-                        ui.oracle(_or)
-                    _dw = node_output.get("_drift_warning", "")
-                    if _dw:
-                        ui.drift(_dw)
-                    # fireteam deploy confirmation rides on think steps
-                    if step.get("tool_output") and str(step.get("tool_args", {}).get("tasks", "")):
-                        ui.fireteam(str(step["tool_output"]))
 
                 # Show output from execute_tool_node (sync result, bg spawn, blocked…)
                 if node_name == "execute_tool" and step.get("tool_output"):
@@ -270,8 +253,30 @@ async def run_red_team_async(config, objective, api_key=None):
                             except Exception:
                                 pass
 
+                # ── think-side signals (buffered into the open panel) ──
+                if node_name == "think":
+                    _jt = node_output.get("_just_transitioned_to", "")
+                    if _jt:
+                        ui.phase_transition(_jt)
+                    _sv = node_output.get("_supervisor_guidance", "")
+                    if _sv:
+                        ui.supervisor(_sv)
+                    _or = node_output.get("_oracle_hypotheses")
+                    if _or:
+                        ui.oracle(_or)
+                    _dw = node_output.get("_drift_warning", "")
+                    if _dw:
+                        ui.drift(_dw)
+                    # fireteam deploy confirmation rides on think steps
+                    if step.get("tool_output") and str(step.get("tool_args", {}).get("tasks", "")):
+                        ui.fireteam(str(step["tool_output"]))
+
+                # between events the strip spins (thinking / working)
+                ui.waiting(True)
+
                 # Check completion
                 if node_output.get("completion_reason"):
+                    ui.flush_open()
                     final_state = node_output
                     break
             else:
@@ -284,6 +289,8 @@ async def run_red_team_async(config, objective, api_key=None):
         except (KeyboardInterrupt, asyncio.CancelledError):
             _signal._suijin_interrupted = False
             _signal.signal(_signal.SIGINT, _signal.SIG_DFL)
+            ui.flush_open()
+            ui.waiting(False)
             try:
                 console.print(
                     "\n[bold yellow]  Paused[/bold yellow] [dim](type guidance, /report, /audit, /state, /sessions, /template, /health, or Ctrl+C to quit)[/dim]"

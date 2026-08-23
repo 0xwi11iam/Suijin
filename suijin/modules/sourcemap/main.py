@@ -1,7 +1,12 @@
 import requests
 
 _T = (5, 20)
-_UA = {"User-Agent": _stealth_ua()}
+
+
+def _ua() -> dict:
+    """Headers with the stealth identity, resolved lazily (importing at
+    module scope ran before _stealth_ua existed — loader crash)."""
+    return {"User-Agent": _stealth_ua()}
 
 
 def _stealth_ua() -> str:
@@ -14,9 +19,8 @@ def _stealth_ua() -> str:
         return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
 
-
 def _get(url, **kw):
-    return requests.get(url, timeout=_T, headers=_UA, **kw)
+    return requests.get(url, timeout=_T, headers=_ua(), **kw)
 
 
 def sourcemap_check(urls: str = "") -> str:

@@ -18,7 +18,7 @@ def _fresh_state():
     saved = dict(UI_STATE)
     UI_STATE.update(
         {
-            "show_reasoning": False,
+            "show_reasoning": True,
             "flags": [],
             "creds": [],
             "fireteams": 0,
@@ -61,29 +61,36 @@ class TestLoot:
 
 
 class TestTranscript:
-    def test_iteration_block_renders(self):
+    def test_iteration_renders_as_one_panel(self):
         ui, c = _ui()
-        ui.iteration_header(6, "recon")
+        ui.iteration_header(6, "informational")
         ui.thinking("Crafting an XSS payload to test the search field")
         ui.reasoning("Search reflects input unencoded")
         ui.tool("execute_terminal", {"cmd": 'curl -s "http://t/search" --data "q=x"'})
         ui.output("Status: 200\nOK")
         out = c.export_text()
-        assert "#6" in out and "recon" in out
+        assert "#6 · informational" in out  # panel title carries number+phase
         assert "thinking" in out and "XSS payload" in out
-        assert "> execute_terminal" in out
-        assert "output" in out and "Status: 200" in out
+        assert "Search reflects input unencoded" in out  # reasoning under thinking, no label
+        assert ":: why ::" not in out
+        assert "execute_terminal" in out
+        assert "Status: 200" in out
 
-    def test_reasoning_hidden_then_toggled(self):
+    def test_reasoning_toggle(self):
         ui, c = _ui()
-        ui.reasoning("secret why")
-        assert "secret why" not in c.export_text()
-        toggle_reasoning(c)
-        assert "secret why" in c.export_text()  # last reasoning re-printed
+        ui.iteration_header(1, "informational")
+        ui.reasoning("the why sentence")
+        ui.tool("nmap", {"target": "10.0.0.1"})
+        ui.output("scan done")
+        assert "the why sentence" in c.export_text()  # shown by default now
+        toggle_reasoning(Console(record=True, width=100, force_terminal=True))
         c2 = Console(record=True, width=100, force_terminal=True)
         ui.console = c2
-        ui.reasoning("second why")
-        assert "second why" in c2.export_text()
+        ui.iteration_header(2, "informational")
+        ui.reasoning("hidden why")
+        ui.tool("nmap", {"target": "10.0.0.1"})
+        ui.output("scan done")
+        assert "hidden why" not in c2.export_text()
 
     def test_loot_lines_and_counters(self):
         ui, c = _ui()
@@ -100,61 +107,116 @@ class TestTranscript:
 
     def test_http_request_uses_json_lexer(self):
         ui, c = _ui()
+        ui.iteration_header(2, "informational")
         ui.tool("http_request", {"method": "POST", "url": "http://t/x", "body": "a=1"})
+        ui.flush_open()
         assert '"method"' in c.export_text()
 
     def test_blocked_output_rendered(self):
         ui, c = _ui()
+        ui.iteration_header(3, "informational")
+        ui.tool("nmap", {"target": "10.0.0.1"})
         ui.output("policy: target outside allowed scopes")
         assert "BLOCKED" in c.export_text()
 
+    def test_graceful_errors(self):
+        from suijin.modules.redteam.lib.red.console_ui import graceful_error, is_error
+
+        # the exact wall of text from the drforst.org field run
+        raw = (
+            "HTTP Error: HTTPSConnectionPool(host='drforst.org', port=443): Max retries exceeded "
+            "with url / (Caused by NameResolutionError(\"HTTPSConnection(host='drforst.org', port=443): "
+            "Failed to resolve 'drforst.org' ([Errno 8] nodename nor servname provided, or not known)\"))"
+        )
+        assert is_error(raw)
+        short = graceful_error(raw)
+        assert "HTTPSConnectionPool" not in short and "Max retries" not in short
+        assert "drforst.org" in short and len(short) < 120
+        assert graceful_error("Error: nmap: command not found") == "nmap not installed"
+        assert graceful_error("Tool error: connection to 10.0.0.5 port 22 refused") is not None
+
+    def test_error_output_renders_as_error_panel(self):
+        ui, c = _ui()
+        ui.iteration_header(4, "informational")
+        ui.tool("http_request", {"method": "GET", "url": "https://nope.invalid"})
+        ui.output(
+            "HTTP Error: HTTPSConnectionPool(host='nope.invalid', port=443): Max retries exceeded with url / "
+            "(Caused by NameResolutionError(\"Failed to resolve 'nope.invalid'\"))"
+        )
+        out = c.export_text()
+        assert "error" in out and "could not resolve nope.invalid (DNS)" in out
+        assert "HTTPSConnectionPool" not in out
+
     def test_fireteam_and_strip_counters(self):
         ui, c = _ui()
+        ui.iteration_header(2, "informational")
         ui.fireteam("Fireteam deployed: 3 specialist(s)")
+        ui.flush_open()
         assert UI_STATE["fireteams"] == 1
         assert "Fireteam deployed" in c.export_text()
 
     def test_planned_steps(self):
         ui, c = _ui()
+        ui.iteration_header(2, "informational")
         ui.planned_steps([{"tool_name": "http_request"}, {"tool_name": "nmap"}])
+        ui.flush_open()
         out = c.export_text()
         assert "2 more step(s)" in out and "http_request" in out
 
     def test_supervisor_oracle_drift(self):
         ui, c = _ui()
+        ui.iteration_header(2, "informational")
         ui.supervisor("switch approach")
         ui.oracle(["try blind sqli"])
         ui.drift("coverage stalled")
+        ui.flush_open()
         out = c.export_text()
-        assert "Supervisor:" in out and "Oracle:" in out and "Drift:" in out
+        assert "Supervisor" in out and "Oracle" in out and "Drift" in out
 
     def test_phase_transition(self):
         ui, c = _ui()
-        ui.phase_transition("exploit", "creds found")
-        assert "phase -> exploit" in c.export_text()
+        ui.iteration_header(2, "informational")
+        ui.phase_transition("exploitation", "creds found")
+        ui.flush_open()
+        assert "phase -> exploitation" in c.export_text()
 
     def test_ask_renders_question_once(self):
         ui, c = _ui()
+        ui.iteration_header(2, "informational")
         ui.ask("Continue with destructive tests?")
         assert c.export_text().count("Continue with destructive") == 1
 
     def test_done_summarizes_loot(self):
         ui, c = _ui()
+        ui.iteration_header(2, "informational")
         ui.loot("FLAG{X}")
-        ui.done(4, 5, "exploit", 0.5, "Objective complete")
+        ui.done(4, 5, "exploitation", 0.5, "Objective complete")
         out = c.export_text()
         assert "Done:" in out and "FLAG{X}" in out
 
     def test_syntax_falls_back_on_exotic_tool(self):
         ui, c = _ui()
+        ui.iteration_header(2, "informational")
         ui.tool("some_unknown_pack_tool", {"weird": "args"})
+        ui.flush_open()
         assert "some_unknown_pack_tool" in c.export_text()
 
     def test_non_terminal_console_no_crash(self):
         c = Console(record=True, width=80, force_terminal=False)
         ui = EngagementUI(c)
+        ui.iteration_header(1, "informational")
         ui.tool("execute_terminal", {"cmd": "echo hi"})
+        ui.flush_open()
         assert "echo hi" in c.export_text()
+
+    def test_waiting_spinner_and_strip(self):
+        ui, c = _ui()
+        ui.start()
+        assert ui._strip() is not None  # spinner state renders before first iteration
+        ui.iteration_header(1, "informational")
+        ui.waiting(True)
+        assert ui._strip() is not None
+        ui.stop()
 
 
 class TestPricing:
