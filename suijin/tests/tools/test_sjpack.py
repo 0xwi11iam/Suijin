@@ -302,3 +302,76 @@ class TestRoundTrip:
         out = sjpack.build(str(EXAMPLES / "headerpeek"), note="n", out=str(tmp_path / "hp.sjm"))
         info = sjpack.inspect(str(out["path"]))
         assert info["seal"] == "ok" and info["meta"]["id"] == "headerpeek"
+
+
+class TestMaliciousExamples:
+    """The five shipped malicious fixtures — end-to-end proof the guards
+    work on real builds (not just synthetic zips)."""
+
+    MAL = REPO / "examples" / "malicious"
+
+    def _install(self, tmp_path, name):
+        out = sjpack.build(str(self.MAL / name), note="malicious fixture", out=str(tmp_path / f"{name}.sjm"))
+        assert "error" not in out, out  # BUILDING malicious code is fine; installing is not
+        r = sjpack.install(str(out["path"]), yes=True, console=Console(record=True, width=90, force_terminal=False))
+        return r
+
+    def test_eval_snake_refused(self, tmp_path):
+        r = self._install(tmp_path, "eval_snake")
+        assert "error" in r and "CRITICAL" in r["error"]
+        assert any(f["rule"] == "dynamic-exec" for f in r["scan"]["findings"])
+
+    def test_creds_leaker_refused(self, tmp_path):
+        r = self._install(tmp_path, "creds_leaker")
+        assert "error" in r and "CRITICAL" in r["error"]
+        assert any(f["rule"] == "hardcoded-secret" for f in r["scan"]["findings"])
+
+    def test_obfuscated_shell_refused(self, tmp_path):
+        r = self._install(tmp_path, "obfuscated_shell")
+        assert "error" in r and "CRITICAL" in r["error"]
+        assert any(f["rule"] == "obfuscation" for f in r["scan"]["findings"])
+
+    def test_tool_shadower_refused(self, tmp_path):
+        r = self._install(tmp_path, "tool_shadower")
+        assert "error" in r and "CRITICAL" in r["error"]
+        assert any(f["rule"] == "tool-shadow" for f in r["scan"]["findings"])
+
+    def test_sneaky_spawner_warns_but_installs(self, tmp_path):
+        """Warnings-tier: shown on the card, install proceeds."""
+        r = self._install(tmp_path, "sneaky_spawner")
+        assert "installed" in r, r
+        rules = {f["rule"] for f in r["scan"]["findings"]}
+        assert "process-spawn" in rules and "network-egress" in rules
+        sjpack.shutil.rmtree(sjpack.Path(r["dest"]), ignore_errors=True)
+
+    def test_declared_binaries_clears_sneaky(self, tmp_path):
+        """Same behavior, but declared in metadata -> honest info, not warn."""
+        d = _mk(
+            tmp_path / "honest",
+            {
+                "manifest.json": json.dumps({"name": "honest", "version": "1.0", "external_binaries": ["nmap"]}),
+                "main.py": (self.MAL / "sneaky_spawner" / "main.py").read_text(),
+            },
+        )
+        out = sjpack.build(str(d), note="n", out=str(tmp_path / "h.sjm"))
+        meta = json.loads(zipfile.ZipFile(out["path"]).read("sjpkg.json"))
+        assert "nmap" in meta["external_binaries"]
+
+
+class TestEnterInstalls:
+    """Field fix: pressing Enter at the wizard must INSTALL (default Y),
+    not decline. The old [y/N] prompt read Enter as no."""
+
+    def test_prompt_defaults_to_yes(self):
+        import inspect
+
+        src = inspect.getsource(sjpack.install)
+        assert "[Y/n]" in src
+        assert '"n", "no"' in src and '"y", "yes"' not in src.split("declined")[0]
+
+    def test_sha256_shown_before_card(self):
+        """The outer hash prints at install so the operator can compare
+        against the author's published hash."""
+        import inspect
+
+        assert "file sha256:" in inspect.getsource(sjpack.install)

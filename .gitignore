@@ -104,3 +104,10 @@ suijin/modules/redteam/lib/intel/knowledge_graph.json
 # Operator-local engagement notes + runtime recovery state
 suijin/.notes/
 suijin/operation_state_recovery.json
+
+# Malicious scanner fixtures: source is tracked (tests read it), but any
+# SEALED builds of them must never be committed
+examples/malicious/**/*.sjm
+examples/malicious/**/*.sja
+examples/malicious/**/*.sjp
+examples/malicious/built/

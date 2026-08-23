@@ -37,6 +37,8 @@ _SPAWN_ATTRS = {"system", "popen", "run", "Popen", "check_output", "check_call",
 
 _B64_BLOB = re.compile(r"['\"]([A-Za-z0-9+/=]{200,})['\"]")
 _HEX_BLOB = re.compile(r"['\"]([0-9a-fA-F]{200,})['\"]")
+# 'A' * 250 style — small literal multiplied into a big blob
+_MUL_BLOB = re.compile(r"['\"]([A-Za-z0-9+/=]{1,8})['\"]\s*\*\s*(\d{3,})")
 
 # stdlib names for the unknown-import rule
 _STDLIB = set(getattr(sys, "stdlib_module_names", ()))
@@ -66,22 +68,33 @@ _KNOWN_DEPS = {
 
 
 def _secret_findings(source: str) -> list[dict]:
-    """Hardcoded secrets — reuses the platform secret patterns + entropy."""
+    """Hardcoded secrets — reuses the platform secret patterns, widened for
+    SOURCE-CODE style assignments. The repo patterns match env/yaml form
+    (KEY=value, no spaces); python writes KEY = value — the scanner
+    normalizes ' = ' to '=' before matching so both forms are caught."""
     try:
         from suijin.modules.platform.lib.security.secret_patterns import SECRET_PATTERNS
 
         patterns = SECRET_PATTERNS
     except Exception:  # noqa: BLE001 — scanner must run standalone too
         return []
+    import re as _re
+
+    normalized = _re.sub(r"(\w)\s*([=:])\s*", r"\1\2", source)  # KEY = v -> KEY=v
     out = []
     for name, rx in patterns.items():
-        for m in rx.finditer(source):
+        for m in rx.finditer(normalized):
+            # report line numbers against the ORIGINAL source: find the
+            # matched VALUE's first line in the original by scanning for
+            # the value string
+            val = m.group(1) if m.groups() else m.group(0)
+            line = source[: source.find(val)].count("\n") + 1 if val and val in source else 1
             out.append(
                 {
                     "rule": "hardcoded-secret",
                     "severity": CRITICAL,
                     "file": None,
-                    "line": source[: m.start()].count("\n") + 1,
+                    "line": line,
                     "detail": f"{name} pattern matches source",
                 }
             )
@@ -154,10 +167,17 @@ def _scan_tree(tree: ast.Module, source: str, rel: str) -> list[dict]:
         elif isinstance(stmt, (ast.For, ast.While)) and not isinstance(stmt, (ast.AsyncFunctionDef, ast.FunctionDef)):
             add("import-time-effect", WARN, stmt, "loop runs at import time")
 
-    # 6. obfuscation: big encoded blob whose decoded form feeds exec
-    for m in list(_B64_BLOB.finditer(source)) + list(_HEX_BLOB.finditer(source)):
-        after = source[m.end() : m.end() + 400]
-        if re.search(r"\b(exec|eval|compile|__import__|loads)\s*\(", after):
+    # 6. obfuscation: big encoded blob whose decoded form feeds exec.
+    # Two shapes: (a) a 200+ char base64/hex LITERAL, (b) a blob built by
+    # string-multiplication ('A' * 250) — the fixture proved shape (b) is
+    # the realistic indirection. Both need an exec/decode call after.
+    blob_hits = list(_B64_BLOB.finditer(source)) + list(_HEX_BLOB.finditer(source))
+    for m2 in _MUL_BLOB.finditer(source):
+        if int(m2.group(2)) >= 200:  # group(2) = the multiplier
+            blob_hits.append(m2)
+    for m in blob_hits:
+        after = source[m.end() : m.end() + 600]
+        if re.search(r"\b(exec|eval|compile|__import__|b64decode|loads)\s*\(", after):
             ln = source[: m.start()].count("\n") + 1
             findings.append(
                 {
@@ -165,7 +185,7 @@ def _scan_tree(tree: ast.Module, source: str, rel: str) -> list[dict]:
                     "severity": CRITICAL,
                     "file": rel,
                     "line": ln,
-                    "detail": f"encoded blob ({len(m.group(1))} chars) feeding an exec/decode call",
+                    "detail": f"large encoded blob ({m.group(1)[:12] if m.lastindex else 'mul'}…) feeding an exec/decode call",
                 }
             )
 
