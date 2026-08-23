@@ -1738,6 +1738,11 @@ def run_compliance(args) -> int:
 
 
 def main(argv=None):
+    import warnings
+
+    from suijin.modules.platform.lib.config_models import CostCapWarning
+
+    warnings.filterwarnings("ignore", category=CostCapWarning)  # one red line in engagements instead
     parser = argparse.ArgumentParser(
         prog="suijin",
         description="Suijin — autonomous red & blue teaming. "

@@ -243,3 +243,199 @@ def _strip_rtf(path: str) -> str:
     content = re.sub(r"[{}]", "", content)  # group braces
     content = re.sub(r"\\\n", "\n", content)  # line continuations
     return content.strip()
+
+
+# ── Pause console: 15 course-changing commands + free-form guidance ──────
+
+PHASES = ("informational", "exploitation", "post_exploitation")
+
+
+class PauseContext:
+    """Everything the pause commands need, injected by the engagement loop.
+    Kept as a plain namespace so tests can fake every knob."""
+
+    def __init__(
+        self,
+        *,
+        console,
+        agent=None,
+        langgraph_config=None,
+        thread_id="",
+        config=None,
+        objective="",
+        route_tool_fn=None,
+        usage_fn=None,
+        loot=None,
+        force_report_fn=None,
+    ):
+        self.console = console
+        self.agent = agent
+        self.langgraph_config = langgraph_config
+        self.thread_id = thread_id
+        self.config = config or {}
+        self.objective = objective
+        self.route_tool_fn = route_tool_fn or (lambda name, args: f"(no route: {name})")
+        self.usage_fn = usage_fn or (lambda: {})
+        self.loot = loot or {"flags": [], "creds": []}
+        self.force_report_fn = force_report_fn
+        self.guidance_extra: list[str] = []  # /focus /skip /finish accumulate here
+
+
+def build_pause_handlers(ctx: PauseContext) -> dict:
+    """/command -> handler(args). 15 commands, each fully testable."""
+
+    def _report(_args):
+        ctx.console.print("[dim]  Generating report...[/dim]")
+        if ctx.force_report_fn:
+            ctx.force_report_fn()
+        ctx.console.print("[dim]  Report saved.[/dim]")
+
+    def _audit(_args):
+        print_audit_trail()
+
+    def _state(_args):
+        if ctx.agent is not None:
+            print_state_summary(ctx.agent, ctx.thread_id)
+
+    def _sessions(_args):
+        list_sessions()
+
+    def _template(_args):
+        handle_template(ctx.config)
+
+    def _health(_args):
+        from suijin.modules.platform.lib.templates import print_health_check
+
+        print_health_check(ctx.console)
+
+    def _objective(args):
+        if not args:
+            ctx.console.print("[yellow]  usage: /objective <new objective text>[/yellow]")
+            return
+        if ctx.agent is not None:
+            try:
+                ctx.agent._graph.update_state(
+                    ctx.langgraph_config,
+                    {
+                        "original_objective": args,
+                        "_objective": args,
+                        "messages": [{"role": "user", "content": f"OPERATOR: objective changed to: {args}"}],
+                    },
+                )
+            except Exception as e:  # noqa: BLE001 — pause must never crash
+                ctx.console.print(f"[yellow]  objective change failed: {e}[/yellow]")
+                return
+        ctx.objective = args
+        ctx.console.print(f"[green]  objective -> {args[:120]}[/green]")
+
+    def _phase(args):
+        p = args.strip().lower().replace("-", "_")
+        if p not in PHASES:
+            ctx.console.print(f"[yellow]  usage: /phase <{'|'.join(PHASES)}>[/yellow]")
+            return
+        if ctx.agent is not None:
+            try:
+                ctx.agent._graph.update_state(
+                    ctx.langgraph_config,
+                    {
+                        "current_phase": p,
+                        "messages": [{"role": "user", "content": f"PHASE TRANSITION: operator forced {p} phase."}],
+                    },
+                )
+            except Exception as e:  # noqa: BLE001
+                ctx.console.print(f"[yellow]  phase change failed: {e}[/yellow]")
+                return
+        ctx.console.print(f"[green]  phase -> {p}[/green]")
+
+    def _focus(args):
+        if not args:
+            ctx.console.print("[yellow]  usage: /focus <what to focus on next>[/yellow]")
+            return
+        ctx.guidance_extra.append(f"Focus on: {args}")
+        ctx.console.print("[dim]  focus noted — it rides the next guidance.[/dim]")
+
+    def _skip(_args):
+        ctx.guidance_extra.append(
+            "Abandon the current approach entirely — it is a dead end. Pivot to a different attack vector now."
+        )
+        ctx.console.print("[dim]  skip noted — pivot instruction queued.[/dim]")
+
+    def _finish(_args):
+        ctx.guidance_extra.append(
+            "Wrap up NOW: run generate_report on what you have, then emit action=complete. No new exploration."
+        )
+        ctx.console.print("[dim]  finish noted — wrap-up instruction queued.[/dim]")
+
+    def _loot(_args):
+        if ctx.loot.get("flags"):
+            for f in ctx.loot["flags"]:
+                ctx.console.print(f"  [#e6b47c]FLAG[/#e6b47c]  {f}")
+        else:
+            ctx.console.print("  [dim]no flags captured yet[/dim]")
+        for kind, v in ctx.loot.get("creds", []):
+            ctx.console.print(f"  [green]CRED[/green]  {kind}: {str(v)[:70]}")
+
+    def _jobs(_args):
+        ctx.console.print(str(ctx.route_tool_fn("job_list", {})))
+
+    def _kill(args):
+        jid = args.strip()
+        if not jid:
+            ctx.console.print("[yellow]  usage: /kill <job_id>[/yellow]")
+            return
+        ctx.console.print(str(ctx.route_tool_fn("job_cancel", {"job_id": jid})))
+
+    def _cost(_args):
+        from suijin.modules.redteam.lib.red.console_ui import _fmt_tok
+
+        u = ctx.usage_fn() or {}
+        tok = int(u.get("input_tokens", 0)) + int(u.get("output_tokens", 0))
+        ctx.console.print(
+            f"  calls {u.get('calls', 0)} | {_fmt_tok(tok)} tok "
+            f"(api {u.get('api_reported_calls', 0)} / est {u.get('estimated_calls', 0)}) "
+            f"| ${float(u.get('est_cost_usd', 0)):.4f}"
+        )
+
+    return {
+        "/report": _report,
+        "/audit": _audit,
+        "/state": _state,
+        "/sessions": _sessions,
+        "/template": _template,
+        "/health": _health,
+        "/objective": _objective,
+        "/phase": _phase,
+        "/focus": _focus,
+        "/skip": _skip,
+        "/finish": _finish,
+        "/loot": _loot,
+        "/jobs": _jobs,
+        "/kill": _kill,
+        "/cost": _cost,
+    }
+
+
+PAUSE_BANNER = (
+    "\n[bold yellow]  Paused[/bold yellow] [dim]— /objective /phase /focus /skip /finish /loot /jobs "
+    "/kill /cost /report /audit /state /sessions /template /health — or type guidance (Ctrl+C to quit)[/dim]"
+)
+
+
+def pause_console(ctx: PauseContext, input_fn) -> str:
+    """Run the pause loop: slash commands dispatch (stay in the loop),
+    the first non-slash line is the guidance. Returns the guidance string
+    (queued /focus /skip /finish instructions merged in)."""
+    handlers = build_pause_handlers(ctx)
+    ctx.console.print(PAUSE_BANNER)
+    while True:
+        line = (input_fn("  Guidance  ") or "").strip()
+        cmd, _, cmd_args = line.partition(" ")
+        handler = handlers.get(cmd.lower())
+        if handler is None:
+            guidance = line
+            break
+        handler(cmd_args.strip())
+    extras = [g for g in ctx.guidance_extra if g]
+    if extras:
+        guidance = " ".join(extras + ([guidance] if guidance else []))
+    return guidance or "Continue what you were doing."
