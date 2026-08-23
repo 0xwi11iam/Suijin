@@ -1,6 +1,6 @@
 {
-  "version": "5.1.0",
+  "version": "5.2.0",
   "codename": "Suijin OS",
-  "release_date": "2026-08-19",
-  "description": "Suijin OS v4.0.0 \u2014 the architecture release. A modular operating system for security automation: stdlib-only kernel (12 subsystems) with a compiled Rust core (DAG + VFS, pure-Python oracles), 61 modules booting from manifests across three tiers (core / recommended+49 packs / community-installed), Textual Module Manager with install system, quiet-boot scene analysis, disable-means-disappear at every tier. Same product, same commands, same look \u2014 now an OS. 1029+ tests green, architecture boundaries enforced in CI."
+  "release_date": "2026-08-23",
+  "description": "Suijin OS v5.2.0 — the field-readiness release. Red side: engagement console UI (syntax-highlighted tool calls, reasoning toggle, live token/cost strip with per-model pricing, loot capture), truthful event plumbing (no stale-tool re-execution, real failure markers, honest audit observations), fireteams with patient timeouts. Blue side: five foundation repairs (unified tarpit protocol, 9 detector classes ported to the core, custom rules wired, config-driven scorer). Plus: graded lab benchmark (suijin bench), payloadforge + containerbreak packs, and an installer that asks normal-vs-dev first and installs from your local checkout live. 1,383 tests green."
 }

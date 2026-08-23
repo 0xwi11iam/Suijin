@@ -6,6 +6,94 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v5.2.0 — Field readiness
+
+Five waves since v5.1.0, all driven by what live engagements actually
+hit (the drfrost/playtorrio notes) and what offline measurement proved.
+
+### Red-team console UI
+- **Engagement transcript rebuilt** (`red/console_ui.py`): per-iteration
+  blocks — thinking line, `:: why ::` reasoning (hidden by default,
+  `/think` toggles + re-prints the last one), `> tool` with per-tool
+  syntax highlighting (bash/json/python/markdown), boxed output,
+  colored loot lines (FLAG{...} gold, credentials green — 8 cred
+  patterns), supervisor/oracle/drift/fireteam/phase renders.
+- **Pinned live strip** (battle.py pattern): iteration · phase ·
+  tokens · cost · FLAG/CRED/FT counters; `~` marks approximate cost.
+- The prompt now requests optional `reasoning` (1-2 sentences WHY).
+
+### Truthful events (bugs the UI exposed)
+- Stale `_current_step` re-executed the previous tool after
+  transition/ask_user/switch_skill/complete turns — cleared.
+- Trace `success`/`error_class`/`tool_output` never back-filled from
+  execution (the `!` failure marker could never fire; supervisor
+  dead-end detection was blind) — execute events now replace the
+  trace entry by iteration.
+- Audit observations logged empty every normal iteration (think-side
+  raced ahead of execution) — now logged from execute events.
+- BLOCKED rendering keyed on real policy/not-found prefixes (the old
+  check was unreachable); ask_operator prints once.
+
+### Accurate token cost (per model)
+- `record_missing_usage` referenced an unbound variable in the
+  amd/deepseek/zai branches — the estimate path was dead code and
+  silently recorded ZERO; fixed. Estimate fallback added for
+  gemini/huggingface/anthropic; LobsterTrap proxy calls counted.
+- Pricing table: +glm-4.6, +Qwen/Qwen3-Coder-480B, +zai-org/GLM-5.1;
+  case-insensitive matching (the default HF model previously fell to
+  the fallback rate). `priced` gets its documented semantics.
+
+### Fireteams
+- Subagent LLM timeout 30s -> 60s (configurable: env
+  `SUIJIN_SUBAGENT_LLM_TIMEOUT` / config `subagent_llm_timeout_s`),
+  one patient retry before a timeout counts — the 15s-timeout
+  double-kill observed in field notes. Deploy confirmations and
+  FIRETEAM results now render in the console.
+
+### Blue foundations (wave A — SOC-in-a-box groundwork)
+- Tarpit file protocol unified: the battle watchdog wrote `set_at`
+  while every reader reads `since` — scripted-battle tarpits moved
+  the scoreboard but never delayed red. One protocol module now
+  serves battle, TUI feed, and proxy.
+- 9 attack classes that only existed in the TUI fast path ported to
+  the core detector (command injection, JWT, deserialization, LDAP,
+  NoSQL, mass assignment, file inclusion, GraphQL, brute-force UA)
+  plus blind SQLi — offline metrics no longer overstate stealth.
+- Custom detector rules (`suijin rules`) wired into the production
+  scorer + TUI tier (validated-and-ignored before).
+- Scorer weights + thresholds driven by `blue_config.json` (was
+  hardcoded theater); latent DEFAULT-poisoning bug in
+  `load_blue_config` fixed (shallow copy).
+- Blueteamer built-in lab launch fixed (BASE_DIR pointed into
+  modules/blueteam where nothing exists).
+
+### Graded lab benchmark (wave 5)
+- **`suijin bench`**: boots each lab (log4shell/wordpress/oauth), runs
+  the agent through real dispatch, scores flag capture / tool calls /
+  iterations / cost; history persists for release-over-release
+  trends. Mock mode is offline-deterministic; scripts never embed
+  flag values (anti-cheat enforced by tests) and thread dynamic
+  tokens from tool output.
+- oauth lab flaw 6 made genuinely exploitable (password grant now
+  honors requested scope — bob's flag was unreachable).
+
+### New attack surfaces (wave 3) + cleanup (wave 4)
+- **payloadforge** pack: rev_shell (bash/python/nc/php/powershell),
+  encode_chain (b64 → gzip+b64 round-trip), stager (curl/wget/python).
+- **containerbreak** pack: docker_analyze (Docker API escape probe),
+  escape_check (self-analysis: cgroup/CapEff/mounts).
+- wifi `sudo_available`; dead code deleted (RECON_PROFILES,
+  attack_simulator, build/), latent endswith/format bugs fixed.
+
+### Installer
+- First question is now install type: **normal** (released) or
+  **dev** (local source tree, live symlink). Run from inside a
+  checkout and dev is the default; `--dev[=PATH]` forces it
+  non-interactively.
+
+1,377 fast tests + 6 slow (83 new since v5.1.0); ruff clean; boot
+150 units / 265+ tools / 140 packs.
+
 ## v5.1.0 — Desktop (technical preview)
 
 The gateway + Tauri client: the agent gets a GUI without the GUI
