@@ -89,11 +89,19 @@ def status(job_id: str) -> str:
     if not j:
         return f"Job {job_id} not found."
     elapsed = time.time() - j["started_at"]
+    if j["status"] in ("done", "failed", "cancelled"):
+        # finished: the full result IS the point — the old 500-char clip
+        # hid the highest-value findings (field trace: the leaked-key scan
+        # was never readable). Use job_output for more; here show plenty.
+        body = str(j.get("output", "") or "(no output)")
+        if j.get("error"):
+            body = f"FAILED: {j['error']}\n{body}"
+        return f"Job {job_id}: {j['status']} ({elapsed:.0f}s)\n  Tool: {j['tool_name']}\n{body}"
     return (
         f"Job {job_id}: {j['status']} ({elapsed:.0f}s)\n"
         f"  Tool: {j['tool_name']}\n"
         f"  Args: {str(j.get('tool_args', {}))[:200]}\n"
-        + (f"  Output: {str(j.get('output', ''))[:500]}" if j.get("output") else "  (no output yet)")
+        + (f"  Output (partial): {str(j.get('output', ''))[:500]}" if j.get("output") else "  (no output yet)")
     )
 
 
@@ -121,6 +129,39 @@ def output(job_id: str) -> str:
 def list_jobs() -> list[dict]:
     with _job_lock:
         return [dict(v) for v in _jobs.values()]
+
+
+# job ids already drained into the conversation (H2) — drain each exactly once
+_drained: set[str] = set()
+
+
+def collect_finished_jobs(max_results: int = 3) -> list[str]:
+    """H2: finished background jobs walk into the conversation (fireteam
+    symmetry). Returns message strings for jobs that finished and were NOT
+    yet announced; marks them drained. The agent can still pull full output
+    via job_output — this is the tap on the shoulder, not the whole report."""
+    msgs = []
+    with _job_lock:
+        finished = [
+            (k, dict(v))
+            for k, v in _jobs.items()
+            if v.get("status") in ("done", "failed") and k not in _drained and v.get("_announce", True)
+        ]
+    for jid, j in sorted(finished, key=lambda kv: kv[1].get("started_at", 0))[:max_results]:
+        _drained.add(jid)
+        if len(_drained) > 200:  # bound memory on long engagements
+            _drained.clear()
+        out = str(j.get("output", "") or "")
+        preview = out[:600] + (f" …(+{len(out) - 600} chars — job_output {jid})" if len(out) > 600 else "")
+        state_word = "FINISHED" if j["status"] == "done" else f"FAILED ({j.get('error', '')})"
+        msgs.append(f"BACKGROUND JOB {jid} {state_word} — {j.get('tool_name', '?')}\n{preview}")
+    return msgs
+
+
+def mark_announced(job_id: str) -> None:
+    """Opt a job out of auto-announcement (e.g. the agent already read it)."""
+    with _job_lock:
+        _drained.add(job_id)
 
 
 _active_job_id = threading.local()
