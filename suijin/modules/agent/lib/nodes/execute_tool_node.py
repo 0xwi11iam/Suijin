@@ -221,7 +221,11 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
 
     output, _ = _maybe_offload(tool_name, str(result))
     duration_ms = int((_time.monotonic() - t0) * 1000)
-    success = not output.startswith("Error:") and not output.startswith("Tool error:")
+    # failure prefixes match dispatch's repeat-guard set — "HTTP Error:" and
+    # "Execution Fault:" were missing here, so HTTP failures registered as
+    # SUCCESS in the trace (the '!' marker never fired for them either)
+    _FAILS = ("Error:", "Tool error:", "Tool Error", "HTTP Error:", "Execution Fault:")
+    success = not str(output).startswith(_FAILS)
     _audit_step(state, tool_name, tool_args, success, duration_ms)
     ec = _classify_error_class(
         success=success,
@@ -249,11 +253,30 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
         except Exception:  # noqa: BLE001 — the board must never break a step
             pass
 
+    # H3: populate chain_failures_memory — the 'Recent Failures' context
+    # section existed but was never written (dead prompt block)
+    failure_updates: dict = {}
+    if not success and ec not in ("background_spawn", "auto_background", "ask_operator"):
+        try:
+            fails = list(state.get("chain_failures_memory") or [])
+            fails.append(
+                {
+                    "tool_name": tool_name,
+                    "error_class": ec,
+                    "error_message": output[:160],
+                    "iteration": step_data.get("iteration"),
+                }
+            )
+            failure_updates = {"chain_failures_memory": fails[-15:]}
+        except Exception:  # noqa: BLE001
+            pass
+
     return {
         "_current_step": step_data,
         "execution_trace": [dict(step_data)],
         "_tool_result": {"success": success, "output": output},
         **board_updates,
+        **failure_updates,
         "_target_grew_last_step": grew,
         "messages": [
             {
