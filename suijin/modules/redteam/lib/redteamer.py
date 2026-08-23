@@ -19,6 +19,7 @@ Key features:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import sys
 import time
@@ -463,6 +464,10 @@ async def run_red_team_async(config, objective, api_key=None):
         # terminal failures NEVER vanish silently — parse_failure killed a
         # live run with no visible explanation (field report)
         _reason = str(final_state.get("completion_reason", ""))
+        _declined = any(
+            w in _reason.lower()
+            for w in ("declin", "refuse", "will not proceed", "cannot proceed", "not able to proceed", "i won't")
+        )
         if _reason in (
             "parse_failure",
             "llm_error",
@@ -477,24 +482,28 @@ async def run_red_team_async(config, objective, api_key=None):
                         _detail = f"last model output: {str(msg['content'])[:300]}"
                         break
             ui.failure(_reason, _detail)
+        elif _declined:
+            # the agent STOPPED ITSELF (authorization doubts) — say so
+            # loudly with the reason; the green Report panel + dim Done line
+            # below read like a silent crash in the field
+            console.print(
+                Panel(
+                    f"{_reason}\n\n[dim]The agent halted itself. Re-run and state the authorization "
+                    "in the objective (e.g. 'target — bug bounty program, h1 id …'), or answer its "
+                    "scope question; a confirmation persists for the whole engagement.[/dim]",
+                    title=" ENGAGEMENT STOPPED — agent declined ",
+                    title_align="left",
+                    border_style="yellow",
+                )
+            )
         messages = final_state.get("messages", [])
         for msg in reversed(messages):
             if msg.get("role") == "assistant" and len(msg.get("content", "")) > 50:
                 console.print(Panel(msg["content"][:5000], title=" Report", border_style="green"))
                 break
 
-        #  Summary
-        trace = final_state.get("execution_trace", [])
-        total = len(trace)
-        ok = sum(1 for s in trace if s.get("success", True))
-        spend = providers.USAGE.get("est_cost_usd", 0)
-        ui.done(
-            ok,
-            total,
-            str(final_state.get("current_phase", "?")),
-            float(spend),
-            str(final_state.get("completion_reason", "?")),
-        )
+        #  Summary — done() runs unconditionally in the finally block
+        spend = float(providers.USAGE.get("est_cost_usd", 0))
 
         # Save state
         DUMP_PATH.write_text(
@@ -566,6 +575,19 @@ async def run_red_team_async(config, objective, api_key=None):
         import traceback
 
         traceback.print_exc()
+    finally:
+        # the Done line ALWAYS renders — if anything above threw, the run
+        # used to exit with zero summary (the 'silent crash')
+        with contextlib.suppress(Exception):
+            ui.done(
+                sum(1 for s in final_state.get("execution_trace", []) if s.get("success", True)),
+                len(final_state.get("execution_trace", [])),
+                str(final_state.get("current_phase", "?")),
+                float(providers.USAGE.get("est_cost_usd", 0)),
+                str(final_state.get("completion_reason", "error before completion")),
+            )
+        with contextlib.suppress(Exception):
+            ui.stop()
 
 
 #  Helper functions — re-exported from session_control for backwards compat
@@ -633,8 +655,42 @@ def _strip_rtf(path):
 
 
 def run_red_team(config, objective, api_key=None):
-    """Sync entry point for TUI."""
-    asyncio.run(run_red_team_async(config, objective, api_key=api_key))
+    """Sync entry point for TUI. NEVER exits silently — any crash renders
+    a visible error panel (the launcher used to swallow it and drop back
+    to the menu like nothing happened)."""
+    from rich.panel import Panel as _Panel
+
+    try:
+        asyncio.run(run_red_team_async(config, objective, api_key=api_key))
+    except KeyboardInterrupt:
+        console.print(
+            _Panel(
+                "operator interrupt — engagement ended", title=" stopped ", title_align="left", border_style="yellow"
+            )
+        )
+    except Exception as e:  # noqa: BLE001 — the TUI must show, not swallow
+        import traceback
+
+        console.print(
+            _Panel(
+                f"{e}\n\n[dim]{traceback.format_exc()[-1500:]}[/dim]\nlogged: outputs/logs/engage_crash.log",
+                title=" engagement crashed ",
+                title_align="left",
+                border_style="red",
+            )
+        )
+        try:
+            from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+            _d = WORKSPACE_DIR / "outputs" / "logs"
+            _d.mkdir(parents=True, exist_ok=True)
+            (_d / "engage_crash.log").open("a").write(
+                f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {str(objective)[:80]}\n"
+                + traceback.format_exc()
+                + "\n"
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def main():
