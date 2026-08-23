@@ -571,16 +571,14 @@ class EngagementUI:
         self._note(line)
 
     def ask(self, question: str) -> None:
-        """Ask-operator turn: ONE dim context line, then the Answer prompt
-        prints outside the block. No thinking line, no question wall —
-        the operator asked for exactly: `Answer:` and a place to type."""
+        """Ask-operator turn: the FULL question as dim markdown (no clips,
+        ever), then the Answer prompt prints outside the block with the
+        live strip stopped. No thinking section on ask turns."""
         if self._cur is None:
             self._cur = _Iteration(self.iteration or 1, self.phase, 0, 0.0)
             self.console.print(Rule(title=f" #{self._cur.n} · {self._cur.phase} ", style=BORDER, align="left"))
             self._cur.open = True
-        first_line = (question or "").strip().split("\n")[0]
-        if first_line:
-            self._section(Text(first_line[:140], style="dim"))
+        self._section(_md(question or "", style="dim"))
         self._close_open()  # the answer prompt must print outside the block
 
     def done(self, ok: int, total: int, phase: str, cost: float, reason: str) -> None:

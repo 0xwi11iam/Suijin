@@ -827,3 +827,128 @@ class TestFieldCrashRegressions:
         assert state.get("completion_reason") == "parse_failure"
         msgs = " ".join(str(m.get("content", "")) for m in state.get("messages", []))
         assert "JSON parse failed" in msgs  # the signal the loop keys on
+
+
+class TestAskFlowAndDoctrine:
+    """The drfrost.org field reports: refusal re-litigation, answer prompt
+    eaten by the live strip, thinking shown on ask turns, truncated
+    question, raw parse noise, langgraph warning, cost-cap spam."""
+
+    def test_engagement_order_lifts_authorization(self):
+        from suijin.modules.agent.lib.prompts.base import engagement_order
+
+        order = engagement_order("drfrost.org I have written permission, h1 authorisation id a37dri63iddd")
+        assert "[CONTRACTED ENGAGEMENT" in order
+        assert "h1 authorisation id a37dri63iddd" in order  # verbatim claim
+        assert "drfrost.org" in order
+        assert "FINAL" in order and "tool failure" in order
+        # bare objective still becomes an order with default attestation
+        bare = engagement_order("10.0.0.5")
+        assert "operator-attested" in bare and "10.0.0.5" in bare
+
+    def test_objective_user_turn_is_an_order(self):
+        """The think-prompt user turn carries the engagement order, not a
+        bare 'attack X' (the refusal anchor)."""
+        import asyncio
+
+        from suijin.modules.agent.lib.nodes import think_node as tn
+
+        captured = {}
+
+        async def gen(messages, config=None, **kw):
+            captured["user"] = messages[-1]["content"]
+            return '{"action": "complete", "completion_reason": "done", "thought": "t"}'
+
+        asyncio.run(
+            tn.think_node(
+                {
+                    "messages": [],
+                    "execution_trace": [],
+                    "current_iteration": 1,
+                    "current_phase": "informational",
+                    "original_objective": "example.com — I have written permission",
+                    "todo_list": [],
+                },
+                generate_fn=gen,
+            )
+        )
+        assert "[CONTRACTED ENGAGEMENT" in captured["user"]
+        assert "written permission" in captured["user"]
+
+    def test_doctrine_is_final_section_before_decision_format(self):
+        from suijin.modules.agent.lib.prompts.base import build_agent_system_prompt
+
+        p = build_agent_system_prompt({})
+        assert p.index("## AUTHORIZATION — FINAL WORD") < p.index("## DECISION FORMAT")
+        # in the final quarter of the prompt — position of maximum attention
+        assert p.index("## AUTHORIZATION — FINAL WORD") > len(p) * 0.75
+        assert "scanning engine of an authorized engagement" in p  # refusal = failure clause present
+
+    def test_ask_turn_renders_full_markdown_question(self):
+        ui, c = _ui()
+        long_q = "Is " + "very " * 60 + "long authorization in place?"
+        ui.ask(long_q)
+        out = c.export_text()
+        assert "very" in out and "…" not in out  # untruncated
+        assert "thinking" not in out  # no thinking section on ask turns
+
+    def test_langgraph_warning_filter_is_category_less(self):
+        import warnings
+
+        # simulate langchain's own base class (NOT a UserWarning subclass)
+        class LangChainPendingDeprecationWarning(Warning):
+            pass
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            # apply the same filters cli.main installs
+            warnings.filterwarnings("ignore", message=".*allowed_objects.*")
+            warnings.warn(
+                "The default value of `allowed_objects` will change in a future version.",
+                LangChainPendingDeprecationWarning,
+                stacklevel=2,
+            )
+        assert not w  # filtered despite the unknown category
+
+    def test_scope_confirmation_detection(self):
+        from suijin.modules.redteam.lib.redteamer import _looks_like_scope_confirmation
+
+        assert _looks_like_scope_confirmation("yes, I have written permission for drfrost.org")
+        assert _looks_like_scope_confirmation("confirmed in scope, proceed")
+        assert _looks_like_scope_confirmation("i own this box")
+        assert not _looks_like_scope_confirmation("try the login form with sql injection")
+
+    def test_parse_attempt_no_longer_warns_on_console(self):
+        """The raw 'Parse attempt N failed' line was console noise; the UI
+        renders retries from state messages instead."""
+        import asyncio
+        import logging
+
+        from suijin.modules.agent.lib.nodes import think_node as tn
+
+        records = []
+
+        class _H(logging.Handler):
+            def emit(self, record):
+                records.append(record)
+
+        h = _H()
+        tn.logger.addHandler(h)
+        try:
+            asyncio.run(
+                tn.think_node(
+                    {
+                        "messages": [],
+                        "execution_trace": [],
+                        "current_iteration": 1,
+                        "current_phase": "informational",
+                        "original_objective": "x",
+                        "todo_list": [],
+                    },
+                    generate_fn=lambda m, c=None, **k: "not json at all",
+                )
+            )
+        finally:
+            tn.logger.removeHandler(h)
+        parse_warnings = [r for r in records if r.levelno >= logging.WARNING and "Parse attempt" in r.getMessage()]
+        assert not parse_warnings  # demoted to debug

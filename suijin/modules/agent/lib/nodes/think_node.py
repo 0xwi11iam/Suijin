@@ -231,12 +231,17 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
 """
     full_prompt = system_prompt + context_block
 
+    # A1: the objective turn is a CONTRACTED ENGAGEMENT order, not a bare
+    # request — the operator's authorization words lifted verbatim. A bare
+    # "attack X" as the last-read text is where refusals anchored.
+    from suijin.modules.agent.lib.prompts.base import engagement_order
+
     # Build messages
     messages = [
         {"role": "system", "content": full_prompt},
         {
             "role": "user",
-            "content": f"Proceed with your next action for objective: {state.get('original_objective', '')}",
+            "content": engagement_order(state.get("original_objective", "")),
         },
     ]
 
@@ -307,7 +312,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
                 "final_summary": f"Agent stopped: {raw_response}",
             }
 
-        logger.warning(f"Parse attempt {attempt + 1} failed: {parse_error}")
+        logger.debug(f"Parse attempt {attempt + 1} failed: {parse_error}")  # console rendering lives in the UI
         if attempt < max_parse_retries - 1:
             messages.append({"role": "assistant", "content": raw_response})
             messages.append(
