@@ -52,6 +52,25 @@ def _productivity(name):
     return getattr(productivity, name)
 
 
+def _render_board(state: dict) -> str:
+    """H1: the engagement board — accumulated target intel, tested-axes
+    coverage, and running background jobs (previously: a raw JSON dump of a
+    skeleton that was never populated)."""
+    try:
+        from suijin.modules.agent.lib.target_board import render_board
+
+        jobs = []
+        try:
+            from suijin.modules.tools.lib import job_registry
+
+            jobs = [j.get("job_id") for j in job_registry.list_jobs() if j.get("status") == "running"]
+        except Exception:  # noqa: BLE001 — job visibility must never break thinking
+            pass
+        return render_board(state.get("target_info") or {}, state.get("tested_axes") or {}, jobs)
+    except Exception:  # noqa: BLE001 — board fallback is the old dump
+        return _json_dumps_safe(state.get("target_info", {}), indent=2)
+
+
 def _run_auto_actions(auto_actions: list, updates: dict):
     """Run lightweight side actions (write_note, check_knowledge, job_list, etc.)
     in the same iteration as the main tool. Results injected into messages.
@@ -210,8 +229,8 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
 ## RECENT MESSAGES (last 15 system/tool messages)
 {recent_msgs or "(none)"}
 
-## TARGET INTELLIGENCE
-{_json_dumps_safe(state.get("target_info", {}), indent=2)}
+## TARGET INTELLIGENCE (your working board — accumulated, trust it)
+{_render_board(state)}
 
 ## TODO LIST
 {todo_context}
@@ -397,11 +416,10 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
     exec_trace = state.get("execution_trace", []) + [step]
 
     # ── Productivity tracking ────────────────────────────────────────
-    prev_target_info = state.get("target_info", {})
-    state_grew = _productivity("detect_state_growth")(
-        {"target_info": prev_target_info},
-        {"target_info": prev_target_info},  # will compare after tool runs
-    )
+    # H1: the honest growth signal — execute_tool_node merges board updates
+    # and sets _target_grew_last_step; the old code compared a dict with
+    # itself here (always False), ratcheting the stall counter forever
+    state_grew = bool(state.get("_target_grew_last_step"))
 
     # ── Axis tracking (complete — not a stub) ────────────────────────
     tested_axes = dict(state.get("tested_axes", {}))
