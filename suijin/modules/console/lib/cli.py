@@ -1743,6 +1743,8 @@ def main(argv=None):
     from suijin.modules.platform.lib.config_models import CostCapWarning
 
     warnings.filterwarnings("ignore", category=CostCapWarning)  # one red line in engagements instead
+    warnings.filterwarnings("ignore", message=".*allowed_objects.*", category=DeprecationWarning)
+    warnings.filterwarnings("ignore", message=".*allowed_objects.*", category=UserWarning)
     parser = argparse.ArgumentParser(
         prog="suijin",
         description="Suijin — autonomous red & blue teaming. "
