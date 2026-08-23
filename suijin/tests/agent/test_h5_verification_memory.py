@@ -128,3 +128,27 @@ class TestEndOfRunMemoryWiring:
 
         src = inspect.getsource(rt.run_red_team_async)
         assert "_mem.record_engagement(" in src  # the 361-sessions-no-memory fix
+
+
+class TestH6Telemetry:
+    def test_audit_row_carries_iteration(self, tmp_path, monkeypatch):
+        """Every row in every agent_steps.jsonl read 'iteration=?' — the
+        audit read a state key that isn't set at execute time."""
+        import asyncio
+
+        from suijin.modules.platform.lib import workspace as ws
+
+        monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        from suijin.modules.agent.lib.nodes.execute_tool_node import execute_tool_node
+
+        asyncio.run(
+            execute_tool_node(
+                {
+                    "_current_step": {"tool_name": "http_request", "tool_args": {"url": "https://t.io/"}, "iteration": 7},
+                    "current_phase": "informational",
+                },
+                route_tool_fn=lambda n, a, c: "Status: 200",
+            )
+        )
+        rows = (tmp_path / "outputs" / "audit_trails" / "agent_steps.jsonl").read_text().splitlines()
+        assert rows and "iteration=7" in rows[-1] and "iteration=?" not in rows[-1]
