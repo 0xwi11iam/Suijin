@@ -1,0 +1,8 @@
+{
+  "name": "headerpeek",
+  "title": "HeaderPeek",
+  "version": "1.0",
+  "description": "Static security-header analysis: audit response headers, verdict CORS, score the posture. Pure python, no network, no external binaries.",
+  "author": "0xwi11iam",
+  "tier": "recommended"
+}

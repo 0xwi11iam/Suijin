@@ -199,6 +199,8 @@ hidden behind CLI flags.
 | `suijin bench` | Graded lab benchmark: agent vs lab, flag/tool/cost score per release (`--lab`, `--live`, `--history`) |
 | `suijin authorize <domain>` | Put bug-bounty authorization on file — renders in every engagement order (`--program`, `--id`, `--page`, `--list`, `--remove`) |
 | `suijin bb-scope <url>` | Bind a bug-bounty program page's scope (advisory) via bugscope — agent self-verifies with `scope_search` |
+| `suijin pack build <dir>` | Seal a pack into a shareable `.sjm/.sja/.sjp` archive (tool table + dev note + SHA-256 seal) |
+| `suijin install <file.sj?>` | Wizard install of a sealed package: attribution, dev note, safety scan, tool table (`--yes`, `--allow-unsafe`) |
 | `suijin kb read <path>` | Dump a **full (untruncated) KB document** from its tarball; `suijin kb diff` checks index vs cache staleness |
 | `suijin pull cve` | Mirror the CISA KEV catalog (no API key) — powers offline `search_cve` + actively-exploited badges |
 | `suijin creds` | Encrypted credential vault: `init` / `list [--reveal]` / `add` / `get` / `export [--plain]` |

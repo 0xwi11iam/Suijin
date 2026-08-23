@@ -889,6 +889,51 @@ def run_scope_cmd(args) -> int:
     return 0
 
 
+def run_pack_build_cmd(args) -> int:
+    """`suijin pack build <dir>` — seal a pack into a .sjm/.sja/.sjp archive."""
+    from suijin.modules.tools.lib import sjpack
+
+    out = sjpack.build(
+        getattr(args, "dir", ""),
+        note=getattr(args, "note", "") or "",
+        out=getattr(args, "out", "") or "",
+        author=getattr(args, "author", "") or "",
+    )
+    if "error" in out:
+        print(out["error"])
+        return 1
+    print(f"built {out['path']}")
+    print(f"  kind={out['kind']} id={out['id']} tools={out['tools']}")
+    print(f"  sha256 {out['sha256']}")
+    print("\nshare the file; recipients install with: suijin install <file>")
+    return 0
+
+
+def run_install_cmd(args) -> int:
+    """`suijin install <file.sj?>` — verify, scan, wizard, install."""
+    from suijin.modules.tools.lib import sjpack
+
+    path = getattr(args, "path", "") or ""
+    if not path:
+        print("usage: suijin install <file.sjm|.sja|.sjp> [--yes] [--allow-unsafe]")
+        return 1
+    out = sjpack.install(
+        path,
+        yes=bool(getattr(args, "yes", False)),
+        allow_unsafe=bool(getattr(args, "allow_unsafe", False)),
+    )
+    if "error" in out:
+        print(f"error: {out['error']}")
+        if "scan" in out:
+            from suijin.modules.platform.lib.safety.scan import render_findings
+
+            print(render_findings(out["scan"]["findings"]))
+        return 1
+    print(f"\ninstalled {out['installed']} ({out['kind']}) -> {out['dest']}")
+    print("boots on next launch; remove with: suijin module uninstall " + out["installed"])
+    return 0
+
+
 def run_bench_cmd(args) -> int:
     """`suijin bench` — graded lab runs: flags/tools/cost score per release."""
     from suijin.modules.ops.lib.bench import render_history, run_all, run_bench
@@ -2002,6 +2047,24 @@ def main(argv=None):
     bench_p.add_argument("--live", action="store_true", help="use the configured LLM provider (default: scripted mock)")
     bench_p.add_argument("--history", action="store_true", help="show past bench runs")
     bench_p.set_defaults(func=run_bench_cmd)
+
+    # pack: seal a pack dir into a .sjm/.sja/.sjp archive (person-to-person)
+    pack_p = sub.add_parser("pack", help="package toolkit: build sealed .sjm/.sja/.sjp archives")
+    pack_sub = pack_p.add_subparsers(dest="pack_action")
+    pb = pack_sub.add_parser("build", help="seal a pack dir into a shareable archive")
+    pb.add_argument("dir", help="pack source dir (manifest.json | plugin.json | bare main.py)")
+    pb.add_argument("--note", default="", help="dev note shown in the install wizard")
+    pb.add_argument("--author", default="", help="author name (defaults to manifest author)")
+    pb.add_argument("--out", default="", help="output path (default: <dir>/../built/<id>-<ver>.sj?)")
+    pb.set_defaults(func=run_pack_build_cmd)
+    pack_p.set_defaults(func=lambda a: run_pack_build_cmd(a))
+
+    # install: wizard-driven install of a sealed archive
+    inst_p = sub.add_parser("install", help="install a sealed .sjm/.sja/.sjp package (wizard)")
+    inst_p.add_argument("path", help="path to the .sjm/.sja/.sjp file")
+    inst_p.add_argument("--yes", action="store_true", help="non-interactive confirm (required off-TTY)")
+    inst_p.add_argument("--allow-unsafe", action="store_true", help="override CRITICAL scan findings")
+    inst_p.set_defaults(func=run_install_cmd)
 
     # authorize: operator attestation ledger (renders VERIFIED into every engagement order)
     auth_p = sub.add_parser("authorize", help="put bug-bounty authorization on file for a target")
