@@ -9,6 +9,9 @@ from huggingface_hub import InferenceClient
 from rich.console import Console
 
 console = Console()
+import logging  # noqa: E402 — provider retry noise goes to logs, not the engagement console
+
+logger = logging.getLogger("suijin.providers")
 
 # ----------------------------------------------------------------------
 # Token / cost accounting
@@ -217,9 +220,9 @@ def _zai_base_url(config):
         return ZAI_ENDPOINTS[setting]
     if setting.startswith(("http://", "https://")):
         return setting.rstrip("/")
-    console.print(
-        f"[yellow]Unknown zai_endpoint '{setting}' — using '{ZAI_DEFAULT_ENDPOINT}' "
-        f"({ZAI_ENDPOINTS[ZAI_DEFAULT_ENDPOINT]}). Valid: coding, paas, or a full URL.[/yellow]"
+    logger.warning(
+        f"Unknown zai_endpoint '{setting}' — using '{ZAI_DEFAULT_ENDPOINT}' "
+        f"({ZAI_ENDPOINTS[ZAI_DEFAULT_ENDPOINT]}). Valid: coding, paas, or a full URL."
     )
     return ZAI_ENDPOINTS[ZAI_DEFAULT_ENDPOINT]
 
@@ -325,7 +328,7 @@ def generate(
 
     # ---------- LobsterTrap proxy check ----------
     if _lobstertrap_available():
-        console.print("[bold green][LobsterTrap] Active — inspecting prompt...[/bold green]")
+        logger.info("[LobsterTrap] Active — inspecting prompt")
         from suijin.modules.tools.lib.services import get as _service
 
         lt_model = model_id or _service("red_active_model")(config)
@@ -336,11 +339,11 @@ def generate(
             with contextlib.suppress(Exception):
                 record_missing_usage(messages, lt_result, "lobstertrap", lt_model)
             if lt_result.startswith("Error: LobsterTrap DENIED"):
-                console.print(f"[bold red]{lt_result}[/bold red]")
+                logger.warning(lt_result)
                 return lt_result
             return lt_result
         else:
-            console.print("[yellow][LobsterTrap] Proxy failed — falling back to direct provider[/yellow]")
+            logger.warning("[LobsterTrap] Proxy failed — falling back to direct provider")
 
     # ---------- Gemini ----------
     if provider == "gemini":
@@ -402,10 +405,10 @@ def generate(
             except Exception as e:
                 err_str = str(e).lower()
                 if "quota" in err_str or "429" in err_str:
-                    console.print("[bold red]Gemini quota exhausted.[/bold red]")
+                    logger.warning("Gemini quota exhausted")
                 elif "api_key" in err_str or "invalid" in err_str:
                     return "Error: Invalid Gemini API Key"
-                console.print(f"[yellow]Gemini attempt {attempt + 1} failed: {e}[/yellow]")
+                logger.warning(f"Gemini attempt {attempt + 1} failed: {e}")
                 time.sleep(5 * (2**attempt))
         return "Error: Gemini API Timeout"
 
@@ -519,8 +522,8 @@ def generate(
                 if "402" in err_str or "credit" in err_str or "billing" in err_str:
                     return "Error: 402"
                 if "rate" in err_str or "429" in err_str or "overloaded" in err_str:
-                    console.print("[bold red]Anthropic rate-limited or overloaded.[/bold red]")
-                console.print(f"[yellow]Anthropic attempt {attempt + 1} failed: {e}[/yellow]")
+                    logger.warning("Anthropic rate-limited or overloaded")
+                logger.warning(f"Anthropic attempt {attempt + 1} failed: {e}")
                 time.sleep(5 * (2**attempt))
         return "Error: Anthropic API Timeout"
 
@@ -563,9 +566,9 @@ def generate(
                 elif resp.status_code == 402:
                     return "Error: 402"
                 else:
-                    console.print(f"[yellow]AMD error {resp.status_code}: {resp.text[:200]}[/yellow]")
+                    logger.warning(f"AMD error {resp.status_code}: {resp.text[:200]}")
             except Exception as e:
-                console.print(f"[yellow]AMD request failed: {e}[/yellow]")
+                logger.warning(f"AMD request failed: {e}")
             time.sleep(5 * (2**attempt))
         return "Error: AMD API Timeout"
 
@@ -618,11 +621,11 @@ def generate(
                 elif resp.status_code == 402:
                     return "Error: 402"
                 elif resp.status_code == 429:
-                    console.print("[bold red]DeepSeek rate-limited.[/bold red]")
+                    logger.warning("DeepSeek rate-limited")
                 else:
-                    console.print(f"[yellow]DeepSeek error {resp.status_code}: {resp.text[:200]}[/yellow]")
+                    logger.warning(f"DeepSeek error {resp.status_code}: {resp.text[:200]}")
             except Exception as e:
-                console.print(f"[yellow]DeepSeek attempt {attempt + 1} failed: {e}[/yellow]")
+                logger.warning(f"DeepSeek attempt {attempt + 1} failed: {e}")
             if attempt < retries - 1:
                 time.sleep(2 * (2**attempt))  # 2s, 4s, 8s backoff
         return "Error: DeepSeek API Timeout"
@@ -685,14 +688,13 @@ def generate(
                         "Adjust in Settings, or check your plan at z.ai/manage-apikey."
                     )
                 elif resp.status_code == 429:
-                    console.print(
-                        "[bold red]Z.ai rate-limited (plan credits may be exhausted — "
-                        "5h/weekly quotas reset automatically).[/bold red]"
+                    logger.warning(
+                        "Z.ai rate-limited (plan credits may be exhausted — 5h/weekly quotas reset automatically)"
                     )
                 else:
-                    console.print(f"[yellow]Z.ai error {resp.status_code}: {resp.text[:200]}[/yellow]")
+                    logger.warning(f"Z.ai error {resp.status_code}: {resp.text[:200]}")
             except Exception as e:
-                console.print(f"[yellow]Z.ai attempt {attempt + 1} failed: {e}[/yellow]")
+                logger.warning(f"Z.ai attempt {attempt + 1} failed: {e}")
             if attempt < retries - 1:
                 time.sleep(2 * (2**attempt))  # 2s, 4s, 8s backoff
         return "Error: Z.ai API Timeout"
