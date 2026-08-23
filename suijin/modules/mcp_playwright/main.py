@@ -5,7 +5,7 @@ event loop to avoid the sync/async conflict with the main asyncio loop.
 All tool functions are sync (called via route_tool) and communicate with
 the browser thread via thread-safe queues.
 
-Field-hardened (ocular-app.tech run):
+Field-hardened (spa-target.example run):
 - playwright NOT installed -> instant actionable message (the old code
   hung 30s and said 'Browser timeout' for a missing dependency)
 - wait_until default is domcontentloaded — networkidle NEVER fires on SPAs

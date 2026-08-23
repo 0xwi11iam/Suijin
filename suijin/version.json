@@ -1,6 +1,6 @@
 {
-  "version": "5.2.0",
+  "version": "5.3.0",
   "codename": "Suijin OS",
   "release_date": "2026-08-23",
-  "description": "Suijin OS v5.2.0 — the field-readiness release. Red side: engagement console UI (syntax-highlighted tool calls, reasoning toggle, live token/cost strip with per-model pricing, loot capture), truthful event plumbing (no stale-tool re-execution, real failure markers, honest audit observations), fireteams with patient timeouts. Blue side: five foundation repairs (unified tarpit protocol, 9 detector classes ported to the core, custom rules wired, config-driven scorer). Plus: graded lab benchmark (suijin bench), payloadforge + containerbreak packs, and an installer that asks normal-vs-dev first and installs from your local checkout live. 1,383 tests green."
+  "description": "Suijin OS v5.3.0 \u2014 the field-hardened release. Red side: engagement console UI rebuilt from live runs (iteration panels with markdown, fast thinking spinner, uncrashable renderer with crash logs, termination banners for every ending, instant Ctrl+C, 15-command pause console), operator authorization workflow (suijin authorize ledger + advisory bb-scope + program-page fetch with the Cloudflare-exists doctrine), supervisor as battle-buddy (52 tactical heuristics, cooldowns, de-interfered detectors), accurate per-model token pricing, provider-flake auto-restart, JS-bundle mining tools, and a reinstall-durable workspace at ~/.suijin/workspace. 1,558 tests green."
 }

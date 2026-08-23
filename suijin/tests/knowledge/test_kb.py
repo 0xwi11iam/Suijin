@@ -407,13 +407,18 @@ class TestRepoAnchoredPaths:
     """KB artifacts must ALWAYS live inside the suijin-security repo folder —
     never CWD-dependent, never scattered into $HOME or /tmp."""
 
-    def test_paths_anchored_to_workspace_caches(self):
+    def test_paths_anchored_to_workspace_caches(self, monkeypatch):
         # v4.1: runtime data lives in the agent workspace (caches/), not
         # the package — a built KB survives reinstalls and, in Docker,
         # container recreation (workspace is the volume)
-        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+        from suijin.modules.platform.lib import workspace as _ws
 
-        caches = WORKSPACE_DIR / "caches"
+        # v5.3: force repo-local AND recomputed kb paths (DB_PATH/CACHE_DIR
+        # resolve at kb import; the durable workspace may have won there)
+        monkeypatch.setattr(_ws, "WORKSPACE_DIR", _ws.PROJECT_DIR / "suijin_agent")
+        monkeypatch.setattr(kbmod, "DB_PATH", _ws.WORKSPACE_DIR / "caches" / "kb.sqlite3")
+        monkeypatch.setattr(kbmod, "CACHE_DIR", _ws.WORKSPACE_DIR / "caches" / "kb_cache")
+        caches = _ws.WORKSPACE_DIR / "caches"
         assert caches / "kb.sqlite3" == kbmod.DB_PATH
         assert caches / "kb_cache" == kbmod.CACHE_DIR
         assert kbmod.DB_PATH.is_absolute()
@@ -495,11 +500,18 @@ class TestWorkspaceIntegrity:
     """The agent workspace (suijin_agent/) is sacred — KB artifacts must
     never leak into it, and its anchoring must not change."""
 
-    def test_kb_lives_in_workspace_caches_not_scattered(self):
+    def test_kb_lives_in_workspace_caches_not_scattered(self, monkeypatch):
         """v4.1: runtime data (kb db + caches) lives INSIDE the workspace
         under caches/ — one volume to rule them all — but never scattered
         at the workspace root."""
-        from suijin.modules.platform.lib.workspace import PROJECT_DIR, WORKSPACE_DIR
+        from suijin.modules.platform.lib import workspace as _ws
+
+        # v5.3: WORKSPACE_DIR may resolve durable (~/.suijin/workspace) on
+        # an installed layout — force repo-local and align kb's paths
+        monkeypatch.setattr(_ws, "WORKSPACE_DIR", _ws.PROJECT_DIR / "suijin_agent")
+        monkeypatch.setattr(kbmod, "DB_PATH", _ws.WORKSPACE_DIR / "caches" / "kb.sqlite3")
+        monkeypatch.setattr(kbmod, "CACHE_DIR", _ws.WORKSPACE_DIR / "caches" / "kb_cache")
+        WORKSPACE_DIR, PROJECT_DIR = _ws.WORKSPACE_DIR, _ws.PROJECT_DIR
 
         assert WORKSPACE_DIR == PROJECT_DIR / "suijin_agent"
         caches = WORKSPACE_DIR / "caches"

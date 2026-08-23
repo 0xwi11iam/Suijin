@@ -58,7 +58,7 @@ def mutate_wordlist(
     """Expand seed words into a mutated wordlist at suijin_agent/<out>."""
     seeds = [str(s).strip() for s in (seeds or []) if str(s).strip()]
     if not seeds:
-        return "Error: seeds required (e.g. ['drfrost', 'DF', 'support@example.com' local-part])."
+        return "Error: seeds required (e.g. ['field-target', 'DF', 'support@example.com' local-part])."
     max_words = max(10, min(int(max_words), _MAX_OUTPUT))
 
     seen: set[str] = set()

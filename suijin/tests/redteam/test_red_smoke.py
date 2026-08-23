@@ -88,10 +88,14 @@ def _happy_events():
 
 @pytest.fixture
 def red_mocks(monkeypatch, tmp_path):
-    """Mock the agent graph + isolate state dump file."""
+    """Mock the agent graph + isolate state dump file + crash logs (tests
+    used to pollute the operator's real outputs/logs/engage_crash.log)."""
     fake_agent = FakeAgent(_happy_events())
     monkeypatch.setattr(rt, "SuijinAgentGraph", lambda **kwargs: fake_agent)
     monkeypatch.setattr(rt, "DUMP_PATH", Path(str(tmp_path)) / "recovery.json")
+    from suijin.modules.platform.lib import workspace as _ws
+
+    monkeypatch.setattr(_ws, "WORKSPACE_DIR", tmp_path)
     return {"agent": fake_agent, "tmpdir": str(tmp_path)}
 
 

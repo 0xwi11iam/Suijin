@@ -106,7 +106,7 @@ summary() {
   ├───────────────────────────────────────────────┤
   │   start:      suijin                          │
   │   verify:     suijin doctor                   │
-  │   workspace:  ${INSTALL_DIR}/repo/suijin_agent│
+  │   workspace:  $INSTALL_DIR/workspace (reinstall-safe)│
   │   more tools: re-run with --tools or --full.  │
   └───────────────────────────────────────────────┘
 EOF
