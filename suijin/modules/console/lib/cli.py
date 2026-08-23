@@ -1685,7 +1685,7 @@ def run_scope(args) -> int:
     """`suijin scope` — Burp-style scope TUI (edits suijin/policy.json)."""
     import curses
 
-    from suijin import tui_scope
+    from suijin.modules.console.lib import tui_scope
 
     try:
         curses.wrapper(tui_scope.run)

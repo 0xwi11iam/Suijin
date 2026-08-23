@@ -62,7 +62,10 @@ def browser_identity() -> dict[str, str]:
             "User-Agent": ua,
             "Accept": accept,
             "Accept-Language": "en-US,en;q=0.9",
-            "Accept-Encoding": "gzip, deflate, br",
+            # NO 'br': we advertise only what requests can actually decode.
+            # Advertising brotli without the brotli package got us raw
+            # binary bodies from Vercel/Cloudflare (field run: ocular-app.tech).
+            "Accept-Encoding": "gzip, deflate",
             "Connection": "keep-alive",
             "Upgrade-Insecure-Requests": "1",
         }
