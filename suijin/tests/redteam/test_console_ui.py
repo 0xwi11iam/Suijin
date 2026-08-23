@@ -757,3 +757,73 @@ class TestPauseConsole:
         ctx, _ = self._ctx(agent=None)
         h = build_pause_handlers(ctx)
         h["/state"]("")  # no agent -> no crash, prints nothing fatal
+
+
+class TestFieldCrashRegressions:
+    """The live-run report: violent flashing + a parse_failure run that
+    vanished after ~5s with nothing rendered."""
+
+    def test_llm_client_has_no_competing_spinner(self):
+        """The flashing: llm_client ran console.status — a SECOND Live
+        region — concurrently with the engagement strip's Live."""
+        import inspect
+
+        from suijin.modules.redteam.lib.red import llm_client
+
+        src = inspect.getsource(llm_client)
+        assert "console.status" not in src
+        assert "Thinking..." not in src
+
+    def test_live_region_is_strip_only(self):
+        """The live region must be ONE stable row — iteration content
+        streams above it, never inside it (repaint storms)."""
+        ui, c = _ui()
+        ui.start()
+        ui.iteration_header(4, "informational")
+        ui.thinking("streaming thought")
+        ui.tool("execute_terminal", {"cmd": "echo hi"})
+        # whatever the live region holds now, it must NOT contain the
+        # iteration's content
+        r = ui._live.renderable
+        rendered = Console(record=True, width=100, force_terminal=True)
+        rendered.print(r)
+        live_text = rendered.export_text()
+        assert "streaming thought" not in live_text
+        assert "echo hi" not in live_text
+        ui.output("Status: 200")
+        ui.stop()
+
+    def test_parse_note_renders_retry(self):
+        ui, c = _ui()
+        ui.iteration_header(2, "informational")
+        ui.parse_note(1)
+        ui.parse_note(2)
+        out = c.export_text()
+        assert "response unparseable — asking again (1/3)" in out
+        assert "response unparseable — asking again (2/3)" in out
+
+    def test_failure_panel_never_vanishes(self):
+        ui, c = _ui()
+        ui.iteration_header(2, "informational")
+        ui.failure("parse_failure", "Agent stopped: LLM output could not be parsed after 3 attempts.")
+        out = c.export_text()
+        assert "engagement ended" in out
+        assert "parse_failure" in out
+        assert "could not be parsed after 3 attempts" in out
+
+    def test_graph_parse_death_is_observable(self):
+        """End-to-end class proof: a garbage model kills the run via
+        parse_failure with corrective messages in state — the exact
+        signals the UI renders (parse_note + failure panel)."""
+        import asyncio
+
+        from suijin.modules.agent.lib.agent_graph import SuijinAgentGraph
+
+        async def garbage(messages, config=None, **kw):
+            return "I am definitely not JSON <thinking>blah</thinking>"
+
+        graph = SuijinAgentGraph(generate_fn=garbage, route_tool_fn=lambda *a: "ok", max_iterations=5)
+        state = asyncio.run(graph.run("probe 127.0.0.1 for flaws", thread_id="parse-death-test"))
+        assert state.get("completion_reason") == "parse_failure"
+        msgs = " ".join(str(m.get("content", "")) for m in state.get("messages", []))
+        assert "JSON parse failed" in msgs  # the signal the loop keys on

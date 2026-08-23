@@ -1,45 +1,37 @@
 """
-suijin/core/red/llm_client.py — Async LLM wrapper with status display + timeout.
+suijin/core/red/llm_client.py — Async LLM wrapper with hard timeout.
 
-Extracted from redteamer.py. Wraps provider.generate() with a Rich status
-spinner and a 90s hard timeout so slow providers never hang the TUI.
+Extracted from redteamer.py. Wraps provider.generate() with a 90s hard
+timeout so slow providers never hang the TUI.
+
+v5.2: the Rich status spinner is GONE. It was a second Live region running
+concurrently with the engagement strip's Live on the same terminal — the
+two fought over the cursor and the whole screen flashed violently during
+live runs. The engagement strip (spinner + tokens/cost) is the one and
+only live region; this wrapper is now silent.
 """
 
 from __future__ import annotations
 
 import asyncio
 
-from rich.console import Console
-
-from suijin.modules.redteam.lib.red.config_loader import active_model, load_config
-
-console = Console()
+from suijin.modules.redteam.lib.red.config_loader import load_config
 
 
 async def generate_async(messages, config=None):
-    """Async LLM call with live status display and hard timeout."""
+    """Async LLM call with a hard timeout. Silent — the engagement strip
+    in red/console_ui.py owns all live display."""
     if not config:
         config = load_config()
-    provider = config.get("provider", "unknown")
-    model = active_model(config)
-    msg_count = len(messages)
-    prompt_chars = sum(len(m.get("content", "")) for m in messages)
 
     # Limit to 90s total — prevents UI hangs from slow API/network
     try:
-        with console.status(
-            f"[bold cyan]Thinking... ({provider}/{model}) — {msg_count} msgs, {prompt_chars // 1000}k chars[/bold cyan]",
-            spinner="dots",
-        ):
-            result = await asyncio.wait_for(
-                asyncio.to_thread(_generate, messages, config),
-                timeout=90.0,
-            )
+        return await asyncio.wait_for(
+            asyncio.to_thread(_generate, messages, config),
+            timeout=90.0,
+        )
     except asyncio.TimeoutError:
-        result = "Error: LLM request timed out after 90s. The provider may be overloaded. Retry with a shorter prompt or switch providers."
-        console.print("[yellow]  (LLM timed out after 90s)[/yellow]")
-
-    return result
+        return "Error: LLM request timed out after 90s. The provider may be overloaded. Retry with a shorter prompt or switch providers."
 
 
 def _generate(messages, config):
