@@ -798,6 +798,94 @@ def run_real_battle_cmd(args) -> int:
     return 0
 
 
+def run_authorize_cmd(args) -> int:
+    """`suijin authorize` — operator attestation ledger."""
+    from suijin.modules.ops.lib import authorizations as auth
+
+    if getattr(args, "list", False):
+        rows = auth.list_authorizations()
+        if not rows:
+            print("no authorizations on file — suijin authorize <domain> --program h1 --id <auth-id>")
+            return 0
+        print(f"{len(rows)} authorization(s) on file:")
+        for r in rows:
+            ident = f" id {r['authorization_id']}" if r.get("authorization_id") else ""
+            print(f"  {r['target']:32} {r['program']:14}{ident}  expires {r['expires_at']}")
+        return 0
+    if getattr(args, "remove", ""):
+        out = auth.remove_authorization(args.remove)
+        if "error" in out:
+            print(out["error"])
+            return 1
+        print(f"removed: {out['removed']}")
+        return 0
+    if not getattr(args, "target", ""):
+        print("usage: suijin authorize <domain> [--program h1] [--id <auth-id>] [--days N] | --list | --remove <domain>")
+        return 1
+    rec = auth.add_authorization(
+        args.target,
+        program=getattr(args, "program", ""),
+        authorization_id=getattr(args, "authorization_id", ""),
+        days=getattr(args, "days", 0) or auth.DEFAULT_DAYS,
+    )
+    if "error" in rec:
+        print(rec["error"])
+        return 1
+    ident = f", id {rec['authorization_id']}" if rec["authorization_id"] else ""
+    print(f"authorization on file: {rec['target']} ({rec['program']}{ident})")
+    print(f"  expires {rec['expires_at']} — engagements against {rec['target']} and its subdomains render VERIFIED")
+    return 0
+
+
+def run_scope_cmd(args) -> int:
+    """`suijin bb-scope <bug-bounty-page-url>` — advisory program scope via bugscope."""
+    from suijin.modules.ops.lib import authorizations as auth
+
+    url = getattr(args, "url", "") or ""
+    if not url:
+        print("usage: suijin bb-scope <program-page-url> [--token <platform-token>]")
+        print("  e.g. suijin bb-scope https://hackerone.com/deepseek")
+        return 1
+    parsed = auth.parse_scope_url(url)
+    if not parsed:
+        print(f"error: not a recognized bug-bounty program page: {url}")
+        print("  supported: hackerone.com/<handle>, bugcrowd.com/<handle>,")
+        print("             yeswehack.com/programs/<slug>, app.intigriti.com/programs/<handle>,")
+        print("             immunefi.com/bug-bounty/<slug>")
+        return 1
+    platform, handle = parsed
+    token = getattr(args, "token", "") or ""
+    if not token:
+        import getpass
+
+        hint = "user:api_token" if platform == "h1" else "bearer/session token"
+        try:
+            token = getpass.getpass(f"{platform} token ({hint}, input hidden — never stored): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\ncancelled")
+            return 1
+    if not token:
+        print("error: token required")
+        return 1
+    binding = auth.bind_program_scope(platform, handle, token)
+    if "error" in binding:
+        print(binding["error"])
+        return 1
+    nin, nout = len(binding["in_scope"]), len(binding["out_of_scope"])
+    print(f"scope bound (advisory): {platform}/{handle}")
+    print(f"  in scope:       {nin} asset(s)")
+    for a in binding["in_scope"][:10]:
+        print(f"    + {a}")
+    if nin > 10:
+        print(f"    ... and {nin - 10} more (agent: scope_search)")
+    if nout:
+        print(f"  OUT of scope:   {nout} asset(s) — the agent stays off these")
+        for a in binding["out_of_scope"][:5]:
+            print(f"    - {a}")
+    print("  cached at outputs/bugscope/ — the agent can scope_search it live")
+    return 0
+
+
 def run_bench_cmd(args) -> int:
     """`suijin bench` — graded lab runs: flags/tools/cost score per release."""
     from suijin.modules.ops.lib.bench import render_history, run_all, run_bench
@@ -1911,6 +1999,23 @@ def main(argv=None):
     bench_p.add_argument("--live", action="store_true", help="use the configured LLM provider (default: scripted mock)")
     bench_p.add_argument("--history", action="store_true", help="show past bench runs")
     bench_p.set_defaults(func=run_bench_cmd)
+
+    # authorize: operator attestation ledger (renders VERIFIED into every engagement order)
+    auth_p = sub.add_parser("authorize", help="put bug-bounty authorization on file for a target")
+    auth_p.add_argument("target", nargs="?", default="", help="domain to authorize (covers subdomains)")
+    auth_p.add_argument("--program", default="", help="program name (h1, bugcrowd, ...)")
+    auth_p.add_argument("--id", dest="authorization_id", default="", help="authorization / program-member id")
+    auth_p.add_argument("--days", type=int, default=0, help="days until the attestation expires (default 90)")
+    auth_p.add_argument("--list", action="store_true", help="list ledger entries")
+    auth_p.add_argument("--remove", default="", help="remove the entry for this target")
+    auth_p.set_defaults(func=run_authorize_cmd)
+
+    # bb-scope: bind a bug-bounty program page's scope (advisory) via bugscope
+    # ('scope' is taken by the Burp-style target-scope TUI)
+    scope_bb = sub.add_parser("bb-scope", help="bind a bug-bounty program page's scope (advisory)")
+    scope_bb.add_argument("url", nargs="?", default="", help="program page URL (hackerone.com/<handle>, ...)")
+    scope_bb.add_argument("--token", default="", help="platform token (h1: 'user:api_token'); prompted if omitted")
+    scope_bb.set_defaults(func=run_scope_cmd)
 
     # kb: read full docs + diff build vs cache
     kb = sub.add_parser("kb", help="knowledge base: read full docs / diff build")

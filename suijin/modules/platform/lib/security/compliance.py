@@ -34,7 +34,7 @@ def _reports_dir():
 
 
 REPORTS_DIR = _reports_dir()
-REPORTS_DIR.mkdir(exist_ok=True)
+REPORTS_DIR.mkdir(parents=True, exist_ok=True)  # parents: fresh/patched workspaces crashed on import
 
 # Risk thresholds
 RISK_HIGH = 0.7

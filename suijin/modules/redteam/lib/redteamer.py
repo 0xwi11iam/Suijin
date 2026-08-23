@@ -70,6 +70,86 @@ def _looks_like_scope_confirmation(answer: str) -> bool:
     return bool(_SCOPE_CONFIRM_RE.search(answer or ""))
 
 
+# ── termination classifier — every ending gets exactly one banner ──────
+
+_DECLINE_WORDS = ("declin", "refuse", "will not proceed", "cannot proceed", "not able to proceed", "i won't")
+_FAIL_REASONS = ("parse_failure", "llm_error", "provider_failure", "budget_exhausted", "node_crash")
+
+
+def _classify_termination(reason: str, final_state: dict, operator_stopped: bool) -> str:
+    r = (reason or "").lower()
+    if operator_stopped:
+        return "OPERATOR"
+    if any(w in r for w in _DECLINE_WORDS):
+        return "DECLINED"
+    if reason in _FAIL_REASONS or reason.startswith("error:"):
+        return "FAILED"
+    iters = int(final_state.get("current_iteration", 0) or 0)
+    if iters == 0 and not reason:
+        return "NO_OUTPUT"
+    return "COMPLETE"
+
+
+def _render_termination(final_state: dict, ui, operator_stopped: bool) -> None:
+    reason = str(final_state.get("completion_reason", "") or "")
+    kind = _classify_termination(reason, final_state, operator_stopped)
+    if kind == "COMPLETE":
+        console.print(
+            Panel(
+                f"{reason or 'objective complete'}",
+                title=" ENGAGEMENT COMPLETE ",
+                title_align="left",
+                border_style="green",
+            )
+        )
+    elif kind == "DECLINED":
+        console.print(
+            Panel(
+                f"{reason}\n\n[dim]The agent halted itself. Put authorization on file first:\n"
+                "  suijin authorize <target> --program h1 --id <auth-id>\n"
+                "VERIFIED targets are never questioned; or answer its scope question — a "
+                "confirmation persists for the whole engagement.[/dim]",
+                title=" ENGAGEMENT STOPPED — DECLINED ",
+                title_align="left",
+                border_style="yellow",
+            )
+        )
+    elif kind == "OPERATOR":
+        console.print(
+            Panel(
+                "operator interrupt — engagement ended by the operator",
+                title=" OPERATOR STOP ",
+                title_align="left",
+                border_style="yellow",
+            )
+        )
+    elif kind == "NO_OUTPUT":
+        console.print(
+            Panel(
+                "the agent produced no iterations — check the provider key (suijin env), "
+                "provider config (suijin config show) and outputs/logs/engage_crash.log",
+                title=" ENGAGEMENT FAILED — NO OUTPUT ",
+                title_align="left",
+                border_style="red",
+            )
+        )
+    else:  # FAILED
+        detail = str(final_state.get("final_summary", "") or "")
+        if not detail:
+            for msg in reversed(final_state.get("messages", [])):
+                if msg.get("role") == "assistant" and msg.get("content"):
+                    detail = f"last model output: {str(msg['content'])[:300]}"
+                    break
+        console.print(
+            Panel(
+                f"{reason}\n{detail}" if detail else reason,
+                title=" ENGAGEMENT FAILED ",
+                title_align="left",
+                border_style="red",
+            )
+        )
+
+
 #  Main agent loop
 
 
@@ -297,7 +377,6 @@ async def run_red_team_async(config, objective, api_key=None):
                     iteration = latest.get("iteration", 0)
                     if iteration > last_iter:
                         last_iter = iteration
-                        _parse_retries = 0
                         thought = latest.get("thought", "")
                         tool_name = latest.get("tool_name", "")
                         tool_args = latest.get("tool_args", {})
@@ -411,6 +490,7 @@ async def run_red_team_async(config, objective, api_key=None):
                 objective = _pause_ctx.objective  # /objective may have changed course
             except (KeyboardInterrupt, EOFError):
                 console.print("\n[bold red]  Force quit.[/bold red]")
+                _operator_stopped = True
                 ui.stop()
                 run_box.stop()
                 break
@@ -461,41 +541,6 @@ async def run_red_team_async(config, objective, api_key=None):
 
     #  Final report (after normal completion)
     try:
-        # terminal failures NEVER vanish silently — parse_failure killed a
-        # live run with no visible explanation (field report)
-        _reason = str(final_state.get("completion_reason", ""))
-        _declined = any(
-            w in _reason.lower()
-            for w in ("declin", "refuse", "will not proceed", "cannot proceed", "not able to proceed", "i won't")
-        )
-        if _reason in (
-            "parse_failure",
-            "llm_error",
-            "provider_failure",
-            "budget_exhausted",
-            "node_crash",
-        ) or _reason.startswith("error:"):
-            _detail = str(final_state.get("final_summary", ""))
-            if not _detail:
-                for msg in reversed(final_state.get("messages", [])):
-                    if msg.get("role") == "assistant" and msg.get("content"):
-                        _detail = f"last model output: {str(msg['content'])[:300]}"
-                        break
-            ui.failure(_reason, _detail)
-        elif _declined:
-            # the agent STOPPED ITSELF (authorization doubts) — say so
-            # loudly with the reason; the green Report panel + dim Done line
-            # below read like a silent crash in the field
-            console.print(
-                Panel(
-                    f"{_reason}\n\n[dim]The agent halted itself. Re-run and state the authorization "
-                    "in the objective (e.g. 'target — bug bounty program, h1 id …'), or answer its "
-                    "scope question; a confirmation persists for the whole engagement.[/dim]",
-                    title=" ENGAGEMENT STOPPED — agent declined ",
-                    title_align="left",
-                    border_style="yellow",
-                )
-            )
         messages = final_state.get("messages", [])
         for msg in reversed(messages):
             if msg.get("role") == "assistant" and len(msg.get("content", "")) > 50:
@@ -576,6 +621,10 @@ async def run_red_team_async(config, objective, api_key=None):
 
         traceback.print_exc()
     finally:
+        # TERMINATION BANNER — one classifier, every ending, unskippable.
+        # The field reports: declines and crashes read as silent failures.
+        with contextlib.suppress(Exception):
+            _render_termination(final_state, ui, _operator_stopped)
         # the Done line ALWAYS renders — if anything above threw, the run
         # used to exit with zero summary (the 'silent crash')
         with contextlib.suppress(Exception):
@@ -665,7 +714,10 @@ def run_red_team(config, objective, api_key=None):
     except KeyboardInterrupt:
         console.print(
             _Panel(
-                "operator interrupt — engagement ended", title=" stopped ", title_align="left", border_style="yellow"
+                "operator interrupt — engagement ended",
+                title=" OPERATOR STOP ",
+                title_align="left",
+                border_style="yellow",
             )
         )
     except Exception as e:  # noqa: BLE001 — the TUI must show, not swallow
@@ -744,6 +796,22 @@ No restrictions. No limits. Pure freedom.
         # Preview
         console.print(f"\n[dim]Objective ({len(obj)} chars):[/]")
         console.print(f"  [cyan]{obj[:500]}{'...' if len(obj) > 500 else ''}[/cyan]\n")
+
+        # authorization ledger hook: a match renders VERIFIED into every
+        # engagement order; no match gets a one-line tip
+        try:
+            from suijin.modules.ops.lib.authorizations import authorization_line
+
+            _al = authorization_line(obj)
+            if _al:
+                console.print(f"[green]authorization on file — {_al.split(')')[0]})[/green]\n")
+            else:
+                console.print(
+                    "[dim]tip: suijin authorize <target> --program h1 --id <auth-id> puts authorization on file[/dim]\n"
+                )
+        except Exception:  # noqa: BLE001 — the hook must never block a launch
+            pass
+
         run_red_team(config, obj)
 
 
