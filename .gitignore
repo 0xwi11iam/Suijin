@@ -90,3 +90,16 @@ dist-desktop/
 /reports/
 dist-desktop/
 dist-release/
+
+# ── v5.3 housekeeping ──
+# Planning notes are operator-local, never shipped
+plan.md
+# Session-local provider config (real one is config.json in the package)
+suijin/modules/blue_config.json
+# Runtime crash logs (belong in the durable workspace, not the repo)
+suijin_agent/outputs/logs/
+# Red KG store is live engagement state — never shipped (fresh clones start empty)
+suijin/modules/redteam/lib/intel/knowledge_graph.json
+# Operator-local engagement notes + runtime recovery state
+suijin/.notes/
+suijin/operation_state_recovery.json

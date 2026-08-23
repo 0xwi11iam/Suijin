@@ -1,6 +1,6 @@
 """JS-bundle attack-surface mining — SPA recon tools.
 
-The ocular-app.tech field run showed the agent hand-rolling curl+grep
+The spa-target.example field run showed the agent hand-rolling curl+grep
 bundles across THREE iterations (with a broken PATHS regex that returned
 nothing on the first try). These tools do it in one call each:
 

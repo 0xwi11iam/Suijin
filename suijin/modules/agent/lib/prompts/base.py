@@ -191,8 +191,8 @@ def _ledger_lines(target_text: str) -> list[str]:
     """VERIFIED-authorization + advisory program-scope lines for this
     target, from the operator's authorize/scope records. The text may be a
     whole objective sentence — any domain token in it can hit the ledger
-    (the operator authorized 'deepseek.com'; the objective may read
-    'api.deepseek.com I have permission'). Best-effort: the order renders
+    (the operator authorized 'example.com'; the objective may read
+    'api.example.com I have permission'). Best-effort: the order renders
     without ledger lines when nothing matches."""
     lines: list[str] = []
     try:

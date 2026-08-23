@@ -299,7 +299,9 @@ class TestWorkspacePathResolution:
 
         result = resolve_workspace_path("outputs/scan.json")
         assert result.is_absolute()
-        assert "suijin_agent" in str(result)
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+        assert str(result).startswith(str(WORKSPACE_DIR))  # v5.3: resolved workspace (durable or repo-local)
 
     def test_dot_dot_traversal_rejected(self):
         """../../../etc/passwd must not escape workspace"""
@@ -538,7 +540,7 @@ class TestExecuteTerminalShellRouting:
 
     The old code shlex.split 'a; b' successfully and exec'd argv-style —
     the ';' became a literal argument. Three documented field engagements
-    (drfrost.org, playtorrio.xyz) hit this and burned iterations."""
+    (field-target.example, prior-target.example) hit this and burned iterations."""
 
     def test_semicolon_chain(self):
         from suijin.modules.tools.lib.terminal import execute_terminal

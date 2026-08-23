@@ -179,7 +179,9 @@ def test_tool_registry():
 def test_workspace_fs():
     from suijin.modules.platform.lib.infra.workspace_fs import outputs_path, payloads_path, scripts_path, workspace_path
 
-    assert "suijin_agent" in workspace_path()
+    # v5.3: durable workspace (~/.suijin/workspace) or repo-local — either contract
+    wp = str(workspace_path())
+    assert "workspace" in wp or "suijin_agent" in wp
     assert "outputs" in outputs_path()
     assert "payloads" in payloads_path()
     assert "scripts" in scripts_path()
