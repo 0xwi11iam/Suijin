@@ -115,6 +115,7 @@ async def run_red_team_async(config, objective, api_key=None):
     last_iter = 0
     final_state = {}
     first_run = True
+    _parse_retries = 0
     langgraph_config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 250}
 
     # Start audit trail
@@ -245,6 +246,7 @@ async def run_red_team_async(config, objective, api_key=None):
                     iteration = latest.get("iteration", 0)
                     if iteration > last_iter:
                         last_iter = iteration
+                        _parse_retries = 0
                         thought = latest.get("thought", "")
                         tool_name = latest.get("tool_name", "")
                         tool_args = latest.get("tool_args", {})
@@ -283,8 +285,17 @@ async def run_red_team_async(config, objective, api_key=None):
                             except Exception:
                                 pass
 
-                # ── think-side signals (buffered into the open panel) ──
+                # ── think-side signals (streamed into the open block) ──
                 if node_name == "think":
+                    # parse failures must be VISIBLE — a run that dies on 3
+                    # unparseable responses used to just vanish. The retry
+                    # loop is internal to think_node; the message that
+                    # reaches this consumer is "JSON parse failed after N".
+                    for _m in node_output.get("messages", []):
+                        _c = str(_m.get("content", ""))
+                        if "could not be parsed" in _c or "JSON parse failed" in _c:
+                            _parse_retries += 1
+                            ui.parse_note(min(_parse_retries, 3))
                     _jt = node_output.get("_just_transitioned_to", "")
                     if _jt:
                         ui.phase_transition(_jt)
@@ -380,6 +391,23 @@ async def run_red_team_async(config, objective, api_key=None):
 
     #  Final report (after normal completion)
     try:
+        # terminal failures NEVER vanish silently — parse_failure killed a
+        # live run with no visible explanation (field report)
+        _reason = str(final_state.get("completion_reason", ""))
+        if _reason in (
+            "parse_failure",
+            "llm_error",
+            "provider_failure",
+            "budget_exhausted",
+            "node_crash",
+        ) or _reason.startswith("error:"):
+            _detail = str(final_state.get("final_summary", ""))
+            if not _detail:
+                for msg in reversed(final_state.get("messages", [])):
+                    if msg.get("role") == "assistant" and msg.get("content"):
+                        _detail = f"last model output: {str(msg['content'])[:300]}"
+                        break
+            ui.failure(_reason, _detail)
         messages = final_state.get("messages", [])
         for msg in reversed(messages):
             if msg.get("role") == "assistant" and len(msg.get("content", "")) > 50:

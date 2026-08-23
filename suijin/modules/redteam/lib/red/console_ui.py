@@ -285,26 +285,23 @@ def _is_blocked(out: str) -> bool:
 
 
 class _Iteration:
-    """One buffered iteration: parts separated by Rule lines, one border."""
+    """One streamed iteration: a titled top rule, printed sections, and a
+    closing rule colored by outcome. NOT part of the live region — content
+    prints above the strip as it arrives (stable, no repaint storms)."""
 
     def __init__(self, n: int, phase: str, dt_tok: int, dt_cost: float):
         self.n = n
         self.phase = phase
         self.dt_tok = dt_tok
         self.dt_cost = dt_cost
-        self.parts: list = []
-        self.border: str = BORDER
-
-    def sep(self) -> None:
-        if self.parts:
-            self.parts.append(Rule(style=BORDER))
-
-    def add(self, renderable) -> None:
-        self.parts.append(renderable)
+        self.sections = 0
+        self.open = False
+        self.ok = True
 
 
 class EngagementUI:
-    """One box per iteration; the live region streams the in-flight box."""
+    """One rule-delimited block per iteration; the live region is ONLY the
+    one-row strip (spinner while the LLM thinks, stats otherwise)."""
 
     def __init__(self, console: Console, objective: str = ""):
         self.console = console
@@ -318,7 +315,7 @@ class EngagementUI:
         self._last_tok = 0
         self._last_cost = 0.0
 
-    # ── strip (doubles as the thinking spinner) ────────────────────────
+    # ── strip (the ONLY live region — one stable row) ──────────────────
 
     def _strip(self) -> Table:
         from suijin.modules.providers.lib import USAGE
@@ -347,22 +344,9 @@ class EngagementUI:
         t.columns[1].ratio = 1
         return t
 
-    # ── live region: in-flight iteration box + strip ───────────────────
-
-    def _build_panel(self, cur: _Iteration) -> Panel:
-        title = f" #{cur.n} · {cur.phase} · +{_fmt_tok(cur.dt_tok)} tok · +${cur.dt_cost:.4f} "
-        return Panel(Group(*cur.parts), title=title, title_align="left", border_style=cur.border, padding=(0, 1))
-
-    def _live_render(self) -> Group:
-        parts = []
-        if self._cur is not None and self._cur.parts:
-            parts.append(self._build_panel(self._cur))
-        parts.append(self._strip())
-        return Group(*parts)
-
     def start(self) -> None:
         if self._live is None:
-            self._live = Live(self._live_render(), console=self.console, refresh_per_second=4)
+            self._live = Live(self._strip(), console=self.console, refresh_per_second=4)
             self._live.start()
 
     def stop(self) -> None:
@@ -379,26 +363,39 @@ class EngagementUI:
     def _tick(self) -> None:
         if self._live is not None:
             with contextlib.suppress(Exception):
-                self._live.update(self._live_render())
+                self._live.update(self._strip())
 
-    # ── iteration buffering ────────────────────────────────────────────
+    # ── streamed iteration block ───────────────────────────────────────
 
-    def _flush(self, border: str = BORDER) -> None:
+    def _section(self, renderable) -> None:
+        """One section inside the open iteration: separator rule between
+        sections, content printed above the live strip."""
+        if self._cur is None:
+            self.console.print(renderable)
+            return
+        if self._cur.sections:
+            self.console.print(Rule(style=BORDER, align="left"))
+        self._cur.sections += 1
+        self.console.print(renderable)
+
+    def _close_open(self, ok: bool | None = None) -> None:
         cur = self._cur
         self._cur = None
-        if cur is None or not cur.parts:
+        if cur is None or not cur.open:
             return
-        if border != BORDER:
-            cur.border = border
-        self.console.print(self._build_panel(cur))
-        self._tick()
+        color = BORDER if ok is None else (GREEN if ok else RED)
+        self.console.print(Rule(style=color, align="left"))
+
+    def _flush(self, border: str = BORDER) -> None:
+        ok = None if border == BORDER else (border == GREEN)
+        self._close_open(ok)
 
     def flush_open(self) -> None:
         """Public: flush any buffered iteration (completion / pause)."""
         self._flush()
 
     def iteration_header(self, n: int, phase: str) -> None:
-        self._flush()  # a bookkeeping turn with no output event flushes here
+        self._flush()  # a bookkeeping turn with no output event closes here
         from suijin.modules.providers.lib import USAGE
 
         tok = int(USAGE.get("input_tokens", 0)) + int(USAGE.get("output_tokens", 0))
@@ -407,52 +404,63 @@ class EngagementUI:
         self._last_tok, self._last_cost = tok, cost
         self.iteration = n
         self.phase = phase or self.phase
+        title = f" #{n} · {self.phase} · +{_fmt_tok(self._cur.dt_tok)} tok · +${self._cur.dt_cost:.4f} "
+        self.console.print("")
+        self.console.print(Rule(title=title, style=BORDER, align="left"))
+        self._cur.open = True
         self.waiting(False)
 
     def thinking(self, thought: str) -> None:
-        if thought and self._cur is not None:
-            self._cur.add(Text(f"thinking  {thought}", style="dim blue"))
-            self._tick()  # stream: the box appears NOW, before the tool runs
+        if thought:
+            self._section(Text(f"thinking  {thought}", style="dim blue"))
+            self._tick()
 
     def reasoning(self, text: str) -> None:
         if not text:
             return
         UI_STATE["last_reasoning"] = text
-        if UI_STATE["show_reasoning"] and self._cur is not None:
-            self._cur.sep()
-            self._cur.add(Text(f"said: {text}", style="bright_cyan"))
+        if UI_STATE["show_reasoning"]:
+            self._section(Text(f"said: {text}", style="bright_cyan"))
             self._tick()
 
     def tool(self, tool_name: str, tool_args: dict) -> None:
-        if tool_name == "ask_operator" or self._cur is None:
+        if tool_name == "ask_operator":
             return
-        self._cur.sep()
-        self._cur.add(Text(f"❯ {tool_name}", style="bold yellow"))
-        if tool_name in _NO_ARGS_TOOLS:
-            self._tick()  # tool line only — no args to show
-            return
-        lexer, get = _LEXERS.get(tool_name, (None, None))
-        code = ""
-        if get is not None:
-            with contextlib.suppress(Exception):
-                code = str(get(tool_args or {}))
-        if not code:
-            code = _json_args(tool_args or {})
-            lexer = "json"
-        if not code.strip():
-            self._tick()
-            return
-        self._cur.add(_syntax(self.console, code, lexer or "text"))
+        parts: list = [Text(f"❯ {tool_name}", style="bold yellow")]
+        if tool_name not in _NO_ARGS_TOOLS:
+            lexer, get = _LEXERS.get(tool_name, (None, None))
+            code = ""
+            if get is not None:
+                with contextlib.suppress(Exception):
+                    code = str(get(tool_args or {}))
+            if not code:
+                code = _json_args(tool_args or {})
+                lexer = "json"
+            if code.strip():
+                parts.append(_syntax(self.console, code, lexer or "text"))
+        if self._cur is not None and self._cur.sections:
+            self.console.print(Rule(style=BORDER, align="left"))
+        if self._cur is not None:
+            self._cur.sections += 1
+        for p in parts:
+            self.console.print(p)
         self._tick()  # stream: the command is visible while it executes
 
     def planned_steps(self, steps: list) -> None:
-        if steps and self._cur is not None:
-            self._cur.sep()
-            self._cur.add(Text(f"plan: {len(steps)} more step(s) queued", style="dim"))
-            for s in steps[:4]:
-                tn = s.get("tool_name", "?") if isinstance(s, dict) else "?"
-                self._cur.add(Text(f"  - {tn}", style="dim"))
-            self._tick()
+        if not steps:
+            return
+        lines = [Text(f"plan: {len(steps)} more step(s) queued", style="dim")]
+        for s in steps[:4]:
+            tn = s.get("tool_name", "?") if isinstance(s, dict) else "?"
+            lines.append(Text(f"  - {tn}", style="dim"))
+        self._section(Group(*lines))
+        self._tick()
+
+    def parse_note(self, attempt: int, max_attempts: int = 3) -> None:
+        """The model returned unparseable JSON — show the retry, don't
+        let the run die invisibly."""
+        self._section(Text(f"response unparseable — asking again ({attempt}/{max_attempts})", style="bold red"))
+        self._tick()
 
     def output(self, text: str, error_class: str = "") -> None:
         out = str(text or "")
@@ -460,23 +468,37 @@ class EngagementUI:
         UI_STATE["last_result_success"] = ok
         if self._cur is None:
             self._cur = _Iteration(self.iteration or 1, self.phase, 0, 0.0)
-        self._cur.sep()
+            self.console.print(Rule(title=f" #{self._cur.n} · {self._cur.phase} ", style=BORDER, align="left"))
+            self._cur.open = True
+        if self._cur.sections:
+            self.console.print(Rule(style=BORDER, align="left"))
+        self._cur.sections += 1
         if _is_blocked(out):
-            self._cur.add(Text(f"BLOCKED  {graceful_error(out)}", style="bold red"))
+            self.console.print(Text(f"BLOCKED  {graceful_error(out)}", style="bold red"))
         elif is_error(out):
-            self._cur.add(Text(graceful_error(out), style="bold red"))
+            self.console.print(Text(graceful_error(out), style="bold red"))
         else:
-            self._cur.add(_syntax(self.console, out, _guess_output_lexer(out)))
-        self._render_loot_into(self._cur, out)
+            self.console.print(_syntax(self.console, out, _guess_output_lexer(out)))
+        self._render_loot_into(out)
         self._flush(border=GREEN if ok else RED)
         self.waiting(True)
 
     # ── loot ───────────────────────────────────────────────────────────
 
+    def _render_loot_into(self, text: str) -> None:
+        flags, creds = loot_in(text)
+        for f in [f for f in flags if f not in UI_STATE["flags"]]:
+            UI_STATE["flags"].append(f)
+            self._section(Text(f"Flag collected!  {f}", style=f"bold {GOLD}"))
+            self._log_finding("flag", f)
+        for kind, v in [c for c in creds if c not in UI_STATE["creds"]]:
+            UI_STATE["creds"].append((kind, v))
+            self._section(Text(f"Credentials harvested! {kind}: {v}", style="bold green"))
+            self._log_finding("credential", f"{kind}: {v[:120]}")
+
     def loot(self, text: str) -> None:
         if self._cur is not None:
-            self._render_loot_into(self._cur, text)
-            self._tick()
+            self._render_loot_into(text)
         else:
             flags, creds = loot_in(text)
             for f in [f for f in flags if f not in UI_STATE["flags"]]:
@@ -485,20 +507,7 @@ class EngagementUI:
             for kind, v in [c for c in creds if c not in UI_STATE["creds"]]:
                 UI_STATE["creds"].append((kind, v))
                 self.console.print(Text(f"Credentials harvested! {kind}: {v[:60]}", style="bold green"))
-            self._tick()
-
-    def _render_loot_into(self, it: _Iteration, text: str) -> None:
-        flags, creds = loot_in(text)
-        for f in [f for f in flags if f not in UI_STATE["flags"]]:
-            UI_STATE["flags"].append(f)
-            it.sep()
-            it.add(Text(f"Flag collected!  {f}", style=f"bold {GOLD}"))
-            self._log_finding("flag", f)
-        for kind, v in [c for c in creds if c not in UI_STATE["creds"]]:
-            UI_STATE["creds"].append((kind, v))
-            it.sep()
-            it.add(Text(f"Credentials harvested! {kind}: {v}", style="bold green"))
-            self._log_finding("credential", f"{kind}: {v[:120]}")
+        self._tick()
 
     def _log_finding(self, ftype: str, evidence: str) -> None:
         try:
@@ -514,15 +523,14 @@ class EngagementUI:
         except Exception:  # noqa: BLE001 — the display line matters more
             pass
 
-    # ── notes (buffered into the open iteration) ───────────────────────
+    # ── notes (sections inside the open iteration) ─────────────────────
 
     def _note(self, renderable) -> None:
         if self._cur is not None:
-            self._cur.sep()
-            self._cur.add(renderable)
-            self._tick()
+            self._section(renderable)
         else:
             self.console.print(renderable)
+        self._tick()
 
     def supervisor(self, text: str) -> None:
         if text:
@@ -555,8 +563,10 @@ class EngagementUI:
     def ask(self, question: str) -> None:
         if self._cur is None:
             self._cur = _Iteration(self.iteration or 1, self.phase, 0, 0.0)
-        self._cur.add(Text(f"Question  {question}", style=f"bold {GOLD}"))
-        self._flush()  # the answer prompt must print outside the box
+            self.console.print(Rule(title=f" #{self._cur.n} · {self._cur.phase} ", style=BORDER, align="left"))
+            self._cur.open = True
+        self._section(Text(f"Question  {question}", style=f"bold {GOLD}"))
+        self._close_open()  # the answer prompt must print outside the block
 
     def done(self, ok: int, total: int, phase: str, cost: float, reason: str) -> None:
         self._flush()
@@ -569,3 +579,13 @@ class EngagementUI:
             self.console.print(f"[bold {GOLD}]Flags:[/bold {GOLD}] {', '.join(escape(f) for f in UI_STATE['flags'])}")
         if UI_STATE["creds"]:
             self.console.print(f"[bold green]Credentials:[/bold green] {len(UI_STATE['creds'])} captured")
+
+    def failure(self, reason: str, detail: str = "") -> None:
+        """Terminal failure (parse_failure / llm_error / provider_failure /
+        budget_exhausted / node_crash) — NEVER let a run just vanish."""
+        self._flush()
+        self.stop()
+        body = [Text(reason, style="bold red")]
+        if detail:
+            body.append(Text(detail, style="dim"))
+        self.console.print(Panel(Group(*body), title="engagement ended", title_align="left", border_style=RED))

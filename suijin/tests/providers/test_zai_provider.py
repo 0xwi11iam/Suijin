@@ -321,24 +321,19 @@ class TestActiveModelResolution:
         assert active_model(None) == "auto"
 
     def test_llm_client_uses_active_model(self, monkeypatch):
-        # the Thinking... spinner builds its label from active_model()
+        # v5.2: the Thinking... spinner is GONE (it fought the engagement
+        # strip's Live region — violent flashing in live runs). The wrapper
+        # is silent; this now asserts the no-spinner contract.
         import asyncio
 
         from suijin.modules.redteam.lib.red import llm_client
 
         monkeypatch.setattr(llm_client, "_generate", lambda msgs, cfg: "ok")
-        labels = []
-        monkeypatch.setattr(
-            llm_client.console,
-            "status",
-            lambda label, **_k: labels.append(label) or _NullCtx(),
-        )
         out = asyncio.run(
             llm_client.generate_async([{"role": "user", "content": "hi"}], {**self.DEFAULT_CFG, "provider": "zai"})
         )
         assert out == "ok"
-        assert "zai/glm-5.3" in labels[0]
-        assert "DeepSeek" not in labels[0]
+        assert not hasattr(llm_client, "console")  # no second console, no status Live
 
 
 class _NullCtx:
