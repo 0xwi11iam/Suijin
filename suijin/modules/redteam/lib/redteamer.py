@@ -77,12 +77,13 @@ async def run_red_team_async(config, objective, api_key=None):
         )
 
     providers.reset_usage()
-    # B11/B16: recall operational memory for the target; warn on drift
+    # B11/B16: recall operational memory for the target — silent (the
+    # 'no memory of X yet' line was startup noise; the scratchpad carries
+    # memory into the prompt where it actually matters)
     try:
         from suijin.modules.agent.lib import memory as _mem
 
-        _target_hint = str(objective)[:120]
-        console.print(_mem.recall(_target_hint, limit=3))
+        _mem.recall(str(objective)[:120], limit=3)
     except Exception:  # noqa: BLE001 — memory is best-effort
         pass
 
@@ -255,8 +256,8 @@ async def run_red_team_async(config, objective, api_key=None):
                         phase = latest.get("phase", node_output.get("current_phase", "?"))
 
                         ui.iteration_header(iteration, phase)
-                        if thought:
-                            ui.thinking(thought)
+                        if thought and tool_name != "ask_operator":
+                            ui.thinking(thought)  # ask turns: question + Answer prompt only
                         ui.reasoning(reasoning)
                         if tool_name:
                             ui.tool(tool_name, tool_args)

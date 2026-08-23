@@ -29,6 +29,7 @@ import re
 
 from rich.console import Console, Group
 from rich.live import Live
+from rich.markdown import Markdown
 from rich.markup import escape
 from rich.panel import Panel
 from rich.rule import Rule
@@ -69,16 +70,13 @@ def ask_operator_answer(
     run_box, console: Console, question: str, timeout_s: float = 600.0, label: str = "Answer"
 ) -> str:
     """Get the operator's answer through the RunBox reader — the ONE thread
-    that owns stdin. Calling input() on the main thread raced the reader's
-    blocking readline: the box stole the typed line and the agent hung
-    forever with no visible prompt (field-run bug). Slash commands keep
-    working while we wait; the first plain line is the answer."""
+    that owns stdin (a main-thread input() raced the reader and hung the
+    agent). Prompt is exactly `Answer:` on its own line; the first plain
+    line typed is the answer (slash commands still dispatch normally)."""
     import time as _time
 
-    if question:
-        console.print(f"[bold {GOLD}]{label}[/bold {GOLD}]  {question}")
-    else:
-        console.print(f"[bold cyan]{label}[/bold cyan] [dim](type your answer — /commands still work)[/dim]")
+    console.print(f"[bold cyan]{label}:[/bold cyan] ", end="")
+    console.file.flush()
     deadline = _time.monotonic() + timeout_s
     run_box.take_guidance()  # drain stale lines queued before the question
     while _time.monotonic() < deadline:
@@ -276,6 +274,12 @@ def _fmt_tok(n: int) -> str:
     return f"{n / 1000:.1f}k" if n >= 1000 else str(n)
 
 
+def _md(text: str, style: str = "none") -> Markdown:
+    """Markdown render for model-authored text (thinking/said/findings/
+    plain tool output) — the model writes markdown; show it as markdown."""
+    return Markdown(text or "", code_theme="monokai", style=style, hyperlinks=False)
+
+
 _BLOCKED_PREFIXES = ("TOOL NOT FOUND", "policy:", "BLOCKED", "Error: tool")
 
 
@@ -412,7 +416,7 @@ class EngagementUI:
 
     def thinking(self, thought: str) -> None:
         if thought:
-            self._section(Text(f"thinking  {thought}", style="dim blue"))
+            self._section(Group(Text("thinking", style="dim blue"), _md(thought, "dim")))
             self._tick()
 
     def reasoning(self, text: str) -> None:
@@ -420,7 +424,7 @@ class EngagementUI:
             return
         UI_STATE["last_reasoning"] = text
         if UI_STATE["show_reasoning"]:
-            self._section(Text(f"said: {text}", style="bright_cyan"))
+            self._section(Group(Text("said:", style="bright_cyan"), _md(text)))
             self._tick()
 
     def tool(self, tool_name: str, tool_args: dict) -> None:
@@ -478,7 +482,13 @@ class EngagementUI:
         elif is_error(out):
             self.console.print(Text(graceful_error(out), style="bold red"))
         else:
-            self.console.print(_syntax(self.console, out, _guess_output_lexer(out)))
+            lexer = _guess_output_lexer(out)
+            if lexer == "text":
+                # plain output — model- and tool-authored text is markdown-ish
+                # (notes, findings, advisories); render it as such
+                self.console.print(_md(out))
+            else:
+                self.console.print(_syntax(self.console, out, lexer))
         self._render_loot_into(out)
         self._flush(border=GREEN if ok else RED)
         self.waiting(True)
@@ -551,7 +561,7 @@ class EngagementUI:
         s = str(text)
         if "deployed" in s.lower():
             UI_STATE["fireteams"] += 1
-        self._note(Text(s, style="bold magenta"))
+        self._note(Group(Text("fireteam", style="bold magenta"), _md(s)))
 
     def phase_transition(self, to_phase: str, reason: str = "") -> None:
         self.phase = to_phase or self.phase
@@ -561,11 +571,16 @@ class EngagementUI:
         self._note(line)
 
     def ask(self, question: str) -> None:
+        """Ask-operator turn: ONE dim context line, then the Answer prompt
+        prints outside the block. No thinking line, no question wall —
+        the operator asked for exactly: `Answer:` and a place to type."""
         if self._cur is None:
             self._cur = _Iteration(self.iteration or 1, self.phase, 0, 0.0)
             self.console.print(Rule(title=f" #{self._cur.n} · {self._cur.phase} ", style=BORDER, align="left"))
             self._cur.open = True
-        self._section(Text(f"Question  {question}", style=f"bold {GOLD}"))
+        first_line = (question or "").strip().split("\n")[0]
+        if first_line:
+            self._section(Text(first_line[:140], style="dim"))
         self._close_open()  # the answer prompt must print outside the block
 
     def done(self, ok: int, total: int, phase: str, cost: float, reason: str) -> None:
