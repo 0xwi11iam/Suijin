@@ -144,8 +144,14 @@ def _render_termination(final_state: dict, ui, operator_stopped: bool) -> None:
         if not detail:
             for msg in reversed(final_state.get("messages", [])):
                 if msg.get("role") == "assistant" and msg.get("content"):
-                    detail = f"last model output: {str(msg['content'])[:300]}"
+                    detail = f"last model output: {str(msg['content'])[:400]}"
                     break
+        if reason == "parse_failure":
+            detail = (detail + "\n\n" if detail else "") + (
+                "the model returned non-JSON 3 times (often an overloaded/timeouty "
+                "provider returning empty or partial responses) — try again, or "
+                "switch provider: suijin providers"
+            )
         console.print(
             Panel(
                 f"{reason}\n{detail}" if detail else reason,
@@ -210,6 +216,9 @@ async def run_red_team_async(config, objective, api_key=None):
     final_state = {}
     first_run = True
     _parse_retries = 0
+    _operator_stopped = False  # unbound-local crash: the finally referenced
+    # this before ANY assignment when an early exception jumped the loop
+    _provider_retried = False
     langgraph_config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 250}
 
     # Start audit trail
@@ -486,6 +495,28 @@ async def run_red_team_async(config, objective, api_key=None):
 
                 # Check completion
                 if node_output.get("completion_reason"):
+                    _cr = str(node_output.get("completion_reason", ""))
+                    if _cr in ("provider_failure", "llm_error") and not _provider_retried:
+                        # provider flake (timeouts/empty responses under load)
+                        # does NOT end the engagement: one full restart with a
+                        # fresh thread. The field runs died to exactly this.
+                        _provider_retried = True
+                        console.print(
+                            f"[yellow]provider trouble ({_cr}) — one automatic restart, then it ends[/yellow]"
+                        )
+                        ui.flush_open()
+                        agent = _agent_graph_cls()(
+                            generate_fn=generate_async,
+                            route_tool_fn=_dispatch_mod().route_tool,
+                            max_iterations=config.get("max_iterations", 100),
+                            run_config=config,
+                        )
+                        thread_id = f"redteam_{int(time.time())}"
+                        langgraph_config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 250}
+                        agent._build()
+                        first_run = True
+                        ui.waiting(True)
+                        continue
                     ui.flush_open()
                     final_state = node_output
                     break

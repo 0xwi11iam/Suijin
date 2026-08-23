@@ -365,3 +365,52 @@ class TestProviderNoiseSilenced:
         assert "Z.ai attempt" not in captured.out  # no raw retry lines
         assert "attempt" not in captured.out
         assert str(out).startswith("Error:")  # the final failure still returns
+
+
+class TestProviderRecovery:
+    """07:24 field run: Z.ai under load returned non-JSON 3x -> parse_failure
+    at iteration 1 with zero trace. Provider flakes must not end engagements
+    (one automatic restart), and the crash path had an unbound-local bug."""
+
+    def test_operator_stopped_initialized(self, monkeypatch):
+        """The finally referenced _operator_stopped before any assignment —
+        an early exception jumped the loop and UnboundLocalError killed the
+        run inside the finally itself (the 'random crash')."""
+        import inspect
+
+        import suijin.modules.redteam.lib.redteamer as rt
+
+        src = inspect.getsource(rt.run_red_team_async)
+        init = src.index("_operator_stopped = False")
+        first_use = min(i for i in (src.index("_render_termination"), src.index("Force quit")) if i > 0)
+        assert init < first_use
+
+    def test_provider_restart_logic_present(self):
+        import inspect
+
+        import suijin.modules.redteam.lib.redteamer as rt
+
+        src = inspect.getsource(rt.run_red_team_async)
+        assert "provider_failure" in src and "one automatic restart" in src
+        assert "_provider_retried" in src  # once, not forever
+
+    def test_parse_failure_banner_names_the_cause(self):
+        from rich.console import Console
+
+        import suijin.modules.redteam.lib.redteamer as rt
+
+        out = Console(record=True, width=100, force_terminal=True)
+        saved = rt.console
+        rt.console = out
+        try:
+            rt._render_termination(
+                {"completion_reason": "parse_failure", "current_iteration": 1, "messages": []},
+                ui=None,
+                operator_stopped=False,
+            )
+        finally:
+            rt.console = saved
+        text = out.export_text()
+        assert "ENGAGEMENT FAILED" in text
+        assert "non-JSON 3 times" in text  # what happened + what to do
+        assert "switch provider" in text
