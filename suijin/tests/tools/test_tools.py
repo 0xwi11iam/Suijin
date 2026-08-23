@@ -608,6 +608,26 @@ class TestMcpTerminalPtyRead:
         finally:
             mcp_shell_close()
 
+    def test_marker_split_across_chunks(self, monkeypatch):
+        """CI failure regression: on slow PTYs the end-marker spans chunk
+        boundaries — the old per-chunk check missed it and the command's
+        own echo was returned instead of the output."""
+        import suijin.modules.mcp_terminal.main as mt
+
+        orig_read = mt.os.read
+
+        def tiny_read(fd, n):
+            return orig_read(fd, 4)  # marker WILL split
+
+        monkeypatch.setattr(mt.os, "read", tiny_read)
+        from suijin.modules.mcp_terminal.main import mcp_shell_close, mcp_shell_exec
+
+        try:
+            out = mcp_shell_exec("sleep 1 && echo split-marker-ok")
+            assert "split-marker-ok" in out, out
+        finally:
+            mcp_shell_close()
+
     def test_pipe_chain_in_session(self):
         from suijin.modules.mcp_terminal.main import mcp_shell_close, mcp_shell_exec
 
