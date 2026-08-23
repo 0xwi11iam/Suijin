@@ -30,17 +30,41 @@ def read_scratchpad(max_chars: int = 4000) -> str:
 
 
 def append_note(content: str, category: str = "") -> None:
-    """write_note hook — one line on the pad. Never raises."""
+    """write_note hook — one line on the pad. Never raises.
+
+    H5: consecutive-duplicate suppression — an operator command auto-logged
+    in a loop once produced 30+ identical '[operator] found admin panel'
+    lines that became the next run's top-priority lead (poisoning)."""
     try:
         import time
 
         stamp = time.strftime("%m-%d %H:%M")
         tag = f"[{category}] " if category else ""
         line = f"- {stamp} {tag}{str(content).strip()[:300]}"
+        if _is_recent_duplicate(line):
+            return
         with scratchpad_path().open("a", encoding="utf-8") as fh:
             fh.write(line + "\n")
     except Exception:  # noqa: BLE001 — the pad must never break note-taking
         pass
+
+
+def _is_recent_duplicate(line: str) -> bool:
+    """True when the same tagged content (ignoring timestamp) is among the
+    last 3 lines — spam bursts get one entry, not thirty."""
+    try:
+        p = scratchpad_path()
+        if not p.exists():
+            return False
+        tail = p.read_text(errors="ignore").splitlines()[-3:]
+        body = line.split(" ", 2)[-1]  # drop the stamp -> '[cat] content'
+        for prev in tail:
+            prev_body = prev.split(" ", 2)[-1] if prev.count(" ") >= 2 else prev
+            if prev_body.strip() == body.strip():
+                return True
+    except Exception:  # noqa: BLE001
+        pass
+    return False
 
 
 def scratchpad_message() -> str | None:

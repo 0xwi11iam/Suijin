@@ -29,6 +29,26 @@ _RECIPES: dict[str, dict] = {
     "open_redirect": {"tool": "open_redirect_check", "note": "30x Location canary"},
     "cors": {"tool": "cors_check", "note": "origin reflection + credentials"},
     "secret": {"tool": "scan_secrets", "note": "pattern + entropy re-scan"},
+    # H5: five more classes (the audit found only 5 recipes — everything
+    # else fell to the weak keyword fallback)
+    "ssrf": {"tool": "ssrf_canary", "note": "OOB callback observed"},
+    "cmd_injection": {"tool": "http_request", "marker": "uid=", "note": "command output echo"},
+    "command_injection": {"tool": "http_request", "marker": "uid=", "note": "command output echo"},
+    "jwt": {"tool": "jwt_inspect", "note": "algorithm/claim re-read"},
+    "idor": {"tool": "http_request", "note": "cross-user object access"},
+    "info_disclosure": {"tool": "http_request", "note": "sensitive data re-read"},
+}
+# synonyms -> canonical recipe key
+_RECIPE_ALIASES = {
+    "sql_injection": "sqli",
+    "injection": "sqli",
+    "command_injection": "cmd_injection",
+    "rce": "cmd_injection",
+    "ssrf_vulnerability": "ssrf",
+    "bola": "idor",
+    "jwt_vulnerability": "jwt",
+    "leak": "info_disclosure",
+    "disclosure": "info_disclosure",
 }
 
 
@@ -43,7 +63,8 @@ def verify_finding(finding: dict, route_fn=None) -> dict:
     ftype = str(finding.get("type", "")).lower()
     evidence = str(finding.get("evidence", ""))
     out = dict(finding)
-    recipe = _RECIPES.get(ftype)
+    key = _RECIPE_ALIASES.get(ftype, ftype)
+    recipe = _RECIPES.get(key)
     if recipe is None:
         out["verification"] = {"verdict": "unverifiable", "evidence": "no independent recipe for this finding type"}
         return out
@@ -77,14 +98,9 @@ def verify_finding(finding: dict, route_fn=None) -> dict:
             "evidence": f"independent {recipe['tool']} CONTRADICTS: expected indicators absent in the second pass",
         }
         return out
-    # generic: any non-error output that mentions the target/keywords
-    kw = [w for w in (ftype.replace("_", " "),) if w]
-    if kw and kw[0].split()[0] in second.lower():
-        out["verification"] = {
-            "verdict": "verified",
-            "evidence": f"independent {recipe['tool']} mentions the finding class ({second[:100]})",
-        }
-        return out
+    # H5: the old keyword-mention fallback counted 'output mentions sqli'
+    # as VERIFIED — that manufactured confidence. Neither confirms nor
+    # contradicts is now honestly 'downgraded'.
     out["verification"] = {
         "verdict": "downgraded",
         "evidence": f"independent {recipe['tool']} neither confirms nor contradicts ({second[:100]})",
