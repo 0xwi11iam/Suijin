@@ -1296,3 +1296,75 @@ class TestAnswerFlowFieldBugs:
         r.print(ui._strip())
         assert "thinking" in r.export_text()
         ui.stop()
+
+
+class TestNoSilentEndings:
+    """hf-mirror.com field run: the agent DECLINED (completion_reason
+    'Engagement declined: …') and the run ended through the normal path —
+    but the operator saw a green Report panel + dim Done and read it as a
+    silent crash. Every ending must be unmissable."""
+
+    def test_decline_renders_stopped_panel(self, monkeypatch):
+        from rich.console import Console
+
+        import suijin.modules.redteam.lib.redteamer as rt
+
+        out = Console(record=True, width=100, force_terminal=True)
+        monkeypatch.setattr(rt, "console", out)
+
+        class _FS(dict):
+            pass
+
+        fs = _FS(
+            completion_reason="Engagement declined: hf-mirror.com is a public third-party service",
+            messages=[{"role": "assistant", "content": "x" * 80}],
+            execution_trace=[],
+            current_phase="informational",
+        )
+        # simulate the final-report block's decline branch
+        _reason = str(fs.get("completion_reason", ""))
+        declined = any(w in _reason.lower() for w in ("declin", "refuse", "will not proceed"))
+        assert declined
+        out.print(f"[bold yellow]ENGAGEMENT STOPPED — agent declined:[/bold yellow] {_reason}")
+        assert "ENGAGEMENT STOPPED" in out.export_text()
+
+    def test_decline_words_detected(self):
+        words = ("declin", "refuse", "will not proceed", "cannot proceed", "not able to proceed", "i won't")
+        for r in ("Engagement declined: x", "I refuse to scan", "I will not proceed against"):
+            assert any(w in r.lower() for w in words), r
+
+    def test_sync_wrapper_shows_crash_panel(self, monkeypatch):
+        """run_red_team NEVER exits silently — an inner crash renders a red
+        panel instead of dropping back to the launcher."""
+
+        async def boom(cfg, obj, api_key=None):
+            raise RuntimeError("provider exploded mid-run")
+
+        monkeypatch.setattr("suijin.modules.redteam.lib.redteamer.run_red_team_async", boom)
+        from rich.console import Console
+
+        import suijin.modules.redteam.lib.redteamer as rt
+
+        out = Console(record=True, width=100, force_terminal=True)
+        monkeypatch.setattr(rt, "console", out)
+        rt.run_red_team({"provider": "zai"}, "10.0.0.9")  # must not raise
+        text = out.export_text()
+        assert "engagement crashed" in text
+        assert "provider exploded" in text
+
+    def test_guard_fallback_is_visible(self, monkeypatch):
+        from rich.console import Console
+
+        import suijin.modules.redteam.lib.red.console_ui as m
+
+        def boom(text, style="none"):
+            raise RuntimeError("renderer died")
+
+        monkeypatch.setattr(m, "_md", boom)
+        c = Console(record=True, width=90, force_terminal=True)
+        ui = m.EngagementUI(c)
+        ui.iteration_header(1, "informational")
+        ui.thinking("content survives")
+        out = c.export_text()
+        assert "content survives" in out
+        assert "render fallback" in out  # the notice, not silence

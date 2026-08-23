@@ -323,9 +323,12 @@ def _guarded(name: str, fn):
         except Exception as e:  # noqa: BLE001 — the UI must never kill a run
             _crash_log(name, e)
             try:
+                # VISIBLE notice, never silent: the operator sees the content
+                # plus a one-line note that the renderer fell back
                 txt = " ".join(str(x)[:200] for x in a if isinstance(x, str))
                 if txt:
                     self.console.print(Text(txt[:400], style="dim"))
+                self.console.print(Text(f"[render fallback: {name}: {type(e).__name__} — logged]", style="yellow"))
             except Exception:  # noqa: BLE001
                 pass
 
