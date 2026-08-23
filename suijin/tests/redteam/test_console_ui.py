@@ -1177,3 +1177,63 @@ class TestJsSurfaceTools:
         out = c.export_text()
         assert "url=https://t/assets/index.js" in out
         assert "AIzaX" in out
+
+
+class TestFieldCrashDriftDict:
+    """Field crash (13:56, ui_crash.log): agent_graph stores _drift_warning
+    as the drift analyser's RESULT DICT; drift() passed it to Text.assemble
+    raw -> TypeError. The guard saved the run but the warning vanished."""
+
+    def test_drift_accepts_result_dict(self):
+        ui, c = _ui()
+        ui.iteration_header(1, "informational")
+        ui.drift(
+            {
+                "drift_detected": True,
+                "drift_causes": ["objective mentions API testing, actions are all port scans"],
+                "suggestions": ["return to the stated objective", "check scope"],
+            }
+        )
+        ui.flush_open()
+        out = c.export_text()
+        assert "port scans" in out and "stated objective" in out
+
+    def test_drift_accepts_plain_string(self):
+        ui, c = _ui()
+        ui.drift("coverage stalled on recon")
+        assert "coverage stalled" in c.export_text()
+
+    def test_oracle_renders_hypothesis_dicts(self):
+        """The oracle returns [{'id','hypothesis','confidence',...}] — the
+        old str(h[0]) printed an ugly dict repr."""
+        ui, c = _ui()
+        ui.iteration_header(1, "informational")
+        ui.oracle(
+            [
+                {
+                    "id": "H1",
+                    "hypothesis": "Input validation — special characters stripped",
+                    "confidence": 0.6,
+                    "validation_payload": "' OR '1'='1",
+                }
+            ]
+        )
+        ui.flush_open()
+        out = c.export_text()
+        assert "[H1] Input validation" in out
+        assert "(0.6)" in out
+        assert "validation_payload" not in out  # dict repr not printed
+
+    def test_no_raw_state_payload_reaches_text_assemble(self):
+        """Every _note-style renderer must coerce: supervisor/drift/oracle/
+        phase_transition/fireteam called with the exact state shapes from
+        agent_graph must render, never raise."""
+        ui, c = _ui()
+        ui.iteration_header(1, "informational")
+        ui.supervisor("repeating tool detected")
+        ui.drift({"drift_causes": ["c1"], "suggestions": ["s1"]})
+        ui.oracle([{"id": "H2", "hypothesis": "WAF blocks", "confidence": 0.4}])
+        ui.phase_transition("exploitation", {"reason": "found creds"})
+        ui.fireteam({"teams": 3})  # even nonsense objects render
+        ui.flush_open()
+        assert "repeating tool" in c.export_text()

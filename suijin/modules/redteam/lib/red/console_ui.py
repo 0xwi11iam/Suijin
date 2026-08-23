@@ -613,16 +613,37 @@ class EngagementUI:
 
     def supervisor(self, text: str) -> None:
         if text:
-            self._note(Text.assemble(("Supervisor  ", "bold magenta"), (text, "dim italic")))
+            self._note(Text.assemble(("Supervisor  ", "bold magenta"), (str(text), "dim italic")))
 
     def oracle(self, hypotheses) -> None:
-        if hypotheses:
-            h = hypotheses if isinstance(hypotheses, list) else [hypotheses]
-            self._note(Text.assemble(("Oracle  ", "bold magenta"), (str(h[0]), "dim italic")))
+        """hypotheses: list of dicts ({'id','hypothesis',...}) from the oracle,
+        a plain list of strings, or a bare string — all render readable."""
+        if not hypotheses:
+            return
+        items = hypotheses if isinstance(hypotheses, list) else [hypotheses]
+        rendered = []
+        for h in items[:2]:
+            if isinstance(h, dict):
+                hid = h.get("id", "?")
+                hyp = h.get("hypothesis") or h.get("text") or str(h)[:160]
+                rendered.append(f"[{hid}] {hyp}" + (f" ({h.get('confidence')})" if h.get("confidence") else ""))
+            else:
+                rendered.append(str(h)[:200])
+        self._note(Text.assemble(("Oracle  ", "bold magenta"), (" // ".join(rendered), "dim italic")))
 
-    def drift(self, text: str) -> None:
-        if text:
-            self._note(Text.assemble(("Drift  ", "bold yellow"), (text, "dim")))
+    def drift(self, text) -> None:
+        """text: the drift analyser's RESULT DICT (drift_causes/suggestions)
+        or a plain string — both render (the dict crashed Text.assemble in
+        the field; the guard saved the run but the warning vanished)."""
+        if not text:
+            return
+        if isinstance(text, dict):
+            causes = ", ".join(str(c) for c in text.get("drift_causes", [])[:2]) or "unknown cause"
+            sugg = "; ".join(str(s) for s in text.get("suggestions", [])[:3])
+            body = causes + (f" — {sugg}" if sugg else "")
+        else:
+            body = str(text)
+        self._note(Text.assemble(("Drift  ", "bold yellow"), (body, "dim")))
 
     def fireteam(self, text: str) -> None:
         if not text:
