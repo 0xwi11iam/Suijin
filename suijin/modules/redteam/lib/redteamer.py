@@ -246,6 +246,19 @@ async def run_red_team_async(config, objective, api_key=None):
                                 _mem.note(f"operator confirmed scope/authorization: {answer[:200]}")
                             except Exception:  # noqa: BLE001 — memory is best-effort
                                 pass
+                            # persist the confirmation INTO the objective: the
+                            # engagement order renders from it every single
+                            # turn, so the model can never 'unsee' the
+                            # operator's attestation again
+                            _confirmed_obj = f"{objective} [OPERATOR-CONFIRMED in engagement: {answer[:160]}]"
+                            agent._graph.update_state(
+                                langgraph_config,
+                                {
+                                    "original_objective": _confirmed_obj,
+                                    "_objective": _confirmed_obj,
+                                },
+                            )
+                            objective = _confirmed_obj
                         agent._graph.update_state(
                             langgraph_config,
                             {
@@ -255,6 +268,7 @@ async def run_red_team_async(config, objective, api_key=None):
                         )
                         console.print("[dim]Answer sent. Resuming...[/dim]\n")
                         ui.start()
+                        ui.waiting(True)  # straight back to the thinking spinner
                         continue
                     ui.output(out, ec)
                     # Audit the FULL observation from the execute event — the
@@ -417,6 +431,7 @@ async def run_red_team_async(config, objective, api_key=None):
                 console.print(f"[yellow]  State update failed: {e}. Restarting...[/yellow]")
                 first_run = True
             ui.start()  # strip back on
+            ui.waiting(True)  # thinking spinner while the agent resumes
             continue  # Resume the while loop
 
         except Exception as e:

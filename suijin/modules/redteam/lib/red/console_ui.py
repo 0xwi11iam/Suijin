@@ -78,13 +78,16 @@ def ask_operator_answer(
 
     console.print(f"[bold cyan]{label}:[/bold cyan] ", end="")
     console.file.flush()
+    run_box.ask_mode(True)  # plain lines are the answer — no guidance echo
     deadline = _time.monotonic() + timeout_s
     run_box.take_guidance()  # drain stale lines queued before the question
     while _time.monotonic() < deadline:
         lines = run_box.take_guidance()
         if lines:
+            run_box.ask_mode(False)
             return lines[0].strip()
         _time.sleep(0.15)
+    run_box.ask_mode(False)
     return ""
 
 
