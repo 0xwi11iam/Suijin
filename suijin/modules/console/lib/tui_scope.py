@@ -17,7 +17,12 @@ import curses
 import json
 import os
 
-POLICY_PATH = os.path.join(os.path.dirname(__file__), "policy.json")
+# The package-level policy (suijin/policy.json) — the SAME file governance.py
+# enforces at dispatch. Resolved from this file's location so it works from
+# the dev symlink; the old dirname(__file__) path made the scope TUI save
+# to modules/console/lib/policy.json, a file nothing ever read.
+_POLICY_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+POLICY_PATH = os.path.join(_POLICY_DIR, "policy.json")
 
 INCLUDE_KEYS = ("allowed_target_scopes",)
 EXCLUDE_KEYS = ("excluded_scopes",)

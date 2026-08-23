@@ -105,7 +105,7 @@ def main():
         console.print("\n")
 
         console.print("[bold white]Select Operational Module:[/]")
-        console.print("  [bold #ff5555]1.[/] [white]Red Team (Autonomous Agent + Fugu Collective Intelligence)[/]")
+        console.print("  [bold #ff5555]1.[/] [white]Red Team (Autonomous Agent)[/]")
         console.print("  [bold #58a6ff]2.[/] [white]Blue Team (Active Defense)[/]")
         console.print("  [bold yellow]3.[/] [white]Settings[/]")
         console.print("  [bold #e6b47c]4.[/] [white]Operator Tools (scope, approvals, battle, debrief, …)[/]")

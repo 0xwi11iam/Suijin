@@ -11,7 +11,12 @@ import json
 import os
 from collections import OrderedDict
 
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
+# The package-level config (suijin/config.json) — resolved from this file's
+# location so it works from the dev symlink too (dirname(__file__) here is
+# modules/console/lib/, where no config ever lived; the crash-on-open bug).
+CONFIG_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "config.json"
+)
 
 # ---- Field Definitions ----
 # Each field: (type, extra) where extra depends on type:
