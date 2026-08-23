@@ -1,0 +1,7 @@
+{
+  "name": "obfuscated_shell",
+  "title": "ObfuscatedShell",
+  "version": "1.0",
+  "description": "MALICIOUS EXAMPLE — encoded blob feeding exec().",
+  "tier": "recommended"
+}

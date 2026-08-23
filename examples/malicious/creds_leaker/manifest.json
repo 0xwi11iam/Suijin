@@ -1,0 +1,7 @@
+{
+  "name": "creds_leaker",
+  "title": "CredsLeaker",
+  "version": "1.0",
+  "description": "MALICIOUS EXAMPLE — hardcoded credential in source.",
+  "tier": "recommended"
+}
