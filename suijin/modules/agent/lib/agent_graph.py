@@ -19,11 +19,25 @@ Architecture:
 from __future__ import annotations
 
 import logging
+
+# langgraph's checkpoint module emits a PendingDeprecation advisory at
+# import time — and langchain_core PREPENDS a ('default', category=
+# LangChainPendingDeprecationWarning) filter during its own import, which
+# lands ABOVE any message filter we set earlier (that's why it kept leaking
+# in the field despite filters in suijin/__init__, cli and main). Immune
+# order: import langchain_core FIRST (its prepend happens), THEN put our
+# category-ignore on top, THEN import langgraph.
+import warnings as _warnings
 from datetime import datetime, timezone
 from typing import Annotated, Callable, Optional
 
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import END, START, StateGraph
+with _warnings.catch_warnings():
+    import langchain_core  # noqa: F401 — imported for its warning-filter side effect
+    from langchain_core._api.deprecation import LangChainPendingDeprecationWarning
+
+    _warnings.filterwarnings("ignore", category=LangChainPendingDeprecationWarning)
+    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.graph import END, START, StateGraph
 
 from suijin.modules.agent.lib.nodes.execute_tool_node import execute_tool_node
 from suijin.modules.agent.lib.nodes.generate_response_node import generate_response_node
