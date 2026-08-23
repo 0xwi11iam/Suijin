@@ -22,14 +22,17 @@ def _isolated_ws(tmp_path, monkeypatch):
 
     monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
     # install destinations isolated too
-    import suijin.modules.tools.lib.sjpack as sp
 
-    monkeypatch.setattr(sp.shutil, "rmtree", sp.shutil.rmtree)  # keep real
     monkeypatch.setattr(
         "suijin.modules.loader.PACK_ROOTS",
         [REPO / "suijin" / "modules", tmp_path / "user_modules"],
     )
     yield tmp_path
+    # hermeticity guard: a test must NEVER write to the real user module
+    # home — a leaked install there poisons every later run's shadow scan
+    real_user_root = __import__("pathlib").Path.home() / ".suijin" / "modules"
+    leaked = sorted(p.name for p in real_user_root.glob("*") if p.is_dir()) if real_user_root.is_dir() else []
+    assert not leaked, f"tests leaked real installs to {real_user_root}: {leaked}"
 
 
 def _mk(dir_path, files: dict):

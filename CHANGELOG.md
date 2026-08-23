@@ -6,6 +6,41 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v5.4.0 — The capability ecosystem
+
+Person-to-person capability distribution: single sealed files with
+attribution, a safety scan and a review wizard before any code runs.
+
+- **`.sjm` / `.sja` / `.sjp` packages** — module packs, addons and
+  tier-gated kernel plugins, one container spec (sjpkg.json +
+  SHA256SUMS + payload; format v1; zero new dependencies). `suijin pack
+  build` auto-extracts the tool table from code and auto-fills invalid
+  manifests; `suijin install` runs the wizard (attribution, dev note,
+  scan verdict, tools table, external binaries) — Enter installs.
+- **Built-in AST-only safety scanner** (platform/lib/safety) — never
+  executes payload code (no-side-effects test); critical: hidden
+  eval/exec, string-multiplication obfuscation blobs, hardcoded secrets
+  in source assignments, built-in tool shadowing; warnings: undeclared
+  spawns, network egress, import-time effects; declared binaries are
+  honest metadata. Install ALWAYS re-scans — embedded reports advisory.
+- **Guards, each tested**: tamper (names the file), path traversal,
+  symlink entries, zip bombs, tool-shadowing refusal (the loader's flat
+  namespace makes a shadow a supply-chain takeover), core-tier plugin
+  refusal.
+- **Malicious examples shipped** (examples/malicious/, 5 packs): the
+  fixtures exposed and fixed two real scanner gaps; CI builds each and
+  asserts refusal. Clean examples sealed in examples/built/.
+- **Field fixes**: spinner at 3x default frame rate (Rich speed
+  semantics were backwards — earlier values slowed it), RunBox shares
+  the engagement console (mid-refresh interleaving), core_utils
+  search_kb accepts its documented limit kwarg, wizard shows the outer
+  sha256 for comparison against the author's published hash.
+- docs/sjpkg-spec.md — author guide + the rent-ledger deletion
+  criterion; README command-table rows; plan.md untracked (operator-
+  local) along with engagement notes, KG store and crash logs.
+
+37 new sjpack/scanner tests; 1,597 fast + 6 slow green; ruff clean.
+
 ## v5.3.0 — Field-hardened
 
 Every change in this release came out of live field engagements (target

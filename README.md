@@ -1,4 +1,4 @@
-<h3 align="center">v5.3.0</h3> 
+<h3 align="center">v5.4.0</h3> 
 <p align="center">
 <img src="assets/suijin.png" alt="Suijin Logo" width="160"/>
 </p>
@@ -6,7 +6,7 @@
 
 
 <p align="center">
-  <img height="20" src="https://img.shields.io/badge/v5.3.0-suijin-green?style=flat" alt="Version"/>
+  <img height="20" src="https://img.shields.io/badge/v5.4.0-suijin-green?style=flat" alt="Version"/>
   <img height="20" src="https://img.shields.io/badge/LICENSE-AGPL%20v3-4169A1?style=flat" alt="License"/>
   <img height="20" src="https://img.shields.io/badge/PYTHON-3.10+-306998?style=flat&logo=python&logoColor=white" alt="Python"/>
 </p>
@@ -28,8 +28,9 @@ toolkit, one knowledge base, and one knowledge graph.
 
 ## What's Next
 
-The v5.3 line is the active surface (engagement console UI, authorization
-workflow, field-hardened agent). What's being built next:
+The v5.4 line is the active surface (engagement console UI,
+authorization workflow, the .sj? package ecosystem). What's being built
+next:
 
 | Priority | Thing | Status |
 |---|---|---|
