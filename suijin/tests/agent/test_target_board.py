@@ -193,7 +193,22 @@ class TestH2JobSemantics:
     def _mkjob(self, monkeypatch, tmp_path, jid="j1", status="done", output="x" * 2000, announce=True):
         import suijin.modules.tools.lib.job_registry as jr
 
-        monkeypatch.setattr(jr, "_jobs", {jid: {"job_id": jid, "tool_name": "nmap", "tool_args": {}, "status": status, "started_at": 1.0, "output": output, "error": None, "_announce": announce}})
+        monkeypatch.setattr(
+            jr,
+            "_jobs",
+            {
+                jid: {
+                    "job_id": jid,
+                    "tool_name": "nmap",
+                    "tool_args": {},
+                    "status": status,
+                    "started_at": 1.0,
+                    "output": output,
+                    "error": None,
+                    "_announce": announce,
+                }
+            },
+        )
         monkeypatch.setattr(jr, "_drained", set())
         return jr
 
@@ -241,11 +256,18 @@ class TestH2JobSemantics:
         from suijin.modules.agent.lib.nodes.execute_tool_node import execute_tool_node
         from suijin.modules.tools.lib import job_registry as jr
 
-        jid = jr.spawn("sleeper", {"cmd": "sleep 8"}, lambda n, a, c: (_t.sleep(8) or "done"))
+        jid = jr.spawn("sleeper", {"cmd": "sleep 8"}, lambda n, a, c: _t.sleep(8) or "done")
         try:
             out = asyncio.run(
                 execute_tool_node(
-                    {"_current_step": {"tool_name": "job_wait", "tool_args": {"job_id": jid, "timeout": 1}, "iteration": 2}, "current_phase": "informational"},
+                    {
+                        "_current_step": {
+                            "tool_name": "job_wait",
+                            "tool_args": {"job_id": jid, "timeout": 1},
+                            "iteration": 2,
+                        },
+                        "current_phase": "informational",
+                    },
                     route_tool_fn=lambda n, a, c: jr.wait(a.get("job_id", ""), timeout=1),
                 )
             )

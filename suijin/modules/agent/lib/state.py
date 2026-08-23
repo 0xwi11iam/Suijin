@@ -366,7 +366,10 @@ def format_todo_list(todo_list: list) -> str:
         icon = status_icons.get(item.get("status", "pending"), "")
         priority = item.get("priority", "medium")
         desc = item.get("description", "")[:100]
-        lines.append(f"  {icon} [{priority}] {desc}")
+        uid = item.get("id", "")
+        # the id renders so todo_updates can REFERENCE tasks — it was
+        # matched by id while the prompt never showed one
+        lines.append(f"  {icon} [{priority}] {desc}" + (f"  (id: {uid})" if uid else ""))
 
     return "\n".join(lines) if lines else "No tasks tracked."
 

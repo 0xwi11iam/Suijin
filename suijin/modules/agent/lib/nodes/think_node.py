@@ -52,6 +52,24 @@ def _productivity(name):
     return getattr(productivity, name)
 
 
+def _queued_plan_block(state: dict) -> str:
+    """H4: plan_tools steps 2..N were dropped after step 1 executed — the
+    remaining queue sat in state, invisible. Now every turn renders it
+    until the plan finishes or the agent changes course."""
+    remaining = state.get("_plan_remaining") or []
+    if not remaining:
+        return ""
+    lines = ["## QUEUED PLAN (from your plan_tools — still pending)"]
+    for i, s in enumerate(remaining[:6], 1):
+        if isinstance(s, dict):
+            tn = s.get("tool_name", "?")
+            args = s.get("tool_args") or {}
+            preview = ", ".join(f"{k}={str(v)[:40]}" for k, v in list(args.items())[:3])
+            lines.append(f"{i}. {tn} ({preview})" if preview else f"{i}. {tn}")
+    lines.append("Emit these via use_tool (or switch_skill/plan_tools to change course) — the queue clears as you go.")
+    return "\n".join(lines) + "\n"
+
+
 def _render_board(state: dict) -> str:
     """H1: the engagement board — accumulated target intel, tested-axes
     coverage, and running background jobs (previously: a raw JSON dump of a
@@ -222,7 +240,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
 - **Phase**: {phase}
 - **Iteration**: {iteration}/{state.get("max_iterations", 100)}
 - **Attack Path**: {state.get("attack_path_type", "recon")}
-
+{_queued_plan_block(state)}
 ## RECENT ACTIONS (last 8 tool calls — DO NOT REPEAT FAILURES)
 {action_log or "(none)"}
 
@@ -492,6 +510,12 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         if auto_actions:
             _run_auto_actions(auto_actions, updates)
 
+        # H4: drain the queued plan — if this use_tool matches the queued
+        # head, pop it so the queue shrinks as the plan executes
+        _remaining = list(state.get("_plan_remaining") or [])
+        if _remaining and isinstance(_remaining[0], dict) and _remaining[0].get("tool_name") == tool_name:
+            updates["_plan_remaining"] = _remaining[1:]
+
     elif action == "plan_tools":
         tool_plan = decision.get("tool_plan") or {}
         steps_list = tool_plan.get("steps", [])
@@ -512,8 +536,10 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
                 "thought": thought,
                 "reasoning": reasoning,
                 "productivity": productivity,
-                "_plan_remaining": steps_list[1:],
             }
+            # H4: top-level, or execute_tool_node's _current_step overwrite
+            # drops it (plans lost their steps 2..N exactly here)
+            updates["_plan_remaining"] = steps_list[1:]
 
         # ── Auto-actions ──
         auto_actions = decision.get("auto_actions") or []
@@ -637,6 +663,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         to_skill = ss.get("to_skill", "")
         updates["_current_step"] = {}  # pure bookkeeping turn — no execute hop
         updates["attack_path_type"] = to_skill
+        updates["_plan_remaining"] = []  # changing course drops the old plan
         updates["messages"].append(
             {
                 "role": "user",
