@@ -7,8 +7,7 @@ from suijin.modules.platform.lib.config_models import CostCapWarning
 
 warnings.filterwarnings("ignore", category=CostCapWarning)  # shown as ONE red line instead
 # third-party deprecation noise (langgraph serializer advisory) — never actionable for the operator
-warnings.filterwarnings("ignore", message=".*allowed_objects.*", category=DeprecationWarning)
-warnings.filterwarnings("ignore", message=".*allowed_objects.*", category=UserWarning)
+warnings.filterwarnings("ignore", message=".*allowed_objects.*")  # any category — langchain uses its own base class
 
 # Make sure the parent dir is on sys.path so `from suijin import …` works
 _pkg_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
