@@ -38,8 +38,17 @@ class RunBox:
         self._lock = threading.Lock()
         self._reader: threading.Thread | None = None
         self._stop = threading.Event()
+        self._ask_mode = False  # a pending ask_operator: plain lines are answers
         for name, fn in _default_handlers(self).items():
             self.register(name, fn)
+
+    # ── ask mode ────────────────────────────────────────────────────
+
+    def ask_mode(self, on: bool) -> None:
+        """While an ask_operator waits, plain lines are consumed as the
+        answer — suppress the guidance echo."""
+        with self._lock:
+            self._ask_mode = bool(on)
 
     # ── lifecycle ───────────────────────────────────────────────────
 
@@ -84,10 +93,13 @@ class RunBox:
             with self._lock:
                 self._guidance.append(line)
                 pending = len(self._guidance)
-            self._out.print(
-                f"[dim]  ▸ queued as guidance ({pending} pending) "
-                "— it reaches the agent at the next pause, or use a /command now[/dim]"
-            )
+            # ask mode: a pending ask_operator consumes the line as the
+            # ANSWER — no guidance echo (it read like the answer was lost)
+            if not self._ask_mode:
+                self._out.print(
+                    f"[dim]  ▸ queued as guidance ({pending} pending) "
+                    "— it reaches the agent at the next pause, or use a /command now[/dim]"
+                )
             return
         cmd, _, rest = line[1:].partition(" ")
         handler = self._handlers.get(cmd.lower())

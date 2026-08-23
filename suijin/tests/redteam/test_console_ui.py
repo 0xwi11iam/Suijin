@@ -1237,3 +1237,62 @@ class TestFieldCrashDriftDict:
         ui.fireteam({"teams": 3})  # even nonsense objects render
         ui.flush_open()
         assert "repeating tool" in c.export_text()
+
+
+class TestAnswerFlowFieldBugs:
+    """deepseek.com field run: 'queued as guidance' echoed over the answer,
+    the strip went static after resume, and the operator's confirmation
+    never persisted into the engagement order (model re-litigated)."""
+
+    def test_ask_mode_suppresses_guidance_echo(self):
+        from rich.console import Console
+
+        from suijin.modules.redteam.lib.red.console_ui import ask_operator_answer
+        from suijin.modules.tools.lib.run_commands import RunBox
+
+        box = RunBox(console=Console(record=True, width=90, force_terminal=True)).start()
+        import threading
+        import time
+
+        def typer():
+            time.sleep(0.2)
+            box.dispatch("hf-mirror.com")  # the operator's answer
+
+        threading.Thread(target=typer, daemon=True).start()
+        answer = ask_operator_answer(box, Console(record=True, width=90), "authorized?", timeout_s=5)
+        box.stop()
+        assert answer == "hf-mirror.com"
+        assert not box._ask_mode  # restored
+
+    def test_normal_guidance_echo_still_works(self):
+        from rich.console import Console
+
+        from suijin.modules.tools.lib.run_commands import RunBox
+
+        c = Console(record=True, width=90, force_terminal=True)
+        box = RunBox(console=c).start()
+        box.ask_mode(False)
+        box.dispatch("try harder on the login form")
+        box.stop()
+        assert "queued as guidance" in c.export_text()
+
+    def test_confirmation_persists_into_objective(self):
+        """The engagement order renders from original_objective EVERY turn —
+        once the operator confirms, the confirmation must ride the order
+        forever (the model can never unsee it)."""
+        from suijin.modules.agent.lib.prompts.base import engagement_order
+
+        confirmed = "deepseek.com [OPERATOR-CONFIRMED in engagement: yes, bug bounty, proceed]"
+        order = engagement_order(confirmed)
+        assert "OPERATOR-CONFIRMED" in order
+        assert "Authorization" in order
+
+    def test_strip_shows_thinking_after_wait(self):
+        ui, c = _ui()
+        ui.start()
+        ui.iteration_header(1, "informational")
+        ui.waiting(True)
+        r = Console(record=True, width=100, force_terminal=True)
+        r.print(ui._strip())
+        assert "thinking" in r.export_text()
+        ui.stop()

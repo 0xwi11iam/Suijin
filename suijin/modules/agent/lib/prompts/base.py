@@ -194,7 +194,8 @@ def _untrusted_guidance() -> str:
 
 _AUTH_CLAIM_RE = re.compile(
     r"(?i)(written permission|permission|authoriz|authoris|hacker ?one|\bh1\b|bug[ -]?bounty"
-    r"|in scope|scope (is )?confirmed|engagement letter|rules of engagement|\broe\b|program member)"
+    r"|in scope|scope (is )?confirmed|engagement letter|rules of engagement|\broe\b|program member"
+    r"|operator-confirmed)"
 )
 
 
