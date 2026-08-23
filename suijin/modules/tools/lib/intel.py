@@ -347,7 +347,9 @@ def check_knowledge(target, payload=None, config=None):
 
 
 def record_finding(target, finding_type, rule, evidence="", config=None):
-    """Record a verified finding to the knowledge graph."""
+    """Record a finding — H5: claims are VERIFIED at claim time (an
+    independent second check runs immediately; the verdict rides the
+    result so the agent sees it on the next turn)."""
     from suijin.modules.loader import load_local_module
 
     kg = load_local_module("knowledge_graph")
@@ -357,7 +359,29 @@ def record_finding(target, finding_type, rule, evidence="", config=None):
         return f"Invalid finding_type. Use one of: {', '.join(valid_types)}"
 
     kg.add_constraint(target, finding_type, rule, evidence=evidence or "", confidence=1.0)
-    return f"Recorded: {target} -> {finding_type} -> '{rule}'"
+    base = f"Recorded: {target} -> {finding_type} -> '{rule}'"
+
+    # claim-time verification — never blocks the recording, only grades it
+    try:
+        from suijin.modules.agent.lib.verify import verify_finding
+
+        v = verify_finding(
+            {"type": finding_type, "target": target, "evidence": evidence or rule, "url": target},
+            route_fn=lambda name, args, cfg: _safe_route(name, args),
+        )
+        verdict = v.get("verification", {}).get("verdict", "unverifiable")
+        note = v.get("verification", {}).get("evidence", "")[:160]
+        return f"{base}\nVerification: {verdict.upper()} — {note}"
+    except Exception:  # noqa: BLE001 — grading must never break recording
+        return base
+
+
+def _safe_route(name, args):
+    """Best-effort second-evidence dispatch; unknown tools grade as
+    unverifiable rather than crashing the recording."""
+    from suijin.modules.tools.lib.dispatch import route_tool
+
+    return route_tool(name, args, {})
 
 
 # ── Note-taking ──────────────────────────────────────────────────────
