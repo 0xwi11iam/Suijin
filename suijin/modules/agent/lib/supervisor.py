@@ -10,6 +10,7 @@ Pattern-based (no LLM calls) — zero cost, instant execution.
 from __future__ import annotations
 
 import logging
+import re as _re_mod
 from typing import Optional
 
 # Phase transition config — defined inline
@@ -64,52 +65,76 @@ def _detect_repeating_tool(trace: list, threshold: int = 3) -> Optional[str]:
 
 
 def _detect_found_but_not_exploited(trace: list) -> Optional[str]:
-    """Detect if a vulnerability was found but not followed up."""
+    """Detect if a CONFIRMED vulnerability was left unexploited.
+
+    v5.2 anti-interference: the old version keyword-matched the agent's own
+    thought text ("checking for XSS" counted as a finding!) and its
+    exploit-tools set missed the real arsenal — it fired mid-recon and
+    mid-exploitation constantly. Now: only a CONFIRMED finding (strong
+    claim language OR an actual record_finding call) counts, and any
+    injection-class tool after it counts as exploitation in progress.
+    """
     if len(trace) < 3:
         return None
-    finding_keywords = [
-        "SQLi",
-        "SSTI",
-        "XSS",
-        "RCE",
-        "SSRF",
-        "IDOR",
-        "injection",
-        "vulnerability",
-        "exposed",
-        "leaked",
-        "bypass",
-        "flag",
-        "command injection",
-        "path traversal",
-        "deserialization",
-    ]
-    # Find the index of the most recent finding
+    confirm_keywords = (
+        "confirmed",
+        "verified",
+        "successfully exploit",
+        "exploitation successful",
+        "is vulnerable",
+        "works —",
+        "works:",
+        "popped",
+        "sqli confirmed",
+        "rce confirmed",
+    )
     finding_idx = -1
     for i in range(len(trace) - 1, -1, -1):
-        thought = trace[i].get("thought", "")
-        if any(kw.lower() in thought.lower() for kw in finding_keywords):
+        if trace[i].get("tool_name") == "record_finding":
+            finding_idx = i
+            break
+        thought = str(trace[i].get("thought", "")).lower()
+        if any(kw in thought for kw in confirm_keywords):
             finding_idx = i
             break
     if finding_idx < 0:
         return None
-    # Check if tools AFTER the finding are exploitation tools
-    exploit_tools = {"http_request", "execute_terminal", "sqlmap_scan", "deploy_subagent"}
     after_finding = trace[finding_idx + 1 :]
     if not after_finding:
         return None  # just found it this turn, give the agent a chance
-    recent_after = [s.get("tool_name", "") for s in after_finding[-3:]]
-    if not any(t in exploit_tools for t in recent_after):
-        return (
-            "You found a vulnerability but haven't exploited it yet. "
-            "Stop doing recon/bookkeeping. TEST the vulnerability NOW. "
-            "Use http_request with a payload, or execute_terminal with an exploit command."
-        )
-    return None
+    exploit_markers = (
+        "http_request",
+        "execute_terminal",
+        "deploy_subagent",
+        "sqlmap",
+        "hydra",
+        "ffuf",
+        "gobuster",
+        "nuclei",
+        "payload_generate",
+        "stager",
+        "rev_shell",
+        "jwt_forge",
+        "custom_cmd_run",
+        "recipe_run",
+    )
+    recent_after = [str(s.get("tool_name", "")) for s in after_finding[-3:]]
+    if any(any(m in t for m in exploit_markers) for t in recent_after):
+        return None  # exploitation is happening — do not interrupt
+    return (
+        "You confirmed a vulnerability but haven't followed through. "
+        "TEST it NOW: http_request with the payload, execute_terminal with the "
+        "exploit, or deploy_subagent for a focused pass."
+    )
 
 
 def _detect_bookkeeping_loop(trace: list, threshold: int = 4) -> Optional[str]:
-    """Detect if the agent is stuck in a bookkeeping loop (notes, creds, job checks)."""
+    """Detect if the agent is stuck in a bookkeeping loop.
+
+    v5.2: research tools (search_cve, web_search, read_file, write_file)
+    were wrongly counted as 'bookkeeping' — an agent researching an exploit
+    for four turns got slapped. Only true no-target-traffic bookkeeping
+    counts now."""
     if len(trace) < threshold:
         return None
     recent_tools = [s.get("tool_name", "") for s in trace[-threshold:]]
@@ -121,10 +146,6 @@ def _detect_bookkeeping_loop(trace: list, threshold: int = 4) -> Optional[str]:
         "job_output",
         "check_knowledge",
         "record_finding",
-        "read_file",
-        "web_search",
-        "write_file",
-        "search_cve",
     }
     if all(t in bookkeeping for t in recent_tools if t):
         return (
@@ -137,13 +158,17 @@ def _detect_bookkeeping_loop(trace: list, threshold: int = 4) -> Optional[str]:
 
 
 def _detect_no_progress(trace: list, threshold: int = 5) -> Optional[str]:
-    """Detect if no new information has been gained in N iterations."""
+    """Detect if no new information has been gained in N iterations.
+
+    v5.2: 'duplicate' verdicts no longer count as no-progress — re-probing
+    one endpoint with evolving payloads IS exploitation, and productivity's
+    duplicate verdict fires constantly mid-chain (this detector was the top
+    source of mid-exploitation interference)."""
     if len(trace) < threshold:
         return None
     recent = trace[-threshold:]
     no_progress = all(
-        s.get("productivity", {}).get("verdict") in ("no_progress", "blocked", "duplicate")
-        or not s.get("success", True)
+        s.get("productivity", {}).get("verdict") in ("no_progress", "blocked") or not s.get("success", True)
         for s in recent
     )
     if no_progress:
@@ -255,27 +280,414 @@ def _detect_subagent_addiction(trace: list, threshold: int = 5) -> Optional[str]
 
 
 def _detect_unverified_claim(trace: list) -> Optional[str]:
-    """Detect when agent claims a finding without diff verification."""
+    """Detect when the agent claims a VERIFIED finding without evidence.
+
+    v5.2 bug fix: the old check demanded 'diff_responses'/'diff_engine' —
+    tools that DO NOT EXIST (the real tool is diff_response) — so it fired
+    on every claimed finding and told the agent to use a phantom tool.
+    Verification now accepts the real evidence tools: diff_response,
+    evidence_capture, record_finding (with evidence), or a successful
+    reproducing http_request/execute_terminal after the claim."""
     if len(trace) < 3:
         return None
     kw = ["SSTI confirmed", "SQLi found", "XSS detected", "RCE achieved", "vulnerability confirmed"]
+    verify_tools = {"diff_response", "evidence_capture", "record_finding"}
     for i in range(len(trace) - 2, len(trace)):
         thought = str(trace[i].get("thought", "")).lower()
         if any(k.lower() in thought for k in kw):
-            tools_since = [s.get("tool_name", "") for s in trace[i:]]
-            if "diff_responses" not in tools_since and "diff_engine" not in tools_since:
-                return "You claimed a finding without verifying with diff_responses. Verify your claims NOW."
+            tools_since = [str(s.get("tool_name", "")) for s in trace[i:]]
+            verified = any(t in verify_tools for t in tools_since)
+            if not verified:
+                # a successful exploit-class call after the claim IS evidence
+                later = trace[i + 1 :]
+                if any(
+                    s.get("success") and str(s.get("tool_name", "")) in ("http_request", "execute_terminal")
+                    for s in later
+                ):
+                    continue
+                return (
+                    "You claimed a confirmed finding — back it with evidence: re-run the "
+                    "payload via diff_response, or evidence_capture the request/response pair."
+                )
     return None
 
 
 # ── Main supervisor ───────────────────────────────────────────────────
 
 
-def analyze_trace(trace: list, **extra_kw) -> Optional[str]:
+# ── Tactical follow-up library (v5.2) ────────────────────────────────────
+# The supervisor's job is not only to catch pathology — it is to be a
+# battle-buddy that spots MISSED OPPORTUNITIES. Each entry: a SIGNAL seen
+# in a recent tool output and the FOLLOW-UP tools that should have come
+# after it. Fires at most once per id per engagement window, never during
+# pathology, never more than one per check.
+
+TACTICAL_FOLLOWUPS = [
+    # ── recon → deeper recon ──────────────────────────────────────────
+    {
+        "id": "robots-not-fetched",
+        "signal": r"(?i)user-agent:\s*\*",
+        "followups": ("http_request",),
+        "hint": "robots.txt found with directives — fetch every Disallow path it names; they are the interesting ones.",
+    },
+    {
+        "id": "sitemap-not-parsed",
+        "signal": r"(?i)<\?xml[^>]*>(?s:.{0,200})?<urlset",
+        "followups": ("parse_sitemap", "http_request"),
+        "hint": "sitemap.xml found — parse it for the full route list before fuzzing blindly.",
+    },
+    {
+        "id": "openapi-missing",
+        "signal": r"(?i)\b(api|/api/v\d)/",
+        "followups": ("openapi_find", "openapi_parse", "http_request"),
+        "hint": "API surface seen — check /openapi.json, /swagger.json, /api-docs before brute-forcing endpoints.",
+    },
+    {
+        "id": "graphql-missing",
+        "signal": r"(?i)graphql",
+        "followups": ("graphql_introspect", "graphql_probe"),
+        "hint": "GraphQL mentioned — run graphql_introspect; introspection is often open and maps the whole schema.",
+    },
+    {
+        "id": "bundle-not-mined",
+        "signal": r"assets/[A-Za-z0-9_-]+\.js",
+        "followups": ("js_bundle_analyze", "source_map_probe"),
+        "hint": "JS bundle referenced — js_bundle_analyze it for routes/secrets/providers in one call.",
+    },
+    {
+        "id": "sourcemap-ref",
+        "signal": r"sourceMappingURL=",
+        "followups": ("source_map_probe",),
+        "hint": "Bundle references a sourcemap — source_map_probe may recover the full original source tree.",
+    },
+    {
+        "id": "jwt-not-inspected",
+        "signal": r"\beyJ[A-Za-z0-9_-]{20,}\.",
+        "followups": ("jwt_inspect", "jwt_decode", "jwt_crack"),
+        "hint": "JWT spotted — jwt_inspect it: algorithm, claims, expiry; weak secrets fall to jwt_crack.",
+    },
+    {
+        "id": "version-no-cve",
+        "signal": r"(?i)server:\s*[a-z-]+/\d",
+        "followups": ("search_cve", "cve_search_nvd"),
+        "hint": "Version banner disclosed — search_cve it before hand-crafting exploits.",
+    },
+    {
+        "id": "port-no-fingerprint",
+        "signal": r"(?i)(\d{1,3}\.){3}\d{1,3}\s+open",
+        "followups": ("whatweb_scan", "nmap_scan", "sslscan_check"),
+        "hint": "Open ports listed but not fingerprinted — whatweb/nmap -sV the interesting ones to get service versions.",
+    },
+    {
+        "id": "cname-takeover",
+        "signal": r"(?i)cname\s+(vercel|github|heroku|netlify|azure|cloudfront|fastly)",
+        "followups": ("takeover_fingerprint", "dns_enum_nameservers"),
+        "hint": "CNAME to a paas provider — takeover_fingerprint it; dangling aliases are free subdomain takeovers.",
+    },
+    {
+        "id": "s3-name-seen",
+        "signal": r"(?i)[a-z0-9.-]+\.s3[.-](amazonaws|website).{0,10}",
+        "followups": ("bucket_check", "aws_s3"),
+        "hint": "S3 bucket name spotted — bucket_check for public list/get/put.",
+    },
+    {
+        "id": "cloud-meta-ssrfable",
+        "signal": r"(?i)(169\.254\.169\.254|metadata\.google)",
+        "followups": ("cloud_metadata_probe", "ssrf_blind_probe", "ssrf_canary"),
+        "hint": "Metadata endpoint reachable/referenced — cloud_metadata_probe for instance credentials.",
+    },
+    {
+        "id": "subdomain-vhost",
+        "signal": r"(?i)\*\.[a-z0-9.-]+\.(com|net|org|io|dev|app)",
+        "followups": ("vhost_check", "crtsh_subdomains", "subfinder_enum"),
+        "hint": "Wildcard DNS — enumerate subdomains (crtsh/subfinder) then vhost_check the edge.",
+    },
+    {
+        "id": "dir-listing-found",
+        "signal": r"(?i)index of /",
+        "followups": ("http_download", "gobuster_dir", "backup_file_probe"),
+        "hint": "Directory listing exposed — walk it and probe for backups (.bak, .old, .zip, .sql).",
+    },
+    {
+        "id": "backup-ext",
+        "signal": r"(?i)\.(bak|old|orig|save|swp)(\?|\s|$)",
+        "followups": ("backup_file_probe", "http_download"),
+        "hint": "Backup file extension seen — probe sibling paths for source/config backups.",
+    },
+    {
+        "id": "git-dir",
+        "signal": r"(?i)(/\.git/|ref: refs/)",
+        "followups": ("archive_extract", "http_download"),
+        "hint": "Exposed .git — download the objects and reconstruct the source tree.",
+    },
+    {
+        "id": "env-file",
+        "signal": r"(?i)(\.env|DATABASE_URL=|AWS_SECRET_ACCESS_KEY=)",
+        "followups": ("evidence_capture", "creds_add"),
+        "hint": "Environment/config leak — capture evidence and store the creds for reuse.",
+    },
+    {
+        "id": "cors-wildcard",
+        "signal": r"(?i)access-control-allow-origin:\s*\*",
+        "followups": ("cors_check",),
+        "hint": "Wildcard CORS — cors_check whether credentials are also allowed (that combination is the bug).",
+    },
+    {
+        "id": "spf-softfail",
+        "signal": r"(?i)v=spf1.{0,80}~all",
+        "followups": ("email_security_records", "dork_search"),
+        "hint": "SPF softfail — the domain is spoofable; check DKIM/DMARC before moving on.",
+    },
+    {
+        "id": "security-txt",
+        "signal": r"(?i)contact:.*security",
+        "followups": ("security_txt_check",),
+        "hint": "security.txt found — read it for scope/hints/known-test accounts.",
+    },
+    {
+        "id": "ws-endpoint",
+        "signal": r"(?i)(wss?://|upgrade:\s*websocket)",
+        "followups": ("ws_connect",),
+        "hint": "WebSocket endpoint — connect and watch for auth-less message channels.",
+    },
+    {
+        "id": "form-not-probed",
+        "signal": r"(?i)<form[^>]*action=",
+        "followups": ("http_request", "extract_forms", "mcp_browser_snapshot"),
+        "hint": "HTML form found — extract every field and test each for injection/IDOR, not just the obvious one.",
+    },
+    {
+        "id": "login-no-defaults",
+        "signal": r"(?i)(login|signin|auth).{0,30}(form|page|post)",
+        "followups": ("hydra_brute", "medusa_brute", "http_request"),
+        "hint": "Login found — try default cred pairs (admin/admin, admin/password) before heavy brute force.",
+    },
+    {
+        "id": "upload-found",
+        "signal": r"(?i)(type=.?file.?|multipart/form-data)",
+        "followups": ("http_request",),
+        "hint": "File upload found — test extension bypass (.php5, .phtml, .js, .svg), content-type lies, and path traversal in the filename.",
+    },
+    {
+        "id": "comment-leak",
+        "signal": r"(?i)<!--\s*(todo|fixme|hack|temp|debug|remove)",
+        "followups": ("extract_comments",),
+        "hint": "Developer comments in HTML — extract_comments across the app; they name half-finished features.",
+    },
+    {
+        "id": "tech-fingerprint-mismatch",
+        "signal": r"(?i)x-powered-by:",
+        "followups": ("whatweb_scan", "techfp"),
+        "hint": "X-Powered-By leaked — fingerprint the exact framework version and search_cve it.",
+    },
+    # ── exploitation follow-through ───────────────────────────────────
+    {
+        "id": "google-key-unprobed",
+        "signal": r"\bAIza[0-9A-Za-z_-]{35}\b",
+        "followups": ("google_key_probe",),
+        "hint": "Google API key found — google_key_probe it for active services (maps/translate/youtube) and referrer restrictions.",
+    },
+    {
+        "id": "sqli-no-extraction",
+        "signal": r"(?i)(sql syntax|unclosed quotation|\bor 1=1\b.{0,40}(true|accepted|logged in))",
+        "followups": ("sqlmap_scan", "http_request"),
+        "hint": "SQLi confirmed — extract data now: UNION columns, then table names; sqlmap --batch automates it.",
+    },
+    {
+        "id": "xss-no-impact",
+        "signal": r"(?i)(<script>alert|onerror=).{0,60}(reflected|executed|rendered)",
+        "followups": ("http_request",),
+        "hint": "XSS confirmed — escalate impact: steal session/CSRF token via fetch to your listener, or abuse stored context.",
+    },
+    {
+        "id": "ssrf-no-oob",
+        "signal": r"(?i)(ssrf (confirmed|works)|server (made|fetched) (a )?request)",
+        "followups": ("ssrf_canary", "ssrf_blind_probe", "cloud_metadata_probe"),
+        "hint": "SSRF confirmed — prove OOB with ssrf_canary (DNS/callback), then pivot to internal ports and metadata.",
+    },
+    {
+        "id": "cmdi-no-shell",
+        "signal": r"(?i)(command (injection|executed)|;\s*(id|whoami)\s*;?\s*uid=)",
+        "followups": ("rev_shell", "stager", "execute_terminal"),
+        "hint": "Command injection confirmed — upgrade to a shell: rev_shell/stager for your platform, then stabilize.",
+    },
+    {
+        "id": "idor-no-enumerate",
+        "signal": r"(?i)(idor|bola).{0,30}(confirmed|works|found)",
+        "followups": ("http_request",),
+        "hint": "IDOR confirmed — enumerate horizontally: script the id range via http_request and map every reachable object.",
+    },
+    {
+        "id": "403-no-bypass",
+        "signal": r"Status:\s*40[35]",
+        "followups": ("verb_tamper", "host_header_inject", "http_request"),
+        "hint": "403/405 wall — try verb tampering (PATCH/TRACE), path tricks (/admin;/, /%2e/), X-Original-URL, Host header rewrite.",
+    },
+    {
+        "id": "creds-no-reuse",
+        "signal": r"(?i)(password|credential)s? (found|dumped|harvested)",
+        "followups": ("http_request", "hydra_brute", "medusa_brute"),
+        "hint": "Credentials captured — test reuse immediately: same password against every login surface and SSH.",
+    },
+    {
+        "id": "ssti-no-rce",
+        "signal": r"(?i)(ssti (confirmed|works)|\{\{7\*7\}\}\s*=?\s*49)",
+        "followups": ("http_request", "execute_terminal"),
+        "hint": "SSTI confirmed — escalate to RCE for the exact engine (Jinja2/Twig/Freemarker each have a known chain), not just math.",
+    },
+    {
+        "id": "xxe-no-file",
+        "signal": r"(?i)xxe.{0,20}(confirmed|works)",
+        "followups": ("http_request",),
+        "hint": "XXE confirmed — read /etc/passwd, then aim at config/sources; wrap in error-based exfil if blind.",
+    },
+    {
+        "id": "deser-no-poc",
+        "signal": r"(?i)(deserializ|unserializ).{0,20}(confirmed|works|vulnerable)",
+        "followups": ("payload_generate", "execute_terminal"),
+        "hint": "Deserialization confirmed — craft the gadget chain (ysoserial / phar / pickle) for the exact stack.",
+    },
+    {
+        "id": "jwt-none-unforged",
+        "signal": r"(?i)alg.{0,6}none",
+        "followups": ("jwt_forge_none", "jwt_forge_hs256"),
+        "hint": "alg:none accepted — forge an admin token with jwt_forge_none and test privilege boundaries.",
+    },
+    {
+        "id": "jwt-weak-secret",
+        "signal": r"(?i)jwt.{0,20}(weak|crack|secret)",
+        "followups": ("jwt_crack", "jwt_forge_hs256"),
+        "hint": "JWT secret looks weak — jwt_crack it, then forge with your own claims.",
+    },
+    {
+        "id": "race-condition",
+        "signal": r"(?i)(coupon|balance|limit|quota).{0,30}(race|concurrent)",
+        "followups": ("execute_terminal",),
+        "hint": "State-changing endpoint with a limit — race it with parallel curls (-Z / xargs -P) before declaring it safe.",
+    },
+    {
+        "id": "massassign-no-test",
+        "signal": r"(?i)(role|isadmin|is_admin|admin)\s*[:=]",
+        "followups": ("mass_assign_probe", "http_request"),
+        "hint": "Role field in API payloads — mass_assign_probe registration/profile update with role=admin.",
+    },
+    {
+        "id": "massassign-found",
+        "signal": r"(?i)mass assignment.{0,20}(works|confirmed)",
+        "followups": ("http_request",),
+        "hint": "Mass assignment works — enumerate which fields bind (role, plan, price, team_id) and map the real impact.",
+    },
+    {
+        "id": "nosql-not-tested",
+        "signal": r"(?i)(mongodb|mongoose|couchdb|documentdb)",
+        "followups": ("http_request",),
+        "hint": "NoSQL backend — send operator injection ({'$ne': null}, '$regex', '$where') not just SQL syntax.",
+    },
+    {
+        "id": "ldap-not-tested",
+        "signal": r"(?i)(ldap|active directory|domain controller)",
+        "followups": ("http_request", "ad_ldap_search"),
+        "hint": "LDAP/AD environment — test filter injection (*)(|(&, attribute wildcards) on the login/search endpoints.",
+    },
+    {
+        "id": "redis-exposed",
+        "signal": r"(?i)redis.{0,20}(6379|found|exposed)",
+        "followups": ("redis_info", "execute_terminal"),
+        "hint": "Redis reachable — INFO dump, then the classic write-cron/ssh-key/module paths for RCE.",
+    },
+    # ── post-exploitation ─────────────────────────────────────────────
+    {
+        "id": "foothold-no-privesc",
+        "signal": r"(?i)(foothold|shell obtained|initial access)",
+        "followups": ("sudo_available", "execute_terminal"),
+        "hint": "Foothold established — check privesc basics: sudo -l, SUID bits, writable services, kernel version.",
+    },
+    {
+        "id": "db-access-no-dump",
+        "signal": r"(?i)(database|mysql>|psql>).{0,20}(connected|access)",
+        "followups": ("execute_terminal",),
+        "hint": "DB access — enumerate schema, dump the user/credential tables, check for other DBs on the host.",
+    },
+    {
+        "id": "cloud-key-no-validate",
+        "signal": r"\bAKIA[0-9A-Z]{16}\b",
+        "followups": ("aws_identity", "aws_enum"),
+        "hint": "AWS key captured — aws_identity for the principal, then aws_enum its actual permissions.",
+    },
+    {
+        "id": "token-no-scope-check",
+        "signal": r"(?i)access_token.??\s*[:=]",
+        "followups": ("http_request",),
+        "hint": "Access token captured — call the profile/admin endpoints with it; scope misses are findings.",
+    },
+    {
+        "id": "hash-no-crack",
+        "signal": r"(?i)\$[0-9][a-z]?\$[A-Za-z0-9./]{20,}",
+        "followups": ("identify_hash", "john_crack", "hashcat_crack"),
+        "hint": "Hash captured — identify_hash, then john/hashcat with the target-specific wordlist you built.",
+    },
+    {
+        "id": "container-no-escape",
+        "signal": r"(?i)(docker|container|k8s).{0,20}(shell|foothold)",
+        "followups": ("docker_analyze", "escape_check"),
+        "hint": "Inside a container — escape_check CapEff/mounts/cgroup and docker_analyze the socket.",
+    },
+    {
+        "id": "secret-no-report",
+        "signal": r"(?i)(secret|key|token).{0,15}(found|leaked)",
+        "followups": ("record_finding", "evidence_capture"),
+        "hint": "Secret material found — record_finding + evidence_capture it before moving on; the report needs the proof.",
+    },
+]
+
+_TACTICAL_COOLDOWN: dict[str, float] = {}
+_TACTICAL_TTL = 1200.0  # seconds an id stays quiet after firing once
+for _e in TACTICAL_FOLLOWUPS:  # compile once at import
+    _e["signal"] = _re_mod.compile(_e["signal"])
+
+
+def _tactical_check(trace: list) -> Optional[str]:
+    """Signal-seen-but-followup-missing scan over recent tool outputs.
+    Returns at most one guidance per check; never repeats an id."""
+    import time as _time
+
+    now = _time.monotonic()
+    for _id in [k for k, ts in _TACTICAL_COOLDOWN.items() if now - ts > _TACTICAL_TTL]:
+        _TACTICAL_COOLDOWN.pop(_id, None)
+    for i, step in enumerate(trace):
+        out = str(step.get("tool_output", ""))
+        if not out:
+            continue
+        for entry in TACTICAL_FOLLOWUPS:
+            eid = entry["id"]
+            if eid in _TACTICAL_COOLDOWN:
+                continue
+            if entry["signal"].search(out):
+                tools_after = [str(s.get("tool_name", "")) for s in trace[i + 1 :]]
+                if any(any(f in t for f in entry["followups"]) for t in tools_after):
+                    continue  # follow-up already done
+                _TACTICAL_COOLDOWN[eid] = now
+                return entry["hint"]
+    return None
+
+
+# ── Main supervisor ───────────────────────────────────────────────────
+
+
+# v5.2 anti-interference: per-detector cooldown — the same nag repeated
+# every check was derailing mid-exploitation runs. A detector that fired
+# stays quiet for _DETECTOR_COOLDOWN_ITERS iterations.
+_DETECTOR_COOLDOWN_ITERS = 15
+_last_fired: dict[str, float] = {}
+
+
+def analyze_trace(trace: list, iteration: float | None = None, **extra_kw) -> Optional[str]:
     """Analyze recent execution trace and return guidance if intervention needed.
 
     Args:
         trace: List of execution step dicts (last 10-15 entries).
+        iteration: current iteration (float epochs not required — any
+            increasing counter works; None = no cooldown tracking).
         extra_kw: Additional state data for context-aware detectors.
 
     Returns:
@@ -299,12 +711,22 @@ def analyze_trace(trace: list, **extra_kw) -> Optional[str]:
     ]
 
     for detector in detectors:
+        name = detector.__name__
+        if iteration is not None and name in _last_fired and iteration - _last_fired[name] < _DETECTOR_COOLDOWN_ITERS:
+            continue  # cooled down — the agent already heard this
         guidance = detector(trace, **extra_kw)
         if guidance:
-            logger.info(f"Supervisor intervention: {detector.__name__}")
+            if iteration is not None:
+                _last_fired[name] = iteration
+            logger.info(f"Supervisor intervention: {name}")
             return guidance
 
-    return None
+    # pathology silent -> be a battle-buddy: one tactical opportunity hint
+    # (cooldown-gated per id, so this cannot spam)
+    try:
+        return _tactical_check(trace)
+    except Exception:  # noqa: BLE001 — heuristics must never break the loop
+        return None
 
 
 # ── LLM-Powered Deep Analysis ────────────────────────────────────────────────

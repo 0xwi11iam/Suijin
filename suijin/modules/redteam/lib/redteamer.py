@@ -137,7 +137,16 @@ async def run_red_team_async(config, objective, api_key=None):
     import signal as _signal
 
     _interrupted = False
-    _old_sigint = _signal.signal(_signal.SIGINT, lambda sig, frame: setattr(_signal, "_suijin_interrupted", True))
+
+    def _sigint(sig, frame):
+        # INSTANT pause: raise in-place — the main thread is inside the
+        # astream await, and the exception unwinds straight to the pause
+        # handler instead of waiting (up to 90s) for the current LLM call
+        # to finish. The flag stays for RunBox's /pause (cross-thread).
+        _signal._suijin_interrupted = True
+        raise KeyboardInterrupt
+
+    _old_sigint = _signal.signal(_signal.SIGINT, _sigint)
     _signal._suijin_interrupted = False
 
     # Live command box — /state /note /kb /pause … usable WHILE the agent runs
@@ -391,8 +400,8 @@ async def run_red_team_async(config, objective, api_key=None):
                 run_box.stop()
                 break
             finally:
-                # Re-arm the interrupt flag mechanism
-                _signal.signal(_signal.SIGINT, lambda sig, frame: setattr(_signal, "_suijin_interrupted", True))
+                # Re-arm the interrupt mechanism (instant-raise form)
+                _signal.signal(_signal.SIGINT, _sigint)
 
             # Inject guidance into graph state
             try:
