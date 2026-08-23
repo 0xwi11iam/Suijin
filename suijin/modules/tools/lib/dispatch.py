@@ -458,6 +458,90 @@ def _fetch_auth_page(target, url):
     return fetch_page(target, url)
 
 
+# ── H3: dispatch-layer anti-repeat ─────────────────────────────────────
+# Field trace: ONE identical failing http_request repeated 80 times across
+# 9.5 hours. Prompts are suggestions; this is a law. Key = (tool, canonical
+# args); 3 consecutive failures of the SAME call hard-block with the last
+# error + alternatives. Different args (payload iteration) always allowed;
+# any success clears the counter. Env kill switch: SUIJIN_REPEAT_GUARD=0.
+
+_REPEAT_STATE = {"fails": {}, "last_error": {}, "blocked": 0}
+_REPEAT_LIMIT = 3
+_FAILURE_PREFIXES = ("Error:", "Tool Error", "Tool error", "HTTP Error:", "Execution Fault:")
+
+_TOOL_ALTERNATIVES = {
+    "http_request": ("execute_terminal (curl with flags)", "mcp_browser_goto (JS-heavy pages)"),
+    "execute_terminal": ("http_request (raw HTTP)", "recon_chain (chained recon)"),
+    "nmap": ("execute_terminal (nmap direct, background it)", "tcp_scan (port sweep)"),
+    "search_kb": ("web_search", "search_cve"),
+    "search_cve": ("search_kb (offline technique docs)", "web_search"),
+}
+
+
+def _repeat_key(tool_name, args) -> str:
+    import hashlib
+    import json as _json
+
+    try:
+        canon = _json.dumps(args or {}, sort_keys=True, default=str)
+    except Exception:  # noqa: BLE001 — unserializable args fall back to repr
+        canon = repr(args)
+    return hashlib.sha1(f"{tool_name}|{canon}".encode()).hexdigest()[:16]
+
+
+def _repeat_guard_check(tool_name, args) -> str | None:
+    import os
+
+    if os.environ.get("SUIJIN_REPEAT_GUARD") == "0":
+        return None
+    key = _repeat_key(tool_name, args)
+    fails = _REPEAT_STATE["fails"].get(key, 0)
+    if fails < _REPEAT_LIMIT:
+        return None
+    alts = _TOOL_ALTERNATIVES.get(tool_name) or _two_alternatives(tool_name)
+    return (
+        f"BLOCKED: this EXACT call has failed {fails} times in a row "
+        f"(last error: {_REPEAT_STATE['last_error'].get(key, '?')[:200]}). "
+        "Repeating identical failing calls is a dead end — the guard will keep blocking it. "
+        f"Change the arguments/approach, or use: {'; '.join(alts)}. "
+        "If you believe this is a harness bug, ask_operator."
+    )
+
+
+def _two_alternatives(tool_name: str) -> tuple[str, str]:
+    import difflib
+
+    pool = ["http_request", "execute_terminal", "search_kb", "check_knowledge", "web_search", "job_list"]
+    close = [t for t in difflib.get_close_matches(tool_name, pool, n=3, cutoff=0.3) if t != tool_name]
+    rest = [t for t in pool if t != tool_name and t not in close]
+    picks = (close + rest)[:2]
+    return (picks[0] if picks else "ask_operator", picks[1] if len(picks) > 1 else "ask_operator")
+
+
+def _repeat_guard_record(tool_name, args, result: str) -> None:
+    import os
+
+    if os.environ.get("SUIJIN_REPEAT_GUARD") == "0":
+        return
+    key = _repeat_key(tool_name, args)
+    failed = str(result or "").startswith(_FAILURE_PREFIXES)
+    if failed:
+        _REPEAT_STATE["fails"][key] = _REPEAT_STATE["fails"].get(key, 0) + 1
+        _REPEAT_STATE["last_error"][key] = str(result)[:300]
+        if len(_REPEAT_STATE["fails"]) > 200:  # bound memory on long engagements
+            _REPEAT_STATE["fails"].clear()
+            _REPEAT_STATE["last_error"].clear()
+    else:
+        _REPEAT_STATE["fails"].pop(key, None)
+        _REPEAT_STATE["last_error"].pop(key, None)
+
+
+def reset_repeat_guard() -> None:
+    """Test/operator seam: clear the repeat ledger."""
+    _REPEAT_STATE["fails"].clear()
+    _REPEAT_STATE["last_error"].clear()
+
+
 def route_tool(tool_name, args, config):
     if args is None:
         args = {}
@@ -494,7 +578,13 @@ def route_tool(tool_name, args, config):
         _recon_state["exploration_count"] = _recon_state.get("exploration_count", 0) + 1
 
     if tool_name in routes:
-        return _execute_with_healing(routes[tool_name], args, tool_name)
+        blocked_repeat = _repeat_guard_check(tool_name, args)
+        if blocked_repeat:
+            _REPEAT_STATE["blocked"] += 1
+            return blocked_repeat
+        result = _execute_with_healing(routes[tool_name], args, tool_name)
+        _repeat_guard_record(tool_name, args, result)
+        return result
     # Not found — suggest close matches; if none, point at the operator.
     # One guess maximum: guessing repeatedly burns the engagement.
     import difflib
