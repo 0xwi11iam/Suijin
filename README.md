@@ -1,4 +1,4 @@
-<h3 align="center">v5.1.0</h3> 
+<h3 align="center">v5.2.0</h3> 
 <p align="center">
 <img src="assets/suijin.png" alt="Suijin Logo" width="160"/>
 </p>
@@ -6,7 +6,7 @@
 
 
 <p align="center">
-  <img height="20" src="https://img.shields.io/badge/v5.1.0-suijin-green?style=flat" alt="Version"/>
+  <img height="20" src="https://img.shields.io/badge/v5.2.0-suijin-green?style=flat" alt="Version"/>
   <img height="20" src="https://img.shields.io/badge/LICENSE-AGPL%20v3-4169A1?style=flat" alt="License"/>
   <img height="20" src="https://img.shields.io/badge/PYTHON-3.10+-306998?style=flat&logo=python&logoColor=white" alt="Python"/>
 </p>
@@ -112,6 +112,19 @@ pip install -r suijin/requirements.txt
 python3 suijin/main.py
 ```
 
+### Dev install (live local copy)
+
+Run the installer from inside your checkout — the first question offers
+**normal** vs **dev**; from a checkout, dev is the default (press Enter):
+
+```bash
+./install.sh            # -> install type [dev] -> live symlink to THIS tree
+./install.sh --dev      # non-interactive dev install
+```
+
+`~/.suijin/repo` becomes a symlink to your working copy — source edits are
+live, no reinstall needed.
+
 ### Docker (turnkey)
 
 ```bash
@@ -176,6 +189,7 @@ hidden behind CLI flags.
 | `suijin eval` | Replay recorded traffic through the blue detector: precision/recall/F1 + threshold sweep |
 | `suijin spar` | Sparring mode: detector practice volley vs stored baseline, regression-gated |
 | `suijin battle` | Purple team: scripted red vs pattern blue on the lab — live scoreboard |
+| `suijin bench` | Graded lab benchmark: agent vs lab, flag/tool/cost score per release (`--lab`, `--live`, `--history`) |
 | `suijin kb read <path>` | Dump a **full (untruncated) KB document** from its tarball; `suijin kb diff` checks index vs cache staleness |
 | `suijin pull cve` | Mirror the CISA KEV catalog (no API key) — powers offline `search_cve` + actively-exploited badges |
 | `suijin creds` | Encrypted credential vault: `init` / `list [--reveal]` / `add` / `get` / `export [--plain]` |
