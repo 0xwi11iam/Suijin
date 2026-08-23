@@ -1,6 +1,6 @@
 {
-  "version": "5.3.0",
+  "version": "5.4.0",
   "codename": "Suijin OS",
   "release_date": "2026-08-23",
-  "description": "Suijin OS v5.3.0 \u2014 the field-hardened release. Red side: engagement console UI rebuilt from live runs (iteration panels with markdown, fast thinking spinner, uncrashable renderer with crash logs, termination banners for every ending, instant Ctrl+C, 15-command pause console), operator authorization workflow (suijin authorize ledger + advisory bb-scope + program-page fetch with the Cloudflare-exists doctrine), supervisor as battle-buddy (52 tactical heuristics, cooldowns, de-interfered detectors), accurate per-model token pricing, provider-flake auto-restart, JS-bundle mining tools, and a reinstall-durable workspace at ~/.suijin/workspace. 1,558 tests green."
+  "description": "Suijin OS v5.4.0 \u2014 the capability ecosystem. Person-to-person package distribution: .sjm module packs, .sja addons and .sjp kernel plugins as single sealed files (SHA-256 sums, path-traversal and zip-bomb guards, tool-shadowing refusal). A built-in AST-only safety scanner refuses hidden eval/exec, hardcoded secrets, obfuscated blobs and built-in tool shadowing \u2014 it never executes payload code, and install always re-scans source. The suijin install wizard shows attribution, dev note, scan verdict and the full tool table; Enter installs. Ships three sealed example packages plus five malicious scanner fixtures proving the guards end-to-end. Field fixes: spinner 3x faster, RunBox shares the engagement console, search_kb accepts its documented args. 1,597 tests green."
 }
