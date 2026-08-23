@@ -94,7 +94,7 @@ def toggle_reasoning(console: Console | None = None) -> bool:
         state = "shown" if UI_STATE["show_reasoning"] else "hidden"
         console.print(f"[dim]  said {state}[/dim]")
         if UI_STATE["show_reasoning"] and UI_STATE["last_reasoning"]:
-            console.print(Text(UI_STATE["last_reasoning"], style="bright_cyan"))
+            console.print(_md(UI_STATE["last_reasoning"], "cyan"))
     return UI_STATE["show_reasoning"]
 
 
@@ -416,7 +416,7 @@ class EngagementUI:
 
     def thinking(self, thought: str) -> None:
         if thought:
-            self._section(Group(Text("thinking", style="dim blue"), _md(thought, "dim")))
+            self._section(_md(thought, "dim blue"))  # no label — we know what this is
             self._tick()
 
     def reasoning(self, text: str) -> None:
@@ -424,7 +424,7 @@ class EngagementUI:
             return
         UI_STATE["last_reasoning"] = text
         if UI_STATE["show_reasoning"]:
-            self._section(Group(Text("said:", style="bright_cyan"), _md(text)))
+            self._section(_md(text, "cyan"))  # no label
             self._tick()
 
     def tool(self, tool_name: str, tool_args: dict) -> None:

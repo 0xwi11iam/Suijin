@@ -185,7 +185,7 @@ class TestTranscript:
         ui.output("Status: 200\nOK")
         out = c.export_text()
         assert "#6 · informational" in out  # panel title carries number+phase
-        assert "thinking" in out and "XSS payload" in out
+        assert "XSS payload" in out  # thinking text (no label — we know what it is)
         assert "Search reflects input unencoded" in out  # reasoning under thinking, no label
         assert ":: why ::" not in out
         assert "execute_terminal" in out
@@ -952,3 +952,62 @@ class TestAskFlowAndDoctrine:
             tn.logger.removeHandler(h)
         parse_warnings = [r for r in records if r.levelno >= logging.WARNING and "Parse attempt" in r.getMessage()]
         assert not parse_warnings  # demoted to debug
+
+
+class TestLabelFreeTranscript:
+    """v5.2 field pass: labels removed (we know what the sections are) —
+    thinking renders dim blue, said renders cyan, both label-free."""
+
+    def test_thinking_has_no_label(self):
+        ui, c = _ui()
+        ui.iteration_header(1, "informational")
+        ui.thinking("Map the target before exploitation")
+        out = c.export_text()
+        assert "Map the target before exploitation" in out
+        assert "thinking" not in out.lower().split("map")[0]  # no label prefix
+
+    def test_said_has_no_label(self):
+        ui, c = _ui()
+        ui.iteration_header(1, "informational")
+        ui.reasoning("Background it so I can keep probing")
+        out = c.export_text()
+        assert "Background it so I can keep probing" in out
+        assert "said" not in out
+
+    def test_stealth_never_advertises_brotli(self):
+        """Field run (ocular-app.tech): we advertised Accept-Encoding: br
+        without a brotli decoder — Vercel served br and the console filled
+        with binary garbage."""
+        from suijin.modules.platform.lib.stealth import browser_identity
+
+        ae = browser_identity().get("Accept-Encoding", "")
+        assert "br" not in ae
+        assert "gzip" in ae
+
+    def test_package_level_warning_filter(self):
+        """The langgraph allowed_objects advisory must be filtered by the
+        PACKAGE init (every entrypoint imports suijin first) — even under
+        -W error and even for langchain's own warning base class."""
+        import subprocess
+        import sys
+
+        code = (
+            "import warnings\n"
+            "warnings.filterwarnings('ignore', message='.*allowed_objects.*')\n"
+            "from langgraph.checkpoint.memory import MemorySaver\n"
+            "print('clean')\n"
+        )
+        r = subprocess.run([sys.executable, "-W", "error::Warning", "-c", code], capture_output=True, text=True)
+        assert "clean" in r.stdout, r.stderr
+
+    def test_scope_cli_import(self):
+        """Field report: `suijin scope` crashed — run_scope imported
+        suijin.tui_scope (top-level) after the module moved to
+        modules/console/lib/."""
+        import importlib
+
+        mod = importlib.import_module("suijin.modules.console.lib.cli")
+        import inspect
+
+        src = inspect.getsource(mod.run_scope)
+        assert "from suijin.modules.console.lib import tui_scope" in src
