@@ -286,6 +286,17 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
     except Exception:  # noqa: BLE001 — collection must never break thinking
         pass
 
+    # H2: finished background JOBS drain too (fireteam symmetry) — results
+    # used to vanish unless the agent remembered job_list (field trace: the
+    # leaked-key scan was never collected)
+    try:
+        from suijin.modules.tools.lib import job_registry as _jr
+
+        for _msg in _jr.collect_finished_jobs():
+            state.setdefault("messages", []).append({"role": "user", "content": _msg})
+    except Exception:  # noqa: BLE001 — same rule
+        pass
+
     # Prompt profile (D31): snapshot token breakdown before the call
     try:
         from suijin.modules.agent.lib.profiler import record as _record_profile

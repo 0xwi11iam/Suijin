@@ -184,3 +184,73 @@ class TestThinkRendersBoard:
         src = inspect.getsource(tn.think_node)
         assert "_target_grew_last_step" in src
         assert "will compare after tool runs" not in src  # the fake comment is gone
+
+
+class TestH2JobSemantics:
+    """Results stop vanishing: finished jobs drain into the conversation
+    (fireteam symmetry), waits never self-background, status untruncated."""
+
+    def _mkjob(self, monkeypatch, tmp_path, jid="j1", status="done", output="x" * 2000, announce=True):
+        import suijin.modules.tools.lib.job_registry as jr
+
+        monkeypatch.setattr(jr, "_jobs", {jid: {"job_id": jid, "tool_name": "nmap", "tool_args": {}, "status": status, "started_at": 1.0, "output": output, "error": None, "_announce": announce}})
+        monkeypatch.setattr(jr, "_drained", set())
+        return jr
+
+    def test_finished_job_drains_once(self, monkeypatch, tmp_path):
+        jr = self._mkjob(monkeypatch, tmp_path)
+        msgs = jr.collect_finished_jobs()
+        assert len(msgs) == 1 and "BACKGROUND JOB j1 FINISHED" in msgs[0]
+        assert jr.collect_finished_jobs() == []  # exactly once
+
+    def test_drain_preview_points_at_full_output(self, monkeypatch, tmp_path):
+        jr = self._mkjob(monkeypatch, tmp_path, output="FINDING: admin panel\n" + "y" * 900)
+        m = jr.collect_finished_jobs()[0]
+        assert "FINDING: admin panel" in m and "job_output j1" in m
+
+    def test_failed_job_announces_failure(self, monkeypatch, tmp_path):
+        jr = self._mkjob(monkeypatch, tmp_path, status="failed", output="")
+        jr._jobs["j1"]["error"] = "exit 127 nmap not found"
+        m = jr.collect_finished_jobs()[0]
+        assert "FAILED" in m and "exit 127" in m
+
+    def test_announced_jobs_stay_silent(self, monkeypatch, tmp_path):
+        jr = self._mkjob(monkeypatch, tmp_path)
+        jr.mark_announced("j1")
+        assert jr.collect_finished_jobs() == []
+
+    def test_running_jobs_do_not_drain(self, monkeypatch, tmp_path):
+        jr = self._mkjob(monkeypatch, tmp_path, status="running")
+        assert jr.collect_finished_jobs() == []
+
+    def test_status_shows_full_output_when_done(self, monkeypatch, tmp_path):
+        jr = self._mkjob(monkeypatch, tmp_path, output="K" * 1200)
+        s = jr.status("j1")
+        assert "K" * 1100 in s  # untruncated (old clip was 500)
+
+    def test_status_clips_running_partial(self, monkeypatch, tmp_path):
+        jr = self._mkjob(monkeypatch, tmp_path, status="running", output="R" * 1200)
+        s = jr.status("j1")
+        assert "partial" in s and "R" * 600 not in s
+
+    def test_job_wait_not_auto_backgrounded(self):
+        """A wait on a still-running job must return its verdict inline —
+        never become a background job itself (the old absurdity)."""
+        import time as _t
+
+        from suijin.modules.agent.lib.nodes.execute_tool_node import execute_tool_node
+        from suijin.modules.tools.lib import job_registry as jr
+
+        jid = jr.spawn("sleeper", {"cmd": "sleep 8"}, lambda n, a, c: (_t.sleep(8) or "done"))
+        try:
+            out = asyncio.run(
+                execute_tool_node(
+                    {"_current_step": {"tool_name": "job_wait", "tool_args": {"job_id": jid, "timeout": 1}, "iteration": 2}, "current_phase": "informational"},
+                    route_tool_fn=lambda n, a, c: jr.wait(a.get("job_id", ""), timeout=1),
+                )
+            )
+            res = out["_current_step"]["tool_output"]
+            assert "AUTO-BG" not in res and "still running" in res
+        finally:
+            jr.mark_announced(jid)
+            jr.cancel(jid)

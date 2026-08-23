@@ -111,9 +111,37 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
             "messages": [{"role": "user", "content": f"BG JOB {job_id}: {tool_name}"}],
         }
 
-    # ── Synchronous (10s timeout, auto-spawn if slower) ──────────────
+    # ── Synchronous (auto-spawn if slower) ───────────────────────────
     _tenant_ctx("local", "default")
     _phase_ctx(state.get("current_phase", "informational"))
+
+    # H2: job-control tools must NEVER be auto-backgrounded — waiting on a
+    # slow job is the point of job_wait; promoting the wait itself to a
+    # background job (the old behavior) made results uncollectable
+    if tool_name in ("job_wait", "job_status", "job_output", "job_list", "fireteam_status"):
+        t0_sync = _time.monotonic()
+        result = route_tool_fn(tool_name, tool_args, {})
+        output, _ = _maybe_offload(tool_name, str(result))
+        duration_ms = int((_time.monotonic() - t0_sync) * 1000)
+        success = not output.startswith("Error:")
+        _audit_step(state, tool_name, tool_args, success, duration_ms)
+        step_data.update(
+            {"tool_output": output, "success": success, "duration_ms": duration_ms, "error_class": "success"}
+        )
+        return {
+            "_current_step": step_data,
+            "execution_trace": [dict(step_data)],
+            "_tool_result": {"success": success, "output": output},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": (
+                        f"RESULT ({tool_name}, {duration_ms}ms, iteration {step_data.get('iteration', '?')}):\n"
+                        f"{_wrap_untrusted(output, 'TOOL_OUTPUT')}"
+                    ),
+                }
+            ],
+        }
 
     AUTO_BG_TIMEOUT = 10  # seconds before auto-promoting to background
 
