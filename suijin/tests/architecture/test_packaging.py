@@ -104,10 +104,6 @@ class TestDocsSync:
     def test_pyproject_matches_version(self):
         import json
 
-        import tomllib
-
         version = json.loads((REPO / "suijin" / "version.json").read_text())["version"]
-        data = tomllib.loads((REPO / "pyproject.toml").read_text())
-        assert data["project"]["version"] == version, (
-            f"pyproject {data['project']['version']} != version.json {version}"
-        )
+        pyproject_v = _pyproject_version()  # 3.10-safe (tomli fallback + skip)
+        assert pyproject_v == version, f"pyproject {pyproject_v} != version.json {version}"

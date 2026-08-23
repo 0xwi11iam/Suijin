@@ -61,14 +61,21 @@ def _drain():
 def mcp_shell_exec(cmd):
     global _cwd
     master = _get_session()
-    marker = f"__SUIJIN_M_{time.time_ns()}__"
+    # the PTY echoes the typed command back — a literal marker in the
+    # command would match its own echo. Construct it so the echoed form
+    # never equals the emitted form: 'echo MARK' types as e""cho-free
+    # concatenation that bash resolves to the same string.
+    mid = f"{time.time_ns()}"
+    marker = f"__SUIJIN_M_{mid}__"
+    send_marker = f'echo "__SUIJIN_M_{mid[:6]}""{mid[6:]}__"'
     try:
-        os.write(master, f"{cmd}; echo {marker}\n".encode())
+        os.write(master, f"{cmd}; {send_marker}\n".encode())
     except OSError as e:
         return f"Shell error (write): {e}"
 
     out = b""
     deadline = time.monotonic() + _TIMEOUT
+    m = marker.encode()
     while time.monotonic() < deadline:
         r, _, _ = select.select([master], [], [], 0.5)
         if not r:
@@ -79,11 +86,12 @@ def mcp_shell_exec(cmd):
             break
         if not chunk:
             break
-        m = marker.encode()
-        if m in chunk:
-            out += chunk[: chunk.index(m)]
-            break
         out += chunk
+        # the marker can split across chunk boundaries (slow writers, PTY
+        # line wrapping on CI) — test the ACCUMULATED buffer, not the chunk
+        if m in out:
+            out = out[: out.index(m)]
+            break
 
     text = out.decode(errors="ignore").strip()
     if time.monotonic() >= deadline:
