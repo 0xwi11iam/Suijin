@@ -1,4 +1,4 @@
-<h3 align="center">v5.2.0</h3> 
+<h3 align="center">v5.3.0</h3> 
 <p align="center">
 <img src="assets/suijin.png" alt="Suijin Logo" width="160"/>
 </p>
@@ -6,7 +6,7 @@
 
 
 <p align="center">
-  <img height="20" src="https://img.shields.io/badge/v5.2.0-suijin-green?style=flat" alt="Version"/>
+  <img height="20" src="https://img.shields.io/badge/v5.3.0-suijin-green?style=flat" alt="Version"/>
   <img height="20" src="https://img.shields.io/badge/LICENSE-AGPL%20v3-4169A1?style=flat" alt="License"/>
   <img height="20" src="https://img.shields.io/badge/PYTHON-3.10+-306998?style=flat&logo=python&logoColor=white" alt="Python"/>
 </p>
@@ -28,13 +28,20 @@ toolkit, one knowledge base, and one knowledge graph.
 
 ## What's Next
 
-The v5.0.1 **Stable** line is the maintenance surface. What's being built next:
+The v5.3 line is the active surface (engagement console UI, authorization
+workflow, field-hardened agent). What's being built next:
 
 | Priority | Thing | Status |
 |---|---|---|
-| 1 | **Suijin Desktop** — native Tauri app (cold-cyan instrument design, Instrument Serif + Geist + Fira Code): approvals & ask-operator inbox, live engagement stream, dashboard; typed client generated from the gateway's OpenAPI — the core ships the gateway module, the app contains zero agent code | gateway + app **landed (technical preview)**; polishing |
+| 1 | **Blue-team SOC loop** — the process_event pipeline: enrich (identity, assets), incidents with lifecycle, identity-level containment, retention + retro-hunt; headless `suijin blue` | wave A foundations landed; loop waves queued |
 | 2 | **Tool packs round 3** — cloud enum depth, AD/kerberos chains, mobile statics (+30) | queued |
 | 3 | **Marketplace community index** — the decentralized pack index goes live (hash-pinned installs already ship) | queued |
+
+> **Desktop app (deprecated):** the Tauri desktop client and its gateway
+> API shipped as a technical preview in v5.1.0 and are currently
+> **not under active maintenance** — the gateway module and desktop code
+> are retained in-tree so the surface can be revived later; the console
+> UI is the supported operator interface.
 | 4 | **`suijin bench`** — graded lab runs, agent performance tracked per release | queued |
 
 Everything above builds on the stable core without churn: the kernel,
@@ -190,6 +197,8 @@ hidden behind CLI flags.
 | `suijin spar` | Sparring mode: detector practice volley vs stored baseline, regression-gated |
 | `suijin battle` | Purple team: scripted red vs pattern blue on the lab — live scoreboard |
 | `suijin bench` | Graded lab benchmark: agent vs lab, flag/tool/cost score per release (`--lab`, `--live`, `--history`) |
+| `suijin authorize <domain>` | Put bug-bounty authorization on file — renders in every engagement order (`--program`, `--id`, `--page`, `--list`, `--remove`) |
+| `suijin bb-scope <url>` | Bind a bug-bounty program page's scope (advisory) via bugscope — agent self-verifies with `scope_search` |
 | `suijin kb read <path>` | Dump a **full (untruncated) KB document** from its tarball; `suijin kb diff` checks index vs cache staleness |
 | `suijin pull cve` | Mirror the CISA KEV catalog (no API key) — powers offline `search_cve` + actively-exploited badges |
 | `suijin creds` | Encrypted credential vault: `init` / `list [--reveal]` / `add` / `get` / `export [--plain]` |

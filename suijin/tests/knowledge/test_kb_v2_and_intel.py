@@ -276,9 +276,9 @@ class TestMutateWordlist:
 class TestCewl:
     def test_extract_words(self):
         words = extract_words(
-            "<html><script>ignore()</script><body>Welcome to DrFrost Corp — login here, admin!</body></html>"
+            "<html><script>ignore()</script><body>Welcome to Example Corp — login here, admin!</body></html>"
         )
-        assert "Welcome" in words and "DrFrost" in words and "admin" in words
+        assert "Welcome" in words and "Example" in words and "admin" in words
         assert "ignore" not in words  # script content stripped
         assert all(len(w) >= 3 for w in words)
 
@@ -289,7 +289,7 @@ class TestCewl:
         monkeypatch.setattr(wm, "resolve_workspace_path", lambda p: (tmp_path / p).resolve())
 
         class _Resp:
-            text = "<html><body>Drfrost mathematics platform teachers students</body></html>"
+            text = "<html><body>Example mathematics platform teachers students</body></html>"
 
         class _Sess:
             def get(self, url, timeout):

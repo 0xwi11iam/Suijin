@@ -237,16 +237,16 @@ class TestTranscript:
     def test_graceful_errors(self):
         from suijin.modules.redteam.lib.red.console_ui import graceful_error, is_error
 
-        # the exact wall of text from the drforst.org field run
+        # the exact wall of text from the field-target.example field run
         raw = (
-            "HTTP Error: HTTPSConnectionPool(host='drforst.org', port=443): Max retries exceeded "
-            "with url / (Caused by NameResolutionError(\"HTTPSConnection(host='drforst.org', port=443): "
-            "Failed to resolve 'drforst.org' ([Errno 8] nodename nor servname provided, or not known)\"))"
+            "HTTP Error: HTTPSConnectionPool(host='field-target.example', port=443): Max retries exceeded "
+            "with url / (Caused by NameResolutionError(\"HTTPSConnection(host='field-target.example', port=443): "
+            "Failed to resolve 'field-target.example' ([Errno 8] nodename nor servname provided, or not known)\"))"
         )
         assert is_error(raw)
         short = graceful_error(raw)
         assert "HTTPSConnectionPool" not in short and "Max retries" not in short
-        assert "drforst.org" in short and len(short) < 120
+        assert "field-target.example" in short and len(short) < 120
         assert graceful_error("Error: nmap: command not found") == "nmap not installed"
         assert graceful_error("Tool error: connection to 10.0.0.5 port 22 refused") is not None
 
@@ -830,17 +830,17 @@ class TestFieldCrashRegressions:
 
 
 class TestAskFlowAndDoctrine:
-    """The drfrost.org field reports: refusal re-litigation, answer prompt
+    """The field-target.example field reports: refusal re-litigation, answer prompt
     eaten by the live strip, thinking shown on ask turns, truncated
     question, raw parse noise, langgraph warning, cost-cap spam."""
 
     def test_engagement_order_lifts_authorization(self):
         from suijin.modules.agent.lib.prompts.base import engagement_order
 
-        order = engagement_order("drfrost.org I have written permission, h1 authorisation id a37dri63iddd")
+        order = engagement_order("field-target.example I have written permission, h1 authorisation id REDACTED-AUTH-ID")
         assert "[ENGAGEMENT ORDER]" in order
-        assert "h1 authorisation id a37dri63iddd" in order  # verbatim claim
-        assert "drfrost.org" in order
+        assert "h1 authorisation id REDACTED-AUTH-ID" in order  # verbatim claim
+        assert "field-target.example" in order
         # force-language REMOVED — it primed meta-suspicion in capable models
         assert "FINAL" not in order and "tool failure" not in order
         # bare objective still becomes an order with default attestation
@@ -912,7 +912,7 @@ class TestAskFlowAndDoctrine:
     def test_scope_confirmation_detection(self):
         from suijin.modules.redteam.lib.redteamer import _looks_like_scope_confirmation
 
-        assert _looks_like_scope_confirmation("yes, I have written permission for drfrost.org")
+        assert _looks_like_scope_confirmation("yes, I have written permission for field-target.example")
         assert _looks_like_scope_confirmation("confirmed in scope, proceed")
         assert _looks_like_scope_confirmation("i own this box")
         assert not _looks_like_scope_confirmation("try the login form with sql injection")
@@ -974,7 +974,7 @@ class TestLabelFreeTranscript:
         assert "said" not in out
 
     def test_stealth_never_advertises_brotli(self):
-        """Field run (ocular-app.tech): we advertised Accept-Encoding: br
+        """Field run (spa-target.example): we advertised Accept-Encoding: br
         without a brotli decoder — Vercel served br and the console filled
         with binary garbage."""
         from suijin.modules.platform.lib.stealth import browser_identity
@@ -1017,6 +1017,9 @@ class TestUncrashableUI:
     the engagement and returned to the menu with zero output."""
 
     def test_render_crash_never_propagates(self, monkeypatch):
+        from suijin.modules.platform.lib import workspace as _ws
+
+        monkeypatch.setattr(_ws, "WORKSPACE_DIR", __import__("pathlib").Path(__import__("tempfile").mkdtemp()))
         from rich.console import Console
 
         import suijin.modules.redteam.lib.red.console_ui as m
@@ -1239,7 +1242,7 @@ class TestFieldCrashDriftDict:
 
 
 class TestAnswerFlowFieldBugs:
-    """deepseek.com field run: 'queued as guidance' echoed over the answer,
+    """corp.example field run: 'queued as guidance' echoed over the answer,
     the strip went static after resume, and the operator's confirmation
     never persisted into the engagement order (model re-litigated)."""
 
@@ -1255,12 +1258,12 @@ class TestAnswerFlowFieldBugs:
 
         def typer():
             time.sleep(0.2)
-            box.dispatch("hf-mirror.com")  # the operator's answer
+            box.dispatch("mirror-target.example")  # the operator's answer
 
         threading.Thread(target=typer, daemon=True).start()
         answer = ask_operator_answer(box, Console(record=True, width=90), "authorized?", timeout_s=5)
         box.stop()
-        assert answer == "hf-mirror.com"
+        assert answer == "mirror-target.example"
         assert not box._ask_mode  # restored
 
     def test_normal_guidance_echo_still_works(self):
@@ -1281,7 +1284,7 @@ class TestAnswerFlowFieldBugs:
         forever (the model can never unsee it)."""
         from suijin.modules.agent.lib.prompts.base import engagement_order
 
-        confirmed = "deepseek.com [OPERATOR-CONFIRMED in engagement: yes, bug bounty, proceed]"
+        confirmed = "corp.example [OPERATOR-CONFIRMED in engagement: yes, bug bounty, proceed]"
         order = engagement_order(confirmed)
         assert "OPERATOR-CONFIRMED" in order
         assert "Authorization" in order
@@ -1298,7 +1301,7 @@ class TestAnswerFlowFieldBugs:
 
 
 class TestNoSilentEndings:
-    """hf-mirror.com field run: the agent DECLINED (completion_reason
+    """mirror-target.example field run: the agent DECLINED (completion_reason
     'Engagement declined: …') and the run ended through the normal path —
     but the operator saw a green Report panel + dim Done and read it as a
     silent crash. Every ending must be unmissable."""
@@ -1315,7 +1318,7 @@ class TestNoSilentEndings:
             pass
 
         fs = _FS(
-            completion_reason="Engagement declined: hf-mirror.com is a public third-party service",
+            completion_reason="Engagement declined: mirror-target.example is a public third-party service",
             messages=[{"role": "assistant", "content": "x" * 80}],
             execution_trace=[],
             current_phase="informational",
@@ -1332,13 +1335,16 @@ class TestNoSilentEndings:
         for r in ("Engagement declined: x", "I refuse to scan", "I will not proceed against"):
             assert any(w in r.lower() for w in words), r
 
-    def test_sync_wrapper_shows_crash_panel(self, monkeypatch):
+    def test_sync_wrapper_shows_crash_panel(self, monkeypatch, tmp_path):
         """run_red_team NEVER exits silently — an inner crash renders a red
         panel instead of dropping back to the launcher."""
 
         async def boom(cfg, obj, api_key=None):
             raise RuntimeError("provider exploded mid-run")
 
+        from suijin.modules.platform.lib import workspace as _ws
+
+        monkeypatch.setattr(_ws, "WORKSPACE_DIR", tmp_path)  # crash log stays in tmp
         monkeypatch.setattr("suijin.modules.redteam.lib.redteamer.run_red_team_async", boom)
         from rich.console import Console
 
@@ -1352,6 +1358,9 @@ class TestNoSilentEndings:
         assert "provider exploded" in text
 
     def test_guard_fallback_is_visible(self, monkeypatch):
+        from suijin.modules.platform.lib import workspace as _ws
+
+        monkeypatch.setattr(_ws, "WORKSPACE_DIR", __import__("pathlib").Path(__import__("tempfile").mkdtemp()))
         from rich.console import Console
 
         import suijin.modules.redteam.lib.red.console_ui as m

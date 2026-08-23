@@ -6,10 +6,108 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v5.3.0 — Field-hardened
+
+Every change in this release came out of live field engagements (target
+names withheld) — each field run's bug report drove a fix, and the
+crash-log system introduced here makes the next ones diagnosable in
+seconds.
+
+### Engagement console UI (rebuilt from field runs)
+- **One iteration = one rendered block**: rule-delimited sections —
+  thinking (dim blue), said (cyan), the command in a syntax-highlighted
+  mini-terminal (bash/json/python/markdown per tool), output rendered as
+  markdown or syntax-highlighted by content type. No truncation anywhere.
+- **Fast thinking spinner**: the pinned strip doubles as the spinner
+  (20fps, npm-snappy dots) showing phase · iteration · tokens · cost ·
+  FLAG/CRED/FT counters; `~` marks estimated pricing.
+- **Uncrashable renderer**: every render method is guarded — a render
+  bug logs to `outputs/logs/ui_crash.log`, falls back to plain text, and
+  the engagement keeps running. The loop itself logs
+  `engage_crash.log`. Both already caught real field bugs.
+- **No silent endings**: one classifier, one banner per ending —
+  COMPLETE (green) / DECLINED (yellow, with the authorize fix) /
+  OPERATOR STOP / FAILED (red + last model output) / FAILED — NO OUTPUT
+  (provider hint).
+- **Instant Ctrl+C**: SIGINT raises in place; the pause menu appears
+  immediately instead of waiting out the current LLM call.
+- **15-command pause console**: `/objective` `/phase` `/focus` `/skip`
+  `/finish` `/loot` `/jobs` `/kill` `/cost` `/report` `/audit` `/state`
+  `/sessions` `/template` `/health` — course changes mutate graph state;
+  extracted to session_control so every command is tested.
+- ask-operator flow: the question renders as dim markdown, the prompt is
+  exactly `Answer:`, the live strip stops during input (it used to eat
+  the prompt), and scope-doubt questions auto-answer from the
+  authorization record.
+
+### Operator authorization workflow
+- **`suijin authorize <domain>`**: attestation ledger — program, auth id,
+  90-day expiry, subdomain coverage; renders in EVERY engagement order so
+  the agent never re-litigates it.
+- **`suijin bb-scope <program-url>`** (advisory): pulls real program
+  scope via bugscope (5 platforms, operator token per-call, never
+  stored); in-scope guides targeting, out-of-scope steers away; the
+  agent `scope_search`es the cache live.
+- **`fetch_authorization_page`** tool: eyes-on verification of the
+  program page with the explicit verdict doctrine — a Cloudflare/WAF
+  block means the page EXISTS (nonexistent pages 404); that is ample.
+  Operator answers containing a URL persist onto the record.
+- Framing rebuilt calm after field feedback: force-language (VERIFIED &
+  SECURE, never-question, statute cites) primed meta-suspicion in
+  capable models; a flat procedural record gets treated as settled fact.
+
+### Supervisor: battle-buddy, not interferer
+- 4 interference bugs fixed (phantom-tool verification demands,
+  thought-text false findings, research counted as bookkeeping, payload
+  iteration counted as no-progress).
+- **52 tactical follow-up heuristics**: signal-seen + follow-up-missing
+  → one concrete hint (JWT → jwt_inspect, SQLi confirmed → sqlmap
+  extraction, AIza key → google_key_probe, foothold → privesc basics,
+  403 wall → verb tampering, …). Cooldown-gated, only when pathology is
+  silent.
+- Per-detector cooldowns; LLM deep analysis every 15th iteration; oracle
+  scoped to http_request response triage only.
+
+### Cost & provider reliability
+- Per-model pricing completed (glm-4.6, Qwen3-Coder, case-insensitive
+  matching); the dead estimate path fixed (unbound variable silently
+  recorded zero); estimate fallbacks for every provider; lobstertrap
+  counted; `priced` flag honest.
+- Provider retry noise silenced (no more raw `Z.ai attempt N failed`
+  walls); provider_failure gets ONE automatic full restart before the
+  engagement ends; parse_failure banners explain themselves.
+- Fireteams: 60s configurable LLM timeout + patient retry (the 15s
+  double-kill from field notes is dead).
+
+### New tooling
+- `js_bundle_analyze` / `google_key_probe` / `source_map_probe` —
+  SPA attack-surface mining in one call (built from a field run where
+  the agent hand-rolled three iterations of broken curl+grep).
+- Every core tool (55) now has a dedicated console render (content
+  tools show content, no-arg tools show no block) and is TAUGHT in the
+  prompt registry.
+- mcp_playwright hardened: missing-dependency fails fast with install
+  instructions (was a 30s hang + false "Browser timeout"), generation
+  counter kills stale results, `domcontentloaded` default (networkidle
+  never fires on analytics SPAs).
+
+### Durability
+- **Reinstall-durable workspace**: state lives at `~/.suijin/workspace`
+  (outside any repo copy) — sessions, memory, the authorization ledger,
+  bugscope pulls and reports survive re-clones and reinstalls.
+  `install.sh` migrates legacy + Medusa-era content into it and symlinks
+  the repo-local path; `SUIJIN_WORKSPACE` overrides.
+- Interactive installer asks install-type FIRST (normal vs dev; dev is
+  the default inside a checkout, live symlink, `--dev[=PATH]` for
+  non-TTY).
+
+1,552 fast + 6 slow tests (110+ new since v5.2.0); ruff clean; boot
+150 units / 265+ tools / 140 packs.
+
 ## v5.2.0 — Field readiness
 
 Five waves since v5.1.0, all driven by what live engagements actually
-hit (the drfrost/playtorrio notes) and what offline measurement proved.
+hit (the field-target/prior-target notes) and what offline measurement proved.
 
 ### Red-team console UI
 - **Engagement transcript rebuilt** (`red/console_ui.py`): per-iteration

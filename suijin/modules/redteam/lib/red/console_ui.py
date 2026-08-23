@@ -388,7 +388,7 @@ class EngagementUI:
                 continue
             setattr(self, _name, types.MethodType(_guarded(_name, _fn), self))
         self._live: Live | None = None
-        self._spinner = Spinner("dots", style=GOLD, speed=0.25)  # snappy, npm-fast
+        self._spinner = Spinner("dots", style=GOLD, speed=0.15)  # fast, npm-snappy
         self.iteration = 0
         self.phase = "starting"
         self._cur: _Iteration | None = None
@@ -426,7 +426,7 @@ class EngagementUI:
 
     def start(self) -> None:
         if self._live is None:
-            self._live = Live(self._strip(), console=self.console, refresh_per_second=12)
+            self._live = Live(self._strip(), console=self.console, refresh_per_second=20)
             self._live.start()
 
     def stop(self) -> None:

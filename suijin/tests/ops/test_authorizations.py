@@ -18,14 +18,14 @@ def _isolated_ws(tmp_path, monkeypatch):
 
 class TestLedger:
     def test_add_match_subdomains(self):
-        rec = auth.add_authorization("deepseek.com", program="h1", authorization_id="a37dri63iddd")
+        rec = auth.add_authorization("corp.example", program="h1", authorization_id="REDACTED-AUTH-ID")
         assert "error" not in rec
-        m = auth.match_authorization("deepseek.com")
-        assert m and m["authorization_id"] == "a37dri63iddd"
-        m2 = auth.match_authorization("api.deepseek.com")
-        assert m2 and m2["target"] == "deepseek.com"  # suffix match
-        assert auth.match_authorization("notdeepseek.com") is None
-        assert auth.match_authorization("deepseek.com.evil.io") is None  # no suffix-suffix spoof
+        m = auth.match_authorization("corp.example")
+        assert m and m["authorization_id"] == "REDACTED-AUTH-ID"
+        m2 = auth.match_authorization("api.corp.example")
+        assert m2 and m2["target"] == "corp.example"  # suffix match
+        assert auth.match_authorization("not-corp.example") is None
+        assert auth.match_authorization("corp.example.evil.io") is None  # no suffix-suffix spoof
 
     def test_url_and_case_normalization(self):
         auth.add_authorization("https://WWW.Example.com/", program="h1")
@@ -67,7 +67,7 @@ class TestLedger:
 class TestScopeUrl:
     def test_all_platforms(self):
         cases = [
-            ("https://hackerone.com/deepseek", "h1", "deepseek"),
+            ("https://hackerone.com/example-corp", "h1", "example-corp"),
             ("https://hackerone.com/some_handle/", "h1", "some_handle"),
             ("https://bugcrowd.com/engagement-123", "bugcrowd", "engagement-123"),
             ("https://yeswehack.com/programs/acme-sas", "ywh", "acme-sas"),
@@ -100,39 +100,39 @@ class TestScopeBinding:
         self._fake_bugscope(
             monkeypatch,
             [
-                {"program": "deepseek", "asset": "*.deepseek.com", "type": "WILDCARD", "eligible": True},
-                {"program": "deepseek", "asset": "support.deepseek.com", "type": "URL", "eligible": False},
+                {"program": "example-corp", "asset": "*.corp.example", "type": "WILDCARD", "eligible": True},
+                {"program": "example-corp", "asset": "support.corp.example", "type": "URL", "eligible": False},
             ],
         )
-        out = auth.bind_program_scope("h1", "deepseek", token="user:tok")
+        out = auth.bind_program_scope("h1", "example-corp", token="user:tok")
         assert "error" not in out
         assert out["advisory"] is True
-        assert "*.deepseek.com" in out["in_scope"]
-        assert "support.deepseek.com" in out["out_of_scope"]
+        assert "*.corp.example" in out["in_scope"]
+        assert "support.corp.example" in out["out_of_scope"]
 
     def test_binding_matches_targets(self, monkeypatch):
         self._fake_bugscope(
             monkeypatch,
             [
-                {"program": "deepseek", "asset": "*.deepseek.com", "eligible": True},
-                {"program": "deepseek", "asset": "chat.deepseek.com", "eligible": False},
+                {"program": "example-corp", "asset": "*.corp.example", "eligible": True},
+                {"program": "example-corp", "asset": "chat.corp.example", "eligible": False},
             ],
         )
-        auth.bind_program_scope("h1", "deepseek", token="t")
-        assert auth.match_scope_bindings("api.deepseek.com")  # wildcard hit
-        assert auth.match_scope_bindings("chat.deepseek.com")  # explicit asset
+        auth.bind_program_scope("h1", "example-corp", token="t")
+        assert auth.match_scope_bindings("api.corp.example")  # wildcard hit
+        assert auth.match_scope_bindings("chat.corp.example")  # explicit asset
         assert not auth.match_scope_bindings("other.io")
 
     def test_scope_line_mentions_out_of_scope(self, monkeypatch):
         self._fake_bugscope(
             monkeypatch,
             [
-                {"program": "deepseek", "asset": "*.deepseek.com", "eligible": True},
-                {"program": "deepseek", "asset": "chat.deepseek.com", "eligible": False},
+                {"program": "example-corp", "asset": "*.corp.example", "eligible": True},
+                {"program": "example-corp", "asset": "chat.corp.example", "eligible": False},
             ],
         )
-        auth.bind_program_scope("h1", "deepseek", token="t")
-        line = auth.scope_line("api.deepseek.com")
+        auth.bind_program_scope("h1", "example-corp", token="t")
+        line = auth.scope_line("api.corp.example")
         assert line and "Program scope (advisory)" in line
         assert "OUT of scope" in line and "scope_search" in line
 
@@ -150,10 +150,10 @@ class TestOrderIntegration:
     def test_verified_renders_every_turn(self):
         from suijin.modules.agent.lib.prompts.base import engagement_order
 
-        auth.add_authorization("deepseek.com", program="h1", authorization_id="a37dri63iddd")
-        order = engagement_order("api.deepseek.com I have permission")
+        auth.add_authorization("corp.example", program="h1", authorization_id="REDACTED-AUTH-ID")
+        order = engagement_order("api.corp.example I have permission")
         assert "on file — suijin authorize record" in order  # boring procedural line
-        assert "a37dri63iddd" in order
+        assert "REDACTED-AUTH-ID" in order
         assert "VERIFIED" not in order and "18 U.S.C." not in order  # no force-language: it primed meta-suspicion
         # unmatched -> plain attestation
         o2 = engagement_order("example.org")
@@ -164,13 +164,13 @@ class TestOrderIntegration:
             self,
             monkeypatch,
             [
-                {"program": "deepseek", "asset": "*.deepseek.com", "eligible": True},
+                {"program": "example-corp", "asset": "*.corp.example", "eligible": True},
             ],
         )
-        auth.bind_program_scope("h1", "deepseek", token="t")
+        auth.bind_program_scope("h1", "example-corp", token="t")
         from suijin.modules.agent.lib.prompts.base import engagement_order
 
-        order = engagement_order("chat.deepseek.com")
+        order = engagement_order("chat.corp.example")
         assert "Program scope (advisory)" in order
 
     def test_doctrine_teaches_verified_is_final(self):
@@ -229,11 +229,11 @@ class TestCli:
 
         f = artifact_dir("bugscope") / "h1.json"
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(json.dumps([{"program": "deepseek", "asset": "*.deepseek.com", "eligible": True}]))
-        assert self._run("bb-scope", "https://hackerone.com/deepseek", "--token", "t") == 0
+        f.write_text(json.dumps([{"program": "example-corp", "asset": "*.corp.example", "eligible": True}]))
+        assert self._run("bb-scope", "https://hackerone.com/example-corp", "--token", "t") == 0
         out = capsys.readouterr().out
-        assert "scope bound (advisory): h1/deepseek" in out
-        assert "*.deepseek.com" in out
+        assert "scope bound (advisory): h1/example-corp" in out
+        assert "*.corp.example" in out
 
 
 class TestTerminationBanners:
@@ -278,7 +278,7 @@ class TestTerminationBanners:
         monkeypatch.setattr(rt, "console", out)
         rt._render_termination(
             {
-                "completion_reason": "Engagement declined: hf-mirror.com is public",
+                "completion_reason": "Engagement declined: mirror-target.example is public",
                 "current_iteration": 2,
                 "messages": [],
             },
@@ -289,7 +289,7 @@ class TestTerminationBanners:
 
 
 class TestScopeAutoAnswer:
-    """hf-mirror.com field run: the model demanded 'verifiable evidence'
+    """mirror-target.example field run: the model demanded 'verifiable evidence'
     despite a VERIFIED ledger record. Scope-doubt questions on covered
     targets are now auto-answered from the record — no human round-trip."""
 
@@ -312,7 +312,7 @@ class TestScopeAutoAnswer:
 
         from suijin.modules.ops.lib import authorizations as auth
 
-        auth.add_authorization("hf-mirror.com", program="h1", authorization_id="ae93ikd994m4430k")
+        auth.add_authorization("mirror-target.example", program="h1", authorization_id="REDACTED-AUTH-ID")
 
         import suijin.modules.redteam.lib.redteamer as rt
 
@@ -323,13 +323,13 @@ class TestScopeAutoAnswer:
                 injected.append(payload)
 
         # simulate the ask branch's auto-answer logic directly
-        out = "I need verifiable evidence of authorization for hf-mirror.com before any scanning"
-        ledger_line = auth.authorization_line("hf-mirror.com")
+        out = "I need verifiable evidence of authorization for mirror-target.example before any scanning"
+        ledger_line = auth.authorization_line("mirror-target.example")
         assert ledger_line and rt._SCOPE_DOUBT_RE.search(out)
         final_msg = f"OPERATOR: confirmed, authorization record on file ({ledger_line}). Continuing."
         FakeGraph().update_state({}, {"messages": [{"role": "user", "content": final_msg}]})
         assert "OPERATOR: confirmed" in injected[0]["messages"][0]["content"]
-        assert "ae93ikd994m4430k" in injected[0]["messages"][0]["content"]
+        assert "REDACTED-AUTH-ID" in injected[0]["messages"][0]["content"]
         assert "do not re-ask" not in injected[0]["messages"][0]["content"]
 
     def test_no_ledger_means_human_answers(self):

@@ -68,12 +68,38 @@ class TestEnsureWorkspaceLayout:
 
 
 class TestCanonicalLayout:
-    def test_repo_layout_is_canonical(self):
+    def test_repo_layout_is_canonical(self, monkeypatch):
+        # v5.3: WORKSPACE_DIR resolves durable (~/.suijin/workspace) when
+        # present — force the repo-local resolution for layout mechanics.
+        monkeypatch.setattr(ws, "WORKSPACE_DIR", ws.PROJECT_DIR / "suijin_agent")
         # Repair first so the assertion holds regardless of import order.
         ws.ensure_workspace_layout()
         inner = ws.PROJECT_DIR / "suijin" / "suijin_agent"
         assert ws.WORKSPACE_DIR == ws.PROJECT_DIR / "suijin_agent"
         assert inner.is_symlink() or not inner.exists()
+
+    def test_workspace_resolution_order(self, monkeypatch, tmp_path):
+        """env override > durable ~/.suijin/workspace > repo-local."""
+        import pathlib
+
+        # isolate: a scratch PROJECT_DIR so an installed-layout symlink at
+        # the real repo-local path cannot short-circuit resolution
+        scratch = tmp_path / "repo"
+        (scratch / "suijin").mkdir(parents=True)
+        monkeypatch.setattr(ws, "PROJECT_DIR", scratch)
+        monkeypatch.delenv("SUIJIN_WORKSPACE", raising=False)
+        fake_home = tmp_path / "home"
+        fake_home.mkdir()
+        monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: fake_home))
+        # repo-local: no env, no durable dir at the fake home
+        assert ws._resolve_workspace() == scratch / "suijin_agent"
+        # durable: create it at the fake home -> it wins over repo-local
+        durable = fake_home / ".suijin" / "workspace"
+        durable.mkdir(parents=True)
+        assert ws._resolve_workspace() == durable
+        # env: explicit override beats everything
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(tmp_path / "explicit"))
+        assert ws._resolve_workspace() == tmp_path / "explicit"
 
     def test_sandbox_inside_workspace(self):
         from suijin.modules.platform.lib.infra import job_runner
