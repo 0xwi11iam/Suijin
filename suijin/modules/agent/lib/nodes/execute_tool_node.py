@@ -204,10 +204,29 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
     )
 
     step_data.update({"tool_output": output, "success": success, "duration_ms": duration_ms, "error_class": ec})
+
+    # H1: engagement state board — harvest what this tool learned and merge
+    # it into target_info; grew flag replaces the fake same-dict growth
+    # comparison think_node used to run
+    board_updates: dict = {}
+    grew = False
+    if success:
+        try:
+            from suijin.modules.agent.lib.target_board import extract_from_output, merge_updates
+
+            upd = extract_from_output(tool_name, tool_args, output)
+            if upd:
+                merged, grew = merge_updates(state.get("target_info") or {}, upd)
+                board_updates = {"target_info": merged}
+        except Exception:  # noqa: BLE001 — the board must never break a step
+            pass
+
     return {
         "_current_step": step_data,
         "execution_trace": [dict(step_data)],
         "_tool_result": {"success": success, "output": output},
+        **board_updates,
+        "_target_grew_last_step": grew,
         "messages": [
             {
                 "role": "user",
