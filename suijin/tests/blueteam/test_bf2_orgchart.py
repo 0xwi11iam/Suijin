@@ -211,17 +211,27 @@ class TestResponders:
             )
 
         async def _run():
-            return deploy_fireteam(
+            from suijin.modules.agent.lib.nodes.subagent_node import collect_finished_teams
+
+            dep = deploy_fireteam(
                 ["block 10.77.77.77 — responder sweep task"], generate_fn=gen, route_tool_fn=route_blue_tool
             )
+            # hold THIS loop open until the specialist finishes — the team
+            # runs as asyncio tasks and dies with the loop (asyncio.run
+            # returning early orphaned them; why this raced local-vs-CI)
+            import time as _t
+
+            deadline = _t.time() + 45
+            while _t.time() < deadline:
+                msgs = collect_finished_teams()
+                if msgs:
+                    break
+                await asyncio.sleep(0.2)
+            return dep
 
         dep = asyncio.run(_run())
         assert dep.get("team_id")
-        import time as _t
-
-        deadline = _t.time() + 30  # CI runners are slow; the episode is bounded by SUBAGENT_TIMEOUT anyway
-        while _t.time() < deadline and not _plane.is_blocked("10.77.77.77"):
-            _t.sleep(0.5)
+        # the episode completed inside the live loop; the block must have landed
         assert _plane.is_blocked("10.77.77.77"), f"responder never blocked; team={dep}"
 
     def test_event_queue_roundtrip(self):
