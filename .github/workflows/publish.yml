@@ -116,6 +116,7 @@ jobs:
 
   pypi-publish:
     if: github.event_name != 'pull_request' && startsWith(github.ref, 'refs/tags/v')
+    needs: [wheel-build]  # the clean-venv install proof gates the upload (5.6.0 lesson)
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
