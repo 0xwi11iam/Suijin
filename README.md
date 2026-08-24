@@ -1,4 +1,4 @@
-<h3 align="center">v5.4.0</h3> 
+<h3 align="center">v5.5.0</h3> 
 <p align="center">
 <img src="assets/suijin.png" alt="Suijin Logo" width="160"/>
 </p>
@@ -6,7 +6,7 @@
 
 
 <p align="center">
-  <img height="20" src="https://img.shields.io/badge/v5.4.0-suijin-green?style=flat" alt="Version"/>
+  <img height="20" src="https://img.shields.io/badge/v5.5.0-suijin-green?style=flat" alt="Version"/>
   <img height="20" src="https://img.shields.io/badge/LICENSE-AGPL%20v3-4169A1?style=flat" alt="License"/>
   <img height="20" src="https://img.shields.io/badge/PYTHON-3.10+-306998?style=flat&logo=python&logoColor=white" alt="Python"/>
 </p>
@@ -28,14 +28,14 @@ toolkit, one knowledge base, and one knowledge graph.
 
 ## What's Next
 
-The v5.4 line is the active surface (engagement console UI,
-authorization workflow, the .sj? package ecosystem). What's being built
-next:
+The v5.5 line is the active surface (harness competence: state board,
+job semantics, anti-repeat, control plane, claim-time verification).
+What's being built next:
 
 | Priority | Thing | Status |
 |---|---|---|
-| 1 | **Blue-team SOC loop** — the process_event pipeline: enrich (identity, assets), incidents with lifecycle, identity-level containment, retention + retro-hunt; headless `suijin blue` | wave A foundations landed; loop waves queued |
-| 2 | **Tool packs round 3** — cloud enum depth, AD/kerberos chains, mobile statics (+30) | queued |
+| 1 | **Beta capability waves** — source audit (treeaudit), web breadth + external bench adapter, mobile, forensics, binary packs | B1–B5 in plan |
+| 2 | **Blue-team SOC loop** — the process_event pipeline: enrich (identity, assets), incidents with lifecycle, identity-level containment, retention + retro-hunt; headless `suijin blue` | wave A foundations landed; loop waves queued |
 | 3 | **Marketplace community index** — the decentralized pack index goes live (hash-pinned installs already ship) | queued |
 
 > **Desktop app (deprecated):** the Tauri desktop client and its gateway

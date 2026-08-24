@@ -1,6 +1,6 @@
 {
-  "version": "5.4.0",
+  "version": "5.5.0",
   "codename": "Suijin OS",
   "release_date": "2026-08-23",
-  "description": "Suijin OS v5.4.0 \u2014 the capability ecosystem. Person-to-person package distribution: .sjm module packs, .sja addons and .sjp kernel plugins as single sealed files (SHA-256 sums, path-traversal and zip-bomb guards, tool-shadowing refusal). A built-in AST-only safety scanner refuses hidden eval/exec, hardcoded secrets, obfuscated blobs and built-in tool shadowing \u2014 it never executes payload code, and install always re-scans source. The suijin install wizard shows attribution, dev note, scan verdict and the full tool table; Enter installs. Ships three sealed example packages plus five malicious scanner fixtures proving the guards end-to-end. Field fixes: spinner 3x faster, RunBox shares the engagement console, search_kb accepts its documented args. 1,597 tests green."
+  "description": "Suijin OS v5.5.0 \u2014 harness competence. Six evidence-backed loop repairs from real field traces: the engagement state board (working memory finally populated and rendered every turn), job semantics (finished background jobs drain into the conversation, waits never self-background, status untruncated), dispatch-layer anti-repeat (identical failing calls blocked at three with alternatives), the undormant control plane (51 skills reachable, plan queue fixed, prompt-hygiene CI gates), claim-time finding verification with honest verdicts plus repaired engagement memory, and per-iteration audit telemetry. 1,648 tests green."
 }
