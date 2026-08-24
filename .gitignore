@@ -116,3 +116,7 @@ examples/malicious/built/
 # workspace (durable home), never in the repo
 suijin_agent/outputs/memory/
 suijin_agent/outputs/scratchpad/
+
+# Hill CTF runtime state (levers may be edited live; events are engagement data)
+suijin/lab/hill_ctf/hill_events.jsonl
+suijin/lab/hill_ctf/hill_defense.json
