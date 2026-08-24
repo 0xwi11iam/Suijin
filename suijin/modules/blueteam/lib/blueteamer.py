@@ -360,16 +360,22 @@ async def _run_async():
             session.baseline_established = feed.baseline_established
             session.baseline_request_count = request_count
 
-            # Update session from feed stats
+            # Update session from feed stats — BF0: DETECTED (flagged) is
+            # not BLOCKED; enforcement counters come from the feed's own
+            # honest tally of applied defenses
             if result and result.verdict == "FLAGGED":
                 session.threats_blocked += 1
+            fs = feed.get_stats()
+            session.threats_deceived = fs.get("deceived", 0)
 
             if request_count % 25 == 0 and request_count > 0:
                 stats = feed.get_stats()
                 console.print(
                     f"  [dim]── {request_count} requests | "
-                    f"{session.threats_blocked} blocked | "
-                    f"{session.threats_deceived} flagged | "
+                    f"{session.threats_blocked} detected | "
+                    f"{stats.get('tarpitted', 0)} tarpitted | "
+                    f"{stats.get('blocked', 0)} blocked | "
+                    f"{session.threats_deceived} deceived | "
                     f"${stats['ai_cost']:.4f} AI cost ──[/dim]"
                 )
 

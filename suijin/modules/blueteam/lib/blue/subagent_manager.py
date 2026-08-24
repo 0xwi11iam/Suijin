@@ -83,13 +83,27 @@ class SubagentManager:
             if sa.endpoint.get("path") == path:
                 return sa
 
-        # Prefix match — /api/users/42 matches /api/users/<int:uid>
+        # Prefix match — /api/users/42 matches /api/users/<int:uid>.
+        # BF0: boundary check — the raw prefix also matched sibling paths
+        # like /api/users_export. Consume the variable segment too: after
+        # the prefix, the next path segment must be a single component.
         for sa in self.subagents.values():
             ep_path = sa.endpoint.get("path", "")
             # Convert Flask/Express patterns to simple prefixes
             prefix = ep_path.split("<")[0].rstrip("/")
-            if prefix and path.startswith(prefix):
-                return sa
+            if not prefix or not path.startswith(prefix):
+                continue
+            if "<" in ep_path:
+                rest = path[len(prefix):].lstrip("/")
+                next_fixed = ep_path.split("<", 1)[1].split(">", 1)[-1]  # after the var
+                consumed = rest.split("/", 1)[0]
+                after = rest[len(consumed):]
+                expected = next_fixed  # e.g. '' or '/detail'
+                if after != expected:
+                    continue  # variable segment overran into a sibling path
+            elif path != prefix:
+                continue  # static route only matches itself
+            return sa
 
         return None
 
