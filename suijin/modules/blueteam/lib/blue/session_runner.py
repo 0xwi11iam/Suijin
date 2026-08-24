@@ -44,6 +44,7 @@ class _KeystrokeReader:
         # only if we raw-mode it; we cbreak WITH ISIG so ^C signals normally —
         # on_intr is the fallback for platforms where ISIG is off)
         self._stop = threading.Event()
+        self._paused = threading.Event()  # set while the pause console owns stdin
         self._thread: threading.Thread | None = None
         self._termios_saved = False
 
@@ -108,6 +109,26 @@ class _KeystrokeReader:
         self._stop.set()
         self._restore()
 
+    def suspend(self) -> None:
+        """Restore cooked mode and stop consuming bytes — the pause
+        console's input() owns stdin (echo + line editing) until resume."""
+        self._paused.set()
+        self._restore()
+
+    def resume(self) -> None:
+        """Re-enter cbreak and retake stdin after a suspend."""
+        import termios
+        import tty
+
+        if self._stop.is_set():
+            return
+        self._paused.clear()
+        try:
+            tty.setcbreak(sys.stdin.fileno())
+            self._termios_saved = True
+        except termios.error:
+            pass
+
     def _pump(self) -> None:
         """Read stdin one byte at a time via select (never blocks exit —
         the daemon thread dies with the process; termios is restored by
@@ -116,6 +137,9 @@ class _KeystrokeReader:
         fd = sys.stdin.fileno()
         buf = ""
         while not self._stop.is_set():
+            if self._paused.is_set():
+                time.sleep(0.1)  # the pause console owns stdin — don't race it
+                continue
             try:
                 r, _, _ = select.select([fd], [], [], 0.2)
             except (OSError, ValueError):
@@ -176,6 +200,17 @@ class BlueCommandBox:
             self._keys.stop()
             self._keys = None
         self.ui.set_input(None)
+
+    def suspend(self) -> None:
+        """Yield the terminal to someone else (the Ctrl+C pause console):
+        restore termios so their input() echoes properly."""
+        if self._keys is not None:
+            self._keys.suspend()
+
+    def resume(self) -> None:
+        """Re-take the terminal after a suspend (new cbreak session)."""
+        if self._keys is not None:
+            self._keys.resume()
 
     def register(self, name: str, fn) -> None:
         self._handlers[name.lstrip("/").lower()] = fn
