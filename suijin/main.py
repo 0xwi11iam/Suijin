@@ -3,16 +3,19 @@ import subprocess
 import sys
 import warnings
 
-from suijin.modules.platform.lib.config_models import CostCapWarning
+# Make sure the parent dir is on sys.path BEFORE any `from suijin import …`
+# (this file lives at /app/suijin/main.py in the container; WORKDIR is
+# /app/suijin, so the package root /app is NOT on the path at startup —
+# the import below detonated with ModuleNotFoundError in docker run)
+_pkg_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _pkg_parent not in sys.path:
+    sys.path.insert(0, _pkg_parent)
+
+from suijin.modules.platform.lib.config_models import CostCapWarning  # noqa: E402
 
 warnings.filterwarnings("ignore", category=CostCapWarning)  # shown as ONE red line instead
 # third-party deprecation noise (langgraph serializer advisory) — never actionable for the operator
 warnings.filterwarnings("ignore", message=".*allowed_objects.*")  # any category — langchain uses its own base class
-
-# Make sure the parent dir is on sys.path so `from suijin import …` works
-_pkg_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _pkg_parent not in sys.path:
-    sys.path.insert(0, _pkg_parent)
 
 from rich.console import Console
 from rich.panel import Panel
@@ -77,6 +80,18 @@ def operator_menu():
 
 
 def main():
+    # container verb support: `docker run image version` etc. — a KNOWN
+    # CLI verb dispatches straight to the CLI instead of the interactive
+    # TUI (unknown argv like pytest's is ignored — it's not for us)
+    _argv = sys.argv[1:]
+    if _argv and not _argv[0].startswith("-") and not _argv[0].endswith(".py"):
+        from suijin.modules.console.lib.cli import is_known_verb
+
+        if is_known_verb(_argv[0]):
+            from suijin.modules.console.lib.cli import main as cli_main
+
+            raise SystemExit(cli_main(_argv))
+
     from suijin.modules.platform.lib.runtime import init_runtime
 
     init_runtime()  # explicit one-time init (Phase 0 contract)

@@ -1873,6 +1873,68 @@ def run_compliance(args) -> int:
     return 0
 
 
+_KNOWN_VERBS = frozenset(
+    {
+        "doctor",
+        "selftest",
+        "status",
+        "version",
+        "env",
+        "tools",
+        "modules",
+        "workspace",
+        "reports",
+        "sessions",
+        "timeline",
+        "dossier",
+        "clean",
+        "wordlist",
+        "gateway",
+        "tokens",
+        "kg",
+        "market",
+        "engage",
+        "theater",
+        "plan",
+        "recipes",
+        "profile",
+        "spar",
+        "watch",
+        "skills",
+        "labs",
+        "export",
+        "debrief",
+        "replay",
+        "eval",
+        "battle",
+        "bench",
+        "pack",
+        "install",
+        "authorize",
+        "bb-scope",
+        "kb",
+        "pull",
+        "creds",
+        "rules",
+        "policy",
+        "providers",
+        "module",
+        "notify",
+        "compliance",
+        "approvals",
+        "panic",
+        "scope",
+        "config",
+    }
+)
+
+
+def is_known_verb(word: str) -> bool:
+    """True when word is a suijin CLI verb (container argv dispatch uses
+    this so pytest's argv never gets dispatched to the CLI)."""
+    return str(word or "").strip() in _KNOWN_VERBS
+
+
 def main(argv=None):
     import warnings
 
