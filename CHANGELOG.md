@@ -6,6 +6,40 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v5.6.1 — Installability Fix
+
+`pip install suijin` works on a clean machine; the container boots,
+takes verbs, and passes its own healthcheck; uninstallable metadata is
+now a build failure instead of a user's error report.
+
+- **pip ResolutionImpossible fixed**: the 5.6.0 wheel declared
+  `rich>=13,<14` alongside `textual>=8` (which requires `rich>=14.2`) —
+  an unsatisfiable pair; every fresh install died. Bounds are now
+  `rich>=13,<16` (pyproject + requirements.txt), and textual ships in
+  the container so the Module Manager TUI opens there. Dev machines
+  never saw it: pip does not re-check installed packages against new
+  bounds.
+- **Container crash fixed**: the entrypoint imported `suijin` before
+  putting its parent on `sys.path` — `ModuleNotFoundError` under
+  `docker run` (WORKDIR is `/app/suijin`, the package root `/app` was
+  never on the path). Bootstrap now runs before all imports; known CLI
+  verbs (`version`, `doctor`, ...) dispatch headless from the
+  entrypoint while pytest-style argv never dispatches (`is_known_verb`
+  gate, pinned to the real argparse choices by test so verbs cannot
+  drift).
+- **Image healthcheck fixed**: doctor's required binaries included
+  `feroxbuster` and `john`, absent from the curated apt list — the
+  shipped image marked itself unhealthy on first boot. Both installed.
+- **Blue console polish**: heartbeat strip thread (uptime ticks,
+  spinner never freezes between requests), always-visible input
+  affordance row (`» /block <ip> · /state · /shell <cmd>`), one-line
+  baseline training progress (no more banner spam, duplicate verdict
+  removed).
+- **Publishing hardened**: the wheel is built, installed into a clean
+  venv, and the CLI run — on every push and PR — and `pypi-publish`
+  waits on that proof; the 5.6.0 metadata bug class is now caught
+  before upload.
+
 ## v5.6.0 — The Hill CTF and Blue Freedom
 
 The blue team stops being a classifier and becomes a defender; a new CTF
