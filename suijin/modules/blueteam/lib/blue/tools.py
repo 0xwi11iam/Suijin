@@ -126,8 +126,13 @@ def _blue_shell(cmd: str = "", args: dict = None) -> str:
     if not command.strip():
         return "Error: cmd required"
     low = command.lower().replace(" ", "")
-    if any(p.lower().replace(" ", "") in low for p in _DANGEROUS_PATTERNS) and os.environ.get("SUIJIN_AUTO_APPROVE", "").lower() != "true":
-        return f"REFUSED: command matches a dangerous pattern ({command[:60]}…). Set SUIJIN_AUTO_APPROVE=true to override."
+    if (
+        any(p.lower().replace(" ", "") in low for p in _DANGEROUS_PATTERNS)
+        and os.environ.get("SUIJIN_AUTO_APPROVE", "").lower() != "true"
+    ):
+        return (
+            f"REFUSED: command matches a dangerous pattern ({command[:60]}…). Set SUIJIN_AUTO_APPROVE=true to override."
+        )
     try:
         proc = subprocess.run(["/bin/sh", "-c", command], capture_output=True, text=True, timeout=30)
         out = (proc.stdout or "") + (("\n[stderr] " + proc.stderr) if proc.stderr else "")
@@ -158,8 +163,10 @@ BLUE_TOOLS: dict[str, tuple] = {
 }
 
 
-def route_blue_tool(name: str, args: dict) -> str:
-    """Dispatch one blue tool. Unknown names return guidance."""
+def route_blue_tool(name: str, args: dict, config=None) -> str:
+    """Dispatch one blue tool. Signature matches the dispatch contract
+    (name, args, config) so it drops straight into SuijinAgentGraph.
+    Unknown names return guidance."""
     entry = BLUE_TOOLS.get(name)
     if entry is None:
         close = [n for n in BLUE_TOOLS if name and name.split("_")[-1] in n][:3]

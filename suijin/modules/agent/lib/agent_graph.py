@@ -182,7 +182,7 @@ class SuijinAgentGraph:
         except Exception:  # noqa: BLE001 — budgeting must never break the loop
             pass
         try:
-            result = await think_node(state, generate_fn=self.generate_fn)
+            result = await think_node(state, generate_fn=self.generate_fn, route_tool_fn=self.route_tool_fn)
             # Circuit breaker: track consecutive provider/parse failures
             if result.get("completion_reason") in ("provider_failure", "parse_failure", "llm_error"):
                 fails = state.get("_consecutive_failures", 0) + 1

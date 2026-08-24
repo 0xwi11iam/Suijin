@@ -61,7 +61,7 @@ def blue_mocks(monkeypatch, tmp_path):
     async def fake_spawn(endpoints, config):
         return []
 
-    monkeypatch.setattr("suijin.modules.blueteam.lib.blue.watchers.spawner.spawn_watchers", fake_spawn)
+    monkeypatch.setattr("suijin.modules.blueteam.lib.blue.watchers.spawn_watchers", fake_spawn)
 
     # SOC team -> cheap fakes
     class FakeSOCLead:

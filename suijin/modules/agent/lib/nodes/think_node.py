@@ -89,7 +89,7 @@ def _render_board(state: dict) -> str:
         return _json_dumps_safe(state.get("target_info", {}), indent=2)
 
 
-def _run_auto_actions(auto_actions: list, updates: dict):
+def _run_auto_actions(auto_actions: list, updates: dict, route_tool_fn=None):
     """Run lightweight side actions (write_note, check_knowledge, job_list, etc.)
     in the same iteration as the main tool. Results injected into messages.
 
@@ -100,7 +100,10 @@ def _run_auto_actions(auto_actions: list, updates: dict):
     - job_list: check background jobs
     - deploy_subagent: spawn parallel work (fires async, result in future turn)
     """
-    from suijin.modules.tools.lib.dispatch import route_tool
+    if route_tool_fn is None:
+        from suijin.modules.tools.lib.dispatch import route_tool as route_tool
+    else:
+        route_tool = route_tool_fn
 
     for aa in auto_actions:
         if not isinstance(aa, dict):
@@ -157,7 +160,7 @@ def _run_auto_actions(auto_actions: list, updates: dict):
             logger.warning(f"Auto-action {aa_action} failed: {e}")
 
 
-async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
+async def think_node(state: dict, *, generate_fn, config: dict = None, route_tool_fn=None) -> dict:
     """Core ReAct reasoning node.
 
     Args:
@@ -177,10 +180,19 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
     _tenant_ctx(user_id, project_id, session_id)
     _phase_ctx(phase)
 
-    # Build system prompt using the new skill-based builder
-    from suijin.modules.agent.lib.prompts.base import build_agent_system_prompt  # lazy import, breaks circular dep
+    # Build system prompt using the new skill-based builder — with the
+    # BF2 blue seam: state["_blue_mode"] swaps in the blue prompt builder
+    # (doctrine, blue tools, blue skills) and the defensive task order
+    if state.get("_blue_mode"):
+        from suijin.modules.blueteam.lib.blue.agent import blue_system_prompt, defensive_order
 
-    system_prompt = build_agent_system_prompt(state)
+        system_prompt = blue_system_prompt(state)
+        user_turn = defensive_order(state.get("original_objective", ""))
+    else:
+        from suijin.modules.agent.lib.prompts.base import build_agent_system_prompt, engagement_order
+
+        system_prompt = build_agent_system_prompt(state)
+        user_turn = engagement_order(state.get("original_objective", ""))
 
     # Add state context (chain, todos, QA) after the skill+tools prompt
     chain_context = format_chain_context(
@@ -278,7 +290,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         {"role": "system", "content": full_prompt},
         {
             "role": "user",
-            "content": engagement_order(state.get("original_objective", "")),
+            "content": user_turn,
         },
     ]
 
@@ -508,7 +520,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         # ── Auto-actions: free side commands that run alongside main tool ──
         auto_actions = decision.get("auto_actions") or []
         if auto_actions:
-            _run_auto_actions(auto_actions, updates)
+            _run_auto_actions(auto_actions, updates, route_tool_fn)
 
         # H4: drain the queued plan — if this use_tool matches the queued
         # head, pop it so the queue shrinks as the plan executes
@@ -544,7 +556,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
         # ── Auto-actions ──
         auto_actions = decision.get("auto_actions") or []
         if auto_actions:
-            _run_auto_actions(auto_actions, updates)
+            _run_auto_actions(auto_actions, updates, route_tool_fn)
 
     elif action == "transition_phase":
         pt = decision.get("phase_transition") or {}
@@ -638,9 +650,13 @@ async def think_node(state: dict, *, generate_fn, config: dict = None) -> dict:
             }
             try:
                 from suijin.modules.agent.lib.nodes.subagent_node import deploy_fireteam
-                from suijin.modules.tools.lib.dispatch import route_tool
 
-                dep = deploy_fireteam(tasks, generate_fn=generate_fn, route_tool_fn=route_tool)
+                if route_tool_fn is not None:
+                    _rt = route_tool_fn  # blue graph: responders route BLUE tools
+                else:
+                    from suijin.modules.tools.lib.dispatch import route_tool as _rt
+
+                dep = deploy_fireteam(tasks, generate_fn=generate_fn, route_tool_fn=_rt)
                 if dep.get("team_id"):
                     content = (
                         f"FIRETEAM {dep['team_id']} DEPLOYED — {len(dep['spawned'])} specialist(s) running in the background:\n"
