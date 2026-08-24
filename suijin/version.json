@@ -1,6 +1,6 @@
 {
-  "version": "5.5.0",
+  "version": "5.6.0",
   "codename": "Suijin OS",
-  "release_date": "2026-08-23",
-  "description": "Suijin OS v5.5.0 \u2014 harness competence. Six evidence-backed loop repairs from real field traces: the engagement state board (working memory finally populated and rendered every turn), job semantics (finished background jobs drain into the conversation, waits never self-background, status untruncated), dispatch-layer anti-repeat (identical failing calls blocked at three with alternatives), the undormant control plane (51 skills reachable, plan queue fixed, prompt-hygiene CI gates), claim-time finding verification with honest verdicts plus repaired engagement memory, and per-iteration audit telemetry. 1,648 tests green."
+  "release_date": "2026-08-24",
+  "description": "Suijin OS v5.6.0 \u2014 The Hill CTF + Blue Freedom. The Hill: a four-perimeter CTF lab (decoy perimeter, JWT two-step + IDOR foothold, SSRF pivot through canary-wired metadata, command-injection vault with a rotating token and a force-rotate defense lever). Blue Freedom waves BF0-BF3: honest enforcement (no zero-defense verdicts, truthful detected/blocked/deceived counters), the enforcement plane (blocks, honeypots, fakes, redirects, canary trips served at the proxy \u2014 instant, zero app mutation), a real org chart (primary agent loop with blue doctrine and 8 defensive playbooks, per-endpoint zero-LLM watchers with auto fast-path, LLM incident responders routing blue tools), and the live blue console (event blocks, stats strip, always-active command box: /block /unblock /state /canaries /rotate /shell). First GHCR + PyPI publishing. 1,727 tests green."
 }
