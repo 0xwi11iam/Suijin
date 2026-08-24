@@ -181,6 +181,12 @@ class LiveFeed:
         self.threat_hunter = threat_hunter
         self.incident_commander = incident_commander
         self._recent_requests: list = []  # For threat hunter to scan
+        # BF0: honest per-instance enforcement counters (see get_stats)
+        self.stats_detected = 0
+        self.stats_tarpitted = 0
+        self.stats_blocked = 0
+        self.stats_deceived = 0
+        self._flagged_ips = {}  # ip -> count of times flagged (instance state)
 
     async def process_request(self, request: dict) -> Optional[AIAnalysisResult]:
         """Process a single incoming request through the tier system.
@@ -246,6 +252,7 @@ class LiveFeed:
 
         if result.verdict == "FLAGGED":
             self.subagent_manager.record_anomaly(path, "FLAGGED")
+            self.stats_detected += 1
             render_investigated_request(result)
             self._execute_ai_decision(result, ip, [], result.score)
             return result
@@ -256,7 +263,9 @@ class LiveFeed:
             return result
 
     # ── Attack response — actually DO something ────────────────────────
-    _flagged_ips: dict = {}  # ip -> count of times flagged
+    # BF0: per-INSTANCE repeat-offender tracking (was a class attribute —
+    # shared mutable state across feeds, harmless today, a trap tomorrow)
+    _flagged_ips: dict  # declared; initialized per instance in __init__
 
     async def _handle_attack_detected(self, request, attack_check, sa, rid, path, method, ip, normalizer):
         """Pattern matched — let AI decide the actual response.
@@ -340,6 +349,7 @@ class LiveFeed:
             action="ANALYZING",
         )
         self.subagent_manager.record_anomaly(path, "FLAGGED")
+        self.stats_detected += 1
         render_investigated_request(result)
 
         # ── AI decides the actual response ──
@@ -438,6 +448,7 @@ class LiveFeed:
                     # Deploy honeypot endpoint
                     hp = deploy_honeypot(target_path, sa, ip)
                     if hp["status"] == "deployed":
+                        self.stats_deceived += 1
                         console.print(
                             f"  [yellow]HONEYPOT:[/yellow] {hp['honeypot_path']} deployed in {os.path.basename(hp['file'])}"
                         )
@@ -467,10 +478,23 @@ class LiveFeed:
                     console.print(f"  [red]PATCH FAILED:[/red] {e}")
 
         # Apply tarpit/blocking
+        defended = False
         if "DECEIVE" in action or "TARPIT" in action:
             self._apply_tarpit(ip, score, patterns)
+            defended = True
         if "BLOCK" in action:
             self._apply_block(ip, score)
+            defended = True
+        # BF0: a FLAGGED verdict that matched NO action verb (REVIEW/LOG/
+        # unknown — including the AI-unavailable path) used to fall through
+        # with ZERO defense. A pattern-confirmed attack always gets at
+        # least the fallback tarpit.
+        if not defended:
+            console.print(
+                f"  [yellow]action '{result.action or 'none'}' matched no defense — applying fallback tarpit[/yellow]"
+            )
+            self._apply_tarpit(ip, score, patterns)
+            result.action = (result.action or "none") + " (fallback tarpit)"
 
         # Show action summary
         action_color = {"BLOCK": "red", "DECEIVE": "yellow", "PATCH": "green", "LOG": "dim"}.get(action, "white")
@@ -489,6 +513,7 @@ class LiveFeed:
 
             _tarpit_protocol.engage(ip, delay=min(8.0, 1.0 + score * 0.8), path=self.TARPIT_FILE, patterns=patterns)
             delay = _tarpit_protocol.delay_for(ip, path=self.TARPIT_FILE)
+            self.stats_tarpitted += 1
             console.print(f"  [yellow]TARPIT:[/yellow] {ip} — {delay:.1f}s delay per request")
         except Exception as e:
             console.print(f"  [red]TARPIT FAILED:[/red] {e}")
@@ -500,6 +525,8 @@ class LiveFeed:
             return
         import platform
         import subprocess
+
+        self.stats_blocked += 1
 
         system = platform.system()
         try:
@@ -542,4 +569,12 @@ class LiveFeed:
             "ai_analyses": self.ai_engine.total_analyses,
             "ai_cost": self.ai_engine.total_cost_usd,
             "subagents": self.subagent_manager.get_summary(),
+            # BF0: honest counters — detected (flagged) vs enforced
+            # (tarpits/blocks actually applied) vs deceived (deception
+            # actually deployed). The old code counted flaggings as
+            # 'blocked' and never counted deception at all.
+            "detected": self.stats_detected,
+            "tarpitted": self.stats_tarpitted,
+            "blocked": self.stats_blocked,
+            "deceived": self.stats_deceived,
         }

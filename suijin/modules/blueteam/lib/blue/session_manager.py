@@ -84,7 +84,7 @@ class BlueSession:
         self.started_at = datetime.now(timezone.utc)
         self.endpoints_discovered = 0
         self.total_requests_processed = 0
-        self.threats_blocked = 0
+        self.threats_blocked = 0  # BF0: flaggings (detected); enforcement in feed stats
         self.threats_deceived = 0
         self.hotfixes_deployed = 0
         self.active_watchers = 0
@@ -120,7 +120,7 @@ class BlueSession:
                     "started_at": self.started_at.isoformat(),
                     "stats": {
                         "requests": self.total_requests_processed,
-                        "blocked": self.threats_blocked,
+                        "detected": self.threats_blocked,  # legacy field name; now = flaggings
                         "deceived": self.threats_deceived,
                         "hotfixes": self.hotfixes_deployed,
                         "watchers": self.active_watchers,
