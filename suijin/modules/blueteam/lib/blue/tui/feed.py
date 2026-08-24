@@ -204,6 +204,10 @@ class LiveFeed:
         method = request.get("method", "GET")
         ip = request.get("ip", "0.0.0.0")
 
+        # BF3: the console UI event block (optional — absent for headless)
+        if getattr(self, "ui", None):
+            self.ui.begin_event(method, path, ip)
+
         # Find the subagent responsible for this endpoint
         sa = self.subagent_manager.find_for_request(path)
 
@@ -213,11 +217,15 @@ class LiveFeed:
                 self.baseline_established = True
                 console.print(f"\n  [bold green]BASELINE ESTABLISHED[/bold green] [dim]({rid} requests)[/dim]")
                 console.print("  [dim]AI analysis now active for anomalous requests[/dim]\n")
+                if getattr(self, "ui", None):
+                    self.ui.note("baseline established — AI analysis active", "green")
             else:
                 if self.config.show_all_normals:
                     if sa:
                         render_subagent_assignment(rid, path, sa.rank, sa.agent_id)
                     render_normal_line(rid, method, path, ip)
+                if getattr(self, "ui", None):
+                    self.ui.verdict("normal", f"baseline training ({rid}/{self.config.baseline_requests})")
                 return None
 
         # ── AFTER BASELINE: check if this is a known normal ──
@@ -230,6 +238,8 @@ class LiveFeed:
                 if sa:
                     render_subagent_assignment(rid, path, sa.rank, sa.agent_id)
                 render_normal_line(rid, method, path, ip)
+            if getattr(self, "ui", None):
+                self.ui.verdict("normal", "known-normal pattern")
             return None
 
         # ── PRE-AI FAST PATH: pattern-based attack detection ──
@@ -254,12 +264,16 @@ class LiveFeed:
             self.subagent_manager.record_anomaly(path, "FLAGGED")
             self.stats_detected += 1
             render_investigated_request(result)
+            if getattr(self, "ui", None):
+                self.ui.verdict("investigated", f"AI flagged — {result.attack_analysis[:100]}")
             self._execute_ai_decision(result, ip, [], result.score)
             return result
         else:
             if normalizer:
                 normalizer.add_to_baseline(request)
             render_anomalous_line(rid, method, path, ip, score=result.score, flagged=False)
+            if getattr(self, "ui", None):
+                self.ui.verdict("anomalous", f"AI says benign (score {result.score})")
             return result
 
     # ── Attack response — actually DO something ────────────────────────
@@ -277,6 +291,9 @@ class LiveFeed:
         pattern_names = [p[0] for p in attack_check["patterns"]]
         score = attack_check["score"]
         body = str(request.get("body", ""))
+
+        if getattr(self, "ui", None):
+            self.ui.verdict("investigated", f"pattern: {', '.join(pattern_names)} (score {score}/10)")
 
         # Track repeat offenders
         prev = self._flagged_ips.get(ip, 0)
@@ -498,6 +515,10 @@ class LiveFeed:
 
         # Show action summary
         action_color = {"BLOCK": "red", "DECEIVE": "yellow", "PATCH": "green", "LOG": "dim"}.get(action, "white")
+        if getattr(self, "ui", None):
+            self.ui.action(result.action or "none", result.reasoning)
+            for cmd in result.commands_run or []:
+                self.ui.command(cmd)
         console.print(
             Panel.fit(
                 f"[bold {action_color}]ACTION: {result.action}[/bold {action_color}]\n[dim]{result.reasoning}[/dim]",

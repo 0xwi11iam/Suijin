@@ -348,8 +348,16 @@ async def _run_async():
     )
     feed.blocking_enabled = blocking_enabled
 
+    # ── BF3: the live console session (strip + events + input box) ──
+    from suijin.modules.blueteam.lib.blue.session_runner import start_session
+
+    session_ui, cmd_box = start_session(console, target_path.rsplit("/", 1)[-1] or "target", feed=feed)
+    session_ui.watchers = len(watchers) if watchers else 0
+
     # ── Main monitoring loop ──
-    console.print("\n[bold #58a6ff]Live Traffic Feed[/bold #58a6ff] [dim](Ctrl+C to pause)[/dim]")
+    console.print(
+        "\n[bold #58a6ff]Live Traffic Feed[/bold #58a6ff] [dim](Ctrl+C to pause, type commands anytime)[/dim]"
+    )
     console.print("─" * 68)
 
     # Signal handling
@@ -425,6 +433,15 @@ async def _run_async():
             fs = feed.get_stats()
             session.threats_deceived = fs.get("deceived", 0)
 
+            # BF3: strip sync — the live UI shows what actually happened
+            session_ui.requests = request_count
+            session_ui.detected = session.threats_blocked
+            session_ui.tarpitted = fs.get("tarpitted", 0)
+            session_ui.blocked = fs.get("blocked", 0)
+            session_ui.deceived = session.threats_deceived
+            session_ui.cost_usd = fs.get("ai_cost", 0.0)
+            session_ui.tick()
+
             if request_count % 25 == 0 and request_count > 0:
                 stats = feed.get_stats()
                 console.print(
@@ -493,6 +510,11 @@ async def _run_async():
                 )
             _signal.signal(_signal.SIGINT, lambda sig, frame: setattr(_signal, "_blue_interrupted", True))
             continue
+
+    # BF3: session teardown — strip off, input box off, clean exit
+    cmd_box.stop()
+    session_ui.stop()
+    session_ui.banner("session ended — report in outputs/blue_state/", "yellow")
 
     session.save()
     # Shut down proxy if running
