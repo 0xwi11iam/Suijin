@@ -87,7 +87,10 @@ def decoy_is_loud() -> bool:
 
 
 def consume_force_rotate() -> bool:
-    """One-shot force-rotate flag (set by blue via shell)."""
+    """One-shot force-rotate flags: the defense file (hill_defense.json)
+    OR the blue-agent semaphore written by blue_force_rotate."""
+    from suijin.modules.platform.lib.constants import TMP_DIR
+
     try:
         with _lock:
             if DEFENSE_PATH.exists() and _load().get("force_rotated"):
@@ -95,6 +98,13 @@ def consume_force_rotate() -> bool:
                 data["force_rotated"] = False
                 DEFENSE_PATH.write_text(json.dumps(data, indent=2))
                 return True
+    except Exception:
+        pass
+    try:
+        sem = TMP_DIR / "hill_force_rotate"
+        if sem.exists():
+            sem.unlink()
+            return True
     except Exception:
         pass
     return False

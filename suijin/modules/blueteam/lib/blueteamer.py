@@ -141,46 +141,103 @@ async def _run_async():
             _print_middleware_snippet(console, traffic_log)
             console.input("\n  [dim]Press Enter to continue...[/dim]")
     elif choice == "2":
-        target_path = str(BASE_DIR / "lab" / "blue_target")
-        traffic_log = str(_const("BLUE_TRAFFIC_LOG"))
-        app_port = _const("BLUE_LAB_PORT")
-
-        import subprocess
-        import urllib.request
-
-        # Kill any stale process on port 5906
+        console.print("\n  [bold white]Built-in labs:[/bold white]")
+        console.print("  [bold]1.[/] blue_target (classic, 25 endpoints — port 5906)")
+        console.print("  [bold]2.[/] hill_ctf (four perimeters, rotating vault token)")
         try:
-            result = subprocess.run(
-                ["lsof", "-ti", f":{_const('BLUE_LAB_PORT')}"], capture_output=True, text=True, timeout=3
-            )
-            for pid in result.stdout.strip().split("\n"):
-                pid = pid.strip()
-                if pid:
-                    os.kill(int(pid), _signal.SIGTERM)
-                    console.print(f"[dim]Killed stale process on :{_const('BLUE_LAB_PORT')} (pid {pid})[/dim]")
+            lab_choice = console.input("\n  Lab  ").strip()
+        except (KeyboardInterrupt, EOFError):
+            return
+        if lab_choice == "2":
+            target_path = str(BASE_DIR / "lab" / "hill_ctf")
+            hill_app_port = 5910
+            # BF1: the Hill ALWAYS boots behind the proxy — that's the
+            # enforcement plane (blocks/honeypots/canaries apply instantly)
+            import subprocess
+            import urllib.request
+
+            for port in (hill_app_port, 5911):
+                try:
+                    result = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True, timeout=3)
+                    for pid in result.stdout.strip().split("\n"):
+                        if pid.strip():
+                            os.kill(int(pid.strip()), _signal.SIGTERM)
+                except Exception:
+                    pass
             time.sleep(0.5)
-        except Exception:
-            pass
+            subprocess.Popen(
+                [sys.executable, str(BASE_DIR / "lab" / "hill_ctf" / "app.py")],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            for _ in range(10):
+                time.sleep(0.3)
+                try:
+                    urllib.request.urlopen(f"http://127.0.0.1:{hill_app_port}/health", timeout=1)
+                    break
+                except Exception:
+                    pass
+            else:
+                console.print("[red]Failed to start the hill lab[/red]")
+                return
+            from suijin.modules.blueteam.lib.blue.proxy import start_proxy
 
-        # Start the vulnerable app in background
-        subprocess.Popen(
-            [sys.executable, str(BASE_DIR / "lab" / "blue_target" / "vulnerable_app.py")],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+            proxy_port = _find_free_port(start=5912)
+            proxy_server = start_proxy(
+                listen_port=proxy_port,
+                target_port=hill_app_port,
+                target_host="127.0.0.1",
+                log_path=_const("BLUE_TRAFFIC_LOG"),
+            )
+            console.print(
+                f"[green]The Hill ready — attack it at :{proxy_port} (app hidden on :{hill_app_port})[/green]"
+            )
+            console.print(
+                "[dim]Your arsenal: blue_block/blue_honeypot/blue_tarpit/… apply at the proxy instantly[/dim]"
+            )
+            app_port = hill_app_port  # sessions/reporting reference the app port
+            traffic_log = str(_const("BLUE_TRAFFIC_LOG"))  # the proxy logs here
+        else:
+            target_path = str(BASE_DIR / "lab" / "blue_target")
+            traffic_log = str(_const("BLUE_TRAFFIC_LOG"))
+            app_port = _const("BLUE_LAB_PORT")
 
-        # Wait until the app is actually listening
-        for _ in range(10):
-            time.sleep(0.3)
+            import subprocess
+            import urllib.request
+
+            # Kill any stale process on port 5906
             try:
-                urllib.request.urlopen(f"http://127.0.0.1:{_const('BLUE_LAB_PORT')}/", timeout=1)
-                console.print(f"[green]Vulnerable app ready on port {_const('BLUE_LAB_PORT')}[/green]")
-                break
+                result = subprocess.run(
+                    ["lsof", "-ti", f":{_const('BLUE_LAB_PORT')}"], capture_output=True, text=True, timeout=3
+                )
+                for pid in result.stdout.strip().split("\n"):
+                    pid = pid.strip()
+                    if pid:
+                        os.kill(int(pid), _signal.SIGTERM)
+                        console.print(f"[dim]Killed stale process on :{_const('BLUE_LAB_PORT')} (pid {pid})[/dim]")
+                time.sleep(0.5)
             except Exception:
                 pass
-        else:
-            console.print(f"[red]Failed to start vulnerable app on port {_const('BLUE_LAB_PORT')}[/red]")
-            return
+
+            # Start the vulnerable app in background
+            subprocess.Popen(
+                [sys.executable, str(BASE_DIR / "lab" / "blue_target" / "vulnerable_app.py")],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+
+            # Wait until the app is actually listening
+            for _ in range(10):
+                time.sleep(0.3)
+                try:
+                    urllib.request.urlopen(f"http://127.0.0.1:{_const('BLUE_LAB_PORT')}/", timeout=1)
+                    console.print(f"[green]Vulnerable app ready on port {_const('BLUE_LAB_PORT')}[/green]")
+                    break
+                except Exception:
+                    pass
+            else:
+                console.print(f"[red]Failed to start vulnerable app on port {_const('BLUE_LAB_PORT')}[/red]")
+                return
     else:
         return
 
