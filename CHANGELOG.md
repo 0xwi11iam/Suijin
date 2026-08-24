@@ -6,6 +6,47 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v5.5.0 — Harness competence
+
+Six evidence-backed repairs to the decision loop — not new tools, not
+benchmark tuning (no bench/lab was touched): the brain the tools run on.
+
+- **H1 engagement state board**: target_info finally populated from tool
+  outputs (nmap ports/services, header + bundle endpoints/tech,
+  credentials, subdomains), rendered every turn with the tested-axes
+  coverage map and running background jobs; the fake growth detector
+  (a dict compared against itself, always False) replaced with the
+  honest execute-set flag the stall counter reads.
+- **H2 job semantics**: finished background jobs drain into the
+  conversation at think time (fireteam symmetry — a field run's leaked-
+  key scan was never collected); job_wait/status/output/list exempt from
+  the 10s auto-background promotion (a wait promoting itself into a job
+  made results uncollectable); job_status untruncated for finished jobs.
+- **H3 dispatch anti-repeat**: three identical failures of the exact
+  same call hard-block with the last error + named alternatives
+  (prompts alone demonstrably fail — one call repeated 80x/9.5h);
+  payload iteration always allowed; chain_failures_memory finally
+  written (initialized, read, never written since inception); latent
+  fix — HTTP failures recorded as successes in the trace.
+- **H4 control plane**: switch_skill + plan_tools advertised with
+  concrete shapes (51 skills, zero switches ever recorded before);
+  _plan_remaining moved top-level (was nested where execute dropped it
+  — plans lost steps 2..N at that exact line), rendered as a QUEUED PLAN
+  block, drained as heads execute, cleared on course change; todos
+  render IDs; two prompt-hygiene CI gates (background-section tools and
+  curated-registry entries must exist in the booted route table).
+- **H5 claim-time verification + memory repair**: record_finding grades
+  every claim immediately (verdict rides the result line); recipes 5→10
+  classes + alias map; the keyword-mention 'verified' fallback killed;
+  memory repaired at three joints (note() arity TypeError swallowed —
+  zero memory across 361 sessions; recall rendered at start;
+  record_engagement at end); scratchpad duplicate-burst suppression
+  (operator noise once hijacked a run's priorities).
+- **H6 telemetry**: audit rows carry their iteration (every row in
+  every agent_steps.jsonl read 'iteration=?').
+
+51 new tests across the waves. 1,648 fast + 6 slow green; ruff clean.
+
 ## v5.4.0 — The capability ecosystem
 
 Person-to-person capability distribution: single sealed files with

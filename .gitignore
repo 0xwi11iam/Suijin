@@ -111,3 +111,8 @@ examples/malicious/**/*.sjm
 examples/malicious/**/*.sja
 examples/malicious/**/*.sjp
 examples/malicious/built/
+
+# H-wave runtime artifacts: engagement memory + scratchpad live in the
+# workspace (durable home), never in the repo
+suijin_agent/outputs/memory/
+suijin_agent/outputs/scratchpad/
