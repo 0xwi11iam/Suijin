@@ -204,9 +204,14 @@ class LiveFeed:
         method = request.get("method", "GET")
         ip = request.get("ip", "0.0.0.0")
 
-        # BF3: the console UI event block (optional — absent for headless)
-        if getattr(self, "ui", None):
-            self.ui.begin_event(method, path, ip)
+        # BF3: the console UI event block (optional — absent for headless).
+        # Baseline-training requests do NOT open blocks (the old per-request
+        # banners scrolled the console; one refreshed line suffices)
+        ui = getattr(self, "ui", None)
+        if ui is not None and self.baseline_established is False and rid < self.config.baseline_requests:
+            ui.baseline_progress(rid, self.config.baseline_requests)
+        elif ui is not None:
+            ui.begin_event(method, path, ip)
 
         # Find the subagent responsible for this endpoint
         sa = self.subagent_manager.find_for_request(path)
@@ -224,8 +229,8 @@ class LiveFeed:
                     if sa:
                         render_subagent_assignment(rid, path, sa.rank, sa.agent_id)
                     render_normal_line(rid, method, path, ip)
-                if getattr(self, "ui", None):
-                    self.ui.verdict("normal", f"baseline training ({rid}/{self.config.baseline_requests})")
+                # UI note: baseline_training progress was already rendered
+                # above (ui.baseline_progress) — nothing more to print here
                 return None
 
         # ── AFTER BASELINE: check if this is a known normal ──

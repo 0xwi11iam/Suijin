@@ -12,6 +12,7 @@ defense session.
 from __future__ import annotations
 
 import contextlib
+import threading
 import time
 
 from rich.console import Console
@@ -76,6 +77,8 @@ class BlueConsoleUI:
         self.started = time.monotonic()
         self._open_event: dict | None = None
         self._sections = 0
+        self._refresh_thread: threading.Thread | None = None
+        self._refresh_stop = threading.Event()
 
     # ── strip ───────────────────────────────────────────────────────────
 
@@ -104,8 +107,10 @@ class BlueConsoleUI:
             (up_str, "dim"),
         )
         t = Table.grid(expand=True, padding=(0, 1))
-        row = [left, Text(), right]
-        t.add_row(*row)
+        t.add_row(left, Text(), right)
+        # the always-visible input affordance (operator request): a » row
+        # pinned under the stats — commands are read by the session box
+        t.add_row(Text("» /block <ip> · /state · /shell <cmd> — type anytime", style=f"dim {BLUE}"), Text(), Text())
         t.columns[1].ratio = 1
         return t
 
@@ -119,11 +124,23 @@ class BlueConsoleUI:
             if self._raw.is_terminal or isinstance(getattr(self._raw, "file", None), io.StringIO):
                 self._live = Live(self._strip(), console=self._raw, refresh_per_second=60)
                 self._live.start()
+                # the heartbeat: rebuild the strip once a second so the
+                # uptime counter ticks and the spinner NEVER freezes between
+                # requests (a static renderable goes stale; the Live region
+                # only redraws what changed)
+                self._refresh_stop.clear()
+                self._refresh_thread = threading.Thread(target=self._heartbeat, name="blue-strip", daemon=True)
+                self._refresh_thread.start()
             else:
                 self._live = None
                 self._headless = True
 
+    def _heartbeat(self) -> None:
+        while not self._refresh_stop.wait(1.0):
+            self.tick()
+
     def stop(self) -> None:
+        self._refresh_stop.set()
         if self._live is not None:
             with contextlib.suppress(Exception):
                 self._live.stop()
@@ -159,6 +176,15 @@ class BlueConsoleUI:
         self._sections = 0
         title = f" {method} {path[:48]} — {ip} "
         self._print(Rule(title=title, style=BORDER, align="left"))
+
+    def baseline_progress(self, done: int, total: int) -> None:
+        """Baseline training: ONE dim status line, refreshed in place —
+        not an event block per request (the old per-request banners
+        scrolled the whole console during the learning phase)."""
+        self.requests += 1
+        with contextlib.suppress(Exception):
+            self._out.print(f"[dim]  learning baseline · {min(done, total)}/{total}[/dim]")
+        self.tick()
 
     def _close_event(self) -> None:
         if self._open_event and self._sections:
