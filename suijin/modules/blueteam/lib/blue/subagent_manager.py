@@ -94,10 +94,10 @@ class SubagentManager:
             if not prefix or not path.startswith(prefix):
                 continue
             if "<" in ep_path:
-                rest = path[len(prefix):].lstrip("/")
+                rest = path[len(prefix) :].lstrip("/")
                 next_fixed = ep_path.split("<", 1)[1].split(">", 1)[-1]  # after the var
                 consumed = rest.split("/", 1)[0]
-                after = rest[len(consumed):]
+                after = rest[len(consumed) :]
                 expected = next_fixed  # e.g. '' or '/detail'
                 if after != expected:
                     continue  # variable segment overran into a sibling path

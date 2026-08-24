@@ -133,6 +133,33 @@ class ProxyHandler(BaseHTTPRequestHandler):
         # Log the request
         self._log_request(method, path, dict(self.headers), body)
 
+        # BF1: enforcement plane — blocks/honeypots/fakes/redirects/canaries
+        # read per-request, applied HERE (instant effect, no app mutation)
+        try:
+            from suijin.modules.blueteam.lib.blue import enforcement
+
+            action = enforcement.enforce(method, path, self.client_address[0], body)
+            if action:
+                if action["kind"] == "block":
+                    self.send_response(403)
+                    self.send_header("Content-Type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(b"403 blocked by defensive policy\n")
+                elif action["kind"] == "redirect":
+                    self.send_response(302)
+                    self.send_header("Location", action["url"])
+                    self.end_headers()
+                else:  # respond (honeypot / fake)
+                    payload = action["body"].encode()
+                    self.send_response(action.get("status", 200))
+                    self.send_header("Content-Type", action.get("content_type", "text/plain"))
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                return
+        except Exception:
+            pass
+
         # Proxy-level tarpit: check if this IP should be delayed
         try:
             from suijin.modules.blueteam.lib.blue.defense.tarpit import delay_for
