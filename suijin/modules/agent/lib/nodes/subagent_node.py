@@ -152,8 +152,19 @@ class SubagentResult:
         return f"[{status}] {self.task[:80]} ({self.steps} steps)"
 
 
-def _tool_reference_text() -> str:
-    """The LIVE tool registry — same surface the main agent sees."""
+def _tool_reference_text(route_tool_fn=None) -> str:
+    """The LIVE tool registry — same surface the main agent sees. When the
+    spawn came from a BLUE graph (route_tool_fn is the blue router), the
+    prompt must advertise the BLUE arsenal — a red registry with a blue
+    router is the prompt/router mismatch the BF2 audit flagged."""
+    try:
+        mod = getattr(route_tool_fn, "__module__", "")
+        if "blueteam" in mod:
+            from suijin.modules.blueteam.lib.blue.tools import render_blue_tools
+
+            return render_blue_tools()
+    except Exception:  # noqa: BLE001 — never block a spawn on rendering
+        pass
     try:
         from suijin.kernel.controller import last_context
 
@@ -170,7 +181,7 @@ def _tool_reference_text() -> str:
         return "(tool reference unavailable)"
 
 
-def _build_system_prompt(task: str, max_steps: int) -> str:
+def _build_system_prompt(task: str, max_steps: int, route_tool_fn=None) -> str:
     return f"""# ROLE: Specialist Subagent — ONE task, done well.
 
 ## TASK
@@ -184,7 +195,7 @@ def _build_system_prompt(task: str, max_steps: int) -> str:
 5. A tool failing 3 times in a row means STOP and report — do not retry a fourth time.
 
 ## TOOLS — the same registry the main agent uses (name(args) — what it does):
-{_tool_reference_text()}
+{_tool_reference_text(route_tool_fn)}
 
 ## DECISION FORMAT — exactly ONE JSON object per turn (same as the main agent):
 {{"action": "use_tool", "tool_name": "...", "tool_args": {{...}}, "thought": "one line"}}
@@ -211,7 +222,7 @@ async def run_subagent(
     logger.info("Subagent [%s] start: %s", subagent_id, task[:100])
 
     messages = [
-        {"role": "system", "content": _build_system_prompt(task, max_steps)},
+        {"role": "system", "content": _build_system_prompt(task, max_steps, route_tool_fn)},
         {"role": "user", "content": f"Execute this task now: {task}"},
     ]
 

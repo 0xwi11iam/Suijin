@@ -295,7 +295,7 @@ async def _run_async():
 
     # Phase 2: Watcher deployment
     console.print("\n[bold cyan]Phase 2: Deploying Watchers[/bold cyan]")
-    from suijin.modules.blueteam.lib.blue.watchers.spawner import spawn_watchers
+    from suijin.modules.blueteam.lib.blue.watchers import spawn_watchers
 
     watchers = await spawn_watchers(endpoints, config)
     session.active_watchers = len(watchers)
