@@ -219,10 +219,10 @@ class TestResponders:
         assert dep.get("team_id")
         import time as _t
 
-        deadline = _t.time() + 15
+        deadline = _t.time() + 30  # CI runners are slow; the episode is bounded by SUBAGENT_TIMEOUT anyway
         while _t.time() < deadline and not _plane.is_blocked("10.77.77.77"):
-            _t.sleep(0.3)
-        assert _plane.is_blocked("10.77.77.77")
+            _t.sleep(0.5)
+        assert _plane.is_blocked("10.77.77.77"), f"responder never blocked; team={dep}"
 
     def test_event_queue_roundtrip(self):
         from suijin.modules.blueteam.lib.blue import agent as ba

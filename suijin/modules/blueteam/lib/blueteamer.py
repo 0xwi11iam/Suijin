@@ -182,7 +182,10 @@ async def _run_async():
                 return
             from suijin.modules.blueteam.lib.blue.proxy import start_proxy
 
-            proxy_port = _find_free_port(start=5912)
+            # obscure high port (operator request): 8080/5912 collide with
+            # dev servers and common tooling; 41732 is unassigned and nobody
+            # scans there by default
+            proxy_port = _find_free_port(start=41732)
             proxy_server = start_proxy(
                 listen_port=proxy_port,
                 target_port=hill_app_port,
