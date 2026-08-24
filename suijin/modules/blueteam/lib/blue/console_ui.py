@@ -111,8 +111,17 @@ class BlueConsoleUI:
 
     def start(self) -> None:
         if self._live is None:
-            self._live = Live(self._strip(), console=self._raw, refresh_per_second=60)
-            self._live.start()
+            # A Live region on a non-terminal stream emits control codes to
+            # stdout forever (CI kernel quiet-boot tests capture stdout
+            # globally) — headless callers get the strip only on demand.
+            import io
+
+            if self._raw.is_terminal or isinstance(getattr(self._raw, "file", None), io.StringIO):
+                self._live = Live(self._strip(), console=self._raw, refresh_per_second=60)
+                self._live.start()
+            else:
+                self._live = None
+                self._headless = True
 
     def stop(self) -> None:
         if self._live is not None:

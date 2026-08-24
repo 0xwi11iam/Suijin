@@ -35,7 +35,7 @@ EXPERT_MODELS = [
 
 # ── Default Ports ───────────────────────────────────────────────────
 BLUE_LAB_PORT = 5906
-PROXY_DEFAULT_PORT = 8080
+PROXY_DEFAULT_PORT = 41730  # obscure high port (operator request)
 METASPLOIT_RPC_PORT = 55553
 
 # ── Scoring Thresholds ──────────────────────────────────────────────

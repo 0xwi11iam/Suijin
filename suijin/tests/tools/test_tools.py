@@ -414,7 +414,7 @@ class TestConstantsExist:
         )
 
         assert BLUE_LAB_PORT == 5906
-        assert PROXY_DEFAULT_PORT == 8080
+        assert PROXY_DEFAULT_PORT == 41730  # obscure high port (operator request; was 8080)
         assert METASPLOIT_RPC_PORT == 55553
 
     def test_scoring_thresholds(self):
