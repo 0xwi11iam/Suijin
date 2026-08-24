@@ -6,6 +6,55 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v5.6.0 — The Hill CTF and Blue Freedom
+
+The blue team stops being a classifier and becomes a defender; a new CTF
+lab gives both sides a proving ground; first registry publishing.
+
+- **The Hill CTF** (lab/hill_ctf, 7 files): four guarded perimeters —
+  decoy perimeter (admin-panel/git/robots bait, decoy token), JWT
+  two-step + IDOR foothold (fragments + canary creds in docs), SSRF
+  pivot through internal metadata (canary creds get DECEIVED with a
+  fake keypair + critical trip), command-injection vault with a
+  15-minute rotating token and a force-rotate lever. Typed severity-
+  tagged events (hill_events.jsonl), standard traffic JSONL, and
+  hill_defense.json levers (login rate limit, SSRF blocklist, decoy
+  sensitivity, force-rotate). 24 tests incl. both JWT forgery paths,
+  canary trips, the full chain walk, rotation invalidation.
+- **BF0 honesty**: zero-defense verdicts impossible (REVIEW/LOG/unknown
+  -> fallback tarpit), honest detected/tarpitted/blocked/deceived
+  counters, prefix-boundary fix, per-instance state. 10 tests.
+- **BF1 arsenal + enforcement plane**: defenses serve AT THE PROXY —
+  blocks (403), honeypots (crafted content instead of forwarding),
+  fake responses, per-IP redirects, canary tripwire with recorded
+  hits. Namespaced blue tool registry (11 tools; gated blue_shell with
+  red's guardrails) deliberately NOT kernel-registered — no red/blue
+  prompt leakage in one-process deathmatches (tested gate). The Hill
+  boots behind the proxy from the blueteamer menu. 18 tests, all with
+  observable proxy effects against the live lab.
+- **BF2 org chart**: the long blue prompt (doctrine, escalation policy
+  per attack class, 8 defensive playbooks, creative-scripting
+  freedom), defensive orders, the _blue_mode seam in think_node, zero-
+  LLM per-endpoint watchers (auto fast-path: tarpit+block instantly on
+  critical hits, analysis finally seeds them), blue-routed incident
+  responders via the fireteam mechanics (prompt advertises the BLUE
+  arsenal — the audit's coupling fixed). 12 tests to the proof
+  standard (no red leakage; scripted episodes land real enforcement).
+- **BF3 live console**: event blocks (request -> verdict -> action,
+  syntax-highlighted commands), pinned strip (req/threats/blocked/
+  deceived/uptime, spinner), always-active input box (/block /unblock
+  /state /tarpits /canaries /report /rotate /quit + free-form shell).
+  15 tests.
+- **Publishing**: publish.yml — GHCR multi-arch image (GITHUB_TOKEN,
+  zero new credentials) + PyPI wheel (PYPI_API_TOKEN secret) on v*
+  tags, PR-side build-only proof jobs, GitHub Release with the
+  release-notes body. compose pulls ghcr.io/0xwi11iam/suijin:latest;
+  Dockerfile version label from build arg; README quickstarts for both
+  registries.
+
+59 new tests since v5.5.0. Full suite 1,727 fast + 6 slow green; ruff
+clean.
+
 ## v5.5.0 — Harness competence
 
 Six evidence-backed repairs to the decision loop — not new tools, not
