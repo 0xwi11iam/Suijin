@@ -156,6 +156,13 @@ class FeedConfig:
 class LiveFeed:
     """Manages the live traffic feed with smart tier routing."""
 
+    def _say(self, *a, **kw) -> None:
+        """Headless-only print: when the live console UI owns the screen,
+        NOTHING may print from this module's console — foreign prints
+        tear the Live strip mid-render (the stacked-spinner bug)."""
+        if getattr(self, "ui", None) is None:
+            console.print(*a, **kw)
+
     def __init__(
         self,
         ai_engine: BlueAIEngine,
@@ -221,13 +228,13 @@ class LiveFeed:
         if not self.baseline_established:
             if rid >= self.config.baseline_requests:
                 self.baseline_established = True
-                console.print(f"\n  [bold green]BASELINE ESTABLISHED[/bold green] [dim]({rid} requests)[/dim]")
-                console.print("  [dim]AI analysis now active for anomalous requests[/dim]\n")
+                self._say(f"\n  [bold green]BASELINE ESTABLISHED[/bold green] [dim]({rid} requests)[/dim]")
+                self._say("  [dim]AI analysis now active for anomalous requests[/dim]\n")
                 if getattr(self, "ui", None):
                     self.ui.baseline_done()
                     self.ui.note("baseline established — AI analysis active", "green")
             else:
-                if self.config.show_all_normals:
+                if self.config.show_all_normals and ui is None:
                     if sa:
                         render_subagent_assignment(rid, path, sa.rank, sa.agent_id)
                     render_normal_line(rid, method, path, ip)
@@ -241,7 +248,7 @@ class LiveFeed:
         normalizer = get_global_normalizer()
 
         if normalizer and normalizer.is_known_normal(request):
-            if self.config.show_all_normals:
+            if self.config.show_all_normals and ui is None:
                 if sa:
                     render_subagent_assignment(rid, path, sa.rank, sa.agent_id)
                 render_normal_line(rid, method, path, ip)
@@ -252,7 +259,7 @@ class LiveFeed:
         # ── PRE-AI FAST PATH: pattern-based attack detection ──
         attack_check = _detect_obvious_attack(request)
 
-        if sa:
+        if sa and ui is None:
             render_subagent_assignment(rid, path, sa.rank, sa.agent_id)
 
         if attack_check["score"] >= self.config.pattern_score_threshold:
@@ -260,7 +267,16 @@ class LiveFeed:
 
         # ── NO PATTERN MATCH: send to AI for analysis ──
         if not self.config.ai_analysis_enabled:
-            render_anomalous_line(rid, method, path, ip, score=attack_check["score"], flagged=False)
+            if ui is None:
+                render_anomalous_line(rid, method, path, ip, score=attack_check["score"], flagged=False)
+            else:
+                # below the pattern threshold with no AI: sub-suspicious
+                # scores are background noise (a lone IP-weights point) —
+                # only genuinely elevated scores render as WATCH
+                from suijin.modules.platform.lib.constants import RISK_SUSPICIOUS as _rs
+
+                lvl = "anomalous" if attack_check["score"] >= _rs else "normal"
+                self.ui.verdict(lvl, f"heuristic score {attack_check['score']}")
             return None
 
         result = await self._call_ai(request, sa, rid, path, method, ip)
@@ -270,7 +286,8 @@ class LiveFeed:
         if result.verdict == "FLAGGED":
             self.subagent_manager.record_anomaly(path, "FLAGGED")
             self.stats_detected += 1
-            render_investigated_request(result)
+            if ui is None:
+                render_investigated_request(result)
             if getattr(self, "ui", None):
                 self.ui.verdict("investigated", f"AI flagged — {result.attack_analysis[:100]}")
             self._execute_ai_decision(result, ip, [], result.score)
@@ -278,7 +295,8 @@ class LiveFeed:
         else:
             if normalizer:
                 normalizer.add_to_baseline(request)
-            render_anomalous_line(rid, method, path, ip, score=result.score, flagged=False)
+            if ui is None:
+                render_anomalous_line(rid, method, path, ip, score=result.score, flagged=False)
             if getattr(self, "ui", None):
                 self.ui.verdict("anomalous", f"AI says benign (score {result.score})")
             return result
@@ -347,13 +365,13 @@ class LiveFeed:
 
                 recon = recon_attacker(ip)
                 if recon.get("hostname") and recon["hostname"] != "unknown":
-                    console.print(f"  [dim]Counter-recon: {ip} -> {recon['hostname']}[/dim]")
+                    self._say(f"  [dim]Counter-recon: {ip} -> {recon['hostname']}[/dim]")
                     kg.add_intelligence(f"recon-{ip}", f"Hostname: {recon['hostname']}")
             except Exception:
                 pass
 
         # Show initial panel — pattern match detected
-        console.print(
+        self._say(
             f"\n  [bold red]ATTACK DETECTED[/bold red] [dim]({', '.join(pattern_names)} | pattern score {effective_score}/10)[/dim]"
         )
         result = AIAnalysisResult(
@@ -374,14 +392,15 @@ class LiveFeed:
         )
         self.subagent_manager.record_anomaly(path, "FLAGGED")
         self.stats_detected += 1
-        render_investigated_request(result)
+        if getattr(self, "ui", None) is None:
+            render_investigated_request(result)
 
         # ── AI decides the actual response ──
         if self.config.ai_analysis_enabled:
             ai_result = await self._call_ai(request, sa, rid, path, method, ip)
             if ai_result and ai_result.verdict == "FLAGGED":
                 # Execute whatever the AI decided
-                console.print(f"\n  [bold cyan]AI DECISION[/bold cyan] [dim](#{rid})[/dim] — {ai_result.action}")
+                self._say(f"\n  [bold cyan]AI DECISION[/bold cyan] [dim](#{rid})[/dim] — {ai_result.action}")
                 self._execute_ai_decision(ai_result, ip, pattern_names, effective_score)
                 kg.add_defense(ip, ai_result.action.lower(), ai_result.reasoning)
                 kg.add_intelligence(f"ai-decision-{rid}", ai_result.reasoning)
@@ -389,13 +408,15 @@ class LiveFeed:
                 return ai_result
             elif ai_result:
                 # AI disagrees with pattern detector — log the disagreement but STILL defend
-                console.print(
+                self._say(
                     f"  [bold yellow]AI OVERRIDE[/bold yellow] [dim]— AI says {ai_result.verdict} (score {ai_result.score}) but pattern score is {effective_score}[/dim]"
                 )
-                console.print(f"  [dim]AI reasoning: {ai_result.reasoning}[/dim]")
-                console.print("  [bold yellow]Applying fallback defense despite AI override[/bold yellow]")
+                self._say(f"  [dim]AI reasoning: {ai_result.reasoning}[/dim]")
+                self._say("  [bold yellow]Applying fallback defense despite AI override[/bold yellow]")
                 # NEVER add pattern-matched attacks to normal baseline
                 self._apply_tarpit(ip, effective_score, pattern_names)
+                if getattr(self, "ui", None):
+                    self.ui.action("TARPIT", f"AI override — pattern score {effective_score}, forced fallback")
                 kg.add_defense(
                     ip, "tarpit", f"Fallback — AI said {ai_result.verdict} but pattern score {effective_score}"
                 )
@@ -403,13 +424,17 @@ class LiveFeed:
                 return result
             else:
                 # AI failed — fall back to tarpit
-                console.print(f"  [yellow]AI unavailable — deploying default tarpit for {ip}[/yellow]")
+                self._say(f"  [yellow]AI unavailable — deploying default tarpit for {ip}[/yellow]")
                 self._apply_tarpit(ip, effective_score, pattern_names)
+                if getattr(self, "ui", None):
+                    self.ui.action("TARPIT", f"AI unavailable — score {effective_score}, fallback defense")
                 kg.add_defense(ip, "tarpit", f"Fallback — AI unavailable, score {effective_score}")
                 kg.save()
         else:
             # AI disabled — tarpit
             self._apply_tarpit(ip, effective_score, pattern_names)
+            if getattr(self, "ui", None):
+                self.ui.action("TARPIT", f"AI disabled — score {effective_score}, pattern defense")
             kg.add_defense(ip, "tarpit", f"AI disabled, score {effective_score}")
             kg.save()
 
@@ -427,7 +452,7 @@ class LiveFeed:
         if result.commands_run:
             import subprocess
 
-            console.print("  [bold white]Commands:[/bold white]")
+            self._say("  [bold white]Commands:[/bold white]")
             for cmd in result.commands_run:
                 try:
                     proc = subprocess.run(
@@ -435,11 +460,11 @@ class LiveFeed:
                     )
                     ok = proc.returncode == 0
                     status = "[green]OK[/green]" if ok else f"[red]FAIL({proc.returncode})[/red]"
-                    console.print(f"    [dim]$[/dim] {cmd} {status}")
+                    self._say(f"    [dim]$[/dim] {cmd} {status}")
                     if proc.stdout.strip():
-                        console.print(f"    [dim]  {proc.stdout.strip()[:200]}[/dim]")
+                        self._say(f"    [dim]  {proc.stdout.strip()[:200]}[/dim]")
                 except Exception as e:
-                    console.print(f"    [dim]$[/dim] {cmd} [red]ERROR: {e}[/red]")
+                    self._say(f"    [dim]$[/dim] {cmd} [red]ERROR: {e}[/red]")
 
         # Apply code patches
         if result.code_changes and target_path:
@@ -453,9 +478,9 @@ class LiveFeed:
                     try:
                         full.parent.mkdir(parents=True, exist_ok=True)
                         full.write_text(new_content)
-                        console.print(f"  [green]PATCHED:[/green] {file_rel} ({len(new_content)} bytes)")
+                        self._say(f"  [green]PATCHED:[/green] {file_rel} ({len(new_content)} bytes)")
                     except Exception as e:
-                        console.print(f"  [red]PATCH FAILED:[/red] {file_rel} — {e}")
+                        self._say(f"  [red]PATCH FAILED:[/red] {file_rel} — {e}")
 
         # ── DEPLOY REAL DECEPTION using subagent pre-built assets ──
         if "DECEIVE" in action and target_path:
@@ -473,21 +498,21 @@ class LiveFeed:
                     hp = deploy_honeypot(target_path, sa, ip)
                     if hp["status"] == "deployed":
                         self.stats_deceived += 1
-                        console.print(
+                        self._say(
                             f"  [yellow]HONEYPOT:[/yellow] {hp['honeypot_path']} deployed in {os.path.basename(hp['file'])}"
                         )
                     # Deploy canary tokens
                     ct = deploy_canary_tokens(target_path, ip)
                     if ct["status"] == "deployed":
-                        console.print(f"  [yellow]CANARIES:[/yellow] {len(ct['files'])} token files deployed")
+                        self._say(f"  [yellow]CANARIES:[/yellow] {len(ct['files'])} token files deployed")
                     # Deploy deception data
                     dd = deploy_deception_data(target_path, sa, ip)
                     if dd["status"] == "deployed":
-                        console.print(
+                        self._say(
                             f"  [yellow]DECEPTION:[/yellow] fake response data ready for {sa.endpoint.get('path', '/')}"
                         )
                 except Exception as e:
-                    console.print(f"  [red]DECEPTION FAILED:[/red] {e}")
+                    self._say(f"  [red]DECEPTION FAILED:[/red] {e}")
 
         if "PATCH" in action and target_path:
             sa = self.subagent_manager.find_for_request(result.path)
@@ -497,9 +522,9 @@ class LiveFeed:
 
                     pt = deploy_patch(target_path, sa)
                     if pt["status"] == "patched":
-                        console.print(f"  [green]VULN FIXED:[/green] {os.path.basename(pt['file'])} — handler patched")
+                        self._say(f"  [green]VULN FIXED:[/green] {os.path.basename(pt['file'])} — handler patched")
                 except Exception as e:
-                    console.print(f"  [red]PATCH FAILED:[/red] {e}")
+                    self._say(f"  [red]PATCH FAILED:[/red] {e}")
 
         # Apply tarpit/blocking
         defended = False
@@ -514,7 +539,7 @@ class LiveFeed:
         # with ZERO defense. A pattern-confirmed attack always gets at
         # least the fallback tarpit.
         if not defended:
-            console.print(
+            self._say(
                 f"  [yellow]action '{result.action or 'none'}' matched no defense — applying fallback tarpit[/yellow]"
             )
             self._apply_tarpit(ip, score, patterns)
@@ -526,7 +551,7 @@ class LiveFeed:
             self.ui.action(result.action or "none", result.reasoning)
             for cmd in result.commands_run or []:
                 self.ui.command(cmd)
-        console.print(
+        self._say(
             Panel.fit(
                 f"[bold {action_color}]ACTION: {result.action}[/bold {action_color}]\n[dim]{result.reasoning}[/dim]",
                 border_style=action_color,
@@ -542,14 +567,14 @@ class LiveFeed:
             _tarpit_protocol.engage(ip, delay=min(8.0, 1.0 + score * 0.8), path=self.TARPIT_FILE, patterns=patterns)
             delay = _tarpit_protocol.delay_for(ip, path=self.TARPIT_FILE)
             self.stats_tarpitted += 1
-            console.print(f"  [yellow]TARPIT:[/yellow] {ip} — {delay:.1f}s delay per request")
+            self._say(f"  [yellow]TARPIT:[/yellow] {ip} — {delay:.1f}s delay per request")
         except Exception as e:
-            console.print(f"  [red]TARPIT FAILED:[/red] {e}")
+            self._say(f"  [red]TARPIT FAILED:[/red] {e}")
 
     def _apply_block(self, ip: str, score: int):
         """Apply network-level block — pfctl on macOS, iptables on Linux."""
         if not getattr(self, "blocking_enabled", False):
-            console.print(f"  [dim]BLOCK LOGGED:[/dim] {ip} — blocking disabled, logged only")
+            self._say(f"  [dim]BLOCK LOGGED:[/dim] {ip} — blocking disabled, logged only")
             return
         import platform
         import subprocess
@@ -560,16 +585,16 @@ class LiveFeed:
         try:
             if system == "Darwin":
                 subprocess.run(["sudo", "pfctl", "-t", "blue_blocked", "-T", "add", ip], capture_output=True, timeout=5)
-                console.print(f"  [red]BLOCKED:[/red] {ip} — pfctl table blue_blocked")
+                self._say(f"  [red]BLOCKED:[/red] {ip} — pfctl table blue_blocked")
             else:
                 subprocess.run(
                     ["sudo", "iptables", "-A", "BLUE_BLOCKED", "-s", ip, "-j", "DROP"], capture_output=True, timeout=5
                 )
-                console.print(f"  [red]BLOCKED:[/red] {ip} — iptables BLUE_BLOCKED chain")
+                self._say(f"  [red]BLOCKED:[/red] {ip} — iptables BLUE_BLOCKED chain")
         except FileNotFoundError:
-            console.print(f"  [yellow]BLOCK LOGGED:[/yellow] {ip} — pfctl/iptables not found, logged only")
+            self._say(f"  [yellow]BLOCK LOGGED:[/yellow] {ip} — pfctl/iptables not found, logged only")
         except Exception as e:
-            console.print(f"  [yellow]BLOCK LOGGED:[/yellow] {ip} — {e}")
+            self._say(f"  [yellow]BLOCK LOGGED:[/yellow] {ip} — {e}")
 
     async def _call_ai(self, request, sa, rid, path, method, ip) -> Optional[AIAnalysisResult]:
         """Call the AI engine. Returns None on failure (error already shown)."""
@@ -584,9 +609,9 @@ class LiveFeed:
                 request_id=rid,
             )
         except Exception as e:
-            console.print(f"  [bold red]AI ANALYSIS FAILED[/bold red] [dim]— {e}[/dim]")
-            console.print(f"  [dim]  Request #{rid} {method} {path} could not be analyzed.[/dim]")
-            console.print("  [dim]  Check API key, network, and provider config in suijin/.env[/dim]")
+            self._say(f"  [bold red]AI ANALYSIS FAILED[/bold red] [dim]— {e}[/dim]")
+            self._say(f"  [dim]  Request #{rid} {method} {path} could not be analyzed.[/dim]")
+            self._say("  [dim]  Check API key, network, and provider config in suijin/.env[/dim]")
             return None
 
     def get_stats(self) -> dict:

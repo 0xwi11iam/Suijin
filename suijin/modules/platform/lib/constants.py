@@ -46,6 +46,7 @@ SCORE_BLOCK = 8
 SCORE_SHADOW = 9
 PATTERN_SCORE_THRESHOLD = 5
 BASELINE_REQUESTS = 25
+RISK_SUSPICIOUS = 3  # display threshold: at/above this a no-AI verdict renders WATCH
 RISK_HIGH = 7
 
 # ── Deception ───────────────────────────────────────────────────────

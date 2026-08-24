@@ -5,6 +5,7 @@ suijin/core/blueteamer.py — Blue Team entry point and TUI.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import signal as _signal
@@ -358,12 +359,12 @@ async def _run_async():
     session_ui.watchers = len(watchers) if watchers else 0
 
     # ── Main monitoring loop ──
-    console.print(
-        "\n[bold #58a6ff]Live Traffic Feed[/bold #58a6ff] [dim](Ctrl+C to pause, type commands anytime)[/dim]"
-    )
-    console.print("─" * 68)
+    # BF3.6: when the live console UI owns the screen, NOTHING may print
+    # from this loop's console — foreign prints while the Live strip is
+    # active tear the cursor mid-strip (the stacked-spinner bug). The
+    # headless path (no feed.ui) keeps the classic prints.
+    _ui = getattr(feed, "ui", None)
 
-    # Signal handling
     _signal.signal(_signal.SIGINT, lambda sig, frame: setattr(_signal, "_blue_interrupted", True))
     _signal._blue_interrupted = False
 
@@ -374,12 +375,27 @@ async def _run_async():
     last_pos = 0
     idle_ticks = 0
 
-    if app_port:
-        console.print(f"  [bold green]Listening on :{app_port}[/bold green] [dim]— traffic log: {traffic_log}[/dim]")
+    if _ui is None:
+        console.print(
+            "\n[bold #58a6ff]Live Traffic Feed[/bold #58a6ff] [dim](Ctrl+C to pause, type commands anytime)[/dim]"
+        )
+        console.print("─" * 68)
+        if app_port:
+            console.print(
+                f"  [bold green]Listening on :{app_port}[/bold green] [dim]— traffic log: {traffic_log}[/dim]"
+            )
+        else:
+            console.print(f"  [bold green]Monitoring[/bold green] [dim]— traffic log: {traffic_log}[/dim]")
+        console.print(
+            f"  [dim]Send HTTP requests to the target app. Blocking: {'ON' if blocking_enabled else 'OFF'}[/dim]"
+        )
+        console.print("─" * 68)
     else:
-        console.print(f"  [bold green]Monitoring[/bold green] [dim]— traffic log: {traffic_log}[/dim]")
-    console.print(f"  [dim]Send HTTP requests to the target app. Blocking: {'ON' if blocking_enabled else 'OFF'}[/dim]")
-    console.print("─" * 68)
+        where = f":{app_port}" if app_port else "log"
+        session_ui.banner(
+            f"Live Traffic Feed — {where} · traffic log: {traffic_log}\n"
+            f"Blocking: {'ON' if blocking_enabled else 'OFF'} · Ctrl+C pauses · type commands anytime"
+        )
 
     while True:
         # Read new lines from traffic log
@@ -445,7 +461,7 @@ async def _run_async():
             session_ui.cost_usd = fs.get("ai_cost", 0.0)
             session_ui.tick()
 
-            if request_count % 25 == 0 and request_count > 0:
+            if request_count % 25 == 0 and request_count > 0 and _ui is None:
                 stats = feed.get_stats()
                 console.print(
                     f"  [dim]── {request_count} requests | "
@@ -458,7 +474,9 @@ async def _run_async():
 
         if not new_lines:
             idle_ticks += 1
-            if idle_ticks % 15 == 0:
+            if idle_ticks % 15 == 0 and _ui is None:
+                # headless nudge only — the live console shows baseline
+                # progress in the strip and never prints idle chatter
                 if not feed.baseline_established:
                     remaining = feed_config.baseline_requests - request_count
                     console.print(f"  [dim]  establishing baseline... {remaining} more requests needed[/dim]")
@@ -472,12 +490,18 @@ async def _run_async():
         if getattr(_signal, "_blue_interrupted", False):
             _signal._blue_interrupted = False
             _signal.signal(_signal.SIGINT, _signal.SIG_DFL)
+            # BF3.6: the keystroke reader must yield the terminal to this
+            # prompt (cbreak echo off garbles console.input) — suspend it
+            with contextlib.suppress(Exception):
+                cmd_box.suspend()
             try:
                 console.print("\n[yellow]  Paused[/yellow] [dim](/report /state /template /health /quit)[/dim]")
                 cmd = console.input("[bold cyan]  Command  [/bold cyan]").strip()
             except (KeyboardInterrupt, EOFError):
-                break
-            if cmd == "/quit":
+                cmd = "/resume-io"  # still resume the reader below, then exit
+            with contextlib.suppress(Exception):
+                cmd_box.resume()
+            if cmd in ("/resume-io", "/quit"):
                 break
             elif cmd == "/health":
                 from suijin.modules.platform.lib.templates import print_health_check

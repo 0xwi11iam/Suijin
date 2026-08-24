@@ -40,37 +40,51 @@ def _ui(width=100):
 
 
 class TestCleanConsole:
-    """BF3.5: only detections scroll the console."""
+    """BF3.6: every request = ONE colored `#N METHOD path ip · WORD` line;
+    hits keep their detail (verdict reason + action panel) below."""
 
-    def test_normal_request_is_silent(self):
+    def test_normal_request_is_one_dim_line(self):
         ui, c = _ui()
         ui.start()
         ui.begin_event("GET", "/health", "10.1.1.1")
         ui.verdict("normal", "known-normal pattern")
         ui.stop()
         out = c.export_text()
-        assert "GET /health" not in out  # nothing printed
-        assert "NORMAL" not in out
-        assert ui.requests == 1  # the counter still ticked
+        assert "#1" in out and "/health" in out and "10.1.1.1" in out and "OK" in out
+        assert "NORMAL" not in out.upper() or "OK" in out  # no verdict block, the line only
+        assert ui.requests == 1
 
     def test_anomalous_is_one_gold_line(self):
         ui, c = _ui()
         ui.begin_event("GET", "/odd", "10.1.1.2")
         ui.verdict("anomalous", "AI says benign (score 3)")
         out = c.export_text()
-        assert "/odd" in out and "10.1.1.2" in out
+        assert "/odd" in out and "10.1.1.2" in out and "WATCH" in out
         assert out.count("\n") <= 3  # ONE line, not a block
 
-    def test_investigated_renders_full_block(self):
+    def test_investigated_line_carries_the_action_verb(self):
         ui, c = _ui()
         ui.begin_event("POST", "/hill/login", "10.2.2.2")
         ui.verdict("investigated", "pattern: sql_injection (score 6/10)")
+        # nothing printed yet — the line waits for its action verb
+        assert "/hill/login" not in c.export_text()
         ui.action("TARPIT", "fallback defense")
         out = c.export_text()
-        assert "POST /hill/login" in out and "10.2.2.2" in out
+        # the one-liner: #1 POST /hill/login 10.2.2.2 · TARPIT
+        assert "#1" in out and "/hill/login" in out and "10.2.2.2" in out and "TARPIT" in out
+        # the detail below it
         assert "INVESTIGATED" in out and "sql_injection" in out
-        assert "TARPIT" in out
         assert ui.detected == 1
+
+    def test_pending_line_flushes_without_action(self):
+        """Edge: investigated but no action ever fires — the line still
+        prints when the next event starts."""
+        ui, c = _ui()
+        ui.begin_event("GET", "/x", "10.5.5.5")
+        ui.verdict("investigated", "AI flagged")
+        ui.begin_event("GET", "/y", "10.5.5.5")  # flush point
+        out = c.export_text()
+        assert "/x" in out and "INVESTIGATED" in out
 
     def test_watching_row_lifecycle(self):
         ui, c = _ui()
@@ -96,6 +110,7 @@ class TestCleanConsole:
         ui, c = _ui()
         ui.begin_event("POST", "/webhook", "10.4.4.4")
         ui.verdict("investigated", "ssrf_attempt")
+        ui.action("TARPIT", "delay")
         ui.command("curl -s http://127.0.0.1:5911/metadata")
         out = c.export_text()
         assert "curl" in out and "metadata" in out
@@ -141,7 +156,9 @@ class TestLiveStrip:
 
     def test_input_box_row(self):
         ui, c = _ui()
-        assert INPUT_HINT in ui.render_strip_text(140)  # idle: the hint
+        strip = ui.render_strip_text(140)
+        assert INPUT_HINT in strip  # idle: the hint inside the box
+        assert "│" in strip  # the box is REAL — bordered panel
         ui.set_input("/block 10.")
         strip = ui.render_strip_text(140)
         assert "/block 10." in strip and "»" in strip  # live typing + cursor row
@@ -316,8 +333,8 @@ class TestFeedIntegration:
 
         ui.stop()
         out = console.export_text()
-        assert "GET /q" in out  # the attack rendered its block
-        assert "GET /" not in out.replace("GET /q", "")  # the benign one printed nothing
+        assert "#2" in out and "/q" in out  # the attack rendered its line + detail
+        assert "#1" in out and " OK" in out  # the benign one got its one dim line
         assert ui.requests == 2
         assert ui.detected == 1
 
