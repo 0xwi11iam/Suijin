@@ -22,7 +22,8 @@ import contextlib
 import threading
 import time
 
-from rich.console import Console
+from rich import box
+from rich.console import Console, Group
 from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -98,6 +99,9 @@ class BlueConsoleUI:
         self._watching: str | None = None  # "GET /path — ip" while a request processes
         self._baseline: tuple[int, int] | None = None  # (done, total) while training
         self._input_buf: str | None = None  # None = hint; str = live typing (cursor ▌)
+        # BF3.6 per-request one-liner: the investigated line waits for its
+        # action verb (BLOCK/TARPIT/...) before printing — `#3 GET /p ip · TARPIT`
+        self._line_pending: dict | None = None
 
     # ── strip ───────────────────────────────────────────────────────────
 
@@ -135,19 +139,32 @@ class BlueConsoleUI:
         parts += [(" | ", "dim"), (_fmt_clock(up), "bright_cyan")]
         return left, Text.assemble(*parts)
 
-    def _input_row(self) -> Text:
+    def _input_row(self):
+        """The REAL input box: a bordered white panel the operator types
+        into — live buffer with a block cursor; the command hint idles
+        inside the same box."""
         if self._input_buf is not None:
-            return Text.assemble(("» ", f"bold {BLUE}"), (self._input_buf[:80], "white"), ("▌", BLUE))
-        return Text.assemble(("» ", f"dim {BLUE}"), (INPUT_HINT, "dim"))
+            body = Text.assemble(("» ", f"bold {BLUE}"), (self._input_buf[:70], "bold white"), ("▌", BLUE))
+        else:
+            body = Text.assemble(("» ", f"dim {BLUE}"), (INPUT_HINT, "dim"))
+        return Panel(
+            body,
+            box=box.SQUARE,
+            border_style="bright_white",
+            padding=(0, 1),
+            expand=True,
+        )
 
-    def _strip(self) -> Table:
+    def _strip(self):
         left, right = self._stats_row()
-        t = Table.grid(expand=True, padding=(0, 1))
-        t.add_row(self._watching_row(), Text(), Text())
-        t.add_row(left, Text(), right)
-        t.add_row(self._input_row(), Text(), Text())
-        t.columns[1].ratio = 1
-        return t
+        stats = Table.grid(expand=True, padding=(0, 1))
+        stats.add_row(left, Text(), right)
+        stats.columns[1].ratio = 1
+        return Group(
+            self._watching_row(),
+            stats,
+            self._input_row(),
+        )
 
     def start(self) -> None:
         if self._live is None:
@@ -234,47 +251,68 @@ class BlueConsoleUI:
 
     def begin_event(self, method: str, path: str, ip: str) -> None:
         """A request starts crossing: occupy the watching row ONLY — no
-        Rule, no print. The block (if any) materializes at verdict time."""
+        Rule, no print. The line prints at verdict time with its action."""
         self._close_event()
         self.requests += 1
-        self._open_event = {"method": method, "path": path, "ip": ip}
+        self._open_event = {"method": method, "path": path, "ip": ip, "rid": self.requests}
         self._sections = 0
         self.set_watching(f"{method} {path[:48]} — {ip}")
 
     def _close_event(self) -> None:
+        self._flush_pending_line()
         if self._open_event and self._sections:
             self._print(Rule(style=BORDER, align="left"))
         self._open_event = None
         self._sections = 0
 
-    def _materialize(self, method: str, path: str, ip: str) -> None:
-        """Print the block header LATE (verdict time): benign traffic never
-        scrolled; detections render with full context now."""
-        self._print(Rule(title=f" {method} {path[:48]} — {ip} ", style=BORDER, align="left"))
-        self._sections = 0
+    # ── the per-request one-liner (BF3.6 operator format) ──────────────
+    #   #3  GET /api/login  10.1.1.1  ·  TARPIT
+
+    def _print_request_line(self, ev: dict, word: str, style: str) -> None:
+        line = Text.assemble(
+            (f"#{ev.get('rid', self.requests):<3d}", "dim"),
+            (f"{ev.get('method', '?'):5s}", f"bold {BLUE}"),
+            (f"{ev.get('path', '?')[:38]:38s}", "white"),
+            (f"{ev.get('ip', '?'):>15s}", "dim"),
+            ("  ·  ", "dim"),
+            (word, style),
+        )
+        self._print(line)
+
+    def _flush_pending_line(self) -> None:
+        """An investigated line that never got its action verb still owes
+        the console its one line."""
+        if self._line_pending:
+            p, self._line_pending = self._line_pending, None
+            self._print_request_line(p["ev"], "INVESTIGATED", f"bold {RED}")
 
     def verdict(self, level: str, reason: str) -> None:
-        style = {"normal": "dim", "anomalous": GOLD, "investigated": RED}.get(level, "white")
+        ev = dict(self._open_event or {})
         # the watching row's lifecycle ends here — auto-delete
-        ev = self._open_event or {}
         if level == "investigated":
-            self._materialize(ev.get("method", "?"), ev.get("path", "?"), ev.get("ip", "?"))
-            self._section(Text(f"{level.upper()}  {reason[:140]}", style=style))
+            # the line waits for its action verb (BLOCK/TARPIT/...) which
+            # lands within this same synchronous flow; flush guards the edge
+            self._line_pending = {"ev": ev, "level": level, "reason": reason}
             self.detected += 1
-            self._close_event()
         elif level == "anomalous":
-            line = f"{ev.get('method', '?')} {ev.get('path', '?')[:40]} — {ev.get('ip', '?')} · {reason[:80]}"
-            self._print(Text(f"~ {line}", style=GOLD))
-        # normal: silent — the req counter already ticked
+            self._print_request_line(ev, "WATCH", GOLD)
+        # normal: one dim line — the operator's `#N <endpoint> <ip> <action>`
+        else:
+            self._print_request_line(ev, "OK", "dim")
         self._open_event = None
         self._watching = None
         self.waiting(True)
 
     def action(self, action: str, detail: str = "") -> None:
         color = {"BLOCK": RED, "TARPIT": GOLD, "DECEIVE": GOLD, "PATCH": GREEN}.get(action.upper(), BLUE)
+        a = action.upper()
+        # the pending investigated line completes with the action verb
+        if self._line_pending:
+            p, self._line_pending = self._line_pending, None
+            self._print_request_line(p["ev"], a or "INVESTIGATED", f"bold {RED}")
+            self._section(Text(f"INVESTIGATED  {p['reason'][:140]}", style=f"bold {RED}"))
         body = f"{action}" + (f"\n{detail[:400]}" if detail else "")
         self._section(Panel(body, title="action", title_align="left", border_style=color, padding=(0, 1)))
-        a = action.upper()
         if "BLOCK" in a:
             self.blocked += 1
         elif "DECEIVE" in a:
