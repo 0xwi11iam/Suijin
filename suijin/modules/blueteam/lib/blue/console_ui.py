@@ -7,6 +7,13 @@ console (/block /unblock /state /tarpits /report /health /quit),
 crash logs, and termination banners. Rich only, no emojis. Every
 public render method is guarded — a render bug must never kill a
 defense session.
+
+BF3.5 — the clean console (operator contract):
+  - the strip is THREE pinned rows, all redrawn in place (zero scroll):
+    watching row (transient) · stats+clock · the input box
+  - benign requests are SILENT (the req counter ticks, nothing prints)
+  - baseline training is strip-only (a `baseline N/M` stat, no lines)
+  - the clock ticks every second, bright
 """
 
 from __future__ import annotations
@@ -31,9 +38,17 @@ RED = "#ff5555"
 GREEN = "#3fb950"
 GOLD = "#e6b47c"
 
+INPUT_HINT = "/block <ip> · /state · /shell <cmd> — type anytime"
+
 
 def _fmt_n(n) -> str:
     return f"{int(n or 0)}"
+
+
+def _fmt_clock(s: int) -> str:
+    h, rem = divmod(s, 3600)
+    m, sec = divmod(rem, 60)
+    return f"{h:d}:{m:02d}:{sec:02d}" if h else f"{m:d}:{sec:02d}"
 
 
 class _GuardedConsole:
@@ -79,19 +94,29 @@ class BlueConsoleUI:
         self._sections = 0
         self._refresh_thread: threading.Thread | None = None
         self._refresh_stop = threading.Event()
+        # BF3.5 transient/pinned rows
+        self._watching: str | None = None  # "GET /path — ip" while a request processes
+        self._baseline: tuple[int, int] | None = None  # (done, total) while training
+        self._input_buf: str | None = None  # None = hint; str = live typing (cursor ▌)
 
     # ── strip ───────────────────────────────────────────────────────────
 
-    def _strip(self) -> Table:
-        up = int(time.monotonic() - self.started)
-        up_str = f"{up // 60}m{up % 60:02d}s" if up >= 60 else f"{up}s"
-        if self._waiting:
-            g = Table.grid(padding=(0, 1))
-            g.add_row(self._spinner, Text("watching", style=f"bold {BLUE}"))
-            left = g
+    def _watching_row(self) -> Text:
+        row = Text()
+        row.append(self._spinner.render(time.monotonic()))  # carries its own style
+        if self._watching:
+            row.append(" ")
+            row.append(self._watching[:70], style=f"bold {BLUE}")
+        elif self._waiting:
+            row.append(" watching", style=f"bold {BLUE}")
         else:
-            left = Text(f"suijin blue · {self.target[:24]}", style=f"bold {BLUE}")
-        right = Text.assemble(
+            row.append(" idle", style="dim")
+        return row
+
+    def _stats_row(self) -> tuple[Text, Text]:
+        up = int(time.monotonic() - self.started)
+        left = Text(f"suijin blue · {self.target[:24]}", style=f"bold {BLUE}")
+        parts = [
             (_fmt_n(self.requests), "cyan"),
             (" req", "dim"),
             (" | ", "dim"),
@@ -103,14 +128,24 @@ class BlueConsoleUI:
             (" | ", "dim"),
             (_fmt_n(self.deceived), GOLD),
             (" deceived", "dim"),
-            (" | ", "dim"),
-            (up_str, "dim"),
-        )
+        ]
+        if self._baseline is not None:
+            done, total = self._baseline
+            parts += [(" | ", "dim"), (f"baseline {min(done, total)}/{total}", GOLD)]
+        parts += [(" | ", "dim"), (_fmt_clock(up), "bright_cyan")]
+        return left, Text.assemble(*parts)
+
+    def _input_row(self) -> Text:
+        if self._input_buf is not None:
+            return Text.assemble(("» ", f"bold {BLUE}"), (self._input_buf[:80], "white"), ("▌", BLUE))
+        return Text.assemble(("» ", f"dim {BLUE}"), (INPUT_HINT, "dim"))
+
+    def _strip(self) -> Table:
+        left, right = self._stats_row()
         t = Table.grid(expand=True, padding=(0, 1))
+        t.add_row(self._watching_row(), Text(), Text())
         t.add_row(left, Text(), right)
-        # the always-visible input affordance (operator request): a » row
-        # pinned under the stats — commands are read by the session box
-        t.add_row(Text("» /block <ip> · /state · /shell <cmd> — type anytime", style=f"dim {BLUE}"), Text(), Text())
+        t.add_row(self._input_row(), Text(), Text())
         t.columns[1].ratio = 1
         return t
 
@@ -155,6 +190,35 @@ class BlueConsoleUI:
         self._waiting = bool(on)
         self.tick()
 
+    # ── transient strip rows (BF3.5) ────────────────────────────────────
+
+    def set_watching(self, label: str) -> None:
+        """Show `GET /path — ip` in the strip while a request processes —
+        prints NOTHING (it vanishes the moment the verdict lands)."""
+        self._watching = str(label)[:70] if label else None
+        self.tick()
+
+    def clear_watching(self) -> None:
+        self._watching = None
+        self.tick()
+
+    def baseline_stat(self, done: int, total: int) -> None:
+        """Baseline training: a `baseline N/M` stat INSIDE the strip —
+        zero console lines (per-request banners were pure spam)."""
+        self.requests += 1
+        self._baseline = (int(done), int(total))
+        self.tick()
+
+    def baseline_done(self) -> None:
+        self._baseline = None
+        self.tick()
+
+    def set_input(self, buf: str | None) -> None:
+        """The input box row: None shows the command hint; a str shows the
+        operator's live typing with a block cursor."""
+        self._input_buf = None if buf is None else str(buf)[:80]
+        self.tick()
+
     # ── event blocks (one request crossing = one block) ────────────────
 
     def _section(self, renderable) -> None:
@@ -169,22 +233,13 @@ class BlueConsoleUI:
         self.tick()
 
     def begin_event(self, method: str, path: str, ip: str) -> None:
-        """Open a request block; closes when verdict lands."""
+        """A request starts crossing: occupy the watching row ONLY — no
+        Rule, no print. The block (if any) materializes at verdict time."""
         self._close_event()
         self.requests += 1
         self._open_event = {"method": method, "path": path, "ip": ip}
         self._sections = 0
-        title = f" {method} {path[:48]} — {ip} "
-        self._print(Rule(title=title, style=BORDER, align="left"))
-
-    def baseline_progress(self, done: int, total: int) -> None:
-        """Baseline training: ONE dim status line, refreshed in place —
-        not an event block per request (the old per-request banners
-        scrolled the whole console during the learning phase)."""
-        self.requests += 1
-        with contextlib.suppress(Exception):
-            self._out.print(f"[dim]  learning baseline · {min(done, total)}/{total}[/dim]")
-        self.tick()
+        self.set_watching(f"{method} {path[:48]} — {ip}")
 
     def _close_event(self) -> None:
         if self._open_event and self._sections:
@@ -192,12 +247,27 @@ class BlueConsoleUI:
         self._open_event = None
         self._sections = 0
 
+    def _materialize(self, method: str, path: str, ip: str) -> None:
+        """Print the block header LATE (verdict time): benign traffic never
+        scrolled; detections render with full context now."""
+        self._print(Rule(title=f" {method} {path[:48]} — {ip} ", style=BORDER, align="left"))
+        self._sections = 0
+
     def verdict(self, level: str, reason: str) -> None:
         style = {"normal": "dim", "anomalous": GOLD, "investigated": RED}.get(level, "white")
-        self._section(Text(f"{level.upper()}  {reason[:140]}", style=style))
+        # the watching row's lifecycle ends here — auto-delete
+        ev = self._open_event or {}
         if level == "investigated":
+            self._materialize(ev.get("method", "?"), ev.get("path", "?"), ev.get("ip", "?"))
+            self._section(Text(f"{level.upper()}  {reason[:140]}", style=style))
             self.detected += 1
-        self._close_event()
+            self._close_event()
+        elif level == "anomalous":
+            line = f"{ev.get('method', '?')} {ev.get('path', '?')[:40]} — {ev.get('ip', '?')} · {reason[:80]}"
+            self._print(Text(f"~ {line}", style=GOLD))
+        # normal: silent — the req counter already ticked
+        self._open_event = None
+        self._watching = None
         self.waiting(True)
 
     def action(self, action: str, detail: str = "") -> None:
@@ -238,3 +308,14 @@ class BlueConsoleUI:
     def banner(self, text: str, style: str = BLUE) -> None:
         self._close_event()
         self._print(Panel(str(text)[:800], title=" blue session ", title_align="left", border_style=style))
+
+    # ── headless strip snapshot (no Live needed) ────────────────────────
+
+    def render_strip_text(self, width: int = 100) -> str:
+        """One-line text snapshot of the strip (tests + headless /state)."""
+        import io
+
+        c = Console(file=io.StringIO(), width=width, force_terminal=False)
+        with contextlib.suppress(Exception):
+            c.print(self._strip())
+        return c.file.getvalue()

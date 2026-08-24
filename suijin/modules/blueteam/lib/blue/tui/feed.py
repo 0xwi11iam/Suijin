@@ -204,12 +204,13 @@ class LiveFeed:
         method = request.get("method", "GET")
         ip = request.get("ip", "0.0.0.0")
 
-        # BF3: the console UI event block (optional — absent for headless).
-        # Baseline-training requests do NOT open blocks (the old per-request
-        # banners scrolled the console; one refreshed line suffices)
+        # BF3.5: the console UI hook (optional — absent for headless).
+        # Baseline training is strip-only (a `baseline N/M` stat in the
+        # pinned row — zero console lines); real requests occupy the
+        # transient watching row until their verdict lands.
         ui = getattr(self, "ui", None)
         if ui is not None and self.baseline_established is False and rid < self.config.baseline_requests:
-            ui.baseline_progress(rid, self.config.baseline_requests)
+            ui.baseline_stat(rid, self.config.baseline_requests)
         elif ui is not None:
             ui.begin_event(method, path, ip)
 
@@ -223,14 +224,15 @@ class LiveFeed:
                 console.print(f"\n  [bold green]BASELINE ESTABLISHED[/bold green] [dim]({rid} requests)[/dim]")
                 console.print("  [dim]AI analysis now active for anomalous requests[/dim]\n")
                 if getattr(self, "ui", None):
+                    self.ui.baseline_done()
                     self.ui.note("baseline established — AI analysis active", "green")
             else:
                 if self.config.show_all_normals:
                     if sa:
                         render_subagent_assignment(rid, path, sa.rank, sa.agent_id)
                     render_normal_line(rid, method, path, ip)
-                # UI note: baseline_training progress was already rendered
-                # above (ui.baseline_progress) — nothing more to print here
+                # UI note: baseline progress lives in the strip
+                # (ui.baseline_stat) — nothing more to print here
                 return None
 
         # ── AFTER BASELINE: check if this is a known normal ──
