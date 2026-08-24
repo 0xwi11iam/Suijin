@@ -12,10 +12,14 @@
 
 FROM kalilinux/kali-rolling:latest
 
+# Version is injected at build time (CI passes the git tag; local builds say dev)
+ARG VERSION=dev
+
 LABEL org.opencontainers.image.title="Suijin" \
       org.opencontainers.image.description="Autonomous red & blue teaming agent (kernel + modules)" \
-      org.opencontainers.image.version="4.3.0" \
-      org.opencontainers.image.licenses="AGPL-3.0-or-later"
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later" \
+      org.opencontainers.image.source="https://github.com/0xwi11iam/Suijin"
 
 # Heavy extras are opt-in at build time (minimum footprint by default)
 ARG WITH_METASPLOIT=0

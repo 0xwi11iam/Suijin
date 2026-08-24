@@ -1,4 +1,4 @@
-<h3 align="center">v5.5.0</h3> 
+<h3 align="center">v5.6.0</h3> 
 <p align="center">
 <img src="assets/suijin.png" alt="Suijin Logo" width="160"/>
 </p>
@@ -6,7 +6,7 @@
 
 
 <p align="center">
-  <img height="20" src="https://img.shields.io/badge/v5.5.0-suijin-green?style=flat" alt="Version"/>
+  <img height="20" src="https://img.shields.io/badge/v5.6.0-suijin-green?style=flat" alt="Version"/>
   <img height="20" src="https://img.shields.io/badge/LICENSE-AGPL%20v3-4169A1?style=flat" alt="License"/>
   <img height="20" src="https://img.shields.io/badge/PYTHON-3.10+-306998?style=flat&logo=python&logoColor=white" alt="Python"/>
 </p>
@@ -136,9 +136,17 @@ live, no reinstall needed.
 ### Docker (turnkey)
 
 ```bash
+git clone https://github.com/0xwi11iam/Suijin.git && cd Suijin
 docker compose run --rm suijin                 # interactive agent
 docker compose run --rm suijin version         # any CLI verb
 docker compose down                            # state survives (named volume)
+```
+
+The published image pulls from GHCR — no local build needed after the
+clone. Prefer Docker directly?
+
+```bash
+docker run --rm -it ghcr.io/0xwi11iam/suijin:latest
 ```
 
 The workspace is a **named volume** (`suijin_workspace`): outputs, the
@@ -146,6 +154,18 @@ knowledge base, caches, and operator configs survive container
 recreation. The image bakes the full Kali toolset plus pip extras
 (impacket, dnsrecon, wafw00f, dirsearch, medusa), health-checks itself
 with `suijin doctor`, and needs only `config.json` mounted read-only.
+
+### pipx / uv (installable package)
+
+```bash
+pipx install suijin        # or: uv tool install suijin
+suijin                     # the classic TUI
+suijin doctor              # environment check
+```
+
+The wheel ships the kernel, core tools, prompts, and skills; the full
+module-pack toolset (138 packs) needs a repo checkout — use the Docker
+image or the installer for the complete arsenal.
 
 ---
 

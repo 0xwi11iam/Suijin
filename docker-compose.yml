@@ -15,7 +15,9 @@
 services:
   suijin:
     build: .
-    image: suijin:latest
+    # GHCR-published image — compose pulls this when it exists (no local
+    # build needed after a plain clone); `build: .` still wins for local dev
+    image: ghcr.io/0xwi11iam/suijin:latest
     container_name: suijin-agent
     stdin_open: true
     tty: true
