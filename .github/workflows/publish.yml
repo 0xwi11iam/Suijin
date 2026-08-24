@@ -37,7 +37,7 @@ jobs:
             VERSION=pr-${{ github.event.number }}
 
   wheel-build:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -51,6 +51,17 @@ jobs:
           python -m pip install --upgrade pip build twine
           python -m build
           twine check dist/*
+
+      - name: Install the wheel in a clean env (resolution proof)
+        # 5.6.0 shipped an unsatisfiable pair (rich<14 + textual>=8 which
+        # needs rich>=14.2) — pip only fails like that in a FRESH env; the
+        # dev venv had compatible-but-out-of-bounds versions already
+        # installed, so every local gate passed. Prove it pre-release.
+        run: |
+          python -m venv /tmp/smoke
+          /tmp/smoke/bin/python -m pip install --upgrade pip
+          /tmp/smoke/bin/python -m pip install dist/suijin-*.whl
+          /tmp/smoke/bin/suijin version
 
   # ── Publish: on version tags (and manual dispatch) ─────────────────
   docker-publish:

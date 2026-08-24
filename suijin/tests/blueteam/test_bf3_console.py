@@ -219,6 +219,59 @@ class TestFeedIntegration:
         assert "GET /q" in out  # attack event
         assert ui.requests == 2
 
+    def test_baseline_training_one_line_not_blocks(self, _plane, tmp_path):
+        """Operator ask: baseline training must not spam event blocks — ONE
+        dim progress line per training request, and never the old duplicate
+        'baseline training' verdict (feed.py used to print BOTH)."""
+        from suijin.modules.blueteam.lib.blue.tui.feed import FeedConfig, LiveFeed
+
+        class E:
+            total_analyses = 0
+            total_cost_usd = 0.0
+
+        class S:
+            def find_for_request(self, p):
+                return None
+
+            def get_subagent_notes(self, p):
+                return ""
+
+            def record_anomaly(self, p, v):
+                pass
+
+            def get_summary(self):
+                return {"total": 0}
+
+        console = _sink_console(100)
+        ui = BlueConsoleUI(console, target="test")
+        ui.start()
+        feed = LiveFeed(
+            ai_engine=E(),
+            subagent_manager=S(),
+            config=FeedConfig(baseline_requests=3, ai_analysis_enabled=False, show_all_normals=False),
+        )
+        feed.TARPIT_FILE = str(tmp_path / "t.json")
+        feed.ui = ui
+
+        # 2 training requests (rid 1,2) + 1 establishing request (rid 3)
+        for i in range(3):
+            asyncio.run(
+                feed.process_request(
+                    {"method": "GET", "path": f"/b{i}", "ip": "1.1.1.1", "user_agent": "x", "headers": {}}
+                )
+            )
+
+        ui.stop()
+        out = console.export_text()
+        # training requests: one refreshed line each, NO event blocks
+        assert out.count("learning baseline") == 2
+        assert "GET /b0" not in out and "GET /b1" not in out
+        # the old duplicate banner is dead
+        assert "baseline training" not in out
+        # the ESTABLISHING request still opens a real event block
+        assert "GET /b2" in out
+        assert ui.requests == 3  # 2 progress lines + 1 event block
+
     def test_stats_sync_updates_strip(self):
         ui, c = _ui()
         ui.requests = 100
