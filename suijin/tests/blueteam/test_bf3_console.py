@@ -16,8 +16,17 @@ def _plane(tmp_path, monkeypatch):
     yield enf
 
 
+def _sink_console(width=100):
+    """A console writing to an in-memory buffer — force_terminal without
+    leaking ANSI to the real stdout (CI kernel quiet-boot tests capture
+    stdout globally and the strip's control codes broke them)."""
+    import io
+
+    return Console(file=io.StringIO(), record=True, width=width, force_terminal=True)
+
+
 def _ui(width=100):
-    c = Console(record=True, width=width, force_terminal=True)
+    c = _sink_console(width)
     return BlueConsoleUI(c, target="hill_ctf"), c
 
 
@@ -80,7 +89,7 @@ class TestLiveStrip:
         ui.tick()
         ui.stop()
         # render the strip directly to check content
-        r = Console(record=True, width=100, force_terminal=True)
+        r = _sink_console(100)
         r.print(ui._strip())
         out = r.export_text()
         assert "42" in out and "7" in out and "3" in out and "2" in out
@@ -90,7 +99,7 @@ class TestLiveStrip:
         ui, c = _ui()
         ui.start()
         ui.waiting(True)
-        r = Console(record=True, width=100, force_terminal=True)
+        r = _sink_console(100)
         r.print(ui._strip())
         assert "watching" in r.export_text()
 
@@ -175,7 +184,7 @@ class TestFeedIntegration:
             def get_summary(self):
                 return {"total": 0}
 
-        console = Console(record=True, width=100, force_terminal=True)
+        console = _sink_console(100)
         ui = BlueConsoleUI(console, target="test")
         ui.start()
 
