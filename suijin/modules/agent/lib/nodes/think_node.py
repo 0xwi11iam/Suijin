@@ -646,7 +646,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
                 "phase": phase,
                 "thought": thought,
                 "reasoning": reasoning,
-                "tool_output": f"Fireteam deployed: {len(tasks)} specialist(s)",
+                "tool_output": "",  # set AFTER deploy — never claim success before it happened
             }
             try:
                 from suijin.modules.agent.lib.nodes.subagent_node import deploy_fireteam
@@ -658,6 +658,10 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
 
                 dep = deploy_fireteam(tasks, generate_fn=generate_fn, route_tool_fn=_rt)
                 if dep.get("team_id"):
+                    updates["_current_step"]["tool_output"] = (
+                        f"Fireteam {dep['team_id']}: {len(dep['spawned'])} deployed, "
+                        f"{len(dep.get('skipped', []))} skipped"
+                    )
                     content = (
                         f"FIRETEAM {dep['team_id']} DEPLOYED — {len(dep['spawned'])} specialist(s) running in the background:\n"
                         + "\n".join(f"  - {t[:160]}" for t in dep["spawned"])
@@ -667,12 +671,16 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
                         content += f"\n  SKIPPED (not deployed): {t[:80]} — {reason}"
                 else:
                     # every task rejected — the message teaches why
+                    updates["_current_step"]["tool_output"] = (
+                        f"Fireteam NOT deployed — {len(dep.get('skipped', []))} task(s) rejected"
+                    )
                     content = "FIRETEAM NOT DEPLOYED — every task was rejected as wasted effort:\n"
                     content += "\n".join(f"  - {t[:80]} — {reason}" for t, reason in dep.get("skipped", []))
                     content += "\nDo single trivial calls yourself with use_tool; make specialist tasks specific (target + what to test)."
                 updates["messages"].append({"role": "user", "content": content})
             except RuntimeError as e:
                 # no running loop (defensive — think_node is always in one)
+                updates["_current_step"]["tool_output"] = f"Fireteam deploy failed: {e}"
                 updates["messages"].append({"role": "user", "content": f"Fireteam deploy failed: {e}"})
     elif action == "switch_skill":
         ss = decision.get("skill_switch") or {}
