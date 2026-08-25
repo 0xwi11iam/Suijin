@@ -62,8 +62,31 @@ class TestOSInstallHints:
         from suijin.modules.tools.lib import availability as av
 
         monkeypatch.setattr(av, "detect_package_manager", lambda: "brew")
-        hint = av.install_hint("smbclient")
-        assert "apt" not in hint and "Kali docker" in hint
+        hint = av.install_hint("curl")  # note-only entry, no apt anywhere
+        assert "apt" not in hint and "built into" in hint
+
+    def test_macos_hint_prefers_brew(self, monkeypatch):
+        from suijin.modules.tools.lib import availability as av
+
+        monkeypatch.setattr(av, "detect_package_manager", lambda: "brew")
+        assert av.install_hint("smbclient") == "brew install samba"
+        assert av.install_hint("medusa") == "brew install medusa"
+        assert av.install_hint("dig") == "brew install bind"
+        assert av.install_hint("snmpwalk") == "brew install net-snmp"
+        assert av.install_hint("metasploit") == "brew install metasploit"
+
+    def test_cme_hints_at_netexec(self, monkeypatch):
+        from suijin.modules.tools.lib import availability as av
+
+        monkeypatch.setattr(av, "detect_package_manager", lambda: "brew")
+        hint = av.install_hint("crackmapexec")
+        assert "NetExec" in hint and "alias crackmapexec" in hint  # PyPI original is dead
+
+    def test_apt_hint_adapts_bind9(self, monkeypatch):
+        from suijin.modules.tools.lib import availability as av
+
+        monkeypatch.setattr(av, "detect_package_manager", lambda: "apt")
+        assert av.install_hint("dig") == "sudo apt install bind9-dnsutils"
 
     def test_pip_name_aliases_resolve(self):
         """duckduckgo-search imports as duckduckgo_search — the pip name
