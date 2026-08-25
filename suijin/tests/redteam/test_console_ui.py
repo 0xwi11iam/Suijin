@@ -1431,15 +1431,36 @@ class TestFireteamStripRows:
         fake = [
             {
                 "team_id": "team-zz",
-                "running": 0,
-                "tasks": [{"task": "Probe http://dead.host/x for open ports", "state": "done", "success": False}],
+                "running": 1,
+                "tasks": [
+                    {"task": "Probe http://dead.host/x for open ports", "state": "done", "success": False},
+                    {"task": "Sweep http://t ranges for live hosts now", "state": "running", "success": None},
+                ],
             }
         ]
         monkeypatch.setattr(m, "_fireteam_snapshot", lambda: fake)
         ui, _c = _ui()
         ui.waiting(False)
         strip = self._render_strip(ui)
-        assert "✗" in strip and "0 running" in strip
+        assert "✗" in strip and "1 running" in strip
+
+    def test_block_hidden_when_nothing_running(self, monkeypatch):
+        """Operator contract: the fireteam block appears ONLY while a team
+        is actually running — finished-but-undrained teams show NOTHING."""
+        import suijin.modules.redteam.lib.red.console_ui as m
+
+        fake = [
+            {
+                "team_id": "team-done",
+                "running": 0,
+                "tasks": [{"task": "Probe http://dead.host/x for open ports", "state": "done", "success": True}],
+            }
+        ]
+        monkeypatch.setattr(m, "_fireteam_snapshot", lambda: fake)
+        ui, _c = _ui()
+        ui.waiting(False)
+        strip = self._render_strip(ui)
+        assert "Fireteam" not in strip and "agent" not in strip
 
     def test_live_count_sums_running(self, monkeypatch):
         import suijin.modules.redteam.lib.red.console_ui as m
