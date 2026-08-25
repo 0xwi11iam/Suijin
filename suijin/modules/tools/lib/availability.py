@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib.util
 import platform
 import shutil
+import sys
 
 
 def _os_release_text() -> str:
@@ -128,6 +129,16 @@ def _adapt(cmd: str, pm: str) -> str:
     return cmd.replace("sudo apt", f"sudo {pm}", 1)
 
 
+def _env_pip(cmd: str) -> str:
+    """pip hints must land in the interpreter running doctor. Machines
+    routinely carry several pythons (system, venvs, pipx) and a bare
+    `pip install` targets whichever one is first on PATH — the dep then
+    reads missing forever despite a 'successful' install."""
+    if cmd.startswith("pip install "):
+        return f"{sys.executable} -m {cmd}"
+    return cmd
+
+
 def install_hint(binary: str) -> str:
     """The install command for THIS operator's OS (brew/apt/dnf/pacman/pip).
     Falls back to alternates — macOS never gets an apt line while a note
@@ -138,7 +149,7 @@ def install_hint(binary: str) -> str:
         order = [pm, "pip", "go"] + (["note", "apt"] if pm == "brew" else ["apt", "note"])
         for key in order:
             if entry.get(key):
-                return _adapt(entry[key], pm)
+                return _env_pip(_adapt(entry[key], pm))
         return str(binary)
     return f"{pm} install {binary}   # or: pip install {binary} if it's a Python package"
 
