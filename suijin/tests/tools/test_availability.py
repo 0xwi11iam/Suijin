@@ -102,3 +102,20 @@ class TestOSInstallHints:
         monkeypatch.setattr(av.shutil, "which", lambda b: "/opt/homebrew/bin/msfconsole" if b == "msfconsole" else None)
         assert av._dependency_available("metasploit")
         assert av._dependency_available("metasploit-framework")
+
+    def test_pip_hints_name_the_running_interpreter(self, monkeypatch):
+        """A bare `pip install` lands in whatever python is first on PATH —
+        on multi-python hosts the dep then reads missing forever. Hints
+        must target the interpreter doctor itself runs from."""
+        from suijin.modules.tools.lib import availability as av
+
+        monkeypatch.setattr(av, "detect_package_manager", lambda: "brew")
+        monkeypatch.setattr(av.sys, "executable", "/opt/suijin/venv/bin/python")
+        hint = av.install_hint("gvm-tools")
+        assert hint == "/opt/suijin/venv/bin/python -m pip install gvm-tools"
+
+    def test_brew_hints_not_prefixed(self, monkeypatch):
+        from suijin.modules.tools.lib import availability as av
+
+        monkeypatch.setattr(av, "detect_package_manager", lambda: "brew")
+        assert av.install_hint("nmap") == "brew install nmap"  # no interpreter prefix
