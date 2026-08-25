@@ -175,3 +175,74 @@ class TestThinkIntegration:
         assert msgs, out.get("messages")
         assert "SKIPPED" in msgs[0] and "vague" in msgs[0]  # 'scan' rejected, SSTI kept
         assert "specialist(s) running" in msgs[0]
+
+
+class TestStatusAndDrainHonesty:
+    """The tweaky bits, fixed: per-task states from results (not `?` for
+    everything), and FAILED results never labeled PARTIAL."""
+
+    def setup_method(self):
+        sn._reset_fireteams()
+
+    def test_status_shows_real_task_states(self):
+        import asyncio
+
+        async def go():
+            from suijin.modules.agent.lib.nodes.subagent_node import SubagentResult
+
+            loop = asyncio.get_running_loop()
+            pending = loop.create_future()  # agent B still flying
+            done_a = SubagentResult(subagent_id="s1", task="task A text", success=True, findings="found", steps=2)
+            sn._FIRETEAMS["team-x"] = {
+                "tasks": ["task A text", "task B text"],
+                "futures": [pending],
+                "started": "",
+                "results": [done_a],
+            }
+            return sn.fireteam_status()
+
+        out = asyncio.run(go())
+        assert "[done OK] task A text" in out  # finished while a sibling runs
+        assert "[running] task B text" in out  # not `?`
+
+    def test_status_failed_task_labeled_failed(self):
+        from suijin.modules.agent.lib.nodes.subagent_node import SubagentResult
+
+        r = SubagentResult(subagent_id="s1", task="bad task", success=False, partial=False, findings="", steps=1)
+        sn._FIRETEAMS["team-y"] = {"tasks": ["bad task"], "futures": [], "started": "", "results": [r]}
+        assert "[done FAILED] bad task" in sn.fireteam_status()
+
+    def test_drain_labels_total_failure_FAILED(self):
+        import asyncio
+
+        from suijin.modules.agent.lib.nodes.subagent_node import SubagentResult
+
+        async def go():
+            loop = asyncio.get_running_loop()
+            fut = loop.create_future()
+            fut.set_result(
+                SubagentResult(subagent_id="s1", task="t", success=False, partial=False, findings="nope", steps=1)
+            )
+            sn._FIRETEAMS["team-f"] = {"tasks": ["t"], "futures": [fut], "started": "", "results": []}
+            return sn.collect_finished_teams()
+
+        msgs = asyncio.run(go())
+        assert msgs and "FAILED" in msgs[0]
+        assert "PARTIAL" not in msgs[0]
+
+    def test_drain_timeout_partial_labeled(self):
+        import asyncio
+
+        from suijin.modules.agent.lib.nodes.subagent_node import SubagentResult
+
+        async def go():
+            loop = asyncio.get_running_loop()
+            fut = loop.create_future()
+            fut.set_result(
+                SubagentResult(subagent_id="s1", task="t", success=False, partial=True, findings="half", steps=9)
+            )
+            sn._FIRETEAMS["team-p"] = {"tasks": ["t"], "futures": [fut], "started": "", "results": []}
+            return sn.collect_finished_teams()
+
+        msgs = asyncio.run(go())
+        assert msgs and "TIMEOUT" in msgs[0]

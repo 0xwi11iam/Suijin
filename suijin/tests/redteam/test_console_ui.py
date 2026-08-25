@@ -1376,3 +1376,92 @@ class TestNoSilentEndings:
         out = c.export_text()
         assert "content survives" in out
         assert "render fallback" in out  # the notice, not silence
+
+
+class TestFireteamStripRows:
+    """The live fireteam block: full word + per-agent rows from the
+    registry (the old `FT N live` counter only ever went up)."""
+
+    def _render_strip(self, ui):
+        import io
+
+        from rich.console import Console as C
+
+        sink = C(file=io.StringIO(), width=110, force_terminal=True)
+        sink.print(ui._strip())
+        return sink.file.getvalue()
+
+    def test_no_fireteams_no_row(self, monkeypatch):
+        import suijin.modules.redteam.lib.red.console_ui as m
+
+        monkeypatch.setattr(m, "_fireteam_snapshot", lambda: [])
+        ui, _c = _ui()
+        ui.waiting(False)
+        strip = self._render_strip(ui)
+        assert "Fireteam" not in strip and "FT" not in strip
+
+    def test_full_word_and_agent_rows(self, monkeypatch):
+        import suijin.modules.redteam.lib.red.console_ui as m
+
+        fake = [
+            {
+                "team_id": "team-ab12cd",
+                "running": 2,
+                "tasks": [
+                    {"task": "Test SQLi on http://t/login via blind probe", "state": "running", "success": None},
+                    {"task": "Enumerate http://t/api for hidden endpoints", "state": "running", "success": None},
+                    {"task": "Fetch http://t/robots.txt and read paths", "state": "done", "success": True},
+                ],
+            }
+        ]
+        monkeypatch.setattr(m, "_fireteam_snapshot", lambda: fake)
+        ui, _c = _ui()
+        ui.waiting(False)
+        strip = self._render_strip(ui)
+        assert "Fireteam" in strip and "team-ab12cd" in strip  # the FULL word
+        assert "2 running" in strip and "1 done" in strip
+        assert "agent 1:" in strip and "agent 2:" in strip
+        assert "SQLi on http://t/login" in strip
+        assert "✓" in strip  # the finished agent shows its mark until the team drains
+        assert "agent 3:" in strip and "robots.txt" in strip  # done agents stay visible with ✓
+
+    def test_failed_agent_marks_red_cross(self, monkeypatch):
+        import suijin.modules.redteam.lib.red.console_ui as m
+
+        fake = [
+            {
+                "team_id": "team-zz",
+                "running": 0,
+                "tasks": [{"task": "Probe http://dead.host/x for open ports", "state": "done", "success": False}],
+            }
+        ]
+        monkeypatch.setattr(m, "_fireteam_snapshot", lambda: fake)
+        ui, _c = _ui()
+        ui.waiting(False)
+        strip = self._render_strip(ui)
+        assert "✗" in strip and "0 running" in strip
+
+    def test_live_count_sums_running(self, monkeypatch):
+        import suijin.modules.redteam.lib.red.console_ui as m
+
+        fake = [
+            {"team_id": "a", "running": 2, "tasks": []},
+            {"team_id": "b", "running": 1, "tasks": []},
+        ]
+        monkeypatch.setattr(m, "_fireteam_snapshot", lambda: fake)
+        assert m._fireteam_live_count() == 3
+        ui, _c = _ui()
+        ui.waiting(False)
+        strip = self._render_strip(ui)
+        assert "Fireteam 3 live" in strip
+
+    def test_rows_disappear_when_registry_empties(self, monkeypatch):
+        import suijin.modules.redteam.lib.red.console_ui as m
+
+        state = {"teams": [{"team_id": "t1", "running": 1, "tasks": [{"task": "x" * 40, "state": "running"}]}]}
+        monkeypatch.setattr(m, "_fireteam_snapshot", lambda: state["teams"])
+        ui, _c = _ui()
+        ui.waiting(False)
+        assert "agent 1:" in self._render_strip(ui)
+        state["teams"] = []  # team drained
+        assert "agent" not in self._render_strip(ui)

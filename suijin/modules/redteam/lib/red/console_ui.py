@@ -26,6 +26,7 @@ from __future__ import annotations
 import contextlib
 import json
 import re
+import threading
 import time
 
 from rich.console import Console, Group
@@ -65,6 +66,55 @@ UI_STATE = {
     "last_reasoning": "",
     "last_result_success": True,
 }
+
+
+def _fireteam_snapshot() -> list:
+    """Live fireteam registry (same process as the agent). Guarded — a UI
+    render must never crash on agent internals."""
+    try:
+        from suijin.modules.agent.lib.nodes.subagent_node import _snapshot
+
+        return _snapshot().get("teams", [])
+    except Exception:
+        return []
+
+
+def _fireteam_live_count() -> int:
+    """Specialists actually running RIGHT NOW (registry truth — the old
+    strip counter only ever went up)."""
+    return sum(int(t.get("running", 0)) for t in _fireteam_snapshot())
+
+
+def _fireteam_agent_rows(spinner) -> list:
+    """Per-agent live lines under the strip: `agent N: <task> ⠋` while
+    running, ✓/✗ when done, gone when the team drains."""
+    rows: list = []
+    for team in _fireteam_snapshot():
+        running = int(team.get("running", 0))
+        done = sum(1 for t in team.get("tasks", []) if t.get("state") == "done")
+        rows.append(
+            Text.assemble(
+                ("Fireteam ", "bold magenta"),
+                (str(team.get("team_id", "?")), "magenta"),
+                (f" · {running} running · {done} done", "dim"),
+            )
+        )
+        for i, t in enumerate(team.get("tasks", []), 1):
+            task = str(t.get("task", ""))[:52]
+            state = t.get("state")
+            if state == "running":
+                line = Text(f"  agent {i}: ", style="dim")
+                line.append(task, style="white")
+                line.append(" ")
+                line.append(spinner.render(time.monotonic()))  # own style
+                rows.append(line)
+            elif state == "done":
+                ok = bool(t.get("success"))
+                mark = "✓" if ok else "✗"
+                style = "green" if ok else "red"
+                rows.append(Text.assemble((f"  agent {i}: ", "dim"), (task, "dim"), (f" {mark}", style)))
+            # queued tasks stay silent — no noise
+    return rows[:8]  # strip height guard (header + agents, few teams)
 
 
 def ask_operator_answer(
@@ -398,11 +448,13 @@ class EngagementUI:
         self._cur: _Iteration | None = None
         self._waiting = True
         self._last_tok = 0
+        self._refresh_thread: threading.Thread | None = None
+        self._refresh_stop = threading.Event()
         self._last_cost = 0.0
 
     # ── strip (the ONLY live region — one stable row) ──────────────────
 
-    def _strip(self) -> Table:
+    def _strip(self):
         from suijin.modules.providers.lib import USAGE
 
         tok = int(USAGE.get("input_tokens", 0)) + int(USAGE.get("output_tokens", 0))
@@ -415,25 +467,41 @@ class EngagementUI:
             left = g
         else:
             left = Text(f"suijin {self.phase} #{self.iteration}", style=f"bold {GOLD}")
+        ft_live = _fireteam_live_count()
         right = Text.assemble(
             (f"{_fmt_tok(tok)} tok", "cyan"),
             (" | ", "dim"),
             (f"{approx}${cost:.4f}", "cyan"),
             *([(" | ", "dim"), (f"FLAG {len(UI_STATE['flags'])}", f"bold {GOLD}")] if UI_STATE["flags"] else []),
             *([(" | ", "dim"), (f"CRED {len(UI_STATE['creds'])}", "bold green")] if UI_STATE["creds"] else []),
-            *([(" | ", "dim"), (f"FT {UI_STATE['fireteams']} live", "bold magenta")] if UI_STATE["fireteams"] else []),
+            # the FULL word + the REAL live count straight from the registry
+            # (the old `FT N live` was a monotonic counter — it never fell)
+            *([(" | ", "dim"), (f"Fireteam {ft_live} live", "bold magenta")] if ft_live else []),
         )
         t = Table.grid(expand=True, padding=(0, 1))
         t.add_row(left, Text(), right)
         t.columns[1].ratio = 1
-        return t
+        rows = [t]
+        rows.extend(_fireteam_agent_rows(self._spinner))
+        return Group(*rows) if len(rows) > 1 else t
 
     def start(self) -> None:
         if self._live is None:
             self._live = Live(self._strip(), console=self.console, refresh_per_second=60)
             self._live.start()
+            # the heartbeat: rebuild the strip once a second so counters,
+            # cost, and the fireteam agent rows stay live (and teams
+            # DISAPPEAR the moment they drain) even while nothing prints
+            self._refresh_stop.clear()
+            self._refresh_thread = threading.Thread(target=self._heartbeat, name="red-strip", daemon=True)
+            self._refresh_thread.start()
+
+    def _heartbeat(self) -> None:
+        while not self._refresh_stop.wait(1.0):
+            self._tick()
 
     def stop(self) -> None:
+        self._refresh_stop.set()
         if self._live is not None:
             with contextlib.suppress(Exception):
                 self._live.stop()
