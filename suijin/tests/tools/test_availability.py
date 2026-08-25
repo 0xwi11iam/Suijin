@@ -94,3 +94,11 @@ class TestOSInstallHints:
         from suijin.modules.tools.lib.availability import _dependency_available
 
         assert _dependency_available("duckduckgo-search")  # core dep, always in the venv
+
+    def test_which_alias_metasploit(self, monkeypatch):
+        """The metasploit dep resolves via the msfconsole binary it pours."""
+        from suijin.modules.tools.lib import availability as av
+
+        monkeypatch.setattr(av.shutil, "which", lambda b: "/opt/homebrew/bin/msfconsole" if b == "msfconsole" else None)
+        assert av._dependency_available("metasploit")
+        assert av._dependency_available("metasploit-framework")
