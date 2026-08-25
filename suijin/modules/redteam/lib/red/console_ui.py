@@ -86,11 +86,14 @@ def _fireteam_live_count() -> int:
 
 
 def _fireteam_agent_rows(spinner) -> list:
-    """Per-agent live lines under the strip: `agent N: <task> ⠋` while
-    running, ✓/✗ when done, gone when the team drains."""
+    """Per-agent live lines in the bottom bar: `agent N: <task> ⠋` while
+    running, ✓/✗ for finished siblings. The WHOLE block appears only while
+    a team is actually running and disappears the moment nothing is."""
     rows: list = []
     for team in _fireteam_snapshot():
         running = int(team.get("running", 0))
+        if not running:
+            continue  # dead/undrained team — the bar shows nothing (operator contract)
         done = sum(1 for t in team.get("tasks", []) if t.get("state") == "done")
         rows.append(
             Text.assemble(
