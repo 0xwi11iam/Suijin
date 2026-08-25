@@ -156,6 +156,14 @@ def tool_dependencies() -> dict[str, list[str]]:
     return deps
 
 
+# dep NAME (as declared in manifests) -> the BINARY actually shipped.
+# brew install metasploit pours msfconsole — which("metasploit") is never
+# true even with the framework fully installed.
+_WHICH_ALIASES = {
+    "metasploit": "msfconsole",
+    "metasploit-framework": "msfconsole",
+}
+
 # pip distribution name -> import name (a declared dep like
 # "duckduckgo-search" imports as duckduckgo_search — find_spec on the
 # pip name wrongly reported installed packages as missing)
@@ -170,7 +178,7 @@ _IMPORT_ALIASES = {
 
 def _dependency_available(dep: str) -> bool:
     """A declared dependency is satisfied by a binary on PATH or a Python package."""
-    if shutil.which(dep):
+    if shutil.which(_WHICH_ALIASES.get(dep, dep)):
         return True
     name = _IMPORT_ALIASES.get(dep, dep)
     try:
