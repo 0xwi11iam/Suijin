@@ -512,7 +512,12 @@ def collect_finished_teams(max_messages: int = 6) -> list[str]:
             except Exception as e:  # noqa: BLE001
                 r = SubagentResult(subagent_id="error", task="?", success=False, findings=f"task crashed: {e}", steps=0)
             team["results"].append(r)
-            status = "OK" if r.success else ("TIMEOUT" if r.partial else "PARTIAL")
+            if r.success:
+                status = "OK"
+            elif r.partial:
+                status = "TIMEOUT (partial findings)"
+            else:
+                status = "FAILED"
             messages.append(
                 f"FIRETEAM RESULT [{team_id}] {status} ({r.steps} steps)\n"
                 f"Task: {r.task[:200]}\nFindings:\n{r.findings[:2000]}"
@@ -547,9 +552,16 @@ def fireteam_status() -> str:
         running = len(team["futures"])
         done = len(team["results"])
         lines.append(f"{team_id}: {running} running, {done} finished")
+        results_by_task = {r.task: r for r in team["results"]}
         for t in team["tasks"]:
-            state = "?" if running else "done"
-            lines.append(f"  - [{state}] {t[:90]}")
+            r = results_by_task.get(t)
+            if r is not None:
+                mark = "done OK" if r.success else ("done TIMEOUT" if r.partial else "done FAILED")
+            elif running:
+                mark = "running"
+            else:
+                mark = "queued"
+            lines.append(f"  - [{mark}] {t[:90]}")
     return nudge + "\n".join(lines)
 
 
