@@ -1,34 +1,143 @@
 """Tool availability — map tools to their required binaries and check PATH.
 
 Used by `get_tool_catalog()` so the system prompt only advertises tools that
-will actually work, and lists the missing ones with install hints.
+will actually work, and by `suijin doctor` for the full dependency sweep
+with OS-tailored install commands.
 """
 
 from __future__ import annotations
 
 import importlib.util
+import platform
 import shutil
 
-_INSTALL_HINTS = {
-    "nmap": "brew install nmap                    # or: apt install nmap",
-    "gobuster": "brew install gobuster              # or: apt install gobuster",
-    "feroxbuster": "brew install feroxbuster          # or: cargo install feroxbuster",
-    "john": "brew install john                   # or: apt install john",
-    "sqlmap": "pip install sqlmap                 # or: brew install sqlmap",
-    "hydra": "brew install hydra                  # or: apt install hydra",
-    "amass": "brew install amass                  # or: go install github.com/owasp-amass/amass/v4/...@master",
-    "subfinder": "brew install subfinder             # or: go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest",
-    "httpx": "brew install httpx                  # or: go install github.com/projectdiscovery/httpx/cmd/httpx@latest",
-    "nuclei": "brew install nuclei                 # or: go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest",
-    "katana": "go install github.com/projectdiscovery/katana/cmd/katana@latest",
-    "nikto": "brew install nikto                  # or: apt install nikto",
-    "whatweb": "brew install whatweb               # or: apt install whatweb",
-    "sslscan": "brew install sslscan               # or: apt install sslscan",
-    "ffuf": "brew install ffuf                   # or: go install github.com/ffuf/ffuf/v2@latest",
-    "msfconsole": "Install Metasploit: https://www.metasploit.com/",
-    "curl": "curl is built into macOS/Linux",
-    "gvm": "Install Greenbone: https://greenbone.github.io/docs/latest/",
+
+def _os_release_text() -> str:
+    try:
+        with open("/etc/os-release") as f:
+            return f.read().lower()
+    except OSError:
+        return ""
+
+
+def detect_package_manager() -> str:
+    """The operator's native installer: brew (macOS), apt/dnf/pacman/apk
+    (Linux, via os-release), pip (fallback / Windows)."""
+    system = platform.system()
+    if system == "Darwin":
+        return "brew"
+    if system == "Linux":
+        rel = _os_release_text()
+        if any(k in rel for k in ("arch", "manjaro", "endeavour", "cachyos")):
+            return "pacman"
+        if any(k in rel for k in ("fedora", "rhel", "centos", "amzn", "rocky")):
+            return "dnf"
+        if "alpine" in rel:
+            return "apk"
+        return "apt"
+    return "pip"
+
+
+# Install commands per binary: brew/apt are adapted to dnf/pacman/apk
+# automatically; "pip"/"go" are alternates; "note" is a last-resort hint.
+_INSTALL = {
+    # ── network & scanning ────────────────────────────────────────────
+    "nmap": {"brew": "brew install nmap", "apt": "sudo apt install nmap"},
+    "gobuster": {"brew": "brew install gobuster", "apt": "sudo apt install gobuster"},
+    "feroxbuster": {"brew": "brew install feroxbuster", "apt": "sudo apt install feroxbuster"},
+    "masscan": {"brew": "brew install masscan", "apt": "sudo apt install masscan"},
+    "nikto": {"brew": "brew install nikto", "apt": "sudo apt install nikto"},
+    "whatweb": {"brew": "brew install whatweb", "apt": "sudo apt install whatweb"},
+    "sslscan": {"brew": "brew install sslscan", "apt": "sudo apt install sslscan"},
+    "httpx": {  # projectdiscovery probe — NOT any same-named python script
+        "brew": "brew install httpx",
+        "apt": "sudo apt install httpx",
+        "go": "go install github.com/projectdiscovery/httpx/cmd/httpx@latest",
+    },
+    "subfinder": {
+        "brew": "brew install subfinder",
+        "go": "go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest",
+    },
+    "nuclei": {
+        "brew": "brew install nuclei",
+        "go": "go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest",
+    },
+    "katana": {"go": "go install github.com/projectdiscovery/katana/cmd/katana@latest"},
+    "amass": {"brew": "brew install amass", "apt": "sudo apt install amass"},
+    "ffuf": {"brew": "brew install ffuf", "go": "go install github.com/ffuf/ffuf/v2@latest"},
+    "dnsrecon": {"pip": "pip install dnsrecon", "apt": "sudo apt install dnsrecon"},
+    # ── exploitation ──────────────────────────────────────────────────
+    "sqlmap": {"brew": "brew install sqlmap", "pip": "pip install sqlmap", "apt": "sudo apt install sqlmap"},
+    "msfconsole": {"note": "Metasploit installer: https://www.metasploit.com/ (preinstalled on Kali)"},
+    "metasploit": {"note": "Metasploit installer: https://www.metasploit.com/ (preinstalled on Kali)"},
+    "metasploit-framework": {"apt": "sudo apt install metasploit-framework", "brew": "brew install metasploit"},
+    "crackmapexec": {"pip": "pipx install crackmapexec", "note": "Kali successor: sudo apt install netexec"},
+    "medusa": {"apt": "sudo apt install medusa", "note": "macOS: run from the Kali docker image"},
+    "searchsploit": {"brew": "brew install exploitdb", "apt": "sudo apt install exploitdb"},
+    # ── credentials & cracking ────────────────────────────────────────
+    "john": {"brew": "brew install john", "apt": "sudo apt install john"},
+    "hashcat": {"brew": "brew install hashcat", "apt": "sudo apt install hashcat"},
+    "hydra": {"brew": "brew install hydra", "apt": "sudo apt install hydra"},
+    "trufflehog": {
+        "brew": "brew install trufflehog",
+        "go": "go install github.com/trufflesecurity/trufflehog/v3@latest",
+    },
+    # ── wireless ──────────────────────────────────────────────────────
+    "aircrack-ng": {"brew": "brew install aircrack-ng", "apt": "sudo apt install aircrack-ng"},
+    "airodump-ng": {"note": "ships with aircrack-ng (brew install aircrack-ng / sudo apt install aircrack-ng)"},
+    # ── web & infra utilities ─────────────────────────────────────────
+    "curl": {"note": "built into macOS and Linux"},
+    "dig": {"note": "macOS: built-in · linux: sudo apt install dnsutils"},
+    "socat": {"brew": "brew install socat", "apt": "sudo apt install socat"},
+    "smbclient": {"apt": "sudo apt install smbclient", "note": "macOS: run from the Kali docker image"},
+    "snmpwalk": {"note": "macOS: built-in · linux: sudo apt install snmp"},
+    "redis-cli": {"brew": "brew install redis", "apt": "sudo apt install redis-tools"},
+    "wafw00f": {"pip": "pip install wafw00f", "apt": "sudo apt install wafw00f"},
+    "dirsearch": {"pip": "pip install dirsearch", "apt": "sudo apt install dirsearch"},
+    "testssl.sh": {"apt": "sudo apt install testssl.sh", "note": "git clone https://github.com/drwetter/testssl.sh"},
+    "mitmproxy": {"brew": "brew install mitmproxy", "pip": "pip install mitmproxy"},
+    "playwright": {"pip": "pip install playwright && playwright install"},
+    # ── cloud CLIs ────────────────────────────────────────────────────
+    "aws": {"brew": "brew install awscli", "pip": "pip install awscli"},
+    "gcloud": {"brew": "brew install --cask google-cloud-sdk", "note": "https://cloud.google.com/sdk/docs/install"},
+    "az": {"brew": "brew install azure-cli", "note": "https://learn.microsoft.com/cli/azure/install-azure-cli"},
+    # ── python packages declared by packs ─────────────────────────────
+    "duckduckgo-search": {"pip": "pip install duckduckgo-search"},
+    "impacket": {"pip": "pip install impacket"},
+    "impacket-secretsdump": {"pip": "pip install impacket"},
+    "websocket-client": {"pip": "pip install websocket-client"},
+    "neo4j": {
+        "brew": "brew install neo4j",
+        "pip": "pip install neo4j",
+        "note": "optional KG backend — https://neo4j.com",
+    },
+    "gvm": {"pip": "pip install gvm-tools"},
+    "gvm-tools": {"pip": "pip install gvm-tools"},
+    "python-gvm": {"pip": "pip install gvm-tools (bundles python-gvm)"},
+    "requests": {"pip": "pip install requests"},
 }
+
+
+def _adapt(cmd: str, pm: str) -> str:
+    """Translate an apt line for non-debian families (dnf/pacman/apk)."""
+    if not cmd or pm in ("apt", "brew", "pip") or not cmd.startswith("sudo apt"):
+        return cmd
+    return cmd.replace("sudo apt", f"sudo {pm}", 1)
+
+
+def install_hint(binary: str) -> str:
+    """The install command for THIS operator's OS (brew/apt/dnf/pacman/pip).
+    Falls back to alternates — macOS never gets an apt line while a note
+    or brew alternative exists."""
+    pm = detect_package_manager()
+    entry = _INSTALL.get(binary)
+    if entry:
+        order = [pm, "pip", "go"] + (["note", "apt"] if pm == "brew" else ["apt", "note"])
+        for key in order:
+            if entry.get(key):
+                return _adapt(entry[key], pm)
+        return str(binary)
+    return f"{pm} install {binary}   # or: pip install {binary} if it's a Python package"
 
 
 def tool_dependencies() -> dict[str, list[str]]:
@@ -44,12 +153,25 @@ def tool_dependencies() -> dict[str, list[str]]:
     return deps
 
 
+# pip distribution name -> import name (a declared dep like
+# "duckduckgo-search" imports as duckduckgo_search — find_spec on the
+# pip name wrongly reported installed packages as missing)
+_IMPORT_ALIASES = {
+    "duckduckgo-search": "duckduckgo_search",
+    "websocket-client": "websocket",
+    "gvm-tools": "gvmtools",
+    "python-gvm": "gvm",
+    "impacket-secretsdump": "impacket",  # script shipped by the impacket dist
+}
+
+
 def _dependency_available(dep: str) -> bool:
     """A declared dependency is satisfied by a binary on PATH or a Python package."""
     if shutil.which(dep):
         return True
+    name = _IMPORT_ALIASES.get(dep, dep)
     try:
-        return importlib.util.find_spec(dep) is not None
+        return importlib.util.find_spec(name) is not None
     except Exception:
         return False
 
@@ -78,13 +200,6 @@ def missing_binaries() -> dict[str, list[str]]:
 def unavailable_tool_names() -> set[str]:
     """Tools that cannot run right now because a required dependency is missing."""
     return set(missing_binaries())
-
-
-def install_hint(binary: str) -> str:
-    if binary in _INSTALL_HINTS:
-        return _INSTALL_HINTS[binary]
-    # Unknown names are most likely Python packages
-    return f"pip install {binary}"
 
 
 def startup_banner() -> str | None:

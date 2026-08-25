@@ -33,3 +33,41 @@ class TestToolDependencies:
     def test_install_hint_nonempty(self):
         assert install_hint("nmap")
         assert install_hint("totally_unknown_binary")
+
+
+class TestOSInstallHints:
+    """install_hint is OS-tailored: brew on macOS, apt/dnf adapted on
+    Linux, and macOS NEVER gets an apt line while a note exists."""
+
+    def test_detect_brew_on_macos(self, monkeypatch):
+        from suijin.modules.tools.lib import availability as av
+
+        monkeypatch.setattr(av.platform, "system", lambda: "Darwin")
+        assert av.detect_package_manager() == "brew"
+
+    def test_detect_dnf_on_fedora(self, monkeypatch):
+        from suijin.modules.tools.lib import availability as av
+
+        monkeypatch.setattr(av.platform, "system", lambda: "Linux")
+        monkeypatch.setattr(av, "_os_release_text", lambda: 'name="fedora linux" id=fedora')
+        assert av.detect_package_manager() == "dnf"
+
+    def test_hint_adapts_apt_to_dnf(self, monkeypatch):
+        from suijin.modules.tools.lib import availability as av
+
+        monkeypatch.setattr(av, "detect_package_manager", lambda: "dnf")
+        assert av.install_hint("nmap") == "sudo dnf install nmap"
+
+    def test_macos_never_gets_apt_when_note_exists(self, monkeypatch):
+        from suijin.modules.tools.lib import availability as av
+
+        monkeypatch.setattr(av, "detect_package_manager", lambda: "brew")
+        hint = av.install_hint("smbclient")
+        assert "apt" not in hint and "Kali docker" in hint
+
+    def test_pip_name_aliases_resolve(self):
+        """duckduckgo-search imports as duckduckgo_search — the pip name
+        must not read as missing when the package is installed."""
+        from suijin.modules.tools.lib.availability import _dependency_available
+
+        assert _dependency_available("duckduckgo-search")  # core dep, always in the venv
