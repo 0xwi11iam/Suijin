@@ -58,20 +58,9 @@ _PKG_DIR = os.path.dirname(
 )  # suijin/ package
 
 REQUIRED_BINARIES = ["nmap", "gobuster", "feroxbuster", "john", "curl"]
-OPTIONAL_BINARIES = [
-    "sqlmap",
-    "hydra",
-    "amass",
-    "subfinder",
-    "httpx",
-    "nuclei",
-    "katana",
-    "nikto",
-    "whatweb",
-    "sslscan",
-    "ffuf",
-    "msfconsole",
-]
+# OPTIONAL_BINARIES retired: the sweep below checks EVERY dependency the
+# loaded packs declare (vendored + user ~/.suijin/modules) — the hardcoded
+# list went stale the moment a new pack landed.
 CORE_IMPORTS = ["rich", "flask", "flask_cors", "langgraph", "pydantic", "requests", "urllib3"]
 LAB_PORT = 5906
 
@@ -90,6 +79,7 @@ def _fail(name, detail=""):
 
 def run_doctor() -> int:
     from suijin.modules.platform.lib.runtime import init_runtime
+    from suijin.modules.tools.lib.availability import install_hint
 
     init_runtime()
     rows = []
@@ -139,13 +129,27 @@ def run_doctor() -> int:
         if p:
             rows.append(_ok(f"bin/{b}", p))
         else:
-            rows.append(_fail(f"bin/{b}", "not found on PATH"))
+            rows.append(_fail(f"bin/{b}", f"not found — {install_hint(b)}"))
             critical += 1
 
-    # Optional binaries
-    for b in OPTIONAL_BINARIES:
-        p = shutil.which(b)
-        rows.append(_ok(f"bin/{b}", p) if p else _warn(f"bin/{b}", "not installed (optional)"))
+    # Pack-declared dependencies — EVERY dep of EVERY loaded pack (vendored
+    # + user ~/.suijin/modules), each miss with the OS-tailored install
+    # command. Replaces the stale hardcoded optional list.
+    try:
+        from suijin.modules.tools.lib.availability import binary_status
+
+        declared = {d: ok for d, ok in binary_status().items() if d not in REQUIRED_BINARIES}
+        missing = sorted(d for d, ok in declared.items() if not ok)
+        for dep in missing:
+            rows.append(_warn(f"tool/{dep}", f"missing — {install_hint(dep)}"))
+        if declared:
+            avail = len(declared) - len(missing)
+            cov = f"{avail}/{len(declared)} pack dependencies available"
+            rows.append(
+                _ok("tool coverage", cov) if not missing else _warn("tool coverage", f"{cov} (see hints above)")
+            )
+    except Exception as e:
+        rows.append(_warn("tool coverage", f"dependency sweep failed: {e}"))
 
     # Config — lives inside the suijin/ package dir, not the repo root.
     cfg = os.path.join(_PKG_DIR, "config.json")
@@ -176,16 +180,35 @@ def run_doctor() -> int:
     else:
         rows.append(_warn("lab", f"port {LAB_PORT} already in use"))
 
-    # Module packs
+    # Module packs — vendored + user-installed, with the split visible
     try:
-        from suijin.modules.loader import discover_modules, get_module_tools
+        from suijin.modules.loader import PACK_ROOTS, discover_modules, get_loaded_modules, get_module_tools
 
         discover_modules()
-        n = len(get_module_tools())
-        rows.append(_ok("modules", f"{n} module tools loaded"))
+        vendored = sum(1 for p in PACK_ROOTS[0].glob("*/manifest.json")) if len(PACK_ROOTS) > 0 else 0
+        user = sum(1 for p in PACK_ROOTS[1].glob("*/manifest.json")) if len(PACK_ROOTS) > 1 else 0
+        rows.append(
+            _ok(
+                "modules",
+                f"{len(get_module_tools())} tools · {len(get_loaded_modules())} packs (vendored {vendored} + user {user})",
+            )
+        )
     except Exception as e:
         rows.append(_fail("modules", str(e)))
         critical += 1
+
+    # Addons — zero-boilerplate tool drops (suijin/addons + wheel-shipped)
+    try:
+        from suijin.modules.addons.entry import scan_addons
+
+        addons = scan_addons()
+        n_tools = sum(len(t) for t in addons.values())
+        if addons:
+            rows.append(_ok("addons", f"{n_tools} tools · {len(addons)} addon(s) ({', '.join(sorted(addons))})"))
+        else:
+            rows.append(_warn("addons", "none installed — `suijin install <pack.sja>` drops one here"))
+    except Exception as e:
+        rows.append(_warn("addons", str(e)[:60]))
 
     # Knowledge base (optional — built on demand via `suijin pull kb`)
     try:

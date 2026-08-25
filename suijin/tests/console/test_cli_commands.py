@@ -217,6 +217,27 @@ class TestDoctorWorkspaceRow:
         assert "workspace" in out
         assert "symlink ok" in out
 
+    def test_doctor_pack_dep_sweep_shows_hints(self, monkeypatch, capsys):
+        """The manifest-driven sweep: every pack dep checked, misses get
+        the OS-tailored install command, coverage row summarises."""
+        from suijin.modules.tools.lib import availability as av
+
+        monkeypatch.setattr(cli.shutil, "which", lambda _b: "/bin/true")
+        monkeypatch.setattr(cli, "REQUIRED_BINARIES", [])
+        monkeypatch.setattr(cli, "_importable", lambda _m: True)
+        monkeypatch.setattr(cli, "_port_free", lambda _p: True)
+        monkeypatch.setattr(cli, "_has_any_api_key", lambda _p: False)
+        monkeypatch.setattr(av, "binary_status", lambda: {"hashcat": False, "made-up-dep": True})
+        monkeypatch.setattr(av, "install_hint", lambda b: f"brew install {b}")
+        code = cli.run_doctor()
+        out = capsys.readouterr().out
+        assert code == 0  # pack-dep misses are WARNs, not criticals
+        assert "tool/hashcat" in out and "brew install hashcat" in out
+        assert "tool/made-up-dep" not in out  # available deps stay silent
+        assert "1/2 pack dependencies available" in out
+        assert "packs (vendored" in out  # the split is visible
+        assert "addons" in out
+
 
 class TestHelpers:
     def test_redact_nested_and_lists(self):
