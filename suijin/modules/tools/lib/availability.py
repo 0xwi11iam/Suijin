@@ -68,11 +68,14 @@ _INSTALL = {
     "dnsrecon": {"pip": "pip install dnsrecon", "apt": "sudo apt install dnsrecon"},
     # ── exploitation ──────────────────────────────────────────────────
     "sqlmap": {"brew": "brew install sqlmap", "pip": "pip install sqlmap", "apt": "sudo apt install sqlmap"},
-    "msfconsole": {"note": "Metasploit installer: https://www.metasploit.com/ (preinstalled on Kali)"},
-    "metasploit": {"note": "Metasploit installer: https://www.metasploit.com/ (preinstalled on Kali)"},
+    "msfconsole": {"brew": "brew install metasploit", "note": "~700MB · preinstalled on Kali"},
+    "metasploit": {"brew": "brew install metasploit", "note": "~700MB · preinstalled on Kali"},
     "metasploit-framework": {"apt": "sudo apt install metasploit-framework", "brew": "brew install metasploit"},
-    "crackmapexec": {"pip": "pipx install crackmapexec", "note": "Kali successor: sudo apt install netexec"},
-    "medusa": {"apt": "sudo apt install medusa", "note": "macOS: run from the Kali docker image"},
+    "crackmapexec": {
+        "pip": "pipx install git+https://github.com/Pennyw0rth/NetExec  # then: alias crackmapexec='nxc'",
+        "apt": "sudo apt install crackmapexec",
+    },
+    "medusa": {"brew": "brew install medusa", "apt": "sudo apt install medusa"},
     "searchsploit": {"brew": "brew install exploitdb", "apt": "sudo apt install exploitdb"},
     # ── credentials & cracking ────────────────────────────────────────
     "john": {"brew": "brew install john", "apt": "sudo apt install john"},
@@ -87,10 +90,10 @@ _INSTALL = {
     "airodump-ng": {"note": "ships with aircrack-ng (brew install aircrack-ng / sudo apt install aircrack-ng)"},
     # ── web & infra utilities ─────────────────────────────────────────
     "curl": {"note": "built into macOS and Linux"},
-    "dig": {"note": "macOS: built-in · linux: sudo apt install dnsutils"},
+    "dig": {"brew": "brew install bind", "apt": "sudo apt install bind9-dnsutils", "note": "built into macOS"},
     "socat": {"brew": "brew install socat", "apt": "sudo apt install socat"},
-    "smbclient": {"apt": "sudo apt install smbclient", "note": "macOS: run from the Kali docker image"},
-    "snmpwalk": {"note": "macOS: built-in · linux: sudo apt install snmp"},
+    "smbclient": {"brew": "brew install samba", "apt": "sudo apt install smbclient"},
+    "snmpwalk": {"brew": "brew install net-snmp", "apt": "sudo apt install snmp", "note": "built into macOS"},
     "redis-cli": {"brew": "brew install redis", "apt": "sudo apt install redis-tools"},
     "wafw00f": {"pip": "pip install wafw00f", "apt": "sudo apt install wafw00f"},
     "dirsearch": {"pip": "pip install dirsearch", "apt": "sudo apt install dirsearch"},
