@@ -63,3 +63,21 @@ the highest-probability payload immediately. Every attempt is noted
 (`write_note`), every confirmation recorded (`record_finding`), proof
 demanded. The authorization ledger gate is unchanged — a target
 without an authorization record gets a visible warning.
+
+## The input box (red console)
+
+The operator prompt is a white box pinned as the strip's bottom row —
+always visible no matter what is running:
+
+```
+[⠋] thinking  RECON  » type here▌
+```
+
+- **thinking + spinner** on the left (live, animated)
+- **mode badge** next to it: RECON / EXPLOIT / REPORT — **Tab cycles**;
+  the mode tags the prompt you give (plain lines dispatch as
+  `[RECON] focus on /admin`-style guidance; slash commands work in any
+  mode)
+- **ESC ESC** (two escapes within 0.6s) **pauses the agent** — the
+  Ctrl+C replacement; arrow keys are swallowed and never reach the
+  buffer; Ctrl+C still works as a backup

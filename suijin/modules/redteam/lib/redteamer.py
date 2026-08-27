@@ -271,7 +271,7 @@ async def run_red_team_async(config, objective, api_key=None):
         console=console,  # ONE console — a second one interleaves mid-refresh
         # with the live strip (field garbling: 'queued as guidance' painted
         # over the spinner line)
-    ).start()
+    )
 
     # Engagement console UI — transcript + pinned strip (Rich only)
     from suijin.modules.redteam.lib.red.console_ui import EngagementUI, toggle_reasoning
@@ -279,6 +279,27 @@ async def run_red_team_async(config, objective, api_key=None):
     ui = EngagementUI(console, objective=objective)
     ui.start()
     _stream_ui["sink"] = ui.reasoning_delta  # the flexing box goes live
+
+    # The input box: on a TTY the keystroke reader owns stdin (live typing,
+    # Tab mode cycling, ESC ESC pause) and the RunBox's line reader stays
+    # OFF — one owner of stdin, ever. Piped/CI keeps the line reader.
+    _input_reader = None
+    if sys.stdin.isatty():
+        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+
+        def _esc_pause():
+            import signal as _sig
+
+            _sig._suijin_interrupted = True  # the loop's pause path (was ^C-only)
+
+        _input_reader = RedInputReader(run_box, ui, on_pause=_esc_pause)
+        if _input_reader.start():
+            console.print("[dim]input box live — Tab: mode · ESC ESC: pause · / for commands[/dim]")
+        else:
+            _input_reader = None
+            run_box.start()
+    else:
+        run_box.start()
 
     from suijin.modules.redteam.lib.red.console_ui import ask_operator_answer as _ask_op
 
@@ -558,6 +579,8 @@ async def run_red_team_async(config, objective, api_key=None):
                 final_state = agent.get_state(thread_id) or {}
 
             run_box.stop()
+            if _input_reader is not None:
+                _input_reader.stop()
             break  # Normal completion — exit while loop
 
         except (KeyboardInterrupt, asyncio.CancelledError):
@@ -565,6 +588,8 @@ async def run_red_team_async(config, objective, api_key=None):
             _signal.signal(_signal.SIGINT, _signal.SIG_DFL)
             ui.flush_open()
             ui.stop()  # B1: the strip would clobber the pause prompts too
+            if _input_reader is not None:
+                _input_reader.suspend()  # cooked mode — the pause console owns stdin
 
             # ── pause console: 15 course-changing commands + guidance ───
             from suijin.modules.redteam.lib.red.console_ui import UI_STATE as _UI_LOOT
@@ -591,6 +616,8 @@ async def run_red_team_async(config, objective, api_key=None):
                 _operator_stopped = True
                 ui.stop()
                 run_box.stop()
+                if _input_reader is not None:
+                    _input_reader.stop()
                 break
             finally:
                 # Re-arm the interrupt mechanism (instant-raise form)
@@ -610,6 +637,8 @@ async def run_red_team_async(config, objective, api_key=None):
                 console.print(f"[yellow]  State update failed: {e}. Restarting...[/yellow]")
                 first_run = True
             ui.start()  # strip back on
+            if _input_reader is not None:
+                _input_reader.resume()  # keystroke layer retakes stdin
             ui.waiting(True)  # thinking spinner while the agent resumes
             continue  # Resume the while loop
 
@@ -619,6 +648,8 @@ async def run_red_team_async(config, objective, api_key=None):
             console.print(f"\n[bold red]  Agent loop error: {e}[/bold red]")
             ui.stop()
             run_box.stop()
+            if _input_reader is not None:
+                _input_reader.stop()
             import traceback
 
             traceback.print_exc()

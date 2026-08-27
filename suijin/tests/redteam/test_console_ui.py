@@ -436,9 +436,7 @@ class TestPricing:
 
         monkeypatch.setenv("ZAI_API_KEY", "k")
         # stream answered, gateway omitted usage -> estimate path
-        monkeypatch.setattr(
-            pl, "_stream_chat", lambda *a, **k: (200, "hello world reply", "", {}, "")
-        )
+        monkeypatch.setattr(pl, "_stream_chat", lambda *a, **k: (200, "hello world reply", "", {}, ""))
         pl.reset_usage()
         out = pl.generate([{"role": "user", "content": "hi"}], {"provider": "zai"})
         assert out == "hello world reply"
@@ -1539,3 +1537,108 @@ class TestFlexingReasoningBox:
         ui.stream_done()
         assert "vanish from the bar" not in self._strip_text(ui)  # collapsed
         assert UI_STATE["last_ttft"] == ttft  # the proof survives for reports
+
+
+class TestInputBox:
+    """The always-at-the-bottom operator prompt: white box, thinking
+    spinner + mode badge on the left, live typing, Tab cycles modes."""
+
+    def _strip_text(self, ui, width=120):
+        import io
+
+        from rich.console import Console as C
+
+        sink = C(file=io.StringIO(), width=width, force_terminal=True)
+        sink.print(ui._strip())
+        return sink.file.getvalue()
+
+    def test_box_always_last_with_mode_and_hint(self):
+        ui, _c = _ui()
+        ui.waiting(True)
+        strip = self._strip_text(ui)
+        assert "RECON" in strip  # default mode badge
+        assert "thinking" in strip  # spinner state label
+        assert "Tab" in strip and "ESC ESC" in strip  # the key hints idle inside
+
+    def test_tab_cycles_modes(self):
+        from suijin.modules.redteam.lib.red.console_input import next_mode
+
+        assert next_mode("recon") == "exploit"
+        assert next_mode("exploit") == "report"
+        assert next_mode("report") == "recon"  # wraps
+
+    def test_set_mode_and_live_typing_render(self):
+        ui, _c = _ui()
+        ui.set_mode("exploit")
+        ui.set_input("check /admin")
+        strip = self._strip_text(ui)
+        assert "EXPLOIT" in strip and "check /admin" in strip and "▌" in strip
+
+    def test_working_label_when_not_waiting(self):
+        ui, _c = _ui()
+        ui.waiting(False)
+        assert "working" in self._strip_text(ui)
+
+    def test_mode_tags_plain_prompts(self):
+        """Plain lines dispatch as mode-tagged guidance; slash commands pass raw."""
+        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+
+        class _Box:
+            def __init__(self):
+                self.lines = []
+
+            def dispatch(self, line):
+                self.lines.append(line)
+
+        box = _Box()
+        reader = RedInputReader.__new__(RedInputReader)
+        reader._run_box = box
+        reader._mode = "report"
+        reader._dispatch("focus on the vault")
+        assert box.lines == ["[REPORT] focus on the vault"]
+        reader._mode = "recon"
+        reader._dispatch("/state")
+        assert box.lines[-1] == "/state"  # slash commands never tagged
+
+    def test_apply_key_contract(self):
+        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+
+        assert RedInputReader.apply_key("ab", "\x7f") == ("a", None)
+        buf, action = RedInputReader.apply_key("", "\t")
+        assert action == "tab" and buf == ""  # Tab never lands in the buffer
+        buf, action = RedInputReader.apply_key("x", "\r")
+        assert action == "line" and buf == ""
+
+    def test_double_esc_fires_pause(self):
+        """ESC ESC within 0.6s pauses the agent (the ^C replacement)."""
+        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+
+        fired = []
+        reader = RedInputReader.__new__(RedInputReader)
+        reader._on_pause = lambda: fired.append(True)
+        reader._last_esc = 0.0
+        reader._stop = __import__("threading").Event()
+        reader._paused_out = __import__("threading").Event()
+
+        # simulate: first ESC registers, immediate second ESC fires
+        reader._last_esc = __import__("time").monotonic()
+        reader._esc_chord()
+        assert fired == [True]
+
+    def test_box_is_last_row_even_with_fireteam_and_panel(self, monkeypatch):
+        import suijin.modules.redteam.lib.red.console_ui as m
+
+        monkeypatch.setattr(
+            m,
+            "_fireteam_snapshot",
+            lambda: [{"team_id": "t1", "running": 1, "tasks": [{"task": "probe the thing", "state": "running"}]}],
+        )
+        ui, _c = _ui()
+        UI_STATE["show_reasoning"] = True
+        ui.waiting(True)
+        ui.reasoning_delta("reasoning", "streaming live")
+        ui.set_input("hello")
+        # everything renders together: panel + fireteam + the input box with typing
+        assert "hello" in self._strip_text(ui)
+        assert "probe the thing" in self._strip_text(ui)
+        assert "streaming live" in self._strip_text(ui)
