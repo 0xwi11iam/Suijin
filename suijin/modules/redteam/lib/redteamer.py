@@ -177,6 +177,22 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
     # no cost-cap console notice — the operator's cap is deliberate
 
     providers.reset_usage()
+    # stderr poisons the Live strip: provider/tool warnings wrote straight
+    # to the terminal above the region, leaving frozen artifact rows. The
+    # suijin logger goes to a file for the engagement's lifetime instead.
+    try:
+        import logging as _logging
+
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR as _WS
+
+        _logd = _WS / "outputs" / "logs"
+        _logd.mkdir(parents=True, exist_ok=True)
+        _fh = _logging.FileHandler(_logd / "engagement.log")
+        _fh.setFormatter(_logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
+        _logging.getLogger("suijin").handlers = [_fh]
+        _logging.getLogger("suijin").propagate = False
+    except Exception:  # noqa: BLE001 — logging setup must never block a run
+        pass
     # B11/B16: recall operational memory for the target — silent (the
     # 'no memory of X yet' line was startup noise; the scratchpad carries
     # memory into the prompt where it actually matters)
@@ -304,11 +320,26 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
         from suijin.modules.redteam.lib.red.console_input import RedInputReader
 
         def _esc_pause():
+            import _thread
             import signal as _sig
 
-            _sig._suijin_interrupted = True  # the loop's pause path (was ^C-only)
+            _sig._suijin_interrupted = True
+            # INSTANT: deliver the interrupt to the main thread NOW — even
+            # mid-LLM-generation, the await unwinds instead of finishing
+            _thread.interrupt_main()
 
-        _input_reader = RedInputReader(run_box, ui, on_pause=_esc_pause)
+        def _live_guidance(line):
+            """Plain prompt -> graph state NOW, no turn-boundary wait."""
+            with contextlib.suppress(Exception):
+                mode = str(_input_reader.mode or "recon").upper()
+            content = f"OPERATOR GUIDANCE (live, just now, from the human operator) [{mode}]: {line}"
+            agent._graph.update_state(
+                langgraph_config,
+                {"messages": [{"role": "user", "content": content}], "completion_reason": None},
+            )
+            ui.note(f"» sent [{mode}] {line[:120]}", "cyan")
+
+        _input_reader = RedInputReader(run_box, ui, on_pause=_esc_pause, on_guidance=_live_guidance)
         if _input_reader.start():
             console.print("[dim]input box live — Tab: mode · ESC ESC: pause · / for commands[/dim]")
         else:
