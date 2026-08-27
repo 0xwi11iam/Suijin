@@ -1474,3 +1474,68 @@ class TestFireteamStripRows:
         assert "agent 1:" in self._render_strip(ui)
         state["teams"] = []  # team drained
         assert "agent" not in self._render_strip(ui)
+
+
+class TestFlexingReasoningBox:
+    """The opencode-style stream: reasoning deltas grow a live panel in the
+    bottom bar (hidden until /think), content deltas ignored, first token
+    proves TTFT, the box collapses when the iteration block takes over."""
+
+    def _strip_text(self, ui, width=110):
+        import io
+
+        from rich.console import Console as C
+
+        sink = C(file=io.StringIO(), width=width, force_terminal=True)
+        sink.print(ui._strip())
+        return sink.file.getvalue()
+
+    def test_reasoning_deltas_flex_the_panel(self):
+        ui, _c = _ui()
+        UI_STATE["show_reasoning"] = True  # /think opened it
+        ui.waiting(True)  # the think turn starts (TTFT clock)
+        ui.reasoning_delta("reasoning", "checking the target ")
+        ui.reasoning_delta("reasoning", "for injectable params")
+        strip = self._strip_text(ui)
+        assert "thinking" in strip  # the panel is live in the bottom bar
+        assert "injectable params" in strip  # and it GROWS with the stream
+
+    def test_hidden_until_think_toggled(self):
+        ui, _c = _ui()
+        UI_STATE["show_reasoning"] = False  # default: hidden
+        ui.waiting(True)
+        ui.reasoning_delta("reasoning", "secret reasoning")
+        assert "secret reasoning" not in self._strip_text(ui)
+        UI_STATE["show_reasoning"] = True  # /think — buffered text appears
+        assert "secret reasoning" in self._strip_text(ui)
+
+    def test_content_deltas_ignored(self):
+        ui, _c = _ui()
+        UI_STATE["show_reasoning"] = True
+        ui.waiting(True)
+        ui.reasoning_delta("content", '{"action": "complete"}')
+        assert "complete" not in self._strip_text(ui)
+        assert not ui._streaming
+
+    def test_ttft_recorded_on_first_delta_only(self):
+        ui, _c = _ui()
+        UI_STATE["show_reasoning"] = True
+        ui.waiting(True)
+        first_ttft = UI_STATE["last_ttft"]
+        ui.reasoning_delta("reasoning", "tok")
+        ttft = UI_STATE["last_ttft"]
+        assert ttft is not None and ttft >= 0
+        ui.reasoning_delta("reasoning", "tok2")
+        assert UI_STATE["last_ttft"] == ttft  # one shot — not overwritten
+        assert first_ttft is None or isinstance(first_ttft, (int, float))
+
+    def test_stream_done_collapses_and_keeps_ttft(self):
+        ui, _c = _ui()
+        UI_STATE["show_reasoning"] = True
+        ui.waiting(True)
+        ui.reasoning_delta("reasoning", "some reasoning that will vanish from the bar")
+        assert "vanish from the bar" in self._strip_text(ui)
+        ttft = UI_STATE["last_ttft"]
+        ui.stream_done()
+        assert "vanish from the bar" not in self._strip_text(ui)  # collapsed
+        assert UI_STATE["last_ttft"] == ttft  # the proof survives for reports
