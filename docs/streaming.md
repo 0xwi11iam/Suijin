@@ -7,14 +7,15 @@ What changed, why it's faster, and how to see the proof.
 zai and deepseek completions now **stream** (`stream=True` SSE). Tokens
 arrive as they are generated instead of after the entire response:
 
-- **Reasoning** (`reasoning_content`) streams into the *flexing box* —
-  a bordered panel inside the bottom bar that grows line by line while
-  the model thinks. It is **hidden by default**; press `/think` to open
-  it (buffered text appears instantly, even mid-stream). When the
-  iteration block prints, the box collapses and the `said` section
-  renders as before.
-- **Content** deltas are not rendered — decisions arrive complete and
-  are parsed exactly as before. Zero behavior change to the agent.
+- BOTH **reasoning** and **content** deltas stream into the *flexing
+  box* — a bordered panel inside the bottom bar that grows line by line
+  while the model generates (glm often emits content with no separate
+  reasoning stream; a sink that ignored it made streaming invisible).
+  The live box shows WHILE STREAMING always; when the iteration block
+  prints it collapses. `/think` governs the transcript's permanent
+  said-section, not the live view.
+- Streaming changes ZERO agent behavior: the decision still parses from
+  the fully-assembled text, exactly as before.
 - Fireteam subagents share the same stream; their deltas interleave in
   the box (cosmetic, tail-capped).
 
