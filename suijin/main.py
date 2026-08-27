@@ -29,6 +29,7 @@ console = Console()
 CLI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "modules", "console", "lib", "cli.py")
 
 OPERATOR_TOOLS = [
+    ("EXPLOIT now — instant, uses all known intel", ["exploit"]),  # target prompted below
     ("Scope editor (Burp-style TUI)", ["scope"]),
     ("Approvals console (HITL)", ["approvals", "list"]),
     ("Battle — red vs blue on the lab", ["battle"]),
@@ -64,7 +65,14 @@ def operator_menu():
         if not c.isdigit() or not (1 <= int(c) <= len(OPERATOR_TOOLS)):
             return
         label, args = OPERATOR_TOOLS[int(c) - 1]
-        if args is None:  # dossier needs a target
+        if args == ["exploit"]:  # /exploit needs a target
+            try:
+                target = input("  target (IP / hostname / URL): ").strip()
+            except (KeyboardInterrupt, EOFError):
+                continue
+            if target:
+                _run_cli(["exploit", target])
+        elif args is None:  # dossier needs a target
             try:
                 target = input("  target (IP / hostname / URL): ").strip()
             except (KeyboardInterrupt, EOFError):
