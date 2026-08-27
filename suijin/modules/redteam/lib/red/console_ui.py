@@ -123,10 +123,11 @@ def _fireteam_agent_rows() -> list:
             )
         )
         for i, t in enumerate(team.get("tasks", []), 1):
-            task = str(t.get("task", ""))[:52]
+            task = str(t.get("task", ""))
             state = t.get("state")
             if state == "running":
-                # a grid cell holds the LIVE spinner object → native animation
+                # a grid cell holds the LIVE spinner object → native animation;
+                # NO truncation — the row flexes as long as the mission needs
                 g = Table.grid(padding=(0, 0))
                 g.add_row(Text(f"  agent {i}: {task} ", style="dim"), Spinner("dots", style="magenta", speed=3.0))
                 rows.append(g)
@@ -136,7 +137,7 @@ def _fireteam_agent_rows() -> list:
                 style = "green" if ok else "red"
                 rows.append(Text.assemble((f"  agent {i}: ", "dim"), (task, "dim"), (f" {mark}", style)))
             # queued tasks stay silent — no noise
-    return rows[:8]  # strip height guard (header + agents, few teams)
+    return rows[:14]  # height guard only — never truncates a task's text
 
 
 def ask_operator_answer(
@@ -524,24 +525,19 @@ class EngagementUI:
         return Group(*rows)
 
     def _input_box_row(self):
-        """The operator's prompt — a real white box, always at the bottom:
-        [⠋ thinking] [MODE] » type here▌ — the spinner is a live renderable
-        (native 60fps), Tab cycles the mode badge."""
+        """The operator's prompt — a real white box, ALWAYS the bottom row:
+        [MODE] » type here▌ — the thinking indicator stays in the strip
+        above (one indicator, not two); Tab cycles the mode badge."""
         mode = str(UI_STATE.get("input_mode", "recon")).upper()
-        g = Table.grid(padding=(0, 1))
-        g.add_row(
-            self._spinner,  # live object — animates under Live's auto-refresh
-            Text("thinking" if self._waiting else "working", style=f"bold {GOLD}" if self._waiting else "dim"),
-            Text(mode, style="bold black on bright_white"),
-        )
+        badge = Text(mode, style="bold black on bright_white")
         buf = UI_STATE.get("input_buf")
         if buf is not None:
-            body = Table.grid(padding=(0, 0))
-            body.add_row(g, Text.assemble((" » ", f"bold {GOLD}"), (str(buf)[:60], "bold white"), ("▌", GOLD)))
+            body = Table.grid(padding=(0, 1))
+            body.add_row(badge, Text.assemble(("» ", f"bold {GOLD}"), (str(buf), "bold white"), ("▌", GOLD)))
         else:
-            hint = f" » Tab:mode  ESC ESC:pause  / for commands — {mode.lower()} prompt"
-            body = Table.grid(padding=(0, 0))
-            body.add_row(g, Text(hint, style="dim"))
+            hint = f"» Tab:mode · ESC ESC:pause · / commands — {mode.lower()} prompt"
+            body = Table.grid(padding=(0, 1))
+            body.add_row(badge, Text(hint, style="dim"))
         return Panel(
             body,
             box=box.SQUARE,
