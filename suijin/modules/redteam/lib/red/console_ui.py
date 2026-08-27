@@ -62,6 +62,8 @@ CRED_RES = [
 UI_STATE = {
     "show_reasoning": False,  # opencode-style: reasoning HIDDEN until /think
     "last_ttft": None,  # seconds to the first streamed token (the proof streaming works)
+    "input_mode": "recon",  # the input box mode badge (Tab cycles)
+    "input_buf": None,  # None = idle hint; str = live typing (cursor ▌)
     "flags": [],
     "creds": [],
     "fireteams": 0,
@@ -518,7 +520,45 @@ class EngagementUI:
             rows.append(panel)  # the flexing box sits directly above the stats
         rows.append(t)
         rows.extend(_fireteam_agent_rows())
-        return Group(*rows) if len(rows) > 1 else t
+        rows.append(self._input_box_row())  # the input box is ALWAYS the bottom row
+        return Group(*rows)
+
+    def _input_box_row(self):
+        """The operator's prompt — a real white box, always at the bottom:
+        [⠋ thinking] [MODE] » type here▌ — the spinner is a live renderable
+        (native 60fps), Tab cycles the mode badge."""
+        mode = str(UI_STATE.get("input_mode", "recon")).upper()
+        g = Table.grid(padding=(0, 1))
+        g.add_row(
+            self._spinner,  # live object — animates under Live's auto-refresh
+            Text("thinking" if self._waiting else "working", style=f"bold {GOLD}" if self._waiting else "dim"),
+            Text(mode, style="bold black on bright_white"),
+        )
+        buf = UI_STATE.get("input_buf")
+        if buf is not None:
+            body = Table.grid(padding=(0, 0))
+            body.add_row(g, Text.assemble((" » ", f"bold {GOLD}"), (str(buf)[:60], "bold white"), ("▌", GOLD)))
+        else:
+            hint = f" » Tab:mode  ESC ESC:pause  / for commands — {mode.lower()} prompt"
+            body = Table.grid(padding=(0, 0))
+            body.add_row(g, Text(hint, style="dim"))
+        return Panel(
+            body,
+            box=box.SQUARE,
+            border_style="bright_white",
+            padding=(0, 1),
+            expand=True,
+        )
+
+    def set_input(self, buf) -> None:
+        """Live typing into the box (None = idle hint)."""
+        UI_STATE["input_buf"] = None if buf is None else str(buf)
+        self._tick()
+
+    def set_mode(self, mode: str) -> None:
+        """The mode badge (recon/exploit/report) — Tab cycles it."""
+        UI_STATE["input_mode"] = str(mode or "recon").lower()
+        self._tick()
 
     def start(self) -> None:
         if self._live is None:
