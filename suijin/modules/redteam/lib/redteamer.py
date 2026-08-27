@@ -202,8 +202,18 @@ async def run_red_team_async(config, objective, api_key=None):
         _dispatch_mod().set_proxy(proxy_url)
         console.print(f"[dim]Proxy: {proxy_url}[/dim]")
 
+    # Streaming: the graph's generate_fn carries the UI's reasoning sink —
+    # deltas flow to the flexing box while the LLM thinks. The cell is
+    # filled once the UI exists (the graph boots before it); fireteam
+    # subagents inherit the same generate_fn (their deltas interleave in
+    # the box — cosmetic, tail-capped).
+    _stream_ui = {"sink": None}
+
+    def _generate_with_stream(messages, config=None, **kw):
+        return generate_async(messages, config, on_delta=_stream_ui["sink"])
+
     agent = _agent_graph_cls()(
-        generate_fn=generate_async,
+        generate_fn=_generate_with_stream,
         route_tool_fn=_dispatch_mod().route_tool,
         max_iterations=config.get("max_iterations", 100),
         run_config=config,
@@ -268,6 +278,7 @@ async def run_red_team_async(config, objective, api_key=None):
 
     ui = EngagementUI(console, objective=objective)
     ui.start()
+    _stream_ui["sink"] = ui.reasoning_delta  # the flexing box goes live
 
     from suijin.modules.redteam.lib.red.console_ui import ask_operator_answer as _ask_op
 
@@ -449,6 +460,7 @@ async def run_red_team_async(config, objective, api_key=None):
                         phase = latest.get("phase", node_output.get("current_phase", "?"))
 
                         ui.iteration_header(iteration, phase)
+                        ui.stream_done()  # the flexing box collapses — the block takes over
                         # ask turns (BOTH forms): question + Answer prompt only —
                         # no thinking/said sections. The action-form ask carries
                         # tool_name on _current_step, not on the trace step.
@@ -527,7 +539,7 @@ async def run_red_team_async(config, objective, api_key=None):
                         )
                         ui.flush_open()
                         agent = _agent_graph_cls()(
-                            generate_fn=generate_async,
+                            generate_fn=_generate_with_stream,
                             route_tool_fn=_dispatch_mod().route_tool,
                             max_iterations=config.get("max_iterations", 100),
                             run_config=config,

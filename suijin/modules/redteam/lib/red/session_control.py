@@ -386,14 +386,16 @@ def build_pause_handlers(ctx: PauseContext) -> dict:
         ctx.console.print(str(ctx.route_tool_fn("job_cancel", {"job_id": jid})))
 
     def _cost(_args):
-        from suijin.modules.redteam.lib.red.console_ui import _fmt_tok
+        from suijin.modules.redteam.lib.red.console_ui import UI_STATE, _fmt_tok
 
         u = ctx.usage_fn() or {}
         tok = int(u.get("input_tokens", 0)) + int(u.get("output_tokens", 0))
+        ttft = UI_STATE.get("last_ttft")
+        ttft_s = f" | first token {ttft}s" if ttft is not None else ""
         ctx.console.print(
             f"  calls {u.get('calls', 0)} | {_fmt_tok(tok)} tok "
             f"(api {u.get('api_reported_calls', 0)} / est {u.get('estimated_calls', 0)}) "
-            f"| ${float(u.get('est_cost_usd', 0)):.4f}"
+            f"| ${float(u.get('est_cost_usd', 0)):.4f}{ttft_s}"
         )
 
     return {
