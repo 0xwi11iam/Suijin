@@ -236,7 +236,9 @@ def engagement_order(objective: str) -> str:
         f"Target: {target}\n"
         f"Authorization: {auth}\n"
         "Rules of Engagement: professional bug-bounty etiquette — no denial-of-service, no data "
-        "destruction, no social engineering of third parties, capture evidence for every finding.\n"
+        "destruction, no social engineering of third parties, capture evidence for every finding. "
+        "Every valuable find is proven: catalog_exploit with a POC step-script and marker — "
+        "the system runs the POC before you continue; unproven findings are rumors.\n"
         "Next action."
     )
 
