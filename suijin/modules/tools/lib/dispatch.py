@@ -613,13 +613,17 @@ def get_tool_catalog():
     catalog = ""
 
     # ── MUST-USE TOOLS (these are NOT optional) ─────────────────────
+    # Catalog diet: per-tool ```json blocks are kept ONLY for the four
+    # mandatory doctrine tools — every other tool's args are already in
+    # the complete registry rendering at the bottom, so examples here
+    # were pure duplicate tokens.
     catalog += """## HOW TO CALL ANY TOOL (read this first)
 Every tool below is called the same way — one JSON object per decision:
   {"action": "use_tool", "tool_name": "<name>", "args": {"<arg>": "<value>", ...}, "thought": "..."}
 Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names exactly.
 
 ##  MANDATORY TOOLS — Use These Every Turn
-- **write_note** — MANDATORY after EVERY action. Log what you did, what happened, and what you learned. Categories: recon, exploit, cve, blocked, finding, progress, complete. Your audit trail and final report depend on these notes. DO NOT SKIP.
+- **write_note** — MANDATORY after EVERY action, EVERY tool result, EVERY phase transition — not just at milestones. If you ran a tool and did not write a note, your next decision is uninformed and the final report has a hole. Categories: recon, exploit, cve, blocked, finding, progress, complete. DO NOT SKIP.
   ```json
   {"tool": "write_note", "args": {"content": "Tested SQLi on /login with payload ' OR 1=1 --. Login bypass confirmed. Gained admin session.", "success": true, "category": "finding", "engagement": "target-name"}}
   ```
@@ -636,24 +640,11 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
   {"tool": "generate_report", "args": {"engagement": "target-name"}}
   ```
 
-## Core Tools
+## Core Tools (args in the ALL AVAILABLE TOOLS registry below)
 - **execute_terminal** — Run ANY shell command. Use this for CLI tools: nmap, gobuster, ffuf, nikto, sqlmap, hydra, john, enum4linux, dirb, masscan, and any other pentesting tool installed on the system. Prefer dedicated CLI tools over raw curl/http_request for scanning and brute-forcing.
-  ```json
-  {"tool": "execute_terminal", "args": {"cmd": "gobuster dir -u http://TARGET -w /usr/share/wordlists/dirb/common.txt"}}
-  {"tool": "execute_terminal", "args": {"cmd": "nmap -sV -sC TARGET"}}
-  ```
 - **http_request** — Raw HTTP requests with full browser emulation. Use for manual web testing, not for scanning (use gobuster/nmap via execute_terminal instead).
-  ```json
-  {"tool": "http_request", "args": {"method": "GET", "url": "http://TARGET/page"}}
-  ```
 - **read_file** — Read any file on the system.
-  ```json
-  {"tool": "read_file", "args": {"file_path": "/etc/hosts"}}
-  ```
 - **write_file** — Write files (scripts, payloads, notes). Defaults to suijin_agent/ for relative paths.
-  ```json
-  {"tool": "write_file", "args": {"file_path": "scripts/exploit.py", "content": "#!/usr/bin/env python3\\n..."}}
-  ```
 """
 
     # Knowledge base — feature-gated: only advertised when the operator has
@@ -664,137 +655,47 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
     if _kb:
         per = ", ".join(f"{k} {v:,}" for k, v in sorted(_kb.get("per_source", {}).items()))
         catalog += f"""- **search_kb** — Full-text search the local knowledge base ({_kb["docs"]:,} docs: {per}). BM25-ranked results with snippets. Optional `source:<name>` filter (e.g. keyword "source:gtfobins awk sudo") and `limit` 1-20 (default 5). Prefer this over web_search for technique/payload/wordlist lookups — it is faster and offline.
-  ```json
-  {{"tool": "search_kb", "args": {{"keyword": "SQL injection bypass WAF", "limit": 5}}}}
-  ```
 - **suggest_exploit** — Offline exploit leads for a fingerprinted service: exact GTFOBins binary page + HackTricks + PayloadsAllTheThings hits. Run right after nmap/whatweb; follow with search_cve for exact-version CVEs.
-  ```json
-  {{"tool": "suggest_exploit", "args": {{"service": "apache httpd", "version": "2.4.49"}}}}
-  ```
 - **find_wordlist** — Find SecLists wordlists by keyword AND materialize them into suijin_agent/wordlists/ for ffuf/gobuster/hydra.
-  ```json
-  {{"tool": "find_wordlist", "args": {{"keyword": "directory"}}}}
-  ```
 - **extract_payloads** — Pull runnable code blocks from matching KB docs into suijin_agent/payloads/. Review before running.
-  ```json
-  {{"tool": "extract_payloads", "args": {{"keyword": "reverse shell bash", "max_payloads": 10}}}}
-  ```
 - **kb_stats** — Knowledge base inventory: per-source doc counts, build age, failed sources.
-  ```json
-  {{"tool": "kb_stats", "args": {{}}}}
-  ```
 """
 
     catalog += """- **wordlist_tool** — Merge / dedupe / length-filter wordlists into suijin_agent/wordlists/.
-  ```json
-  {"tool": "wordlist_tool", "args": {"action": "merge", "files": ["wordlists/a.txt", "wordlists/b.txt"], "out": "wordlists/merged.txt", "min_len": 4}}
-  ```
 - **mine_failures** — Cluster the failure DB so you never repeat a blocked technique/target combo.
-  ```json
-  {"tool": "mine_failures", "args": {"max_clusters": 5}}
-  ```
 - **anonymize_report** — Scrub IPs/emails/tokens/keys from a report file into suijin_agent/reports/anonymized/ before sharing.
-  ```json
-  {"tool": "anonymize_report", "args": {"file_path": "reports/eng_report.md"}}
-  ```
 - **apply_patch** — Patch vulnerabilities in the target lab application.
-  ```json
-  {"tool": "apply_patch", "args": {"vulnerability": "sqli"}}
-  ```
-- **claim_flag** — Signal objective complete.
-  ```json
-  {"tool": "claim_flag", "args": {"flag": "flag{...}"}}
-  ```
+- **claim_flag** — Signal objective complete (args: flag).
 - **recon_chain** — One-call recon: nmap scan + service fingerprint + version-based CVE lookup.
-  ```json
-  {"tool": "recon_chain", "args": {"target": "TARGET"}}
-  ```
 
 ## Metasploit
 - **msf_check** — Verify Metasploit availability.
-  ```json
-  {"tool": "msf_check", "args": {}}
-  ```
 - **msf_command** — Run raw msfconsole commands.
-  ```json
-  {"tool": "msf_command", "args": {"cmd": "search eternalblue"}}
-  ```
 - **msf_run** — Execute exploit/auxiliary/post modules.
-  ```json
-  {"tool": "msf_run", "args": {"module": "exploit/multi/handler", "payload": "windows/meterpreter/reverse_tcp", "options": {"LHOST": "10.0.0.5", "LPORT": "4444"}}}
-  ```
 - **msf_sessions** — Manage sessions.
-  ```json
-  {"tool": "msf_sessions", "args": {"action": "list"}}
-  ```
 
 ## Intelligence
 - **search_cve** — Query NVD for CVEs by software+version.
-  ```json
-  {"tool": "search_cve", "args": {"software": "apache httpd", "version": "2.4.49", "limit": 5}}
-  ```
 - **check_knowledge** — Query the knowledge graph before generating payloads.
-  ```json
-  {"tool": "check_knowledge", "args": {"target": "TARGET"}}
-  ```
 - **record_finding** — Persist verified findings.
-  ```json
-  {"tool": "record_finding", "args": {"target": "TARGET", "finding_type": "blocks", "rule": "' OR 1=1", "evidence": "WAF 403"}}
-  ```
-- **write_note** — Log engagement progress.
-  ```json
-  {"tool": "write_note", "args": {"content": "Progress update...", "success": true, "category": "progress", "engagement": "target-name"}}
-  ```
+- **write_note** — Log engagement progress (MANDATORY cadence — see top).
 
 ## Creative Freedom Tools
 - **web_search** — Search the internet for exploit techniques, CVE details, documentation.
-  ```json
-  {"tool": "web_search", "args": {"query": "apache 2.4.49 CVE exploit", "max_results": 5}}
-  ```
 - **pip_install** — Install Python packages the agent needs (requests, pwntools, etc).
-  ```json
-  {"tool": "pip_install", "args": {"package": "requests"}}
-  ```
 - **edit_skill** — Improve your own hacking methodology by editing skill prompts.
-  ```json
-  {"tool": "edit_skill", "args": {"skill_name": "sql_injection", "new_content": "..."}}
-  ```
 - **write_tool** — Create new Python tools to extend your capabilities.
-  ```json
-  {"tool": "write_tool", "args": {"tool_name": "my_scanner", "code": "def scan():..."}}
-  ```
 - **list_skills** — See all attack skills you can edit.
-  ```json
-  {"tool": "list_skills", "args": {}}
-  ```
 - **list_own_files** — See all code files you can read and modify.
-  ```json
-  {"tool": "list_own_files", "args": {}}
-  ```
 
 ## Background Jobs (parallel execution)
 - **job_spawn** happens automatically for slow tools (nmap, gobuster, sqlmap, hydra, ffuf, nikto).
   When you run these via execute_terminal, they return a job_id immediately. You keep working!
 - **job_status** — Check status of a background job.
-  ```json
-  {"tool": "job_status", "args": {"job_id": "abc123"}}
-  ```
 - **job_wait** — Wait for a job to complete (with timeout).
-  ```json
-  {"tool": "job_wait", "args": {"job_id": "abc123", "timeout": 60}}
-  ```
 - **job_output** — Get full output from a completed job.
-  ```json
-  {"tool": "job_output", "args": {"job_id": "abc123"}}
-  ```
 - **job_list** — List all running background jobs.
-  ```json
-  {"tool": "job_list", "args": {}}
-  ```
 - **job_cancel** — Cancel a running job.
-  ```json
-  {"tool": "job_cancel", "args": {"job_id": "abc123"}}
-  ```
 """
 
     # Knowledge extras + evidence (B12-B15, B18)
@@ -841,40 +742,16 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
     # Analysis & utility routes that predate the curated prose above —
     # callable but previously invisible to the model (flexibility fix:
     # every routed tool must appear in the catalog exactly once).
-    catalog += """## Analysis & Utility Tools
+    catalog += """## Analysis & Utility Tools (args in the registry below)
 - **target_dossier** — per-target intelligence dossier (knowledge graph + failure history + notes).
-  ```json
-  {"tool": "target_dossier", "args": {"target": "TARGET"}}
-  ```
 - **payload_generate** — ready-made payloads by vulnerability type and framework.
-  ```json
-  {"tool": "payload_generate", "args": {"vuln_type": "rce", "framework": "spring"}}
-  ```
 - **mutate_wordlist** — expand a seed wordlist (leet, years, suffixes) into payloads/wordlists/.
-  ```json
-  {"tool": "mutate_wordlist", "args": {"seeds": ["admin", "company2024"]}}
-  ```
 - **cewl_words** — harvest a custom wordlist from a target URL's content.
-  ```json
-  {"tool": "cewl_words", "args": {"url": "http://TARGET"}}
-  ```
 - **diff_response** — diff baseline vs injected responses to expose subtle behavior changes.
-  ```json
-  {"tool": "diff_response", "args": {"baseline": "...", "injected": "..."}}
-  ```
 - **rate_limit_check / rate_limit_all** — detect rate-limited endpoints before brute force.
-  ```json
-  {"tool": "rate_limit_check", "args": {"endpoint": "/login"}}
-  ```
 - **attack_tree** — render a trace as an attack tree diagram for the report.
-  ```json
-  {"tool": "attack_tree", "args": {"trace_json": "..."}}
-  ```
 - **normalize_output** — normalize raw tool output for comparison/storage.
 - **kb_read** — read one KB document by path (from search_kb results).
-  ```json
-  {"tool": "kb_read", "args": {"path": "gtfobins/aws.md"}}
-  ```
 """
 
     # ── THE KERNEL-RENDERED CAPABILITY SURFACE ──────────────────────
