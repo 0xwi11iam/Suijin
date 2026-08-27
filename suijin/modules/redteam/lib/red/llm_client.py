@@ -18,23 +18,30 @@ import asyncio
 from suijin.modules.redteam.lib.red.config_loader import load_config
 
 
-async def generate_async(messages, config=None):
-    """Async LLM call with a hard timeout. Silent — the engagement strip
-    in red/console_ui.py owns all live display."""
+async def generate_async(messages, config=None, on_delta=None):
+    """Async LLM call. Silent — the engagement strip in red/console_ui.py
+    owns all live display; `on_delta(kind, text)` streams tokens to it.
+
+    Hard timeout is 600s: the old 90s cap killed every long completion
+    ("read timed out" forever) — with streaming the operator watches
+    progress live, so a slow, long generation is fine; only a genuinely
+    stuck transport deserves the axe."""
     if not config:
         config = load_config()
 
-    # Limit to 90s total — prevents UI hangs from slow API/network
     try:
         return await asyncio.wait_for(
-            asyncio.to_thread(_generate, messages, config),
-            timeout=90.0,
+            asyncio.to_thread(_generate, messages, config, on_delta),
+            timeout=600.0,
         )
     except asyncio.TimeoutError:
-        return "Error: LLM request timed out after 90s. The provider may be overloaded. Retry with a shorter prompt or switch providers."
+        return (
+            "Error: LLM request timed out after 600s (no transport progress). "
+            "The provider may be stuck — retry or switch providers."
+        )
 
 
-def _generate(messages, config):
+def _generate(messages, config, on_delta=None):
     """Thread-friendly wrapper that lazily resolves the providers module."""
     from suijin.modules.loader import load_local_module
 
@@ -42,5 +49,5 @@ def _generate(messages, config):
     fn = getattr(providers, "generate_with_failover", None)
     # honor config['fallback_providers'] when configured; plain generate otherwise
     if fn and (config or {}).get("fallback_providers"):
-        return fn(messages, config)
-    return providers.generate(messages, config)
+        return fn(messages, config, on_delta=on_delta)
+    return providers.generate(messages, config, on_delta=on_delta)

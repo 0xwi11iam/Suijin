@@ -14,6 +14,19 @@ import logging  # noqa: E402 — provider retry noise goes to logs, not the enga
 logger = logging.getLogger("suijin.providers")
 
 # ----------------------------------------------------------------------
+# HTTP transport (shared) — TLS smoothing + honest timeouts
+# ----------------------------------------------------------------------
+# One Session for every OpenAI-compatible call: the TLS handshake and TCP
+# setup happen ONCE, then keep-alive carries the connection between
+# iterations (a fresh handshake per call was a large slice of the
+# perceived 10-20s dead time before first output).
+_HTTP = req.Session()
+# (connect, read): 10s to establish, 300s for the body. A long glm/deepseek
+# completion is LEGITIMATE — the old scalar timeout=45 killed exactly the
+# biggest responses as "read timed out", then retried the whole call.
+_TIMEOUT = (10, 300)
+
+# ----------------------------------------------------------------------
 # Token / cost accounting
 # ----------------------------------------------------------------------
 # Every provider returns token-usage metadata, but historically we threw it
@@ -240,44 +253,6 @@ LOBSTERTRAP_URL = "http://localhost:8080/v1"
 LOBSTERTRAP_DASHBOARD = "http://localhost:8080/_lobstertrap/"
 
 
-def _lobstertrap_available():
-    """Check if LobsterTrap proxy is running."""
-    try:
-        resp = req.get(LOBSTERTRAP_DASHBOARD, timeout=1)
-        return resp.status_code == 200
-    except Exception:
-        return False
-
-
-def _call_via_lobstertrap(messages, model, temperature, max_tokens):
-    """
-    Send request through LobsterTrap proxy using OpenAI-compatible API.
-    LobsterTrap inspects and enforces policy before forwarding.
-    """
-    headers = {"Content-Type": "application/json"}
-    payload = {
-        "model": model,
-        "messages": messages,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }
-    try:
-        resp = req.post(
-            f"{LOBSTERTRAP_URL}/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=120,
-        )
-        if resp.status_code == 200:
-            return resp.json()["choices"][0]["message"]["content"]
-        elif resp.status_code == 403:
-            return f"Error: LobsterTrap DENIED — {resp.json().get('message', 'Policy violation')}"
-        else:
-            return None
-    except Exception:
-        return None
-
-
 # ----------------------------------------------------------------------
 # Gemini setup
 # ----------------------------------------------------------------------
@@ -306,6 +281,100 @@ def _init_anthropic(config):
 
 
 # ----------------------------------------------------------------------
+# OpenAI-compatible transport: streaming + non-streaming, shared session
+# ----------------------------------------------------------------------
+
+
+def _emit(on_delta, kind, piece):
+    if on_delta is not None and piece:
+        with contextlib.suppress(Exception):  # display must never break generation
+            on_delta(kind, piece)
+
+
+def _stream_chat(url, headers, payload, on_delta=None):
+    """Stream an OpenAI-compatible chat completion (SSE).
+
+    Returns (status, content, reasoning, usage, body):
+      status 200 — content/reasoning assembled, usage from the final chunk
+        (stream_options.include_usage; None when the gateway omits it)
+      status != 200 — non-2xx HTTP: body carries a short error excerpt
+      status 0 — transport/stream failure BEFORE completion; whatever
+        landed is returned but the caller should fall back to non-stream
+    """
+    import json as _json
+
+    p = dict(payload)
+    p["stream"] = True
+    p["stream_options"] = {"include_usage": True}
+    content: list[str] = []
+    reasoning: list[str] = []
+    usage = None
+    try:
+        with _HTTP.post(url, headers=headers, json=p, timeout=_TIMEOUT, stream=True) as resp:
+            if resp.status_code != 200:
+                return resp.status_code, "", "", None, (resp.text or "")[:400]
+            for line in resp.iter_lines(decode_unicode=True):
+                if not line or not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    obj = _json.loads(data)
+                except Exception:
+                    continue
+                u = obj.get("usage")
+                if isinstance(u, dict) and u:
+                    usage = u  # the include_usage chunk carries the totals
+                for ch in obj.get("choices") or []:
+                    delta = ch.get("delta") or {}
+                    piece = delta.get("content")
+                    if piece:
+                        content.append(piece)
+                        _emit(on_delta, "content", piece)
+                    rpiece = delta.get("reasoning_content")
+                    if rpiece:
+                        reasoning.append(rpiece)
+                        _emit(on_delta, "reasoning", rpiece)
+            return 200, "".join(content), "".join(reasoning), usage, ""
+    except Exception as e:
+        logger.debug(f"stream transport error: {e}")
+        return 0, "".join(content), "".join(reasoning), usage, str(e)[:200]
+
+
+def _post_chat(url, headers, payload):
+    """Non-streaming OpenAI-compatible call on the shared session.
+    Returns (status_code, parsed_json_or_None, body_text)."""
+    resp = _HTTP.post(url, headers=headers, json=payload, timeout=_TIMEOUT)
+    body = resp.text or ""
+    try:
+        return resp.status_code, resp.json(), body
+    except Exception:
+        return resp.status_code, None, body
+
+
+def _diagnose_transport(exc) -> str:
+    """Actionable transport diagnosis — TLS vs DNS vs connect vs read.
+    The operator sees the CAUSE, not a raw traceback (field runs kept
+    hitting 'SSL'/'read timed out' blobs with zero guidance)."""
+    name = type(exc).__name__
+    low = str(exc).lower()
+    if "ssl" in low or "tls" in low or "certificate" in low or name == "SSLError":
+        return (
+            f"TLS handshake failed — endpoint refused/broke the secure handshake (VPN, proxy, or cert issue) [{name}]"
+        )
+    if "connect" in low and "timeout" in low:
+        return f"connect timeout — host did not answer in 10s (network down, firewall, or wrong endpoint) [{name}]"
+    if "read timed out" in low or name == "ReadTimeout":
+        return f"read timeout — no bytes within the read window (provider stalled) [{name}]"
+    if "getaddrinfo" in low or "nodename" in low or "name or service" in low:
+        return f"DNS failure — the API hostname did not resolve [{name}]"
+    if "connection" in low:
+        return f"connection failed — reset/refused mid-transport (often VPN/proxy flapping) [{name}]"
+    return f"{name}: {str(exc)[:120]}"
+
+
+# ----------------------------------------------------------------------
 # Core call – all providers
 # ----------------------------------------------------------------------
 def generate(
@@ -316,7 +385,13 @@ def generate(
     temperature=None,
     max_tokens=None,
     retries=3,
+    on_delta=None,
 ):
+    """Generate a completion. `on_delta(kind, text)` (kind: "reasoning" |
+    "content") receives tokens as they stream, when the provider supports
+    it (zai/deepseek) — rendering stays live instead of waiting for the
+    entire response. Callback errors are swallowed: display must never
+    break generation."""
     if config is None:
         from suijin.modules.tools.lib.services import get as _service
 
@@ -325,25 +400,6 @@ def generate(
     provider = config.get("provider", "deepseek").lower()
     temp = temperature if temperature is not None else config.get("temperature", 0.4)
     mtokens = max_tokens if max_tokens is not None else config.get("max_tokens_per_request", 8000)
-
-    # ---------- LobsterTrap proxy check ----------
-    if _lobstertrap_available():
-        logger.info("[LobsterTrap] Active — inspecting prompt")
-        from suijin.modules.tools.lib.services import get as _service
-
-        lt_model = model_id or _service("red_active_model")(config)
-        lt_result = _call_via_lobstertrap(messages, lt_model, temp, mtokens)
-        if lt_result is not None:
-            # proxy path strips usage metadata — estimate so cost is never
-            # silently zero while LobsterTrap is active
-            with contextlib.suppress(Exception):
-                record_missing_usage(messages, lt_result, "lobstertrap", lt_model)
-            if lt_result.startswith("Error: LobsterTrap DENIED"):
-                logger.warning(lt_result)
-                return lt_result
-            return lt_result
-        else:
-            logger.warning("[LobsterTrap] Proxy failed — falling back to direct provider")
 
     # ---------- Gemini ----------
     if provider == "gemini":
@@ -544,11 +600,11 @@ def generate(
         }
         for attempt in range(retries):
             try:
-                resp = req.post(
+                resp = _HTTP.post(
                     f"{endpoint}/chat/completions",
                     headers=headers,
                     json=payload,
-                    timeout=120,
+                    timeout=_TIMEOUT,
                 )
                 if resp.status_code == 200:
                     data = resp.json()
@@ -592,43 +648,56 @@ def generate(
             "max_tokens": mtokens,
             "temperature": temp,
         }
+        ds_url = "https://api.deepseek.com/v1/chat/completions"
+        last_diag = "transport failure"
         for attempt in range(retries):
             try:
-                resp = req.post(
-                    "https://api.deepseek.com/v1/chat/completions",
-                    headers=headers,
-                    json=payload,
-                    timeout=45,
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    msg = data["choices"][0]["message"]
-                    content = msg.get("content") or msg.get("reasoning_content", "") or "(empty response)"
-                    try:
+                status, content, reasoning, usage, body = _stream_chat(ds_url, headers, payload, on_delta=on_delta)
+                if status == 0:
+                    # stream died in transit — ONE non-stream fallback on the
+                    # shared session, then the normal backoff path if that fails
+                    code, data, _b = _post_chat(ds_url, headers, payload)
+                    if code == 200 and data:
+                        msg = data["choices"][0]["message"]
+                        content = msg.get("content") or msg.get("reasoning_content", "") or "(empty response)"
                         u = data.get("usage") or {}
-                        if u.get("prompt_tokens") is None:
-                            # gateway omitted usage — estimate, never zero-count
-                            record_missing_usage(messages, content, "deepseek", ds_model)
+                        try:
+                            if u.get("prompt_tokens") is None:
+                                record_missing_usage(messages, content, "deepseek", ds_model)
+                            else:
+                                _record_usage(
+                                    "deepseek", ds_model, u.get("prompt_tokens", 0), u.get("completion_tokens", 0)
+                                )
+                        except Exception:
+                            pass
+                        return content
+                if status == 200:
+                    text = content or reasoning or "(empty response)"
+                    try:
+                        if usage is None or usage.get("prompt_tokens") is None:
+                            record_missing_usage(messages, text, "deepseek", ds_model)
                         else:
                             _record_usage(
-                                "deepseek", ds_model, u.get("prompt_tokens", 0), u.get("completion_tokens", 0)
+                                "deepseek", ds_model, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)
                             )
                     except Exception:
                         pass
-                    return content
-                elif resp.status_code == 401:
+                    return text
+                elif status == 401:
                     return "Error: Invalid DeepSeek API Key"
-                elif resp.status_code == 402:
+                elif status == 402:
                     return "Error: 402"
-                elif resp.status_code == 429:
+                elif status == 429:
                     logger.warning("DeepSeek rate-limited")
-                else:
-                    logger.warning(f"DeepSeek error {resp.status_code}: {resp.text[:200]}")
+                elif status != 0:
+                    logger.warning(f"DeepSeek error {status}: {body[:200]}")
+                last_diag = body[:120] or "stream failed without detail"
             except Exception as e:
-                logger.warning(f"DeepSeek attempt {attempt + 1} failed: {e}")
+                last_diag = _diagnose_transport(e)
+            logger.warning(f"DeepSeek attempt {attempt + 1} failed — {last_diag}")
             if attempt < retries - 1:
                 time.sleep(2 * (2**attempt))  # 2s, 4s, 8s backoff
-        return "Error: DeepSeek API Timeout"
+        return f"Error: DeepSeek API unreachable after {retries} attempt(s) — {last_diag}"
 
     # ---------- Z.ai (GLM) ----------
     if provider == "zai":
@@ -651,33 +720,47 @@ def generate(
             "max_tokens": mtokens,
             "temperature": temp,
         }
+        zai_url = f"{base_url}/chat/completions"
+        last_diag = "transport failure"
         for attempt in range(retries):
             try:
-                resp = req.post(
-                    f"{base_url}/chat/completions",
-                    headers=headers,
-                    json=payload,
-                    timeout=45,
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    msg = data["choices"][0]["message"]
-                    content = msg.get("content") or msg.get("reasoning_content", "") or "(empty response)"
-                    try:
+                status, content, reasoning, usage, body = _stream_chat(zai_url, headers, payload, on_delta=on_delta)
+                if status == 0:
+                    # stream died in transit — ONE non-stream fallback on the
+                    # shared session, then the normal backoff path if that fails
+                    code, data, _b = _post_chat(zai_url, headers, payload)
+                    if code == 200 and data:
+                        msg = data["choices"][0]["message"]
+                        content = msg.get("content") or msg.get("reasoning_content", "") or "(empty response)"
                         u = data.get("usage") or {}
-                        if u.get("prompt_tokens") is None:
+                        try:
+                            if u.get("prompt_tokens") is None:
+                                record_missing_usage(messages, content, "zai", zai_model)
+                            else:
+                                _record_usage(
+                                    "zai", zai_model, u.get("prompt_tokens", 0), u.get("completion_tokens", 0)
+                                )
+                        except Exception:
+                            pass
+                        return content
+                if status == 200:
+                    text = content or reasoning or "(empty response)"
+                    try:
+                        if usage is None or usage.get("prompt_tokens") is None:
                             # gateway omitted usage — estimate, never zero-count
-                            record_missing_usage(messages, content, "zai", zai_model)
+                            record_missing_usage(messages, text, "zai", zai_model)
                         else:
-                            _record_usage("zai", zai_model, u.get("prompt_tokens", 0), u.get("completion_tokens", 0))
+                            _record_usage(
+                                "zai", zai_model, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)
+                            )
                     except Exception:
                         pass
-                    return content
-                elif resp.status_code == 401:
+                    return text
+                elif status == 401:
                     return "Error: Invalid Z.ai API Key"
-                elif resp.status_code == 402:
+                elif status == 402:
                     return "Error: 402 (insufficient Z.ai credits)"
-                elif resp.status_code == 403:
+                elif status == 403:
                     # Classic cause: Coding Plan key hitting the pay-as-you-go
                     # endpoint (or vice versa). Point at the fix instead of
                     # retrying blindly — 403s don't heal with retries.
@@ -687,17 +770,19 @@ def generate(
                         f'Pay-as-you-go: set zai_endpoint="paas" ({ZAI_PAAS_BASE_URL}). '
                         "Adjust in Settings, or check your plan at z.ai/manage-apikey."
                     )
-                elif resp.status_code == 429:
+                elif status == 429:
                     logger.warning(
                         "Z.ai rate-limited (plan credits may be exhausted — 5h/weekly quotas reset automatically)"
                     )
-                else:
-                    logger.warning(f"Z.ai error {resp.status_code}: {resp.text[:200]}")
+                elif status != 0:
+                    logger.warning(f"Z.ai error {status}: {body[:200]}")
+                last_diag = body[:120] or "stream failed without detail"
             except Exception as e:
-                logger.warning(f"Z.ai attempt {attempt + 1} failed: {e}")
+                last_diag = _diagnose_transport(e)
+            logger.warning(f"Z.ai attempt {attempt + 1} failed — {last_diag}")
             if attempt < retries - 1:
                 time.sleep(2 * (2**attempt))  # 2s, 4s, 8s backoff
-        return "Error: Z.ai API Timeout"
+        return f"Error: Z.ai API unreachable after {retries} attempt(s) — {last_diag}"
 
     return f"Error: Unknown provider '{provider}'"
 

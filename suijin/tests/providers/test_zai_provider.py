@@ -6,6 +6,8 @@ pay-as-you-go endpoint ("paas" — per-token USD). All network calls are mocked
 — no API key needed.
 """
 
+import json
+
 import pytest
 
 from suijin.modules.providers import lib as providers
@@ -27,6 +29,36 @@ class _FakeResponse:
         return self._json
 
 
+class _FakeStreamResponse:
+    """Streaming surface for a _FakeResponse: SSE lines the _stream_chat
+    parser consumes (content/reasoning deltas + usage chunk + [DONE])."""
+
+    def __init__(self, response):
+        self.status_code = response.status_code
+        self._r = response
+        self.text = response.text
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def iter_lines(self, decode_unicode=True):
+        if self.status_code != 200:
+            return iter(())
+        chunks = []
+        msg = (self._r._json.get("choices") or [{}])[0].get("message", {})
+        if msg.get("reasoning_content"):
+            chunks.append({"choices": [{"delta": {"reasoning_content": msg["reasoning_content"]}}]})
+        if msg.get("content"):
+            chunks.append({"choices": [{"delta": {"content": msg["content"]}}]})
+        if self._r._json.get("usage"):
+            chunks.append({"choices": [], "usage": self._r._json["usage"]})
+        lines = [f"data: {json.dumps(c)}" for c in chunks] + ["data: [DONE]"]
+        return iter(lines)
+
+
 class _FakeSession:
     def __init__(self, response):
         self.response = response
@@ -34,6 +66,8 @@ class _FakeSession:
 
     def post(self, url, **kwargs):
         self.calls.append({"url": url, **kwargs})
+        if kwargs.get("stream"):
+            return _FakeStreamResponse(self.response)
         return self.response
 
 
@@ -59,32 +93,32 @@ class TestZaiEndpoints:
 
     def test_default_is_coding_plan(self, monkeypatch):
         sess = _FakeSession(_ok_response())
-        monkeypatch.setattr(providers, "req", sess)
+        monkeypatch.setattr(providers, "_HTTP", sess)
         out = providers.generate([{"role": "user", "content": "hi"}], CFG, retries=1)
         assert out == "GLM says hello"
         assert sess.calls[0]["url"] == CODING_URL
 
     def test_explicit_coding_endpoint(self, monkeypatch):
         sess = _FakeSession(_ok_response())
-        monkeypatch.setattr(providers, "req", sess)
+        monkeypatch.setattr(providers, "_HTTP", sess)
         providers.generate([{"role": "user", "content": "hi"}], {**CFG, "zai_endpoint": "coding"}, retries=1)
         assert sess.calls[0]["url"] == CODING_URL
 
     def test_paas_endpoint_selected(self, monkeypatch):
         sess = _FakeSession(_ok_response())
-        monkeypatch.setattr(providers, "req", sess)
+        monkeypatch.setattr(providers, "_HTTP", sess)
         providers.generate([{"role": "user", "content": "hi"}], {**CFG, "zai_endpoint": "paas"}, retries=1)
         assert sess.calls[0]["url"] == PAAS_URL
 
     def test_endpoint_case_insensitive(self, monkeypatch):
         sess = _FakeSession(_ok_response())
-        monkeypatch.setattr(providers, "req", sess)
+        monkeypatch.setattr(providers, "_HTTP", sess)
         providers.generate([{"role": "user", "content": "hi"}], {**CFG, "zai_endpoint": "  PaaS "}, retries=1)
         assert sess.calls[0]["url"] == PAAS_URL
 
     def test_custom_base_url_passthrough(self, monkeypatch):
         sess = _FakeSession(_ok_response())
-        monkeypatch.setattr(providers, "req", sess)
+        monkeypatch.setattr(providers, "_HTTP", sess)
         providers.generate(
             [{"role": "user", "content": "hi"}], {**CFG, "zai_endpoint": "https://proxy.example.com/v1"}, retries=1
         )
@@ -92,7 +126,7 @@ class TestZaiEndpoints:
 
     def test_unknown_endpoint_falls_back_to_coding(self, monkeypatch):
         sess = _FakeSession(_ok_response())
-        monkeypatch.setattr(providers, "req", sess)
+        monkeypatch.setattr(providers, "_HTTP", sess)
         providers.generate([{"role": "user", "content": "hi"}], {**CFG, "zai_endpoint": "garbage"}, retries=1)
         # never silently hits pay-as-you-go with a plan key
         assert sess.calls[0]["url"] == CODING_URL
@@ -109,7 +143,7 @@ class TestZaiEndpoints:
 class TestZaiGenerate:
     def test_happy_path(self, monkeypatch):
         sess = _FakeSession(_ok_response())
-        monkeypatch.setattr(providers, "req", sess)
+        monkeypatch.setattr(providers, "_HTTP", sess)
         out = providers.generate([{"role": "user", "content": "hi"}], CFG, retries=1)
         assert out == "GLM says hello"
         assert len(sess.calls) == 1
@@ -119,7 +153,7 @@ class TestZaiGenerate:
         assert call["json"]["model"] == "glm-5.3"
 
     def test_usage_recorded(self, monkeypatch):
-        monkeypatch.setattr(providers, "req", _FakeSession(_ok_response()))
+        monkeypatch.setattr(providers, "_HTTP", _FakeSession(_ok_response()))
         providers.generate([{"role": "user", "content": "hi"}], CFG, retries=1)
         u = providers.get_usage()
         assert u["calls"] == 1
@@ -129,24 +163,24 @@ class TestZaiGenerate:
 
     def test_model_remap_from_hf_style_id(self, monkeypatch):
         sess = _FakeSession(_ok_response())
-        monkeypatch.setattr(providers, "req", sess)
+        monkeypatch.setattr(providers, "_HTTP", sess)
         providers.generate([{"role": "user", "content": "hi"}], CFG, model_id="zai-org/GLM-5.3", retries=1)
         assert sess.calls[0]["json"]["model"] == "glm-5.3"
 
     def test_non_glm_model_falls_back_to_default(self, monkeypatch):
         sess = _FakeSession(_ok_response())
-        monkeypatch.setattr(providers, "req", sess)
+        monkeypatch.setattr(providers, "_HTTP", sess)
         providers.generate([{"role": "user", "content": "hi"}], CFG, model_id="gpt-4o", retries=1)
         assert sess.calls[0]["json"]["model"] == "glm-5.3"
 
     def test_turbo_model_kept(self, monkeypatch):
         sess = _FakeSession(_ok_response())
-        monkeypatch.setattr(providers, "req", sess)
+        monkeypatch.setattr(providers, "_HTTP", sess)
         providers.generate([{"role": "user", "content": "hi"}], CFG, model_id="glm-5-turbo", retries=1)
         assert sess.calls[0]["json"]["model"] == "glm-5-turbo"
 
     def test_invalid_key(self, monkeypatch):
-        monkeypatch.setattr(providers, "req", _FakeSession(_FakeResponse(401, text="unauthorized")))
+        monkeypatch.setattr(providers, "_HTTP", _FakeSession(_FakeResponse(401, text="unauthorized")))
         out = providers.generate([{"role": "user", "content": "hi"}], CFG, retries=1)
         assert "Invalid Z.ai API Key" in out
 
@@ -163,20 +197,20 @@ class TestZaiGenerate:
                 "usage": {},
             },
         )
-        monkeypatch.setattr(providers, "req", _FakeSession(resp))
+        monkeypatch.setattr(providers, "_HTTP", _FakeSession(resp))
         out = providers.generate([{"role": "user", "content": "hi"}], CFG, retries=1)
         assert out == "chain of thought answer"
 
     def test_timeout_message(self, monkeypatch):
         sess = _FakeSession(_FakeResponse(500, text="boom"))
-        monkeypatch.setattr(providers, "req", sess)
+        monkeypatch.setattr(providers, "_HTTP", sess)
         monkeypatch.setattr(providers.time, "sleep", lambda _s: None)
         out = providers.generate([{"role": "user", "content": "hi"}], CFG, retries=2)
-        assert out == "Error: Z.ai API Timeout"
+        assert out.startswith("Error: Z.ai API unreachable")
 
     def test_retries_then_gives_up(self, monkeypatch):
         sess = _FakeSession(_FakeResponse(500, text="boom"))
-        monkeypatch.setattr(providers, "req", sess)
+        monkeypatch.setattr(providers, "_HTTP", sess)
         monkeypatch.setattr(providers.time, "sleep", lambda _s: None)
         providers.generate([{"role": "user", "content": "hi"}], CFG, retries=3)
         assert len(sess.calls) == 3
@@ -188,7 +222,7 @@ class TestZai403EndpointMismatch:
 
     def test_403_names_both_endpoints(self, monkeypatch):
         sess = _FakeSession(_FakeResponse(403, text="subscription quota not applicable"))
-        monkeypatch.setattr(providers, "req", sess)
+        monkeypatch.setattr(providers, "_HTTP", sess)
         out = providers.generate([{"role": "user", "content": "hi"}], {**CFG, "zai_endpoint": "paas"}, retries=3)
         assert "403" in out
         assert 'zai_endpoint="coding"' in out
@@ -328,7 +362,7 @@ class TestActiveModelResolution:
 
         from suijin.modules.redteam.lib.red import llm_client
 
-        monkeypatch.setattr(llm_client, "_generate", lambda msgs, cfg: "ok")
+        monkeypatch.setattr(llm_client, "_generate", lambda msgs, cfg, on_delta=None: "ok")
         out = asyncio.run(
             llm_client.generate_async([{"role": "user", "content": "hi"}], {**self.DEFAULT_CFG, "provider": "zai"})
         )
@@ -351,7 +385,7 @@ class TestDeepSeekTimeoutRegression:
     def test_timeout_returns_deepseek_message(self, monkeypatch):
         monkeypatch.setenv("DEEPSEEK_API_KEY", "ds-key")
         sess = _FakeSession(_FakeResponse(500, text="boom"))
-        monkeypatch.setattr(providers, "req", sess)
+        monkeypatch.setattr(providers, "_HTTP", sess)
         monkeypatch.setattr(providers.time, "sleep", lambda _s: None)
         cfg = {
             "provider": "deepseek",
@@ -360,4 +394,4 @@ class TestDeepSeekTimeoutRegression:
             "max_tokens_per_request": 8000,
         }
         out = providers.generate([{"role": "user", "content": "hi"}], cfg, retries=2)
-        assert out == "Error: DeepSeek API Timeout"
+        assert out.startswith("Error: DeepSeek API unreachable")

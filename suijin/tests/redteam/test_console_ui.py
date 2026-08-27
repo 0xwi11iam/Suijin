@@ -434,23 +434,11 @@ class TestPricing:
         UnboundLocalError swallowed -> ZERO tokens recorded."""
         from suijin.modules.providers import lib as pl
 
-        calls = {}
-
-        class _Resp:
-            status_code = 200
-
-            def json(self):
-                return {
-                    "choices": [{"message": {"content": "hello world reply"}}],
-                    "usage": {},
-                }  # usage present but empty
-
-        def fake_post(url, headers=None, json=None, timeout=None):  # noqa: A002
-            calls["url"] = url
-            return _Resp()
-
         monkeypatch.setenv("ZAI_API_KEY", "k")
-        monkeypatch.setattr(pl.req, "post", fake_post)
+        # stream answered, gateway omitted usage -> estimate path
+        monkeypatch.setattr(
+            pl, "_stream_chat", lambda *a, **k: (200, "hello world reply", "", {}, "")
+        )
         pl.reset_usage()
         out = pl.generate([{"role": "user", "content": "hi"}], {"provider": "zai"})
         assert out == "hello world reply"
