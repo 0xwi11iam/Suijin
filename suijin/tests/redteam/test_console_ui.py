@@ -1490,7 +1490,6 @@ class TestFlexingReasoningBox:
 
     def test_reasoning_deltas_flex_the_panel(self):
         ui, _c = _ui()
-        UI_STATE["show_reasoning"] = True  # /think opened it
         ui.waiting(True)  # the think turn starts (TTFT clock)
         ui.reasoning_delta("reasoning", "checking the target ")
         ui.reasoning_delta("reasoning", "for injectable params")
@@ -1498,29 +1497,39 @@ class TestFlexingReasoningBox:
         assert "thinking" in strip  # the panel is live in the bottom bar
         assert "injectable params" in strip  # and it GROWS with the stream
 
-    def test_hidden_until_think_toggled(self):
+    def test_box_streams_without_think_toggle(self):
+        """The live box shows WHILE STREAMING always — /think governs only
+        the transcript's said-section. (The old gate hid the stream and the
+        operator saw 15s of spinner then everything at once.)"""
         ui, _c = _ui()
-        UI_STATE["show_reasoning"] = False  # default: hidden
+        UI_STATE["show_reasoning"] = False  # default: hidden transcript view
         ui.waiting(True)
-        ui.reasoning_delta("reasoning", "secret reasoning")
-        assert "secret reasoning" not in self._strip_text(ui)
-        UI_STATE["show_reasoning"] = True  # /think — buffered text appears
-        assert "secret reasoning" in self._strip_text(ui)
+        ui.reasoning_delta("reasoning", "visible reasoning")
+        assert "visible reasoning" in self._strip_text(ui)
 
-    def test_content_deltas_ignored(self):
+    def test_content_deltas_flex_the_box_too(self):
+        """glm often streams content with NO reasoning_content — the sink
+        must flex the box on content or streaming is invisible."""
         ui, _c = _ui()
-        UI_STATE["show_reasoning"] = True
         ui.waiting(True)
-        ui.reasoning_delta("content", '{"action": "complete"}')
-        assert "complete" not in self._strip_text(ui)
-        assert not ui._streaming
+        ui.reasoning_delta("content", '{"action": "use_tool", ')
+        ui.reasoning_delta("content", '"tool_name": "http_request"}')
+        strip = self._strip_text(ui)
+        assert "use_tool" in strip and "http_request" in strip  # live typing visible
+
+    def test_reasoning_and_content_render_together(self):
+        ui, _c = _ui()
+        ui.waiting(True)
+        ui.reasoning_delta("reasoning", "thinking hard ")
+        ui.reasoning_delta("content", "the decision")
+        strip = self._strip_text(ui)
+        assert "thinking hard" in strip and "the decision" in strip
 
     def test_ttft_recorded_on_first_delta_only(self):
         ui, _c = _ui()
-        UI_STATE["show_reasoning"] = True
         ui.waiting(True)
         first_ttft = UI_STATE["last_ttft"]
-        ui.reasoning_delta("reasoning", "tok")
+        ui.reasoning_delta("content", "tok")  # content counts too (glm streams content)
         ttft = UI_STATE["last_ttft"]
         assert ttft is not None and ttft >= 0
         ui.reasoning_delta("reasoning", "tok2")

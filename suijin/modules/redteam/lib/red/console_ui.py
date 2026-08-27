@@ -526,16 +526,17 @@ class EngagementUI:
 
     def _input_box_row(self):
         """The operator's prompt — a real white box, ALWAYS the bottom row:
-        [MODE] » type here▌ — the thinking indicator stays in the strip
-        above (one indicator, not two); Tab cycles the mode badge."""
-        mode = str(UI_STATE.get("input_mode", "recon")).upper()
-        badge = Text(mode, style="bold black on bright_white")
+        [MODE] » type here▌ — the mode is bold colored text (recon cyan,
+        exploit red, report green); Tab cycles it."""
+        mode = str(UI_STATE.get("input_mode", "recon")).lower()
+        color = {"recon": "cyan", "exploit": "red", "report": "green"}.get(mode, "cyan")
+        badge = Text(mode.upper(), style=f"bold {color}")
         buf = UI_STATE.get("input_buf")
         if buf is not None:
             body = Table.grid(padding=(0, 1))
             body.add_row(badge, Text.assemble(("» ", f"bold {GOLD}"), (str(buf), "bold white"), ("▌", GOLD)))
         else:
-            hint = f"» Tab:mode · ESC ESC:pause · / commands — {mode.lower()} prompt"
+            hint = f"» Tab:mode · ESC ESC:pause · / commands — {mode} prompt"
             body = Table.grid(padding=(0, 1))
             body.add_row(badge, Text(hint, style="dim"))
         return Panel(
@@ -588,13 +589,17 @@ class EngagementUI:
     def reasoning_delta(self, kind: str, text: str) -> None:
         """on_delta sink for the provider stream — the flexing box.
 
-        Called from the provider worker thread; guarded. Content deltas are
-        ignored (decisions render complete, exactly as before); reasoning
-        deltas grow the panel line by line. Fireteam subagent deltas may
-        interleave — cosmetic, tail-capped."""
-        if kind != "reasoning" or not text:
+        Called from the provider worker thread; guarded. BOTH kinds stream
+        into the box: reasoning (dim italic) AND content (plain) — glm often
+        emits content-only, and a sink that discards it made streaming
+        invisible (15s spinner, then everything at once). The live box shows
+        WHILE STREAMING regardless of /think (that toggle governs the
+        transcript's said-section, not the live view). TTFT records on the
+        first token of ANY kind. Fireteam subagent deltas may interleave —
+        cosmetic, tail-capped."""
+        if not text:
             return
-        self._stream_buf.append(text)
+        self._stream_buf.append((kind, text))
         if len(self._stream_buf) > 500:
             self._stream_buf = self._stream_buf[-500:]
         self._streaming = True
@@ -614,13 +619,25 @@ class EngagementUI:
             self._tick()
 
     def _stream_panel(self):
-        """The opencode-style flexing box: grows as reasoning streams,
-        tail-scrolls at the cap, hidden until /think opens it."""
-        if not (self._streaming and UI_STATE.get("show_reasoning")):
+        """The opencode-style flexing box: grows as tokens stream (reasoning
+        AND content), tail-scrolls at the cap. VISIBLE while streaming —
+        the operator watches the model think; /think only governs the
+        transcript's permanent said-section."""
+        if not self._streaming:
             return None
-        body = Text("".join(self._stream_buf)[-800:], style="dim italic")
+        parts = []
+        for kind, piece in self._stream_buf[-40:]:
+            if kind == "reasoning":
+                parts.append(Text(str(piece), style="dim italic"))
+            else:
+                parts.append(Text(str(piece)))
+        body = Text()
+        for p in parts:
+            body.append(p)
+        if not body:
+            body = Text("…", style="dim")
         return Panel(
-            body,
+            body[-2000:],
             box=box.SQUARE,
             border_style=f"dim {GOLD}",
             title=" thinking ",
