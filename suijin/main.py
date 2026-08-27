@@ -30,6 +30,7 @@ CLI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "modules", "conso
 
 OPERATOR_TOOLS = [
     ("EXPLOIT now — instant, uses all known intel", ["exploit"]),  # target prompted below
+    ("Resume a saved engagement (.sje)", ["load-prompt"]),  # path prompted below
     ("Scope editor (Burp-style TUI)", ["scope"]),
     ("Approvals console (HITL)", ["approvals", "list"]),
     ("Battle — red vs blue on the lab", ["battle"]),
@@ -72,6 +73,13 @@ def operator_menu():
                 continue
             if target:
                 _run_cli(["exploit", target])
+        elif args == ["load-prompt"]:  # resume a saved engagement
+            try:
+                path = input("  .sje path (or name from outputs/exports/): ").strip()
+            except (KeyboardInterrupt, EOFError):
+                continue
+            if path:
+                _run_cli(["load", path])
         elif args is None:  # dossier needs a target
             try:
                 target = input("  target (IP / hostname / URL): ").strip()

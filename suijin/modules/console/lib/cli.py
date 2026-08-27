@@ -1669,6 +1669,18 @@ def run_exploit_cmd(args) -> int:
     return int(run_exploit(getattr(args, "target", "")) or 0)
 
 
+def run_load_cmd(args) -> int:
+    """`suijin load <file.sje>` — resume a saved engagement (state restored,
+    agent continues with full memory)."""
+    from suijin.modules.tools.lib.engagement_bundle import resume_engagement
+
+    try:
+        return resume_engagement(getattr(args, "bundle", ""))
+    except ValueError as e:
+        print(f"error: {e}")
+        return 1
+
+
 def run_theater_cmd(args) -> int:
     """`suijin theater` — C26 animated session replay."""
     import json as _json
@@ -1925,6 +1937,7 @@ _KNOWN_VERBS = frozenset(
         "market",
         "engage",
         "exploit",
+        "load",
         "theater",
         "plan",
         "recipes",
@@ -2046,6 +2059,10 @@ def main(argv=None):
     exploit_p = sub.add_parser("exploit", help="instant exploitation — skips recon, uses all known intel")
     exploit_p.add_argument("target", help="IP / hostname / URL (authorization checked)")
     exploit_p.set_defaults(func=run_exploit_cmd)
+
+    load_p = sub.add_parser("load", help="resume a saved engagement (.sje bundle)")
+    load_p.add_argument("bundle", help="path to the .sje file (see outputs/exports/)")
+    load_p.set_defaults(func=run_load_cmd)
 
     theater_p = sub.add_parser("theater", help="animated replay of the latest session")
     theater_p.set_defaults(func=run_theater_cmd)

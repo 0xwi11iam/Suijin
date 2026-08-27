@@ -166,7 +166,7 @@ def _render_termination(final_state: dict, ui, operator_stopped: bool) -> None:
 #  Main agent loop
 
 
-async def run_red_team_async(config, objective, api_key=None):
+async def run_red_team_async(config, objective, api_key=None, resume_state=None):
     # the pydantic cost-cap warning echoes validator internals as a wall of
     # text — silenced everywhere; ONE red line below instead
     import warnings
@@ -236,6 +236,22 @@ async def run_red_team_async(config, objective, api_key=None):
     # this before ANY assignment when an early exception jumped the loop
     _provider_retried = False
     langgraph_config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 250}
+
+    # .sje resume: seed the fresh thread with the saved engagement's state
+    # (messages, traces, chain memory) — the same update_state seam
+    # operator guidance uses. The agent CONTINUES, it does not restart.
+    if resume_state:
+        try:
+            agent._graph.update_state(langgraph_config, dict(resume_state))
+            n_msgs = len(resume_state.get("messages") or [])
+            console.print(
+                f"[green]resumed from saved engagement — {n_msgs} message(s), "
+                f"iteration {resume_state.get('current_iteration', '?')}, "
+                f"phase {resume_state.get('current_phase', '?')}[/green]"
+            )
+            first_run = False  # state already seeded — no objective injection turn
+        except Exception as e:  # noqa: BLE001 — resume failure falls back to fresh
+            console.print(f"[yellow]resume injection failed ({e}) — starting fresh[/yellow]")
 
     # Start audit trail
     try:
@@ -710,6 +726,17 @@ async def run_red_team_async(config, objective, api_key=None):
 
             logging.getLogger("suijin").warning(f"Session save failed: {e}")
 
+        # .sje bundle — the concluded engagement, resumable (`suijin load`)
+        try:
+            from suijin.modules.tools.lib.engagement_bundle import save_engagement
+
+            _sje = save_engagement(thread_id, objective, config, final_state, spend)
+            console.print(f"[dim]engagement bundle saved — resume anytime: suijin load {_sje.name}[/dim]")
+        except Exception as e:
+            import logging
+
+            logging.getLogger("suijin").warning(f".sje save failed: {e}")
+
         # H5: write the engagement to per-target memory — 361 sessions had
         # produced ZERO memory entries because this was never called
         try:
@@ -849,14 +876,18 @@ def _strip_rtf(path):
     return sc._strip_rtf(path)
 
 
-def run_red_team(config, objective, api_key=None):
+def run_red_team(config, objective, api_key=None, resume_state=None):
     """Sync entry point for TUI. NEVER exits silently — any crash renders
     a visible error panel (the launcher used to swallow it and drop back
-    to the menu like nothing happened)."""
+    to the menu like nothing happened). `resume_state` seeds the thread
+    with a saved engagement's graph state (.sje resume)."""
     from rich.panel import Panel as _Panel
 
     try:
-        asyncio.run(run_red_team_async(config, objective, api_key=api_key))
+        if resume_state is not None:
+            asyncio.run(run_red_team_async(config, objective, api_key=api_key, resume_state=resume_state))
+        else:
+            asyncio.run(run_red_team_async(config, objective, api_key=api_key))
     except KeyboardInterrupt:
         console.print(
             _Panel(
