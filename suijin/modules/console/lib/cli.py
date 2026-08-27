@@ -1662,6 +1662,13 @@ def run_engage_cmd(args) -> int:
     return 0
 
 
+def run_exploit_cmd(args) -> int:
+    """`suijin exploit <target>` — instant exploitation with known intel."""
+    from suijin.modules.redteam.lib.redteamer import run_exploit
+
+    return int(run_exploit(getattr(args, "target", "")) or 0)
+
+
 def run_theater_cmd(args) -> int:
     """`suijin theater` — C26 animated session replay."""
     import json as _json
@@ -1917,6 +1924,7 @@ _KNOWN_VERBS = frozenset(
         "kg",
         "market",
         "engage",
+        "exploit",
         "theater",
         "plan",
         "recipes",
@@ -2034,6 +2042,10 @@ def main(argv=None):
     engage.add_argument("target", nargs="?", help="concrete target")
     engage.add_argument("--list", action="store_true", help="list templates")
     engage.set_defaults(func=run_engage_cmd)
+
+    exploit_p = sub.add_parser("exploit", help="instant exploitation — skips recon, uses all known intel")
+    exploit_p.add_argument("target", help="IP / hostname / URL (authorization checked)")
+    exploit_p.set_defaults(func=run_exploit_cmd)
 
     theater_p = sub.add_parser("theater", help="animated replay of the latest session")
     theater_p.set_defaults(func=run_theater_cmd)

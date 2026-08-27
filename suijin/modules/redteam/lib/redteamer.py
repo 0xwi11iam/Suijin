@@ -860,6 +860,46 @@ def run_red_team(config, objective, api_key=None):
             pass
 
 
+def run_exploit(target: str = "", config=None):
+    """/exploit — instant exploitation with everything already known.
+
+    No menus, no recon phases: the objective orders the agent to mine its
+    own intel first (knowledge graph, dossier, failure history) and go
+    straight to the highest-probability payload. Authorization gates
+    unchanged (the engagement order renders the ledger as always)."""
+    if not target or not str(target).strip():
+        print("usage: suijin exploit <target>")
+        return 1
+    target = str(target).strip()
+    load_env()
+    config = config or load_config()
+    discover_modules()
+
+    try:
+        from suijin.modules.ops.lib.authorizations import authorization_line
+
+        _al = authorization_line(target)
+        if _al:
+            console.print(f"[green]authorization on file — {_al}[/green]\n")
+        else:
+            console.print(
+                "[yellow]no authorization on file for this target — suijin authorize <target> first[/yellow]\n"
+            )
+    except Exception:  # noqa: BLE001 — the gate must never block a launch
+        pass
+
+    objective = (
+        f"EXPLOIT NOW — {target}. "
+        "You have done enough recon. First move: call check_knowledge for this target and target_dossier — "
+        "everything already known (verified vectors, blocked patterns, creds, failed attempts) is your head start. "
+        "Then go STRAIGHT to exploitation: pick the highest-probability vector from the intel and fire it. "
+        "No port sweeps, no directory brute-force, no further recon unless a payload needs one specific fact. "
+        "write_note every attempt with its result; record_finding on anything confirmed. "
+        "Show proof (response/output evidence) the moment something lands."
+    )
+    return run_red_team(config, objective) or 0
+
+
 def main():
     load_env()
     config = load_config()
