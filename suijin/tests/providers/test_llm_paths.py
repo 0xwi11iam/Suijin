@@ -90,19 +90,12 @@ class TestGenerateDeepSeek:
         import suijin.modules.providers.lib as p
         from suijin.modules.providers.lib import generate, get_usage, reset_usage
 
-        monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
-
-        def mock_post(url, **kwargs):
-            return FakeResponse(
-                200,
-                {
-                    "choices": [{"message": {"content": "hello from mock"}}],
-                    "usage": {"prompt_tokens": 100, "completion_tokens": 50},
-                },
-            )
-
-        monkeypatch.setattr(p.req, "post", mock_post)
+        monkeypatch.setattr(
+            p,
+            "_stream_chat",
+            lambda *a, **k: (200, "hello from mock", "", {"prompt_tokens": 100, "completion_tokens": 50}, ""),
+        )
         reset_usage()
         result = generate(
             [{"role": "user", "content": "hi"}], {"provider": "deepseek", "deepseek_model": "deepseek-v4-flash"}
@@ -116,10 +109,9 @@ class TestGenerateDeepSeek:
         import suijin.modules.providers.lib as p
         from suijin.modules.providers.lib import generate
 
-        monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
         called = []
-        monkeypatch.setattr(p.req, "post", lambda *a, **k: called.append(True))
+        monkeypatch.setattr(p._HTTP, "post", lambda *a, **k: called.append(True))
         result = generate([{"role": "user", "content": "hi"}], {"provider": "deepseek"}, retries=1)
         assert "API key" in result
         assert called == []
@@ -128,9 +120,8 @@ class TestGenerateDeepSeek:
         import suijin.modules.providers.lib as p
         from suijin.modules.providers.lib import generate
 
-        monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "bad-key")
-        monkeypatch.setattr(p.req, "post", lambda *a, **k: FakeResponse(401, {}))
+        monkeypatch.setattr(p, "_stream_chat", lambda *a, **k: (401, "", "", None, "unauthorized"))
         result = generate([{"role": "user", "content": "hi"}], {"provider": "deepseek"}, retries=1)
         assert "Invalid DeepSeek API Key" in result
 
@@ -138,19 +129,39 @@ class TestGenerateDeepSeek:
         import suijin.modules.providers.lib as p
         from suijin.modules.providers.lib import generate
 
-        monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
-        monkeypatch.setattr(p.req, "post", lambda *a, **k: FakeResponse(402, {}))
+        monkeypatch.setattr(p, "_stream_chat", lambda *a, **k: (402, "", "", None, "billing"))
         result = generate([{"role": "user", "content": "hi"}], {"provider": "deepseek"}, retries=1)
         assert "402" in result
+
+    def test_stream_transport_failure_uses_nonstream_fallback(self, monkeypatch):
+        import suijin.modules.providers.lib as p
+        from suijin.modules.providers.lib import generate
+
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
+        monkeypatch.setattr(p, "_stream_chat", lambda *a, **k: (0, "", "", None, "conn reset"))
+        monkeypatch.setattr(
+            p,
+            "_post_chat",
+            lambda *a, **k: (
+                200,
+                {
+                    "choices": [{"message": {"content": "fallback ok"}}],
+                    "usage": {"prompt_tokens": 5, "completion_tokens": 2},
+                },
+                "",
+            ),
+        )
+        result = generate([{"role": "user", "content": "hi"}], {"provider": "deepseek"}, retries=1)
+        assert result == "fallback ok"
 
     def test_retries_exhausted_falls_through(self, monkeypatch):
         import suijin.modules.providers.lib as p
         from suijin.modules.providers.lib import generate
 
-        monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
-        monkeypatch.setattr(p.req, "post", lambda *a, **k: FakeResponse(500, {}))
+        monkeypatch.setattr(p, "_stream_chat", lambda *a, **k: (500, "", "", None, "boom"))
+        monkeypatch.setattr(p, "_post_chat", lambda *a, **k: (500, None, "boom"))
         monkeypatch.setattr(p.time, "sleep", lambda s: None)
         result = generate([{"role": "user", "content": "hi"}], {"provider": "deepseek"}, retries=2)
         assert "Error" in result
@@ -159,39 +170,56 @@ class TestGenerateDeepSeek:
         import suijin.modules.providers.lib as p
         from suijin.modules.providers.lib import generate
 
-        monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
         sent = {}
 
-        def mock_post(url, **kwargs):
-            sent.update(kwargs)
-            return FakeResponse(200, {"choices": [{"message": {"content": "ok"}}]})
+        def fake_stream(url, headers, payload, on_delta=None):
+            sent.update(payload)
+            return 200, "ok", "", {"prompt_tokens": 1, "completion_tokens": 1}, ""
 
-        monkeypatch.setattr(p.req, "post", mock_post)
+        monkeypatch.setattr(p, "_stream_chat", fake_stream)
         generate(
             [{"role": "user", "content": "hi"}],
             {"provider": "deepseek", "deepseek_model": "deepseek-v4-flash"},
             model_id="anthropic/claude-opus-4-8",
             retries=1,
         )
-        assert sent["json"]["model"] == "deepseek-v4-flash"
+        assert sent["model"] == "deepseek-v4-flash"
 
     def test_unknown_provider(self, monkeypatch):
-        import suijin.modules.providers.lib as p
         from suijin.modules.providers.lib import generate
 
-        monkeypatch.setattr(p, "_lobstertrap_available", lambda: False)
         result = generate([{"role": "user", "content": "hi"}], {"provider": "not-a-real-provider"})
         assert "Unknown provider" in result
 
-    def test_lobstertrap_active_routes_through_proxy(self, monkeypatch):
+    def test_on_delta_streams_reasoning_and_content(self, monkeypatch):
+        """The streaming callback contract: reasoning and content deltas
+        reach the UI live, in arrival order."""
         import suijin.modules.providers.lib as p
         from suijin.modules.providers.lib import generate
 
-        monkeypatch.setattr(p, "_lobstertrap_available", lambda: True)
-        monkeypatch.setattr(p, "_call_via_lobstertrap", lambda messages, model, temp, mt: "proxy result")
-        result = generate([{"role": "user", "content": "hi"}], {"provider": "deepseek"})
-        assert result == "proxy result"
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "k")
+
+        def fake_stream(url, headers, payload, on_delta=None):
+            on_delta("reasoning", "thinking ")
+            on_delta("reasoning", "hard")
+            on_delta("content", '{"action": "complete"}')
+            return 200, '{"action": "complete"}', "thinking hard", {"prompt_tokens": 3, "completion_tokens": 3}, ""
+
+        monkeypatch.setattr(p, "_stream_chat", fake_stream)
+        seen = []
+        out = generate(
+            [{"role": "user", "content": "hi"}],
+            {"provider": "deepseek"},
+            retries=1,
+            on_delta=lambda k, t: seen.append((k, t)),
+        )
+        assert out == '{"action": "complete"}'
+        assert seen == [
+            ("reasoning", "thinking "),
+            ("reasoning", "hard"),
+            ("content", '{"action": "complete"}'),
+        ]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -747,3 +775,57 @@ class TestSupervisorEvaluate:
         )
         assert verdict.get("skipped") is True  # no LLM call, no flags
         assert called == []
+
+
+class TestTransportDiagnosis:
+    """TLS/DNS/connect/read failures diagnose to actionable causes —
+    the operator sees WHY, never a raw traceback."""
+
+    def _diag(self, exc):
+        from suijin.modules.providers.lib import _diagnose_transport
+
+        return _diagnose_transport(exc)
+
+    def test_tls_handshake(self):
+        import requests as rq
+
+        out = self._diag(rq.exceptions.SSLError("HTTPSConnectionPool: SSL: HANDSHAKE_FAILURE"))
+        assert "TLS handshake failed" in out and "VPN" in out
+
+    def test_read_timeout(self):
+        import requests as rq
+
+        out = self._diag(rq.exceptions.ReadTimeout("read timed out"))
+        assert "read timeout" in out
+
+    def test_connect_timeout(self):
+        import requests as rq
+
+        out = self._diag(rq.exceptions.ConnectTimeout("connect timeout"))
+        assert "connect timeout" in out
+
+    def test_dns_failure(self):
+        import requests as rq
+
+        out = self._diag(rq.exceptions.ConnectionError("HTTPSConnectionPool host: getaddrinfo failed"))
+        assert "DNS failure" in out
+
+    def test_transport_exception_never_escapes_generate(self, monkeypatch):
+        """Even an unexpected raise inside the stream path returns a
+        diagnosed Error: string — the agent loop never sees a traceback."""
+        import requests as rq
+
+        import suijin.modules.providers.lib as p
+        from suijin.modules.providers.lib import generate
+
+        monkeypatch.setenv("ZAI_API_KEY", "k")
+        monkeypatch.setattr(p.time, "sleep", lambda s: None)
+
+        def boom(*a, **k):
+            raise rq.exceptions.SSLError("sslv3 alert handshake failure")
+
+        monkeypatch.setattr(p, "_stream_chat", boom)
+        monkeypatch.setattr(p, "_post_chat", boom)
+        out = generate([{"role": "user", "content": "hi"}], {"provider": "zai"}, retries=2)
+        assert out.startswith("Error:")
+        assert "TLS handshake failed" in out

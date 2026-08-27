@@ -352,11 +352,15 @@ class TestProviderNoiseSilenced:
             status_code = 500
             text = "boom"
 
-        def fail_post(url, headers=None, json=None, timeout=None):  # noqa: A002
+        def fail_post(url, headers=None, json=None, timeout=None, **kw):  # noqa: A002
             raise _rq.exceptions.ReadTimeout("read timed out")
 
-        monkeypatch.setattr(pl.req, "post", fail_post)
-        monkeypatch.setattr(pl, "_lobstertrap_available", lambda: False)
+        def fail_stream(url, headers=None, json=None, **kw):
+            raise _rq.exceptions.ReadTimeout("read timed out")
+
+        monkeypatch.setattr(pl._HTTP, "post", fail_post)
+        monkeypatch.setattr(pl, "_stream_chat", fail_stream)
+        monkeypatch.setattr(pl, "_post_chat", fail_post)
         pl.reset_usage()
         out = pl.generate([{"role": "user", "content": "hi"}], {"provider": "zai", "retries": 2})
         captured = capsys.readouterr()
