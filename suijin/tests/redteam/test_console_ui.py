@@ -1557,8 +1557,42 @@ class TestInputBox:
         ui.waiting(True)
         strip = self._strip_text(ui)
         assert "RECON" in strip  # default mode badge
-        assert "thinking" in strip  # spinner state label
+        assert "thinking" in strip  # the ONE thinking indicator (strip, not box)
         assert "Tab" in strip and "ESC ESC" in strip  # the key hints idle inside
+
+    def test_box_has_no_second_thinking(self):
+        """One thinking indicator (the strip's) — the box carries ONLY the
+        mode badge + input, no duplicate spinner/label."""
+        ui, _c = _ui()
+        ui.waiting(True)
+        ui.set_input("hello")
+        strip = self._strip_text(ui)
+        box_line = next(ln for ln in strip.split("\n") if "hello" in ln)
+        assert "RECON" in box_line and "hello" in box_line
+        assert "thinking" not in box_line and "working" not in box_line
+
+    def test_strip_shows_phase_not_thinking_when_working(self):
+        ui, _c = _ui()
+        ui.waiting(False)
+        strip = self._strip_text(ui)
+        assert "thinking" not in strip  # idle: phase label, no stale indicator
+
+    def test_fireteam_task_text_never_truncated(self, monkeypatch):
+        import suijin.modules.redteam.lib.red.console_ui as m
+
+        long_task = (
+            "MISSION: locate + fingerprint the admin panel the operator keeps flagging across every engagement we have ever run together"
+            * 2
+        )
+        monkeypatch.setattr(
+            m,
+            "_fireteam_snapshot",
+            lambda: [{"team_id": "t1", "running": 1, "tasks": [{"task": long_task, "state": "running"}]}],
+        )
+        ui, _c = _ui()
+        ui.waiting(False)
+        strip = self._strip_text(ui, width=200)
+        assert long_task[:120] in strip  # full mission text, no 52-char clip
 
     def test_tab_cycles_modes(self):
         from suijin.modules.redteam.lib.red.console_input import next_mode
@@ -1574,11 +1608,6 @@ class TestInputBox:
         strip = self._strip_text(ui)
         assert "EXPLOIT" in strip and "check /admin" in strip and "▌" in strip
 
-    def test_working_label_when_not_waiting(self):
-        ui, _c = _ui()
-        ui.waiting(False)
-        assert "working" in self._strip_text(ui)
-
     def test_mode_tags_plain_prompts(self):
         """Plain lines dispatch as mode-tagged guidance; slash commands pass raw."""
         from suijin.modules.redteam.lib.red.console_input import RedInputReader
@@ -1593,6 +1622,7 @@ class TestInputBox:
         box = _Box()
         reader = RedInputReader.__new__(RedInputReader)
         reader._run_box = box
+        reader._on_guidance = None  # no live-injection wired: mode-tag fallback
         reader._mode = "report"
         reader._dispatch("focus on the vault")
         assert box.lines == ["[REPORT] focus on the vault"]
@@ -1642,3 +1672,43 @@ class TestInputBox:
         assert "hello" in self._strip_text(ui)
         assert "probe the thing" in self._strip_text(ui)
         assert "streaming live" in self._strip_text(ui)
+
+
+class TestLiveGuidanceInjection:
+    """Plain prompts inject into the graph NOW — no turn-boundary wait."""
+
+    def test_on_guidance_receives_the_line(self):
+        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+
+        got = []
+
+        class _Box:
+            _ask_mode = False
+
+            def dispatch(self, line):
+                got.append(("box", line))
+
+        reader = RedInputReader.__new__(RedInputReader)
+        reader._run_box = _Box()
+        reader._mode = "exploit"
+        reader._on_guidance = lambda line: got.append(("graph", line))
+        reader._dispatch("hit the admin panel now")
+        assert got == [("graph", "hit the admin panel now")]  # instant — not queued
+
+    def test_ask_mode_answers_go_to_the_box_raw(self):
+        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+
+        got = []
+
+        class _Box:
+            _ask_mode = True
+
+            def dispatch(self, line):
+                got.append(line)
+
+        reader = RedInputReader.__new__(RedInputReader)
+        reader._run_box = _Box()
+        reader._mode = "recon"
+        reader._on_guidance = lambda line: got.append(("graph", line))
+        reader._dispatch("my answer")
+        assert got == ["my answer"]  # the pending ask consumes it raw

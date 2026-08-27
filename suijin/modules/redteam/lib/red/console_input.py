@@ -36,10 +36,11 @@ def next_mode(m: str) -> str:
 class RedInputReader:
     """cbreak keystroke pump owning stdin (TTY only)."""
 
-    def __init__(self, run_box, ui, on_pause=None, modes=MODES):
+    def __init__(self, run_box, ui, on_pause=None, modes=MODES, on_guidance=None):
         self._run_box = run_box  # dispatch target (slash commands + guidance)
         self._ui = ui  # set_input / set_mode sinks
-        self._on_pause = on_pause  # double-ESC: pause the agent
+        self._on_pause = on_pause  # double-ESC: pause the agent INSTANTLY
+        self._on_guidance = on_guidance  # plain line -> injected into the graph NOW
         self._modes = tuple(modes)
         self._mode = self._modes[0]
         self._stop = threading.Event()
@@ -160,7 +161,7 @@ class RedInputReader:
             buf, action = self.apply_key(buf, b)
             if action == "line":
                 line, buf = buf, ""
-                self._ui.set_input(buf)
+                self._ui.set_input(None)  # clear FIRST — no residual artifact
                 if line.strip():
                     with contextlib.suppress(Exception):
                         self._dispatch(line)
@@ -216,6 +217,16 @@ class RedInputReader:
     def _dispatch(self, line: str) -> None:
         if line.startswith("/"):
             self._run_box.dispatch(line)
+            return
+        # a pending ask_operator consumes plain lines as the ANSWER (raw)
+        if getattr(self._run_box, "_ask_mode", False):
+            self._run_box.dispatch(line)
+            return
+        if getattr(self, "_on_guidance", None) is not None:
+            # INSTANT: injected into the graph state now — no waiting for a
+            # pause or turn boundary; the echo stays in the UI, not the queue
+            with contextlib.suppress(Exception):
+                self._on_guidance(line)
             return
         tag = f"[{self._mode.upper()}] "
         self._run_box.dispatch(tag + line)
