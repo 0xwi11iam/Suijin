@@ -263,6 +263,31 @@ def _detect_phase_stall(trace: list, threshold: int = 20) -> Optional[str]:
     return None
 
 
+def _detect_uncataloged_finding(trace: list) -> Optional[str]:
+    """A confirmed finding without a POC-backed catalog entry is a rumor —
+    catalog_exploit (the blocking step-POC gate) must follow every find."""
+    if len(trace) < 3:
+        return None
+    finding_idx = -1
+    for i in range(len(trace) - 1, -1, -1):
+        t = trace[i].get("tool_name", "")
+        if t == "catalog_exploit":
+            return None  # cataloged — nothing to say
+        if t == "record_finding":
+            finding_idx = i
+            break
+    if finding_idx < 0:
+        return None
+    after = trace[finding_idx + 1 :]
+    if len(after) < 2:
+        return None  # give the agent a turn to catalog it
+    return (
+        "You recorded a finding but never cataloged the exploit: call catalog_exploit with a POC "
+        'step-script ({"cmd":..., "wait":N} list) and the marker that proves it — the system '
+        "runs the POC before you continue. Unproven findings are rumors."
+    )
+
+
 def _detect_subagent_addiction(trace: list, threshold: int = 5) -> Optional[str]:
     """Detect when agent spawns subagents instead of working directly."""
     if len(trace) < threshold:
@@ -702,6 +727,7 @@ def analyze_trace(trace: list, iteration: float | None = None, **extra_kw) -> Op
         _detect_repeating_tool,
         _detect_bookkeeping_loop,
         _detect_found_but_not_exploited,
+        _detect_uncataloged_finding,
         _detect_subagent_addiction,
         _detect_subagents_failing,
         _detect_unverified_claim,

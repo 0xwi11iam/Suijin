@@ -84,6 +84,7 @@ from suijin.modules.tools.lib.aux_tools import (
     _web_search,
     _write_tool,
 )
+from suijin.modules.tools.lib.exploit_catalog import catalog_exploit
 
 # Re-exported for backwards compatibility — these names lived on dispatch.py
 # before the split and external callers still import them from here.
@@ -307,6 +308,19 @@ def _build_routes(config):
         "check_knowledge": lambda a: check_knowledge(a.get("target"), payload=a.get("payload"), config=config),
         "record_finding": lambda a: record_finding(
             a.get("target"), a.get("finding_type"), a.get("rule"), evidence=a.get("evidence", ""), config=config
+        ),
+        # POC-backed exploit catalog — the blocking gate (runs the step-POC
+        # before the agent can continue; verdict: CONFIRMED/FAILED_*)
+        "catalog_exploit": lambda a: catalog_exploit(
+            a.get("engagement"),
+            a.get("target"),
+            a.get("vuln_class") or a.get("class"),
+            a.get("title", ""),
+            poc=a.get("poc"),
+            marker=a.get("marker", ""),
+            guards=a.get("guards", ""),
+            entry_id=a.get("entry_id", ""),
+            config=config,
         ),
         # Note-taking
         "write_note": lambda a: write_note(
@@ -638,6 +652,10 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
 - **generate_report** — MANDATORY at engagement end. Creates detailed Markdown report with all findings, attack chains, Mermaid diagrams. Call BEFORE complete/claim_flag.
   ```json
   {"tool": "generate_report", "args": {"engagement": "target-name"}}
+  ```
+- **catalog_exploit** — MANDATORY the moment you find something valuable. Write the exploit as a POC step-script (a list of `{"cmd": ..., "wait": N}` commands — multi-request chains like login->cookie->payload), give the `marker` that proves success, and call. THE SYSTEM RUNS THE POC BEFORE YOU CONTINUE: marker lands -> CONFIRMED (receipts saved); a command errors -> you get the failing step, fix the script and re-call with `entry_id`; clean run but no marker -> FAILED_REPRO (maybe a false positive — say so). A finding without a cataloged POC is a rumor.
+  ```json
+  {"tool": "catalog_exploit", "args": {"engagement": "t", "target": "http://t", "vuln_class": "sqli", "title": "login bypass", "poc": [{"cmd": "curl -s -c /tmp/j http://t/login -d 'u=x&p=y'", "wait": 1}, {"cmd": "curl -s -b /tmp/j 'http://t/admin?id=1 OR 1=1'"}], "marker": "root:", "guards": "needs low-priv session first"}}
   ```
 
 ## Core Tools (args in the ALL AVAILABLE TOOLS registry below)
