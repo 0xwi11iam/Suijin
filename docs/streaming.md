@@ -81,3 +81,31 @@ always visible no matter what is running:
 - **ESC ESC** (two escapes within 0.6s) **pauses the agent** — the
   Ctrl+C replacement; arrow keys are swallowed and never reach the
   buffer; Ctrl+C still works as a backup
+
+## Engagement bundles (.sje)
+
+Every concluded engagement saves to `suijin_agent/outputs/exports/<name>.sje`
+— a hash-sealed zip carrying the graph state (messages, chain memory,
+phase, todos), the exploit catalogs (POCs + receipts), and the config
+(secrets stripped). Resume anytime:
+
+    suijin load <file.sje>        # or Operator Tools → Resume a saved engagement
+
+The saved state is injected into a fresh graph thread — the agent
+CONTINUES with full memory (what it tried, what failed, what was
+proven) instead of starting over. Tampered or corrupt bundles are
+refused with the exact reason.
+
+## Engagement bundles (.sje)
+
+Every concluded engagement saves to suijin_agent/outputs/exports/NAME.sje
+— a hash-sealed zip carrying the graph state (messages, chain memory,
+phase, todos), the exploit catalogs (POCs + receipts), and the config
+(secrets stripped). Resume anytime:
+
+    suijin load FILE.sje      # or Operator Tools -> Resume a saved engagement
+
+The saved state is injected into a fresh graph thread — the agent
+CONTINUES with full memory (what it tried, what failed, what was
+proven) instead of starting over. Tampered or corrupt bundles are
+refused with the exact reason.
