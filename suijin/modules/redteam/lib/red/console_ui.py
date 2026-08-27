@@ -29,6 +29,7 @@ import re
 import threading
 import time
 
+from rich import box
 from rich.console import Console, Group
 from rich.live import Live
 from rich.markdown import Markdown
@@ -59,7 +60,8 @@ CRED_RES = [
 
 # module-level so RunBox's /think can flip it from the reader thread
 UI_STATE = {
-    "show_reasoning": True,  # 'said' section renders by default
+    "show_reasoning": False,  # opencode-style: reasoning HIDDEN until /think
+    "last_ttft": None,  # seconds to the first streamed token (the proof streaming works)
     "flags": [],
     "creds": [],
     "fireteams": 0,
@@ -85,10 +87,26 @@ def _fireteam_live_count() -> int:
     return sum(int(t.get("running", 0)) for t in _fireteam_snapshot())
 
 
-def _fireteam_agent_rows(spinner) -> list:
+def _fireteam_total() -> int:
+    """All agents across live teams (running + finished-but-undrained);
+    a snapshot without task detail still counts its running specialists."""
+    total = 0
+    for t in _fireteam_snapshot():
+        running = int(t.get("running", 0))
+        if running > 0:
+            total += max(len(t.get("tasks", [])), running)
+    return total
+
+
+def _fireteam_agent_rows() -> list:
     """Per-agent live lines in the bottom bar: `agent N: <task> ⠋` while
     running, ✓/✗ for finished siblings. The WHOLE block appears only while
-    a team is actually running and disappears the moment nothing is."""
+    a team is actually running and disappears the moment nothing is.
+
+    Smoothness: each running agent gets its OWN Spinner OBJECT (not a
+    pre-rendered frame) — Rich's Live auto-refresh re-renders renderables
+    at refresh_per_second, so the animation is native 60fps; the 1s
+    heartbeat only refreshes the counts."""
     rows: list = []
     for team in _fireteam_snapshot():
         running = int(team.get("running", 0))
@@ -106,11 +124,10 @@ def _fireteam_agent_rows(spinner) -> list:
             task = str(t.get("task", ""))[:52]
             state = t.get("state")
             if state == "running":
-                line = Text(f"  agent {i}: ", style="dim")
-                line.append(task, style="white")
-                line.append(" ")
-                line.append(spinner.render(time.monotonic()))  # own style
-                rows.append(line)
+                # a grid cell holds the LIVE spinner object → native animation
+                g = Table.grid(padding=(0, 0))
+                g.add_row(Text(f"  agent {i}: {task} ", style="dim"), Spinner("dots", style="magenta", speed=3.0))
+                rows.append(g)
             elif state == "done":
                 ok = bool(t.get("success"))
                 mark = "✓" if ok else "✗"
@@ -421,6 +438,8 @@ class EngagementUI:
             "iteration_header",
             "thinking",
             "reasoning",
+            "reasoning_delta",
+            "stream_done",
             "tool",
             "planned_steps",
             "parse_note",
@@ -453,6 +472,10 @@ class EngagementUI:
         self._last_tok = 0
         self._refresh_thread: threading.Thread | None = None
         self._refresh_stop = threading.Event()
+        # streaming reasoning (the flexing box): deltas land here live
+        self._stream_buf: list[str] = []
+        self._streaming = False
+        self._waiting_since: float | None = None  # think-turn start → TTFT proof
         self._last_cost = 0.0
 
     # ── strip (the ONLY live region — one stable row) ──────────────────
@@ -471,21 +494,30 @@ class EngagementUI:
         else:
             left = Text(f"suijin {self.phase} #{self.iteration}", style=f"bold {GOLD}")
         ft_live = _fireteam_live_count()
+        ft_total = _fireteam_total()
+        # the compact segment lives WHERE 'FT 1' lived — same stats row,
+        # more content: running/total straight from the registry
+        ft_seg = None
+        if ft_live:
+            label = f"Fireteam {ft_live}/{ft_total} live" if ft_total != ft_live else f"Fireteam {ft_live} live"
+            ft_seg = [(" | ", "dim"), (label, "bold magenta")]
         right = Text.assemble(
             (f"{_fmt_tok(tok)} tok", "cyan"),
             (" | ", "dim"),
             (f"{approx}${cost:.4f}", "cyan"),
             *([(" | ", "dim"), (f"FLAG {len(UI_STATE['flags'])}", f"bold {GOLD}")] if UI_STATE["flags"] else []),
             *([(" | ", "dim"), (f"CRED {len(UI_STATE['creds'])}", "bold green")] if UI_STATE["creds"] else []),
-            # the FULL word + the REAL live count straight from the registry
-            # (the old `FT N live` was a monotonic counter — it never fell)
-            *([(" | ", "dim"), (f"Fireteam {ft_live} live", "bold magenta")] if ft_live else []),
+            *(ft_seg or []),
         )
         t = Table.grid(expand=True, padding=(0, 1))
         t.add_row(left, Text(), right)
         t.columns[1].ratio = 1
-        rows = [t]
-        rows.extend(_fireteam_agent_rows(self._spinner))
+        rows = []
+        panel = self._stream_panel()
+        if panel is not None:
+            rows.append(panel)  # the flexing box sits directly above the stats
+        rows.append(t)
+        rows.extend(_fireteam_agent_rows())
         return Group(*rows) if len(rows) > 1 else t
 
     def start(self) -> None:
@@ -513,7 +545,52 @@ class EngagementUI:
     def waiting(self, on: bool) -> None:
         """Between events: the strip shows the thinking spinner."""
         self._waiting = bool(on)
+        if on and self._waiting_since is None:
+            self._waiting_since = time.monotonic()  # TTFT clock starts
         self._tick()
+
+    def reasoning_delta(self, kind: str, text: str) -> None:
+        """on_delta sink for the provider stream — the flexing box.
+
+        Called from the provider worker thread; guarded. Content deltas are
+        ignored (decisions render complete, exactly as before); reasoning
+        deltas grow the panel line by line. Fireteam subagent deltas may
+        interleave — cosmetic, tail-capped."""
+        if kind != "reasoning" or not text:
+            return
+        self._stream_buf.append(text)
+        if len(self._stream_buf) > 500:
+            self._stream_buf = self._stream_buf[-500:]
+        self._streaming = True
+        if self._waiting_since is not None:
+            # first token of this turn: the TTFT proof (seconds, one shot)
+            UI_STATE["last_ttft"] = round(time.monotonic() - self._waiting_since, 2)
+            self._waiting_since = None
+        self._tick()
+
+    def stream_done(self) -> None:
+        """Collapse the flexing box — the iteration block takes over the
+        transcript (the `said` section renders as before)."""
+        if self._stream_buf or self._streaming:
+            self._stream_buf = []
+            self._streaming = False
+            self._waiting_since = None
+            self._tick()
+
+    def _stream_panel(self):
+        """The opencode-style flexing box: grows as reasoning streams,
+        tail-scrolls at the cap, hidden until /think opens it."""
+        if not (self._streaming and UI_STATE.get("show_reasoning")):
+            return None
+        body = Text("".join(self._stream_buf)[-800:], style="dim italic")
+        return Panel(
+            body,
+            box=box.SQUARE,
+            border_style=f"dim {GOLD}",
+            title=" thinking ",
+            title_align="left",
+            padding=(0, 1),
+        )
 
     def _tick(self) -> None:
         if self._live is not None:
