@@ -476,10 +476,11 @@ class EngagementUI:
         self._refresh_thread: threading.Thread | None = None
         self._refresh_stop = threading.Event()
         # streaming reasoning (the flexing box): deltas land here live
-        # streaming (unbounded transcript streaming): deltas land here,
-        # the heartbeat flushes them ABOVE the strip as scrolling rows —
-        # the whole thought is shown, never capped to a little box
-        self._stream_pending: list[tuple[str, str]] = []
+        # streaming: deltas ACCUMULATE here; the flexing white box (in the
+        # bottom bar) shows the live tail with FULL-WIDTH word wrap, and
+        # rows age out into the scrolling transcript above — nothing lost
+        self._stream_parts: list[tuple[str, str]] = []
+        self._stream_flushed = 0  # char offset already printed to the transcript
         self._stream_lock = threading.Lock()
         self._streaming = False
         self._waiting_since: float | None = None  # think-turn start → TTFT proof
@@ -520,6 +521,9 @@ class EngagementUI:
         t.add_row(left, Text(), right)
         t.columns[1].ratio = 1
         rows = []
+        sbox = self._stream_box()  # the flexing white thought-box, ABOVE the stats
+        if sbox is not None:
+            rows.append(sbox)
         rows.append(t)
         rows.extend(_fireteam_agent_rows())
         rows.append(self._input_box_row())  # the input box is ALWAYS the bottom row
@@ -590,52 +594,100 @@ class EngagementUI:
         self._tick()
 
     def reasoning_delta(self, kind: str, text: str) -> None:
-        """on_delta sink for the provider stream — UNBOUNDED transcript
-        streaming: deltas land in the pending buffer and the heartbeat
-        flushes them ABOVE the strip as scrolling rows. The WHOLE thought
-        is shown — never capped to a little box; new rows appear and the
-        screen scrolls, the strip (+ input box) stays pinned at the bottom.
-        Both kinds stream: reasoning renders dim italic, content plain
-        (glm often emits content-only). TTFT records on the first token of
-        ANY kind. Called from the provider worker thread; lock-guarded."""
+        """on_delta sink for the provider stream.
+
+        Deltas ACCUMULATE (never one-word-per-line prints); the flexing
+        white box in the bottom bar renders the live tail with full-width
+        word wrap — rows FILL before wrapping. Text older than the tail
+        window ages out into the scrolling transcript, so the whole
+        thought survives. Both kinds stream: reasoning dim italic, content
+        plain (glm often emits content-only). TTFT records on the first
+        token of ANY kind. Provider-worker-thread safe; lock-guarded."""
         if not text:
             return
         with self._stream_lock:
-            self._stream_pending.append((kind, text))
-            if len(self._stream_pending) > 5000:  # memory guard only — display never truncates
-                self._stream_pending = self._stream_pending[-5000:]
+            self._stream_parts.append((kind, str(text)))
         self._streaming = True
         if self._waiting_since is not None:
             # first token of this turn: the TTFT proof (seconds, one shot)
             UI_STATE["last_ttft"] = round(time.monotonic() - self._waiting_since, 2)
             self._waiting_since = None
-        self._flush_stream()
+        self._age_stream()
         self._tick()
 
-    def _flush_stream(self) -> None:
-        """Print accumulated stream text ABOVE the strip — scrolling rows,
-        nothing capped. Called on every delta and at stream_done."""
-        with self._stream_lock:
-            pending, self._stream_pending = self._stream_pending, []
-        if not pending:
-            return
+    # tail window: the flexing box keeps roughly this many recent chars;
+    # everything older has already scrolled into the transcript
+    STREAM_TAIL_CHARS = 900
+
+    def _stream_body(self, start: int, end: int) -> Text:
+        """Styled Text for the [start, end) char range of the stream."""
         body = Text()
-        for kind, piece in pending:
-            if kind == "reasoning":
-                body.append(Text(str(piece), style="dim italic"))
-            else:
-                body.append(Text(str(piece)))
-        with contextlib.suppress(Exception):  # display must never break generation
-            self.console.print(body)
+        off = 0
+        with self._stream_lock:
+            parts = list(self._stream_parts)
+        for kind, piece in parts:
+            p_start, p_end = off, off + len(piece)
+            off = p_end
+            if p_end <= start or p_start >= end:
+                continue
+            s = max(0, start - p_start)
+            e = min(len(piece), end - p_start)
+            seg = piece[s:e]
+            body.append(Text(seg, style="dim italic") if kind == "reasoning" else Text(seg))
+        return body
+
+    def _stream_total(self) -> int:
+        with self._stream_lock:
+            return sum(len(p) for _, p in self._stream_parts)
+
+    def _age_stream(self) -> None:
+        """Move text older than the tail window into the transcript (one
+        consolidated print — full-width rows that scroll)."""
+        total = self._stream_total()
+        keep_from = max(0, total - self.STREAM_TAIL_CHARS)
+        if keep_from <= self._stream_flushed:
+            return
+        body = self._stream_body(self._stream_flushed, keep_from)
+        if body:
+            with contextlib.suppress(Exception):  # display must never break generation
+                self.console.print(body)
+        self._stream_flushed = keep_from
+
+    def _stream_box(self):
+        """The flexing white box above the bottom bar: full-width wrapped
+        live tail of the stream. Grows as tokens land; aged rows scroll
+        into the transcript; the strip stays pinned beneath it."""
+        if not self._stream_parts:
+            return None
+        total = self._stream_total()
+        body = self._stream_body(max(0, total - self.STREAM_TAIL_CHARS), total)
+        if not body:
+            return None
+        return Panel(
+            body,
+            box=box.SQUARE,
+            border_style="bright_white",
+            title=" thinking ",
+            title_align="left",
+            padding=(0, 1),
+            expand=True,
+        )
 
     def stream_done(self) -> None:
-        """End the stream: flush the remainder; the iteration block takes
-        over the transcript (the `said` section renders as before)."""
-        if self._stream_pending or self._streaming:
-            self._streaming = False
-            self._waiting_since = None
-            self._flush_stream()
-            self._tick()
+        """End the stream: the remaining tail prints to the transcript, the
+        box collapses; the iteration block takes over (said-section as before)."""
+        total = self._stream_total()
+        if total > self._stream_flushed:
+            body = self._stream_body(self._stream_flushed, total)
+            if body:
+                with contextlib.suppress(Exception):
+                    self.console.print(body)
+        with self._stream_lock:
+            self._stream_parts = []
+            self._stream_flushed = 0
+        self._streaming = False
+        self._waiting_since = None
+        self._tick()
 
     def _tick(self) -> None:
         if self._live is not None:
