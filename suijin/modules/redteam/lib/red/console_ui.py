@@ -476,10 +476,11 @@ class EngagementUI:
         self._refresh_thread: threading.Thread | None = None
         self._refresh_stop = threading.Event()
         # streaming reasoning (the flexing box): deltas land here live
-        # streaming: deltas ACCUMULATE here silently; the flexing white box
-        # (in the bottom bar) renders the whole live thought, full-width
-        # wrapped, growing taller as it floods in — no per-delta prints
-        self._stream_parts: list[tuple[str, str]] = []
+        # streaming: deltas accumulate into a text buffer; FULL-WIDTH rows
+        # print above the strip as they fill — the terminal auto-scrolls
+        # infinitely, the strip (input box) stays pinned, nothing redraws
+        self._stream_text: str = ""
+        self._stream_emitted: int = 0  # char offset already printed as rows
         self._stream_lock = threading.Lock()
         self._streaming = False
         self._waiting_since: float | None = None  # think-turn start → TTFT proof
@@ -520,9 +521,6 @@ class EngagementUI:
         t.add_row(left, Text(), right)
         t.columns[1].ratio = 1
         rows = []
-        sbox = self._stream_box()  # the flexing white thought-box, ABOVE the stats
-        if sbox is not None:
-            rows.append(sbox)
         rows.append(t)
         rows.extend(_fireteam_agent_rows())
         rows.append(self._input_box_row())  # the input box is ALWAYS the bottom row
@@ -593,83 +591,65 @@ class EngagementUI:
         self._tick()
 
     def reasoning_delta(self, kind: str, text: str) -> None:
-        """on_delta sink for the provider stream.
+        """on_delta sink for the provider stream — infinite auto-scroll.
 
-        Deltas ACCUMULATE silently — ZERO per-delta prints (the aged-sliver
-        prints fragmented mid-word). The white box renders the whole live
-        thought and FLEXES TALLER as content floods in; stream_done prints
-        the entire thought to the transcript once, consolidated. Both kinds
-        stream: reasoning dim italic, content plain. TTFT records on the
-        first token of ANY kind. Provider-worker-thread safe; lock-guarded."""
+        Deltas accumulate; when enough text has arrived to FILL a full
+        terminal row, that row prints above the strip (bright blue) and the
+        terminal scrolls. Nothing is redrawn, nothing is boxed — the
+        smoothest possible stream: rows fill, the screen scrolls forever,
+        the strip (input box) stays pinned at the bottom. Both kinds count
+        ('what the AI says'); TTFT records on the first token of any kind.
+        Provider-worker-thread safe; lock-guarded."""
         if not text:
             return
         with self._stream_lock:
-            self._stream_parts.append((kind, str(text)))
+            self._stream_text += str(text)
         self._streaming = True
         if self._waiting_since is not None:
             # first token of this turn: the TTFT proof (seconds, one shot)
             UI_STATE["last_ttft"] = round(time.monotonic() - self._waiting_since, 2)
             self._waiting_since = None
-        self._tick()
+        self._emit_stream_rows()
 
-    def _stream_body(self, start: int, end: int) -> Text:
-        """Styled Text for the [start, end) char range of the stream."""
-        body = Text()
-        off = 0
-        with self._stream_lock:
-            parts = list(self._stream_parts)
-        for kind, piece in parts:
-            p_start, p_end = off, off + len(piece)
-            off = p_end
-            if p_end <= start or p_start >= end:
-                continue
-            s = max(0, start - p_start)
-            e = min(len(piece), end - p_start)
-            seg = piece[s:e]
-            body.append(Text(seg, style="dim italic") if kind == "reasoning" else Text(seg))
-        return body
+    def _stream_row_width(self) -> int:
+        with contextlib.suppress(Exception):
+            w = int(self.console.width or 80)
+            if w > 30:
+                return w - 4
+        return 76
 
-    def _stream_total(self) -> int:
-        with self._stream_lock:
-            return sum(len(p) for _, p in self._stream_parts)
-
-    # the box renders the WHOLE thought and flexes taller as it floods in;
-    # this cap only stops a pathological stream from making each 60fps
-    # re-render quadratic — it is ~50 terminal rows, taller than any screen
-    STREAM_BOX_CHARS = 4000
-
-    def _stream_box(self):
-        """The flexing white box above the bottom bar: full-width wrapped
-        live thought — grows taller as tokens land, the strip stays pinned
-        beneath it, and the terminal shows its bottom (input box visible)."""
-        if not self._stream_parts:
-            return None
-        total = self._stream_total()
-        body = self._stream_body(max(0, total - self.STREAM_BOX_CHARS), total)
-        if not body:
-            return None
-        return Panel(
-            body,
-            box=box.SQUARE,
-            border_style="bright_white",
-            title=" thinking ",
-            title_align="left",
-            padding=(0, 1),
-            expand=True,
-        )
+    def _emit_stream_rows(self) -> None:
+        """Print every COMPLETE full-width row that has accumulated — word
+        boundary preferred, exact fill when words run long. No fragments:
+        a row only prints when it can fill."""
+        while True:
+            with self._stream_lock:
+                text, emitted = self._stream_text, self._stream_emitted
+            width = self._stream_row_width()
+            if len(text) - emitted < width:
+                return  # not enough for a full row — wait for more tokens
+            row_end = emitted + width
+            seg = text[emitted:row_end]
+            sp = seg.rfind(" ")
+            if sp > width // 2:  # readable break at the last word boundary
+                row_end = emitted + sp + 1
+            line = text[emitted:row_end].rstrip()
+            with contextlib.suppress(Exception):  # display must never break generation
+                self.console.print(Text(line, style="bright_blue"))
+            with self._stream_lock:
+                self._stream_emitted = row_end
 
     def stream_done(self) -> None:
-        """End the stream: print the ENTIRE thought to the transcript in
-        ONE consolidated full-width block (nothing ever lost to fragments),
-        then collapse the box for the iteration block."""
-        total = self._stream_total()
-        if total:
-            body = self._stream_body(0, total)
-            if body:
-                with contextlib.suppress(Exception):  # display must never break generation
-                    self.console.print(body)
+        """End the stream: print the final partial row, reset. The complete
+        thought lives in the transcript as full-width bright-blue rows."""
         with self._stream_lock:
-            self._stream_parts = []
+            text, emitted = self._stream_text, self._stream_emitted
+            self._stream_text = ""
+            self._stream_emitted = 0
+        tail = text[emitted:].strip()
+        if tail:
+            with contextlib.suppress(Exception):
+                self.console.print(Text(tail, style="bright_blue"))
         self._streaming = False
         self._waiting_since = None
         self._tick()
