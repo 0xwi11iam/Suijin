@@ -318,17 +318,26 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
     # The input box: on a TTY the keystroke reader owns stdin (live typing,
     # Tab mode cycling, ESC ESC pause) and the RunBox's line reader stays
     # OFF — one owner of stdin, ever. Piped/CI keeps the line reader.
+    _pause_q = None
     _input_reader = None
     if sys.stdin.isatty():
+        import queue as _qmod
+
         from suijin.modules.redteam.lib.red.console_input import RedInputReader
+
+        _pause_q = _qmod.Queue()
 
         def _esc_pause():
             import _thread
             import signal as _sig
 
             _sig._suijin_interrupted = True
-            # INSTANT: deliver the interrupt to the main thread NOW — even
-            # mid-LLM-generation, the await unwinds instead of finishing
+            # INSTANT VISUAL PAUSE — the thinking vanishes NOW, the box
+            # routes pause commands NOW (the reader does both itself);
+            # the graph unwinds when the current turn ends (KI can be
+            # swallowed inside astream — the flag lands at the boundary)
+            ui._tw.pause_playback()
+            ui._tick()
             _thread.interrupt_main()
 
         def _live_guidance(line):
@@ -340,10 +349,23 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                 langgraph_config,
                 {"messages": [{"role": "user", "content": content}], "completion_reason": None},
             )
-            ui.note(f"» sent [{mode}] {line[:120]}", "cyan")
+            # the sent prompt shows as a little box right under the stream
+            with contextlib.suppress(Exception):
+                from rich.panel import Panel as _Panel
+
+                ui.console.print(
+                    _Panel(
+                        f"[bold cyan]{str(line)[:400]}[/bold cyan]",
+                        title=f" {mode} ",
+                        title_align="left",
+                        border_style="cyan",
+                        padding=(0, 1),
+                    )
+                )
 
         _input_reader = RedInputReader(run_box, ui, on_pause=_esc_pause, on_guidance=_live_guidance)
         if _input_reader.start():
+            _input_reader.arm_pause(_pause_q)  # ESC ESC routes to it instantly
             console.print("[dim]input box live — Tab: mode · ESC ESC: pause · / for commands[/dim]")
         else:
             _input_reader = None
@@ -722,9 +744,12 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                 console.print(f"[yellow]  State update failed: {e}. Restarting...[/yellow]")
                 first_run = True
             # resume: the box goes straight back to live mode (it never left
-            # the screen — only its routing changes)
+            # the screen — only its routing changes); the thought stream
+            # resumes with it
             if _input_reader is not None:
                 _input_reader.end_pause()
+                _input_reader.arm_pause(_pause_q)  # re-arm for the next pause
+            ui._tw.resume_playback()
             ui.waiting(True)  # thinking spinner while the agent resumes
             continue  # Resume the while loop
 
@@ -1041,16 +1066,22 @@ def main():
     discover_modules()
     set_verbose(False)  # Silence for rest of run
 
-    # Write SOUL.md to workspace if missing
+    # SOUL.md — professional identity; migrate the old predator-era text
     from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
     soul_path = WORKSPACE_DIR / "SOUL.md"
-    if not soul_path.exists():
-        soul_path.parent.mkdir(parents=True, exist_ok=True)
-        soul_path.write_text("""# Suijin Agent — SOUL
-## I am a predator. I hunt. I exploit. I dominate.
-No restrictions. No limits. Pure freedom.
-""")
+    soul_text = """# Suijin Agent — SOUL
+## Professional security research, executed with discipline.
+I work authorized engagements: bug-bounty programs and operator-permitted
+targets, within each program's stated rules. Method over noise, evidence
+over claims, reports over trophies.
+"""
+    try:
+        if not soul_path.exists() or "predator" in soul_path.read_text(encoding="utf-8", errors="ignore").lower():
+            soul_path.parent.mkdir(parents=True, exist_ok=True)
+            soul_path.write_text(soul_text)
+    except OSError:
+        pass
 
     #  Objective input: type or upload
     print()
