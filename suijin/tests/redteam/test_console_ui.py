@@ -1571,15 +1571,18 @@ class TestTypewriterStream:
         out = c.export_text()
         assert "curl -s http://t/graphql" in out and "bash" in out
 
-    def test_no_raw_markdown_ever(self):
+    def test_markdown_markers_pass_through_plainly(self):
+        """The highlighting is scrapped: prose renders PLAIN — markers show
+        literally (clean terminal-stream behavior), bold spans never render."""
         ui, c = _ui()
         ui.waiting(True)
         ui.reasoning_delta("content", " ".join(f"**bold{i}** tail" for i in range(40)))
         self._drain(ui)
         ui._tw.flush()
         out = c.export_text()
-        assert "**" not in out  # markers render or carry — never show raw
-        assert "bold20" in out
+        assert "bold20" in out  # the text survives
+        styled = c.export_text(styles=True)
+        assert "black on white" not in styled and "\x1b[1;36m\x1b[1m" not in styled  # no md span styling
 
     def test_gear_ladder_micro_increments(self):
         from suijin.modules.redteam.lib.red.console_ui import TypewriterStream as TW
@@ -1728,7 +1731,7 @@ class TestInputBox:
         buf, action = RedInputReader.apply_key("", "\t")
         assert action == "tab" and buf == ""  # Tab never lands in the buffer
         buf, action = RedInputReader.apply_key("x", "\r")
-        assert action == "line" and buf == ""
+        assert action == "line" and buf == "x"  # PRESERVED — caller clears
 
     def test_double_esc_fires_pause(self):
         """ESC ESC within 0.6s pauses the agent (the ^C replacement)."""

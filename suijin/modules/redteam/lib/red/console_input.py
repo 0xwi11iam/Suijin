@@ -17,7 +17,9 @@ signals as a backup; termios is restored on stop/atexit.
 
 from __future__ import annotations
 
+import codecs
 import contextlib
+import os
 import select
 import sys
 import threading
@@ -36,14 +38,19 @@ def next_mode(m: str) -> str:
 class RedInputReader:
     """cbreak keystroke pump owning stdin (TTY only)."""
 
-    def __init__(self, run_box, ui, on_pause=None, modes=MODES, on_guidance=None):
+    def __init__(self, run_box, ui, on_pause=None, modes=MODES, on_guidance=None, on_pause_line=None):
         self._run_box = run_box  # dispatch target (slash commands + guidance)
         self._ui = ui  # set_input / set_mode sinks
         self._on_pause = on_pause  # double-ESC: pause the agent INSTANTLY
         self._on_guidance = on_guidance  # plain line -> injected into the graph NOW
+        self._on_pause_line = on_pause_line  # pause session: reader-side command consumer
         self._pause_queue = None  # set while the pause console owns input: lines go HERE raw
         self._armed_queue = None  # pre-registered by the engagement: ESC ESC activates it NOW
         self._modes = tuple(modes)
+        # RAW byte reads + incremental decode: the text layer BUFFERS (a
+        # one-write ESC ESC landed entirely in Python's buffer, select on
+        # the fd never saw the second byte, the chord never fired)
+        self._decoder = codecs.getincrementaldecoder("utf-8")("replace")
         self._mode = self._modes[0]
         self._stop = threading.Event()
         self._paused_out = threading.Event()  # paused: pump parked (ask/pause consoles own stdin)
@@ -70,7 +77,10 @@ class RedInputReader:
             return False
         try:
             tty.setcbreak(fd)  # ISIG stays ON: ^C still signals (backup)
-        except termios.error:
+        except termios.error as _e:
+            if os.environ.get("SUIJIN_DRIVE_DEBUG"):
+                with contextlib.suppress(Exception), open("/tmp/rig_reader_debug.log", "a") as _dbg:
+                    _dbg.write(f"setcbreak failed: {_e}\n")
             return False
         import atexit
 
@@ -80,6 +90,9 @@ class RedInputReader:
         self._thread = threading.Thread(target=self._pump, name="red-input", daemon=True)
         self._thread.start()
         self._ui.set_mode(self._mode)
+        if os.environ.get("SUIJIN_DRIVE_DEBUG"):
+            with contextlib.suppress(Exception), open("/tmp/rig_reader_debug.log", "a") as _dbg:
+                _dbg.write(f"reader started fd={fd}\n")
         return True
 
     def _restore(self) -> None:
@@ -119,9 +132,11 @@ class RedInputReader:
 
     @staticmethod
     def apply_key(buf: str, key: str) -> tuple[str, str | None]:
-        """One keystroke -> (buffer, action). Actions: 'line', 'tab', None."""
+        """One keystroke -> (buffer, action). Actions: 'line', 'tab', None.
+        On 'line' the buffer is PRESERVED — the caller consumes and clears
+        it (the old contract returned "" and silently ate every prompt)."""
         if key in ("\r", "\n"):
-            return "", "line"
+            return buf, "line"
         if key in ("\x7f", "\x08"):
             return buf[:-1], None
         if key == "\x15":  # ctrl-u
@@ -136,6 +151,19 @@ class RedInputReader:
 
     def _pump(self) -> None:
         fd = sys.stdin.fileno()
+        try:
+            self._pump_loop(fd)
+        except BaseException:  # the reader must never die silently
+            import traceback
+
+            try:
+                with open("/tmp/suijin_reader_crash.log", "a") as fh:
+                    fh.write(traceback.format_exc() + "\n")
+            except OSError:
+                pass
+            raise
+
+    def _pump_loop(self, fd: int) -> None:
         buf = ""
         while not self._stop.is_set():
             if self._paused_out.is_set():
@@ -148,23 +176,37 @@ class RedInputReader:
             if not r:
                 continue
             try:
-                b = sys.stdin.read(1)
+                raw = os.read(fd, 1)
             except (OSError, ValueError):
                 return
-            if not b:
+            if not raw:
                 return  # EOF
+            b = self._decoder.decode(raw)  # select-consistent: no text buffering
+            if not b:
+                continue  # mid multi-byte char — wait for the rest
+            if os.environ.get("SUIJIN_DRIVE_DEBUG"):
+                with contextlib.suppress(Exception), open("/tmp/rig_keys.log", "a") as _kl:
+                    _kl.write(f"{b!r}\n")
             if b == "\x1b":
                 # disambiguate: arrow/page sequences start ESC [ / ESC O;
-                # a LONE second ESC within 0.6s is the pause chord
-                if self._sequence(fd):
-                    continue  # swallowed, never lands in the buffer
-                # pause FIRED: routing switches inside _esc_chord NOW (the
-                # main thread joins when the current turn unwinds — the box
-                # is already responsive to pause commands)
+                # a second ESC within 0.6s (or back-to-back in one write)
+                # is the pause chord
+                seq = self._sequence(fd)
+                if seq is True:
+                    continue  # arrow keys etc — swallowed, never land in the buffer
+                if seq == "esc":
+                    # zero-gap double ESC: the chord FIRES right now —
+                    # no window check (both presses already happened)
+                    self._fire_chord()
+                    continue
+                # lone ESC — the 0.6s chord window opens/updates
                 self._esc_chord()
                 continue
             buf, action = self.apply_key(buf, b)
             if action == "line":
+                if os.environ.get("SUIJIN_DRIVE_DEBUG"):
+                    with contextlib.suppress(Exception), open("/tmp/rig_keys.log", "a") as _kl:
+                        _kl.write(f"ENTER line={buf!r}\n")
                 line, buf = buf, ""
                 self._ui.set_input(None)  # clear FIRST — no residual artifact
                 if line.strip():
@@ -178,20 +220,23 @@ class RedInputReader:
                 continue
             self._ui.set_input(buf)
 
+    def _fire_chord(self) -> None:
+        """The pause chord fired: on_pause runs (instant visual + session),
+        routing switches to the armed queue immediately."""
+        self._last_esc = 0.0
+        if self._on_pause:
+            with contextlib.suppress(Exception):
+                self._on_pause()
+        if getattr(self, "_armed_queue", None) is not None:
+            self._pause_queue = self._armed_queue
+
     def _esc_chord(self) -> bool:
         """A lone ESC arrived: within 0.6s of the previous one, PAUSE the
         agent (the Ctrl+C replacement). Single ESCs just register.
         Returns True when the pause fired."""
         now = time.monotonic()
         if now - self._last_esc <= 0.6:
-            self._last_esc = 0.0
-            if self._on_pause:
-                with contextlib.suppress(Exception):
-                    self._on_pause()
-            # routing switches HERE: the armed queue takes over instantly —
-            # typed commands reach the pause console before the graph lands
-            if getattr(self, "_armed_queue", None) is not None:
-                self._pause_queue = self._armed_queue
+            self._fire_chord()
             return True
         self._last_esc = now
         return False
@@ -205,8 +250,8 @@ class RedInputReader:
             return False
         if not r:
             return False
-        b2 = sys.stdin.read(1)
-        if b2 in ("[", "O"):
+        b2 = os.read(fd, 1)
+        if b2 in (b"[", b"O"):
             # consume until a final byte of the CSI/SS3 sequence
             deadline = time.monotonic() + 0.05
             while time.monotonic() < deadline:
@@ -216,13 +261,12 @@ class RedInputReader:
                     return True
                 if not r:
                     break
-                f = sys.stdin.read(1)
+                f = os.read(fd, 1)
                 if f and f.isalpha():
                     break
             return True
-        if b2 == "\x1b":  # second escape arriving instantly — push back: treat as none
-            # rare timing: pause chord handled by caller's window; drop both
-            return False
+        if b2 == b"\x1b":
+            return "esc"  # second ESC back-to-back: the CHORD, zero-gap — caller fires
         return False  # lone ESC — not a sequence
 
     # ── pause mode: the omnipresent box feeds the pause console ──────
@@ -244,6 +288,20 @@ class RedInputReader:
         # the armed queue STAYS armed: the next ESC ESC re-routes instantly
 
     def _dispatch(self, line: str) -> None:
+        if os.environ.get("SUIJIN_DRIVE_DEBUG"):
+            with contextlib.suppress(Exception), open("/tmp/rig_keys.log", "a") as _kl:
+                _kl.write(f"dispatch: {line!r} handler={getattr(self, '_on_pause_line', None) is not None}\n")
+        if getattr(self, "_on_pause_line", None) is not None:
+            # a pause session OWNS input: the reader consumes the line
+            # itself — commands answer instantly, no main-thread dependency
+            try:
+                self._on_pause_line(line)
+            except BaseException:
+                import traceback
+
+                with contextlib.suppress(Exception), open("/tmp/suijin_reader_crash.log", "a") as fh:
+                    fh.write("pause_line: " + traceback.format_exc() + "\n")
+            return
         if getattr(self, "_pause_queue", None) is not None:
             with contextlib.suppress(Exception):
                 self._pause_queue.put(line)

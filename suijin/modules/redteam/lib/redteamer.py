@@ -327,17 +327,50 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
 
         _pause_q = _qmod.Queue()
 
+        _pause_session = {"active": False, "guidance": None, "stop": False, "done": __import__("threading").Event()}
+
+        def _start_pause_session():
+            """READER THREAD: the instant pause — banner + PAUSED visual +
+            command consumption all happen HERE. The main thread (stuck in
+            an LLM call whose KI LangGraph swallows) joins when it lands;
+            the operator never waits for it."""
+            if _pause_session["active"]:
+                return
+            _pause_session["active"] = True
+            _pause_session["guidance"] = None
+            _pause_session["stop"] = False
+            _pause_session["done"].clear()
+            ui.paused_visual(True)
+            console.print(sc.PAUSE_BANNER)
+            console.print("[dim]paused — commands answer instantly; the current turn finishes in the background[/dim]")
+
+        def _pause_line(line):
+            """READER THREAD: one entered line = one pause-console step.
+            Slash commands dispatch now; a plain line is the guidance and
+            ends the session."""
+            ctx = _pause_session.get("ctx")
+            if ctx is None:
+                return
+            cmd, _, rest = (line or "").partition(" ")
+            handler = sc.build_pause_handlers(ctx).get(cmd.lower())
+            if handler is not None:
+                handler(rest.strip())
+                if getattr(ctx, "stop_requested", False):
+                    _pause_session["stop"] = True
+                    _pause_session["done"].set()
+                return
+            extras = [g for g in getattr(ctx, "guidance_extra", []) if g]
+            _pause_session["guidance"] = " ".join(extras + ([line] if line else [])) or "Continue what you were doing."
+            console.print("[dim]guidance queued — resumes when the current turn ends[/dim]")
+            _pause_session["done"].set()
+
         def _esc_pause():
             import _thread
             import signal as _sig
 
             _sig._suijin_interrupted = True
-            # INSTANT VISUAL PAUSE — the thinking vanishes NOW, the box
-            # routes pause commands NOW (the reader does both itself);
-            # the graph unwinds when the current turn ends (KI can be
-            # swallowed inside astream — the flag lands at the boundary)
-            ui._tw.pause_playback()
-            ui._tick()
+            _start_pause_session()
+            _input_reader._on_pause_line = _pause_line  # commands answer NOW
             _thread.interrupt_main()
 
         def _live_guidance(line):
@@ -363,7 +396,32 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                     )
                 )
 
-        _input_reader = RedInputReader(run_box, ui, on_pause=_esc_pause, on_guidance=_live_guidance)
+        # PauseContext up front: the reader-side session must answer /state
+        # /cost /quit the INSTANT ESC ESC fires — the main thread may be
+        # stuck in an LLM call for seconds yet. Live values ride a holder.
+        from suijin.modules.redteam.lib.red.console_ui import UI_STATE as _UI_LOOT
+
+        _pause_live = {"agent": agent, "thread_id": thread_id, "final_state": {}, "objective": objective}
+
+        _pause_ctx = sc.PauseContext(
+            console=console,
+            agent=agent,
+            langgraph_config=langgraph_config,
+            thread_id=thread_id,
+            config=config,
+            objective=objective,
+            route_tool_fn=lambda name, args: _dispatch_mod().route_tool(name, args, {}),
+            usage_fn=providers.get_usage,
+            loot=_UI_LOOT,
+            force_report_fn=lambda: sc.force_report(
+                _pause_live["agent"], _pause_live["thread_id"], _pause_live["final_state"], _pause_live["objective"], config
+            ),
+        )
+        _pause_session["ctx"] = _pause_ctx
+
+        _input_reader = RedInputReader(
+            run_box, ui, on_pause=_esc_pause, on_guidance=_live_guidance, on_pause_line=None
+        )
         if _input_reader.start():
             _input_reader.arm_pause(_pause_q)  # ESC ESC routes to it instantly
             console.print("[dim]input box live — Tab: mode · ESC ESC: pause · / for commands[/dim]")
@@ -640,6 +698,9 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                         thread_id = f"redteam_{int(time.time())}"
                         langgraph_config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 250}
                         agent._build()
+                        _pause_live.update({"agent": agent, "thread_id": thread_id})
+                        _pause_ctx.agent = agent
+                        _pause_ctx.thread_id = thread_id
                         first_run = True
                         ui.waiting(True)
                         continue
@@ -658,68 +719,46 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
         except (KeyboardInterrupt, asyncio.CancelledError):
             _signal._suijin_interrupted = False
             # _sigint STAYS installed through the pause: Ctrl+C raises
-            # KeyboardInterrupt instantly anywhere (queue.get included) —
-            # SIG_DFL here would have KILLED the app with no save.
+            # KeyboardInterrupt instantly anywhere — SIG_DFL here would
+            # have KILLED the app with no save.
             _signal.signal(_signal.SIGINT, _sigint)
             ui.flush_open()
-            # The omnipresent input box KEEPS running through the pause —
-            # the pause console reads from it via a queue. No legacy
-            # Guidance prompt, no strip teardown, no cooked-mode dance.
-            _pause_q = None
-            if _input_reader is not None:
-                import queue as _q
 
-                _pause_q = _q.Queue()
-                _input_reader.begin_pause(_pause_q)
-                console.print("[dim]type in the input box — /quit ends + saves, plain text is guidance[/dim]")
+            _pause_live.update({"agent": agent, "thread_id": thread_id, "final_state": final_state, "objective": objective})
+            _pause_ctx.agent = agent
+            _pause_ctx.thread_id = thread_id
+            _pause_ctx.objective = objective
+            _pause_session["ctx"] = _pause_ctx
+
+            if _input_reader is not None and _pause_session["active"]:
+                # ESC ESC fired MID-TURN: the reader already runs the pause
+                # session (banner + PAUSED visual + instant commands). The
+                # operator may have already typed guidance or /quit — join.
+                _pause_session["ctx"] = _pause_ctx  # handlers now answer /state etc.
+                _pause_session["done"].wait()
+            elif _input_reader is not None:
+                # Ctrl+C path (no session yet): start the reader-side
+                # session NOW — same instant behavior, same consumer.
+                _pause_session["ctx"] = _pause_ctx
+                _start_pause_session()
+                _input_reader._on_pause_line = _pause_line
+                _pause_session["done"].wait()
             else:
-                ui.stop()  # non-TTY: no box exists — the old prompt path
-
-            # ── pause console: course-changing commands + guidance ──────
-            from suijin.modules.redteam.lib.red.console_ui import UI_STATE as _UI_LOOT
-
-            _pause_ctx = sc.PauseContext(
-                console=console,
-                agent=agent,
-                langgraph_config=langgraph_config,
-                thread_id=thread_id,
-                config=config,
-                objective=objective,
-                route_tool_fn=lambda name, args: _dispatch_mod().route_tool(name, args, {}),
-                usage_fn=providers.get_usage,
-                loot=_UI_LOOT,
-                force_report_fn=lambda _a=agent, _t=thread_id, _f=final_state, _o=objective, _c=config: sc.force_report(
-                    _a, _t, _f, _o, _c
-                ),
-            )
-
-            def _pause_input(label, timeout=600.0, _q=_pause_q):
-                """Read pause input from the omnipresent box (lines land in
-                the queue raw); falls back to the legacy prompt only when
-                no keystroke reader exists (piped/CI)."""
-                if _q is None:
-                    return _operator_input(label, timeout)
-                return _q.get(timeout=timeout)
-
-            try:
-                guidance = sc.pause_console(_pause_ctx, _pause_input)
-                objective = _pause_ctx.objective  # /objective may have changed course
-            except (KeyboardInterrupt, EOFError):
-                console.print("\n[bold red]  Force quit — saving state...[/bold red]")
-                final_state = agent.get_state(thread_id) or {}  # force-quit still saves a full .sje
-                _operator_stopped = True
+                # non-TTY: no box exists — the legacy prompt path
                 ui.stop()
-                run_box.stop()
-                if _input_reader is not None:
-                    _input_reader.end_pause()
-                    _input_reader.stop()
-                break
-            finally:
-                # Re-arm the interrupt mechanism (instant-raise form)
-                _signal.signal(_signal.SIGINT, _sigint)
+                try:
+                    guidance = sc.pause_console(_pause_ctx, lambda label, timeout=600.0: _operator_input(label, timeout))
+                    _pause_session["guidance"] = guidance
+                except (KeyboardInterrupt, EOFError):
+                    guidance = None
+                    _pause_session["stop"] = True
+                objective = _pause_ctx.objective
+                _pause_session["done"].set()
 
-            if getattr(_pause_ctx, "stop_requested", False):
-                # /quit — save everything (session + restorable .sje) and exit
+            objective = _pause_ctx.objective  # /objective may have changed course
+
+            if _pause_session["stop"] or getattr(_pause_ctx, "stop_requested", False):
+                # /quit or force-quit — save everything (session + .sje)
                 final_state = agent.get_state(thread_id) or {}
                 _operator_stopped = True  # the banner must not fake a completion
                 console.print("[dim]  engagement ended — full save follows[/dim]")
@@ -730,6 +769,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                     _input_reader.stop()
                 break
 
+            guidance = _pause_session["guidance"]
             # Inject guidance into graph state
             try:
                 agent._graph.update_state(
@@ -743,14 +783,16 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
             except Exception as e:
                 console.print(f"[yellow]  State update failed: {e}. Restarting...[/yellow]")
                 first_run = True
-            # resume: the box goes straight back to live mode (it never left
-            # the screen — only its routing changes); the thought stream
-            # resumes with it
+            # resume: session closes, the box returns to live routing, the
+            # thought stream resumes, the strip un-pauses
+            _pause_session["active"] = False
+            _pause_session["ctx"] = None
             if _input_reader is not None:
+                _input_reader._on_pause_line = None
                 _input_reader.end_pause()
-                _input_reader.arm_pause(_pause_q)  # re-arm for the next pause
-            ui._tw.resume_playback()
-            ui.waiting(True)  # thinking spinner while the agent resumes
+                _input_reader.arm_pause(_pause_q)
+            ui.paused_visual(False)
+            ui.waiting(True)
             continue  # Resume the while loop
 
         except Exception as e:
