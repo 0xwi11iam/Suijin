@@ -1476,9 +1476,11 @@ class TestFireteamStripRows:
 
 
 class TestFlexingReasoningBox:
-    """Unbounded transcript streaming: deltas print ABOVE the strip as
-    scrolling rows — the WHOLE thought shows (screen scrolls), strip +
-    input box stay pinned. Both kinds stream; TTFT proves the first token."""
+    """The flexing white thought-box in the bottom bar: deltas ACCUMULATE
+    (full-width word wrap — rows FILL before wrapping, never one word per
+    line); the box shows the live tail and grows; aged rows scroll into
+    the transcript so the WHOLE thought survives; stream_done flushes the
+    remainder. Both kinds stream; TTFT proves the first token."""
 
     def _strip_text(self, ui, width=110):
         import io
@@ -1489,46 +1491,53 @@ class TestFlexingReasoningBox:
         sink.print(ui._strip())
         return sink.file.getvalue()
 
-    def test_reasoning_streams_to_transcript(self):
+    def test_deltas_accumulate_into_the_box(self):
         ui, c = _ui()
         ui.waiting(True)
-        ui.reasoning_delta("reasoning", "checking the target ")
-        ui.reasoning_delta("reasoning", "for injectable params")
-        out = c.export_text()  # the TRANSCRIPT above the strip
-        assert "checking the target" in out and "injectable params" in out
-        assert "render fallback" not in out  # the real path — never the crash guard
-        assert "injectable params" not in self._strip_text(ui)  # NOT in a box
+        ui.reasoning_delta("content", "large ")
+        ui.reasoning_delta("content", "travel ")
+        ui.reasoning_delta("content", "booking ")
+        ui.reasoning_delta("content", "platform")
+        strip = self._strip_text(ui)
+        assert "large" in strip and "platform" in strip  # in the BOX, joined
+        out_lines = [ln for ln in c.export_text().split("\n") if ln.strip()]
+        assert out_lines == []  # nothing aged out yet — NO one-word prints
+        assert "render fallback" not in strip
+
+    def test_rows_fill_full_width_in_the_box(self):
+        """Tokens join to full rows: a long stream renders as wrapped lines
+        inside the box, not N single-word lines."""
+        ui, c = _ui()
+        ui.waiting(True)
+        words = " ".join(f"w{i}" for i in range(60))  # ~350 chars, one 'thought'
+        for i in range(0, len(words), 20):
+            ui.reasoning_delta("content", words[i : i + 20])
+        strip = self._strip_text(ui)
+        lines = [ln.strip() for ln in strip.split("\n") if ln.strip()]
+        word_lines = [ln for ln in lines if ln.startswith("w") and " " not in ln and len(ln) < 8]
+        assert not word_lines  # no lone-word rows — text flows full-width
+        assert "w0" in strip and "w59" in strip
 
     def test_streams_without_think_toggle(self):
-        """The stream prints live regardless of /think (that toggle governs
-        only the transcript's permanent said-section)."""
-        ui, c = _ui()
+        ui, _c = _ui()
         UI_STATE["show_reasoning"] = False
         ui.waiting(True)
         ui.reasoning_delta("reasoning", "visible reasoning")
-        assert "visible reasoning" in c.export_text()
+        assert "visible reasoning" in self._strip_text(ui)
 
-    def test_content_streams_too(self):
-        """glm often streams content with NO reasoning_content — the sink
-        must print content or streaming is invisible."""
+    def test_aged_rows_scroll_into_transcript(self):
+        """Text older than the tail window prints to the transcript — the
+        whole thought survives, the box keeps the live tail."""
         ui, c = _ui()
         ui.waiting(True)
-        ui.reasoning_delta("content", '{"action": "use_tool", ')
-        ui.reasoning_delta("content", '"tool_name": "http_request"}')
-        out = c.export_text()
-        assert "use_tool" in out and "http_request" in out
-        assert "render fallback" not in out  # live regression: the crash guard must stay silent
-
-    def test_no_cap_long_thoughts(self):
-        """The whole thought shows — a long stream never truncates."""
-        ui, c = _ui()
-        ui.waiting(True)
-        long = "".join(f"thought-{i:03d} " for i in range(200))  # far past any old cap
+        long = "".join(f"thought-{i:03d} " for i in range(200))
         for i in range(0, len(long), 100):
             ui.reasoning_delta("reasoning", long[i : i + 100])
         out = c.export_text()
-        assert "thought-000" in out and "thought-199" in out  # head AND tail
-        assert "render fallback" not in out
+        assert "thought-000" in out  # the aged head scrolled up
+        strip = self._strip_text(ui)
+        assert "thought-199" in strip  # the live tail stays in the box
+        assert "render fallback" not in out and "render fallback" not in strip
 
     def test_ttft_recorded_on_first_delta_only(self):
         ui, _c = _ui()
@@ -1541,7 +1550,7 @@ class TestFlexingReasoningBox:
         assert UI_STATE["last_ttft"] == ttft  # one shot — not overwritten
         assert first_ttft is None or isinstance(first_ttft, (int, float))
 
-    def test_stream_done_flushes_remainder_and_keeps_ttft(self):
+    def test_stream_done_flushes_tail_and_collapses(self):
         ui, c = _ui()
         ui.waiting(True)
         ui.reasoning_delta("reasoning", "final fragment")
@@ -1550,7 +1559,8 @@ class TestFlexingReasoningBox:
         out = c.export_text()
         assert "final fragment" in out  # remainder flushed — nothing lost
         assert UI_STATE["last_ttft"] == ttft
-        assert ui._stream_pending == [] and not ui._streaming
+        assert ui._stream_parts == [] and not ui._streaming
+        assert "final fragment" not in self._strip_text(ui)  # box collapsed
 
 
 class TestInputBox:
@@ -1679,12 +1689,12 @@ class TestInputBox:
         )
         ui, c = _ui()
         ui.waiting(True)
-        ui.reasoning_delta("reasoning", "streaming live")  # prints ABOVE the strip
+        ui.reasoning_delta("reasoning", "streaming live")  # lives in the thought-box
         ui.set_input("hello")
-        # the strip carries fireteam + input box (streamed text lives in the transcript)
+        # the strip carries thought-box + fireteam + input box (last, always)
         assert "hello" in self._strip_text(ui)
         assert "probe the thing" in self._strip_text(ui)
-        assert "streaming live" in c.export_text()
+        assert "streaming live" in self._strip_text(ui)
 
 
 class TestLiveGuidanceInjection:
