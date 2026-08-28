@@ -1512,13 +1512,22 @@ class TestStreamingRows:
         assert "word059" in c.export_text()
         assert "render fallback" not in c.export_text()
 
-    def test_streamed_text_is_bright_blue(self):
+    def test_colors_light_for_think_cyan_for_speaking(self):
+        # SPEAKING (content): cyan — pure stream, no boundary mixing
         ui, c = _ui()
         ui.waiting(True)
-        words = " ".join(f"blue{i}" for i in range(40))
-        ui.reasoning_delta("content", words)
+        ui.reasoning_delta("content", " ".join(f"cyan{i}" for i in range(40)))
         styled = c.export_text(styles=True)
-        assert "\x1b[94m" in styled  # bright blue ANSI — not dim/light
+        cyan_rows = "".join(ln for ln in styled.split("\n") if "cyan" in ln)
+        assert "\x1b[36m" in cyan_rows and "\x1b[2;3m" not in cyan_rows
+
+        # THINK (reasoning): light dim italic — separate UI, pure stream
+        ui2, c2 = _ui()
+        ui2.waiting(True)
+        ui2.reasoning_delta("reasoning", " ".join(f"light{i}" for i in range(40)))
+        styled2 = c2.export_text(styles=True)
+        light_rows = "".join(ln for ln in styled2.split("\n") if "light" in ln)
+        assert "\x1b[2;3m" in light_rows and "\x1b[36m" not in light_rows
 
     def test_stream_done_flushes_the_final_partial_row(self):
         ui, c = _ui()
@@ -1527,7 +1536,7 @@ class TestStreamingRows:
         ui.stream_done()
         out = c.export_text()
         assert "the very last partial fragment" in out  # nothing lost
-        assert ui._stream_text == "" and ui._stream_emitted == 0
+        assert ui._stream_flat == "" and ui._stream_emitted == 0 and ui._stream_parts == []
 
     def test_no_box_in_strip_input_box_still_last(self):
         """The stream lives in the transcript — the strip carries stats,
