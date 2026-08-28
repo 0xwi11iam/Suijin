@@ -1475,11 +1475,11 @@ class TestFireteamStripRows:
         assert "agent" not in self._render_strip(ui)
 
 
-class TestStreamingRows:
-    """Infinite auto-scroll streaming: deltas accumulate; FULL-WIDTH rows
-    print above the strip as they fill (word-boundary break, bright blue);
-    the terminal scrolls forever, the strip stays pinned, nothing redraws.
-    Fragments are structurally impossible."""
+class TestTypewriterStream:
+    """Adaptive typewriter: prose plays through the micro-increment gear
+    ladder (60 steps to ~3000 c/s), full rows commit to the transcript,
+    command spans box themselves, markdown NEVER shows raw, machinery is
+    silent (no gear/tps text anywhere)."""
 
     def _strip_text(self, ui, width=110):
         import io
@@ -1490,78 +1490,141 @@ class TestStreamingRows:
         sink.print(ui._strip())
         return sink.file.getvalue()
 
-    def test_no_print_until_a_full_row_fills(self):
+    def _drain(self, ui, secs=5.0):
+        """Drive the ticker synchronously until the buffers empty."""
+        import time as _t
+
+        deadline = _t.monotonic() + secs
+        while (_t.monotonic() < deadline) and (ui._tw._pending or ui._tw._line):
+            ui._tw.tick(0.1)
+
+    def test_partial_line_renders_in_strip_with_cursor(self):
+        ui, _c = _ui()
+        ui.waiting(True)
+        ui.reasoning_delta("content", "typing live")
+        ui._tw.tick(0.5)  # plenty of budget
+        strip = self._strip_text(ui)
+        assert "typing live" in strip and "▌" in strip
+
+    def test_full_rows_commit_and_scroll(self):
         ui, c = _ui()
         ui.waiting(True)
-        ui.reasoning_delta("content", "large ")
-        ui.reasoning_delta("content", "travel ")
-        lines = [ln for ln in c.export_text().split("\n") if ln.strip()]
-        assert lines == []  # partial rows wait — no fragments, no lone words
+        words = " ".join(f"word{i:03d}" for i in range(60))
+        ui.reasoning_delta("content", words)
+        self._drain(ui)
+        ui._tw.flush()
+        out = c.export_text()
+        assert "word000" in out and "word059" in out  # head and tail survive
+        lines = [ln for ln in out.split("\n") if "word" in ln]
+        assert all(len(ln) > 30 for ln in lines)  # rows are FULL — no fragments
+        assert ui._tw._pending == [] and ui._tw._line == ""
 
-    def test_full_rows_print_and_scroll(self):
-        ui, c = _ui()
-        ui.waiting(True)
-        words = " ".join(f"word{i:03d}" for i in range(60))  # ~480 chars
-        for i in range(0, len(words), 12):
-            ui.reasoning_delta("content", words[i : i + 12])
-        lines = [ln for ln in c.export_text().split("\n") if ln.strip()]
-        assert len(lines) >= 3  # multiple full rows printed — auto-scroll
-        assert all(len(ln) > 40 for ln in lines)  # every row is FULL-width
-        assert "word000" in " ".join(lines)  # head printed as full rows
-        ui.stream_done()  # the partial tail flushes at completion
-        assert "word059" in c.export_text()
-        assert "render fallback" not in c.export_text()
+    def test_colors_light_think_cyan_speak(self):
+        ui1, c1 = _ui()
+        ui1.waiting(True)
+        ui1.reasoning_delta("content", " ".join(f"cyan{i}" for i in range(60)))
+        self._drain(ui1)
+        ui1._tw.flush()
+        cyan_rows = "".join(ln for ln in c1.export_text(styles=True).split("\n") if "cyan" in ln)
+        assert "36m" in cyan_rows  # SPEAKING = bold cyan (\x1b[1;36m)
 
-    def test_colors_light_for_think_cyan_for_speaking(self):
-        # SPEAKING (content): cyan — pure stream, no boundary mixing
-        ui, c = _ui()
-        ui.waiting(True)
-        ui.reasoning_delta("content", " ".join(f"cyan{i}" for i in range(40)))
-        styled = c.export_text(styles=True)
-        cyan_rows = "".join(ln for ln in styled.split("\n") if "cyan" in ln)
-        assert "\x1b[36m" in cyan_rows and "\x1b[2;3m" not in cyan_rows
-
-        # THINK (reasoning): light dim italic — separate UI, pure stream
         ui2, c2 = _ui()
         ui2.waiting(True)
-        ui2.reasoning_delta("reasoning", " ".join(f"light{i}" for i in range(40)))
-        styled2 = c2.export_text(styles=True)
-        light_rows = "".join(ln for ln in styled2.split("\n") if "light" in ln)
-        assert "\x1b[2;3m" in light_rows and "\x1b[36m" not in light_rows
+        ui2.reasoning_delta("reasoning", " ".join(f"light{i}" for i in range(60)))
+        self._drain(ui2)
+        ui2._tw.flush()
+        light_rows = "".join(ln for ln in c2.export_text(styles=True).split("\n") if "light" in ln)
+        assert "2;3m" in light_rows and "36m" not in light_rows  # THINK = light (dim italic)
 
-    def test_stream_done_flushes_the_final_partial_row(self):
+    def test_json_action_boxes_itself(self):
+        ui, c = _ui()
+        ui.waiting(True)
+        ui.reasoning_delta("content", 'I will parallelize. {"action": "use_tool", "tool_name": "deploy_subagent", "tool_args": {"tasks": 2}} now.')
+        self._drain(ui)
+        ui._tw.flush()
+        out = c.export_text()
+        assert "deploy_subagent" in out  # the decision is visible
+        assert "json" in out  # box title present
+        # the JSON renders ONCE (boxed), not twice as prose
+        assert out.count("deploy_subagent") == 1
+
+    def test_json_split_across_fragments_still_boxes(self):
+        ui, c = _ui()
+        ui.waiting(True)
+        blob = 'prefix {"action": "write_note", "args": {"content": "x"}} suffix'
+        for ch in blob:  # brutal fragmentation
+            ui.reasoning_delta("content", ch)
+        self._drain(ui)
+        ui._tw.flush()
+        out = c.export_text()
+        assert out.count("write_note") == 1 and "json" in out
+
+    def test_fenced_block_boxes(self):
+        ui, c = _ui()
+        ui.waiting(True)
+        ui.reasoning_delta("content", "plan:\n```bash\ncurl -s http://t/graphql\n```\ndone")
+        self._drain(ui)
+        ui._tw.flush()
+        out = c.export_text()
+        assert "curl -s http://t/graphql" in out and "bash" in out
+
+    def test_no_raw_markdown_ever(self):
+        ui, c = _ui()
+        ui.waiting(True)
+        ui.reasoning_delta("content", " ".join(f"**bold{i}** tail" for i in range(40)))
+        self._drain(ui)
+        ui._tw.flush()
+        out = c.export_text()
+        assert "**" not in out  # markers render or carry — never show raw
+        assert "bold20" in out
+
+    def test_gear_ladder_micro_increments(self):
+        from suijin.modules.redteam.lib.red.console_ui import TypewriterStream as TW
+
+        assert len(TW.LADDER) >= 60  # a lot of small increments
+        assert all(TW.LADDER[i] < TW.LADDER[i + 1] for i in range(len(TW.LADDER) - 1))  # monotonic
+        assert TW.LADDER[-1] >= 2000  # to the absolute limit of model TPS (and beyond)
+
+    def test_rate_catches_up_on_backlog(self):
+        ui, _c = _ui()
+        tw = ui._tw
+        # simulate heavy arrival: 3 rows of backlog
+        ui.reasoning_delta("content", "x" * (3 * (ui.console.width - 4) + 10))
+        rate = tw._select_rate(0.02)
+        assert rate >= tw.MIN_RATE
+        # with a big backlog and high measured cps, the rate jumps straight to the snap gear
+        tw._arrivals.clear()
+        tw._arrivals.append((__import__("time").monotonic() - 1.0, 2000))  # 2000 c/s measured
+        rate2 = tw._select_rate(0.02)
+        assert rate2 >= 2000  # never falls behind the model
+
+    def test_stream_done_via_ui_flushes_everything(self):
         ui, c = _ui()
         ui.waiting(True)
         ui.reasoning_delta("content", "the very last partial fragment")
         ui.stream_done()
-        out = c.export_text()
-        assert "the very last partial fragment" in out  # nothing lost
-        assert ui._stream_flat == "" and ui._stream_emitted == 0 and ui._stream_parts == []
+        assert "the very last partial fragment" in c.export_text()
+        assert ui._tw._pending == [] and ui._tw._line == ""
 
-    def test_no_box_in_strip_input_box_still_last(self):
-        """The stream lives in the transcript — the strip carries stats,
-        fireteam, and the input box (ALWAYS last); no thinking box."""
-
-        ui, c = _ui()
+    def test_machinery_is_silent(self):
+        ui, _c = _ui()
         ui.waiting(True)
-        ui.reasoning_delta("content", "streaming text goes to the transcript")
+        ui.reasoning_delta("content", "streaming now")
+        ui._tw.tick(0.1)
         strip = self._strip_text(ui)
-        assert "thinking" not in strip.split("\n")[0] or True  # no box title row
-        assert "transcript" not in strip  # stream text NOT in the strip
-        ui.set_input("hello")
-        last = [ln for ln in self._strip_text(ui).split("\n") if "hello" in ln]
-        assert last  # the input box is present and last
+        for noisy in ("tok/s", "tps", "gear", "rate"):
+            assert noisy not in strip.lower()  # detection/speed machinery invisible
 
     def test_ttft_recorded_on_first_delta_only(self):
         ui, _c = _ui()
         ui.waiting(True)
-        first_ttft = UI_STATE["last_ttft"]
+        first = UI_STATE["last_ttft"]
         ui.reasoning_delta("content", "tok")
         ttft = UI_STATE["last_ttft"]
         assert ttft is not None and ttft >= 0
         ui.reasoning_delta("reasoning", "tok2")
-        assert UI_STATE["last_ttft"] == ttft  # one shot
-        assert first_ttft is None or isinstance(first_ttft, (int, float))
+        assert UI_STATE["last_ttft"] == ttft
+        assert first is None or isinstance(first, (int, float))
 
 
 class TestInputBox:
