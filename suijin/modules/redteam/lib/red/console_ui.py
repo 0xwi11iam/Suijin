@@ -23,6 +23,7 @@ Rich only, no emojis. One iteration = ONE box, split by separator lines:
 
 from __future__ import annotations
 
+import collections
 import contextlib
 import json
 import re
@@ -424,6 +425,372 @@ class _Iteration:
         self.ok = True
 
 
+# ── stream playback: splitter + typewriter (ALL machinery silent) ──────
+
+
+class StreamSplitter:
+    """Segregates command spans from prose — under the hood, invisible.
+
+    Command spans render as COMPLETE black syntax boxes (never typewrite,
+    never show raw): brace-balanced {"action"|"tool"...} JSON objects and
+    ``` fenced blocks. Everything between flows through as prose.
+    Fed arbitrary fragment boundaries; stateless across feed() calls."""
+
+    def __init__(self):
+        self._buf = ""
+
+    def feed(self, text: str) -> list:
+        """-> segments: ("text", s) prose or ("box", lang, content) for a
+        COMPLETE command span. Open spans and straddling starts stay held
+        inside — they resolve on later feeds."""
+        self._buf += text
+        segments: list = []
+        buf = self._buf
+        i = 0
+        span_open = False
+        while i < len(buf):
+            fence = buf.find("```", i)
+            jstart = self._json_start(buf, i)
+            if jstart is None and fence == -1:
+                break  # pure prose to the end
+            if jstart is not None and (fence == -1 or jstart < fence):
+                if jstart > i:
+                    segments.append(("text", buf[i:jstart]))
+                end = self._json_end(buf, jstart)
+                if end is None:
+                    i, span_open = jstart, True  # incomplete JSON — hold ALL of it
+                    break
+                segments.append(("box", "json", buf[jstart:end]))
+                i = end
+                continue
+            if fence > i:
+                segments.append(("text", buf[i:fence]))
+            close = buf.find("```", fence + 3)
+            if close == -1:
+                i, span_open = fence, True  # incomplete fence — hold ALL of it
+                break
+            inner = buf[fence + 3 : close]
+            first_nl = inner.find("\n")
+            lang = inner[:first_nl].strip() if first_nl >= 0 else ""
+            inner = inner[first_nl + 1 :] if first_nl >= 0 else inner
+            segments.append(("box", lang or "bash", inner.rstrip("\n")))
+            i = close + 3
+        tail = buf[i:]
+        if span_open:
+            self._buf = tail  # an open span never leaks its head into prose
+            return segments
+        # pure-prose tail: hold any short straddling span-start candidate
+        # (a '{' whose '"key' hasn't arrived, a partial fence)
+        safe = len(tail)
+        cut = max(tail.rfind("{"), tail.rfind("```"))
+        if cut != -1 and len(tail) - cut < 48:
+            safe = cut
+        prose, self._buf = tail[:safe], tail[safe:]
+        if prose:
+            segments.append(("text", prose))
+        return segments
+
+    _JSON_KEYS = ("action", "tool", "auto_actions")
+
+    @classmethod
+    def _json_start(cls, buf: str, i: int):
+        """Index of a command-JSON opening `{` at/after i, else None."""
+        pos = buf.find('{"', i)
+        while pos != -1:
+            rest = buf[pos + 2 : pos + 40]
+            for key in cls._JSON_KEYS:
+                if rest.startswith(key):
+                    nxt = rest[len(key) : len(key) + 1]
+                    if nxt in ('"', '":', "", " "):
+                        return pos
+            pos = buf.find('{"', pos + 1)
+        return None
+
+    @staticmethod
+    def _json_end(buf: str, start: int):
+        """Index PAST the closing brace of the JSON at start (string- and
+        escape-aware); None while incomplete."""
+        depth = 0
+        in_str = False
+        esc = False
+        for k in range(start, len(buf)):
+            c = buf[k]
+            if in_str:
+                if esc:
+                    esc = False
+                elif c == "\\":
+                    esc = True
+                elif c == '"':
+                    in_str = False
+                continue
+            if c == '"':
+                in_str = True
+            elif c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    return k + 1
+        return None
+
+    def drain(self) -> str:
+        """Release whatever is held (an unfinished span at stream end) as
+        raw text — content is never silently lost."""
+        out, self._buf = self._buf, ""
+        return out
+
+
+class TypewriterStream:
+    """Adaptive playback: prose types out at the model's own measured rate.
+
+    60 micro-increment gears span 20 → ~3000 chars/sec (beyond the fastest
+    models shipping today), so playback ALWAYS catches up. A 50Hz ticker
+    moves rate*dt chars from the pending queue into the live line; when
+    the line fills a terminal row it commits to the transcript. Raw
+    markdown never prints: unbalanced markers carry over to the next row
+    and unresolved ones are dropped at flush. Selection + measurement are
+    invisible — only the line, rows, and boxes appear."""
+
+    MIN_RATE = 20.0
+    LADDER = sorted({max(20, min(3000, round(20 * (1.09**i)))) for i in range(60)})  # 60 micro-increments
+    TICK_HZ = 50.0
+    CATCHUP_FACTOR = 1.15  # play slightly faster than arrival — always catch up
+    BACKLOG_ESCAPE = 3  # rows of backlog that allow unbounded gear jumps
+
+    def __init__(self, ui):
+        self._ui = ui
+        self._lock = threading.Lock()
+        self._pending: list[tuple[str, str]] = []  # (kind, text) prose queue
+        self._line = ""
+        self._line_kind = ""  # empty until the first char lands (never default to content)
+        self._arrivals: collections.deque = collections.deque()  # (monotonic, chars)
+        self._rate = self.MIN_RATE
+        self._splitter = StreamSplitter()
+        self._hold = ""
+        self._md_carry = ""
+        self._thread: threading.Thread | None = None
+        self._stop = threading.Event()
+
+    # ── lifecycle ────────────────────────────────────────────────────
+
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, name="red-typewriter", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def _run(self) -> None:
+        dt = 1.0 / self.TICK_HZ
+        while not self._stop.wait(dt):
+            with contextlib.suppress(Exception):
+                self.tick(dt)
+
+    # ── ingestion ────────────────────────────────────────────────────
+
+    def feed(self, kind: str, text: str) -> None:
+        segments = self._splitter.feed(text)
+        with self._lock:
+            self._arrivals.append((time.monotonic(), len(text)))
+            for seg in segments:
+                if seg[0] == "text":
+                    self._pending.append((kind, seg[1]))
+                elif seg[0] == "box":
+                    self._pending.append((f"__box__{seg[1]}", seg[2]))
+
+    # ── playback ─────────────────────────────────────────────────────
+
+    def _measured_cps(self) -> float:
+        now = time.monotonic()
+        with self._lock:
+            arrivals = [(t, n) for (t, n) in self._arrivals if now - t <= 5.0]
+            self._arrivals = collections.deque(arrivals)
+            chars = sum(n for _, n in arrivals)
+            span = max(0.001, now - arrivals[0][0]) if arrivals else 5.0
+        return chars / span
+
+    def _backlog(self) -> int:
+        with self._lock:
+            return sum(len(t) for _, t in self._pending) + len(self._line)
+
+    def _select_rate(self, dt: float) -> float:
+        """Micro-increment gear selection — smooth steps, backlog escape."""
+        target = max(self.MIN_RATE, self._measured_cps() * self.CATCHUP_FACTOR)
+        row = max(20, self._ui.console.width - 4)
+        snap = next((g for g in self.LADDER if g >= target), self.LADDER[-1])
+        if self._backlog() > self.BACKLOG_ESCAPE * row:
+            return snap  # far behind: jump straight to the catching gear
+        # smooth: approach the snapped gear at most +18%/-30% per tick
+        nxt = min(snap, self._rate * 1.18) if snap > self._rate else max(snap, self._rate * 0.70)
+        return max(self.MIN_RATE, nxt)
+
+    def tick(self, dt: float) -> None:
+        """One playback step — public for tests. Moves rate*dt chars from
+        pending into the line; commits filled rows; emits complete boxes."""
+        self._rate = self._select_rate(dt)
+        budget = self._rate * dt
+        row = max(20, self._ui.console.width - 4)
+        while budget > 0:
+            with self._lock:
+                item = self._pending[0] if self._pending else None
+            if item is None:
+                break
+            kind, text = item
+            if kind.startswith("__box__"):
+                with self._lock:
+                    self._pending.pop(0)
+                self._emit_box(kind[len("__box__") :], text)
+                continue  # boxes cost no typewriter budget
+            take = min(len(text), max(1, int(round(budget))), max(1, row - len(self._line)))
+            with self._lock:
+                piece = text[:take]
+                rest = text[take:]
+                if rest:
+                    self._pending[0] = (kind, rest)
+                else:
+                    self._pending.pop(0)
+                self._line += piece
+                if not self._line_kind:
+                    self._line_kind = kind
+                if len(self._line) >= row:
+                    line, kind_now = self._line, self._line_kind
+                    self._line, self._line_kind = "", ""
+                    self._commit_row(line, kind_now)
+                    budget -= take
+                    continue
+            budget -= take
+
+    # ── emission ─────────────────────────────────────────────────────
+
+    def _commit_row(self, line: str, kind: str = "content") -> None:
+        """Markdown-clean commit: balanced markers render, orphans carry
+        over (and unresolved ones die at flush) — raw markdown NEVER shows."""
+        text = self._md_carry + line
+        carry = ""
+        for marker in ("**", "__"):
+            if text.count(marker) % 2 == 1:
+                last = text.rfind(marker)
+                carry = text[last:]
+                text = text[:last]
+                break
+        else:
+            ticks = text.count("`")
+            if ticks % 2 == 1:
+                last = text.rfind("`")
+                carry = text[last:]
+                text = text[:last]
+        self._md_carry = carry
+        style = "dim italic" if kind == "reasoning" else "bold cyan"
+        body = self._render_md(text, style)
+        with contextlib.suppress(Exception):
+            self._ui.console.print(body)
+
+    _MD_TOKEN = re.compile(r"(\*\*.+?\*\*|__.+?__|`.+?`|\*[^*\n]+?\*|\[[^\]]+\]\([^)]+\)|^#{1,4}\s+|\n)")
+
+    @classmethod
+    def _render_md(cls, text: str, base: str) -> Text:
+        """Lightweight markdown tokenizer — renders bold/italic/code/links
+        and keeps the base color; NO raw markers ever reach the screen."""
+        body = Text()
+        pos = 0
+        for m in cls._MD_TOKEN.finditer(text):
+            if m.start() > pos:
+                body.append(Text(text[pos : m.start()], style=base))
+            tok = m.group(0)
+            if tok.startswith(("**", "__")):
+                body.append(Text(tok[2:-2], style=f"{base} bold"))
+            elif tok.startswith("`"):
+                body.append(Text(tok[1:-1], style="black on white"))
+            elif tok.startswith("["):
+                label = tok[1 : tok.index("]")] if "]" in tok else tok
+                body.append(Text(label, style=f"{base} underline"))
+            elif tok.startswith("#"):
+                body.append(Text("", style=base))  # heading marker dropped
+            elif tok == "\n":
+                body.append(Text("\n", style=base))
+            else:
+                body.append(Text(tok[1:-1], style=f"{base} italic"))
+            pos = m.end()
+        if pos < len(text):
+            body.append(Text(text[pos:], style=base))
+        return body
+
+    def _emit_wrapped(self, kind: str, text: str) -> None:
+        """Flush-time emission: one merged block, console wraps it."""
+        base = "dim italic" if kind == "reasoning" else "bold cyan"
+        with contextlib.suppress(Exception):
+            self._ui.console.print(self._render_md(text, base))
+
+    def _emit_box(self, lang: str, content: str) -> None:
+        """A complete command span: black box, white syntax-highlighted."""
+        with contextlib.suppress(Exception):
+            body = Syntax(
+                str(content)[:2000],
+                lang if lang in ("json", "bash", "sh", "python", "javascript") else "bash",
+                theme="terminal",  # white-ish on black
+                word_wrap=True,
+                background_color="default",
+            )
+            self._ui.console.print(
+                Panel(
+                    body,
+                    box=box.SQUARE,
+                    border_style="bright_white",
+                    title=f" {lang} ",
+                    title_align="left",
+                    padding=(0, 1),
+                )
+            )
+
+    # ── drain / render ───────────────────────────────────────────────
+
+    def flush(self) -> None:
+        """stream_done: play everything out instantly — no loss, no litter.
+        Contiguous same-kind text runs print as one wrapped block (the
+        console wraps at width); boxes print complete; an unfinished held
+        span releases as prose — content is never silently dropped."""
+        tail = self._splitter.drain()
+        with self._lock:
+            pending, self._pending = list(self._pending), []
+            line, line_kind = self._line, self._line_kind
+            self._line, self._line_kind = "", ""
+            self._md_carry = ""
+        if tail.strip():
+            pending.append(("content", tail))
+        if line.strip() and not any(not k.startswith("__box__") for k, _ in pending):
+            pending.append(("content", ""))  # ensure a content run exists to carry the live line
+        runs: list[tuple[str, list[str]]] = []
+        for kind, text in pending:
+            if kind.startswith("__box__"):
+                runs.append((kind, [text]))
+            elif runs and runs[-1][0] == kind and not runs[-1][0].startswith("__box__"):
+                runs[-1][1].append(text)
+            else:
+                runs.append((kind, [text]))
+        for kind, chunks in runs:
+            if kind.startswith("__box__"):
+                self._emit_box(kind[len("__box__") :], "".join(chunks))
+            else:
+                merged = (line + "".join(chunks)) if kind == line_kind else "".join(chunks)
+                line = ""
+                if merged.strip():
+                    self._emit_wrapped(kind, merged)
+        if line.strip():  # leftover live line with no same-kind run to carry it
+            self._emit_wrapped(line_kind or "content", line)
+
+    def line_renderable(self):
+        """The live partial line for the strip — with a block cursor."""
+        with self._lock:
+            line, kind = self._line, self._line_kind
+        if not line:
+            return None
+        style = "dim italic" if kind == "reasoning" else "bold cyan"
+        return Text.assemble(Text(line, style=style), ("▌", style))
+
+
 class EngagementUI:
     """One rule-delimited block per iteration; the live region is ONLY the
     one-row strip (spinner while the LLM thinks, stats otherwise)."""
@@ -476,14 +843,12 @@ class EngagementUI:
         self._refresh_thread: threading.Thread | None = None
         self._refresh_stop = threading.Event()
         # streaming reasoning (the flexing box): deltas land here live
-        # streaming: deltas accumulate into a text buffer; FULL-WIDTH rows
-        # print above the strip as they fill — the terminal auto-scrolls
-        # infinitely, the strip (input box) stays pinned, nothing redraws
-        self._stream_parts: list[tuple[str, str]] = []  # (kind, text) history
-        self._stream_flat: str = ""  # joined cache for offset math
-        self._stream_emitted: int = 0  # char offset already printed as rows
-        self._stream_lock = threading.Lock()
-        self._streaming = False
+        # streaming: the TypewriterStream (below the class) owns playback.
+        # Deltas feed the splitter; prose typewrites through the gear
+        # ladder; command spans (JSON actions, fenced blocks) render as
+        # complete black syntax boxes. ALL machinery is silent — the screen
+        # shows only the typewriter line, committed rows, and boxes.
+        self._tw = TypewriterStream(ui=self)
         self._waiting_since: float | None = None  # think-turn start → TTFT proof
         self._last_cost = 0.0
 
@@ -522,6 +887,9 @@ class EngagementUI:
         t.add_row(left, Text(), right)
         t.columns[1].ratio = 1
         rows = []
+        tw = self.typewriter_row()
+        if tw is not None:
+            rows.append(tw)  # the typewriter line (live partial row)
         rows.append(t)
         rows.extend(_fireteam_agent_rows())
         rows.append(self._input_box_row())  # the input box is ALWAYS the bottom row
@@ -579,6 +947,7 @@ class EngagementUI:
 
     def stop(self) -> None:
         self._refresh_stop.set()
+        self._tw.stop()
         if self._live is not None:
             with contextlib.suppress(Exception):
                 self._live.stop()
@@ -592,88 +961,33 @@ class EngagementUI:
         self._tick()
 
     def reasoning_delta(self, kind: str, text: str) -> None:
-        """on_delta sink for the provider stream — infinite auto-scroll.
+        """on_delta sink for the provider stream — feeds the typewriter.
 
-        Deltas accumulate; when enough text arrives to FILL a full terminal
-        row, that row prints above the strip and the terminal scrolls.
-        Colors (operator contract): THINK (reasoning) renders LIGHT (dim
-        italic), SPEAKING (content) renders CYAN. Nothing redraws, nothing
-        is boxed; the strip stays pinned. TTFT records on the first token
-        of any kind. Provider-worker-thread safe; lock-guarded."""
+        Splitter first: command spans ({"action"...} JSON, ``` fences) are
+        held and rendered as complete black syntax boxes; prose flows to
+        the typewriter, which plays it back at the measured token rate
+        (micro-increment gear ladder, fully under the hood). Colors:
+        think = light dim italic, speak = bold cyan. TTFT records on the
+        first token of any kind. Provider-worker-thread safe."""
         if not text:
             return
-        with self._stream_lock:
-            self._stream_parts.append((kind, str(text)))
-            self._stream_flat += str(text)
-        self._streaming = True
         if self._waiting_since is not None:
             # first token of this turn: the TTFT proof (seconds, one shot)
             UI_STATE["last_ttft"] = round(time.monotonic() - self._waiting_since, 2)
             self._waiting_since = None
-        self._emit_stream_rows()
-
-    def _stream_row_width(self) -> int:
-        with contextlib.suppress(Exception):
-            w = int(self.console.width or 80)
-            if w > 30:
-                return w - 4
-        return 76
-
-    def _stream_slice(self, start: int, end: int) -> Text:
-        """Styled Text for the [start, end) char range: light for think
-        (dim italic), cyan for speaking."""
-        body = Text()
-        off = 0
-        with self._stream_lock:
-            parts = list(self._stream_parts)
-        for kind, piece in parts:
-            p_start, p_end = off, off + len(piece)
-            off = p_end
-            if p_end <= start or p_start >= end:
-                continue
-            s = max(0, start - p_start)
-            e = min(len(piece), end - p_start)
-            seg = piece[s:e]
-            body.append(Text(seg, style="dim italic") if kind == "reasoning" else Text(seg, style="cyan"))
-        return body
-
-    def _emit_stream_rows(self) -> None:
-        """Print every COMPLETE full-width row that has accumulated — word
-        boundary preferred. No fragments: a row only prints when full."""
-        while True:
-            with self._stream_lock:
-                flat, emitted = self._stream_flat, self._stream_emitted
-            width = self._stream_row_width()
-            if len(flat) - emitted < width:
-                return  # not enough for a full row — wait for more tokens
-            row_end = emitted + width
-            seg = flat[emitted:row_end]
-            sp = seg.rfind(" ")
-            if sp > width // 2:  # readable break at the last word boundary
-                row_end = emitted + sp + 1
-            line = self._stream_slice(emitted, row_end)
-            if line.plain.strip():
-                with contextlib.suppress(Exception):  # display must never break generation
-                    self.console.print(line)
-            with self._stream_lock:
-                self._stream_emitted = row_end
+        self._tw.feed(kind, str(text))
+        self._tick()
 
     def stream_done(self) -> None:
-        """End the stream: print the final partial row, reset. The complete
-        thought lives in the transcript as full-width rows."""
-        with self._stream_lock:
-            flat, emitted = self._stream_flat, self._stream_emitted
-        tail = self._stream_slice(emitted, len(flat))  # slice BEFORE reset
-        with self._stream_lock:
-            self._stream_parts = []
-            self._stream_flat = ""
-            self._stream_emitted = 0
-        if tail.plain.strip():
-            with contextlib.suppress(Exception):
-                self.console.print(tail)
-        self._streaming = False
+        """End the stream: drain everything (remaining prose commits, any
+        open command box closes), reset for the next turn."""
+        self._tw.flush()
         self._waiting_since = None
         self._tick()
+
+    def typewriter_row(self):
+        """The live partial line for the strip (None when idle)."""
+        return self._tw.line_renderable()
 
     def _tick(self) -> None:
         if self._live is not None:

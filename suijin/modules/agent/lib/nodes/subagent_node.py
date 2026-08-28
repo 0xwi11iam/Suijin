@@ -453,6 +453,23 @@ def deploy_fireteam(
     """
     semaphore = asyncio.Semaphore(max_concurrent)
 
+    # Display isolation: subagent streams never render — only the PRIMARY's
+    # thought typewrites. Pass on_delta=False when the callable accepts it.
+    import inspect as _inspect
+
+    try:
+        _params = _inspect.signature(generate_fn).parameters
+        _sinkable = "on_delta" in _params or any(p.kind == p.VAR_KEYWORD for p in _params.values())
+    except (TypeError, ValueError):
+        _sinkable = False
+
+    if _sinkable:
+        _gen = generate_fn
+
+        async def generate_fn(task_messages, config=None, **kw):  # noqa: F811 — deliberate shadow
+            kw["on_delta"] = False
+            return await _gen(task_messages, config, **kw)
+
     async def _run_one(task: str) -> SubagentResult:
         try:
             async with semaphore:
