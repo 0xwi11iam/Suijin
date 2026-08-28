@@ -567,7 +567,6 @@ class TypewriterStream:
         self._rate = self.MIN_RATE
         self._splitter = StreamSplitter()
         self._hold = ""
-        self._md_carry = ""
         self._last_kind = None  # think/said separator tracking""
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
@@ -684,58 +683,13 @@ class TypewriterStream:
     # ── emission ─────────────────────────────────────────────────────
 
     def _commit_row(self, line: str, kind: str = "content") -> None:
-        """Markdown-clean commit: balanced markers render, orphans carry
-        over (and unresolved ones die at flush) — raw markdown NEVER shows."""
-        text = self._md_carry + line
-        carry = ""
-        for marker in ("**", "__"):
-            if text.count(marker) % 2 == 1:
-                last = text.rfind(marker)
-                carry = text[last:]
-                text = text[:last]
-                break
-        else:
-            ticks = text.count("`")
-            if ticks % 2 == 1:
-                last = text.rfind("`")
-                carry = text[last:]
-                text = text[:last]
-        self._md_carry = carry
+        """Commit one full-width row — PLAIN styled text only (operator
+        contract: the markdown highlighting experiment is scrapped; prose
+        renders as light think / bold cyan speak, nothing parsed)."""
         self._kind_separator(kind)
         style = "dim italic" if kind == "reasoning" else "bold cyan"
-        body = self._render_md(text, style)
         with contextlib.suppress(Exception):
-            self._ui.console.print(body)
-
-    _MD_TOKEN = re.compile(r"(\*\*.+?\*\*|__.+?__|`.+?`|\*[^*\n]+?\*|\[[^\]]+\]\([^)]+\)|^#{1,4}\s+|\n)")
-
-    @classmethod
-    def _render_md(cls, text: str, base: str) -> Text:
-        """Lightweight markdown tokenizer — renders bold/italic/code/links
-        and keeps the base color; NO raw markers ever reach the screen."""
-        body = Text()
-        pos = 0
-        for m in cls._MD_TOKEN.finditer(text):
-            if m.start() > pos:
-                body.append(Text(text[pos : m.start()], style=base))
-            tok = m.group(0)
-            if tok.startswith(("**", "__")):
-                body.append(Text(tok[2:-2], style=f"{base} bold"))
-            elif tok.startswith("`"):
-                body.append(Text(tok[1:-1], style="black on white"))
-            elif tok.startswith("["):
-                label = tok[1 : tok.index("]")] if "]" in tok else tok
-                body.append(Text(label, style=f"{base} underline"))
-            elif tok.startswith("#"):
-                body.append(Text("", style=base))  # heading marker dropped
-            elif tok == "\n":
-                body.append(Text("\n", style=base))
-            else:
-                body.append(Text(tok[1:-1], style=f"{base} italic"))
-            pos = m.end()
-        if pos < len(text):
-            body.append(Text(text[pos:], style=base))
-        return body
+            self._ui.console.print(Text(line, style=style))
 
     def _kind_separator(self, kind: str) -> None:
         """THINK and SAID stay visually separate: a dim labeled rule when
@@ -749,11 +703,12 @@ class TypewriterStream:
         self._last_kind = kind
 
     def _emit_wrapped(self, kind: str, text: str) -> None:
-        """Flush-time emission: one merged block, console wraps it."""
+        """Flush-time emission: one merged block, console wraps it —
+        plain styled text, no highlighting."""
         self._kind_separator(kind)
         base = "dim italic" if kind == "reasoning" else "bold cyan"
         with contextlib.suppress(Exception):
-            self._ui.console.print(self._render_md(text, base))
+            self._ui.console.print(Text(text, style=base))
 
     def _emit_box(self, lang: str, content: str) -> None:
         """A complete command span: black box, white syntax-highlighted."""
@@ -788,7 +743,6 @@ class TypewriterStream:
             pending, self._pending = list(self._pending), []
             line, line_kind = self._line, self._line_kind
             self._line, self._line_kind = "", ""
-            self._md_carry = ""
         if tail.strip():
             pending.append(("content", tail))
         if line.strip() and not any(not k.startswith("__box__") for k, _ in pending):
@@ -874,6 +828,7 @@ class EngagementUI:
         self._last_tok = 0
         self._refresh_thread: threading.Thread | None = None
         self._refresh_stop = threading.Event()
+        self._paused = False  # ESC ESC: the strip shows PAUSED, spinner stops
         # streaming reasoning (the flexing box): deltas land here live
         # streaming: the TypewriterStream (below the class) owns playback.
         # Deltas feed the splitter; prose typewrites through the gear
@@ -892,7 +847,11 @@ class EngagementUI:
         tok = int(USAGE.get("input_tokens", 0)) + int(USAGE.get("output_tokens", 0))
         cost = float(USAGE.get("est_cost_usd", 0.0))
         approx = "" if USAGE.get("priced", True) else "~"
-        if self._waiting:
+        if self._paused:
+            # ESC ESC: PAUSED, no spinner — the engagement is stopped at
+            # the operator's chord; the graph winds down in its own time
+            left = Text("PAUSED", style="bold yellow")
+        elif self._waiting:
             # thinking + dots — the label the operator asked for
             g = Table.grid(padding=(0, 1))
             g.add_row(self._spinner, Text("thinking", style=f"bold {GOLD}"))
@@ -994,6 +953,13 @@ class EngagementUI:
         self._waiting = bool(on)
         if on and self._waiting_since is None:
             self._waiting_since = time.monotonic()  # TTFT clock starts
+        self._tick()
+
+    def paused_visual(self, on: bool) -> None:
+        """ESC ESC instant visual: PAUSED in the strip, spinner stopped,
+        thought stream frozen. Resume restores the live state."""
+        self._paused = bool(on)
+        self._tw.pause_playback() if on else self._tw.resume_playback()
         self._tick()
 
     def reasoning_delta(self, kind: str, text: str) -> None:
