@@ -476,11 +476,10 @@ class EngagementUI:
         self._refresh_thread: threading.Thread | None = None
         self._refresh_stop = threading.Event()
         # streaming reasoning (the flexing box): deltas land here live
-        # streaming: deltas ACCUMULATE here; the flexing white box (in the
-        # bottom bar) shows the live tail with FULL-WIDTH word wrap, and
-        # rows age out into the scrolling transcript above — nothing lost
+        # streaming: deltas ACCUMULATE here silently; the flexing white box
+        # (in the bottom bar) renders the whole live thought, full-width
+        # wrapped, growing taller as it floods in — no per-delta prints
         self._stream_parts: list[tuple[str, str]] = []
-        self._stream_flushed = 0  # char offset already printed to the transcript
         self._stream_lock = threading.Lock()
         self._streaming = False
         self._waiting_since: float | None = None  # think-turn start → TTFT proof
@@ -596,13 +595,12 @@ class EngagementUI:
     def reasoning_delta(self, kind: str, text: str) -> None:
         """on_delta sink for the provider stream.
 
-        Deltas ACCUMULATE (never one-word-per-line prints); the flexing
-        white box in the bottom bar renders the live tail with full-width
-        word wrap — rows FILL before wrapping. Text older than the tail
-        window ages out into the scrolling transcript, so the whole
-        thought survives. Both kinds stream: reasoning dim italic, content
-        plain (glm often emits content-only). TTFT records on the first
-        token of ANY kind. Provider-worker-thread safe; lock-guarded."""
+        Deltas ACCUMULATE silently — ZERO per-delta prints (the aged-sliver
+        prints fragmented mid-word). The white box renders the whole live
+        thought and FLEXES TALLER as content floods in; stream_done prints
+        the entire thought to the transcript once, consolidated. Both kinds
+        stream: reasoning dim italic, content plain. TTFT records on the
+        first token of ANY kind. Provider-worker-thread safe; lock-guarded."""
         if not text:
             return
         with self._stream_lock:
@@ -612,12 +610,7 @@ class EngagementUI:
             # first token of this turn: the TTFT proof (seconds, one shot)
             UI_STATE["last_ttft"] = round(time.monotonic() - self._waiting_since, 2)
             self._waiting_since = None
-        self._age_stream()
         self._tick()
-
-    # tail window: the flexing box keeps roughly this many recent chars;
-    # everything older has already scrolled into the transcript
-    STREAM_TAIL_CHARS = 900
 
     def _stream_body(self, start: int, end: int) -> Text:
         """Styled Text for the [start, end) char range of the stream."""
@@ -640,27 +633,19 @@ class EngagementUI:
         with self._stream_lock:
             return sum(len(p) for _, p in self._stream_parts)
 
-    def _age_stream(self) -> None:
-        """Move text older than the tail window into the transcript (one
-        consolidated print — full-width rows that scroll)."""
-        total = self._stream_total()
-        keep_from = max(0, total - self.STREAM_TAIL_CHARS)
-        if keep_from <= self._stream_flushed:
-            return
-        body = self._stream_body(self._stream_flushed, keep_from)
-        if body:
-            with contextlib.suppress(Exception):  # display must never break generation
-                self.console.print(body)
-        self._stream_flushed = keep_from
+    # the box renders the WHOLE thought and flexes taller as it floods in;
+    # this cap only stops a pathological stream from making each 60fps
+    # re-render quadratic — it is ~50 terminal rows, taller than any screen
+    STREAM_BOX_CHARS = 4000
 
     def _stream_box(self):
         """The flexing white box above the bottom bar: full-width wrapped
-        live tail of the stream. Grows as tokens land; aged rows scroll
-        into the transcript; the strip stays pinned beneath it."""
+        live thought — grows taller as tokens land, the strip stays pinned
+        beneath it, and the terminal shows its bottom (input box visible)."""
         if not self._stream_parts:
             return None
         total = self._stream_total()
-        body = self._stream_body(max(0, total - self.STREAM_TAIL_CHARS), total)
+        body = self._stream_body(max(0, total - self.STREAM_BOX_CHARS), total)
         if not body:
             return None
         return Panel(
@@ -674,17 +659,17 @@ class EngagementUI:
         )
 
     def stream_done(self) -> None:
-        """End the stream: the remaining tail prints to the transcript, the
-        box collapses; the iteration block takes over (said-section as before)."""
+        """End the stream: print the ENTIRE thought to the transcript in
+        ONE consolidated full-width block (nothing ever lost to fragments),
+        then collapse the box for the iteration block."""
         total = self._stream_total()
-        if total > self._stream_flushed:
-            body = self._stream_body(self._stream_flushed, total)
+        if total:
+            body = self._stream_body(0, total)
             if body:
-                with contextlib.suppress(Exception):
+                with contextlib.suppress(Exception):  # display must never break generation
                     self.console.print(body)
         with self._stream_lock:
             self._stream_parts = []
-            self._stream_flushed = 0
         self._streaming = False
         self._waiting_since = None
         self._tick()

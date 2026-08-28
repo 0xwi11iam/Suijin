@@ -1491,7 +1491,7 @@ class TestFlexingReasoningBox:
         sink.print(ui._strip())
         return sink.file.getvalue()
 
-    def test_deltas_accumulate_into_the_box(self):
+    def test_deltas_accumulate_into_the_box_zero_prints(self):
         ui, c = _ui()
         ui.waiting(True)
         ui.reasoning_delta("content", "large ")
@@ -1501,7 +1501,7 @@ class TestFlexingReasoningBox:
         strip = self._strip_text(ui)
         assert "large" in strip and "platform" in strip  # in the BOX, joined
         out_lines = [ln for ln in c.export_text().split("\n") if ln.strip()]
-        assert out_lines == []  # nothing aged out yet — NO one-word prints
+        assert out_lines == []  # ZERO per-delta prints — no fragments, ever
         assert "render fallback" not in strip
 
     def test_rows_fill_full_width_in_the_box(self):
@@ -1525,19 +1525,21 @@ class TestFlexingReasoningBox:
         ui.reasoning_delta("reasoning", "visible reasoning")
         assert "visible reasoning" in self._strip_text(ui)
 
-    def test_aged_rows_scroll_into_transcript(self):
-        """Text older than the tail window prints to the transcript — the
-        whole thought survives, the box keeps the live tail."""
+    def test_long_stream_stays_boxed_no_fragments(self):
+        """A long stream: the box keeps flexing (whole thought), ZERO
+        transcript prints until done — the aged-sliver fragments are dead."""
         ui, c = _ui()
         ui.waiting(True)
         long = "".join(f"thought-{i:03d} " for i in range(200))
         for i in range(0, len(long), 100):
             ui.reasoning_delta("reasoning", long[i : i + 100])
-        out = c.export_text()
-        assert "thought-000" in out  # the aged head scrolled up
+        out = [ln for ln in c.export_text().split("\n") if ln.strip()]
+        assert out == []  # NOTHING printed mid-stream — fragments impossible
         strip = self._strip_text(ui)
-        assert "thought-199" in strip  # the live tail stays in the box
-        assert "render fallback" not in out and "render fallback" not in strip
+        assert "thought-199" in strip  # the live thought in the box
+        ui.stream_done()
+        done = c.export_text()
+        assert "thought-000" in done and "thought-199" in done  # whole thought, one flush
 
     def test_ttft_recorded_on_first_delta_only(self):
         ui, _c = _ui()
@@ -1550,14 +1552,15 @@ class TestFlexingReasoningBox:
         assert UI_STATE["last_ttft"] == ttft  # one shot — not overwritten
         assert first_ttft is None or isinstance(first_ttft, (int, float))
 
-    def test_stream_done_flushes_tail_and_collapses(self):
+    def test_stream_done_flushes_whole_thought_and_collapses(self):
         ui, c = _ui()
         ui.waiting(True)
-        ui.reasoning_delta("reasoning", "final fragment")
+        ui.reasoning_delta("reasoning", "head of the thought ")
+        ui.reasoning_delta("content", "final fragment")
         ttft = UI_STATE["last_ttft"]
         ui.stream_done()
         out = c.export_text()
-        assert "final fragment" in out  # remainder flushed — nothing lost
+        assert "head of the thought" in out and "final fragment" in out  # WHOLE thought
         assert UI_STATE["last_ttft"] == ttft
         assert ui._stream_parts == [] and not ui._streaming
         assert "final fragment" not in self._strip_text(ui)  # box collapsed
@@ -1765,3 +1768,53 @@ class TestPauseQuitSavesState:
         inputs = iter(["focus on the vault"])
         out = sc.pause_console(ctx, lambda label, timeout=600.0: next(inputs))
         assert "vault" in out and not ctx.stop_requested
+
+
+class TestPauseThroughTheBox:
+    """The omnipresent input box feeds the pause console — no legacy
+    prompt; lines route RAW (slash and guidance alike)."""
+
+    def _reader(self):
+        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+
+        class _Box:
+            def dispatch(self, line):
+                raise AssertionError("pause mode must NOT touch the run box")
+
+        reader = RedInputReader.__new__(RedInputReader)
+        reader._run_box = _Box()
+        reader._on_guidance = lambda line: None
+        reader._pause_queue = None
+        reader._mode = "recon"
+        return reader
+
+    def test_begin_pause_routes_raw(self):
+        import queue
+
+        reader = self._reader()
+        q = queue.Queue()
+        reader.begin_pause(q)
+        reader._dispatch("/quit")
+        reader._dispatch("plain guidance line")
+        assert q.get_nowait() == "/quit"  # raw — pause handlers parse it
+        assert q.get_nowait() == "plain guidance line"
+
+    def test_end_pause_restores_live_routing(self):
+        import queue
+
+        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+
+        got = []
+
+        class _Box:
+            def dispatch(self, line):
+                got.append(line)
+
+        reader = RedInputReader.__new__(RedInputReader)
+        reader._run_box = _Box()
+        reader._on_guidance = None
+        reader._pause_queue = queue.Queue()
+        reader._mode = "recon"
+        reader.end_pause()
+        reader._dispatch("/state")
+        assert got == ["/state"]
