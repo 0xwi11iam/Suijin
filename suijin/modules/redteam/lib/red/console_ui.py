@@ -625,7 +625,8 @@ class EngagementUI:
                 body.append(Text(str(piece), style="dim italic"))
             else:
                 body.append(Text(str(piece)))
-        self._print(body)
+        with contextlib.suppress(Exception):  # display must never break generation
+            self.console.print(body)
 
     def stream_done(self) -> None:
         """End the stream: flush the remainder; the iteration block takes
