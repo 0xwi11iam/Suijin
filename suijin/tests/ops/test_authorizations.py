@@ -384,7 +384,9 @@ class TestProviderRecovery:
 
         src = inspect.getsource(rt.run_red_team_async)
         init = src.index("_operator_stopped = False")
-        first_use = min(i for i in (src.index("_render_termination"), src.index("Force quit")) if i > 0)
+        first_use = min(
+            i for i in (src.index("_render_termination"), src.index("engagement ended — full save")) if i > 0
+        )
         assert init < first_use
 
     def test_provider_restart_logic_present(self):
