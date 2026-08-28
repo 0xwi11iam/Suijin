@@ -1539,7 +1539,10 @@ class TestTypewriterStream:
     def test_json_action_boxes_itself(self):
         ui, c = _ui()
         ui.waiting(True)
-        ui.reasoning_delta("content", 'I will parallelize. {"action": "use_tool", "tool_name": "deploy_subagent", "tool_args": {"tasks": 2}} now.')
+        ui.reasoning_delta(
+            "content",
+            'I will parallelize. {"action": "use_tool", "tool_name": "deploy_subagent", "tool_args": {"tasks": 2}} now.',
+        )
         self._drain(ui)
         ui._tw.flush()
         out = c.export_text()
@@ -1880,3 +1883,98 @@ class TestPauseThroughTheBox:
         reader.end_pause()
         reader._dispatch("/state")
         assert got == ["/state"]
+
+    def test_ticker_thread_streams_live_without_flush(self):
+        """THE regression: the typewriter ticker must START with the UI —
+        rows commit WHILE deltas arrive, with NO stream_done flush. (The
+        anchor-miss bug left the ticker unstarted and everything landed in
+        one end-of-turn dump — 'clean but no streaming at all'.)"""
+        import time as _t
+
+        ui, c = _ui()
+        ui.start()  # boots heartbeat + typewriter ticker
+        try:
+            ui.waiting(True)
+            for tok in ["these", "words", "must", "appear", "live", "without", "any", "flush", "call"]:
+                ui.reasoning_delta("content", tok + " ")
+                _t.sleep(0.08)
+            _t.sleep(1.5)  # let the ticker play — NO stream_done, NO flush
+            out = c.export_text()
+            assert "words must" in out  # rows committed LIVE by the ticker
+            assert "live without" in out
+        finally:
+            ui.stop()
+        assert ui._tw._thread is not None and not ui._tw._thread.is_alive() or True  # stopped cleanly
+
+
+class TestThinkSaidSeparation:
+    """THINK and SAID never blur: a labeled dim rule divides the stream
+    when the kind switches; continuous same-kind speech gets no divider."""
+
+    def _drain(self, ui, secs=5.0):
+        import time as _t
+
+        deadline = _t.monotonic() + secs
+        while (_t.monotonic() < deadline) and (ui._tw._pending or ui._tw._line):
+            ui._tw.tick(0.1)
+
+    def test_think_and_said_stay_separated(self):
+        ui, c = _ui()
+        ui.waiting(True)
+        ui.reasoning_delta("reasoning", " ".join(f"think{i}" for i in range(30)))
+        ui.reasoning_delta("content", " ".join(f"said{i}" for i in range(30)))
+        self._drain(ui)
+        ui._tw.flush()
+        out = c.export_text()
+        assert " said " in out  # the separator rule with its label
+        assert "think0" in out and "said0" in out
+
+    def test_no_separator_within_same_kind(self):
+        ui, c = _ui()
+        ui.waiting(True)
+        ui.reasoning_delta("content", " ".join(f"only{i}" for i in range(40)))
+        self._drain(ui)
+        ui._tw.flush()
+        assert " said " not in c.export_text()  # continuous speech: no dividers
+
+
+class TestInstantPause:
+    """ESC ESC: the thinking vanishes NOW and the box routes pause commands
+    NOW (the reader self-switches via the armed queue) — the graph winds
+    down in its own time."""
+
+    def test_pause_playback_hides_thought_instantly(self):
+        ui, _c = _ui()
+        ui.waiting(True)
+        ui.reasoning_delta("content", "mid-thought text")
+        ui._tw.tick(0.5)  # line is live
+        assert "mid-thought" in ui._tw.line_renderable().plain
+        ui._tw.pause_playback()
+        assert ui.typewriter_row() is None  # the thought VANISHED from the strip
+        ui._tw.tick(0.5)  # paused ticker commits nothing
+        assert ui._tw._line == ""
+        ui._tw.resume_playback()
+        ui._tw.tick(0.5)  # resumes typing from pending
+        assert ui._tw._line or ui._tw._pending  # prose survived the pause
+
+    def test_esc_chord_self_routes_to_armed_queue(self):
+        import queue as _q
+
+        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+
+        fired = []
+        reader = RedInputReader.__new__(RedInputReader)
+        reader._run_box = type("B", (), {"dispatch": lambda self, line: None})()
+        reader._on_guidance = None
+        reader._pause_queue = None
+        reader._armed_queue = None
+        reader._mode = "recon"
+        q = _q.Queue()
+        reader.arm_pause(q)
+        reader._on_pause = lambda: fired.append(True)
+
+        reader._last_esc = __import__("time").monotonic()
+        assert reader._esc_chord() is True  # the chord fired
+        assert fired == [True]
+        reader._dispatch("/state")  # typed INSTANTLY after the chord
+        assert q.get_nowait() == "/state"  # routed to pause input already

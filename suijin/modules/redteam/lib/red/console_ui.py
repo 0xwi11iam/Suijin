@@ -568,8 +568,10 @@ class TypewriterStream:
         self._splitter = StreamSplitter()
         self._hold = ""
         self._md_carry = ""
+        self._last_kind = None  # think/said separator tracking""
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
+        self._playback_paused = False  # ESC ESC: hide the thought NOW
 
     # ── lifecycle ────────────────────────────────────────────────────
 
@@ -586,8 +588,21 @@ class TypewriterStream:
     def _run(self) -> None:
         dt = 1.0 / self.TICK_HZ
         while not self._stop.wait(dt):
+            if self._playback_paused:
+                continue  # paused: nothing types, nothing commits
             with contextlib.suppress(Exception):
                 self.tick(dt)
+
+    def pause_playback(self) -> None:
+        """INSTANT pause: the visible thought line vanishes now (pending
+        prose is kept); the ticker stops committing until resume."""
+        self._playback_paused = True
+        with self._lock:
+            self._line, self._line_kind = "", ""
+        self._ui._tick()
+
+    def resume_playback(self) -> None:
+        self._playback_paused = False
 
     # ── ingestion ────────────────────────────────────────────────────
 
@@ -629,7 +644,10 @@ class TypewriterStream:
 
     def tick(self, dt: float) -> None:
         """One playback step — public for tests. Moves rate*dt chars from
-        pending into the line; commits filled rows; emits complete boxes."""
+        pending into the line; commits filled rows; emits complete boxes.
+        A paused playback commits NOTHING (ESC ESC froze the stream)."""
+        if self._playback_paused:
+            return
         self._rate = self._select_rate(dt)
         budget = self._rate * dt
         row = max(20, self._ui.console.width - 4)
@@ -683,6 +701,7 @@ class TypewriterStream:
                 carry = text[last:]
                 text = text[:last]
         self._md_carry = carry
+        self._kind_separator(kind)
         style = "dim italic" if kind == "reasoning" else "bold cyan"
         body = self._render_md(text, style)
         with contextlib.suppress(Exception):
@@ -718,8 +737,20 @@ class TypewriterStream:
             body.append(Text(text[pos:], style=base))
         return body
 
+    def _kind_separator(self, kind: str) -> None:
+        """THINK and SAID stay visually separate: a dim labeled rule when
+        the stream switches between them (think -> said, said -> think)."""
+        if kind.startswith("__box__"):
+            return
+        if self._last_kind and kind != self._last_kind:
+            label = " said " if kind == "content" else " think "
+            with contextlib.suppress(Exception):
+                self._ui.console.print(Rule(title=label, style="dim", align="left"))
+        self._last_kind = kind
+
     def _emit_wrapped(self, kind: str, text: str) -> None:
         """Flush-time emission: one merged block, console wraps it."""
+        self._kind_separator(kind)
         base = "dim italic" if kind == "reasoning" else "bold cyan"
         with contextlib.suppress(Exception):
             self._ui.console.print(self._render_md(text, base))
@@ -780,6 +811,7 @@ class TypewriterStream:
                     self._emit_wrapped(kind, merged)
         if line.strip():  # leftover live line with no same-kind run to carry it
             self._emit_wrapped(line_kind or "content", line)
+        self._last_kind = None  # next turn starts clean
 
     def line_renderable(self):
         """The live partial line for the strip — with a block cursor."""
@@ -940,6 +972,10 @@ class EngagementUI:
             self._refresh_stop.clear()
             self._refresh_thread = threading.Thread(target=self._heartbeat, name="red-strip", daemon=True)
             self._refresh_thread.start()
+            # the typewriter ticker: playback thread at 50Hz — WITHOUT this
+            # nothing streams live (rows only land at stream_done's flush,
+            # which reads as 'clean but no streaming at all')
+            self._tw.start()
 
     def _heartbeat(self) -> None:
         while not self._refresh_stop.wait(1.0):

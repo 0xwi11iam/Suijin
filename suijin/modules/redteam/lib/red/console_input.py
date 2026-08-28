@@ -42,6 +42,7 @@ class RedInputReader:
         self._on_pause = on_pause  # double-ESC: pause the agent INSTANTLY
         self._on_guidance = on_guidance  # plain line -> injected into the graph NOW
         self._pause_queue = None  # set while the pause console owns input: lines go HERE raw
+        self._armed_queue = None  # pre-registered by the engagement: ESC ESC activates it NOW
         self._modes = tuple(modes)
         self._mode = self._modes[0]
         self._stop = threading.Event()
@@ -157,6 +158,9 @@ class RedInputReader:
                 # a LONE second ESC within 0.6s is the pause chord
                 if self._sequence(fd):
                     continue  # swallowed, never lands in the buffer
+                # pause FIRED: routing switches inside _esc_chord NOW (the
+                # main thread joins when the current turn unwinds — the box
+                # is already responsive to pause commands)
                 self._esc_chord()
                 continue
             buf, action = self.apply_key(buf, b)
@@ -174,17 +178,23 @@ class RedInputReader:
                 continue
             self._ui.set_input(buf)
 
-    def _esc_chord(self) -> None:
+    def _esc_chord(self) -> bool:
         """A lone ESC arrived: within 0.6s of the previous one, PAUSE the
-        agent (the Ctrl+C replacement). Single ESCs just register."""
+        agent (the Ctrl+C replacement). Single ESCs just register.
+        Returns True when the pause fired."""
         now = time.monotonic()
         if now - self._last_esc <= 0.6:
             self._last_esc = 0.0
             if self._on_pause:
                 with contextlib.suppress(Exception):
                     self._on_pause()
-        else:
-            self._last_esc = now
+            # routing switches HERE: the armed queue takes over instantly —
+            # typed commands reach the pause console before the graph lands
+            if getattr(self, "_armed_queue", None) is not None:
+                self._pause_queue = self._armed_queue
+            return True
+        self._last_esc = now
+        return False
 
     @staticmethod
     def _sequence(fd: int) -> bool:
@@ -217,14 +227,21 @@ class RedInputReader:
 
     # ── pause mode: the omnipresent box feeds the pause console ──────
 
-    def begin_pause(self, queue) -> None:
+    def arm_pause(self, queue) -> None:
+        """Pre-register the pause queue. The INSTANT ESC ESC fires, the
+        reader routes lines there itself — no waiting for the main thread
+        to land (the graph may take seconds to unwind; the box must not)."""
+        self._armed_queue = queue
+
+    def begin_pause(self, queue=None) -> None:
         """The engagement paused: every entered line routes RAW into the
         queue (the pause console consumes it) — the box never yields to a
         legacy prompt; it stays the one and only inputter."""
-        self._pause_queue = queue
+        self._pause_queue = queue if queue is not None else self._armed_queue
 
     def end_pause(self) -> None:
         self._pause_queue = None
+        # the armed queue STAYS armed: the next ESC ESC re-routes instantly
 
     def _dispatch(self, line: str) -> None:
         if getattr(self, "_pause_queue", None) is not None:
