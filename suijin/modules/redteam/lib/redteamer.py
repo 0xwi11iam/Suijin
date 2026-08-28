@@ -659,7 +659,8 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                 guidance = sc.pause_console(_pause_ctx, lambda label, timeout=600.0: _operator_input(label, timeout))
                 objective = _pause_ctx.objective  # /objective may have changed course
             except (KeyboardInterrupt, EOFError):
-                console.print("\n[bold red]  Force quit.[/bold red]")
+                console.print("\n[bold red]  Force quit — saving state...[/bold red]")
+                final_state = agent.get_state(thread_id) or {}  # force-quit still saves a full .sje
                 _operator_stopped = True
                 ui.stop()
                 run_box.stop()
@@ -669,6 +670,17 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
             finally:
                 # Re-arm the interrupt mechanism (instant-raise form)
                 _signal.signal(_signal.SIGINT, _sigint)
+
+            if getattr(_pause_ctx, "stop_requested", False):
+                # /quit — save everything (session + restorable .sje) and exit
+                final_state = agent.get_state(thread_id) or {}
+                _operator_stopped = True  # the banner must not fake a completion
+                console.print("[dim]  engagement ended — full save follows[/dim]")
+                ui.stop()
+                run_box.stop()
+                if _input_reader is not None:
+                    _input_reader.stop()
+                break
 
             # Inject guidance into graph state
             try:

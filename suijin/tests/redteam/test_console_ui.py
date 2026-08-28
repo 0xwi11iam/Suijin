@@ -599,7 +599,7 @@ class TestPauseConsole:
 
         ctx, _ = self._ctx()
         h = build_pause_handlers(ctx)
-        assert len(h) == 15
+        assert len(h) == 16
         assert set(h) == {
             "/report",
             "/audit",
@@ -616,6 +616,7 @@ class TestPauseConsole:
             "/jobs",
             "/kill",
             "/cost",
+            "/quit",
         }
 
     def test_plain_line_is_guidance(self):
@@ -1475,9 +1476,9 @@ class TestFireteamStripRows:
 
 
 class TestFlexingReasoningBox:
-    """The opencode-style stream: reasoning deltas grow a live panel in the
-    bottom bar (hidden until /think), content deltas ignored, first token
-    proves TTFT, the box collapses when the iteration block takes over."""
+    """Unbounded transcript streaming: deltas print ABOVE the strip as
+    scrolling rows — the WHOLE thought shows (screen scrolls), strip +
+    input box stay pinned. Both kinds stream; TTFT proves the first token."""
 
     def _strip_text(self, ui, width=110):
         import io
@@ -1488,42 +1489,43 @@ class TestFlexingReasoningBox:
         sink.print(ui._strip())
         return sink.file.getvalue()
 
-    def test_reasoning_deltas_flex_the_panel(self):
-        ui, _c = _ui()
-        ui.waiting(True)  # the think turn starts (TTFT clock)
+    def test_reasoning_streams_to_transcript(self):
+        ui, c = _ui()
+        ui.waiting(True)
         ui.reasoning_delta("reasoning", "checking the target ")
         ui.reasoning_delta("reasoning", "for injectable params")
-        strip = self._strip_text(ui)
-        assert "thinking" in strip  # the panel is live in the bottom bar
-        assert "injectable params" in strip  # and it GROWS with the stream
+        out = c.export_text()  # the TRANSCRIPT above the strip
+        assert "checking the target" in out and "injectable params" in out
+        assert "injectable params" not in self._strip_text(ui)  # NOT in a box
 
-    def test_box_streams_without_think_toggle(self):
-        """The live box shows WHILE STREAMING always — /think governs only
-        the transcript's said-section. (The old gate hid the stream and the
-        operator saw 15s of spinner then everything at once.)"""
-        ui, _c = _ui()
-        UI_STATE["show_reasoning"] = False  # default: hidden transcript view
+    def test_streams_without_think_toggle(self):
+        """The stream prints live regardless of /think (that toggle governs
+        only the transcript's permanent said-section)."""
+        ui, c = _ui()
+        UI_STATE["show_reasoning"] = False
         ui.waiting(True)
         ui.reasoning_delta("reasoning", "visible reasoning")
-        assert "visible reasoning" in self._strip_text(ui)
+        assert "visible reasoning" in c.export_text()
 
-    def test_content_deltas_flex_the_box_too(self):
+    def test_content_streams_too(self):
         """glm often streams content with NO reasoning_content — the sink
-        must flex the box on content or streaming is invisible."""
-        ui, _c = _ui()
+        must print content or streaming is invisible."""
+        ui, c = _ui()
         ui.waiting(True)
         ui.reasoning_delta("content", '{"action": "use_tool", ')
         ui.reasoning_delta("content", '"tool_name": "http_request"}')
-        strip = self._strip_text(ui)
-        assert "use_tool" in strip and "http_request" in strip  # live typing visible
+        out = c.export_text()
+        assert "use_tool" in out and "http_request" in out
 
-    def test_reasoning_and_content_render_together(self):
-        ui, _c = _ui()
+    def test_no_cap_long_thoughts(self):
+        """The whole thought shows — a long stream never truncates."""
+        ui, c = _ui()
         ui.waiting(True)
-        ui.reasoning_delta("reasoning", "thinking hard ")
-        ui.reasoning_delta("content", "the decision")
-        strip = self._strip_text(ui)
-        assert "thinking hard" in strip and "the decision" in strip
+        long = "".join(f"thought-{i:03d} " for i in range(200))  # far past any old cap
+        for i in range(0, len(long), 100):
+            ui.reasoning_delta("reasoning", long[i : i + 100])
+        out = c.export_text()
+        assert "thought-000" in out and "thought-199" in out  # head AND tail
 
     def test_ttft_recorded_on_first_delta_only(self):
         ui, _c = _ui()
@@ -1536,16 +1538,16 @@ class TestFlexingReasoningBox:
         assert UI_STATE["last_ttft"] == ttft  # one shot — not overwritten
         assert first_ttft is None or isinstance(first_ttft, (int, float))
 
-    def test_stream_done_collapses_and_keeps_ttft(self):
-        ui, _c = _ui()
-        UI_STATE["show_reasoning"] = True
+    def test_stream_done_flushes_remainder_and_keeps_ttft(self):
+        ui, c = _ui()
         ui.waiting(True)
-        ui.reasoning_delta("reasoning", "some reasoning that will vanish from the bar")
-        assert "vanish from the bar" in self._strip_text(ui)
+        ui.reasoning_delta("reasoning", "final fragment")
         ttft = UI_STATE["last_ttft"]
         ui.stream_done()
-        assert "vanish from the bar" not in self._strip_text(ui)  # collapsed
-        assert UI_STATE["last_ttft"] == ttft  # the proof survives for reports
+        out = c.export_text()
+        assert "final fragment" in out  # remainder flushed — nothing lost
+        assert UI_STATE["last_ttft"] == ttft
+        assert ui._stream_pending == [] and not ui._streaming
 
 
 class TestInputBox:
@@ -1664,7 +1666,7 @@ class TestInputBox:
         reader._esc_chord()
         assert fired == [True]
 
-    def test_box_is_last_row_even_with_fireteam_and_panel(self, monkeypatch):
+    def test_box_is_last_row_even_with_fireteam_and_stream(self, monkeypatch):
         import suijin.modules.redteam.lib.red.console_ui as m
 
         monkeypatch.setattr(
@@ -1672,15 +1674,14 @@ class TestInputBox:
             "_fireteam_snapshot",
             lambda: [{"team_id": "t1", "running": 1, "tasks": [{"task": "probe the thing", "state": "running"}]}],
         )
-        ui, _c = _ui()
-        UI_STATE["show_reasoning"] = True
+        ui, c = _ui()
         ui.waiting(True)
-        ui.reasoning_delta("reasoning", "streaming live")
+        ui.reasoning_delta("reasoning", "streaming live")  # prints ABOVE the strip
         ui.set_input("hello")
-        # everything renders together: panel + fireteam + the input box with typing
+        # the strip carries fireteam + input box (streamed text lives in the transcript)
         assert "hello" in self._strip_text(ui)
         assert "probe the thing" in self._strip_text(ui)
-        assert "streaming live" in self._strip_text(ui)
+        assert "streaming live" in c.export_text()
 
 
 class TestLiveGuidanceInjection:
@@ -1721,3 +1722,33 @@ class TestLiveGuidanceInjection:
         reader._on_guidance = lambda line: got.append(("graph", line))
         reader._dispatch("my answer")
         assert got == ["my answer"]  # the pending ask consumes it raw
+
+
+class TestPauseQuitSavesState:
+    """/quit in the pause console ends the engagement with a full save."""
+
+    def test_quit_handler_sets_stop_flag(self):
+        from suijin.modules.redteam.lib.red import session_control as sc
+
+        ctx = sc.PauseContext(console=type("C", (), {"print": lambda self, *a, **k: None})())
+        handlers = sc.build_pause_handlers(ctx)
+        assert "/quit" in handlers
+        handlers["/quit"]("")
+        assert ctx.stop_requested is True
+
+    def test_pause_console_returns_on_quit(self):
+        from suijin.modules.redteam.lib.red import session_control as sc
+
+        ctx = sc.PauseContext(console=type("C", (), {"print": lambda self, *a, **k: None})())
+        inputs = iter(["/quit"])
+        out = sc.pause_console(ctx, lambda label, timeout=600.0: next(inputs))
+        assert out == ""
+        assert ctx.stop_requested is True
+
+    def test_pause_console_guidance_still_works(self):
+        from suijin.modules.redteam.lib.red import session_control as sc
+
+        ctx = sc.PauseContext(console=type("C", (), {"print": lambda self, *a, **k: None})())
+        inputs = iter(["focus on the vault"])
+        out = sc.pause_console(ctx, lambda label, timeout=600.0: next(inputs))
+        assert "vault" in out and not ctx.stop_requested
