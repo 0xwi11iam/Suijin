@@ -279,6 +279,7 @@ class PauseContext:
         self.loot = loot or {"flags": [], "creds": []}
         self.force_report_fn = force_report_fn
         self.guidance_extra: list[str] = []  # /focus /skip /finish accumulate here
+        self.stop_requested = False  # /quit: end the engagement (full save + exit)
 
 
 def build_pause_handlers(ctx: PauseContext) -> dict:
@@ -398,6 +399,12 @@ def build_pause_handlers(ctx: PauseContext) -> dict:
             f"| ${float(u.get('est_cost_usd', 0)):.4f}{ttft_s}"
         )
 
+    def _quit(_args):
+        """End the engagement now — the loop saves the session AND a full
+        .sje bundle (restorable state) before exiting."""
+        ctx.stop_requested = True
+        ctx.console.print("[dim]  quitting — saving session + .sje bundle...[/dim]")
+
     return {
         "/report": _report,
         "/audit": _audit,
@@ -414,19 +421,22 @@ def build_pause_handlers(ctx: PauseContext) -> dict:
         "/jobs": _jobs,
         "/kill": _kill,
         "/cost": _cost,
+        "/quit": _quit,
     }
 
 
 PAUSE_BANNER = (
     "\n[bold yellow]  Paused[/bold yellow] [dim]— /objective /phase /focus /skip /finish /loot /jobs "
-    "/kill /cost /report /audit /state /sessions /template /health — or type guidance (Ctrl+C to quit)[/dim]"
+    "/kill /cost /report /audit /state /sessions /template /health /quit — or type guidance "
+    "(/quit ends the run and saves a resumable .sje)[/dim]"
 )
 
 
 def pause_console(ctx: PauseContext, input_fn) -> str:
     """Run the pause loop: slash commands dispatch (stay in the loop),
     the first non-slash line is the guidance. Returns the guidance string
-    (queued /focus /skip /finish instructions merged in)."""
+    (queued /focus /skip /finish instructions merged in). /quit sets
+    ctx.stop_requested — the engagement loop saves + exits."""
     handlers = build_pause_handlers(ctx)
     ctx.console.print(PAUSE_BANNER)
     while True:
@@ -437,6 +447,8 @@ def pause_console(ctx: PauseContext, input_fn) -> str:
             guidance = line
             break
         handler(cmd_args.strip())
+        if ctx.stop_requested:
+            return ""  # /quit — the loop handles the full-save exit
     extras = [g for g in ctx.guidance_extra if g]
     if extras:
         guidance = " ".join(extras + ([guidance] if guidance else []))

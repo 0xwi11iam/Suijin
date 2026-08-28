@@ -476,7 +476,11 @@ class EngagementUI:
         self._refresh_thread: threading.Thread | None = None
         self._refresh_stop = threading.Event()
         # streaming reasoning (the flexing box): deltas land here live
-        self._stream_buf: list[str] = []
+        # streaming (unbounded transcript streaming): deltas land here,
+        # the heartbeat flushes them ABOVE the strip as scrolling rows —
+        # the whole thought is shown, never capped to a little box
+        self._stream_pending: list[tuple[str, str]] = []
+        self._stream_lock = threading.Lock()
         self._streaming = False
         self._waiting_since: float | None = None  # think-turn start → TTFT proof
         self._last_cost = 0.0
@@ -516,9 +520,6 @@ class EngagementUI:
         t.add_row(left, Text(), right)
         t.columns[1].ratio = 1
         rows = []
-        panel = self._stream_panel()
-        if panel is not None:
-            rows.append(panel)  # the flexing box sits directly above the stats
         rows.append(t)
         rows.extend(_fireteam_agent_rows())
         rows.append(self._input_box_row())  # the input box is ALWAYS the bottom row
@@ -559,7 +560,9 @@ class EngagementUI:
 
     def start(self) -> None:
         if self._live is None:
-            self._live = Live(self._strip(), console=self.console, refresh_per_second=60)
+            # transient: on stop (pause/end) the strip VANISHES cleanly —
+            # no stale bottom artifact painted under the pause prompts
+            self._live = Live(self._strip(), console=self.console, refresh_per_second=60, transient=True)
             self._live.start()
             # the heartbeat: rebuild the strip once a second so counters,
             # cost, and the fireteam agent rows stay live (and teams
@@ -587,63 +590,51 @@ class EngagementUI:
         self._tick()
 
     def reasoning_delta(self, kind: str, text: str) -> None:
-        """on_delta sink for the provider stream — the flexing box.
-
-        Called from the provider worker thread; guarded. BOTH kinds stream
-        into the box: reasoning (dim italic) AND content (plain) — glm often
-        emits content-only, and a sink that discards it made streaming
-        invisible (15s spinner, then everything at once). The live box shows
-        WHILE STREAMING regardless of /think (that toggle governs the
-        transcript's said-section, not the live view). TTFT records on the
-        first token of ANY kind. Fireteam subagent deltas may interleave —
-        cosmetic, tail-capped."""
+        """on_delta sink for the provider stream — UNBOUNDED transcript
+        streaming: deltas land in the pending buffer and the heartbeat
+        flushes them ABOVE the strip as scrolling rows. The WHOLE thought
+        is shown — never capped to a little box; new rows appear and the
+        screen scrolls, the strip (+ input box) stays pinned at the bottom.
+        Both kinds stream: reasoning renders dim italic, content plain
+        (glm often emits content-only). TTFT records on the first token of
+        ANY kind. Called from the provider worker thread; lock-guarded."""
         if not text:
             return
-        self._stream_buf.append((kind, text))
-        if len(self._stream_buf) > 500:
-            self._stream_buf = self._stream_buf[-500:]
+        with self._stream_lock:
+            self._stream_pending.append((kind, text))
+            if len(self._stream_pending) > 5000:  # memory guard only — display never truncates
+                self._stream_pending = self._stream_pending[-5000:]
         self._streaming = True
         if self._waiting_since is not None:
             # first token of this turn: the TTFT proof (seconds, one shot)
             UI_STATE["last_ttft"] = round(time.monotonic() - self._waiting_since, 2)
             self._waiting_since = None
+        self._flush_stream()
         self._tick()
 
+    def _flush_stream(self) -> None:
+        """Print accumulated stream text ABOVE the strip — scrolling rows,
+        nothing capped. Called on every delta and at stream_done."""
+        with self._stream_lock:
+            pending, self._stream_pending = self._stream_pending, []
+        if not pending:
+            return
+        body = Text()
+        for kind, piece in pending:
+            if kind == "reasoning":
+                body.append(Text(str(piece), style="dim italic"))
+            else:
+                body.append(Text(str(piece)))
+        self._print(body)
+
     def stream_done(self) -> None:
-        """Collapse the flexing box — the iteration block takes over the
-        transcript (the `said` section renders as before)."""
-        if self._stream_buf or self._streaming:
-            self._stream_buf = []
+        """End the stream: flush the remainder; the iteration block takes
+        over the transcript (the `said` section renders as before)."""
+        if self._stream_pending or self._streaming:
             self._streaming = False
             self._waiting_since = None
+            self._flush_stream()
             self._tick()
-
-    def _stream_panel(self):
-        """The opencode-style flexing box: grows as tokens stream (reasoning
-        AND content), tail-scrolls at the cap. VISIBLE while streaming —
-        the operator watches the model think; /think only governs the
-        transcript's permanent said-section."""
-        if not self._streaming:
-            return None
-        parts = []
-        for kind, piece in self._stream_buf[-40:]:
-            if kind == "reasoning":
-                parts.append(Text(str(piece), style="dim italic"))
-            else:
-                parts.append(Text(str(piece)))
-        body = Text()
-        for p in parts:
-            body.append(p)
-        if not body:
-            body = Text("…", style="dim")
-        return Panel(
-            body[-2000:],
-            box=box.SQUARE,
-            border_style=f"dim {GOLD}",
-            title=" thinking ",
-            title_align="left",
-            padding=(0, 1),
-        )
 
     def _tick(self) -> None:
         if self._live is not None:
