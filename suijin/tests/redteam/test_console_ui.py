@@ -1496,6 +1496,7 @@ class TestFlexingReasoningBox:
         ui.reasoning_delta("reasoning", "for injectable params")
         out = c.export_text()  # the TRANSCRIPT above the strip
         assert "checking the target" in out and "injectable params" in out
+        assert "render fallback" not in out  # the real path — never the crash guard
         assert "injectable params" not in self._strip_text(ui)  # NOT in a box
 
     def test_streams_without_think_toggle(self):
@@ -1516,6 +1517,7 @@ class TestFlexingReasoningBox:
         ui.reasoning_delta("content", '"tool_name": "http_request"}')
         out = c.export_text()
         assert "use_tool" in out and "http_request" in out
+        assert "render fallback" not in out  # live regression: the crash guard must stay silent
 
     def test_no_cap_long_thoughts(self):
         """The whole thought shows — a long stream never truncates."""
@@ -1526,6 +1528,7 @@ class TestFlexingReasoningBox:
             ui.reasoning_delta("reasoning", long[i : i + 100])
         out = c.export_text()
         assert "thought-000" in out and "thought-199" in out  # head AND tail
+        assert "render fallback" not in out
 
     def test_ttft_recorded_on_first_delta_only(self):
         ui, _c = _ui()
