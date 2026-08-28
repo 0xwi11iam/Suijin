@@ -479,7 +479,8 @@ class EngagementUI:
         # streaming: deltas accumulate into a text buffer; FULL-WIDTH rows
         # print above the strip as they fill — the terminal auto-scrolls
         # infinitely, the strip (input box) stays pinned, nothing redraws
-        self._stream_text: str = ""
+        self._stream_parts: list[tuple[str, str]] = []  # (kind, text) history
+        self._stream_flat: str = ""  # joined cache for offset math
         self._stream_emitted: int = 0  # char offset already printed as rows
         self._stream_lock = threading.Lock()
         self._streaming = False
@@ -593,17 +594,17 @@ class EngagementUI:
     def reasoning_delta(self, kind: str, text: str) -> None:
         """on_delta sink for the provider stream — infinite auto-scroll.
 
-        Deltas accumulate; when enough text has arrived to FILL a full
-        terminal row, that row prints above the strip (bright blue) and the
-        terminal scrolls. Nothing is redrawn, nothing is boxed — the
-        smoothest possible stream: rows fill, the screen scrolls forever,
-        the strip (input box) stays pinned at the bottom. Both kinds count
-        ('what the AI says'); TTFT records on the first token of any kind.
-        Provider-worker-thread safe; lock-guarded."""
+        Deltas accumulate; when enough text arrives to FILL a full terminal
+        row, that row prints above the strip and the terminal scrolls.
+        Colors (operator contract): THINK (reasoning) renders LIGHT (dim
+        italic), SPEAKING (content) renders CYAN. Nothing redraws, nothing
+        is boxed; the strip stays pinned. TTFT records on the first token
+        of any kind. Provider-worker-thread safe; lock-guarded."""
         if not text:
             return
         with self._stream_lock:
-            self._stream_text += str(text)
+            self._stream_parts.append((kind, str(text)))
+            self._stream_flat += str(text)
         self._streaming = True
         if self._waiting_since is not None:
             # first token of this turn: the TTFT proof (seconds, one shot)
@@ -618,38 +619,58 @@ class EngagementUI:
                 return w - 4
         return 76
 
+    def _stream_slice(self, start: int, end: int) -> Text:
+        """Styled Text for the [start, end) char range: light for think
+        (dim italic), cyan for speaking."""
+        body = Text()
+        off = 0
+        with self._stream_lock:
+            parts = list(self._stream_parts)
+        for kind, piece in parts:
+            p_start, p_end = off, off + len(piece)
+            off = p_end
+            if p_end <= start or p_start >= end:
+                continue
+            s = max(0, start - p_start)
+            e = min(len(piece), end - p_start)
+            seg = piece[s:e]
+            body.append(Text(seg, style="dim italic") if kind == "reasoning" else Text(seg, style="cyan"))
+        return body
+
     def _emit_stream_rows(self) -> None:
         """Print every COMPLETE full-width row that has accumulated — word
-        boundary preferred, exact fill when words run long. No fragments:
-        a row only prints when it can fill."""
+        boundary preferred. No fragments: a row only prints when full."""
         while True:
             with self._stream_lock:
-                text, emitted = self._stream_text, self._stream_emitted
+                flat, emitted = self._stream_flat, self._stream_emitted
             width = self._stream_row_width()
-            if len(text) - emitted < width:
+            if len(flat) - emitted < width:
                 return  # not enough for a full row — wait for more tokens
             row_end = emitted + width
-            seg = text[emitted:row_end]
+            seg = flat[emitted:row_end]
             sp = seg.rfind(" ")
             if sp > width // 2:  # readable break at the last word boundary
                 row_end = emitted + sp + 1
-            line = text[emitted:row_end].rstrip()
-            with contextlib.suppress(Exception):  # display must never break generation
-                self.console.print(Text(line, style="bright_blue"))
+            line = self._stream_slice(emitted, row_end)
+            if line.plain.strip():
+                with contextlib.suppress(Exception):  # display must never break generation
+                    self.console.print(line)
             with self._stream_lock:
                 self._stream_emitted = row_end
 
     def stream_done(self) -> None:
         """End the stream: print the final partial row, reset. The complete
-        thought lives in the transcript as full-width bright-blue rows."""
+        thought lives in the transcript as full-width rows."""
         with self._stream_lock:
-            text, emitted = self._stream_text, self._stream_emitted
-            self._stream_text = ""
+            flat, emitted = self._stream_flat, self._stream_emitted
+        tail = self._stream_slice(emitted, len(flat))  # slice BEFORE reset
+        with self._stream_lock:
+            self._stream_parts = []
+            self._stream_flat = ""
             self._stream_emitted = 0
-        tail = text[emitted:].strip()
-        if tail:
+        if tail.plain.strip():
             with contextlib.suppress(Exception):
-                self.console.print(Text(tail, style="bright_blue"))
+                self.console.print(tail)
         self._streaming = False
         self._waiting_since = None
         self._tick()
