@@ -225,8 +225,11 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
     # the box — cosmetic, tail-capped).
     _stream_ui = {"sink": None}
 
-    def _generate_with_stream(messages, config=None, **kw):
-        return generate_async(messages, config, on_delta=_stream_ui["sink"])
+    def _generate_with_stream(messages, config=None, on_delta=None, **kw):
+        # on_delta=False from subagents SUPPRESSES display streaming (only
+        # the primary's thought renders — fireteam deltas never interleave)
+        sink = _stream_ui["sink"] if on_delta is None else (None if on_delta is False else on_delta)
+        return generate_async(messages, config, on_delta=sink, **kw)
 
     agent = _agent_graph_cls()(
         generate_fn=_generate_with_stream,

@@ -246,3 +246,49 @@ class TestStatusAndDrainHonesty:
 
         msgs = asyncio.run(go())
         assert msgs and "TIMEOUT" in msgs[0]
+
+
+class TestSubagentStreamIsolation:
+    """Only the PRIMARY's stream renders — fireteam specialists suppress
+    display streaming (on_delta=False) when the callable accepts it."""
+
+    def test_deploy_passes_on_delta_false(self):
+        seen = {}
+
+        async def gen(messages, config=None, **kw):
+            seen.update(kw)
+            return json.dumps({"action": "complete", "completion_reason": "done", "thought": "t"})
+
+        async def go():
+            dep = sn.deploy_fireteam(
+                ["Probe http://t/x reachability and confirm status code"],
+                generate_fn=gen,
+                route_tool_fn=lambda name, args, cfg: "ok",
+            )
+            assert dep["team_id"]
+            await asyncio.sleep(0.3)
+            sn.collect_finished_teams()
+
+        asyncio.run(go())
+        assert seen.get("on_delta") is False  # the display sink was suppressed
+
+    def test_naive_generate_fn_untouched(self):
+        """A minimal (messages, config) callable — no on_delta kwarg injected."""
+        seen = {}
+
+        async def gen(messages, config=None):
+            seen["called"] = True
+            return json.dumps({"action": "complete", "completion_reason": "done", "thought": "t"})
+
+        async def go():
+            dep = sn.deploy_fireteam(
+                ["Probe http://t/y reachability and confirm status code"],
+                generate_fn=gen,
+                route_tool_fn=lambda name, args, cfg: "ok",
+            )
+            assert dep["team_id"]
+            await asyncio.sleep(0.3)
+            sn.collect_finished_teams()
+
+        asyncio.run(go())
+        assert seen.get("called") is True
