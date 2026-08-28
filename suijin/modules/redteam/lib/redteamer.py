@@ -632,13 +632,25 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
 
         except (KeyboardInterrupt, asyncio.CancelledError):
             _signal._suijin_interrupted = False
-            _signal.signal(_signal.SIGINT, _signal.SIG_DFL)
+            # _sigint STAYS installed through the pause: Ctrl+C raises
+            # KeyboardInterrupt instantly anywhere (queue.get included) —
+            # SIG_DFL here would have KILLED the app with no save.
+            _signal.signal(_signal.SIGINT, _sigint)
             ui.flush_open()
-            ui.stop()  # B1: the strip would clobber the pause prompts too
+            # The omnipresent input box KEEPS running through the pause —
+            # the pause console reads from it via a queue. No legacy
+            # Guidance prompt, no strip teardown, no cooked-mode dance.
+            _pause_q = None
             if _input_reader is not None:
-                _input_reader.suspend()  # cooked mode — the pause console owns stdin
+                import queue as _q
 
-            # ── pause console: 15 course-changing commands + guidance ───
+                _pause_q = _q.Queue()
+                _input_reader.begin_pause(_pause_q)
+                console.print("[dim]type in the input box — /quit ends + saves, plain text is guidance[/dim]")
+            else:
+                ui.stop()  # non-TTY: no box exists — the old prompt path
+
+            # ── pause console: course-changing commands + guidance ──────
             from suijin.modules.redteam.lib.red.console_ui import UI_STATE as _UI_LOOT
 
             _pause_ctx = sc.PauseContext(
@@ -655,8 +667,17 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                     _a, _t, _f, _o, _c
                 ),
             )
+
+            def _pause_input(label, timeout=600.0, _q=_pause_q):
+                """Read pause input from the omnipresent box (lines land in
+                the queue raw); falls back to the legacy prompt only when
+                no keystroke reader exists (piped/CI)."""
+                if _q is None:
+                    return _operator_input(label, timeout)
+                return _q.get(timeout=timeout)
+
             try:
-                guidance = sc.pause_console(_pause_ctx, lambda label, timeout=600.0: _operator_input(label, timeout))
+                guidance = sc.pause_console(_pause_ctx, _pause_input)
                 objective = _pause_ctx.objective  # /objective may have changed course
             except (KeyboardInterrupt, EOFError):
                 console.print("\n[bold red]  Force quit — saving state...[/bold red]")
@@ -665,6 +686,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                 ui.stop()
                 run_box.stop()
                 if _input_reader is not None:
+                    _input_reader.end_pause()
                     _input_reader.stop()
                 break
             finally:
@@ -679,6 +701,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                 ui.stop()
                 run_box.stop()
                 if _input_reader is not None:
+                    _input_reader.end_pause()
                     _input_reader.stop()
                 break
 
@@ -695,9 +718,10 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
             except Exception as e:
                 console.print(f"[yellow]  State update failed: {e}. Restarting...[/yellow]")
                 first_run = True
-            ui.start()  # strip back on
+            # resume: the box goes straight back to live mode (it never left
+            # the screen — only its routing changes)
             if _input_reader is not None:
-                _input_reader.resume()  # keystroke layer retakes stdin
+                _input_reader.end_pause()
             ui.waiting(True)  # thinking spinner while the agent resumes
             continue  # Resume the while loop
 

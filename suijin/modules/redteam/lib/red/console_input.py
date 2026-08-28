@@ -41,6 +41,7 @@ class RedInputReader:
         self._ui = ui  # set_input / set_mode sinks
         self._on_pause = on_pause  # double-ESC: pause the agent INSTANTLY
         self._on_guidance = on_guidance  # plain line -> injected into the graph NOW
+        self._pause_queue = None  # set while the pause console owns input: lines go HERE raw
         self._modes = tuple(modes)
         self._mode = self._modes[0]
         self._stop = threading.Event()
@@ -214,7 +215,22 @@ class RedInputReader:
             return False
         return False  # lone ESC — not a sequence
 
+    # ── pause mode: the omnipresent box feeds the pause console ──────
+
+    def begin_pause(self, queue) -> None:
+        """The engagement paused: every entered line routes RAW into the
+        queue (the pause console consumes it) — the box never yields to a
+        legacy prompt; it stays the one and only inputter."""
+        self._pause_queue = queue
+
+    def end_pause(self) -> None:
+        self._pause_queue = None
+
     def _dispatch(self, line: str) -> None:
+        if getattr(self, "_pause_queue", None) is not None:
+            with contextlib.suppress(Exception):
+                self._pause_queue.put(line)
+            return
         if line.startswith("/"):
             self._run_box.dispatch(line)
             return
