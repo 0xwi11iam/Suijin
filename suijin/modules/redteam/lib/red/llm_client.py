@@ -22,21 +22,20 @@ async def generate_async(messages, config=None, on_delta=None):
     """Async LLM call. Silent — the engagement strip in red/console_ui.py
     owns all live display; `on_delta(kind, text)` streams tokens to it.
 
-    Hard timeout is 600s: the old 90s cap killed every long completion
-    ("read timed out" forever) — with streaming the operator watches
-    progress live, so a slow, long generation is fine; only a genuinely
-    stuck transport deserves the axe."""
+    Hard timeout is 180s: 600s was an invisible 10-minute stall when
+    the provider hung (the operator saw "it stopped"); 180s covers the
+    biggest legitimate completions with retries."""
     if not config:
         config = load_config()
 
     try:
         return await asyncio.wait_for(
             asyncio.to_thread(_generate, messages, config, on_delta),
-            timeout=600.0,
+            timeout=180.0,
         )
     except asyncio.TimeoutError:
         return (
-            "Error: LLM request timed out after 600s (no transport progress). "
+            "Error: LLM request timed out after 180s (no transport progress). "
             "The provider may be stuck — retry or switch providers."
         )
 

@@ -418,7 +418,7 @@ def read_doc(path: str, source: str | None = None, cache_dir: Path | None = None
     needle = (path or "").strip().strip("/")
     if not needle:
         raise ValueError("path required (e.g. '_gtfobins/awk' or 'sqli.md')")
-    candidates: list[tuple[str, str, Path, object]] = []
+    all_members: list[tuple[str, str, Path, object]] = []
     names = [source] if source else list(SOURCES)
     for name in names:
         if name not in SOURCES:
@@ -432,9 +432,34 @@ def read_doc(path: str, source: str | None = None, cache_dir: Path | None = None
                     continue
                 parts = member.name.split("/", 1)
                 rel = parts[1] if len(parts) == 2 else member.name
-                if needle in rel:
-                    candidates.append((name, rel, tar_path, member))
-                    break  # one hit per source is plenty for substring search
+                all_members.append((name, rel, tar_path, member))
+
+    # tier 1: exact path (case-insensitive) — the strongest signal
+    needle_low = needle.lower()
+    candidates = [(s, r, t, m) for s, r, t, m in all_members if r.lower() == needle_low]
+    # tier 2: suffix match — path components align from the end,
+    # extension-insensitive (shared_name matches shared_name.md)
+    if not candidates:
+        needle_parts = needle_low.split("/")
+
+        def _stem(path: str) -> str:
+            from os.path import splitext
+
+            return splitext(path)[0].lower()
+
+        candidates = [
+            (s, r, t, m)
+            for s, r, t, m in all_members
+            if "/".join(r.lower().split("/")[-len(needle_parts) :]) == "/".join(needle_parts)
+            or _stem(r) == needle_low
+        ]
+    # tier 3: prefix — starts with the needle (stronger than substring)
+    if not candidates:
+        candidates = [(s, r, t, m) for s, r, t, m in all_members if r.lower().startswith(needle_low)]
+    # tier 4: substring — LAST resort (this is where 'SQL Injection'
+    # used to match 'NoSQL Injection/README.md' before its own doc)
+    if not candidates:
+        candidates = [(s, r, t, m) for s, r, t, m in all_members if needle_low in r.lower()]
     if not candidates:
         raise FileNotFoundError(
             f"No KB file matches '{needle}' in cached tarballs "
