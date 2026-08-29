@@ -610,7 +610,10 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                         ui.start()
                         ui.waiting(True)  # straight back to the thinking spinner
                         continue
-                    ui.output(out, ec)
+                    if step.get("tool_name") == "catalog_exploit" and ui.exploit_verdict(out):
+                        pass  # the classed verdict panel rendered
+                    else:
+                        ui.output(out, ec)
                     # Audit the FULL observation from the execute event — the
                     # old think-side log raced ahead of execution and logged
                     # every observation empty.
