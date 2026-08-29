@@ -44,6 +44,7 @@ class RedInputReader:
         self._on_pause = on_pause  # double-ESC: pause the agent INSTANTLY
         self._on_guidance = on_guidance  # plain line -> injected into the graph NOW
         self._on_pause_line = on_pause_line  # pause session: reader-side command consumer
+        self._ask_queue = None  # set while an ask_operator waits: plain lines ARE the answer
         self._pause_queue = None  # set while the pause console owns input: lines go HERE raw
         self._armed_queue = None  # pre-registered by the engagement: ESC ESC activates it NOW
         self._modes = tuple(modes)
@@ -141,6 +142,8 @@ class RedInputReader:
             return buf[:-1], None
         if key == "\x15":  # ctrl-u
             return "", None
+        if key == "\x00":  # ctrl+space — cycle model intelligence
+            return buf, "intel"
         if key == "\t":  # Tab cycles the mode
             return buf, "tab"
         if key.isprintable():
@@ -218,6 +221,16 @@ class RedInputReader:
                 self._ui.set_mode(self._mode)
                 self._ui.set_input(buf)
                 continue
+            if action == "intel":
+                # Ctrl+Space: cycle model intelligence (applies on the
+                # NEXT LLM call — between thoughts, per the contract)
+                from suijin.modules.redteam.lib.red.console_ui import UI_STATE
+
+                tiers = ("max", "high", "medium", "low")
+                cur = str(UI_STATE.get("intelligence", "max"))
+                UI_STATE["intelligence"] = tiers[(tiers.index(cur) + 1) % len(tiers)] if cur in tiers else "max"
+                self._ui.set_input(buf)  # keep typing intact
+                continue
             self._ui.set_input(buf)
 
     def _fire_chord(self) -> None:
@@ -277,6 +290,16 @@ class RedInputReader:
         to land (the graph may take seconds to unwind; the box must not)."""
         self._armed_queue = queue
 
+    def begin_ask(self, queue) -> None:
+        """An ask_operator is waiting: every entered line routes RAW into
+        the queue as the ANSWER (no mode tag, no command parsing) — the
+        old console.input fallback fought the cbreak reader and typing
+        died. The box stays the one and only inputter."""
+        self._ask_queue = queue
+
+    def end_ask(self) -> None:
+        self._ask_queue = None
+
     def begin_pause(self, queue=None) -> None:
         """The engagement paused: every entered line routes RAW into the
         queue (the pause console consumes it) — the box never yields to a
@@ -291,6 +314,11 @@ class RedInputReader:
         if os.environ.get("SUIJIN_DRIVE_DEBUG"):
             with contextlib.suppress(Exception), open("/tmp/rig_keys.log", "a") as _kl:
                 _kl.write(f"dispatch: {line!r} handler={getattr(self, '_on_pause_line', None) is not None}\n")
+        if getattr(self, "_ask_queue", None) is not None:
+            # an ask_operator consumes plain lines as the ANSWER, raw
+            with contextlib.suppress(Exception):
+                self._ask_queue.put(line)
+            return
         if getattr(self, "_on_pause_line", None) is not None:
             # a pause session OWNS input: the reader consumes the line
             # itself — commands answer instantly, no main-thread dependency
