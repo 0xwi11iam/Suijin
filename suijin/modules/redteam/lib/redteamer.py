@@ -496,6 +496,12 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                 node_name = list(event.keys())[0]
                 node_output = event[node_name]
 
+                # diag: every node transition (think->execute->think...)
+                with contextlib.suppress(Exception):
+                    from suijin.kernel.diag import diag as _diag
+
+                    _diag("node", name=node_name, iter=node_output.get("current_iteration", "?"))
+
                 ui.waiting(False)  # an event arrived — spinner off
 
                 # THINK event boundary: the safest injection point — the
