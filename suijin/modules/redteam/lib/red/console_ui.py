@@ -958,10 +958,22 @@ class EngagementUI:
             # which reads as 'clean but no streaming at all')
             self._tw.start()
 
+    _LLM_WAIT_REPORT_S = 15  # every 15s of silent thinking, tell the operator
+
     def _heartbeat(self) -> None:
+        beat = 0
         while not self._refresh_stop.wait(1.0):
+            beat += 1
             with contextlib.suppress(Exception):
                 UI_STATE["cursor_on"] = not UI_STATE.get("cursor_on", True)  # the blink
+            # LLM-wait progress: the spinner says nothing about TIME — a
+            # dim transcript line every 15s proves the program is alive
+            with contextlib.suppress(Exception):
+                if self._waiting and self._waiting_since is not None:
+                    waited = time.monotonic() - self._waiting_since
+                    if waited > 0 and int(waited) % self._LLM_WAIT_REPORT_S == 0 and not self._streaming:
+                        self.console.print(f"[dim]  still thinking… {int(waited)}s[/dim]")
+                        self._waiting_since += 0.5  # offset so it fires once, not every 1s tick
             self._tick()
 
     def stop(self) -> None:

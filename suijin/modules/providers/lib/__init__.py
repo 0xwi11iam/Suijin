@@ -21,10 +21,11 @@ logger = logging.getLogger("suijin.providers")
 # iterations (a fresh handshake per call was a large slice of the
 # perceived 10-20s dead time before first output).
 _HTTP = req.Session()
-# (connect, read): 10s to establish, 300s for the body. A long glm/deepseek
-# completion is LEGITIMATE — the old scalar timeout=45 killed exactly the
-# biggest responses as "read timed out", then retried the whole call.
-_TIMEOUT = (10, 300)
+# (connect, read): 10s to establish, 120s for the body. The 300s read
+# was a 5-minute invisible stall per LLM call (the operator saw "it
+# stopped"); 120s covers the biggest legitimate completions, and the
+# retry loop handles the rest.
+_TIMEOUT = (10, 120)
 
 # ----------------------------------------------------------------------
 # Token / cost accounting
@@ -287,8 +288,32 @@ def _init_anthropic(config):
 
 def _emit(on_delta, kind, piece):
     if on_delta is not None and piece:
+        if not _diag_ttft["seen"]:
+            _diag_first_token()
         with contextlib.suppress(Exception):  # display must never break generation
             on_delta(kind, piece)
+
+
+_diag_ttft = {"t0": None, "seen": False}
+
+
+def _diag_llm_start(provider: str, model: str, msgs: int):
+    from suijin.kernel.diag import diag
+
+    _diag_ttft["t0"] = time.monotonic()
+    _diag_ttft["seen"] = False
+    diag("llm_start", provider=provider, model=model, msgs=msgs)
+
+
+def _diag_llm_done(provider: str, model: str, ok: bool, wall_s: float):
+    from suijin.kernel.diag import diag
+
+    ttft = round(time.monotonic() - _diag_ttft["t0"], 2) if _diag_ttft["t0"] else None
+    diag("llm_done", provider=provider, model=model, ok=ok, wall_s=round(wall_s, 2), ttft_s=ttft)
+
+
+def _diag_first_token():
+    _diag_ttft["seen"] = True
 
 
 def _stream_chat(url, headers, payload, on_delta=None):
@@ -649,6 +674,8 @@ def generate(
             "temperature": temp,
         }
         ds_url = "https://api.deepseek.com/v1/chat/completions"
+        _diag_llm_start("deepseek", ds_model, len(messages))
+        _ds_t0 = time.monotonic()
         last_diag = "transport failure"
         for attempt in range(retries):
             try:
@@ -697,6 +724,7 @@ def generate(
             logger.warning(f"DeepSeek attempt {attempt + 1} failed — {last_diag}")
             if attempt < retries - 1:
                 time.sleep(2 * (2**attempt))  # 2s, 4s, 8s backoff
+        _diag_llm_done("deepseek", ds_model, False, time.monotonic() - _ds_t0)
         return f"Error: DeepSeek API unreachable after {retries} attempt(s) — {last_diag}"
 
     # ---------- Z.ai (GLM) ----------
@@ -728,6 +756,8 @@ def generate(
             if intel == "medium":
                 payload["max_tokens"] = max(1000, int(mtokens) // 2)
         zai_url = f"{base_url}/chat/completions"
+        _diag_llm_start("zai", zai_model, len(messages))
+        _zai_t0 = time.monotonic()
         last_diag = "transport failure"
         for attempt in range(retries):
             try:
@@ -752,6 +782,7 @@ def generate(
                         return content
                 if status == 200:
                     text = content or reasoning or "(empty response)"
+                    _diag_llm_done("zai", zai_model, True, time.monotonic() - _zai_t0)
                     try:
                         if usage is None or usage.get("prompt_tokens") is None:
                             # gateway omitted usage — estimate, never zero-count
@@ -789,6 +820,7 @@ def generate(
             logger.warning(f"Z.ai attempt {attempt + 1} failed — {last_diag}")
             if attempt < retries - 1:
                 time.sleep(2 * (2**attempt))  # 2s, 4s, 8s backoff
+        _diag_llm_done("zai", zai_model, False, time.monotonic() - _zai_t0)
         return f"Error: Z.ai API unreachable after {retries} attempt(s) — {last_diag}"
 
     return f"Error: Unknown provider '{provider}'"

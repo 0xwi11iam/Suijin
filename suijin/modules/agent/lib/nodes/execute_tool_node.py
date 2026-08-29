@@ -189,9 +189,12 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
         return job_id
 
     t0 = _time.monotonic()
-    t = threading.Thread(target=_run_tool, daemon=True)
-    t.start()
-    t.join(timeout=AUTO_BG_TIMEOUT)
+    from suijin.kernel.diag import diag_timer
+
+    with diag_timer("tool", name=tool_name, bg=True):
+        t = threading.Thread(target=_run_tool, daemon=True)
+        t.start()
+        t.join(timeout=AUTO_BG_TIMEOUT)
 
     if t.is_alive():
         # Still running — promote to background job via the registry
