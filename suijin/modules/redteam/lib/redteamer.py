@@ -496,20 +496,27 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                 node_name = list(event.keys())[0]
                 node_output = event[node_name]
 
-                # drain operator guidance ON the event loop — guaranteed
-                # thread-safe, guaranteed read (the reader queued it)
-                with contextlib.suppress(Exception):
-                    while True:
-                        try:
-                            _g = _guidance_q.get_nowait()
-                        except _guidance_qmod.Empty:
-                            break
-                        agent._graph.update_state(
-                            langgraph_config,
-                            {"messages": [{"role": "user", "content": _g}], "completion_reason": None},
-                        )
-
                 ui.waiting(False)  # an event arrived — spinner off
+
+                # THINK event boundary: the safest injection point — the
+                # node just completed, the next one hasn't started, and the
+                # message will be in state before the next think reads it
+                if node_name in ("think", "__start__"):
+                    try:
+                        while True:
+                            try:
+                                _g = _guidance_q.get_nowait()
+                            except Exception:
+                                break
+                            agent._graph.update_state(
+                                langgraph_config,
+                                {"messages": [{"role": "user", "content": _g}], "completion_reason": None},
+                            )
+                    except Exception as _ge:
+                        import logging
+
+                        logging.getLogger("suijin").warning(f"guidance inject failed: {_ge}")
+
                 trace = node_output.get("execution_trace", [])
                 step = node_output.get("_current_step", {})
 

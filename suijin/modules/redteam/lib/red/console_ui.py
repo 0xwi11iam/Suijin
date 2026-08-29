@@ -570,7 +570,7 @@ class TypewriterStream:
         self._rate = self.MIN_RATE
         self._splitter = StreamSplitter()
         self._hold = ""
-        self._last_kind = None  # think/said separator tracking""
+        self._last_kind = None
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._playback_paused = False  # ESC ESC: hide the thought NOW
@@ -698,27 +698,15 @@ class TypewriterStream:
     def _commit_row(self, line: str, kind: str = "content") -> None:
         """Commit one full-width row — PLAIN styled text only (operator
         contract: the markdown highlighting experiment is scrapped; prose
-        renders as light think / bold cyan speak, nothing parsed)."""
-        self._kind_separator(kind)
+        renders as light think / bold cyan speak, nothing parsed, no
+        dividers)."""
         style = "dim italic" if kind == "reasoning" else "bold cyan"
         with contextlib.suppress(Exception):
             self._ui.console.print(Text(line, style=style))
 
-    def _kind_separator(self, kind: str) -> None:
-        """THINK and SAID stay visually separate: a dim labeled rule when
-        the stream switches between them (think -> said, said -> think)."""
-        if kind.startswith("__box__"):
-            return
-        if self._last_kind and kind != self._last_kind:
-            label = " said " if kind == "content" else " think "
-            with contextlib.suppress(Exception):
-                self._ui.console.print(Rule(title=label, style="dim", align="left"))
-        self._last_kind = kind
-
     def _emit_wrapped(self, kind: str, text: str) -> None:
         """Flush-time emission: one merged block, console wraps it —
-        plain styled text, no highlighting."""
-        self._kind_separator(kind)
+        plain styled text, no highlighting, no said/think dividers."""
         base = "dim italic" if kind == "reasoning" else "bold cyan"
         with contextlib.suppress(Exception):
             self._ui.console.print(Text(text, style=base))
@@ -785,7 +773,6 @@ class TypewriterStream:
                     self._emit_wrapped(kind, merged)
         if line.strip():  # leftover live line with no same-kind run to carry it
             self._emit_wrapped(line_kind or "content", line)
-        self._last_kind = None  # next turn starts clean
 
     def line_renderable(self):
         """The live partial line for the strip — with a block cursor."""
