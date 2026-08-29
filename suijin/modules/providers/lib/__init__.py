@@ -720,6 +720,13 @@ def generate(
             "max_tokens": mtokens,
             "temperature": temp,
         }
+        # model intelligence (operator's Ctrl+Space tier, applied between
+        # thoughts): glm-4.5+ accepts a thinking toggle; low disables it
+        intel = str((config or {}).get("intelligence", "") or "").lower()
+        if intel in ("max", "high", "medium", "low"):
+            payload["thinking"] = {"type": "disabled" if intel == "low" else "enabled"}
+            if intel == "medium":
+                payload["max_tokens"] = max(1000, int(mtokens) // 2)
         zai_url = f"{base_url}/chat/completions"
         last_diag = "transport failure"
         for attempt in range(retries):
