@@ -214,7 +214,7 @@ def test_engagement_schema():
     # Session save
     state = {"original_objective": "test_recovery", "current_phase": "recon", "current_iteration": 5}
     path = save_session_state(state)
-    assert "operation_state_recovery.json" in path
+    assert path.endswith("recovery.json") and "engagements" in path  # scoped per engagement
     from suijin.modules.agent.lib.engagement import has_recovery_state, load_session_state
 
     assert has_recovery_state()

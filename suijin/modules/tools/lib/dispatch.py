@@ -319,6 +319,10 @@ def _build_routes(config):
             poc=a.get("poc"),
             marker=a.get("marker", ""),
             guards=a.get("guards", ""),
+            severity=a.get("severity", ""),
+            cvss=a.get("cvss"),
+            abandon=bool(a.get("abandon")),
+            claim=bool(a.get("claim")),
             entry_id=a.get("entry_id", ""),
             config=config,
         ),
@@ -653,7 +657,7 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
   ```json
   {"tool": "generate_report", "args": {"engagement": "target-name"}}
   ```
-- **catalog_exploit** — MANDATORY the moment you find something valuable. Write the exploit as a POC step-script (a list of `{"cmd": ..., "wait": N}` commands — multi-request chains like login->cookie->payload), give the `marker` that proves success, and call. THE SYSTEM RUNS THE POC BEFORE YOU CONTINUE: marker lands -> CONFIRMED (receipts saved); a command errors -> you get the failing step, fix the script and re-call with `entry_id`; clean run but no marker -> FAILED_REPRO (maybe a false positive — say so). A finding without a cataloged POC is a rumor.
+- **catalog_exploit** — MANDATORY the moment you find something valuable. Register it CLASSED: `severity` (critical/high/medium/low/info) + `cvss` (0.0-10.0) — records display as `CRITICAL CVSS 8.9 : SQL injection in the search parameter`. Write the exploit as a POC step-script (a list of `{"cmd": ..., "wait": N}` commands), give the `marker` that proves success, and call. THE SYSTEM RUNS THE POC BEFORE YOU CONTINUE. Perfect (marker reproduced) -> CONFIRMED, continue. Not perfect -> you get every command's output and THREE choices: (1) EDIT — re-call with `entry_id` + a fixed poc; (2) ABANDON — `entry_id` + `abandon:true` (the combo is memory-poisoned); (3) CLAIM IT WORKED ANYWAY — `entry_id` + `claim:true` (recorded AI_CLAIMED, amber-flagged 'NOT terminal-verified' in every report). A finding without a cataloged POC is a rumor.
   ```json
   {"tool": "catalog_exploit", "args": {"engagement": "t", "target": "http://t", "vuln_class": "sqli", "title": "login bypass", "poc": [{"cmd": "curl -s -c /tmp/j http://t/login -d 'u=x&p=y'", "wait": 1}, {"cmd": "curl -s -b /tmp/j 'http://t/admin?id=1 OR 1=1'"}], "marker": "root:", "guards": "needs low-priv session first"}}
   ```
