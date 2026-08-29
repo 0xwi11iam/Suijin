@@ -1910,9 +1910,9 @@ class TestPauseThroughTheBox:
         assert ui._tw._thread is not None and not ui._tw._thread.is_alive() or True  # stopped cleanly
 
 
-class TestThinkSaidSeparation:
-    """THINK and SAID never blur: a labeled dim rule divides the stream
-    when the kind switches; continuous same-kind speech gets no divider."""
+class TestNoSaidDivider:
+    """The said/think divider is REMOVED (operator: 'what the fuck is
+    said') — the stream is continuous, no labeled rules anywhere."""
 
     def _drain(self, ui, secs=5.0):
         import time as _t
@@ -1921,7 +1921,7 @@ class TestThinkSaidSeparation:
         while (_t.monotonic() < deadline) and (ui._tw._pending or ui._tw._line):
             ui._tw.tick(0.1)
 
-    def test_think_and_said_stay_separated(self):
+    def test_no_said_or_think_divider_ever(self):
         ui, c = _ui()
         ui.waiting(True)
         ui.reasoning_delta("reasoning", " ".join(f"think{i}" for i in range(30)))
@@ -1929,16 +1929,8 @@ class TestThinkSaidSeparation:
         self._drain(ui)
         ui._tw.flush()
         out = c.export_text()
-        assert " said " in out  # the separator rule with its label
-        assert "think0" in out and "said0" in out
-
-    def test_no_separator_within_same_kind(self):
-        ui, c = _ui()
-        ui.waiting(True)
-        ui.reasoning_delta("content", " ".join(f"only{i}" for i in range(40)))
-        self._drain(ui)
-        ui._tw.flush()
-        assert " said " not in c.export_text()  # continuous speech: no dividers
+        assert "think0" in out and "said0" in out  # both kinds render
+        assert " said " not in out and " think " not in out  # NO divider rules
 
 
 class TestInstantPause:
