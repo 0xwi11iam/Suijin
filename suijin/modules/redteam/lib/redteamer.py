@@ -391,18 +391,15 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
             _input_reader._on_pause_line = _pause_line  # commands answer NOW
             _thread.interrupt_main()
 
-        import queue as _guidance_qmod
-
-        _guidance_q = _guidance_qmod.Queue()  # reader thread -> event loop (thread-safe)
-
         def _live_guidance(line):
-            """Plain prompt -> the guidance queue; the astream loop injects
-            it ON the event loop between events (cross-thread update_state
-            on the memory saver could fail silently — the guidance the
-            operator swears they sent and the AI never saw)."""
+            """Plain prompt -> live_guidance.md (the file the think node
+            reads at the TOP of its prompt every turn — atomic, no LangGraph
+            state mutation, cannot fail)."""
+            from suijin.modules.agent.lib.live_guidance import write_guidance
+
             with contextlib.suppress(Exception):
                 mode = str(_input_reader.mode or "recon").upper()
-            _guidance_q.put(f"OPERATOR GUIDANCE (live, just now, from the human operator) [{mode}]: {line}")
+            write_guidance(line, mode=mode)
             # the sent prompt shows as a little box right under the stream
             with contextlib.suppress(Exception):
                 from rich.panel import Panel as _Panel
@@ -503,25 +500,6 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                     _diag("node", name=node_name, iter=node_output.get("current_iteration", "?"))
 
                 ui.waiting(False)  # an event arrived — spinner off
-
-                # THINK event boundary: the safest injection point — the
-                # node just completed, the next one hasn't started, and the
-                # message will be in state before the next think reads it
-                if node_name in ("think", "__start__"):
-                    try:
-                        while True:
-                            try:
-                                _g = _guidance_q.get_nowait()
-                            except Exception:
-                                break
-                            agent._graph.update_state(
-                                langgraph_config,
-                                {"messages": [{"role": "user", "content": _g}], "completion_reason": None},
-                            )
-                    except Exception as _ge:
-                        import logging
-
-                        logging.getLogger("suijin").warning(f"guidance inject failed: {_ge}")
 
                 trace = node_output.get("execution_trace", [])
                 step = node_output.get("_current_step", {})

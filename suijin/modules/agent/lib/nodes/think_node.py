@@ -180,18 +180,30 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     _tenant_ctx(user_id, project_id, session_id)
     _phase_ctx(phase)
 
+    # Live guidance (file-based, atomic): the operator's typed prompt
+    # rides at the TOP of the system prompt — above doctrine, above the
+    # engagement order, above everything. Read + consume each turn.
+    from suijin.modules.agent.lib.live_guidance import read_and_clear_guidance
+
+    _live_guidance = read_and_clear_guidance()
+    _guidance_block = ""
+    if _live_guidance:
+        _guidance_block = (
+            "\n## OPERATOR GUIDANCE (live — the human just said this, act on it NOW)\n" + _live_guidance + "\n"
+        )
+
     # Build system prompt using the new skill-based builder — with the
     # BF2 blue seam: state["_blue_mode"] swaps in the blue prompt builder
     # (doctrine, blue tools, blue skills) and the defensive task order
     if state.get("_blue_mode"):
         from suijin.modules.blueteam.lib.blue.agent import blue_system_prompt, defensive_order
 
-        system_prompt = blue_system_prompt(state)
+        system_prompt = _guidance_block + blue_system_prompt(state)
         user_turn = defensive_order(state.get("original_objective", ""))
     else:
         from suijin.modules.agent.lib.prompts.base import build_agent_system_prompt, engagement_order
 
-        system_prompt = build_agent_system_prompt(state)
+        system_prompt = _guidance_block + build_agent_system_prompt(state)
         user_turn = engagement_order(state.get("original_objective", ""))
 
     # Add state context (chain, todos, QA) after the skill+tools prompt
@@ -279,6 +291,20 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
 - READ the output of completed jobs BEFORE spawning new ones.
 """
     full_prompt = system_prompt + context_block
+
+    # Live context manifest — the operator sees exactly what the AI was
+    # fed this turn (guidance verbatim at the top, overwriting each turn)
+    from suijin.modules.agent.lib.live_guidance import write_context_manifest
+
+    write_context_manifest(
+        guidance=_live_guidance or "",
+        phase=phase,
+        iteration=iteration,
+        attack_path=str(state.get("attack_path_type", "recon")),
+        recent_actions=action_log,
+        msg_count=len(raw_msgs),
+        prompt_chars=len(full_prompt),
+    )
 
     # A1: the objective turn is a CONTRACTED ENGAGEMENT order, not a bare
     # request — the operator's authorization words lifted verbatim. A bare
