@@ -672,6 +672,16 @@ class TypewriterStream:
                 self._line += piece
                 if not self._line_kind:
                     self._line_kind = kind
+                # model-emitted newlines END the row (paragraph breaks): an
+                # embedded \n rendered mid-Text produced the broken
+                # 'w / ork' fragments — commit up to the last \n instead
+                nl = self._line.rfind("\n")
+                if nl != -1:
+                    line, kind_now = self._line[:nl].rstrip(), self._line_kind
+                    self._line = self._line[nl + 1 :].lstrip()
+                    if line:
+                        self._commit_row(line, kind_now)
+                    continue  # newline commits are free (no budget spent)
                 if len(self._line) >= row:
                     line, kind_now = self._line, self._line_kind
                     self._line, self._line_kind = "", ""
@@ -836,6 +846,7 @@ class EngagementUI:
         # complete black syntax boxes. ALL machinery is silent — the screen
         # shows only the typewriter line, committed rows, and boxes.
         self._tw = TypewriterStream(ui=self)
+        self._streaming = False  # True between the first delta and stream_done (green-rule tracking)
         self._waiting_since: float | None = None  # think-turn start → TTFT proof
         self._last_cost = 0.0
 
@@ -969,21 +980,30 @@ class EngagementUI:
         held and rendered as complete black syntax boxes; prose flows to
         the typewriter, which plays it back at the measured token rate
         (micro-increment gear ladder, fully under the hood). Colors:
-        think = light dim italic, speak = bold cyan. TTFT records on the
-        first token of any kind. Provider-worker-thread safe."""
+        think = light dim italic, speak = bold cyan. A GREEN rule prints
+        above each new stream start (separates the operator's world from
+        the AI's thinking). TTFT records on the first token of any kind.
+        Provider-worker-thread safe."""
         if not text:
             return
+        if not self._streaming:
+            # the stream STARTS here: green separator above the thinking
+            with contextlib.suppress(Exception):
+                self.console.print(Rule(style="green"))
         if self._waiting_since is not None:
             # first token of this turn: the TTFT proof (seconds, one shot)
             UI_STATE["last_ttft"] = round(time.monotonic() - self._waiting_since, 2)
             self._waiting_since = None
         self._tw.feed(kind, str(text))
+        self._streaming = True
         self._tick()
 
     def stream_done(self) -> None:
         """End the stream: drain everything (remaining prose commits, any
-        open command box closes), reset for the next turn."""
+        open command box closes), reset for the next turn (the next
+        stream start prints its green separator again)."""
         self._tw.flush()
+        self._streaming = False
         self._waiting_since = None
         self._tick()
 
