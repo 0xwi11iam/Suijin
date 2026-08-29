@@ -12,11 +12,11 @@ from pathlib import Path
 
 
 def scratchpad_path() -> Path:
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+    from suijin.modules.platform.lib.workspace import engagement_dir
 
-    d = WORKSPACE_DIR / "outputs" / "scratchpad"
+    d = engagement_dir()
     d.mkdir(parents=True, exist_ok=True)
-    return d / "engagement.md"
+    return d / "scratchpad.md"
 
 
 def read_scratchpad(max_chars: int = 4000) -> str:
@@ -39,6 +39,10 @@ def append_note(content: str, category: str = "") -> None:
         import time
 
         stamp = time.strftime("%m-%d %H:%M")
+        # guidance echoes are MEMORY, never directives — the [operator] tag
+        # birthed the 'operator flagged an admin panel' confabulation
+        if str(category).lower() in ("operator", "guidance"):
+            category = "guidance-memory"
         tag = f"[{category}] " if category else ""
         line = f"- {stamp} {tag}{str(content).strip()[:300]}"
         if _is_recent_duplicate(line):

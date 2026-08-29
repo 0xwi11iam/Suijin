@@ -21,9 +21,12 @@ def _approvals_path():
     v = globals().get("APPROVALS_PATH")
     if v is not None:
         return v
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-    return WORKSPACE_DIR / "approvals.json"
+    from suijin.modules.platform.lib.workspace import engagement_dir
+
+    d = engagement_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    return d / "approvals.json"
 
 
 def _session_path():

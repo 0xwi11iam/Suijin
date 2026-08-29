@@ -177,6 +177,11 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
     # no cost-cap console notice — the operator's cap is deliberate
 
     providers.reset_usage()
+    # scope ALL per-engagement state (schema/recovery/scratchpad/approvals)
+    # to outputs/engagements/<stamp>_<slug>/ — state dies with the run
+    from suijin.modules.platform.lib.workspace import set_engagement
+
+    set_engagement(objective)
     # stderr poisons the Live strip: provider/tool warnings wrote straight
     # to the terminal above the region, leaving frozen artifact rows. The
     # suijin logger goes to a file for the engagement's lifetime instead.
@@ -901,6 +906,17 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
             import logging
 
             logging.getLogger("suijin").warning(f".sje save failed: {e}")
+
+        # the .sje bundle IS the resume artifact — retire the live state dir
+        # into outputs/archive/ (the immortal-root-state fix)
+        try:
+            from suijin.modules.platform.lib.workspace import archive_engagement
+
+            _arch = archive_engagement("ended")
+            if _arch is not None:
+                console.print(f"[dim]engagement state archived: {_arch.name}[/dim]")
+        except Exception:
+            pass
 
         # H5: write the engagement to per-target memory — 361 sessions had
         # produced ZERO memory entries because this was never called
