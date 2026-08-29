@@ -169,11 +169,11 @@ def ask_operator_answer(
 
 
 def toggle_reasoning(console: Console | None = None) -> bool:
-    """Flip the 'said' section visibility. Returns the new state."""
+    """Flip the reasoning section visibility. Returns the new state."""
     UI_STATE["show_reasoning"] = not UI_STATE["show_reasoning"]
     if console is not None:
         state = "shown" if UI_STATE["show_reasoning"] else "hidden"
-        console.print(f"[dim]  said {state}[/dim]")
+        console.print(f"[dim]  reasoning {state}[/dim]")
         if UI_STATE["show_reasoning"] and UI_STATE["last_reasoning"]:
             console.print(_md(UI_STATE["last_reasoning"], "cyan"))
     return UI_STATE["show_reasoning"]
