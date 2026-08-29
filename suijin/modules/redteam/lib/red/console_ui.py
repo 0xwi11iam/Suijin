@@ -925,6 +925,7 @@ class EngagementUI:
         buf = UI_STATE.get("input_buf")
 
         left = Text.assemble((mode, f"bold {color}"))
+        left.append(f" · {intel}", style=f"bold {'green' if intel == 'max' else 'cyan'}")
         if model:
             left.append(f" · {model}", style="dim")
         left.append(" » ", style=f"bold {GOLD}")
@@ -934,10 +935,7 @@ class EngagementUI:
         else:
             left.append("type here", style="dim")
 
-        row = Table.grid(padding=(0, 1))
-        row.add_row(left, Text(intel, style=f"bold {'green' if intel == 'max' else 'cyan'}"))
-        row.columns[1].justify = "right"
-        body = row
+        body = left
         return Panel(
             body,
             box=box.SQUARE,

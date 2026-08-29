@@ -391,15 +391,18 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
             _input_reader._on_pause_line = _pause_line  # commands answer NOW
             _thread.interrupt_main()
 
+        import queue as _guidance_qmod
+
+        _guidance_q = _guidance_qmod.Queue()  # reader thread -> event loop (thread-safe)
+
         def _live_guidance(line):
-            """Plain prompt -> graph state NOW, no turn-boundary wait."""
+            """Plain prompt -> the guidance queue; the astream loop injects
+            it ON the event loop between events (cross-thread update_state
+            on the memory saver could fail silently — the guidance the
+            operator swears they sent and the AI never saw)."""
             with contextlib.suppress(Exception):
                 mode = str(_input_reader.mode or "recon").upper()
-            content = f"OPERATOR GUIDANCE (live, just now, from the human operator) [{mode}]: {line}"
-            agent._graph.update_state(
-                langgraph_config,
-                {"messages": [{"role": "user", "content": content}], "completion_reason": None},
-            )
+            _guidance_q.put(f"OPERATOR GUIDANCE (live, just now, from the human operator) [{mode}]: {line}")
             # the sent prompt shows as a little box right under the stream
             with contextlib.suppress(Exception):
                 from rich.panel import Panel as _Panel
@@ -493,6 +496,19 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                 node_name = list(event.keys())[0]
                 node_output = event[node_name]
 
+                # drain operator guidance ON the event loop — guaranteed
+                # thread-safe, guaranteed read (the reader queued it)
+                with contextlib.suppress(Exception):
+                    while True:
+                        try:
+                            _g = _guidance_q.get_nowait()
+                        except _guidance_qmod.Empty:
+                            break
+                        agent._graph.update_state(
+                            langgraph_config,
+                            {"messages": [{"role": "user", "content": _g}], "completion_reason": None},
+                        )
+
                 ui.waiting(False)  # an event arrived — spinner off
                 trace = node_output.get("execution_trace", [])
                 step = node_output.get("_current_step", {})
@@ -540,7 +556,9 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                         # main thread raced the reader and hung the agent).
                         # Detached engagements (stdin dead) use the desktop
                         # bridge instead.
-                        if run_box.alive:
+                        if _input_reader is not None or run_box.alive:
+                            # the keystroke reader (or RunBox) owns stdin —
+                            # console.input fought it and typing DIED
                             answer = _operator_input("Answer", 600.0)
                         elif sys.stdin is not None and sys.stdin.isatty():
                             try:

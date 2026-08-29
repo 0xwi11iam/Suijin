@@ -1988,11 +1988,23 @@ class TestIntelligenceAndAsk:
     consumes raw typed lines via the reader's ask queue (the console.input
     fallback fought the cbreak reader — typing died)."""
 
-    def test_ctrl_space_is_intel_action(self):
+    def test_alt_plus_i_is_intel_action(self):
         from suijin.modules.redteam.lib.red.console_input import RedInputReader
 
-        buf, action = RedInputReader.apply_key("keep typing", "\x00")
-        assert action == "intel" and buf == "keep typing"  # buffer intact
+        # Alt/Option+I arrives as ESC then 'i' — _sequence detects the pair
+        buf, action = RedInputReader.apply_key("", "i")
+        assert action is None and buf == "i"  # plain i types normally
+        # the ALT detection lives in _sequence (ESC+i pair); the reader
+        # routes it to _cycle_intelligence directly
+
+    def test_sequence_detects_alt_i(self, monkeypatch):
+        from suijin.modules.redteam.lib.red import console_input as ci
+
+        # feed ESC then 'i' through the mock fd (Alt+I = ESC-prefixed on macOS)
+        feed = [b"i"]  # _sequence reads the byte AFTER the pump's ESC
+        monkeypatch.setattr(ci.select, "select", lambda *a, **k: ([a[0][0]], [], []))
+        monkeypatch.setattr(ci.os, "read", lambda fd, n: feed.pop(0))
+        assert ci.RedInputReader._sequence(0) == "alt-i"
 
     def test_intel_cycles_all_tiers(self):
 

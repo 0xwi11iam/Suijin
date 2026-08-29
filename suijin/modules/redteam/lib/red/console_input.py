@@ -142,8 +142,8 @@ class RedInputReader:
             return buf[:-1], None
         if key == "\x15":  # ctrl-u
             return "", None
-        if key == "\x00":  # ctrl+space — cycle model intelligence
-            return buf, "intel"
+        if key == "i" and buf == "\x1b":  # Alt/Option+I — model intelligence
+            return "", "intel"
         if key == "\t":  # Tab cycles the mode
             return buf, "tab"
         if key.isprintable():
@@ -197,6 +197,11 @@ class RedInputReader:
                 seq = self._sequence(fd)
                 if seq is True:
                     continue  # arrow keys etc — swallowed, never land in the buffer
+                if seq == "alt-i":
+                    # Alt/Option+I — cycle model intelligence (the ESC+i
+                    # pair arrived together; the buffer stays untouched)
+                    self._cycle_intelligence()
+                    continue
                 if seq == "esc":
                     # zero-gap double ESC: the chord FIRES right now —
                     # no window check (both presses already happened)
@@ -222,16 +227,20 @@ class RedInputReader:
                 self._ui.set_input(buf)
                 continue
             if action == "intel":
-                # Ctrl+Space: cycle model intelligence (applies on the
-                # NEXT LLM call — between thoughts, per the contract)
-                from suijin.modules.redteam.lib.red.console_ui import UI_STATE
-
-                tiers = ("max", "high", "medium", "low")
-                cur = str(UI_STATE.get("intelligence", "max"))
-                UI_STATE["intelligence"] = tiers[(tiers.index(cur) + 1) % len(tiers)] if cur in tiers else "max"
+                self._cycle_intelligence()
                 self._ui.set_input(buf)  # keep typing intact
                 continue
             self._ui.set_input(buf)
+
+    def _cycle_intelligence(self) -> None:
+        """Alt/Option+I: cycle model intelligence — applies on the NEXT
+        LLM call (between thoughts, per the operator contract)."""
+        from suijin.modules.redteam.lib.red.console_ui import UI_STATE
+
+        tiers = ("max", "high", "medium", "low")
+        cur = str(UI_STATE.get("intelligence", "max"))
+        UI_STATE["intelligence"] = tiers[(tiers.index(cur) + 1) % len(tiers)] if cur in tiers else "max"
+        self._ui.set_mode(self._mode)  # tick the strip so the tier renders
 
     def _fire_chord(self) -> None:
         """The pause chord fired: on_pause runs (instant visual + session),
@@ -264,6 +273,8 @@ class RedInputReader:
         if not r:
             return False
         b2 = os.read(fd, 1)
+        if b2 == b"i":
+            return "alt-i"  # Alt/Option+I (macOS Option sends ESC-prefixed keys)
         if b2 in (b"[", b"O"):
             # consume until a final byte of the CSI/SS3 sequence
             deadline = time.monotonic() + 0.05
