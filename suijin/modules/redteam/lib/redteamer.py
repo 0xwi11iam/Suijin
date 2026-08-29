@@ -224,12 +224,25 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
     # subagents inherit the same generate_fn (their deltas interleave in
     # the box — cosmetic, tail-capped).
     _stream_ui = {"sink": None}
+    from suijin.modules.redteam.lib.red.console_ui import UI_STATE as _UI_STATE
+
+    with contextlib.suppress(Exception):
+        _prov = str(config.get("provider", "?"))
+        _model = ""
+        with contextlib.suppress(Exception):
+            _model = str(active_model(config) or "")
+        _UI_STATE["model_label"] = f"{_prov} {_model}".strip()
 
     def _generate_with_stream(messages, config=None, on_delta=None, **kw):
         # on_delta=False from subagents SUPPRESSES display streaming (only
         # the primary's thought renders — fireteam deltas never interleave)
         sink = _stream_ui["sink"] if on_delta is None else (None if on_delta is False else on_delta)
-        return generate_async(messages, config, on_delta=sink, **kw)
+        # model intelligence (Ctrl+Space) applies to the NEXT call — it is
+        # read per-call, never mid-thought, per the operator contract
+        cfg = dict(config or {})
+        with contextlib.suppress(Exception):
+            cfg["intelligence"] = _UI_STATE.get("intelligence", "max")
+        return generate_async(messages, cfg, on_delta=sink, **kw)
 
     agent = _agent_graph_cls()(
         generate_fn=_generate_with_stream,
@@ -434,8 +447,23 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
     from suijin.modules.redteam.lib.red.console_ui import ask_operator_answer as _ask_op
 
     def _operator_input(label: str, timeout_s: float = 600.0) -> str:
-        """Operator text through the RunBox reader (stdin's ONE owner) —
-        console.input on the main thread raced the reader and hung."""
+        """Operator text through the ONE stdin owner. TTY: the keystroke
+        reader routes raw lines to an ask queue (console.input fought the
+        cbreak reader and typing DIED — the field bug). Non-TTY: the old
+        RunBox/line-reader path."""
+        import queue as _qmod
+
+        if _input_reader is not None:
+            q = _qmod.Queue()
+            with contextlib.suppress(Exception):
+                console.print(f"[bold cyan]{label}[/bold cyan] [dim]— type your answer in the input box[/dim]")
+            _input_reader.begin_ask(q)
+            try:
+                return q.get(timeout=timeout_s)
+            except _qmod.Empty:
+                return ""
+            finally:
+                _input_reader.end_ask()
         if run_box.alive:
             return _ask_op(run_box, console, "", timeout_s=timeout_s, label=label.strip())
         try:

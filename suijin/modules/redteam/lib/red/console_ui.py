@@ -65,6 +65,9 @@ UI_STATE = {
     "last_ttft": None,  # seconds to the first streamed token (the proof streaming works)
     "input_mode": "recon",  # the input box mode badge (Tab cycles)
     "input_buf": None,  # None = idle hint; str = live typing (cursor ▌)
+    "intelligence": "max",  # model intelligence tier (Ctrl+Space cycles; next LLM call)
+    "model_label": "",  # "provider model" shown beside the mode badge
+    "cursor_on": True,  # the input-box cursor blink (heartbeat toggles)
     "flags": [],
     "creds": [],
     "fireteams": 0,
@@ -721,7 +724,14 @@ class TypewriterStream:
             self._ui.console.print(Text(text, style=base))
 
     def _emit_box(self, lang: str, content: str) -> None:
-        """A complete command span: black box, white syntax-highlighted."""
+        """A complete command span: black box, white syntax-highlighted.
+        IDENTICAL consecutive spans render ONCE — glm's reasoning stream
+        often rehearses the exact decision JSON that arrives again as
+        content (the duplicate-box field bug)."""
+        norm = " ".join(str(content).split())[:2000]
+        if norm and norm == getattr(self, "_last_box_norm", None):
+            return
+        self._last_box_norm = norm
         with contextlib.suppress(Exception):
             body = Syntax(
                 str(content)[:2000],
@@ -846,7 +856,8 @@ class EngagementUI:
         # complete black syntax boxes. ALL machinery is silent — the screen
         # shows only the typewriter line, committed rows, and boxes.
         self._tw = TypewriterStream(ui=self)
-        self._streaming = False  # True between the first delta and stream_done (green-rule tracking)
+        self._streaming = False  # True between the first delta and stream_done
+        self._last_box_norm = None  # duplicate-command-box guard
         self._waiting_since: float | None = None  # think-turn start → TTFT proof
         self._last_cost = 0.0
 
@@ -897,21 +908,36 @@ class EngagementUI:
         rows.append(self._input_box_row())  # the input box is ALWAYS the bottom row
         return Group(*rows)
 
+    # model intelligence tiers — Cmd/Ctrl-style cycler (Ctrl+Space), sent
+    # to the provider on the next LLM call (applies between thoughts)
+    INTELLIGENCE_TIERS = ("max", "high", "medium", "low")
+
     def _input_box_row(self):
         """The operator's prompt — a real white box, ALWAYS the bottom row:
-        [MODE] » type here▌ — the mode is bold colored text (recon cyan,
-        exploit red, report green); Tab cycles it."""
+        recon · zai glm-5.3 » type here▌  ...  max — lowercase short mode
+        badge, provider+model beside it, model-intelligence on the right;
+        the cursor BLINKS (heartbeat toggles) so the box reads as focused."""
         mode = str(UI_STATE.get("input_mode", "recon")).lower()
         color = {"recon": "cyan", "exploit": "red", "report": "green"}.get(mode, "cyan")
-        badge = Text(mode.upper(), style=f"bold {color}")
+        model = str(UI_STATE.get("model_label", "") or "")
+        intel = str(UI_STATE.get("intelligence", "max"))
+        cursor = "▌" if UI_STATE.get("cursor_on", True) else " "
         buf = UI_STATE.get("input_buf")
+
+        left = Text.assemble((mode, f"bold {color}"))
+        if model:
+            left.append(f" · {model}", style="dim")
+        left.append(" » ", style=f"bold {GOLD}")
         if buf is not None:
-            body = Table.grid(padding=(0, 1))
-            body.add_row(badge, Text.assemble(("» ", f"bold {GOLD}"), (str(buf), "bold white"), ("▌", GOLD)))
+            left.append(str(buf), style="bold white")
+            left.append(cursor, style=GOLD)
         else:
-            hint = f"» Tab:mode · ESC ESC:pause · / commands — {mode} prompt"
-            body = Table.grid(padding=(0, 1))
-            body.add_row(badge, Text(hint, style="dim"))
+            left.append("type here", style="dim")
+
+        row = Table.grid(padding=(0, 1))
+        row.add_row(left, Text(intel, style=f"bold {'green' if intel == 'max' else 'cyan'}"))
+        row.columns[1].justify = "right"
+        body = row
         return Panel(
             body,
             box=box.SQUARE,
@@ -949,6 +975,8 @@ class EngagementUI:
 
     def _heartbeat(self) -> None:
         while not self._refresh_stop.wait(1.0):
+            with contextlib.suppress(Exception):
+                UI_STATE["cursor_on"] = not UI_STATE.get("cursor_on", True)  # the blink
             self._tick()
 
     def stop(self) -> None:
@@ -980,16 +1008,12 @@ class EngagementUI:
         held and rendered as complete black syntax boxes; prose flows to
         the typewriter, which plays it back at the measured token rate
         (micro-increment gear ladder, fully under the hood). Colors:
-        think = light dim italic, speak = bold cyan. A GREEN rule prints
-        above each new stream start (separates the operator's world from
-        the AI's thinking). TTFT records on the first token of any kind.
+        think = light dim italic, speak = bold cyan. The green separator
+        is the ITERATION HEADER (one per iteration — no second rule at
+        stream start). TTFT records on the first token of any kind.
         Provider-worker-thread safe."""
         if not text:
             return
-        if not self._streaming:
-            # the stream STARTS here: green separator above the thinking
-            with contextlib.suppress(Exception):
-                self.console.print(Rule(style="green"))
         if self._waiting_since is not None:
             # first token of this turn: the TTFT proof (seconds, one shot)
             UI_STATE["last_ttft"] = round(time.monotonic() - self._waiting_since, 2)
@@ -1055,9 +1079,12 @@ class EngagementUI:
         self._last_tok, self._last_cost = tok, cost
         self.iteration = n
         self.phase = phase or self.phase
-        title = f" #{n} · {self.phase} · +{_fmt_tok(self._cur.dt_tok)} tok · +${self._cur.dt_cost:.4f} "
+        label = "starting engagement" if n <= 1 else f"iteration {n}"
+        title = f" {label} · {self.phase} · +{_fmt_tok(self._cur.dt_tok)} tok · +${self._cur.dt_cost:.4f} "
         self.console.print("")
-        self.console.print(Rule(title=title, style=BORDER, align="left"))
+        # THE one green separator per iteration (operator contract: one
+        # line, green, labeled — no stacked yellow+green pair)
+        self.console.print(Rule(title=title, style="green", align="left"))
         self._cur.open = True
         self.waiting(False)
 

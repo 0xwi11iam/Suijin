@@ -138,7 +138,7 @@ class TestEveryCoreToolRenders:
         ui.output("Status: 200\nok")
         out = c.export_text()
         assert name in out, name  # the ❯ line
-        assert "#1 · informational" in out
+        assert "starting engagement · informational" in out
         if expect is not None:
             assert expect in out, (name, out[:400])  # the arg content, not a dict dump
         else:
@@ -172,7 +172,7 @@ class TestEveryCoreToolRenders:
         ui.fireteam("Fireteam deployed: 2 specialist(s)")
         ui.flush_open()
         out = c.export_text()
-        assert "Fireteam deployed" in out and "#3" in out
+        assert "Fireteam deployed" in out and "iteration 3" in out
 
 
 class TestTranscript:
@@ -184,7 +184,7 @@ class TestTranscript:
         ui.tool("execute_terminal", {"cmd": 'curl -s "http://t/search" --data "q=x"'})
         ui.output("Status: 200\nOK")
         out = c.export_text()
-        assert "#6 · informational" in out  # panel title carries number+phase
+        assert "iteration 6 · informational" in out  # panel title carries number+phase
         assert "XSS payload" in out  # thinking text (no label — we know what it is)
         assert "Search reflects input unencoded" in out  # reasoning under thinking, no label
         assert ":: why ::" not in out
@@ -1650,9 +1650,9 @@ class TestInputBox:
         ui, _c = _ui()
         ui.waiting(True)
         strip = self._strip_text(ui)
-        assert "RECON" in strip  # default mode badge
+        assert "recon" in strip  # default mode badge (lowercase)
         assert "thinking" in strip  # the ONE thinking indicator (strip, not box)
-        assert "Tab" in strip and "ESC ESC" in strip  # the key hints idle inside
+        assert "type here" in strip and "max" in strip  # idle hint + intelligence tier
 
     def test_box_has_no_second_thinking(self):
         """One thinking indicator (the strip's) — the box carries ONLY the
@@ -1662,7 +1662,7 @@ class TestInputBox:
         ui.set_input("hello")
         strip = self._strip_text(ui)
         box_line = next(ln for ln in strip.split("\n") if "hello" in ln)
-        assert "RECON" in box_line and "hello" in box_line
+        assert "recon" in box_line and "hello" in box_line
         assert "thinking" not in box_line and "working" not in box_line
 
     def test_strip_shows_phase_not_thinking_when_working(self):
@@ -1700,7 +1700,7 @@ class TestInputBox:
         ui.set_mode("exploit")
         ui.set_input("check /admin")
         strip = self._strip_text(ui)
-        assert "EXPLOIT" in strip and "check /admin" in strip and "▌" in strip
+        assert "exploit" in strip and "check /admin" in strip and "▌" in strip
 
     def test_mode_tags_plain_prompts(self):
         """Plain lines dispatch as mode-tagged guidance; slash commands pass raw."""
@@ -1981,3 +1981,73 @@ class TestInstantPause:
         assert fired == [True]
         reader._dispatch("/state")  # typed INSTANTLY after the chord
         assert q.get_nowait() == "/state"  # routed to pause input already
+
+
+class TestIntelligenceAndAsk:
+    """Ctrl+Space cycles model intelligence (next LLM call); an ask_operator
+    consumes raw typed lines via the reader's ask queue (the console.input
+    fallback fought the cbreak reader — typing died)."""
+
+    def test_ctrl_space_is_intel_action(self):
+        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+
+        buf, action = RedInputReader.apply_key("keep typing", "\x00")
+        assert action == "intel" and buf == "keep typing"  # buffer intact
+
+    def test_intel_cycles_all_tiers(self):
+
+        tiers = ("max", "high", "medium", "low")
+        UI_STATE["intelligence"] = "max"
+        for want in tiers[1:] + tiers[:1]:
+            # simulate the pump's intel branch
+            cur = str(UI_STATE.get("intelligence", "max"))
+            UI_STATE["intelligence"] = tiers[(tiers.index(cur) + 1) % len(tiers)]
+            assert UI_STATE["intelligence"] == want
+        UI_STATE["intelligence"] = "max"
+
+    def test_box_shows_model_and_intelligence(self):
+        ui, _c = _ui()
+        UI_STATE["model_label"] = "zai glm-5.3"
+        import io
+
+        from rich.console import Console as C
+
+        sink = C(file=io.StringIO(), width=110, force_terminal=True)
+        sink.print(ui._strip())
+        out = sink.file.getvalue()
+        assert "recon" in out and "zai glm-5.3" in out and "max" in out
+        UI_STATE["model_label"] = ""
+
+    def test_ask_queue_routes_raw_lines(self):
+        import queue as _q
+
+        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+
+        reader = RedInputReader.__new__(RedInputReader)
+        reader._run_box = type("B", (), {"dispatch": lambda self, line: None})()
+        reader._on_guidance = None
+        reader._pause_queue = None
+        reader._ask_queue = None
+        reader._mode = "recon"
+        q = _q.Queue()
+        reader.begin_ask(q)
+        reader._dispatch("/state")  # even slash lines are the ANSWER during an ask
+        reader._dispatch("do the thing")
+        reader.end_ask()
+        assert q.get_nowait() == "/state"
+        assert q.get_nowait() == "do the thing"
+
+    def test_duplicate_command_boxes_render_once(self):
+        ui, c = _ui()
+        ui.waiting(True)
+        blob = '{"action": "use_tool", "tool_name": "http_request", "tool_args": {"url": "http://t"}}'
+        ui.reasoning_delta("reasoning", f"rehearsing the call {blob} now")
+        ui.reasoning_delta("content", f"emitting {blob} for real")
+        import time as _t
+
+        deadline = _t.monotonic() + 6
+        while (ui._tw._pending or ui._tw._line) and _t.monotonic() < deadline:
+            ui._tw.tick(0.1)
+        ui._tw.flush()
+        out = c.export_text()
+        assert out.count("http_request") == 1  # ONE box — the rehearsal dup is dead
