@@ -10,6 +10,7 @@ Handles:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from datetime import datetime, timezone
@@ -28,18 +29,18 @@ def _schema_path():
     v = globals().get("SCHEMA_PATH")
     if v is not None:
         return v  # monkeypatched / set by the operator
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+    from suijin.modules.platform.lib.workspace import engagement_dir
 
-    return WORKSPACE_DIR / "engagement_schema.json"
+    return engagement_dir() / "schema.json"
 
 
 def _recovery_path():
     v = globals().get("RECOVERY_PATH")
     if v is not None:
         return v  # monkeypatched / set by the operator
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+    from suijin.modules.platform.lib.workspace import engagement_dir
 
-    return WORKSPACE_DIR / "operation_state_recovery.json"
+    return engagement_dir() / "recovery.json"
 
 
 def __getattr__(name):
@@ -175,8 +176,25 @@ def save_session_state(state: dict) -> str:
     return str(_recovery_path())
 
 
+_GARBAGE_MARKERS = (";;", "\\*", "# program rules", "# program", "helvetica")
+
+
+def _objective_is_garbage(objective: str) -> bool:
+    """A pasted policy page is not an objective. Heuristics from the field:
+    the 92KB blob whose 'objective' was 'Helvetica;; \\*;; # Program Rules…'."""
+    obj = str(objective or "").strip()
+    if len(obj) < 10:
+        return True
+    low = obj.lower()
+    if any(m in low for m in _GARBAGE_MARKERS[:3]):
+        return True
+    return obj.count("\n") > 8 and obj.count("\n") / max(1, len(obj)) > 0.05  # wall of pasted text
+
+
 def load_session_state() -> Optional[dict]:
-    """Load a previously saved session for recovery. Returns None if no save exists."""
+    """Load a previously saved session for recovery. Returns None if no save
+    exists — or when the saved objective is garbage (a pasted policy page):
+    the blob is quarantined to archive/ and the run starts fresh."""
     if not _recovery_path().exists():
         return None
     try:
@@ -185,6 +203,14 @@ def load_session_state() -> Optional[dict]:
         logger.warning("Corrupt recovery file — ignoring")
         return None
     if not data.get("objective"):
+        return None
+    if _objective_is_garbage(data.get("objective")):
+        with contextlib.suppress(Exception):
+            import shutil
+
+            quarantine = _recovery_path().with_suffix(".garbage.json")
+            shutil.move(str(_recovery_path()), str(quarantine))
+        logger.warning("Recovery objective is garbage (pasted policy?) — quarantined, starting fresh")
         return None
     logger.info(
         "Recovery state found: phase=%s iteration=%s saved=%s",

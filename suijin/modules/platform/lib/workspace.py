@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 from pathlib import Path
@@ -70,6 +71,8 @@ ARTIFACT_DIRS = (
     "portal",
     "bugscope",
     "fireteam",
+    "engagements",  # per-engagement state (schema/recovery/scratchpad/approvals)
+    "archive",  # ended engagements land here (timestamped, immutable)
 )
 
 
@@ -78,6 +81,63 @@ def artifact_dir(name: str) -> Path:
     if name not in ARTIFACT_DIRS:
         raise ValueError(f"unknown artifact dir {name!r} (one of {ARTIFACT_DIRS})")
     return WORKSPACE_DIR / "outputs" / name
+
+
+# ── per-engagement state (the immortal-root-state fix) ─────────────────
+_CURRENT_ENGAGEMENT: Path | None = None
+
+
+def _slugify(text: str) -> str:
+    import re
+
+    words = re.sub(r"[^a-zA-Z0-9.-]+", "_", str(text or "engagement")).strip("_")
+    return (words[:48] or "engagement")
+
+
+def set_engagement(objective: str = "") -> Path:
+    """Scope all per-engagement state (schema, recovery, scratchpad,
+    approvals) to outputs/engagements/<slug>/ — state DIES with its
+    engagement instead of accumulating at the workspace root forever."""
+    global _CURRENT_ENGAGEMENT
+    from datetime import datetime, timezone
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    d = artifact_dir("engagements") / f"{stamp}_{_slugify(objective[:60])}"
+    d.mkdir(parents=True, exist_ok=True)
+    _CURRENT_ENGAGEMENT = d
+    return d
+
+
+def engagement_dir() -> Path:
+    """The current engagement's state dir (auto-created; `_default` before
+    set_engagement boots — legacy callers keep working)."""
+    d = _CURRENT_ENGAGEMENT or artifact_dir("engagements") / "_default"
+    with contextlib.suppress(OSError):
+        d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def archive_engagement(reason: str = "ended") -> Path | None:
+    """Move the current engagement's state dir into outputs/archive/
+    (timestamped) — the .sje bundle remains the resume artifact."""
+    global _CURRENT_ENGAGEMENT
+    if _CURRENT_ENGAGEMENT is None:
+        return None
+    from datetime import datetime, timezone
+    from shutil import move
+
+    src = _CURRENT_ENGAGEMENT
+    _CURRENT_ENGAGEMENT = None
+    if not src.is_dir() or not any(src.iterdir()):
+        return None
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    dest = artifact_dir("archive") / f"{stamp}_{src.name}_{_slugify(reason)}"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        move(str(src), str(dest))
+        return dest
+    except OSError:
+        return None
 
 
 def migrate_legacy_artifacts(workspace: Path | None = None) -> list[str]:
