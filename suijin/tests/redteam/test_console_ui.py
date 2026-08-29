@@ -2051,3 +2051,43 @@ class TestIntelligenceAndAsk:
         ui._tw.flush()
         out = c.export_text()
         assert out.count("http_request") == 1  # ONE box — the rehearsal dup is dead
+
+
+class TestExploitVerdictPanel:
+    """catalog_exploit results render as a prominent CLASSED panel in the
+    TUI — the agent's own severity/CVSS classing, status-colored."""
+
+    def test_confirmed_classed_panel(self):
+        ui, c = _ui()
+        ui.iteration_header(2, "exploitation")
+        ok = ui.exploit_verdict(
+            "EXP-001 CONFIRMED — CRITICAL CVSS 8.9 : SQL injection in the search parameter. "
+            "The TERMINAL reproduced marker 'root:' in its output."
+        )
+        assert ok
+        out = c.export_text()
+        assert "CRITICAL" in out and "CVSS 8.9" in out
+        assert "SQL injection in the search parameter" in out
+        assert "CONFIRMED" in out and "EXP-001" in out
+
+    def test_agent_defined_classing_renders(self):
+        ui, c = _ui()
+        ui.iteration_header(2, "exploitation")
+        ui.exploit_verdict(
+            "EXP-002 CONFIRMED — SEVERE-BLIND CVSS 9.9 : time-based blind injection in the filter param."
+        )
+        out = c.export_text()
+        assert "SEVERE-BLIND" in out and "CVSS 9.9" in out  # custom class displays verbatim
+
+    def test_ai_claimed_carries_the_warning(self):
+        ui, c = _ui()
+        ui.iteration_header(2, "exploitation")
+        ui.exploit_verdict(
+            "EXP-003 AI_CLAIMED — HIGH CVSS 7.2 : reflected XSS in the callback. Recorded as AI-CLAIMED."
+        )
+        out = c.export_text()
+        assert "AI_CLAIMED" in out and "NOT terminal-verified" in out
+
+    def test_non_exploit_output_not_matched(self):
+        ui, _c = _ui()
+        assert not ui.exploit_verdict("nmap scan completed: 22/tcp open ssh")

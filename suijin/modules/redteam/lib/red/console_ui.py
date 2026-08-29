@@ -1140,6 +1140,46 @@ class EngagementUI:
         self._section(Text(f"response unparseable — asking again ({attempt}/{max_attempts})", style="bold red"))
         self._tick()
 
+    _SEV_COLORS = {"CRITICAL": "bold red", "HIGH": "red", "MEDIUM": "bold yellow", "LOW": "yellow"}
+
+    def exploit_verdict(self, result_text: str) -> bool:
+        """When catalog_exploit fires, the CLASSED registration renders as
+        a prominent verdict panel in the TUI — the agent's own classing,
+        e.g. 'CRITICAL CVSS 8.9 : SQL injection in the search parameter'
+        with status coloring. Returns True when rendered."""
+        import re as _re
+
+        m = _re.search(
+            r"(EXP-\d+)\s+(CONFIRMED|AI_CLAIMED|ABANDONED|FAILED_SYNTAX|FAILED_REPRO|DRAFT)\s+—\s+(.+?)(?:\.\s|$)",
+            str(result_text or ""),
+        )
+        if not m:
+            return False
+        eid, status, rest = m.group(1), m.group(2), m.group(3)
+        sev_m = _re.match(r"([A-Z-]+)\s+CVSS\s+([0-9.]+)\s*:\s*(.+)", rest)
+        title = rest
+        sev_line = ""
+        color = self._SEV_COLORS.get("MEDIUM")
+        if sev_m:
+            sev, cvss, title = sev_m.group(1), sev_m.group(2), sev_m.group(3)
+            sev_line = f"{sev}  CVSS {cvss}"
+            color = self._SEV_COLORS.get(sev, "bold cyan")
+        status_style = {"CONFIRMED": "bold green", "AI_CLAIMED": "bold yellow"}.get(status, "bold red")
+        with contextlib.suppress(Exception):
+            body = Text.assemble(
+                (f"{sev_line}\n", color) if sev_line else ("", ""),
+                (str(title).strip()[:120], "bold white"),
+                ("\n", ""),
+                (f"{status}", status_style),
+                ("  ·  ", "dim"),
+                (eid, "dim"),
+                ("  ·  NOT terminal-verified" if status == "AI_CLAIMED" else "", "bold yellow"),
+            )
+            self.console.print(
+                Panel(body, title=" vulnerability ", title_align="left", border_style=color, padding=(0, 1))
+            )
+        return True
+
     def output(self, text: str, error_class: str = "") -> None:
         out = str(text or "")
         ok = not (is_error(out) or out.startswith("BLOCKED"))
