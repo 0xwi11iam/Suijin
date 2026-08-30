@@ -986,6 +986,8 @@ class EngagementUI:
         if on and self._waiting_since is None:
             self._waiting_since = time.monotonic()  # TTFT clock starts
             self._last_report_s = -1  # new turn — fresh progress cadence
+            self._streaming = False  # previous turn's stream is dead (suppresses still-thinking otherwise)
+            self._tw.resume_playback()  # unstick the typewriter if it was paused
         self._tick()
 
     def paused_visual(self, on: bool) -> None:
