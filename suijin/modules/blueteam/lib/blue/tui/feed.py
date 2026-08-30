@@ -110,7 +110,14 @@ def _detect_obvious_attack(request: dict) -> dict:
 
     This runs BEFORE any AI call so obvious attacks get immediate attention.
     Returns {"score": int, "patterns": [(name, weight), ...]}
+    BF7: the FP allowlist runs BEFORE the detector — allowlisted signals
+    are suppressed (the /fp command feeds this, wiring the old dead
+    allowlist_check into the live path).
     """
+    from suijin.modules.blueteam.lib.blue.learning import fp_allowlist_check
+
+    _fp_path = str(request.get("path", ""))
+    _fp_query = str(request.get("query", {}))
     body = str(request.get("body", ""))
     ua = str(request.get("user_agent", ""))
     path = request.get("path", "/")
@@ -125,6 +132,12 @@ def _detect_obvious_attack(request: dict) -> dict:
 
     for name, pattern, weight in _ATTACK_PATTERNS:
         if re.search(pattern, scan_text):
+            # BF7: FP allowlist suppresses allowlisted signals (the /fp
+            # command feeds this — the old dead allowlist_check, now live)
+            from suijin.modules.blueteam.lib.blue.learning import fp_allowlist_check
+
+            if fp_allowlist_check(name, path=path):
+                continue
             score = min(10, score + weight)
             patterns_found.append((name, weight))
 
