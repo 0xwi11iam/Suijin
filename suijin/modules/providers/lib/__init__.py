@@ -338,7 +338,10 @@ def _stream_chat(url, headers, payload, on_delta=None):
         with _HTTP.post(url, headers=headers, json=p, timeout=_TIMEOUT, stream=True) as resp:
             if resp.status_code != 200:
                 return resp.status_code, "", "", None, (resp.text or "")[:400]
+            _first_token_deadline = time.monotonic() + 60.0  # provider sends NOTHING in 60s → kill
             for line in resp.iter_lines(decode_unicode=True):
+                if time.monotonic() > _first_token_deadline and not content and not reasoning:
+                    return 0, "", "", None, "first-token timeout: provider sent no data in 60s"
                 if not line or not line.startswith("data:"):
                     continue
                 data = line[5:].strip()
