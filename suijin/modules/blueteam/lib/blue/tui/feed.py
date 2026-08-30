@@ -15,6 +15,7 @@ and the action is recorded in the shared knowledge graph.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import re
 from dataclasses import dataclass
@@ -173,6 +174,7 @@ class LiveFeed:
         tier2=None,
         threat_hunter=None,
         incident_commander=None,
+        case_store=None,
     ):
         self.ai_engine = ai_engine
         self.subagent_manager = subagent_manager
@@ -187,6 +189,10 @@ class LiveFeed:
         self.tier2 = tier2
         self.threat_hunter = threat_hunter
         self.incident_commander = incident_commander
+        # BF4: the case store (replaces the in-memory IncidentCommander)
+        from suijin.modules.blueteam.lib.blue.cases import CaseStore
+
+        self.case_store = case_store or CaseStore(getattr(self, "_engagement_name", ""))
         self._recent_requests: list = []  # For threat hunter to scan
         # BF0: honest per-instance enforcement counters (see get_stats)
         self.stats_detected = 0
@@ -341,13 +347,17 @@ class LiveFeed:
         if not matched_t1 and self.tier1_analysts:
             self.tier1_analysts[0].triage(request, effective_score)
 
-        # SOC Tier-2 + Incident Commander: declare incident for severe/repeat attacks
-        if effective_score >= _risk_high() and self.incident_commander:
+        # BF4: every confirmed attack opens/attaches to a CASE (persistent,
+        # timeline, MTTD/MTTR timestamps) — the IncidentCommander retires
+        if effective_score >= 3:
+            with contextlib.suppress(Exception):
+                self.case_store.record_event(
+                    ip, pattern_names[0] if pattern_names else "unknown", effective_score, path, source="detector"
+                )
+        if effective_score >= _risk_high() and self.soc_lead:
             hist = kg.get_attacker_history(ip)
             if hist.get("total_flags", 0) >= 2:
-                self.incident_commander.declare_incident(ip, pattern_names[0], effective_score, [path])
-                if self.soc_lead:
-                    self.soc_lead.escalate(ip, f"Repeat offender — {pattern_names[0]}", effective_score)
+                self.soc_lead.escalate(ip, f"Repeat offender — {pattern_names[0]}", effective_score)
 
         # Threat hunter: scan recent requests for missed patterns
         if self.threat_hunter and self.request_count % 10 == 0:
@@ -558,6 +568,15 @@ class LiveFeed:
                 padding=(1, 2),
             )
         )
+
+    def _record_case_action(self, ip: str, action: str, detail: str, path: str):
+        """BF4: enforcement actions attach to the actor's case."""
+        with contextlib.suppress(Exception):
+            case = self.case_store.find_open_for_actor(ip)
+            if case:
+                self.case_store.record_action(case["id"], action, detail)
+            elif action.upper() in ("BLOCK", "TARPIT", "DECEIVE"):
+                self.case_store.record_event(ip, "enforcement", 0, path, source=action, detail=detail)
 
     def _apply_tarpit(self, ip: str, score: int, patterns: list):
         """Apply tarpit — write state file Flask checks on each request."""
