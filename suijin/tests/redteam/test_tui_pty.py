@@ -92,13 +92,13 @@ def test_pause_chord_commands_and_resume(rig):
     time.sleep(2)
     assert "guidance queued" in _log_text(), "guidance not consumed by the session"
 
-    # the turn ends -> main lands -> guidance injects -> the loop RESUMES
+    # the turn ends -> main lands -> guidance written to file -> resume
     deadline = time.time() + 25
     while time.time() < deadline:
-        if "Guidance sent. Resuming" in _log_text():
+        if "guidance written" in _log_text() or "Resuming" in _log_text():
             break
         time.sleep(1)
-    assert "Guidance sent. Resuming" in _log_text(), "engagement did not resume after the turn"
+    assert "guidance written" in _log_text() or "Resuming" in _log_text(), "engagement did not resume after the turn"
 
     # the stream is live again (thinking spinner back, not PAUSED)
     time.sleep(3)

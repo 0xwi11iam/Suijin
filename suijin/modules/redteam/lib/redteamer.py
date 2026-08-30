@@ -432,14 +432,16 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
             usage_fn=providers.get_usage,
             loot=_UI_LOOT,
             force_report_fn=lambda: sc.force_report(
-                _pause_live["agent"], _pause_live["thread_id"], _pause_live["final_state"], _pause_live["objective"], config
+                _pause_live["agent"],
+                _pause_live["thread_id"],
+                _pause_live["final_state"],
+                _pause_live["objective"],
+                config,
             ),
         )
         _pause_session["ctx"] = _pause_ctx
 
-        _input_reader = RedInputReader(
-            run_box, ui, on_pause=_esc_pause, on_guidance=_live_guidance, on_pause_line=None
-        )
+        _input_reader = RedInputReader(run_box, ui, on_pause=_esc_pause, on_guidance=_live_guidance, on_pause_line=None)
         if _input_reader.start():
             _input_reader.arm_pause(_pause_q)  # ESC ESC routes to it instantly
             console.print("[dim]input box live — Tab: mode · ESC ESC: pause · / for commands[/dim]")
@@ -482,12 +484,16 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
     )
     console.print(HINT + " [dim]/think (toggle reasoning)[/dim]")
 
+    _resume_retry = False  # one clean-restart allowed after a paused resume
+
     while True:
         try:
+            _got_events = False
             input_state = {"_objective": objective, "user_id": "local", "project_id": "default"} if first_run else None
             first_run = False
 
             async for event in agent._graph.astream(input_state, langgraph_config):
+                _got_events = True
                 if getattr(_signal, "_suijin_interrupted", False):
                     raise KeyboardInterrupt()
                 node_name = list(event.keys())[0]
@@ -498,6 +504,27 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                     from suijin.kernel.diag import diag as _diag
 
                     _diag("node", name=node_name, iter=node_output.get("current_iteration", "?"))
+
+                # Guidance delivery confirmation: when a think event fires,
+                # check the context manifest for guidance consumed this turn
+                if node_name == "think":
+                    with contextlib.suppress(Exception):
+                        from suijin.modules.agent.lib.live_guidance import context_path
+
+                        cp = context_path()
+                        if cp.is_file():
+                            body = cp.read_text(encoding="utf-8", errors="ignore")
+                            if "delivered this turn" in body:
+                                # extract the guidance text
+                                gd_start = body.find("delivered this turn") + len("delivered this turn)") + 1
+                                gd_end = body.find("\n## ", gd_start)
+                                gd_text = (
+                                    body[gd_start:gd_end].strip()
+                                    if gd_end > gd_start
+                                    else body[gd_start : gd_start + 200]
+                                )
+                                if gd_text and "(none" not in gd_text:
+                                    ui.guidance_delivered(gd_text)
 
                 ui.waiting(False)  # an event arrived — spinner off
 
@@ -755,6 +782,14 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
             else:
                 # If loop completes without break, get final state
                 final_state = agent.get_state(thread_id) or {}
+                # Resume hardening: zero events from a resumed astream =
+                # the graph's internal state was stale after the KI —
+                # restart cleanly from the objective (one retry only)
+                if not _got_events and _resume_retry:
+                    _resume_retry = False
+                    first_run = True
+                    console.print("[yellow]  graph resumed empty — restarting from objective[/yellow]")
+                    continue
 
             run_box.stop()
             if _input_reader is not None:
@@ -769,7 +804,9 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
             _signal.signal(_signal.SIGINT, _sigint)
             ui.flush_open()
 
-            _pause_live.update({"agent": agent, "thread_id": thread_id, "final_state": final_state, "objective": objective})
+            _pause_live.update(
+                {"agent": agent, "thread_id": thread_id, "final_state": final_state, "objective": objective}
+            )
             _pause_ctx.agent = agent
             _pause_ctx.thread_id = thread_id
             _pause_ctx.objective = objective
@@ -792,7 +829,9 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                 # non-TTY: no box exists — the legacy prompt path
                 ui.stop()
                 try:
-                    guidance = sc.pause_console(_pause_ctx, lambda label, timeout=600.0: _operator_input(label, timeout))
+                    guidance = sc.pause_console(
+                        _pause_ctx, lambda label, timeout=600.0: _operator_input(label, timeout)
+                    )
                     _pause_session["guidance"] = guidance
                 except (KeyboardInterrupt, EOFError):
                     guidance = None
@@ -815,19 +854,13 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                 break
 
             guidance = _pause_session["guidance"]
-            # Inject guidance into graph state
-            try:
-                agent._graph.update_state(
-                    langgraph_config,
-                    {
-                        "messages": [{"role": "user", "content": f"OPERATOR GUIDANCE: {guidance}"}],
-                        "completion_reason": None,
-                    },
-                )
-                console.print("[dim]  Guidance sent. Resuming...[/dim]\n")
-            except Exception as e:
-                console.print(f"[yellow]  State update failed: {e}. Restarting...[/yellow]")
-                first_run = True
+            # Pause guidance goes to the SAME file the think node reads —
+            # one mechanism, no update_state, no silent failure
+            if guidance and guidance != "Continue what you are doing.":
+                from suijin.modules.agent.lib.live_guidance import write_guidance
+
+                write_guidance(guidance, mode="PAUSED")
+                console.print("[dim]  guidance written — the AI reads it next turn[/dim]\n")
             # resume: session closes, the box returns to live routing, the
             # thought stream resumes, the strip un-pauses
             _pause_session["active"] = False
@@ -838,6 +871,10 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                 _input_reader.arm_pause(_pause_q)
             ui.paused_visual(False)
             ui.waiting(True)
+            # Resume hardening: the KI that paused us may have left the
+            # graph's internal execution state stale — if the next astream
+            # yields nothing, the retry below restarts from the objective
+            _resume_retry = True
             continue  # Resume the while loop
 
         except Exception as e:
