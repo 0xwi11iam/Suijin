@@ -998,6 +998,22 @@ class EngagementUI:
         self._tw.pause_playback() if on else self._tw.resume_playback()
         self._tick()
 
+    def guidance_delivered(self, text: str) -> None:
+        """Visible confirmation: the think node CONSUMED the operator's
+        guidance — no more guessing whether the AI saw it."""
+        with contextlib.suppress(Exception):
+            from rich.panel import Panel as _Panel
+
+            self.console.print(
+                _Panel(
+                    f"[bold green]delivered to the AI[/bold green] [dim]{str(text)[:200]}[/dim]",
+                    title=" » guidance ",
+                    title_align="left",
+                    border_style="green",
+                    padding=(0, 1),
+                )
+            )
+
     def reasoning_delta(self, kind: str, text: str) -> None:
         """on_delta sink for the provider stream — feeds the typewriter.
 
