@@ -897,7 +897,7 @@ class EngagementUI:
 
     def _input_box_row(self):
         """The operator's prompt — a real white box, ALWAYS the bottom row:
-        recon · zai glm-5.3 » type here▌  ...  max — lowercase short mode
+        recon · zai glm-5.3 » ▌type here  ...  max — cursor LEFT of the hint
         badge, provider+model beside it, model-intelligence on the right;
         the cursor BLINKS (heartbeat toggles) so the box reads as focused."""
         mode = str(UI_STATE.get("input_mode", "recon")).lower()
