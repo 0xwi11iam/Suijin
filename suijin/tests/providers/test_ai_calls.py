@@ -7,6 +7,10 @@ import os
 import sys
 import time
 
+import pytest
+
+pytestmark = [pytest.mark.ai, pytest.mark.slow]  # live paid API calls
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 

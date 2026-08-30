@@ -800,14 +800,19 @@ def generate(
                         pass
                     return text
                 elif status == 401:
+                    _diag_llm_done("zai", zai_model, False, time.monotonic() - _zai_t0)
                     return "Error: Invalid Z.ai API Key"
                 elif status == 402:
                     _diag_llm_done("zai", zai_model, False, time.monotonic() - _zai_t0)
-                    return "Error: 402 (insufficient Z.ai credits)"
+                    return (
+                        "Error: 402 (Z.ai plan quota exhausted or out of credits — "
+                        "coding-plan quotas reset every ~5h; pay-as-you-go needs a top-up)"
+                    )
                 elif status == 403:
                     # Classic cause: Coding Plan key hitting the pay-as-you-go
                     # endpoint (or vice versa). Point at the fix instead of
                     # retrying blindly — 403s don't heal with retries.
+                    _diag_llm_done("zai", zai_model, False, time.monotonic() - _zai_t0)
                     return (
                         "Error: Z.ai 403 — this key can't use the selected endpoint. "
                         f'Coding Plan: set zai_endpoint="coding" ({ZAI_CODING_BASE_URL}). '
