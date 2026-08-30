@@ -556,7 +556,7 @@ class TypewriterStream:
 
     MIN_RATE = 20.0
     LADDER = sorted({max(20, min(3000, round(20 * (1.09**i)))) for i in range(60)})  # 60 micro-increments
-    TICK_HZ = 50.0
+    TICK_HZ = 20.0  # 50Hz fought the Live refresh → terminal control code conflicts → flashing TUI
     CATCHUP_FACTOR = 1.15  # play slightly faster than arrival — always catch up
     BACKLOG_ESCAPE = 3  # rows of backlog that allow unbounded gear jumps
 

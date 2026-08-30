@@ -78,9 +78,9 @@ def test_pause_chord_commands_and_resume(rig):
 
     # ESC ESC mid-think: instant PAUSED + banner — the LLM is STILL stuck
     _send(fifo, b"\x1b\x1b")
-    time.sleep(2)
+    time.sleep(5)  # timeout-poll is 2s; allow a full poll + processing
     out = _log_text()
-    assert "Paused" in out, "no pause banner within 2s of the chord"
+    assert "Paused" in out, "no pause banner within 5s of the chord"
     assert "PAUSED" in out, "strip did not flip to PAUSED"
 
     # a command answers INSTANTLY during the stuck window
