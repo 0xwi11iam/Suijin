@@ -81,7 +81,14 @@ def _looks_like_scope_confirmation(answer: str) -> bool:
 # ── termination classifier — every ending gets exactly one banner ──────
 
 _DECLINE_WORDS = ("declin", "refuse", "will not proceed", "cannot proceed", "not able to proceed", "i won't")
-_FAIL_REASONS = ("parse_failure", "llm_error", "provider_failure", "budget_exhausted", "node_crash")
+_FAIL_REASONS = (
+    "parse_failure",
+    "llm_error",
+    "provider_failure",
+    "provider_out_of_credits",
+    "budget_exhausted",
+    "node_crash",
+)
 
 
 def _classify_termination(reason: str, final_state: dict, operator_stopped: bool) -> str:
@@ -147,6 +154,24 @@ def _render_termination(final_state: dict, ui, operator_stopped: bool) -> None:
                 if msg.get("role") == "assistant" and msg.get("content"):
                     detail = f"last model output: {str(msg['content'])[:400]}"
                     break
+        if reason == "provider_out_of_credits":
+            console.print(
+                Panel(
+                    "The LLM provider rejected every call: HTTP 402 / insufficient credits.\n"
+                    "The engagement could not think — this is a billing problem, not a bug.\n\n"
+                    "[dim]Fix: top up the provider account or switch provider:\n"
+                    "  suijin providers   (list / test / switch)\n"
+                    "  suijin env         (check keys)\n"
+                    "Logs: outputs/logs/engagement.log[/dim]",
+                    title=" ENGAGEMENT FAILED — PROVIDER OUT OF CREDITS ",
+                    title_align="left",
+                    border_style="red",
+                )
+            )
+            console.print("[dim]  press Enter to return to the menu...[/dim]")
+            with contextlib.suppress(Exception):
+                input()
+            return
         if reason == "parse_failure":
             detail = (detail + "\n\n" if detail else "") + (
                 "the model returned non-JSON 3 times (often an overloaded/timeouty "
