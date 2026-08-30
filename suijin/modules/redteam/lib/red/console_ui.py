@@ -912,10 +912,11 @@ class EngagementUI:
         if model:
             left.append(f" · {model}", style="dim")
         left.append(" » ", style=f"bold {GOLD}")
-        left.append(cursor, style=GOLD)  # cursor FIRST — LEFT of everything
         if buf is not None:
             left.append(str(buf), style="bold white")
+            left.append(cursor, style=GOLD)  # typing: cursor TRAILS the text — moves with input
         else:
+            left.append(cursor, style=GOLD)  # idle: cursor sits LEFT of the hint
             left.append("type here", style="dim")
 
         body = left
