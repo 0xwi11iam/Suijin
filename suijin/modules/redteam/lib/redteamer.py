@@ -252,7 +252,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
     agent = _agent_graph_cls()(
         generate_fn=_generate_with_stream,
         route_tool_fn=_dispatch_mod().route_tool,
-        max_iterations=config.get("max_iterations", 100),
+        max_iterations=config.get("max_iterations", 100000),  # operator: infinite by default
         run_config=config,
     )
 
@@ -272,7 +272,10 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
     _operator_stopped = False  # unbound-local crash: the finally referenced
     # this before ANY assignment when an early exception jumped the loop
     _provider_retried = False
-    langgraph_config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 250}
+    langgraph_config = {
+        "configurable": {"thread_id": thread_id},
+        "recursion_limit": 100000,
+    }  # operator: infinite (250 killed real engagements)}
 
     # .sje resume: seed the fresh thread with the saved engagement's state
     # (messages, traces, chain memory) — the same update_state seam
@@ -794,11 +797,14 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                         agent = _agent_graph_cls()(
                             generate_fn=_generate_with_stream,
                             route_tool_fn=_dispatch_mod().route_tool,
-                            max_iterations=config.get("max_iterations", 100),
+                            max_iterations=config.get("max_iterations", 100000),  # operator: infinite by default
                             run_config=config,
                         )
                         thread_id = f"redteam_{int(time.time())}"
-                        langgraph_config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 250}
+                        langgraph_config = {
+                            "configurable": {"thread_id": thread_id},
+                            "recursion_limit": 100000,
+                        }  # operator: infinite (250 killed real engagements)}
                         agent._build()
                         _pause_live.update({"agent": agent, "thread_id": thread_id})
                         _pause_ctx.agent = agent

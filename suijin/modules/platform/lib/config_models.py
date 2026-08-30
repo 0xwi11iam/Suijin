@@ -98,9 +98,9 @@ class RedConfig(BaseModel):
     max_iterations: int = Field(default=100, ge=1, le=10000)
     temperature: float = Field(default=0.4, ge=0.0, le=2.0)
     supervisor_interval: int = Field(default=5, ge=1)
-    cost_hard_cap_usd: float = Field(default=2.0, ge=0.0)
-    cost_budget_usd: float = Field(default=1.0, ge=0.0)
-    cost_alert_usd: float = Field(default=0.25, ge=0.0)
+    cost_hard_cap_usd: float = Field(default=0.0, ge=0.0)  # 0 = unlimited (operator)
+    cost_budget_usd: float = Field(default=0.0, ge=0.0)  # 0 = unlimited (operator)
+    cost_alert_usd: float = Field(default=0.0, ge=0.0)  # 0 = disabled (operator)
     expert_models: List[str] = Field(default_factory=list)
     final_model_id: str = ""
     sentinel_model_id: str = ""
