@@ -358,6 +358,16 @@ class BlueCommandBox:
                     )
                 self.ui.note("\n".join(lines), "cyan")
 
+        def fp(args):
+            pattern = args.strip()
+            if not pattern:
+                self.ui.note("usage: /fp <signal-name or path-regex>", "yellow")
+                return
+            from suijin.modules.blueteam.lib.blue.learning import fp_allowlist_add
+
+            fp_allowlist_add(pattern, reason="operator command")
+            self.ui.note(f"allowlisted: {pattern} (this signal will be suppressed)", "green")
+
         def hunt_cmd(_):
             from suijin.modules.blueteam.lib.blue import enforcement
             from suijin.modules.blueteam.lib.blue.knowledge_graph import get_kg
@@ -378,6 +388,7 @@ class BlueCommandBox:
             "dossier": dossier,
             "case": case,
             "hunt": hunt_cmd,
+            "fp": fp,
         }.items():
             self.register(name, fn)
 
