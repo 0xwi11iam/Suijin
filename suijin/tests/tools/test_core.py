@@ -158,8 +158,8 @@ class TestConfigValidation:
         from suijin.modules.platform.lib.config_models import RedConfig
 
         c = RedConfig()
-        assert c.cost_hard_cap_usd == 2.0
-        assert c.max_iterations == 100
+        assert c.cost_hard_cap_usd == 0.0  # operator: 0 = unlimited
+        assert c.max_iterations == 100000  # operator: effectively infinite
 
     def test_red_config_rejects_negative_cost(self):
         from pydantic import ValidationError

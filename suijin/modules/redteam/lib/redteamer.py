@@ -242,6 +242,17 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
 
     _runtime.reset_recon_state()
 
+    # PROVIDER CHAIN — printed at EVERY engagement start. The operator must
+    # never wonder which LLM is about to be spent (field incident: config
+    # said zai, a resumed bundle said deepseek, nobody could tell).
+    with contextlib.suppress(Exception):
+        _p = str(config.get("provider", "deepseek")).lower()
+        _m = config.get(f"{_p}_model") or "auto"
+        _e = f" ({config.get('zai_endpoint')})" if _p == "zai" else ""
+        _fb = config.get("fallback_providers") or []
+        _chain = f" · fallback: {', '.join(_fb)}" if _fb else " · no fallback"
+        console.print(f"[bold]provider: {_p} / {_m}{_e}{_chain}[/bold]")
+
     # Apply proxy setting from config
     proxy_url = config.get("proxy_url", "")
     if proxy_url:
