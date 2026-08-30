@@ -398,7 +398,24 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
 
         # Provider error: no point retrying parse, provider already retried internally.
         # One retry at think level for transient network glitches, then bail.
+        # 402 = OUT OF CREDITS: no point retrying at all — kill instantly
+        # with a message the operator can read.
         if isinstance(raw_response, str) and raw_response.startswith("Error:"):
+            if "402" in raw_response or "credit" in raw_response.lower() or "billing" in raw_response.lower():
+                return {
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": (
+                                f"SYSTEM: PROVIDER OUT OF CREDITS — {raw_response}. "
+                                "Check billing at your provider's dashboard. Engagement halted."
+                            ),
+                        }
+                    ],
+                    "current_iteration": iteration,
+                    "completion_reason": "provider_out_of_credits",
+                    "final_summary": f"Provider out of credits: {raw_response}",
+                }
             logger.warning(f"Provider error: {raw_response[:200]}")
             if attempt == 0:
                 await asyncio.sleep(3)
