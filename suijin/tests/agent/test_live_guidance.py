@@ -1,5 +1,6 @@
 """Live guidance — the file-based operator->AI channel."""
 
+import asyncio
 import json
 
 import pytest
@@ -12,9 +13,24 @@ from suijin.modules.agent.lib import live_guidance as lg
 def _ws(tmp_path, monkeypatch):
     monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
     ws._CURRENT_ENGAGEMENT = None
-    ws.set_engagement("live guidance test")
+    ws.set_engagement("lg test")
     yield tmp_path
     ws._CURRENT_ENGAGEMENT = None
+
+
+def _run_think(state_extra=None):
+    from suijin.modules.agent.lib.nodes.think_node import think_node
+
+    got = []
+
+    async def gen(messages, config=None, **kw):
+        got.append(list(messages))
+        return json.dumps({"action": "complete", "completion_reason": "done", "thought": "t"})
+
+    state = {"objective": "t", "original_objective": "test target", "messages": [], "target_info": {}}
+    state.update(state_extra or {})
+    asyncio.run(think_node(state, generate_fn=gen, config={}))
+    return got[0] if got else []
 
 
 class TestGuidanceFile:
@@ -29,41 +45,22 @@ class TestGuidanceFile:
     def test_empty_when_no_file(self):
         assert lg.read_and_clear_guidance() == ""
 
-    captured = {}
-
-    def test_guidance_at_top_of_system_prompt(self):
-        import asyncio
-
-        from suijin.modules.agent.lib.nodes.think_node import think_node
-
+    def test_guidance_is_last_user_message(self):
+        """Guidance rides as the LAST user message — highest attention."""
         lg.write_guidance("priority: test /graphql")
+        msgs = _run_think()
+        assert len(msgs) >= 3  # [system, objective, guidance]
+        last = msgs[-1]
+        assert last["role"] == "user"
+        assert "OPERATOR GUIDANCE" in last["content"]
+        assert "priority: test /graphql" in last["content"]
+        # the system prompt does NOT contain it (not diluted there)
+        assert "OPERATOR GUIDANCE" not in msgs[0]["content"]
 
-        async def gen(messages, config=None, **kw):
-            self.captured["sys"] = messages[0]["content"]
-            return json.dumps({"action": "complete", "completion_reason": "done", "thought": "t"})
-
-        state = {"objective": "t", "original_objective": "test target", "messages": [], "target_info": {}}
-        asyncio.run(think_node(state, generate_fn=gen, config={}))
-        sys_prompt = self.captured["sys"]
-        assert "OPERATOR GUIDANCE" in sys_prompt
-        assert "priority: test /graphql" in sys_prompt
-        doctrine_idx = sys_prompt.find("PROFESSIONAL ENGAGEMENT")
-        guidance_idx = sys_prompt.find("OPERATOR GUIDANCE")
-        if doctrine_idx != -1:
-            assert guidance_idx < doctrine_idx
-
-    def test_no_guidance_no_block(self):
-        import asyncio
-
-        from suijin.modules.agent.lib.nodes.think_node import think_node
-
-        async def gen(messages, config=None, **kw):
-            self.captured["plain"] = messages[0]["content"]
-            return json.dumps({"action": "complete", "completion_reason": "done", "thought": "t"})
-
-        state = {"objective": "t", "original_objective": "test target", "messages": [], "target_info": {}}
-        asyncio.run(think_node(state, generate_fn=gen, config={}))
-        assert "OPERATOR GUIDANCE" not in self.captured["plain"]
+    def test_no_guidance_no_extra_message(self):
+        msgs = _run_think()
+        assert len(msgs) == 2  # [system, objective] — no guidance rider
+        assert "OPERATOR GUIDANCE" not in msgs[-1]["content"]
 
 
 class TestContextManifest:
