@@ -189,10 +189,9 @@ class LiveFeed:
         self.tier2 = tier2
         self.threat_hunter = threat_hunter
         self.incident_commander = incident_commander
-        # BF4: the case store (replaces the in-memory IncidentCommander)
-        from suijin.modules.blueteam.lib.blue.cases import CaseStore
-
-        self.case_store = case_store or CaseStore(getattr(self, "_engagement_name", ""))
+        # BF4: the case store (replaces the in-memory IncidentCommander).
+        # LAZY — the constructor does file I/O that blocks mocked tests.
+        self._case_store = case_store
         self._recent_requests: list = []  # For threat hunter to scan
         # BF0: honest per-instance enforcement counters (see get_stats)
         self.stats_detected = 0
@@ -200,6 +199,14 @@ class LiveFeed:
         self.stats_blocked = 0
         self.stats_deceived = 0
         self._flagged_ips = {}  # ip -> count of times flagged (instance state)
+
+    @property
+    def case_store(self):
+        if self._case_store is None:
+            from suijin.modules.blueteam.lib.blue.cases import CaseStore
+
+            self._case_store = CaseStore(getattr(self, "_engagement_name", ""))
+        return self._case_store
 
     async def process_request(self, request: dict) -> Optional[AIAnalysisResult]:
         """Process a single incoming request through the tier system.

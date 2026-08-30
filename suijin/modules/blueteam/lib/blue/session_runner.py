@@ -347,6 +347,14 @@ class BlueCommandBox:
                     )
                 self.ui.note("\n".join(lines), "cyan")
 
+        def hunt_cmd(_):
+            from suijin.modules.blueteam.lib.blue import enforcement
+            from suijin.modules.blueteam.lib.blue.knowledge_graph import get_kg
+            from suijin.modules.blueteam.lib.blue.retention import hunt, render_hunt
+
+            result = hunt(get_kg(), enforcement.snapshot())
+            self.ui.note(render_hunt(result), "magenta")
+
         for name, fn in {
             "state": state,
             "block": block,
@@ -358,6 +366,7 @@ class BlueCommandBox:
             "rotate": rotate,
             "dossier": dossier,
             "case": case,
+            "hunt": hunt_cmd,
         }.items():
             self.register(name, fn)
 
