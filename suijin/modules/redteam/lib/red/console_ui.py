@@ -959,21 +959,21 @@ class EngagementUI:
             self._tw.start()
 
     _LLM_WAIT_REPORT_S = 15  # every 15s of silent thinking, tell the operator
+    _last_report_s: int = -1  # dedup — one line per interval, never twice
 
     def _heartbeat(self) -> None:
-        beat = 0
         while not self._refresh_stop.wait(1.0):
-            beat += 1
             with contextlib.suppress(Exception):
                 UI_STATE["cursor_on"] = not UI_STATE.get("cursor_on", True)  # the blink
             # LLM-wait progress: the spinner says nothing about TIME — a
-            # dim transcript line every 15s proves the program is alive
+            # dim transcript line every 15s proves the program is alive.
+            # SUPPRESSED during pause (the PAUSED strip IS the state).
             with contextlib.suppress(Exception):
-                if self._waiting and self._waiting_since is not None:
-                    waited = time.monotonic() - self._waiting_since
-                    if waited > 0 and int(waited) % self._LLM_WAIT_REPORT_S == 0 and not self._streaming:
-                        self.console.print(f"[dim]  still thinking… {int(waited)}s[/dim]")
-                        self._waiting_since += 0.5  # offset so it fires once, not every 1s tick
+                if self._waiting and not self._paused and not self._streaming and self._waiting_since is not None:
+                    waited = int(time.monotonic() - self._waiting_since)
+                    if waited > 0 and waited % self._LLM_WAIT_REPORT_S == 0 and waited != self._last_report_s:
+                        self._last_report_s = waited
+                        self.console.print(f"[dim]  still thinking… {waited}s[/dim]")
             self._tick()
 
     def stop(self) -> None:
@@ -989,13 +989,20 @@ class EngagementUI:
         self._waiting = bool(on)
         if on and self._waiting_since is None:
             self._waiting_since = time.monotonic()  # TTFT clock starts
+            self._last_report_s = -1  # new turn — fresh progress cadence
         self._tick()
 
     def paused_visual(self, on: bool) -> None:
         """ESC ESC instant visual: PAUSED in the strip, spinner stopped,
-        thought stream frozen. Resume restores the live state."""
+        thought stream frozen, still-thinking lines suppressed. Resume
+        restores the live state."""
         self._paused = bool(on)
-        self._tw.pause_playback() if on else self._tw.resume_playback()
+        if on:
+            self._tw.pause_playback()
+            self._last_report_s = -1  # suppress still-thinking during pause
+        else:
+            self._tw.resume_playback()
+            self._waiting_since = time.monotonic()  # restart the clock on resume
         self._tick()
 
     def guidance_delivered(self, text: str) -> None:
