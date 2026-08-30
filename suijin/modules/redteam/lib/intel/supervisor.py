@@ -213,7 +213,8 @@ def heuristic_stuck_check(telemetry, config):
         flags.append("drift")
 
     cost = float(telemetry["usage"].get("est_cost_usd", 0.0))
-    if cost >= float(config.get("cost_alert_usd", 0.25)):
+    _alert = float(config.get("cost_alert_usd", 0.25) or 0.0)
+    if _alert > 0 and cost >= _alert:  # 0/negative = alert disabled (operator: no caps)
         flags.append("cost_alert")
     return flags
 
@@ -323,15 +324,18 @@ def evaluate(messages, turn, objective, config):
             )
 
     # ---- Cost guardrail (deterministic, independent of the LLM) ----
+    # 0/negative = DISABLED (operator: no spending caps). Without the > 0
+    # guard a 0 default made `cost >= 0` always true — instant abort
+    # steering on every check for fresh configs missing the keys.
     cost = float(usage.get("est_cost_usd", 0.0))
-    budget = float(config.get("cost_budget_usd", 1.0))
-    hard_cap = float(config.get("cost_hard_cap_usd", 2.0))
-    if cost >= hard_cap:
+    budget = float(config.get("cost_budget_usd", 1.0) or 0.0)
+    hard_cap = float(config.get("cost_hard_cap_usd", 2.0) or 0.0)
+    if hard_cap > 0 and cost >= hard_cap:
         verdict["recommend_abort"] = True
         verdict["stuck"] = True
         if not verdict.get("reason"):
             verdict["reason"] = f"Hard cost cap ${hard_cap:.2f} reached (spent ~${cost:.4f})."
-    elif cost >= budget:
+    elif budget > 0 and cost >= budget:
         verdict["switch_to_low_hanging"] = True
         verdict["stuck"] = True
         if not verdict.get("reason"):

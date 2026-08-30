@@ -311,7 +311,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
     langgraph_config = {
         "configurable": {"thread_id": thread_id},
         "recursion_limit": 100000,
-    }  # operator: infinite (250 killed real engagements)}
+    }  # operator: infinite (250 killed real engagements)
 
     # .sje resume: seed the fresh thread with the saved engagement's state
     # (messages, traces, chain memory) — the same update_state seam
@@ -849,7 +849,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                         langgraph_config = {
                             "configurable": {"thread_id": thread_id},
                             "recursion_limit": 100000,
-                        }  # operator: infinite (250 killed real engagements)}
+                        }  # operator: infinite (250 killed real engagements)
                         agent._build()
                         _pause_live.update({"agent": agent, "thread_id": thread_id})
                         _pause_ctx.agent = agent
@@ -1018,7 +1018,11 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                     "objective": objective,
                     "phase": final_state.get("current_phase"),
                     "iterations": final_state.get("current_iteration"),
-                    "trace_count": len(trace),
+                    # final_state, NOT the loop-local `trace` — an early
+                    # crash (zero events) left `trace` unbound and the
+                    # NameError killed EVERY save below it (.sje, session,
+                    # memory) — the run ended with nothing on disk
+                    "trace_count": len(final_state.get("execution_trace", [])),
                 },
                 indent=2,
             )
