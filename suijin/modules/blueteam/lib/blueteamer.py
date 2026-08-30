@@ -369,7 +369,10 @@ async def _run_async():
     _signal._blue_interrupted = False
 
     # Tail the live traffic log (configurable path)
-    open(traffic_log, "w").close()  # clear old log
+    # The GLOBAL /tmp traffic log starts clean each session (stale entries
+    # from previous runs poisoned the tail). The BF5-retained workspace
+    # log (outputs/blue_traffic/) is separate and NEVER truncated.
+    open(traffic_log, "w").close()
 
     request_count = 0
     last_pos = 0
