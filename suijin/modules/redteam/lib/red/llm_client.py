@@ -27,6 +27,14 @@ async def generate_async(messages, config=None, on_delta=None):
     biggest legitimate completions with retries."""
     if not config:
         config = load_config()
+    elif not (config.get("provider") or "").strip():
+        # PARTIAL config (e.g. {"intelligence": "max"} from the stream
+        # wrapper) is truthy — the old `if not config` rescue never fired
+        # and generate() silently defaulted to deepseek while the
+        # operator's config said zai. Merge the real config underneath.
+        merged = dict(load_config())
+        merged.update(config)
+        config = merged
 
     try:
         return await asyncio.wait_for(
