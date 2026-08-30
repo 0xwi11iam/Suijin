@@ -711,8 +711,10 @@ def generate(
                         pass
                     return text
                 elif status == 401:
+                    _diag_llm_done("deepseek", ds_model, False, time.monotonic() - _ds_t0)
                     return "Error: Invalid DeepSeek API Key"
                 elif status == 402:
+                    _diag_llm_done("deepseek", ds_model, False, time.monotonic() - _ds_t0)
                     return "Error: 402"
                 elif status == 429:
                     logger.warning("DeepSeek rate-limited")
@@ -797,6 +799,7 @@ def generate(
                 elif status == 401:
                     return "Error: Invalid Z.ai API Key"
                 elif status == 402:
+                    _diag_llm_done("zai", zai_model, False, time.monotonic() - _zai_t0)
                     return "Error: 402 (insufficient Z.ai credits)"
                 elif status == 403:
                     # Classic cause: Coding Plan key hitting the pay-as-you-go
