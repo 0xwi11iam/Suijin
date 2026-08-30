@@ -191,6 +191,10 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         _guidance_block = (
             "\n## OPERATOR GUIDANCE (live — the human just said this, act on it NOW)\n" + _live_guidance + "\n"
         )
+        # the operator SEES that the AI received it — no more guessing
+        import logging as _lg
+
+        _lg.getLogger("suijin").info(f"GUIDANCE DELIVERED: {_live_guidance[:200]}")
 
     # Build system prompt using the new skill-based builder — with the
     # BF2 blue seam: state["_blue_mode"] swaps in the blue prompt builder
