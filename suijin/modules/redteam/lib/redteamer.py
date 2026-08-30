@@ -505,12 +505,19 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
 
             _eq = _qmod.Queue()
 
-            async def _astream_reader(_g=agent._graph, _is=input_state, _lc=langgraph_config, _q=_eq):
+            _stream_error: list = []  # the reader catches what the generator raises
+
+            async def _astream_reader(
+                _g=agent._graph, _is=input_state, _lc=langgraph_config, _q=_eq, _err=_stream_error
+            ):
                 try:
                     async for _ev in _g.astream(_is, _lc):
                         _q.put_nowait(_ev)
-                except BaseException:
-                    pass  # the generator's errors are the loop's to handle
+                except BaseException as _be:
+                    if isinstance(_be, (KeyboardInterrupt, asyncio.CancelledError)):
+                        pass  # the pause/interrupt path is the loop's to handle
+                    else:
+                        _err.append(_be)  # GraphRecursionError, node crashes, etc
                 finally:
                     _q.put_nowait(None)  # sentinel: stream done
 
@@ -524,6 +531,8 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                         raise KeyboardInterrupt()
                     continue
                 if event is None:  # sentinel — astream completed
+                    if _stream_error:
+                        raise _stream_error[0]  # the reader captured the real crash
                     break
                 _got_events = True
                 if getattr(_signal, "_suijin_interrupted", False):
@@ -916,14 +925,30 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
         except Exception as e:
             # Graph crashed (bug, not operator interrupt) — report and end
             # the engagement instead of killing the whole application.
-            console.print(f"\n[bold red]  Agent loop error: {e}[/bold red]")
+            # The error MUST survive the screen clear: stop the Live first,
+            # THEN print a bordered panel (a bare line was cleared with the
+            # strip — the operator never saw why the run died).
             ui.stop()
             run_box.stop()
             if _input_reader is not None:
                 _input_reader.stop()
             import traceback
 
-            traceback.print_exc()
+            from rich.panel import Panel as _ErrPanel
+
+            _tb = traceback.format_exc()
+            console.print()
+            console.print(
+                _ErrPanel(
+                    f"[bold red]{type(e).__name__}[/bold red]: {str(e)[:400]}\n\n[dim]{_tb[-600:]}[/dim]",
+                    title=" ENGAGEMENT ERROR ",
+                    title_align="left",
+                    border_style="red",
+                )
+            )
+            console.print("[dim]  press Enter to return to the menu...[/dim]")
+            with contextlib.suppress(Exception):
+                input()
             try:  # field crashes must be diagnosable after the fact
                 from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
