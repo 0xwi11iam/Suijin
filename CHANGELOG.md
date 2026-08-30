@@ -6,6 +6,46 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v5.7.0 — The Interactive Operator
+
+The operator and the AI are in a live conversation: you type, the AI
+reads, a green panel confirms delivery. The stream is clean. Bugs are
+reproduced in a real PTY before they're fixed.
+
+- **File-based live guidance**: the input box writes to
+  live_guidance.md; the think node reads it at the TOP of the system
+  prompt (above doctrine); a green panel confirms delivery; the
+  context manifest shows exactly what the AI was fed each turn. Zero
+  LangGraph state mutation — a file read is atomic and cannot fail.
+- **Adaptive typewriter stream**: 60 micro-increment gears (20-3000
+  chars/sec); think = light, speak = cyan; command boxes; duplicate
+  span dedup; model newlines are paragraph breaks; 15s progress
+  indicator (deduped, suppressed during pause).
+- **Classed vulnerability registration**: agent-defined severity +
+  CVSS display prominently in the TUI; POC step-scripts the TERMINAL
+  executes; three-choice failure flow (edit / abandon / claim-anyway
+  with amber AI_CLAIMED stamping).
+- **Per-engagement state**: schema/recovery/scratchpad/approvals scoped
+  to outputs/engagements/<slug>/; ended runs archive automatically;
+  recovery refuses garbage objectives; scratchpad [operator] tags are
+  [guidance-memory].
+- **.sje bundles**: hash-sealed engagement snapshots; `suijin load`
+  resumes with full memory.
+- **Interactive review rig** (scripts/tui_drive.py): real PTY, raw
+  keystrokes, real frames; four field bugs caught live.
+- **Diagnostic logging** (outputs/logs/diag.log): every LLM call, tool
+  call, node transition — JSONL, rotates at 10MB.
+- **Always-at-the-bottom input box**: mode cycling (Tab), model
+  intelligence (Alt+I), instant ESC ESC pause, /quit full-save.
+- **Ask-operator typing fixed**: answers route through the reader's
+  ask queue (console.input fought the cbreak reader).
+- **Timeouts tightened**: 120s read (was 300s), 180s hard cap (was
+  600s) — invisible 10-minute stalls killed.
+- **kb_read tiered path matching**: exact -> suffix -> prefix ->
+  substring (the SQL/NoSQL confusion is dead).
+- **Module-pack import fixes**: knowledge_graph, fileio, search_cve
+  (legacy path resolution).
+
 ## v5.6.1 — Installability Fix
 
 `pip install suijin` works on a clean machine; the container boots,

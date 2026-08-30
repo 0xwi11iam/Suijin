@@ -1,6 +1,6 @@
 {
-  "version": "5.6.1",
+  "version": "5.7.0",
   "codename": "Suijin OS",
-  "release_date": "2026-08-24",
-  "description": "Suijin OS v5.6.1 — installability fix release. pip install suijin works again: the 5.6.0 wheel shipped an unsatisfiable pair (rich<14 + textual>=8, which needs rich>=14.2) so every fresh install died with ResolutionImpossible; bounds are now rich>=13,<16 and textual ships in the container too. The container entrypoint no longer crashes (sys.path bootstrap before imports) and supports headless verbs (docker run image version / doctor). Blue console polish: heartbeat strip (uptime ticks, spinner never freezes), always-visible input affordance, one-line baseline training progress. The image now passes its own healthcheck (feroxbuster + john installed). Publishing is gated by a clean-venv wheel-install proof so uninstallable metadata can never ship again. 1,728 tests green."
+  "release_date": "2026-08-30",
+  "description": "Suijin OS v5.7.0 \u2014 The Interactive Operator. File-based live guidance (the operator types, the AI reads, a green panel confirms delivery), the adaptive typewriter stream (60 micro-increment gears, light think / cyan speak, command boxes with syntax highlighting), the classed vulnerability system (agent-defined severity + CVSS, POC step-scripts the TERMINAL executes, three-choice abandon/edit/claim flow), per-engagement state scoping (state dies with the run), .sje engagement bundles (save on conclusion, resume with full memory), the interactive review rig (scripts/tui_drive.py \u2014 spawn under a real PTY, drive with raw keystrokes, reproduce bugs live), diagnostic logging (every LLM call, tool, node transition to outputs/logs/diag.log), and the always-at-the-bottom input box (mode cycling, Alt+I intelligence tiers, ESC ESC instant pause, /quit full-save). 1,867 tests green."
 }
