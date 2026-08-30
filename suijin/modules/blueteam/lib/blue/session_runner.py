@@ -284,13 +284,24 @@ class BlueCommandBox:
         def report(_):
             up = int(time.monotonic() - self.ui.started)
             from suijin.modules.blueteam.lib.blue.cases import CaseStore
+            from suijin.modules.blueteam.lib.blue.metrics import save_report, session_metrics
 
-            cs = CaseStore().get_stats()
+            feed_stats = {
+                "total": self.ui.requests,
+                "detected": self.ui.detected,
+                "blocked": self.ui.blocked,
+                "tarpitted": self.ui.tarpitted if hasattr(self.ui, "tarpitted") else 0,
+                "deceived": self.ui.deceived,
+            }
+            metrics = session_metrics(CaseStore(), feed_stats)
+            path = save_report(metrics, self.ui.target)
             self.ui.note(
                 f"session report — {self.ui.requests} req | {self.ui.detected} threats | "
                 f"{self.ui.blocked} blocked | {self.ui.deceived} deceived | {up}s uptime\n"
-                f"cases — {cs['total']} total ({cs['open']} open, {cs['closed']} closed) | "
-                f"{cs['actors']} actor(s) tracked",
+                f"cases — {metrics['cases']} ({metrics['cases_open']} open) | "
+                f"ATT&CK coverage {metrics['attack']['coverage_pct']}% | "
+                f"MTTD {metrics.get('mttd_avg_s', '?')}s | MTTR {metrics.get('mttr_avg_s', '?')}s\n"
+                f"saved: {path.name}",
                 "cyan",
             )
 
