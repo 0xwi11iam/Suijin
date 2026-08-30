@@ -283,9 +283,14 @@ class BlueCommandBox:
 
         def report(_):
             up = int(time.monotonic() - self.ui.started)
+            from suijin.modules.blueteam.lib.blue.cases import CaseStore
+
+            cs = CaseStore().get_stats()
             self.ui.note(
                 f"session report — {self.ui.requests} req | {self.ui.detected} threats | "
-                f"{self.ui.blocked} blocked | {self.ui.deceived} deceived | {up}s uptime",
+                f"{self.ui.blocked} blocked | {self.ui.deceived} deceived | {up}s uptime\n"
+                f"cases — {cs['total']} total ({cs['open']} open, {cs['closed']} closed) | "
+                f"{cs['actors']} actor(s) tracked",
                 "cyan",
             )
 
@@ -297,6 +302,51 @@ class BlueCommandBox:
         def rotate(_):
             self.ui.note(route_blue_tool("blue_force_rotate", {"reason": "operator command"}), "green")
 
+        def dossier(args):
+            ip = args.split()[0] if args else ""
+            if not ip:
+                self.ui.note("usage: /dossier <ip>", "yellow")
+                return
+            from suijin.modules.blueteam.lib.blue import enforcement
+            from suijin.modules.blueteam.lib.blue.cases import CaseStore
+            from suijin.modules.blueteam.lib.blue.dossier import build_dossier, render_dossier
+            from suijin.modules.blueteam.lib.blue.knowledge_graph import get_kg
+
+            d = build_dossier(ip, CaseStore(), get_kg(), enforcement.snapshot())
+            self.ui.note(render_dossier(d), "cyan")
+
+        def case(args):
+            from suijin.modules.blueteam.lib.blue.cases import CaseStore
+
+            store = CaseStore()
+            if not args:
+                cases = store.list_cases()
+                if not cases:
+                    self.ui.note("no cases on file", "dim")
+                    return
+                lines = [f"cases: {len(cases)} ({sum(1 for c in cases if c['status'] != 'closed')} open)"]
+                for c in cases[:10]:
+                    lines.append(
+                        f"  {c['id']} [{c['status']}] {c.get('attack_type', '?')} sev={c.get('severity', 0)} from {c.get('actor_ip', '?')}"
+                    )
+                self.ui.note("\n".join(lines), "cyan")
+            else:
+                c = store.case_detail(args.split()[0])
+                if not c:
+                    self.ui.note(f"case {args} not found", "yellow")
+                    return
+                lines = [f"{c['id']} — {c.get('attack_type')} from {c.get('actor_ip')}"]
+                lines.append(
+                    f"status: {c['status']} | severity: {c.get('severity', 0)} | ATT&CK: {c.get('mitre', '?')}"
+                )
+                lines.append(f"opened: {c.get('opened_at', '?')} | contained: {c.get('contained_at', '?')}")
+                lines.append(f"timeline ({len(c.get('timeline', []))} events):")
+                for e in c.get("timeline", [])[-8:]:
+                    lines.append(
+                        f"  [{e.get('ts', '?')[11:19]}] {e.get('kind', '?')}: {e.get('type', '?')} {e.get('detail', '')[:60]}"
+                    )
+                self.ui.note("\n".join(lines), "cyan")
+
         for name, fn in {
             "state": state,
             "block": block,
@@ -306,6 +356,8 @@ class BlueCommandBox:
             "report": report,
             "shell": shell,
             "rotate": rotate,
+            "dossier": dossier,
+            "case": case,
         }.items():
             self.register(name, fn)
 

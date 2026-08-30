@@ -9,6 +9,7 @@ Edges: attacked, defended_by, deceived_by, related_to
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import threading
@@ -18,6 +19,16 @@ from typing import Optional
 
 
 def _blue_kg_path():
+    """BF4: the KG lives in the workspace (cross-session persistent) —
+    the old /tmp location dies with the machine. Falls back to /tmp
+    only if the workspace is unavailable (bare container tests)."""
+
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+    ws = WORKSPACE_DIR / "outputs" / "blue_state" / "kg.json"
+    with contextlib.suppress(OSError):
+        ws.parent.mkdir(parents=True, exist_ok=True)
+        return ws
     from suijin.modules.platform.lib.constants import BLUE_KG_PATH as _v
 
     return _v
