@@ -492,9 +492,39 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
             input_state = {"_objective": objective, "user_id": "local", "project_id": "default"} if first_run else None
             first_run = False
 
-            async for event in agent._graph.astream(input_state, langgraph_config):
+            # Queue-bridge astream: LangGraph's generator SWALLOWS the KI
+            # from interrupt_main() — wait_for around __anext__ BREAKS async
+            # generators (cancellation consumes the item). Instead: a
+            # background reader pushes events to a queue; the main loop
+            # reads with timeout and polls the interrupt flag every 2s
+            # (fixes the unpause-deadlock when fireteam subagents hold it)
+            import queue as _qmod
+
+            _eq = _qmod.Queue()
+
+            async def _astream_reader(_g=agent._graph, _is=input_state, _lc=langgraph_config, _q=_eq):
+                try:
+                    async for _ev in _g.astream(_is, _lc):
+                        _q.put_nowait(_ev)
+                except BaseException:
+                    pass  # the generator's errors are the loop's to handle
+                finally:
+                    _q.put_nowait(None)  # sentinel: stream done
+
+            _reader_task = asyncio.create_task(_astream_reader())
+            while True:
+                try:
+                    event = await asyncio.wait_for(asyncio.to_thread(_eq.get, timeout=2.0), timeout=3.0)
+                except (asyncio.TimeoutError, _qmod.Empty):
+                    if getattr(_signal, "_suijin_interrupted", False):
+                        _reader_task.cancel()
+                        raise KeyboardInterrupt()
+                    continue
+                if event is None:  # sentinel — astream completed
+                    break
                 _got_events = True
                 if getattr(_signal, "_suijin_interrupted", False):
+                    _reader_task.cancel()
                     raise KeyboardInterrupt()
                 node_name = list(event.keys())[0]
                 node_output = event[node_name]
