@@ -700,16 +700,18 @@ class TypewriterStream:
         contract: the markdown highlighting experiment is scrapped; prose
         renders as light think / bold cyan speak, nothing parsed, no
         dividers)."""
-        style = "dim italic" if kind == "reasoning" else "bold cyan"
+        # PLAIN — the operator killed all highlighting: no italic, no
+        # bold, no cyan, no syntax. Think = dim, speak = default.
+        style = "dim" if kind == "reasoning" else ""
         with contextlib.suppress(Exception):
-            self._ui.console.print(Text(line, style=style))
+            self._ui.console.print(Text(line, style=style) if style else line)
 
     def _emit_wrapped(self, kind: str, text: str) -> None:
         """Flush-time emission: one merged block, console wraps it —
         plain styled text, no highlighting, no said/think dividers."""
-        base = "dim italic" if kind == "reasoning" else "bold cyan"
+        base = "dim" if kind == "reasoning" else ""
         with contextlib.suppress(Exception):
-            self._ui.console.print(Text(text, style=base))
+            self._ui.console.print(Text(text, style=base) if base else text)
 
     def _emit_box(self, lang: str, content: str) -> None:
         """A complete command span: black box, white syntax-highlighted.
@@ -721,13 +723,7 @@ class TypewriterStream:
             return
         self._last_box_norm = norm
         with contextlib.suppress(Exception):
-            body = Syntax(
-                str(content)[:2000],
-                lang if lang in ("json", "bash", "sh", "python", "javascript") else "bash",
-                theme="terminal",  # white-ish on black
-                word_wrap=True,
-                background_color="default",
-            )
+            body = Text(str(content)[:2000], style="white")  # plain — no syntax highlighting
             self._ui.console.print(
                 Panel(
                     body,
@@ -780,8 +776,8 @@ class TypewriterStream:
             line, kind = self._line, self._line_kind
         if not line:
             return None
-        style = "dim italic" if kind == "reasoning" else "bold cyan"
-        return Text.assemble(Text(line, style=style), ("▌", style))
+        style = "dim" if kind == "reasoning" else ""
+        return Text.assemble(Text(line, style=style) if style else Text(line), ("▌", style or "white"))
 
 
 class EngagementUI:
@@ -918,9 +914,9 @@ class EngagementUI:
         left.append(" » ", style=f"bold {GOLD}")
         if buf is not None:
             left.append(str(buf), style="bold white")
-            left.append(cursor, style=GOLD)
         else:
             left.append("type here", style="dim")
+        left.append(cursor, style=GOLD)  # ALWAYS blink — idle AND typing
 
         body = left
         return Panel(
