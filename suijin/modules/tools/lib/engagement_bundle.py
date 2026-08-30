@@ -206,7 +206,14 @@ def resume_engagement(path: str | Path) -> int:
     manifest = bundle["manifest"]
     objective = manifest.get("objective", "")
     restore_side_files(path)
-    config = dict(manifest.get("config") or {})
+    # CURRENT config wins over the bundle's stale copy. The bundle's config
+    # froze the operator intent of a past session (provider, models, caps) —
+    # resuming with it silently ignored provider switches made AFTER the
+    # bundle was saved (field incident: zai set, deepseek ran, 402 death).
+    # Engagement STATE rides the bundle; operator SETTINGS ride config.json.
+    from suijin.modules.platform.lib.config_loader import load_config
+
+    config = {**dict(manifest.get("config") or {}), **load_config()}
     graph_state = dict(bundle["graph_state"] or {})
     graph_state["completion_reason"] = None  # resumed = keep working
 

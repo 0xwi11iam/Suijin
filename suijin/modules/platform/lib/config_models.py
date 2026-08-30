@@ -95,7 +95,7 @@ class RedConfig(BaseModel):
     deepseek_model: str = Field(default="deepseek-v4-flash")
     zai_model: str = Field(default="glm-5.3")
     zai_endpoint: str = Field(default="coding")
-    max_iterations: int = Field(default=100, ge=1, le=10000)
+    max_iterations: int = Field(default=100000, ge=1, le=1000000)  # operator: infinite by default
     temperature: float = Field(default=0.4, ge=0.0, le=2.0)
     supervisor_interval: int = Field(default=5, ge=1)
     cost_hard_cap_usd: float = Field(default=0.0, ge=0.0)  # 0 = unlimited (operator)
