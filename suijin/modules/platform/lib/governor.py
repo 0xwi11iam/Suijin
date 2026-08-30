@@ -32,7 +32,12 @@ def budget_status(config: dict | None) -> dict:
     action: 'ok' | 'warn' | 'stop' — 'stop' means end the engagement now.
     """
     cfg = config or {}
-    limit = float(cfg.get("max_cost_usd") or DEFAULT_MAX_COST_USD)
+    # explicit 0 / negative = UNLIMITED (operator: no spending caps).
+    # `cfg.get("max_cost_usd") or DEFAULT` swallowed 0 back to the default —
+    # a set-to-zero cap was silently a $25 stop.
+    limit = float(cfg.get("max_cost_usd") or 0.0) if "max_cost_usd" in cfg else DEFAULT_MAX_COST_USD
+    if limit <= 0:
+        return {"limit": 0.0, "spent": _usage().get("est_cost_usd", 0.0), "pct": 0.0, "priced": False, "action": "ok"}
     warn_pct = float(cfg.get("cost_warn_pct") or DEFAULT_WARN_PCT)
     usage = _usage()
     spent = float(usage.get("est_cost_usd", 0.0))
