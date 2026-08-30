@@ -155,10 +155,11 @@ def _render_termination(final_state: dict, ui, operator_stopped: bool) -> None:
                     detail = f"last model output: {str(msg['content'])[:400]}"
                     break
         if reason == "provider_out_of_credits":
+            _raw = str(final_state.get("final_summary", "") or "")[:300]
             console.print(
                 Panel(
-                    "The LLM provider rejected every call: HTTP 402 / insufficient credits.\n"
-                    "The engagement could not think — this is a billing problem, not a bug.\n\n"
+                    f"The LLM provider rejected every call: HTTP 402 / insufficient credits.\n\n"
+                    f"[dim]provider said:[/dim] {_raw or '(no detail captured)'}\n\n"
                     "[dim]Fix: top up the provider account or switch provider:\n"
                     "  suijin providers   (list / test / switch)\n"
                     "  suijin env         (check keys)\n"

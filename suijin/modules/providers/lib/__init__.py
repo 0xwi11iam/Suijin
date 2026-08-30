@@ -420,10 +420,17 @@ def generate(
     it (zai/deepseek) — rendering stays live instead of waiting for the
     entire response. Callback errors are swallowed: display must never
     break generation."""
-    if config is None:
+    if config is None or not str(config.get("provider") or "").strip():
+        # None OR PARTIAL config: a truthy dict without "provider" (e.g.
+        # {"intelligence": "max"} threaded from the stream wrapper) used to
+        # fall through to the deepseek default — silently spending the
+        # wrong provider while the operator's config said otherwise.
         from suijin.modules.tools.lib.services import get as _service
 
-        config = _service("red_config")
+        _base = _service("red_config") or {}
+        _merged = dict(_base)
+        _merged.update(config or {})
+        config = _merged
 
     provider = config.get("provider", "deepseek").lower()
     temp = temperature if temperature is not None else config.get("temperature", 0.4)
