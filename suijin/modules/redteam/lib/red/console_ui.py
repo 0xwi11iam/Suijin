@@ -912,11 +912,11 @@ class EngagementUI:
         if model:
             left.append(f" · {model}", style="dim")
         left.append(" » ", style=f"bold {GOLD}")
+        left.append(cursor, style=GOLD)  # cursor FIRST — LEFT of everything
         if buf is not None:
             left.append(str(buf), style="bold white")
         else:
             left.append("type here", style="dim")
-        left.append(cursor, style=GOLD)  # ALWAYS blink — idle AND typing
 
         body = left
         return Panel(
