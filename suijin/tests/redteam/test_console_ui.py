@@ -1519,22 +1519,25 @@ class TestTypewriterStream:
         assert all(len(ln) > 30 for ln in lines)  # rows are FULL — no fragments
         assert ui._tw._pending == [] and ui._tw._line == ""
 
-    def test_colors_light_think_cyan_speak(self):
+    def test_think_dim_speak_plain(self):
+        """ALL highlighting killed: think = dim (no italic), speak = default
+        (no bold, no cyan) — plain text only per operator contract."""
         ui1, c1 = _ui()
         ui1.waiting(True)
-        ui1.reasoning_delta("content", " ".join(f"cyan{i}" for i in range(60)))
+        ui1.reasoning_delta("content", " ".join(f"speak{i}" for i in range(60)))
         self._drain(ui1)
         ui1._tw.flush()
-        cyan_rows = "".join(ln for ln in c1.export_text(styles=True).split("\n") if "cyan" in ln)
-        assert "36m" in cyan_rows  # SPEAKING = bold cyan (\x1b[1;36m)
+        speak_rows = "".join(ln for ln in c1.export_text(styles=True).split("\n") if "speak" in ln)
+        assert "36m" not in speak_rows  # NO cyan
 
         ui2, c2 = _ui()
         ui2.waiting(True)
-        ui2.reasoning_delta("reasoning", " ".join(f"light{i}" for i in range(60)))
+        ui2.reasoning_delta("reasoning", " ".join(f"think{i}" for i in range(60)))
         self._drain(ui2)
         ui2._tw.flush()
-        light_rows = "".join(ln for ln in c2.export_text(styles=True).split("\n") if "light" in ln)
-        assert "2;3m" in light_rows and "36m" not in light_rows  # THINK = light (dim italic)
+        think_rows = "".join(ln for ln in c2.export_text(styles=True).split("\n") if "think" in ln)
+        assert "\x1b[2m" in think_rows  # THINK = dim
+        assert "2;3m" not in think_rows  # NO italic (plain dim only)
 
     def test_json_action_boxes_itself(self):
         ui, c = _ui()
