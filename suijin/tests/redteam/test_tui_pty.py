@@ -13,6 +13,7 @@ Marked slow: spawns processes, takes ~40s.
 
 import re
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -20,7 +21,7 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[3]
 RUN = Path("/tmp/suijin_drive")  # the driver's fixed control dir
-PY = REPO / ".venv" / "bin" / "python"
+PY = Path(sys.executable)  # works everywhere (local venv AND CI system python)
 
 
 @pytest.fixture()

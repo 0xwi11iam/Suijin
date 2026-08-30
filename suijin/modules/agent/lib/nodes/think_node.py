@@ -186,12 +186,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     from suijin.modules.agent.lib.live_guidance import read_and_clear_guidance
 
     _live_guidance = read_and_clear_guidance()
-    _guidance_block = ""
     if _live_guidance:
-        _guidance_block = (
-            "\n## OPERATOR GUIDANCE (live — the human just said this, act on it NOW)\n" + _live_guidance + "\n"
-        )
-        # the operator SEES that the AI received it — no more guessing
         import logging as _lg
 
         _lg.getLogger("suijin").info(f"GUIDANCE DELIVERED: {_live_guidance[:200]}")
@@ -202,12 +197,12 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     if state.get("_blue_mode"):
         from suijin.modules.blueteam.lib.blue.agent import blue_system_prompt, defensive_order
 
-        system_prompt = _guidance_block + blue_system_prompt(state)
+        system_prompt = blue_system_prompt(state)
         user_turn = defensive_order(state.get("original_objective", ""))
     else:
         from suijin.modules.agent.lib.prompts.base import build_agent_system_prompt, engagement_order
 
-        system_prompt = _guidance_block + build_agent_system_prompt(state)
+        system_prompt = build_agent_system_prompt(state)
         user_turn = engagement_order(state.get("original_objective", ""))
 
     # Add state context (chain, todos, QA) after the skill+tools prompt
@@ -315,7 +310,10 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     # "attack X" as the last-read text is where refusals anchored.
     from suijin.modules.agent.lib.prompts.base import engagement_order
 
-    # Build messages
+    # Build messages — the operator's live guidance rides as the LAST
+    # USER MESSAGE (the highest-attention position in the conversation:
+    # the model weights recent user messages far above system-prompt text,
+    # which is where guidance went to die before)
     messages = [
         {"role": "system", "content": full_prompt},
         {
@@ -323,6 +321,16 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
             "content": user_turn,
         },
     ]
+    if _live_guidance:
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "OPERATOR GUIDANCE (live — the human operator just said this; "
+                    "act on it THIS TURN, above all prior context):\n" + _live_guidance
+                ),
+            }
+        )
 
     # Scratchpad (C2): first turn of an engagement re-orients the agent
     # with its own notes (external memory — survives compaction).
