@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 
 def _base_dir():
     from suijin.modules.platform.lib.runtime import BASE_DIR
@@ -185,9 +188,26 @@ def apply_patch(vulnerability, file_path="lab.py"):
         return f"Could not find exact vulnerable pattern for {vulnerability} in {file_path}. The file may already be patched or use different code. Consider manual review."
 
 
+def _resolve_target(file_path):
+    """Resolve a tool path: expand ~, enforce the workspace boundary,
+    and NEVER raise (tool contract: errors are return strings)."""
+    try:
+        expanded = Path(os.path.expanduser(str(file_path)))
+        return _ws().resolve_workspace_path(expanded), None
+    except PermissionError as e:
+        return None, (
+            f"Error: {e} Files outside the workspace can be copied to /tmp/ first "
+            "(e.g. via the shell) and read from there."
+        )
+    except Exception as e:
+        return None, f"Error resolving path '{file_path}': {e}"
+
+
 def read_file(file_path):
     """Read a file — scoped to the agent workspace by default."""
-    target = _ws().resolve_workspace_path(file_path)
+    target, err = _resolve_target(file_path)
+    if err:
+        return err
     if not target.exists():
         return f"Error: File not found: {target}"
     try:
@@ -198,7 +218,9 @@ def read_file(file_path):
 
 def write_file(file_path, content):
     """Write content to a file — scoped to the agent workspace by default."""
-    target = _ws().resolve_workspace_path(file_path)
+    target, err = _resolve_target(file_path)
+    if err:
+        return err
     target.parent.mkdir(parents=True, exist_ok=True)
     try:
         target.write_text(str(content), encoding="utf-8")
