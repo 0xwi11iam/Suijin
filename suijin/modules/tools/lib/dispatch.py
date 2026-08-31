@@ -84,6 +84,8 @@ from suijin.modules.tools.lib.aux_tools import (
     _web_search,
     _write_tool,
 )
+from suijin.modules.tools.lib.bypass_403 import bypass_403 as _bypass_403
+from suijin.modules.tools.lib.code_harness import code_harness as _code_harness
 from suijin.modules.tools.lib.exploit_catalog import catalog_exploit
 
 # Re-exported for backwards compatibility — these names lived on dispatch.py
@@ -289,6 +291,18 @@ def _build_routes(config):
         "mine_failures": lambda a: mine_failures(max_clusters=int(a.get("max_clusters", 5))),
         "anonymize_report": lambda a: anonymize_report(a.get("file_path", "")),
         "http_request": lambda a: http_request(a.get("method", "GET"), a.get("url"), a.get("headers"), a.get("body")),
+        "bypass_403": lambda a: _bypass_403(a.get("url", "")),
+        "code_harness": lambda a: _code_harness(
+            a.get("goal", ""),
+            language=a.get("language", "python"),
+            code=a.get("code", ""),
+            run_cmd=a.get("run_cmd", ""),
+            success_regex=a.get("success_regex", ""),
+            fail_regex=a.get("fail_regex", ""),
+            filename=a.get("filename", ""),
+            timeout_s=int(a.get("timeout_s", 30)),
+            max_cycles=int(a.get("max_cycles", 3)),
+        ),
         "read_file": lambda a: read_file(a.get("file_path", "")),
         "write_file": lambda a: write_file(a.get("file_path", ""), a.get("content", "")),
         "apply_patch": lambda a: apply_patch(a.get("vulnerability"), a.get("file_path", "lab.py")),
@@ -489,6 +503,7 @@ _FAILURE_PREFIXES = ("Error:", "Tool Error", "Tool error", "HTTP Error:", "Execu
 
 _TOOL_ALTERNATIVES = {
     "http_request": ("execute_terminal (curl with flags)", "mcp_browser_goto (JS-heavy pages)"),
+    "bypass_403": ("http_request (manual variant crafting)",),
     "execute_terminal": ("http_request (raw HTTP)", "recon_chain (chained recon)"),
     "nmap": ("execute_terminal (nmap direct, background it)", "tcp_scan (port sweep)"),
     "search_kb": ("web_search", "search_cve"),
@@ -665,6 +680,8 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
 ## Core Tools (args in the ALL AVAILABLE TOOLS registry below)
 - **execute_terminal** — Run ANY shell command. Use this for CLI tools: nmap, gobuster, ffuf, nikto, sqlmap, hydra, john, enum4linux, dirb, masscan, and any other pentesting tool installed on the system. Prefer dedicated CLI tools over raw curl/http_request for scanning and brute-forcing.
 - **http_request** — Raw HTTP requests with full browser emulation. Use for manual web testing, not for scanning (use gobuster/nmap via execute_terminal instead).
+- **bypass_403** — The 403 breaker: one call fires ~24 bypass variants (path normalization, X-Original-URL/XFF headers, method overrides, path-as-param) through http_request with pacing. Call it whenever a promising path 403s; the verdict table shows which variant got through.
+- **code_harness** — The exploit dev loop: write→run→triage→fix in a per-attempt sandbox. Args: goal, language (python/bash/php/go/js...), code, run_cmd ('{file}' placeholder), success_regex, fail_regex, timeout_s, max_cycles. Python gets mechanical fixes (auto pip-install, syntax catch). VERDICT: PASS is your EVIDENCE — record_finding on a code-based exploit claim REQUIRES a harness PASS in the same engagement; anything else is an unverified claim.
 - **read_file** — Read any file on the system.
 - **write_file** — Write files (scripts, payloads, notes). Defaults to suijin_agent/ for relative paths.
 """
