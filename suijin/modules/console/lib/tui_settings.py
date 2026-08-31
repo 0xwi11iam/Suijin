@@ -10,6 +10,7 @@ import curses
 import json
 import os
 from collections import OrderedDict
+from pathlib import Path
 
 # The package-level config (suijin/config.json) — resolved from this file's
 # location so it works from the dev symlink too (dirname(__file__) here is
@@ -17,6 +18,27 @@ from collections import OrderedDict
 CONFIG_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "config.json"
 )
+
+
+def _registry_provider_choices():
+    """Registry providers + any custom:<name> entries in config.json."""
+    choices = []
+    try:
+        from suijin.modules.providers.lib.registry import CLOUD_KEYS, LOCAL_KEYS
+
+        choices = CLOUD_KEYS + LOCAL_KEYS
+    except Exception:  # noqa: BLE001 — Settings must open even headless
+        pass
+    try:
+        cfg = json.loads(Path(CONFIG_PATH).read_text()) if os.path.exists(CONFIG_PATH) else {}
+        for entry in cfg.get("custom_providers") or []:
+            name = str(entry.get("name", "")).strip()
+            if name:
+                choices.append(f"custom:{name}")
+    except Exception:  # noqa: BLE001
+        pass
+    return choices
+
 
 # ---- Field Definitions ----
 # Each field: (type, extra) where extra depends on type:
@@ -31,7 +53,10 @@ CONFIG_PATH = os.path.join(
 ALL_FIELDS = OrderedDict(
     [
         # ---- Provider ----
-        ("provider", ("choice", ["deepseek", "huggingface", "gemini", "anthropic", "amd", "zai"])),
+        (
+            "provider",
+            ("choice", ["deepseek", "huggingface", "gemini", "anthropic", "amd", "zai"] + _registry_provider_choices()),
+        ),
         # ---- DeepSeek ----
         ("deepseek_model", ("choice", ["deepseek-chat", "deepseek-reasoner"], ["deepseek"])),
         # ---- Z.ai ----

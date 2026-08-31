@@ -1333,18 +1333,31 @@ def run_providers(args) -> int:
     cfg = load_config()
     if getattr(args, "all", False):
         chain = ["deepseek", "zai", "gemini", "anthropic", "amd", "huggingface"]
+        try:
+            from suijin.modules.providers.lib.registry import CLOUD_KEYS, LOCAL_KEYS
+
+            chain += CLOUD_KEYS + LOCAL_KEYS
+        except Exception:  # noqa: BLE001
+            pass
     else:
         chain = [cfg.get("provider", "deepseek")] + (cfg.get("fallback_providers") or [])
     ok_count = 0
+    _env_map = {
+        "zai": "ZAI_API_KEY",
+        "deepseek": "DEEPSEEK_API_KEY",
+        "gemini": "GEMINI_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
+        "amd": "AMD_API_KEY",
+        "huggingface": "HF_TOKEN",
+    }
+    try:
+        from suijin.modules.providers.lib.registry import KEY_ENV_BY_PROVIDER
+
+        _env_map.update(KEY_ENV_BY_PROVIDER)
+    except Exception:  # noqa: BLE001
+        pass
     for provider in dict.fromkeys(chain):
-        env = {
-            "zai": "ZAI_API_KEY",
-            "deepseek": "DEEPSEEK_API_KEY",
-            "gemini": "GEMINI_API_KEY",
-            "anthropic": "ANTHROPIC_API_KEY",
-            "amd": "AMD_API_KEY",
-            "huggingface": "HF_TOKEN",
-        }.get(provider, "")
+        env = _env_map.get(provider, "")
         if env and not os.environ.get(env):
             print(f"  {provider:12} SKIP (no {env})")
             continue

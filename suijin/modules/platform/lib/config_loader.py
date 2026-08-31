@@ -110,40 +110,47 @@ def load_env():
         console.print("  [bold #e6b47c]3.[/] [white]Gemini[/]")
         console.print("  [bold #58a6ff]4.[/] [white]DeepSeek[/]")
         console.print("  [bold #c586c0]5.[/] [white]Z.ai (GLM)[/]")
-        choice = input("Choice [1-5]: ").strip()
+        console.print("  [bold #e6b47c]6.[/] [white]OpenRouter (one key → every major model)[/]")
+        console.print("  [bold #58a6ff]7.[/] [white]OpenAI[/]")
+        console.print("  [dim white]  …every registry provider activates when its KEY appears in .env[/]")
+        console.print("  [bold green]8.[/] [white]Local (Ollama — no key, free)[/]")
+        choice = input("Choice [1-8]: ").strip()
         config = load_config()
-        if choice == "2":
-            config["provider"] = "amd"
+
+        def _save(provider_key: str, env_name: str, key: str):
+            config["provider"] = provider_key
             with open(CONFIG_PATH, "w") as f:
                 json.dump(config, f, indent=4)
+            ENV_PATH.write_text(f"{env_name}={key}\n" if env_name else "")
+            if env_name:
+                os.environ[env_name] = key
+
+        _registry_pick = {
+            "6": ("openrouter", "OPENROUTER_API_KEY"),
+            "7": ("openai", "OPENAI_API_KEY"),
+        }
+        if choice in _registry_pick:
+            pk, env_name = _registry_pick[choice]
+            key = input(f"Enter {env_name}: ").strip()
+            _save(pk, env_name, key)
+        elif choice == "8":
+            _save("ollama", "", "")
+            console.print("[green]Local mode: ollama serve + ollama pull <model>[/green]")
+        elif choice == "2":
             key = input("Enter AMD_API_KEY: ").strip()
-            ENV_PATH.write_text(f"AMD_API_KEY={key}\n")
-            os.environ["AMD_API_KEY"] = key
+            _save("amd", "AMD_API_KEY", key)
         elif choice == "3":
-            config["provider"] = "gemini"
-            with open(CONFIG_PATH, "w") as f:
-                json.dump(config, f, indent=4)
             key = input("Enter GEMINI_API_KEY: ").strip()
-            ENV_PATH.write_text(f"GEMINI_API_KEY={key}\n")
-            os.environ["GEMINI_API_KEY"] = key
+            _save("gemini", "GEMINI_API_KEY", key)
         elif choice == "4":
-            config["provider"] = "deepseek"
-            with open(CONFIG_PATH, "w") as f:
-                json.dump(config, f, indent=4)
             key = input("Enter DEEPSEEK_API_KEY: ").strip()
-            ENV_PATH.write_text(f"DEEPSEEK_API_KEY={key}\n")
-            os.environ["DEEPSEEK_API_KEY"] = key
+            _save("deepseek", "DEEPSEEK_API_KEY", key)
         elif choice == "5":
-            config["provider"] = "zai"
-            with open(CONFIG_PATH, "w") as f:
-                json.dump(config, f, indent=4)
             key = input("Enter ZAI_API_KEY: ").strip()
-            ENV_PATH.write_text(f"ZAI_API_KEY={key}\n")
-            os.environ["ZAI_API_KEY"] = key
+            _save("zai", "ZAI_API_KEY", key)
         else:
             token = input("Enter HF_TOKEN: ").strip()
-            ENV_PATH.write_text(f"HF_TOKEN={token}\n")
-            os.environ["HF_TOKEN"] = token
+            _save("huggingface", "HF_TOKEN", token)
     else:
         for line in ENV_PATH.read_text().splitlines():
             if "=" in line:
