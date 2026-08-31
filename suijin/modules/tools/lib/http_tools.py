@@ -93,6 +93,10 @@ def http_request(method, url, headers=None, body=""):
             f"Cookies: {dict(_session().cookies)}",
             f"Body:\n{resp.text}",
         ]
+        if resp.status_code == 403:
+            out.append(
+                "Note: 403 Forbidden — the bypass_403 tool can battery-test path/header/method variants on this URL."
+            )
         return _truncate("\n".join(out))
     except Exception as e:
         return f"HTTP Error: {str(e)}"
