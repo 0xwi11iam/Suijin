@@ -101,6 +101,13 @@ def _price_for(model):
     m = str(model).strip()
     if m in MODEL_PRICING:
         return MODEL_PRICING[m]
+    # registry providers price their own default models
+    with contextlib.suppress(Exception):
+        from suijin.modules.providers.lib.registry import PROVIDER_REGISTRY
+
+        for _spec in PROVIDER_REGISTRY.values():
+            if _spec.default_model and _spec.default_model.split("/")[-1].lower() in m.lower() and _spec.pricing:
+                return _spec.pricing
     # tolerate provider prefixes / suffixes (e.g. "anthropic/claude-opus-4-8")
     # and case drift ("deepseek-ai/DeepSeek-V4-Flash" vs "deepseek-v4-flash")
     m_lower = m.lower()
@@ -841,7 +848,116 @@ def generate(
         _diag_llm_done("zai", zai_model, False, time.monotonic() - _zai_t0)
         return f"Error: Z.ai API unreachable after {retries} attempt(s) — {last_diag}"
 
+    # ---------- Registry providers (OpenAI-compatible table rows) ----------
+    from suijin.modules.providers.lib.registry import PROVIDER_REGISTRY, ProviderSpec, resolve_custom_provider
+
+    spec = PROVIDER_REGISTRY.get(provider)
+    if spec is None and provider.startswith("custom:"):
+        spec = resolve_custom_provider(provider.split(":", 1)[1], config)
+    if isinstance(spec, ProviderSpec):
+        return _compat_call(
+            spec,
+            messages,
+            config,
+            temperature=temp,
+            max_tokens=mtokens,
+            retries=retries,
+            on_delta=on_delta,
+            model_id=model_id,
+        )
+
     return f"Error: Unknown provider '{provider}'"
+
+
+def _compat_call(spec, messages, config, *, temperature, max_tokens, retries, on_delta, model_id=None):
+    """The generic OpenAI-compatible engine — one code path for every
+    registry provider (cloud table rows AND custom: LAN boxes). Streaming
+    first, ONE non-stream fallback on transport death, usage recorded
+    (local = unpriced so the cost governor can never stop on free models),
+    errors as 'Error:' strings per the failover protocol."""
+    import os as _os
+
+    cfg = config or {}
+    api_key = ""
+    for env in spec.key_envs:
+        if _os.environ.get(env, "").strip():
+            api_key = _os.environ[env].strip()
+            break
+    if not api_key:
+        api_key = spec.inline_key
+    if spec.requires_key and not api_key:
+        _env = " or ".join(spec.key_envs)
+        return f"Error: {spec.label} API key not set. Add {_env} to .env (suijin env) or Settings."
+
+    model = model_id or cfg.get(f"{spec.key}_model") or spec.default_model
+    if not model:
+        return (
+            f"Error: no model set for {spec.label}. Set '{spec.key}_model' in config.json "
+            "(suijin config / Settings) — e.g. the model id your endpoint serves."
+        )
+
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    payload = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    url = f"{spec.base_url.rstrip('/')}/chat/completions"
+    _diag_llm_start(spec.key, model, len(messages))
+    _t0 = time.monotonic()
+    last_diag = "transport failure"
+    for attempt in range(retries):
+        try:
+            status, content, reasoning, usage, body = _stream_chat(url, headers, payload, on_delta=on_delta)
+            if status == 0:
+                code, data, _b = _post_chat(url, headers, payload)
+                if code == 200 and data:
+                    msg = data["choices"][0]["message"]
+                    content = msg.get("content") or msg.get("reasoning_content", "") or "(empty response)"
+                    u = data.get("usage") or {}
+                    with contextlib.suppress(Exception):
+                        if u.get("prompt_tokens") is None:
+                            record_missing_usage(messages, content, spec.key, model)
+                        else:
+                            _record_usage(spec.key, model, u.get("prompt_tokens", 0), u.get("completion_tokens", 0))
+                    return content
+            if status == 200:
+                text = content or reasoning or "(empty response)"
+                _diag_llm_done(spec.key, model, True, time.monotonic() - _t0)
+                with contextlib.suppress(Exception):
+                    if usage is None or usage.get("prompt_tokens") is None:
+                        record_missing_usage(messages, text, spec.key, model)
+                    else:
+                        _record_usage(spec.key, model, usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0))
+                return text
+            if status == 401:
+                _diag_llm_done(spec.key, model, False, time.monotonic() - _t0)
+                return f"Error: Invalid {spec.label} API Key"
+            if status == 402:
+                _diag_llm_done(spec.key, model, False, time.monotonic() - _t0)
+                return f"Error: 402 ({spec.label} rejected the call — insufficient credits/quota)"
+            if status == 403:
+                _diag_llm_done(spec.key, model, False, time.monotonic() - _t0)
+                return (
+                    f"Error: {spec.label} 403 — key lacks access to '{model}' (or base_url is wrong "
+                    f"for this key). Check the model id and endpoint."
+                )
+            if status == 404:
+                last_diag = f"model '{model}' not found at {spec.base_url}"
+            elif status == 429:
+                last_diag = "rate-limited (429)"
+            elif status != 0:
+                last_diag = str(body)[:150]
+        except Exception as e:  # noqa: BLE001 — transport errors become strings
+            last_diag = _diagnose_transport(e)
+        logger.warning(f"{spec.label} attempt {attempt + 1} failed — {last_diag}")
+        if attempt < retries - 1:
+            time.sleep(2 * (2**attempt))
+    _diag_llm_done(spec.key, model, False, time.monotonic() - _t0)
+    return f"Error: {spec.label} unreachable after {retries} attempt(s) — {last_diag}"
 
 
 # Failover telemetry (D29): chain outcomes per process lifetime. Doctor

@@ -356,7 +356,12 @@ def _syntax(console: Console, code: str, lexer: str) -> object:
 
 
 def _fmt_tok(n: int) -> str:
-    return f"{n / 1000:.1f}k" if n >= 1000 else str(n)
+    """Token counts in M above a million — '2.4M', not '2,400k'."""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.2f}M"
+    if n >= 1_000:
+        return f"{n / 1000:.1f}k"
+    return str(n)
 
 
 def _crash_log(where: str, exc: BaseException) -> None:
