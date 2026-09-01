@@ -151,7 +151,8 @@ def test_skill_loader():
     assert "SQL INJECTION" in prompt.upper()
     assert "UNION SELECT" in prompt
     prompt = get_skill_prompt("")
-    assert "RECONNAISSANCE" in prompt.upper()
+    assert "TARGETING" in prompt.upper()  # v-posture: recon targets, exploitation executes
+    assert "NEVER run exploits" not in prompt  # the old hesitation gate is gone
     skills = get_available_skills()
     assert len(skills) > 0
 
