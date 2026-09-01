@@ -8,6 +8,7 @@ Adapted from redamon/agentic/orchestrator_helpers/nodes/think_node.py.
 """
 
 import asyncio
+import contextlib
 import logging
 from uuid import uuid4
 
@@ -258,12 +259,27 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         if thought:
             action_log += f"    thought: {thought}\n"
 
+    _governor_lines = ""
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.mode_governor import scoreboard, untried
+
+        _sb = scoreboard(state)
+        _open = untried(state.get("_attack_queue") or [])
+        if _sb:
+            _governor_lines = f"- **Progress**: {_sb}\n"
+        if _open:
+            _top = " | ".join(f"{str(s['surface'])[:60]} ({s.get('cls', '?')})" for s in _open[:4])
+            _governor_lines += (
+                f"- **Untried surfaces ({len(_open)})**: {_top}\n"
+                "  Each surface above is ready to test — pick one and fire the matching payload class.\n"
+            )
+
     context_block = f"""
 ## CURRENT STATE
 - **Phase**: {phase}
 - **Iteration**: {iteration}/{state.get("max_iterations", 100)}
 - **Attack Path**: {state.get("attack_path_type", "recon")}
-{_queued_plan_block(state)}
+{_governor_lines}{_queued_plan_block(state)}
 ## RECENT ACTIONS (last 8 tool calls — DO NOT REPEAT FAILURES)
 {action_log or "(none)"}
 
@@ -282,12 +298,13 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
 ## Q&A HISTORY
 {qa_context or "(none)"}
 
-## [warn] RULES
-- NEVER repeat a FAILED action. If a tool failed, try a DIFFERENT approach.
+## RULES
+- NEVER repeat an IDENTICAL failed call (same tool, same args). A failed payload has taught you one context — vary the class/encoding/position and fire again on a surface that's still unproven.
 - NEVER install tools you already tried to install. Use what's available.
 - NEVER check job_status/job_list twice in a row without acting on results.
 - If nmap/job has no output after 90s, it's probably blocked. Move on.
 - READ the output of completed jobs BEFORE spawning new ones.
+- Exploitation is iterative by nature: probe → adjust → fire again is the workflow, not a stall. Switch attack CLASS only when a surface is confirmed dead.
 """
     full_prompt = system_prompt + context_block
 
@@ -636,11 +653,24 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
             updates["_just_transitioned_to"] = to_phase
             phase_history = state.get("phase_history", []) + [PhaseHistoryEntry(phase=to_phase).model_dump()]
             updates["phase_history"] = phase_history
+            # Doctrine follows the phase (the skill-stuck bug): switching to
+            # exploitation picks the best-fit skill for the collected
+            # surfaces unless the model named one this turn.
+            _skill_note = ""
+            if to_phase == "exploitation" and not updates.get("attack_path_type"):
+                try:
+                    from suijin.modules.agent.lib.mode_governor import best_skill_for
+
+                    _skill = best_skill_for(state)
+                    updates["attack_path_type"] = _skill
+                    _skill_note = f"\nDoctrine auto-switched to: {_skill} (best fit for the surfaces found)."
+                except Exception:  # noqa: BLE001 — best-effort doctrine swap
+                    pass
             updates["messages"].append(
                 {
                     "role": "user",
                     "content": f"PHASE TRANSITION: Now in {to_phase} phase. Reason: {reason}\n"
-                    f"You may now use {to_phase}-appropriate tools. Proceed with your next action.",
+                    f"You may now use {to_phase}-appropriate tools.{_skill_note}\nProceed with your next action.",
                 }
             )
 

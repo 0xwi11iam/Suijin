@@ -190,6 +190,22 @@ class SuijinAgentGraph:
             else:
                 result["_consecutive_failures"] = 0
 
+            # ── Mode governor: surface queue + recon→exploit switch ──
+            try:
+                from suijin.modules.agent.lib import mode_governor as _mg
+
+                queue = _mg.update_queue(state, result)
+                if queue != (state.get("_attack_queue") or []):
+                    result["_attack_queue"] = queue
+                directive = _mg.govern(state, state.get("_run_config") or self.run_config)
+                if directive:
+                    msgs = directive.pop("messages", [])
+                    for k, v in directive.items():
+                        result[k] = v
+                    result.setdefault("messages", []).extend(msgs)  # APPEND — think's messages must survive the merge
+            except Exception as _mg_err:  # noqa: BLE001 — never break the loop
+                logger.debug(f"mode governor skipped: {_mg_err}")
+
             # ── Supervisor check (runs every N iterations) ──────────
             supervisor_interval = 5  # can be loaded from config
             iteration = result.get("current_iteration", state.get("current_iteration", 0))
@@ -203,6 +219,21 @@ class SuijinAgentGraph:
                     # enables per-detector cooldowns so nothing nags twice)
                     guidance = analyze_trace(trace[-15:], iteration=iteration)
                     if guidance:
+                        # Wrap-up gate: "generate your report and complete"
+                        # is forbidden while untried attack surfaces remain
+                        # — quitting with attack debt is the timidity bug.
+                        try:
+                            from suijin.modules.agent.lib import mode_governor as _mg
+
+                            _open = _mg.untried(state.get("_attack_queue") or result.get("_attack_queue") or [])
+                        except Exception:  # noqa: BLE001
+                            _open = []
+                        if "generate your report" in guidance and _open:
+                            guidance = (
+                                f"Recon yield is exhausted but {len(_open)} attack surfaces remain UNTRIED — "
+                                "switch to exploitation and work the queue before any report. "
+                                f"Top: {', '.join(str(s['surface'])[:50] for s in _open[:3])}"
+                            )
                         logger.info(f"Supervisor pattern intervention at iteration {iteration}: {guidance[:80]}")
                         result.setdefault("messages", []).append(
                             {
@@ -249,10 +280,45 @@ class SuijinAgentGraph:
                         if last_step.get("tool_name") == "http_request" and detect_anomaly(tool_output):
                             hypotheses = await generate_hypotheses_async(tool_output, state, self.generate_fn)
                             if hypotheses:
+                                # ACTUATION (not homework): the top hypothesis
+                                # carrying a validation_payload gets ONE
+                                # auto-fired probe — paced by http_request's
+                                # own limiter — and the EVIDENCE lands in the
+                                # conversation. The agent reacts to results,
+                                # not suggestions.
+                                _fired = ""
+                                try:
+                                    import asyncio as _aio
+                                    import json as _json
+
+                                    for _h in hypotheses or []:
+                                        _vp = str((_h or {}).get("validation_payload") or "").strip()
+                                        _target = str(last_step.get("tool_args", {}).get("url") or "")
+                                        if _vp and _target and "http" in _vp.lower():
+                                            _probe = {
+                                                "method": "GET",
+                                                "url": _target,
+                                                "body": _vp if "{" in _vp or "=" in _vp else "",
+                                                "headers": {"Content-Type": "application/json"} if _vp.startswith("{") else None,
+                                            }
+                                            try:
+                                                _payload = _json.loads(_vp)
+                                                if isinstance(_payload, dict):
+                                                    _probe.update({k: v for k, v in _payload.items() if k in ("method", "url", "headers", "body")})
+                                            except Exception:  # noqa: BLE001 — payload may be raw text
+                                                pass
+                                            _out = await _aio.wait_for(
+                                                _aio.to_thread(self.route_tool_fn, "http_request", _probe, {}),
+                                                timeout=45,
+                                            )
+                                            _fired = f"\nORACLE PROBE FIRED ({_probe.get('method')} {_probe.get('url')}) → {str(_out)[:400]}"
+                                            break
+                                except Exception as _ofire:  # noqa: BLE001 — actuation is best-effort
+                                    logger.debug(f"oracle actuation skipped: {_ofire}")
                                 result.setdefault("messages", []).append(
                                     {
                                         "role": "user",
-                                        "content": f"ORACLE: Anomalous response detected. Hypotheses: {hypotheses}",
+                                        "content": f"ORACLE: Anomalous response detected. Hypotheses: {hypotheses}{_fired}",
                                     }
                                 )
                                 result["_oracle_hypotheses"] = hypotheses

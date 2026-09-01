@@ -96,6 +96,7 @@ class RedConfig(BaseModel):
     zai_model: str = Field(default="glm-5.3")
     zai_endpoint: str = Field(default="coding")
     max_iterations: int = Field(default=100000, ge=1, le=1000000)  # operator: infinite by default
+    posture: str = Field(default="assertive")  # recon | assertive — the mode-governor dial
     temperature: float = Field(default=0.4, ge=0.0, le=2.0)
     supervisor_interval: int = Field(default=5, ge=1)
     cost_hard_cap_usd: float = Field(default=0.0, ge=0.0)  # 0 = unlimited (operator)
@@ -106,6 +107,14 @@ class RedConfig(BaseModel):
     sentinel_model_id: str = ""
     max_tokens_per_request: int = Field(default=8000, ge=100)
     stealth: bool = Field(default=True)  # v5.1: quiet by default (masked identity, pacing, tool rate caps)
+
+    @field_validator("posture")
+    @classmethod
+    def validate_posture(cls, v):
+        v = (v or "assertive").strip().lower()
+        if v not in ("recon", "assertive"):
+            raise ValueError("posture must be 'recon' or 'assertive'")
+        return v
 
     @field_validator("zai_endpoint")
     @classmethod
