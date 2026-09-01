@@ -1,0 +1,49 @@
+{
+  "name": "citadel",
+  "description": "Hardened corporate fortress — armored exterior, ~26 planted vulns, 3 crown chains. Cheap checks bounce; everything real is chained.",
+  "port": 5908,
+  "internal_port": 5909,
+  "root_flag_file": "/tmp/suijin_citadel_root.txt",
+  "posture": "secure-looking: WAF fake-404s, rate limits 200/min, security headers, decoy admin, fake .git canary, deceptive metadata, decoy false flag",
+  "tiers": {
+    "tier1_disguised_recon": [
+      {"id": "T1-1", "class": "info_disclosure", "where": "/backup.zip", "detail": "partial config: jwt_secret_prefix + hint at /internal/config", "flag": null},
+      {"id": "T1-2", "class": "version_disclosure", "where": "/api/v1/public/info", "detail": "flask/werkzeug versions on forgotten v1 route", "flag": null},
+      {"id": "T1-3", "class": "user_enumeration", "where": "POST /login", "detail": "timing oracle: existing user = +0.4s", "flag": null},
+      {"id": "T1-4", "class": "cors_misconfig", "where": "/api/v1/public/*", "detail": "ACAO reflects Origin + credentials true on one subpath", "flag": null},
+      {"id": "T1-5", "class": "sourcemap_leak", "where": "/static/js/app.map", "detail": "internal paths + vault host leak", "flag": null},
+      {"id": "T1-6", "class": "hidden_route", "where": "/api/v2", "detail": "unlinked v2 API incl. executive endpoint", "flag": null},
+      {"id": "T1-7", "class": "misdirection", "where": "robots.txt + security.txt", "detail": "decoy disallows; 'no automated testing' bait", "flag": null},
+      {"id": "T1-8", "class": "decoy", "where": "/admin, /.git/config, /flag", "detail": "always-401 admin, canary git creds, FALSE-validating decoy flag", "flag": null}
+    ],
+    "tier2_real_bugs": [
+      {"id": "T2-1", "class": "sqli_blind_boolean", "where": "GET /api/items?category=", "detail": "f-string query; WAF eats obvious payloads, encoded boolean works", "flag": null},
+      {"id": "T2-2", "class": "sqli_union", "where": "GET /search?q=", "detail": "filter blocks 'union select' — uNIon/**/SeLeCt bypass", "flag": null},
+      {"id": "T2-3", "class": "xss_stored", "where": "POST /api/comments → /admin/comments", "detail": "raw render in admin view", "flag": null},
+      {"id": "T2-4", "class": "idor", "where": "GET /api/docs/{id}", "detail": "unguessable ids leak via error/graphQL; classified doc holds a flag", "flag": "FLAG{citadel_idor_docs}"},
+      {"id": "T2-5", "class": "password_reset_poisoning", "where": "POST /api/reset", "detail": "reset link uses attacker Host header", "flag": null},
+      {"id": "T2-6", "class": "race_condition", "where": "POST /api/transfer", "detail": "balance read outside the lock — double-spend", "flag": null},
+      {"id": "T2-7", "class": "ssrf", "where": "POST /api/webhook", "detail": "private ranges blocked — /redirect?url= same-origin bypass", "flag": null},
+      {"id": "T2-8", "class": "open_redirect+crlf", "where": "GET /redirect?url=", "detail": "SSRF primitive + %0d%0a CRLF passes the weak check", "flag": null},
+      {"id": "T2-9", "class": "path_traversal", "where": "GET /download?file=", "detail": "'../' blocked — ..;/ bypass", "flag": null},
+      {"id": "T2-10", "class": "upload_blocklist_bypass", "where": "POST /api/upload", "detail": ".php blocked, .phtml passes", "flag": null},
+      {"id": "T2-11", "class": "mass_assignment", "where": "POST /api/register", "detail": "role rides the JSON body", "flag": null},
+      {"id": "T2-12", "class": "xxe", "where": "POST /api/import", "detail": "external entities resolve (blind OOB)", "flag": null},
+      {"id": "T2-13", "class": "ssti", "where": "POST /api/settings custom_message", "detail": "admin Jinja render", "flag": null},
+      {"id": "T2-14", "class": "prototype_pollution", "where": "POST /api/settings dotted keys", "detail": "__proto__-style merge into render context", "flag": null},
+      {"id": "T2-15", "class": "auth_bypass_decoy", "where": "GET /flag", "detail": "decoy flag — validates FALSE in graders", "flag": null}
+    ],
+    "tier3_crown_chains": [
+      {"id": "CHA", "name": "sqli→rce", "steps": "blind SQLi /api/items → extract admin md5 hash → crack → login → GET /..;/internal/config (full JWT secret) → forge admin JWT → POST /admin/exec → read /tmp/suijin_citadel_root.txt", "flag": "FLAG{citadel_root_rce}"},
+      {"id": "CHB", "name": "ssrf→vault", "steps": "webhook SSRF via /redirect → 127.0.0.1:5909/metadata (FAKE creds — deceptive) → /metadata/v2/ (real) → /vault/token (15-min rotation) → /vault/blob → POST /vault/decrypt cmd injection", "flag": "FLAG{citadel_vault_crown}"},
+      {"id": "CHC", "name": "race→ato", "steps": "transfer race → drain + IDOR docs (executive uuid) → ceo session → GET /api/v2/executive", "flag": "FLAG{citadel_ceo_ato}"}
+    ]
+  },
+  "flags": [
+    "FLAG{citadel_idor_docs}",
+    "FLAG{citadel_root_rce}",
+    "FLAG{citadel_vault_crown}",
+    "FLAG{citadel_ceo_ato}"
+  ],
+  "decoy_flags": ["FLAG{citadel_decoy_easy_path}"]
+}
