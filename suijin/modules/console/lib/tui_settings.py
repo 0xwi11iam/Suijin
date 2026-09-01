@@ -77,9 +77,10 @@ ALL_FIELDS = OrderedDict(
             ("choice", ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"], ["anthropic"]),
         ),
         # ---- Universal fields (all providers) ----
+        ("posture", ("choice", ["assertive", "recon"])),
         ("temperature", ("float", (0.0, 2.0))),
         ("max_tokens_per_request", ("int", (1, 128000))),
-        ("max_iterations", ("int", (1, 500))),
+        ("max_iterations", ("int", (1, 1000000))),
         ("supervisor_model_id", ("string",)),
         ("supervisor_interval", ("int", (1, 100))),
         # ---- Cost guardrails ----

@@ -175,28 +175,27 @@ SKILL_MAP = {
     "blue_investigation": BLUE_FORENSICS_PROMPT,
 }
 
-# Default recon prompt — used when no specific attack path is set
+# Default posture prompt — used when no specific attack path is set.
+# Doctrine: recon targets, exploitation executes. Professional inevitability —
+# testing a surface you can already see is the job, not a decision to weigh.
 DEFAULT_RECON_PROMPT = """
-## PHASE: RECONNAISSANCE
+## MODE: TARGETING
 
-You are in the **informational** phase. Your job is to MAP the target thoroughly
-BEFORE attempting any exploitation.
+Recon chooses the next target; it never delays the shot. A form seen is a form
+tested. A version matched is a payload scheduled. Exploitation is not a later
+phase you earn — it is what recon is FOR.
 
-### MANDATORY RECON WORKFLOW:
+### WORKFLOW (parallel, not sequential):
 
-1. **Port scan**: `execute_terminal` with nmap -sV -sC TARGET
-2. **Directory bruteforce**: gobuster or feroxbuster against web ports
-3. **Service fingerprint**: whatweb, curl -I to identify technologies
-4. **CVE research**: search_cve for every discovered service+version
-5. **Endpoint discovery**: check robots.txt, sitemap.xml, .well-known/, /api/
-6. **Parameter discovery**: look for forms, query strings, API parameters
+1. **Surface discovery**: ports/services (nmap -sV), endpoints (robots.txt, sitemap, /api/, .well-known/), forms, parameters — run scanners as BACKGROUND JOBS while you test what's already in front of you
+2. **Immediate testing**: the moment a parameter, form, or version-match appears, fire the payload class it matches. Do not queue it for later.
+3. **CVE matching**: every fingerprinted service+version gets a search_cve pass; every hit gets its PoC attempted
+4. **Surface multiplication**: one endpoint found → its siblings tested (/v1/ → /v2/, /internal/; /login SQLi failed → /search, /api/users, /profile?id=)
+5. **Record as you go**: write_note negative results too — they prevent re-testing, they never pause the advance
 
-### EXPLORATION RULES:
-- Test EVERY endpoint you find — /login, /api, /admin, /reset, /debug
-- When you find one endpoint, check for similar ones (/v1/ -> also try /v2/, /internal/)
-- Surface multiply: SQLi on /login failed? Try /search, /api/users, /profile?id=
-- NEVER run exploits (sqlmap, hydra, msf_run) until 3+ recon steps are complete
-- Log everything with write_note — negative results prevent expensive re-testing
+### WHEN TO SWITCH MODE:
+- New surfaces stopped appearing AND untried surfaces remain → switch_mode to exploitation and work the queue
+- The objective needs one specific fact → grab it, then return to testing
 """
 
 

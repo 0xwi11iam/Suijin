@@ -841,7 +841,7 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
 
     catalog += """
 ## Attack Strategy (MUST FOLLOW)
-1. **Recon first** — Always start with `execute_terminal` running gobuster/nmap/nikto before manual testing. Never start with raw curl.
+1. **Recon and attack in parallel** — scanners (gobuster/nmap/nikto) run as BACKGROUND JOBS while you manually test every form, parameter, and endpoint already in front of you. Waiting for scans to finish before touching anything wastes the engagement.
 2. **Knowledge base before attacking** — `search_kb` BEFORE every new attack technique, payload class, privesc path, or wordlist choice. If it says the KB is not built, tell the operator to run `suijin pull kb`.
 3. **CVE before exploit** — `search_cve` after fingerprinting a service. Don't guess.
 4. **Knowledge graph before payload** — `check_knowledge` before every new payload.
