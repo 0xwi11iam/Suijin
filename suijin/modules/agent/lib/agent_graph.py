@@ -18,6 +18,7 @@ Architecture:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 
 # langgraph's checkpoint module emits a PendingDeprecation advisory at
@@ -207,7 +208,8 @@ class SuijinAgentGraph:
                 logger.debug(f"mode governor skipped: {_mg_err}")
 
             # ── Supervisor check (runs every N iterations) ──────────
-            supervisor_interval = 5  # can be loaded from config
+            with contextlib.suppress(Exception):
+                supervisor_interval = int((state.get("_run_config") or self.run_config).get("supervisor_interval", 5))
             iteration = result.get("current_iteration", state.get("current_iteration", 0))
             if iteration > 0 and iteration % supervisor_interval == 0:
                 try:
@@ -299,12 +301,20 @@ class SuijinAgentGraph:
                                                 "method": "GET",
                                                 "url": _target,
                                                 "body": _vp if "{" in _vp or "=" in _vp else "",
-                                                "headers": {"Content-Type": "application/json"} if _vp.startswith("{") else None,
+                                                "headers": {"Content-Type": "application/json"}
+                                                if _vp.startswith("{")
+                                                else None,
                                             }
                                             try:
                                                 _payload = _json.loads(_vp)
                                                 if isinstance(_payload, dict):
-                                                    _probe.update({k: v for k, v in _payload.items() if k in ("method", "url", "headers", "body")})
+                                                    _probe.update(
+                                                        {
+                                                            k: v
+                                                            for k, v in _payload.items()
+                                                            if k in ("method", "url", "headers", "body")
+                                                        }
+                                                    )
                                             except Exception:  # noqa: BLE001 — payload may be raw text
                                                 pass
                                             _out = await _aio.wait_for(
