@@ -243,6 +243,13 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
 
     _runtime.reset_recon_state()
 
+    # register the LIVE config dict — adjust_config mutates it in place and
+    # the governor/budget guard re-read it every think turn (the seam)
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.self_config import set_live_config
+
+        set_live_config(config)
+
     # PROVIDER CHAIN — printed at EVERY engagement start. The operator must
     # never wonder which LLM is about to be spent (field incident: config
     # said zai, a resumed bundle said deepseek, nobody could tell).

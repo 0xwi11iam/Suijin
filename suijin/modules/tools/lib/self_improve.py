@@ -124,27 +124,60 @@ def edit_skill(skill_name: str, new_content: str) -> str:
 
 
 def write_tool(tool_name: str, code: str) -> str:
-    """Create or update a tool implementation.
+    """Create a REAL, immediately-callable tool (self-extension).
 
-    The agent can write new tools in Python to extend its capabilities.
-    Tools are saved to suijin/tools/ and loaded automatically.
+    Writes an agent pack to ~/.suijin/modules/<name>/ (the user pack
+    root — the vendored tree stays clean) with manifest + main.py, then
+    re-scans the loader so the tool is routable on the NEXT tool call.
 
-    Args:
-        tool_name: Python-safe name for the tool (e.g. 'custom_scanner').
-        code: Complete Python code for the tool.
-
-    Returns:
-        Confirmation or error.
+    The code MUST define: def <tool_name>(**kwargs) -> str
+    (routed as f(**args); return 'Error: ...' on failure, never raise).
+    Prior versions are snapshotted (rollback = delete the pack dir).
     """
-    safe_name = "".join(c for c in tool_name if c.isalnum() or c == "_").lower()
-    if not safe_name:
-        return "Invalid tool name — use alphanumeric characters and underscores."
+    import json as _json
 
-    tool_path = BASE_DIR / "tools" / f"{safe_name}.py"
+    safe_name = "".join(c for c in tool_name if c.isalnum() or c == "_").lower()
+    if not safe_name or safe_name[0].isdigit():
+        return "Error: invalid tool name — lowercase alphanumeric + underscores, not starting with a digit."
+    if f"def {safe_name}(" not in code:
+        return (
+            f"Error: the code must define `def {safe_name}(**kwargs) -> str` — "
+            "that exact function is what gets routed. Never raise; return 'Error: ...' strings."
+        )
+    pack_dir = Path.home() / ".suijin" / "modules" / safe_name
     try:
-        tool_path.write_text(code)
-        return f"[done] Tool '{safe_name}' written to tools/{safe_name}.py ({len(code)} chars)."
-    except Exception as e:
+        pack_dir.mkdir(parents=True, exist_ok=True)
+        # snapshot prior version (the edit_skill pattern)
+        main = pack_dir / "main.py"
+        if main.exists():
+            hist = pack_dir / "_history"
+            hist.mkdir(exist_ok=True)
+            shutil.copy2(main, hist / f"{time.time_ns()}.py")
+            hist_files = sorted(hist.glob("*.py"))
+            for old in hist_files[:-25]:  # bounded, like skill history
+                old.unlink(missing_ok=True)
+        main.write_text(code, encoding="utf-8")
+        (pack_dir / "manifest.json").write_text(
+            _json.dumps(
+                {"name": safe_name, "author": "agent", "tools": {safe_name: "agent-authored tool"}},
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        # register NOW — discover_modules is idempotent and re-scans everything
+        from suijin.modules.loader import discover_modules, get_module_tools
+
+        discover_modules()
+        if safe_name not in get_module_tools():
+            return (
+                f"[warn] Tool '{safe_name}' written to {pack_dir} but did not register "
+                "(check the code imports at module top level). It will retry on next boot."
+            )
+        return (
+            f"[done] Tool '{safe_name}' REGISTERED — callable immediately as a tool_name. "
+            f"Pack: {pack_dir}. Test it on your next turn."
+        )
+    except Exception as e:  # noqa: BLE001 — tools return strings
         return f"Error writing tool: {e}"
 
 

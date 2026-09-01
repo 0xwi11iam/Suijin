@@ -2,6 +2,7 @@
 Base prompt builder — autonomous agent system prompt.
 """
 
+import contextlib
 import re
 
 from suijin.modules.agent.lib.prompts.tool_registry import build_tool_catalog_prompt
@@ -369,7 +370,15 @@ NEVER run sequential scans when you could deploy subagents instead.
     try:
         from suijin.modules.agent.lib.profiles import profile_directive
 
-        _pd = profile_directive(getattr(state, "get", lambda *a: None)("_run_config") or {})
+        _rc = getattr(state, "get", lambda *a: None)("_run_config") or {}
+        if not _rc.get("adversary_profile"):
+            # TUI engagements never seed _run_config — fall through to the
+            # live disk config so the profile directive isn't silently dead
+            with contextlib.suppress(Exception):
+                from suijin.modules.platform.lib.config_loader import load_config as _lc
+
+                _rc = _lc()
+        _pd = profile_directive(_rc)
         if _pd:
             parts.append(_pd)
     except Exception:  # noqa: BLE001

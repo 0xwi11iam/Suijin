@@ -51,6 +51,28 @@ def get_module_tools():
     return _gmt()
 
 
+_MISSING_RX = __import__("re").compile(r"not (?:installed|found)|command not found|No such file", __import__("re").I)
+
+
+def _with_install_hint(tool_name: str, result: str) -> str:
+    """The catalog's kept promise: a missing-binary error gets THIS
+    operator's install command appended — the agent self-serves instead
+    of stalling. Best-effort, never changes success results."""
+    try:
+        text = str(result)
+        if not text.startswith(("Error", "Tool Error", "Tool error")) or not _MISSING_RX.search(text):
+            return result
+        from suijin.modules.tools.lib.availability import install_hint, tool_dependencies
+
+        deps = tool_dependencies().get(tool_name) or []
+        hints = [f"→ install: {install_hint(b)}" for b in deps if install_hint(b)]
+        if not hints:
+            return result
+        return text + "\n" + "\n".join(hints[:2]) + "\n(you may install it via execute_terminal, then retry)"
+    except Exception:  # noqa: BLE001 — hints must never break a result
+        return result
+
+
 def __getattr__(name):
     if name in _KB_TOOLS_NAMES:
         from suijin.modules.knowledge.lib import kb_tools
@@ -114,6 +136,7 @@ from suijin.modules.tools.lib.jobs import (
 )
 from suijin.modules.tools.lib.js_tools import google_key_probe, js_bundle_analyze, source_map_probe
 from suijin.modules.tools.lib.output_normalizer import normalize_output
+from suijin.modules.tools.lib.self_config import adjust_config as _adjust_config
 
 
 def _kb_read_tool(path: str) -> str:
@@ -292,6 +315,7 @@ def _build_routes(config):
         "anonymize_report": lambda a: anonymize_report(a.get("file_path", "")),
         "http_request": lambda a: http_request(a.get("method", "GET"), a.get("url"), a.get("headers"), a.get("body")),
         "bypass_403": lambda a: _bypass_403(a.get("url", "")),
+        "adjust_config": lambda a: _adjust_config(**(a or {})),
         "code_harness": lambda a: _code_harness(
             a.get("goal", ""),
             language=a.get("language", "python"),
@@ -617,7 +641,7 @@ def route_tool(tool_name, args, config):
             return blocked_repeat
         result = _execute_with_healing(routes[tool_name], args, tool_name)
         _repeat_guard_record(tool_name, args, result)
-        return result
+        return _with_install_hint(tool_name, result)
     # Not found — suggest close matches; if none, point at the operator.
     # One guess maximum: guessing repeatedly burns the engagement.
     import difflib
@@ -681,6 +705,7 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
 - **execute_terminal** — Run ANY shell command. Use this for CLI tools: nmap, gobuster, ffuf, nikto, sqlmap, hydra, john, enum4linux, dirb, masscan, and any other pentesting tool installed on the system. Prefer dedicated CLI tools over raw curl/http_request for scanning and brute-forcing.
 - **http_request** — Raw HTTP requests with full browser emulation. Use for manual web testing, not for scanning (use gobuster/nmap via execute_terminal instead).
 - **bypass_403** — The 403 breaker: one call fires ~24 bypass variants (path normalization, X-Original-URL/XFF headers, method overrides, path-as-param) through http_request with pacing. Call it whenever a promising path 403s; the verdict table shows which variant got through.
+- **adjust_config** — Tune YOUR OWN run: no args shows the effective config; with args adjusts allowlisted keys (posture, temperature, max_tokens_per_request, provider, fallback_providers, model ids) — changes go LIVE on the next turn/call. Use it when the situation changes: provider dying (switch provider / extend fallback chain), recon exhausted (posture), responses truncated (max_tokens). Cost caps, stealth, safety modes, and scope are operator-only.
 - **code_harness** — The exploit dev loop: write→run→triage→fix in a per-attempt sandbox. Args: goal, language (python/bash/php/go/js...), code, run_cmd ('{file}' placeholder), success_regex, fail_regex, timeout_s, max_cycles. Python gets mechanical fixes (auto pip-install, syntax catch). VERDICT: PASS is your EVIDENCE — record_finding on a code-based exploit claim REQUIRES a harness PASS in the same engagement; anything else is an unverified claim.
 - **read_file** — Read any file on the system.
 - **write_file** — Write files (scripts, payloads, notes). Defaults to suijin_agent/ for relative paths.
