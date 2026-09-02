@@ -1,4 +1,4 @@
-<h3 align="center">v6.5.0 — The Weaponization Engine</h3> 
+<h3 align="center">v6.6.0 — The Web Evidence Engine</h3> 
 <p align="center">
 <img src="assets/suijin.png" alt="Suijin Logo" width="160"/>
 </p>
@@ -6,7 +6,7 @@
 
 
 <p align="center">
-  <img height="20" src="https://img.shields.io/badge/v6.5.0-suijin-green?style=flat" alt="Version"/>
+  <img height="20" src="https://img.shields.io/badge/v6.6.0-suijin-green?style=flat" alt="Version"/>
   <img height="20" src="https://img.shields.io/badge/LICENSE-AGPL%20v3-4169A1?style=flat" alt="License"/>
   <img height="20" src="https://img.shields.io/badge/PYTHON-3.10+-306998?style=flat&logo=python&logoColor=white" alt="Python"/>
 </p>
@@ -25,6 +25,31 @@ toolkit, one knowledge base, and one knowledge graph.
 > tool you accept full responsibility for your actions.
 
 ---
+
+## The honest comparison
+
+| | Suijin | Prompt-count agents |
+|---|---|---|
+| Findings are | **terminal-verified POCs** (the system runs the exploit before you see it) or **baseline/exploit diffs** (compare mode) | model claims |
+| Quitting is | **structurally refused** while surfaces/cells are untested (the completion gate) | up to the model |
+| Access-control testing | **cross-credential session model** — ID fields differing per credential, one-argument credential swap | prose |
+| Payload breadth | **battery+facts engine** — tag survival, noise-floor differentials, WAF-block qualification | model recall |
+| Dead code | **CI-enforced**: `suijin capability` fails the build on orphans | count metrics |
+| Gym | **onboard labs with chain-verification tests + bench grading** (Citadel: 26 vulns, 3 crown chains) | — |
+
+## What's New in v6.6.0 — The Web Evidence Engine
+
+- **http_replay**: payloads travel as DATA — 15 mutation ops, 12 composable codecs (incl. the
+  tab WAF-evasion escape), **compare mode** (baseline+exploit+diff in one call), **credential
+  swap** (the IDOR primitive), sweep, raw-byte smuggling mode
+- **inject_probe**: the battery+facts evidence engine — never an oracle; sink-context
+  classification, measured noise floors, WAF-block qualification
+- **web_session**: the cross-credential session model built automatically from governed
+  traffic — the IDOR worklist + hidden-params (mass-assignment targets the UI never exposed)
+- **The completion gate**: closure refused while untried surfaces/coverage cells remain
+- **Coverage ledger** with evidence-required marking; surface_expand sibling enumeration;
+  same-surface stall detection; XSS impact-exploration playbooks (OAuth chaining, token exfil)
+- **`suijin capability`** — the no-orphan-code CI gate
 
 ## What's New in v6.5.0
 
