@@ -19,6 +19,7 @@
     "tier2_real_bugs": [
       {"id": "T2-1", "class": "sqli_blind_boolean", "where": "GET /api/items?category=", "detail": "f-string query; WAF eats obvious payloads, encoded boolean works", "flag": null},
       {"id": "T2-2", "class": "sqli_union", "where": "GET /search?q=", "detail": "filter blocks 'union select' — uNIon/**/SeLeCt bypass", "flag": null},
+      {"id": "T2-2b", "class": "xss_reflected", "where": "GET /search?q=...&fmt=html", "detail": "search-results header echoes the query raw (HTML)", "flag": null},
       {"id": "T2-3", "class": "xss_stored", "where": "POST /api/comments → /admin/comments", "detail": "raw render in admin view", "flag": null},
       {"id": "T2-4", "class": "idor", "where": "GET /api/docs/{id}", "detail": "unguessable ids leak via error/graphQL; classified doc holds a flag", "flag": "FLAG{citadel_idor_docs}"},
       {"id": "T2-5", "class": "password_reset_poisoning", "where": "POST /api/reset", "detail": "reset link uses attacker Host header", "flag": null},
