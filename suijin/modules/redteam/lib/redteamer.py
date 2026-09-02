@@ -513,6 +513,13 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
             q = _qmod.Queue()
             with contextlib.suppress(Exception):
                 console.print(f"[bold cyan]{label}[/bold cyan] [dim]— type your answer in the input box[/dim]")
+            # STRIP BACK UP for the typing window: the ask flow stops the
+            # Live before printing the question, but the input box lives
+            # INSIDE the strip — without restarting it the operator types
+            # into a void (no box, no echo, 'can't type'). start() is
+            # idempotent; we stop again so the caller's bracket is balanced.
+            with contextlib.suppress(Exception):
+                ui.start()
             _input_reader.begin_ask(q)
             try:
                 return q.get(timeout=timeout_s)
@@ -520,6 +527,8 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                 return ""
             finally:
                 _input_reader.end_ask()
+                with contextlib.suppress(Exception):
+                    ui.stop()
         if run_box.alive:
             return _ask_op(run_box, console, "", timeout_s=timeout_s, label=label.strip())
         try:

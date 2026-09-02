@@ -23,9 +23,16 @@ def _save_store(data):
     STORE_PATH.write_text(json.dumps(data, indent=2))
 
 
-def creds_add(service, cred_type, value, username="", notes=""):
+def creds_add(service="", cred_type="", value="", username="", notes="", **aliases):
+    """Tolerant to argument drift from the model: note→notes, type→cred_type,
+    token/key/password shorthand → value. The old rigid signature returned
+    'unexpected keyword argument' and the credential was LOST."""
+    notes = notes or aliases.get("note") or ""
+    cred_type = cred_type or aliases.get("type") or aliases.get("kind") or ""
+    value = value or aliases.get("token") or aliases.get("key") or aliases.get("password") or ""
+    username = username or aliases.get("user") or ""
     if not service or not value:
-        return "Error: service and value required"
+        return "Error: service and value required (service=<target/system>, value=<the secret>, type=<password/token/key/cookie>, note=<context>)"
     store = _load_store()
     entry = {
         "service": service,
