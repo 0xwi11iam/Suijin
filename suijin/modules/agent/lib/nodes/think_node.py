@@ -700,13 +700,40 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     elif action == "complete":
         completion_reason = decision.get("completion_reason", "Objective complete")
         updates["_current_step"] = {}  # no execute hop on completion
-        updates["completion_reason"] = completion_reason
-        updates["messages"].append(
-            {
-                "role": "user",
-                "content": f"OBJECTIVE COMPLETE: {completion_reason}",
-            }
-        )
+        # ── THE COMPLETION GATE (the field-review premature-closure hole):
+        # model-initiated closure is REFUSED while untried attack surfaces
+        # remain or high-priority coverage cells are untested. The wrap-up
+        # gate only intercepted the supervisor's nudge — the exit door was
+        # unlocked. ──
+        _refusal = None
+        with contextlib.suppress(Exception):
+            from suijin.modules.agent.lib.mode_governor import untried as _untried
+
+            _open = _untried(state.get("_attack_queue") or [])
+            if len(_open) >= 2:
+                _refusal = (
+                    f"COMPLETION REFUSED (surface gate): {len(_open)} attack surfaces remain UNTRIED "
+                    f"(top: {', '.join(str(s['surface'])[:40] for s in _open[:3])}). Test them or mark "
+                    "why they cannot apply — then complete."
+                )
+        if _refusal is None:
+            with contextlib.suppress(Exception):
+                from suijin.modules.tools.lib.coverage import completion_blocked
+
+                assets = list({str(s.get("surface", "")) for s in (state.get("_attack_queue") or [])[:20]}) or [
+                    str(state.get("_objective") or "")[:100]
+                ]
+                _refusal = completion_blocked(assets)
+        if _refusal:
+            updates["messages"].append({"role": "user", "content": _refusal})
+        else:
+            updates["completion_reason"] = completion_reason
+            updates["messages"].append(
+                {
+                    "role": "user",
+                    "content": f"OBJECTIVE COMPLETE: {completion_reason}",
+                }
+            )
 
     elif action == "ask_user":
         uq = decision.get("user_question") or {}
