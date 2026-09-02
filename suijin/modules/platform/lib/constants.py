@@ -74,7 +74,7 @@ import os
 
 TMP_DIR = Path(os.environ.get("SUIJIN_TMP_DIR") or os.environ.get("MEDUSA_TMP_DIR") or "/tmp")
 
-BLUE_KG_PATH = TMP_DIR / "blue_kg.json"
+BLUE_KG_PATH = TMP_DIR / "blue_kg.json"  # legacy /tmp location (BF4: workspace KG overrides)
 BLUE_TRAFFIC_LOG = TMP_DIR / "blue_defend_traffic.jsonl"
 BLUE_TARPIT_FILE = TMP_DIR / "blue_tarpit.json"
 BLUE_HONEYPOT_FILE = TMP_DIR / "blue_honeypots.json"

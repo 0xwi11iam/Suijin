@@ -5,8 +5,13 @@ Hard lab with RCE endpoint. Multi-step exploit chain required.
 Port: 5700
 Flag: /tmp/suijin_flag.txt (requires RCE to read)
 """
-from flask import Flask, render_template_string, request, session, redirect, url_for, g, send_file
-import sqlite3, os, hashlib, subprocess, json, random, string, time
+import hashlib
+import json
+import os
+import sqlite3
+import subprocess
+
+from flask import Flask, g, redirect, render_template_string, request, session
 
 app = Flask(__name__)
 app.secret_key = 'd3v0ps_s3cr3t_k3y_5700'
@@ -297,7 +302,7 @@ nav a{margin-right:16px}</style></head><body>
 _load_templates()
 
 def RENDER(name, **kwargs):
-    from jinja2 import Environment, BaseLoader, TemplateNotFound
+    from jinja2 import BaseLoader, Environment
     env = Environment(loader=BaseLoader())
     tmpl = TEMPLATES.get(name, '')
     if '{% extends' in tmpl:

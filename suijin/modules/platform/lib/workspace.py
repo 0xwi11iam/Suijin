@@ -91,7 +91,7 @@ def _slugify(text: str) -> str:
     import re
 
     words = re.sub(r"[^a-zA-Z0-9.-]+", "_", str(text or "engagement")).strip("_")
-    return (words[:48] or "engagement")
+    return words[:48] or "engagement"
 
 
 def set_engagement(objective: str = "") -> Path:

@@ -1,5 +1,6 @@
 """Active Directory Lab — simulated DC with Kerberos, LDAP, SMB on port 5905."""
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify, request
+
 app = Flask(__name__)
 users = {"administrator": "P@ssw0rd2024!", "jsmith": "Summer2024!", "backup_svc": "Backup123!", "sql_svc": "SqlSvc2024!"}
 flags = {}
@@ -33,9 +34,9 @@ def smb_shares():
 @app.route("/smb/share/<name>")
 def smb_share(name):
     if name.lower() == "backup":
-        return f"Contents of Backup share:\nbackup_svc_creds.txt: backup_svc:Backup123!\nflag{{ad_backup_share_5905}}"
+        return "Contents of Backup share:\nbackup_svc_creds.txt: backup_svc:Backup123!\nflag{ad_backup_share_5905}"
     if name.lower() == "hr-docs" and request.headers.get("X-Auth-User") == "administrator":
-        return f"HR Documents:\nflag{{ad_hr_share_5905}}\nsalary_data.xlsx"
+        return "HR Documents:\nflag{ad_hr_share_5905}\nsalary_data.xlsx"
     return f"Access denied to {name}. Auth required: {request.headers.get('X-Auth-User','none')}"
 
 @app.route("/flag")

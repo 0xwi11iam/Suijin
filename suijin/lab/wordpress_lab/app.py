@@ -10,10 +10,7 @@ Flaws:
   7. Insecure file upload (no extension check)
   8. CSRF (no nonce on password change)
 """
-import json
-import re
 import sqlite3
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 

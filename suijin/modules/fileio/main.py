@@ -17,6 +17,7 @@ def _get_tools():
     global _tools
     if _tools is None:
         from suijin.modules.tools.lib import dispatch as _dispatch_mod
+
         _tools = _dispatch_mod
     return _tools
 

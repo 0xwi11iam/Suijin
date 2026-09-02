@@ -8,12 +8,20 @@ Vulnerabilities: SQLi, IDOR, XSS, SSTI, XXE, command injection,
                  race condition, path traversal, mass assignment,
                  predictable tokens, info disclosure, CORS misconfig.
 """
-import json, os, sqlite3, time, hashlib, hmac, threading, uuid, re, xml.etree.ElementTree as ET
+import hashlib
+import json
+import os
+import re
+import sqlite3
+import time
+import uuid
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import Flask, request, jsonify, g, make_response, Response
-from flask_cors import CORS
+
 import jwt as pyjwt
+from flask import Flask, Response, g, jsonify, request
+from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True, origins="*")
@@ -436,7 +444,8 @@ def update_config():
 
 @app.route("/health", methods=["GET"])
 def health():
-    import platform, sys
+    import platform
+    import sys
     return jsonify({"status":"healthy","uptime":time.time(),"python":sys.version,
         "platform":platform.platform(),"node":platform.node(),
         "db_size":os.path.getsize(DB) if os.path.exists(DB) else 0,
