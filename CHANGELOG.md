@@ -6,6 +6,66 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v6.6.0 — The Web Evidence Engine
+
+Every testing claim has a load-bearing tool underneath it. The agent
+stops improvising web tests through prose and starts testing with
+structured data, mechanical breadth, and evidence gates.
+
+### http_replay — payloads travel as DATA
+- 15 mutation ops (add-query enables HPP, body-set-field dot-paths,
+  set-method/target/path-param), 12 composable codecs (incl. **tab**:
+  url-encode with %09 spaces — slips separator-class WAFs)
+- **compare mode**: baseline + exploit + structured DIFF in one call —
+  the 3-gate protocol made mechanically cheap ("no measurable
+  difference = NOT a finding" is returned, not remembered)
+- **credential swap**: strips the 7 common auth headers, injects a
+  named set — the IDOR/vertical-authz primitive
+- sweep (≤50 paced values), raw TCP/TLS verbatim bytes
+  (smuggling/desync), module-level 5000-request budget + AIMD limiter,
+  scope guard, curl-equivalents + DBMS error signatures everywhere
+
+### inject_probe — the battery+facts engine (never an oracle)
+No 'vulnerable' field exists by design. xss: 11-tag survival battery +
+20 weaponized payloads with sink-CONTEXT classification. ssti:
+`7919*6841` in 9 syntaxes — product-present + literal-absent = evaluated.
+sqli: DBMS fingerprints + boolean pairs against a MEASURED noise floor.
+lfi: file content-signatures × 11 traversal shapes verbatim; a read
+must make the signature APPEAR. WAF-blocked returns "NOT evidence of
+safety — escalate."
+
+### web_session — the cross-credential session model
+Every governed send is auto-attributed and recorded. summary = the
+access-control worklist: endpoint SHAPES reached by 2+ credentials, ID
+fields DIFFERING per credential (the IDOR substrate with the exact
+replay to fire) + hidden params (request fields the UI never exposed —
+mass-assignment targets). Browser snapshots capture the UI form-field
+truth that powers the correlation.
+
+### The completion gate + coverage ledger
+- Model-initiated `complete` is REFUSED while ≥2 untried surfaces or
+  priority coverage cells remain — "stopped with 7 untried surfaces" is
+  structurally impossible now
+- coverage_check: (asset × vuln-class) ledger; tested_not_vulnerable
+  REQUIRES evidence (a note without a sent request is a FALSE record);
+  wide notes recorded once per origin
+
+### The review fixes
+- surface_expand: sibling enumeration (the missed /modals/* pivot)
+- SURFACE STALL: same-surface-different-args grinding (≥4 attempts, no
+  growth) fires the forced-pivot directive
+- XSS impact-exploration playbooks: OAuth chaining off mapped
+  state/redirect_uri, cookie/token exfil, authenticated reads, CSRF
+  harvest — plus browser-verification for execution claims
+- Doctrine: FILTERED ≠ SAFE (4-5 distinct variations, one axis at a
+  time) · EVIDENCE OR IT DIDN'T HAPPEN (the diff, 403 = enforcement
+  works)
+
+### No-orphan-code, enforced
+`suijin capability` audit verb + CI gate: routes ↔ catalog parity +
+pack integrity. Orphans are build failures, not archaeology. The dead
+testssl/wafw00f packs are fixed; 301 routes at full parity.
+
 ## v6.5.0 — The Weaponization Engine
 
 The agent stops being a recon buddy. Everything in this release exists

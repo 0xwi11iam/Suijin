@@ -481,6 +481,16 @@ def run_status() -> int:
     return 0
 
 
+def run_capability() -> int:
+    """The no-orphan-code contract: every route cataloged, every catalog
+    bullet routed, every pack defines what it declares. CI-enforced."""
+    from suijin.modules.tools.lib.capability_audit import audit
+
+    code, report = audit()
+    print(report)
+    return code
+
+
 def run_tools_list() -> int:
     """Every callable agent tool, core + module, with availability marks."""
     from suijin.modules.tools.lib.dispatch import list_route_tools
@@ -1946,6 +1956,7 @@ _KNOWN_VERBS = frozenset(
         "version",
         "env",
         "tools",
+        "capability",
         "modules",
         "workspace",
         "reports",
@@ -2025,6 +2036,7 @@ def main(argv=None):
         "version": ("print version, python, and package details", run_version),
         "env": ("show API key presence (names only, never values)", run_env),
         "tools": ("list all agent tools with availability", run_tools_list),
+        "capability": ("no-orphan-code audit: routes ↔ catalog parity + pack integrity (CI gate)", run_capability),
         "modules": ("list loaded module packs", run_modules_list),
         "workspace": ("workspace layout, usage, and symlink health", run_workspace_status),
         "reports": ("list engagement reports", run_reports_list),

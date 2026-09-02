@@ -1,7 +1,7 @@
 import subprocess
 
 
-def run(host: str = "") -> str:
+def testssl_scan(host: str = "") -> str:
     import shlex
 
     argv = ["testssl.sh", "--quiet", "--color", "0", host.strip()]
