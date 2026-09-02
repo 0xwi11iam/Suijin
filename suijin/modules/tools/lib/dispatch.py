@@ -115,7 +115,20 @@ from suijin.modules.tools.lib.exploit_catalog import catalog_exploit
 # Everything listed in __all__ below is a deliberate re-export: ruff must
 # not prune these "unused" imports.
 from suijin.modules.tools.lib.guardrails import _BLOCKED_PATTERNS, confirm_global_action, is_dangerous
+from suijin.modules.tools.lib.http_replay import (
+    http_replay as _http_replay,
+)
+from suijin.modules.tools.lib.http_replay import (
+    http_replay_raw as _http_replay_raw,
+)
+from suijin.modules.tools.lib.http_replay import (
+    list_credentials as _list_credentials,
+)
+from suijin.modules.tools.lib.http_replay import (
+    register_credential as _register_credential,
+)
 from suijin.modules.tools.lib.http_tools import apply_patch, http_request, read_file, write_file
+from suijin.modules.tools.lib.inject_probe import inject_probe as _inject_probe
 from suijin.modules.tools.lib.intel import (
     NOTES_DIR,
     NVD_BASE,
@@ -316,6 +329,43 @@ def _build_routes(config):
         "anonymize_report": lambda a: anonymize_report(a.get("file_path", "")),
         "http_request": lambda a: http_request(a.get("method", "GET"), a.get("url"), a.get("headers"), a.get("body")),
         "bypass_403": lambda a: _bypass_403(a.get("url", "")),
+        "http_replay": lambda a: _http_replay(
+            request_id=a.get("request_id", ""),
+            method=a.get("method", "GET"),
+            url=a.get("url", ""),
+            headers=a.get("headers"),
+            body=a.get("body", ""),
+            mutations=a.get("mutations"),
+            codec=a.get("codec"),
+            codec_field=a.get("codec_field", ""),
+            credential=a.get("credential", ""),
+            unauthenticated=bool(a.get("unauthenticated")),
+            compare=a.get("compare"),
+            sweep=a.get("sweep"),
+            follow_redirects=bool(a.get("follow_redirects")),
+            timeout=int(a.get("timeout", 30)),
+            allow_internal=bool(a.get("allow_internal")),
+        ),
+        "http_replay_raw": lambda a: _http_replay_raw(
+            host=a.get("host", ""), port=int(a.get("port", 443)), tls=bool(a.get("tls", True)),
+            data=a.get("data", ""), timeout=int(a.get("timeout", 15)),
+        ),
+        "register_credential": lambda a: _register_credential(
+            name=a.get("name", ""), headers=a.get("headers"), cookies=a.get("cookies", "")
+        ),
+        "list_credentials": lambda a: _list_credentials(),
+        "inject_probe": lambda a: _inject_probe(
+            url=a.get("url", ""),
+            method=a.get("method", "GET"),
+            headers=a.get("headers"),
+            body=a.get("body", ""),
+            vuln_class=a.get("vuln_class", "xss"),
+            field=a.get("field", "q"),
+            in_body=bool(a.get("in_body")),
+            request_id=a.get("request_id", ""),
+            timeout=int(a.get("timeout", 20)),
+            allow_internal=bool(a.get("allow_internal")),
+        ),
         "adjust_config": lambda a: _adjust_config(**(a or {})),
         "payload_mutate": lambda a: _payload_mutate(
             a.get("payload", ""), blocked_response=a.get("blocked_response", ""), vuln_class=a.get("vuln_class", "")
@@ -709,6 +759,9 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
 - **execute_terminal** — Run ANY shell command. Use this for CLI tools: nmap, gobuster, ffuf, nikto, sqlmap, hydra, john, enum4linux, dirb, masscan, and any other pentesting tool installed on the system. Prefer dedicated CLI tools over raw curl/http_request for scanning and brute-forcing.
 - **http_request** — Raw HTTP requests with full browser emulation. Use for manual web testing, not for scanning (use gobuster/nmap via execute_terminal instead).
 - **bypass_403** — The 403 breaker: one call fires ~24 bypass variants (path normalization, X-Original-URL/XFF headers, method overrides, path-as-param) through http_request with pacing. Call it whenever a promising path 403s; the verdict table shows which variant got through.
+- **http_replay** — THE governed send path for testing: payloads travel as DATA. Replay a stored request_id or inline spec through 15 mutation ops (add-query enables HPP, body-set-field dot-paths, set-method/target...) + 12 composable codecs (tab = WAF-evasion %09 spaces, url-double, base64, hex, html-dec, unicode...). `compare:{mutations,credential}` returns baseline + exploit + structured DIFF in ONE call — the 3-gate protocol (no measurable difference = NOT a finding). `credential:'name'` swaps auth wholesale (the IDOR/vertical-authz primitive). `sweep:{op,field,values}` tests ≤50 values paced. Every result carries a curl equivalent + DBMS error signatures. http_replay_raw sends VERBATIM bytes (smuggling/desync).
+- **register_credential** / **list_credentials** — Named credential sets (auth headers + cookies) captured from logins you hold; the swap substrate for access-control replay.
+- **inject_probe** — The evidence engine, NEVER an oracle: fires curated batteries (xss tag-survival + 20 weaponized payloads with sink-context classification; ssti 9-syntax product-discriminators — product-present + literal-absent = evaluated; cmd closed id/ver set; sqli DBMS error fingerprints + boolean pairs against a MEASURED noise floor; lfi file-signatures × 11 traversal shapes verbatim) and returns FACTS — surviving tags, reflection context, block signals ('WAF-blocked is NOT safe — escalate'), not_tested receipts. You craft the real exploit from the facts; confirm via catalog_exploit.
 - **adjust_config** — Tune YOUR OWN run: no args shows the effective config; with args adjusts allowlisted keys (posture, temperature, max_tokens_per_request, provider, fallback_providers, model ids) — changes go LIVE on the next turn/call. Use it when the situation changes: provider dying (switch provider / extend fallback chain), recon exhausted (posture), responses truncated (max_tokens). Cost caps, stealth, safety modes, and scope are operator-only.
 - **payload_mutate** — Evasion variants for a blocked payload: pass the payload (+ the blocked response) → ranked variants (case-rotation, inline comments, URL/double-URL/unicode encoding, whitespace, null-terminate) with family-escalation advice (reflected → blind → time-based → OOB). Fire variants one per request. THE answer to 'the payload worked manually but the WAF ate it'.
 - **code_harness** — The exploit dev loop: write→run→triage→fix in a per-attempt sandbox. Args: goal, language (python/bash/php/go/js...), code, run_cmd ('{file}' placeholder), success_regex, fail_regex, timeout_s, max_cycles. Python gets mechanical fixes (auto pip-install, syntax catch). VERDICT: PASS is your EVIDENCE — record_finding on a code-based exploit claim REQUIRES a harness PASS in the same engagement; anything else is an unverified claim.

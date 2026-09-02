@@ -279,9 +279,16 @@ def search():  # T2: UNION SQLi — needs filter evasion (space/comment tricks)
     try:
         rows = conn.execute(f"SELECT id,name FROM items WHERE name LIKE '%{q}%'").fetchall()  # noqa: S608
     except sqlite3.OperationalError as e:
-        return jsonify({"error": str(e)}), 500
+        # T2: error-based reflection — the SQL error echoes the payload
+        return Response(f"<html><body><h1>Results for: {q}</h1><p>{e}</p></body></html>", 500,
+                        {"Content-Type": "text/html"})
     finally:
         conn.close()
+    if request.args.get("fmt") == "html":
+        # T2: reflected XSS — the portal's search-results header echoes the query raw
+        names = "".join(f"<li>{r['name']}</li>" for r in rows)
+        return Response(f"<html><body><h1>Results for: {q}</h1><ul>{names}</ul></body></html>",
+                        200, {"Content-Type": "text/html"})
     return jsonify([dict(r) for r in rows])
 
 
