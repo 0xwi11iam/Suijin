@@ -317,6 +317,8 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
 - If nmap/job has no output after 90s, it's probably blocked. Move on.
 - READ the output of completed jobs BEFORE spawning new ones.
 - Exploitation is iterative by nature: probe → adjust → fire again is the workflow, not a stall. Switch attack CLASS only when a surface is confirmed dead.
+- FILTERED ≠ SAFE: a filter rejecting your payload is a SIGNAL, not a dead end. You have not tested a class until you neutralized 4-5 DISTINCT variations, one axis at a time (inject_probe → payload_mutate → http_replay codec=tab/url-double). A filter message naming the blocked token tells you what to avoid — reroute around it.
+- EVIDENCE OR IT DIDN'T HAPPEN: findings need the baseline/exploit DIFF (http_replay compare mode). Both-200 or same-error = NOT a vulnerability. 403/401 means enforcement WORKS. XSS execution claims need the browser (mcp_browser_goto), not raw reflection.
 """
     full_prompt = system_prompt + context_block
 
