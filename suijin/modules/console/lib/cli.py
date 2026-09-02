@@ -1105,13 +1105,23 @@ def run_selftest() -> int:
     def _workspace_anchor():
         from suijin.modules.platform.lib.workspace import PROJECT_DIR, WORKSPACE_DIR, ensure_workspace_layout
 
-        assert WORKSPACE_DIR == PROJECT_DIR / "suijin_agent"
         ensure_workspace_layout()  # repair if needed, then verify
-        inner = PROJECT_DIR / "suijin" / "suijin_agent"
-        assert inner.is_symlink() or not inner.exists(), (
-            f"suijin/suijin_agent must be a symlink to ../suijin_agent (got {inner})"
+        if WORKSPACE_DIR == PROJECT_DIR / "suijin_agent":
+            # repo checkout: the workspace anchors next to the project and
+            # the inner path is a symlink to it
+            inner = PROJECT_DIR / "suijin" / "suijin_agent"
+            assert inner.is_symlink() or not inner.exists(), (
+                f"suijin/suijin_agent must be a symlink to ../suijin_agent (got {inner})"
+            )
+            return f"{WORKSPACE_DIR} (repo-local anchor, inner symlink ok)"
+        # pip-installed package: the durable home IS the correct anchor —
+        # the old assertion failed every clean-venv selftest
+        from pathlib import Path as _P
+
+        assert _P.home() / ".suijin" / "workspace" == WORKSPACE_DIR, (
+            f"workspace must be repo-local or ~/.suijin/workspace (got {WORKSPACE_DIR})"
         )
-        return f"{WORKSPACE_DIR} (suijin/suijin_agent -> ../suijin_agent)"
+        return f"{WORKSPACE_DIR} (durable home — pip install mode)"
 
     def _sandbox():
         from pathlib import Path
