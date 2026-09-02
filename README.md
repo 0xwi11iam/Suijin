@@ -1,4 +1,4 @@
-<h3 align="center">v5.7.0</h3> 
+<h3 align="center">v6.5.0 — The Weaponization Engine</h3> 
 <p align="center">
 <img src="assets/suijin.png" alt="Suijin Logo" width="160"/>
 </p>
@@ -6,7 +6,7 @@
 
 
 <p align="center">
-  <img height="20" src="https://img.shields.io/badge/v5.7.0-suijin-green?style=flat" alt="Version"/>
+  <img height="20" src="https://img.shields.io/badge/v6.5.0-suijin-green?style=flat" alt="Version"/>
   <img height="20" src="https://img.shields.io/badge/LICENSE-AGPL%20v3-4169A1?style=flat" alt="License"/>
   <img height="20" src="https://img.shields.io/badge/PYTHON-3.10+-306998?style=flat&logo=python&logoColor=white" alt="Python"/>
 </p>
@@ -25,6 +25,23 @@ toolkit, one knowledge base, and one knowledge graph.
 > tool you accept full responsibility for your actions.
 
 ---
+
+## What's New in v6.5.0
+
+- **The Weaponization Engine**: the agent runs recon→exploit→post-exploit autonomously —
+  attack-surface queue with visible untried debt, forced mode transitions, foothold detection,
+  escalation playbooks on every CONFIRMED finding, positive memory (what worked, by target
+  and by class), deterministic chain planning, payload mutation ladders.
+- **24 AI providers**: 13 cloud (OpenRouter = one key for every major model, OpenAI, xAI,
+  Mistral, Groq, Together, Fireworks, DeepInfra, Cerebras, SambaNova, Perplexity, Cohere,
+  Lambda), 5 keyless local (Ollama, LM Studio, vLLM, llama.cpp, Jan), and `custom:` LAN
+  boxes at any IP:port. Credit death self-heals to the next provider instead of dying.
+- **Self-service**: the agent adjusts its own config at runtime (`adjust_config`), installs
+  what it needs from install-hinted errors, and writes its own loadable tools.
+- **New tools**: `bypass_403` (24-variant WAF filter battery), `code_harness`
+  (write→run→fix exploit dev loop, PASS = evidence), `payload_mutate` (evasion variants).
+- **CITADEL lab**: an armored fortress with 26 planted vulns and 3 crown chains —
+  bench-graded gym: `suijin bench --lab citadel`.
 
 ## What's Next
 
