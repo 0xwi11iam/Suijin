@@ -151,6 +151,7 @@ from suijin.modules.tools.lib.js_tools import google_key_probe, js_bundle_analyz
 from suijin.modules.tools.lib.output_normalizer import normalize_output
 from suijin.modules.tools.lib.payload_mutate import payload_mutate as _payload_mutate
 from suijin.modules.tools.lib.self_config import adjust_config as _adjust_config
+from suijin.modules.tools.lib.web_session import web_session as _web_session
 
 
 def _kb_read_tool(path: str) -> str:
@@ -354,6 +355,7 @@ def _build_routes(config):
             name=a.get("name", ""), headers=a.get("headers"), cookies=a.get("cookies", "")
         ),
         "list_credentials": lambda a: _list_credentials(),
+        "web_session": lambda a: _web_session(action=a.get("action", "summary")),
         "inject_probe": lambda a: _inject_probe(
             url=a.get("url", ""),
             method=a.get("method", "GET"),
@@ -761,6 +763,7 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
 - **bypass_403** — The 403 breaker: one call fires ~24 bypass variants (path normalization, X-Original-URL/XFF headers, method overrides, path-as-param) through http_request with pacing. Call it whenever a promising path 403s; the verdict table shows which variant got through.
 - **http_replay** — THE governed send path for testing: payloads travel as DATA. Replay a stored request_id or inline spec through 15 mutation ops (add-query enables HPP, body-set-field dot-paths, set-method/target...) + 12 composable codecs (tab = WAF-evasion %09 spaces, url-double, base64, hex, html-dec, unicode...). `compare:{mutations,credential}` returns baseline + exploit + structured DIFF in ONE call — the 3-gate protocol (no measurable difference = NOT a finding). `credential:'name'` swaps auth wholesale (the IDOR/vertical-authz primitive). `sweep:{op,field,values}` tests ≤50 values paced. Every result carries a curl equivalent + DBMS error signatures. http_replay_raw sends VERBATIM bytes (smuggling/desync).
 - **register_credential** / **list_credentials** — Named credential sets (auth headers + cookies) captured from logins you hold; the swap substrate for access-control replay.
+- **web_session** — The cross-credential session model, built AUTOMATICALLY from every governed send: the access-control worklist (endpoint shapes reached by 2+ credentials, ID fields differing per credential — the IDOR substrate with the exact replay to fire) + hidden params (request fields the UI never exposed — mass-assignment targets). Role cycling: register credentials, replay the same surfaces as each, then action=summary.
 - **inject_probe** — The evidence engine, NEVER an oracle: fires curated batteries (xss tag-survival + 20 weaponized payloads with sink-context classification; ssti 9-syntax product-discriminators — product-present + literal-absent = evaluated; cmd closed id/ver set; sqli DBMS error fingerprints + boolean pairs against a MEASURED noise floor; lfi file-signatures × 11 traversal shapes verbatim) and returns FACTS — surviving tags, reflection context, block signals ('WAF-blocked is NOT safe — escalate'), not_tested receipts. You craft the real exploit from the facts; confirm via catalog_exploit.
 - **adjust_config** — Tune YOUR OWN run: no args shows the effective config; with args adjusts allowlisted keys (posture, temperature, max_tokens_per_request, provider, fallback_providers, model ids) — changes go LIVE on the next turn/call. Use it when the situation changes: provider dying (switch provider / extend fallback chain), recon exhausted (posture), responses truncated (max_tokens). Cost caps, stealth, safety modes, and scope are operator-only.
 - **payload_mutate** — Evasion variants for a blocked payload: pass the payload (+ the blocked response) → ranked variants (case-rotation, inline comments, URL/double-URL/unicode encoding, whitespace, null-terminate) with family-escalation advice (reflected → blind → time-based → OOB). Fire variants one per request. THE answer to 'the payload worked manually but the WAF ate it'.
