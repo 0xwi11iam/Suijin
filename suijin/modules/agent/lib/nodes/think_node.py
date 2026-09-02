@@ -273,6 +273,18 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
                 f"- **Untried surfaces ({len(_open)})**: {_top}\n"
                 "  Each surface above is ready to test — pick one and fire the matching payload class.\n"
             )
+        with contextlib.suppress(Exception):
+            from suijin.modules.agent.lib.attack_memory import plan_chains
+
+            chains = plan_chains(state)
+            if chains:
+                _governor_lines += "## CHAINS READY\n" + "\n".join(f"- {c}" for c in chains) + "\n"
+        prior = state.get("_prior_confirmed") or []
+        if prior:
+            _governor_lines += "## " + prior[0] + "\n" + "\n".join(prior[1:6]) + "\n"
+        gym = state.get("_gym_notes") or []
+        if gym:
+            _governor_lines += "## GYM NOTES (bench failures to drill)\n" + "\n".join(gym) + "\n"
 
     context_block = f"""
 ## CURRENT STATE
