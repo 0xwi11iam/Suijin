@@ -144,7 +144,11 @@ class TestH6Telemetry:
         asyncio.run(
             execute_tool_node(
                 {
-                    "_current_step": {"tool_name": "http_request", "tool_args": {"url": "https://t.io/"}, "iteration": 7},
+                    "_current_step": {
+                        "tool_name": "http_request",
+                        "tool_args": {"url": "https://t.io/"},
+                        "iteration": 7,
+                    },
                     "current_phase": "informational",
                 },
                 route_tool_fn=lambda n, a, c: "Status: 200",

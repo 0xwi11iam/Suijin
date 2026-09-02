@@ -10,11 +10,10 @@ Flaws:
   7. ID token algorithm confusion (accepts alg:none)
   8. Userinfo endpoint without audience check
 """
-import hashlib
 import json
 import secrets
 import time
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import urlencode
 
 from flask import Flask, jsonify, redirect, request
 

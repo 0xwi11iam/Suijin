@@ -74,7 +74,11 @@ def write_context_manifest(
     try:
         p = context_path()
         p.parent.mkdir(parents=True, exist_ok=True)
-        g = f"## OPERATOR GUIDANCE (delivered this turn)\n{guidance}\n" if guidance else "## OPERATOR GUIDANCE\n(none pending)\n"
+        g = (
+            f"## OPERATOR GUIDANCE (delivered this turn)\n{guidance}\n"
+            if guidance
+            else "## OPERATOR GUIDANCE\n(none pending)\n"
+        )
         p.write_text(
             f"# Context Manifest — {time.strftime('%H:%M:%S')} every think turn\n\n"
             f"{g}\n"
