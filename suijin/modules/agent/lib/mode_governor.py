@@ -42,7 +42,7 @@ def _cfg_int(cfg: dict, key: str, default: int) -> int:
 
 
 def posture_config(cfg: dict | None) -> dict:
-    """"posture": assertive (default) = 6 pure-recon iterations, 3-iter
+    """ "posture": assertive (default) = 6 pure-recon iterations, 3-iter
     surface stall; recon = patient (20 / 6)."""
     p = str((cfg or {}).get("posture") or "assertive").lower()
     if p == "recon":
@@ -91,7 +91,9 @@ def update_queue(state: dict, result: dict) -> dict:
     for s in harvest_surfaces(result):
         key = str(s["surface"])
         if key and key not in known and len(queue) < 60:
-            queue.append({"surface": key, "cls": s.get("cls", "?"), "tried": False, "iter": result.get("current_iteration", 0)})
+            queue.append(
+                {"surface": key, "cls": s.get("cls", "?"), "tried": False, "iter": result.get("current_iteration", 0)}
+            )
             known.add(key)
     # a confirmed finding on a surface retires it
     for s in queue:
@@ -107,6 +109,55 @@ def untried(queue: list) -> list[dict]:
     return [s for s in (queue or []) if not s.get("tried")]
 
 
+# ── foothold engine ──────────────────────────────────────────────────
+# One deterministic predicate: shell-ish output, confirmed shell-class
+# exploit, or captured credentials ⇒ the engagement has a foothold and
+# the governor promotes it to post_exploitation (forced, same mechanism
+# as recon → exploitation).
+_FOOTHOLD_RX = _re.compile(
+    r"uid=\d+\(|\bwhoami\b|shell obtained|reverse shell|webshell|FLAG\{[^}]*rce[^}]*\}",
+    _re.I,
+)
+_SHELL_CLASSES = ("rce", "ssti", "command_injection", "cmdi", "deser", "file_upload", "upload", "privesc")
+
+
+def update_foothold(state: dict, result: dict) -> bool:
+    """Scan a think/execute result for foothold evidence; returns True when
+    the foothold flag was just set (first detection wins)."""
+    try:
+        if state.get("_foothold_at"):
+            return False
+        texts = []
+        step = result.get("_current_step") or {}
+        texts.append(str(step.get("tool_output") or ""))
+        for tr in (result.get("execution_trace") or [])[-2:]:
+            texts.append(str(tr.get("tool_output") or "")[:4000])
+        blob = "\n".join(texts)
+        hit = bool(_FOOTHOLD_RX.search(blob))
+        if not hit and "CONFIRMED" in blob and "catalog" in str(step.get("tool_name") or "") + blob[:200].lower():
+            for cls in _SHELL_CLASSES:  # catalog_exploit CONFIRMED on a shell-class entry
+                if cls in blob.lower():
+                    hit = True
+                    break
+        if not hit:
+            board = (state.get("target_info") or {}).get("credentials") or []
+            # cred regexes straight off tool output (UI loot was display-only)
+            hit = bool(_CRED_RX.search(blob)) or bool(board)
+        if hit:
+            result["_foothold_at"] = True
+            return True
+        return False
+    except Exception:  # noqa: BLE001
+        return False
+
+
+_CRED_RX = _re.compile(
+    r"\bAKIA[0-9A-Z]{16}\b|\beyJ[A-Za-z0-9_-]{10,}\.|\bgh[pousr]_[A-Za-z0-9]{20,}\b|\bsk-[A-Za-z0-9]{20,}\b"
+    r"|password[\"']?\s*[:=]\s*[\"']?\S{6,}",
+    _re.I,
+)
+
+
 def govern(state: dict, cfg: dict | None) -> dict | None:
     """The mode switch decision. Returns a state-patch (phase + skill +
     message) or None. Fires when: in informational mode, recon has stalled
@@ -114,13 +165,37 @@ def govern(state: dict, cfg: dict | None) -> dict | None:
     untried surfaces ≥ min_surfaces."""
     try:
         pc = posture_config(cfg)
+        # FOOTHOLD (forced): in exploitation mode with a foothold, promote
+        # to post_exploitation with the doctrine swap — the same proven
+        # mechanism as the recon → exploitation switch.
+        if str(state.get("current_phase") or "") == "exploitation" and state.get("_foothold_at"):
+            if not state.get("_post_exploit_done"):
+                return {
+                    "current_phase": "post_exploitation",
+                    "_just_transitioned_to": "post_exploitation",
+                    "attack_path_type": "post_exploit",
+                    "_post_exploit_done": True,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": (
+                                "MODE CHANGE → post_exploitation (procedural: foothold established — credentials "
+                                "or shell access captured). Doctrine switched to: post_exploit. "
+                                "Consolidate: privesc checklist, loot inventory, pivot surface, cleanup."
+                            ),
+                        }
+                    ],
+                }
+            return None
         if str(state.get("current_phase") or "") != "informational":
             return None
         q = untried(state.get("_attack_queue"))
         if len(q) < pc["min_surfaces"]:
             return None
         iters = int(state.get("current_iteration") or 0)
-        since_new = iters - int(max((int(s.get("iter") or 0) for s in (state.get("_attack_queue") or [ {"iter": 0}])), default=0))
+        since_new = iters - int(
+            max((int(s.get("iter") or 0) for s in (state.get("_attack_queue") or [{"iter": 0}])), default=0)
+        )
         fresh = any(int(s.get("iter") or 0) >= iters - 1 for s in (state.get("_attack_queue") or []))
         stalled = (not fresh) and since_new >= pc["stall"]
         # the recon cap bounds PATIENCE, not productivity — fresh surfaces
@@ -173,6 +248,7 @@ def scoreboard(state: dict) -> str:
         findings = len(state.get("findings") or [])
         phase = str(state.get("current_phase") or "informational")
         skill = str(state.get("attack_path_type") or "targeting")
-        return f"mode={phase} doctrine={skill} · findings={findings} · untried_surfaces={len(q)}"
+        fh = " · FOOTHOLD" if state.get("_foothold_at") else ""
+        return f"mode={phase} doctrine={skill} · findings={findings} · untried_surfaces={len(q)}{fh}"
     except Exception:  # noqa: BLE001
         return ""

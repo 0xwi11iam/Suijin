@@ -198,12 +198,41 @@ class SuijinAgentGraph:
                 queue = _mg.update_queue(state, result)
                 if queue != (state.get("_attack_queue") or []):
                     result["_attack_queue"] = queue
+                _mg.update_foothold(state, result)
+                if int(result.get("current_iteration") or 0) <= 1 and "_prior_confirmed" not in state:
+                    with contextlib.suppress(Exception):
+                        from suijin.modules.agent.lib.attack_memory import what_worked
+
+                        prior = what_worked(state.get("_objective") or self.run_config.get("_objective") or "")
+                        if prior:
+                            result["_prior_confirmed"] = prior
+                        with contextlib.suppress(Exception):
+                            from suijin.modules.platform.lib.workspace import WORKSPACE_DIR as _WS
+
+                            _lg = _WS / "outputs" / "bench" / "learnings.md"
+                            if _lg.is_file():
+                                _notes = [ln for ln in _lg.read_text().splitlines() if ln.strip()][-3:]
+                                if _notes:
+                                    result["_gym_notes"] = _notes
                 directive = _mg.govern(state, state.get("_run_config") or self.run_config)
                 if directive:
                     msgs = directive.pop("messages", [])
                     for k, v in directive.items():
                         result[k] = v
                     result.setdefault("messages", []).extend(msgs)  # APPEND — think's messages must survive the merge
+                # Weaponizer (propose-only): a CONFIRMED catalog_exploit earns
+                # a ready-to-fire escalation task in context — the model
+                # decides, one turn cost, no auto-spawn.
+                with contextlib.suppress(Exception):
+                    from suijin.modules.agent.lib.weaponizer import propose_for
+
+                    already = set(state.get("_escalations_proposed") or [])
+                    prop = propose_for(result, already)
+                    if prop:
+                        msg, key = prop
+                        already.add(key)
+                        result["_escalations_proposed"] = sorted(already)[-50:]
+                        result.setdefault("messages", []).append({"role": "user", "content": msg})
             except Exception as _mg_err:  # noqa: BLE001 — never break the loop
                 logger.debug(f"mode governor skipped: {_mg_err}")
 

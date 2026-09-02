@@ -384,9 +384,28 @@ def run_bench(lab: str = "", mock: bool = True) -> dict:
             "tokens": int(usage.get("input_tokens", 0)) + int(usage.get("output_tokens", 0)),
         }
         _append_history(score)
+        _append_learnings(score, known, captured)
         return score
     finally:
         proc.kill()
+
+
+def _append_learnings(score: dict, known: list, captured: set) -> None:
+    """The gym loop: missed flags become learnings the NEXT engagement's
+    think context reads — bench failures directly calibrate the agent."""
+    try:
+        missed = [f for f in known if f not in captured]
+        if not missed:
+            return
+        p = _bench_dir() / "learnings.md"
+        lines = p.read_text().splitlines() if p.exists() else []
+        lines.append(
+            f"- {score['timestamp'][:10]} {score['lab']}: missed {len(missed)}/{len(known)} "
+            f"({', '.join(m.split('{')[1][:24] for m in missed[:3])}) — drill these classes"
+        )
+        p.write_text("\n".join(lines[-20:]) + "\n")
+    except Exception:  # noqa: BLE001 — learnings never break the bench
+        pass
 
 
 def _append_history(score: dict) -> None:
