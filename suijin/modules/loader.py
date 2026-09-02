@@ -191,16 +191,18 @@ def _force_load_module(module_name, file_path):
 def get_module_tools():
     """Return dict of {tool_name: callable} from all loaded modules.
 
-    Call discover_modules() first.
+    Call discover_modules() first. Tolerates the undiscovered state
+    (returns {} instead of NameError — route_tool must work pre-boot).
     """
-    return dict(_module_tools)
+    return dict(globals().get("_module_tools") or {})
 
 
 def get_module_skills():
     """Return merged skill documentation from all loaded modules.
 
     Returns a string suitable for injection into the system prompt.
-    Call discover_modules() first.
+    Call discover_modules() first. Tolerates the undiscovered state
+    (returns {} instead of NameError — route_tool must work pre-boot).
     """
     if not _module_skills:
         return ""
