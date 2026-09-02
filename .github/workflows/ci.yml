@@ -69,6 +69,17 @@ jobs:
             -m "not ai" \
             -p no:warnings
 
+      - name: Capability audit (no-orphan-code gate)
+        run: |
+          PYTHONPATH="$PWD:$PYTHONPATH" python -c "
+          from suijin.modules.platform.lib.runtime import init_runtime
+          init_runtime()
+          from suijin.modules.tools.lib.capability_audit import audit
+          code, report = audit()
+          print(report)
+          raise SystemExit(code)
+          "
+
       - name: Type check (non-blocking)
         continue-on-error: true
         run: |

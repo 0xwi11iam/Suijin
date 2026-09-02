@@ -1,7 +1,7 @@
 import subprocess
 
 
-def run(url: str = "") -> str:
+def wafw00f_scan(url: str = "") -> str:
     import shlex
 
     argv = ["wafw00f", "-a", url.strip()]
