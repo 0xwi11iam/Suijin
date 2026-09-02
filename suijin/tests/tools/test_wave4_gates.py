@@ -14,6 +14,7 @@ import requests
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
+
 from suijin.modules.agent.lib.mode_governor import update_queue  # noqa: E402
 from suijin.modules.tools.lib.coverage import (  # noqa: E402
     asset_of,
@@ -35,6 +36,17 @@ def _kill_port(port):
             subprocess.run(["kill", "-9", pid], capture_output=True)
     except Exception:
         pass
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_store(tmp_path_factory):
+    """The coverage store is engagement-scoped global state — pin it to a
+    scratch dir for this module or full-suite ordering leaks in."""
+    from suijin.modules.tools.lib import coverage as cov
+
+    store = tmp_path_factory.mktemp("cov_store") / "coverage.json"
+    cov._store_path = lambda: store
+    yield
 
 
 @pytest.fixture(scope="module")
