@@ -180,6 +180,27 @@ def _snap(page, max_el):
         els = _collect()
     if not els:
         return "No interactive elements. (checked visible DOM after a 1.5s hydration wait — if the page is JS-rendered, try mcp_browser_exec to inspect, or get_html)"
+    # session-model capture: the UI's form-field truth (name + hidden/
+    # readonly/disabled) — the hiddenParams correlation source (wave 3)
+    try:
+        ui_fields = page.evaluate(
+            """() => {
+            const f = [];
+            document.querySelectorAll('input,select,textarea').forEach(el => {
+                const st = getComputedStyle(el);
+                f.push({name: el.name || el.id || el.getAttribute('data-name') || el.getAttribute('aria-label') || '',
+                        type: el.type || el.tagName.toLowerCase(),
+                        hidden: el.type === 'hidden' || st.display === 'none' || st.visibility === 'hidden',
+                        readonly: el.readOnly === true, disabled: el.disabled === true});
+            });
+            return f.filter(x => x.name);
+        }"""
+        )
+        from suijin.modules.tools.lib.web_session import record_ui_fields
+
+        record_ui_fields(page.url, ui_fields or [])
+    except Exception:
+        pass
     _snapshot_elements = els[:max_el]
     lines = [f"Page: {page.title()[:80]}\nURL: {page.url[:120]}\nElements: {len(_snapshot_elements)}"]
     for e in _snapshot_elements:

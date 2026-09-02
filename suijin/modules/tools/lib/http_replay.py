@@ -339,6 +339,12 @@ def _send(req: dict, timeout: int = 30, follow_redirects: bool = False) -> dict:
         )
         throttled = resp.status_code in (429, 503)
         _aimd(success=not throttled, throttled=throttled)
+        try:  # session-model capture — the automatic observation layer
+            from suijin.modules.tools.lib.web_session import record_send
+
+            record_send(req)
+        except Exception:  # noqa: BLE001
+            pass
         out = {
             "status": resp.status_code,
             "length": len(resp.text or ""),
