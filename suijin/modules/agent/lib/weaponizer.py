@@ -101,7 +101,17 @@ PLAYBOOKS: dict[str, dict] = {
     },
     "xss": {
         "skill": "xss",
-        "steps": "verify the sink renders (event-handler payload, script tags are usually filtered), steal-style proof via a callback you control (ssrf_canary), document the admin-view path",
+        "steps": (
+            "IMPACT EXPLORATION is the deliverable (a reflection alone is a lead, not a finding): "
+            "1) cookie/token theft — document.cookie exfil to a listener you control (ssrf_canary); "
+            "2) OAuth chaining — you mapped state/redirect_uri already: craft the XSS to capture the "
+            "code/state from the callback URL, replay the flow stolen; "
+            "3) authenticated read — run a fetch() as the victim against a role-gated endpoint "
+            "(the web_session worklist tells you which), exfil the body; "
+            "4) CSRF token harvest to unlock a second csrf-protected action. "
+            "Verify execution in the browser (mcp_browser_goto + snapshot) — raw HTML reflection is "
+            "never a zero-interaction claim"
+        ),
     },
     "redirect": {
         "skill": "open_redirect",
