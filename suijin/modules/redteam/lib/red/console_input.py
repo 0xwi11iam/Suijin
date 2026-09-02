@@ -147,7 +147,7 @@ class RedInputReader:
         if key == "\t":  # Tab cycles the mode
             return buf, "tab"
         if key.isprintable():
-            return (buf + key)[:120], None
+            return buf + key, None  # no length cap — the box flexes with the buffer
         return buf, None
 
     # ── pump ──────────────────────────────────────────────────────────
@@ -324,7 +324,12 @@ class RedInputReader:
     def _dispatch(self, line: str) -> None:
         if os.environ.get("SUIJIN_DRIVE_DEBUG"):
             with contextlib.suppress(Exception), open("/tmp/rig_keys.log", "a") as _kl:
-                _kl.write(f"dispatch: {line!r} handler={getattr(self, '_on_pause_line', None) is not None}\n")
+                _kl.write(
+                    f"dispatch: {line!r} pause_line={getattr(self, '_on_pause_line', None) is not None} "
+                    f"guidance={getattr(self, '_on_guidance', None) is not None} "
+                    f"pause_q={getattr(self, '_pause_queue', None) is not None} "
+                    f"ask_q={getattr(self, '_ask_queue', None) is not None}"
+                )
         if getattr(self, "_ask_queue", None) is not None:
             # an ask_operator consumes plain lines as the ANSWER, raw
             with contextlib.suppress(Exception):

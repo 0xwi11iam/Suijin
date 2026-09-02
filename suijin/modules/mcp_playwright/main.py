@@ -147,25 +147,39 @@ def _dispatch(page, cmd, kw):
 
 def _snap(page, max_el):
     global _snapshot_elements
-    els = page.evaluate("""() => {
-        const sel = 'a,button,input,select,textarea,[role="button"],[role="link"],[onclick]';
+
+    def _collect():
+        return page.evaluate("""() => {
+        const sel = 'a,button,input,select,textarea,[role="button"],[role="link"],[onclick],form,[contenteditable="true"]';
         const r = []; const seen = new Set();
         document.querySelectorAll(sel).forEach(el => {
             if (r.length >= 200) return;
             const rect = el.getBoundingClientRect();
-            if (!rect.width || !rect.height || rect.bottom < 0 || rect.top > innerHeight) return;
+            // Zero-SIZE elements are dead UI — but the OLD fold-clip
+            // (rect.top > innerHeight) rejected everything below 800px,
+            // which is where most real pages keep their forms and links.
+            // Playwright auto-scrolls on click; off-viewport is fine.
+            const st = getComputedStyle(el);
+            if ((!rect.width && !rect.height) || st.visibility === 'hidden' || st.display === 'none' || el.disabled === true) return;
             const t = el.tagName.toLowerCase(), id = el.id || '';
             const cls = (el.className && typeof el.className === 'string') ? el.className.split(' ').slice(0,2).join('.') : '';
-            const txt = (el.textContent||el.getAttribute('aria-label')||el.getAttribute('placeholder')||'').trim().slice(0,60);
+            const txt = (el.textContent||el.getAttribute('aria-label')||el.getAttribute('placeholder')||el.value||'').trim().slice(0,60);
             const href = el.getAttribute('href')||'', nm = el.getAttribute('name')||'', tp = el.getAttribute('type')||'';
             let s = id ? '#'+id : cls ? t+'.'+cls.replace(/\\s+/g,'.') : nm ? t+'[name="'+nm+'"]' : href&&t==='a' ? 'a[href="'+href.slice(0,40)+'"]' : txt ? t+':has-text("'+txt.slice(0,30)+'")' : '';
             const k = s||txt; if (seen.has(k)) return; seen.add(k);
-            r.push({idx:r.length+1,tag:t,text:txt,sel:s,type:tp||'',href:href.slice(0,80),x:Math.round(rect.x+rect.width/2),y:Math.round(rect.y+rect.height/2)});
+            r.push({idx:r.length+1,tag:t,text:txt,sel:s,type:tp||'',href:href.slice(0,80),x:Math.max(0,Math.round(rect.x+rect.width/2)),y:Math.max(0,Math.round(rect.y+rect.height/2))});
         });
         return r;
     }""")
+
+    els = _collect()
     if not els:
-        return "No interactive elements."
+        # SPA hydration grace: domcontentloaded fires BEFORE React/Vue
+        # render — wait and retry once before declaring the page empty
+        page.wait_for_timeout(1500)
+        els = _collect()
+    if not els:
+        return "No interactive elements. (checked visible DOM after a 1.5s hydration wait — if the page is JS-rendered, try mcp_browser_exec to inspect, or get_html)"
     _snapshot_elements = els[:max_el]
     lines = [f"Page: {page.title()[:80]}\nURL: {page.url[:120]}\nElements: {len(_snapshot_elements)}"]
     for e in _snapshot_elements:
@@ -187,8 +201,16 @@ def _click(page, sel):
                 if e["sel"]:
                     page.click(e["sel"], timeout=5000)
                 else:
+                    # scroll the element into view first — coordinates off
+                    # the initial viewport were the old silent-miss
+                    page.evaluate(
+                        "([x, y]) => window.scrollTo(0, Math.max(0, y - window.innerHeight/2))", [e["x"], e["y"]]
+                    )
+                    page.wait_for_timeout(200)
                     page.mouse.click(e["x"], e["y"])
             except:
+                page.evaluate("([x, y]) => window.scrollTo(0, Math.max(0, y - window.innerHeight/2))", [e["x"], e["y"]])
+                page.wait_for_timeout(200)
                 page.mouse.click(e["x"], e["y"])
             page.wait_for_timeout(500)
             return f'Clicked [{i + 1}] {e["tag"]} "{e["text"][:40]}"'
