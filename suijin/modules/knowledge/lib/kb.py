@@ -450,8 +450,7 @@ def read_doc(path: str, source: str | None = None, cache_dir: Path | None = None
         candidates = [
             (s, r, t, m)
             for s, r, t, m in all_members
-            if "/".join(r.lower().split("/")[-len(needle_parts) :]) == "/".join(needle_parts)
-            or _stem(r) == needle_low
+            if "/".join(r.lower().split("/")[-len(needle_parts) :]) == "/".join(needle_parts) or _stem(r) == needle_low
         ]
     # tier 3: prefix — starts with the needle (stronger than substring)
     if not candidates:

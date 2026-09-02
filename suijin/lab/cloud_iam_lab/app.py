@@ -1,6 +1,5 @@
 """Cloud IAM Lab — simulated AWS IAM misconfigurations on port 5900."""
-from flask import Flask, request, jsonify, render_template_string
-import os, json
+from flask import Flask, jsonify
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "cloud_lab_secret_5900"

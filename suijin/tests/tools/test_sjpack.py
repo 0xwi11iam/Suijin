@@ -74,7 +74,10 @@ class TestScanner:
             # contains the contiguous literal (GitHub push protection flags
             # it); the assembled runtime string still matches the scanner
             + "\nAWS_SECRET_ACCESS_KEY='wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY'\nSTRIPE='"
-            + "sk_" + "live_" + "a" * 24 + "'\n"
+            + "sk_"
+            + "live_"
+            + "a" * 24
+            + "'\n"
         )
         r = sc.scan_sources({"main.py": src})
         assert r["verdict"] == "critical"

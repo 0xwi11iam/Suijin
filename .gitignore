@@ -120,3 +120,14 @@ suijin_agent/outputs/scratchpad/
 # Hill CTF runtime state (levers may be edited live; events are engagement data)
 suijin/lab/hill_ctf/hill_events.jsonl
 suijin/lab/hill_ctf/hill_defense.json
+
+# ── v6.5.0 housekeeping ──
+.venv/
+venv/
+.ruff_cache/
+.pytest_cache/
+*.log
+npm-debug.log*
+node_modules/
+.claude*
+.codex*
