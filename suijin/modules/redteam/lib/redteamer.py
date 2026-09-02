@@ -233,7 +233,9 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
         # H5: recall is RENDERED, not discarded — the agent starts with its
         # prior engagements against this target (memory was pull-only and
         # nothing ever pulled)
-        _recall = _mem.recall(str(objective)[:120], limit=3)
+        from suijin.modules.agent.lib.attack_memory import target_key as _tk
+
+        _recall = _mem.recall(_tk(objective), limit=3)
         if _recall and _recall.strip():
             console.print("[dim]prior engagements recalled (outputs/memory/)[/dim]")
     except Exception:  # noqa: BLE001 — memory is best-effort
@@ -1082,7 +1084,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
             from suijin.modules.agent.lib import memory as _mem
 
             _mem.record_engagement(
-                str(objective)[:120],
+                _tk(str(objective)),
                 str(objective)[:200],
                 {
                     "iterations": final_state.get("current_iteration", 0),

@@ -136,6 +136,7 @@ from suijin.modules.tools.lib.jobs import (
 )
 from suijin.modules.tools.lib.js_tools import google_key_probe, js_bundle_analyze, source_map_probe
 from suijin.modules.tools.lib.output_normalizer import normalize_output
+from suijin.modules.tools.lib.payload_mutate import payload_mutate as _payload_mutate
 from suijin.modules.tools.lib.self_config import adjust_config as _adjust_config
 
 
@@ -316,6 +317,9 @@ def _build_routes(config):
         "http_request": lambda a: http_request(a.get("method", "GET"), a.get("url"), a.get("headers"), a.get("body")),
         "bypass_403": lambda a: _bypass_403(a.get("url", "")),
         "adjust_config": lambda a: _adjust_config(**(a or {})),
+        "payload_mutate": lambda a: _payload_mutate(
+            a.get("payload", ""), blocked_response=a.get("blocked_response", ""), vuln_class=a.get("vuln_class", "")
+        ),
         "code_harness": lambda a: _code_harness(
             a.get("goal", ""),
             language=a.get("language", "python"),
@@ -706,6 +710,7 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
 - **http_request** — Raw HTTP requests with full browser emulation. Use for manual web testing, not for scanning (use gobuster/nmap via execute_terminal instead).
 - **bypass_403** — The 403 breaker: one call fires ~24 bypass variants (path normalization, X-Original-URL/XFF headers, method overrides, path-as-param) through http_request with pacing. Call it whenever a promising path 403s; the verdict table shows which variant got through.
 - **adjust_config** — Tune YOUR OWN run: no args shows the effective config; with args adjusts allowlisted keys (posture, temperature, max_tokens_per_request, provider, fallback_providers, model ids) — changes go LIVE on the next turn/call. Use it when the situation changes: provider dying (switch provider / extend fallback chain), recon exhausted (posture), responses truncated (max_tokens). Cost caps, stealth, safety modes, and scope are operator-only.
+- **payload_mutate** — Evasion variants for a blocked payload: pass the payload (+ the blocked response) → ranked variants (case-rotation, inline comments, URL/double-URL/unicode encoding, whitespace, null-terminate) with family-escalation advice (reflected → blind → time-based → OOB). Fire variants one per request. THE answer to 'the payload worked manually but the WAF ate it'.
 - **code_harness** — The exploit dev loop: write→run→triage→fix in a per-attempt sandbox. Args: goal, language (python/bash/php/go/js...), code, run_cmd ('{file}' placeholder), success_regex, fail_regex, timeout_s, max_cycles. Python gets mechanical fixes (auto pip-install, syntax catch). VERDICT: PASS is your EVIDENCE — record_finding on a code-based exploit claim REQUIRES a harness PASS in the same engagement; anything else is an unverified claim.
 - **read_file** — Read any file on the system.
 - **write_file** — Write files (scripts, payloads, notes). Defaults to suijin_agent/ for relative paths.
