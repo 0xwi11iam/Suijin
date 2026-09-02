@@ -102,6 +102,27 @@ def update_queue(state: dict, result: dict) -> dict:
                 tn = str(tr.get("tool_name") or "")
                 if tn in ("catalog_exploit", "record_finding"):
                     s["tried"] = True
+    # same-surface grind counter: the repeat-guard catches IDENTICAL calls;
+    # same-surface-different-args grinding was unguarded (the field-review
+    # loop hole). 4+ attempts without target growth = forced-pivot signal.
+    step = result.get("_current_step") or {}
+    tgt = str((step.get("tool_args") or {}).get("url") or "")
+    if tgt:
+        attempts = list(state.get("_surface_attempts") or [])
+        attempts.append({"surface": tgt, "iter": result.get("current_iteration", 0),
+                         "grew": bool(result.get("_target_grew_last_step"))})
+        attempts = attempts[-30:]
+        recent = [a for a in attempts if a["surface"] == tgt][-4:]
+        result["_surface_attempts"] = attempts
+        if len(recent) >= 4 and not any(a["grew"] for a in recent):
+            result.setdefault("messages", []).append({
+                "role": "user",
+                "content": (
+                    f"SURFACE STALL: 4+ attempts against {tgt[:70]} with no new target data — this surface is "
+                    "confirming dead in its current form. Vary the attack CLASS (payload_mutate family escalation) "
+                    "or move to another untried surface; re-testing with near-identical args is the loop failure mode."
+                ),
+            })
     return queue
 
 
