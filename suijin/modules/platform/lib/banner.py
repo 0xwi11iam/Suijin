@@ -11,7 +11,7 @@ The block-letter wordmark underneath, cyan.
 Rules (operator contract):
 - renders at EVERY TUI start (welcome, mode selector, red boot, blue
   boot, `suijin version`)
-- terminal too narrow (<156 cols — the art is 154 wide), non-TTY, or
+- terminal too narrow (<80 cols — the art is 77 wide), non-TTY, or
   NO_COLOR → NOTHING at all
 """
 
@@ -55,7 +55,7 @@ def render_boot_banner(console=None) -> bool:
         if os.environ.get("NO_COLOR"):
             return False
         width = _terminal_width()
-        if width < 156:
+        if width < 80:
             return False
         if not (sys.stdout.isatty() or (console is not None and getattr(console, "is_terminal", False))):
             return False

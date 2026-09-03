@@ -47,12 +47,12 @@ class TestArt:
     def test_ans_ships_and_is_wellformed(self):
         src = _ans()
         lines = src.strip("\n").split("\n")
-        assert 60 <= len(lines) <= 80  # the true art is 72 rows
+        assert 30 <= len(lines) <= 45  # the new-dragon art is 36 rows
         import re
 
         for ln in lines:
             plain = re.sub(r"\x1b\[[0-9;]*m", "", ln)
-            assert len(plain.rstrip()) <= 155  # art is ~154 wide after frame-crop
+            assert len(plain.rstrip()) <= 80  # art is ~77 wide after frame-crop
 
     def test_glyphs_present(self):
         src = _ans()
@@ -67,7 +67,7 @@ class TestRender:
         assert "\x1b[1;36m" in out  # cyan wordmark
 
     def test_narrow_renders_nothing(self):
-        ok, out = _render(120)
+        ok, out = _render(70)
         assert ok is False
         assert out == ""  # NOTHING — no fallback, no torn art
 
