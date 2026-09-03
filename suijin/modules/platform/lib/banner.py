@@ -1,80 +1,76 @@
-"""banner — the dragon boot art.
+"""banner — the dragon boot art (raw ANSI passthrough).
 
-The exact ansifier art (transcribed span-for-span into
-suijin/assets/dragon_banner.json, 75x22 run-length grid) rendered in full
-color, with the block-letter Suijin wordmark in cyan underneath.
+The art ships as assets/banner.ans — the exact ansifier-style escape
+stream (xterm-256 SGR per cell, one char per cell), generated from the
+validated 75x22 grid. It is written RAW to the terminal stream: Rich's
+Text renderer mis-measures the half-block glyphs (▓▒░) and squashes the
+art — the hydraulic-press incident. Raw bytes render cell-perfect.
+
+The block-letter wordmark underneath, cyan.
 
 Rules (operator contract):
 - renders at EVERY TUI start (welcome, mode selector, red boot, blue
   boot, `suijin version`)
-- terminal too narrow (<78 cols), non-TTY, or NO_COLOR → render NOTHING
-  at all — no fallback wordmark, no torn art, clean silence
+- terminal too narrow (<156 cols — the art is 154 wide), non-TTY, or
+  NO_COLOR → NOTHING at all
 """
 
 from __future__ import annotations
 
-import json
 import os
+import sys
 from pathlib import Path
 
 WORDMARK = r"""
-______            _       _   _
-.' ____ \          (_)     (_) (__)
-| (___ \_|__   _   __      __  __   _ .--.
- _.____`.[  | | | [  |    [  |[  | [ `.-. |
-| \____) || \_/ |, | |  _  | | | |  | | | |
- \______.''.__.'_/[___][ \_| |[___][___||__]
-                        \____/
+____        _  _ _
+/ ___| _   _(_)(_|_)_ __
+\___ \| | | | || | | '_ \
+ ___) | |_| | || | | | | |
+|____/ \__,_|_|/ |_|_| |_|
+             |__/
 """
 
-_GRID: dict | None = None
+_ANS: str | None = None
 
 
-def _grid() -> dict:
-    global _GRID
-    if _GRID is None:
-        p = Path(__file__).resolve().parents[3] / "assets" / "dragon_banner.json"
-        _GRID = json.loads(p.read_text())
-    return _GRID
+def _ans() -> str:
+    global _ANS
+    if _ANS is None:
+        p = Path(__file__).resolve().parents[3] / "assets" / "banner.ans"
+        _ANS = p.read_text()
+    return _ANS
 
 
-def _terminal_width(console) -> int:
+def _terminal_width() -> int:
     try:
-        return int(console.size.width)
+        return os.get_terminal_size(sys.stdout.fileno()).columns
     except Exception:  # noqa: BLE001
         return 0
 
 
-def render_boot_banner(console) -> bool:
-    """True when the banner rendered; False when skipped (narrow/flat)."""
+def render_boot_banner(console=None) -> bool:
+    """True when rendered; False when skipped (narrow/flat). Raw output —
+    no Rich anywhere near the art."""
     try:
         if os.environ.get("NO_COLOR"):
             return False
-        width = _terminal_width(console)
-        if width < 78 or not getattr(console, "is_terminal", False):
+        width = _terminal_width()
+        if width < 156:
+            return False
+        if not (sys.stdout.isatty() or (console is not None and getattr(console, "is_terminal", False))):
             return False
 
-        from rich.text import Text
-
-        g = _grid()
-        art = Text(no_wrap=True)
-        for row_runs in g["rows"]:
-            line = Text(no_wrap=True)
-            for count, ch, bg, fg in row_runs:
-                if bg == "#000000" and fg == "#800000":
-                    # the black frame — plain spaces (terminal bg does the rest)
-                    line.append(ch * count)
-                else:
-                    line.append(ch * count, style=f"{fg} on {bg}")
-            art.append_text(line)
-            art.append("\n")
-
-        console.print(art, no_wrap=True, overflow="ignore")
-        console.print()
-        pad = max(0, (width - max(len(ln) for ln in WORDMARK.splitlines())) // 2 - 6)
-        for ln in WORDMARK.strip("\n").splitlines():
-            console.print(" " * pad + f"[bold cyan]{ln}[/bold cyan]", highlight=False)
-        console.print()
+        out = sys.stdout
+        out.write(_ans())  # the dragon, verbatim
+        # the wordmark — cyan, centered-ish under the art
+        mark_lines = WORDMARK.strip("\n").splitlines()
+        mark_w = max(len(ln) for ln in mark_lines)
+        pad = max(0, (width - mark_w) // 2)
+        out.write("\n")
+        for ln in mark_lines:
+            out.write(" " * pad + "\x1b[1;36m" + ln + "\x1b[0m\n")
+        out.write("\n")
+        out.flush()
         return True
     except Exception:  # noqa: BLE001 — the banner must never break a boot
         return False
