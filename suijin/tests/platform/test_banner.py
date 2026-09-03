@@ -1,17 +1,14 @@
-"""banner — the letter-density dragon: cyan + red bands + white eye."""
+"""banner — the letter-density dragon: all cyan, white eye, skip rules."""
 
 import sys
 
 from suijin.modules.platform.lib.banner import (
-    CYAN,
-    EYE,
     EYE_MARKS,
-    RED,
     WORDMARK,
     _lines,
+    _render_line,
     art_width,
     render_boot_banner,
-    styled_lines,
 )
 
 
@@ -54,7 +51,7 @@ def _render(width=110, tty=True):
 class TestArt:
     def test_art_lines_load(self):
         lines = _lines()
-        assert 42 <= len(lines) <= 52  # 47 rows: horns kept, strays trimmed
+        assert 42 <= len(lines) <= 52  # 47 rows: horns kept, only the two stray top pairs trimmed
         assert art_width() >= 80
 
     def test_horn_tips_present(self):
@@ -67,35 +64,33 @@ class TestArt:
         lines = _lines()
         for mark in EYE_MARKS:
             assert any(mark in ln for ln in lines), f"eye mark {mark!r} missing"
+            # each mark appears exactly once (unambiguous white target)
             assert sum(mark in ln for ln in lines) == 1
 
 
-class TestStyledLines:
-    def test_band_pattern(self):
-        segs = styled_lines()
-        for idx, row in enumerate(segs):
-            if not row:
-                continue
-            base = next(s for _, s in row if s != EYE)
-            assert base == (RED if idx % 7 >= 4 else CYAN), f"row {idx}: {base}"
+class TestRenderLine:
+    def test_plain_line_all_cyan(self):
+        out = _render_line(0, "OQI              UR")
+        assert out.startswith("\x1b[36m") and out.endswith("\x1b[0m")
+        assert "\x1b[97m" not in out
 
-    def test_eye_segments(self):
-        segs = styled_lines()
-        assert sum(1 for row in segs for _, s in row if s == EYE) == 3
+    def test_eye_line_white_segment(self):
+        line = next(ln for ln in _lines() if "NNOT" in ln)
+        out = _render_line(0, line)
+        assert "\x1b[97mNNOT" in out
+        assert out.index("\x1b[97m") > out.index("\x1b[36m")  # cyan pre, white eye
 
-    def test_red_rows_exist(self):
-        segs = styled_lines()
-        red_rows = sum(1 for row in segs if any(s == RED for _, s in row))
-        assert red_rows >= 12  # ~3/7 of 47 rows
+    def test_blank_line_empty(self):
+        assert _render_line(2, "   ") == ""
 
 
 class TestRender:
-    def test_renders_on_wide_tty_with_red_bands(self):
+    def test_renders_on_wide_tty(self):
         ok, out = _render(110)
         assert ok is True
-        assert out.count("\x1b[31;1m") >= 12  # the red band runs
-        assert out.count("\x1b[97m") == 3  # the eye
-        assert "\x1b[1;36m/ ___|" in out  # the cyan wordmark
+        assert out.count("\x1b[36m") > 40  # the art, cyan
+        assert out.count("\x1b[97m") == 3  # the three eye marks, white
+        assert "\x1b[1;36m/ ___|" in out or "/ ___|" in out  # wordmark
 
     def test_narrow_renders_nothing(self):
         ok, out = _render(70)
