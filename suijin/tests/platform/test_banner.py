@@ -88,8 +88,7 @@ class TestRender:
     def test_renders_on_wide_tty(self):
         ok, out = _render(110)
         assert ok is True
-        assert out.count("\x1b[36m") > 20  # cyan rows
-        assert out.count("\x1b[31;1m") >= 10  # the red stripe bands
+        assert out.count("\x1b[36m") > 40  # the art, cyan
         assert out.count("\x1b[97m") == 3  # the three eye marks, white
         assert "\x1b[1;36m/ ___|" in out or "/ ___|" in out  # wordmark
 
