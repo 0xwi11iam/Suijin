@@ -26,8 +26,9 @@ WORDMARK = (
     "             |__/ "
 )
 
-# the eye: line index (0-based) → the substring marking it
-EYE_MARKS = {13: "NNOT", 14: "G CEK", 15: "RTRO"}
+# the eye: each mark renders bright white on whichever line carries it
+# (content-based — line indices shift when the art is edited)
+EYE_MARKS = ("NNOT", "G CEK", "RTRO")
 
 _LINES: list[str] | None = None
 
@@ -49,8 +50,8 @@ def art_width() -> int:
 
 def _render_line(idx: int, line: str) -> str:
     """One art line: cyan everywhere, bright white across the eye mark."""
-    mark = EYE_MARKS.get(idx)
-    if mark and mark in line:
+    mark = next((m for m in EYE_MARKS if m in line), None)
+    if mark:
         start = line.index(mark)
         end = start + len(mark)
         pre, eye, post = line[:start], line[start:end], line[end:]
