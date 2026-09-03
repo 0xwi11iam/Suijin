@@ -51,13 +51,15 @@ def _render(width=110, tty=True):
 class TestArt:
     def test_art_lines_load(self):
         lines = _lines()
-        assert 40 <= len(lines) <= 60  # the dragon is 49 rows
+        assert 35 <= len(lines) <= 50  # 41 rows after the horn-section trim
         assert art_width() >= 80
 
     def test_eye_marks_present_in_art(self):
         lines = _lines()
-        for idx, mark in EYE_MARKS.items():
-            assert mark in lines[idx], f"eye mark {mark!r} missing on line {idx + 1}"
+        for mark in EYE_MARKS:
+            assert any(mark in ln for ln in lines), f"eye mark {mark!r} missing"
+            # each mark appears exactly once (unambiguous white target)
+            assert sum(mark in ln for ln in lines) == 1
 
 
 class TestRenderLine:
@@ -67,8 +69,8 @@ class TestRenderLine:
         assert "\x1b[97m" not in out
 
     def test_eye_line_white_segment(self):
-        line = _lines()[13]
-        out = _render_line(13, line)
+        line = next(ln for ln in _lines() if "NNOT" in ln)
+        out = _render_line(0, line)
         assert "\x1b[97mNNOT" in out
         assert out.index("\x1b[97m") > out.index("\x1b[36m")  # cyan pre, white eye
 
