@@ -51,8 +51,14 @@ def _render(width=110, tty=True):
 class TestArt:
     def test_art_lines_load(self):
         lines = _lines()
-        assert 35 <= len(lines) <= 50  # 41 rows after the horn-section trim
+        assert 42 <= len(lines) <= 52  # 47 rows: horns kept, only the two stray top pairs trimmed
         assert art_width() >= 80
+
+    def test_horn_tips_present(self):
+        blob = "\n".join(_lines())
+        for tip in ("VU", "WYX", "XXXWW", "WXXXXXYYYX"):
+            assert tip in blob, f"horn tip {tip!r} missing"
+        assert "OQI" not in blob and "GTP" not in blob  # the removed strays
 
     def test_eye_marks_present_in_art(self):
         lines = _lines()
