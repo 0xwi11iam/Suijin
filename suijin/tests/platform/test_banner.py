@@ -47,16 +47,21 @@ class TestArt:
     def test_ans_ships_and_is_wellformed(self):
         src = _ans()
         lines = src.strip("\n").split("\n")
-        assert 30 <= len(lines) <= 45  # the new-dragon art is 36 rows
+        assert 30 <= len(lines) <= 45  # the dragon art is 37 rows
         import re
 
         for ln in lines:
             plain = re.sub(r"\x1b\[[0-9;]*m", "", ln)
             assert len(plain.rstrip()) <= 80  # art is ~77 wide after frame-crop
 
-    def test_glyphs_present(self):
+    def test_colored_cells_present(self):
+        import re
+
         src = _ans()
-        assert src.count("▓") > 30 and src.count("▒") > 80 and src.count("░") > 60
+        runs = re.findall(r"\x1b\[48;5;(\d+)m", src)
+        colored = [int(r) for r in runs if int(r) not in (0, 16)]
+        assert len(colored) > 500  # the bg-only gradient art
+        assert "▓" not in src and "▒" not in src  # bg-only: no glyphs at all
 
 
 class TestRender:
@@ -82,6 +87,6 @@ class TestRender:
         assert ok is False
 
     def test_wordmark_exact(self):
-        assert "/ ___|" in WORDMARK
-        assert "_ __" in WORDMARK
-        assert "|__/" in WORDMARK
+        assert "_______." in WORDMARK
+        assert "(----`" in WORDMARK
+        assert r"\______/" in WORDMARK
