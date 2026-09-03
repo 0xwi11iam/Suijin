@@ -1,14 +1,12 @@
-"""banner — the letter-density dragon, all cyan, white eye.
+"""banner — the letter-density dragon: cyan base, red bands, white eye.
 
-The art ships as assets/banner.txt (plain text; the shape lives in the
-leading spaces). Every character renders cyan; the eye region — the
-NNOT / G CEK / RTRO letter cluster — renders bright white.
+styled_lines() is the SINGLE source of dragon styling — both render
+paths consume it (the raw-ANSI boot banner and the Textual Shell's
+DragonWidget), so the red accent appears on every dragon render.
 
-Rules (operator contract):
-- renders at EVERY TUI start (welcome, mode selector, red boot, blue
-  boot, `suijin version`)
-- terminal too narrow, non-TTY, or NO_COLOR → NOTHING at all
-- the wordmark (block text) prints cyan underneath
+Band pattern: every 7th row group — rows where (index % 7) >= 4 — is
+bright red (3-row red bands separated by 4 cyan rows). One red shade.
+Eye marks (content-based) stay bright white regardless of band.
 """
 
 from __future__ import annotations
@@ -26,9 +24,9 @@ WORDMARK = (
     "             |__/ "
 )
 
-# the eye: each mark renders bright white on whichever line carries it
-# (content-based — line indices shift when the art is edited)
 EYE_MARKS = ("NNOT", "G CEK", "RTRO")
+
+CYAN, RED, EYE = "cyan", "red", "eye"
 
 _LINES: list[str] | None = None
 
@@ -41,6 +39,38 @@ def _lines() -> list[str]:
     return _LINES
 
 
+def _row_style(idx: int) -> str:
+    """Red band: rows 4,5,6 of every 7-row group."""
+    return RED if (idx % 7) >= 4 else CYAN
+
+
+def styled_lines() -> list[list[tuple[str, str]]]:
+    """Per art line: [(text, style), ...] segments. style ∈ {cyan, red, eye}.
+
+    The eye mark splits its line into pre/eye/post; the rest of the line
+    carries the row's band color. Blank lines return []."""
+    out: list[list[tuple[str, str]]] = []
+    for idx, line in enumerate(_lines()):
+        if not line.rstrip():
+            out.append([])
+            continue
+        base = _row_style(idx)
+        mark = next((m for m in EYE_MARKS if m in line), None)
+        if mark:
+            start = line.index(mark)
+            end = start + len(mark)
+            segs: list[tuple[str, str]] = []
+            if line[:start]:
+                segs.append((line[:start], base))
+            segs.append((line[start:end], EYE))
+            if line[end:].rstrip():
+                segs.append((line[end:].rstrip(), base))
+            out.append(segs)
+        else:
+            out.append([(line.rstrip(), base)])
+    return out
+
+
 def art_width() -> int:
     try:
         return max(len(ln.rstrip()) for ln in _lines())
@@ -48,23 +78,7 @@ def art_width() -> int:
         return 0
 
 
-def _render_line(idx: int, line: str) -> str:
-    """One art line: cyan everywhere, bright white across the eye mark."""
-    mark = next((m for m in EYE_MARKS if m in line), None)
-    if mark:
-        start = line.index(mark)
-        end = start + len(mark)
-        pre, eye, post = line[:start], line[start:end], line[end:]
-        out = ""
-        if pre.strip() or pre:
-            out += "\x1b[36m" + pre
-        out += "\x1b[97m" + eye
-        if post.rstrip():
-            out += "\x1b[36m" + post
-        return out.rstrip() + "\x1b[0m"
-    if not line.rstrip():
-        return ""
-    return "\x1b[36m" + line.rstrip() + "\x1b[0m"
+_ANSI = {CYAN: "\x1b[36m", RED: "\x1b[31;1m", EYE: "\x1b[97m"}
 
 
 def _terminal_width() -> int:
@@ -75,21 +89,25 @@ def _terminal_width() -> int:
 
 
 def render_boot_banner(console=None) -> bool:
-    """True when rendered; False when skipped (narrow/flat). Raw output."""
+    """Raw-ANSI boot banner (welcome/red boot/blue boot/`suijin version`).
+    True when rendered; False when skipped (narrow/flat)."""
     try:
         if os.environ.get("NO_COLOR"):
             return False
         width = _terminal_width()
-        need = art_width() + 2
-        if width < need:
+        if width < art_width() + 2:
             return False
         if not (sys.stdout.isatty() or (console is not None and getattr(console, "is_terminal", False))):
             return False
 
         out = sys.stdout
-        for idx, line in enumerate(_lines()):
-            out.write(_render_line(idx, line) + "\n")
-        # the wordmark — cyan, centered under the art
+        for segs in styled_lines():
+            if not segs:
+                out.write("\n")
+                continue
+            for text, style in segs:
+                out.write(_ANSI[style] + text)
+            out.write("\x1b[0m\n")
         mark_lines = WORDMARK.split("\n")
         mark_w = max(len(ln) for ln in mark_lines)
         pad = max(0, (width - mark_w) // 2)

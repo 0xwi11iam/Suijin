@@ -55,6 +55,10 @@ BASE_DIR = Path(__file__).resolve().parents[3]  # the suijin/ package dir —
 
 def main():
     """Entry point for Blue Team mode."""
+    with contextlib.suppress(Exception):  # the dragon at every blue TUI boot
+        from suijin.modules.platform.lib.banner import render_boot_banner
+
+        render_boot_banner(console)
     asyncio.run(_run_async())
 
 
