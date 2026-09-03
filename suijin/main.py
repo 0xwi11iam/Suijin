@@ -130,6 +130,13 @@ def main():
         render_boot_banner(console)
     except Exception:
         pass
+    # version block-art — STARTUP SCREEN ONLY (not the selector redraws)
+    try:
+        from suijin.modules.platform.lib.banner import render_version_art
+
+        render_version_art()
+    except Exception:
+        pass
     print("\n")
     console.print(" [dim]Press [bold #58a6ff]Enter[/] to continue...", end="")
     try:
