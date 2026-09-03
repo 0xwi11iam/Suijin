@@ -1,17 +1,22 @@
-"""banner — the dragon boot art: raw ANSI passthrough, skip rules, wordmark."""
+"""banner — the letter-density dragon: all cyan, white eye, skip rules."""
 
 import sys
 
-from suijin.modules.platform.lib.banner import WORDMARK, _ans, render_boot_banner
+from suijin.modules.platform.lib.banner import (
+    EYE_MARKS,
+    WORDMARK,
+    _lines,
+    _render_line,
+    art_width,
+    render_boot_banner,
+)
 
 
 class _TtyShim:
-    """A stdout shim that looks like a real 100-col terminal."""
-
-    def __init__(self, width=100, tty=True, columns=None):
+    def __init__(self, width=110, tty=True):
         self._buf = []
         self._tty = tty
-        self._columns = columns if columns is not None else width
+        self._width = width
         self.isatty = lambda: self._tty
 
     def fileno(self):
@@ -28,7 +33,7 @@ class _TtyShim:
         return "".join(self._buf)
 
 
-def _render(width=100, tty=True):
+def _render(width=110, tty=True):
     from suijin.modules.platform.lib import banner as _b
 
     shim = _TtyShim(width, tty)
@@ -44,47 +49,54 @@ def _render(width=100, tty=True):
 
 
 class TestArt:
-    def test_ans_ships_and_is_wellformed(self):
-        src = _ans()
-        lines = src.strip("\n").split("\n")
-        assert 30 <= len(lines) <= 45  # the dragon art is 37 rows
-        import re
+    def test_art_lines_load(self):
+        lines = _lines()
+        assert 40 <= len(lines) <= 60  # the dragon is 49 rows
+        assert art_width() >= 80
 
-        for ln in lines:
-            plain = re.sub(r"\x1b\[[0-9;]*m", "", ln)
-            assert len(plain.rstrip()) <= 80  # art is ~77 wide after frame-crop
+    def test_eye_marks_present_in_art(self):
+        lines = _lines()
+        for idx, mark in EYE_MARKS.items():
+            assert mark in lines[idx], f"eye mark {mark!r} missing on line {idx + 1}"
 
-    def test_colored_cells_present(self):
-        import re
 
-        src = _ans()
-        runs = re.findall(r"\x1b\[48;5;(\d+)m", src)
-        colored = [int(r) for r in runs if int(r) not in (0, 16)]
-        assert len(colored) > 500  # the bg-only gradient art
-        assert "▓" not in src and "▒" not in src  # bg-only: no glyphs at all
-        assert not any(1 <= c <= 15 for c in colored)  # no saturated speckles
+class TestRenderLine:
+    def test_plain_line_all_cyan(self):
+        out = _render_line(0, "OQI              UR")
+        assert out.startswith("\x1b[36m") and out.endswith("\x1b[0m")
+        assert "\x1b[97m" not in out
+
+    def test_eye_line_white_segment(self):
+        line = _lines()[13]
+        out = _render_line(13, line)
+        assert "\x1b[97mNNOT" in out
+        assert out.index("\x1b[97m") > out.index("\x1b[36m")  # cyan pre, white eye
+
+    def test_blank_line_empty(self):
+        assert _render_line(2, "   ") == ""
 
 
 class TestRender:
-    def test_renders_raw_on_wide_tty(self):
-        ok, out = _render(200)
+    def test_renders_on_wide_tty(self):
+        ok, out = _render(110)
         assert ok is True
-        assert _ans() in out  # the art bytes, VERBATIM
-        assert "\x1b[1;36m" in out  # cyan wordmark
+        assert out.count("\x1b[36m") > 40  # the art, cyan
+        assert out.count("\x1b[97m") == 3  # the three eye marks, white
+        assert "\x1b[1;36m/ ___|" in out or "/ ___|" in out  # wordmark
 
     def test_narrow_renders_nothing(self):
         ok, out = _render(70)
         assert ok is False
-        assert out == ""  # NOTHING — no fallback, no torn art
+        assert out == ""
 
     def test_no_tty_skips(self):
-        ok, out = _render(200, tty=False)
+        ok, out = _render(110, tty=False)
         assert ok is False
         assert out == ""
 
     def test_no_color_env_skips(self, monkeypatch):
         monkeypatch.setenv("NO_COLOR", "1")
-        ok, out = _render(200)
+        ok, out = _render(110)
         assert ok is False
 
     def test_wordmark_exact(self):
