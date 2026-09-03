@@ -111,59 +111,6 @@ def main():
     from suijin.modules.platform.lib.runtime import init_runtime
 
     init_runtime()  # explicit one-time init (Phase 0 contract)
-
-    # The Textual Shell: dragon left pane, clickable pages. Falls back to
-    # the legacy plain flow on non-TTY / narrow / NO_COLOR (CI, containers).
-    try:
-        import shutil as _sh
-
-        if sys.stdout.isatty() and not os.environ.get("NO_COLOR") and _sh.get_terminal_size().columns >= 100:
-            from suijin.modules.console.lib.shell import run_shell
-
-            result = run_shell()
-            if result is None or result.kind == "quit":
-                return
-            if result.kind == "red":
-                from suijin.modules.platform.lib.config_loader import load_config
-                from suijin.modules.redteam.lib.redteamer import run_red_team
-
-                cfg = load_config()
-                print(chr(27) + "[2J\033[H", end="")
-                run_red_team(cfg, result.objective)
-                return
-            if result.kind == "blue":
-                import asyncio
-                import io as _io
-
-                from suijin.modules.blueteam.lib import blueteamer as _bt
-
-                print(chr(27) + "[2J\033[H", end="")
-                _old_stdin = sys.stdin
-                sys.stdin = _io.StringIO(f"1\n{result.path}\n{result.port}\n")
-                try:
-                    asyncio.run(_bt._run_async())
-                finally:
-                    sys.stdin = _old_stdin
-                return
-            if result.kind == "blue_lab":
-                import asyncio
-                import io as _io
-
-                from suijin.modules.blueteam.lib import blueteamer as _bt
-
-                _lab_choice = "1" if result.lab == "blue_target" else "2"
-                print(chr(27) + "[2J\033[H", end="")
-                _old_stdin = sys.stdin
-                sys.stdin = _io.StringIO(f"2\n{_lab_choice}\n")
-                try:
-                    asyncio.run(_bt._run_async())
-                finally:
-                    sys.stdin = _old_stdin
-                return
-            return
-    except Exception:
-        pass  # any shell failure falls through to the legacy flow below
-
     print(chr(27) + "[2J\033[H", end="")
 
     # Startup availability banner — warn about missing tools before the menu.
