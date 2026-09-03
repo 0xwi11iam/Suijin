@@ -21,6 +21,7 @@ Every subcommand is non-interactive and scriptable (exit 0 = healthy).
 """
 
 import argparse
+import contextlib
 import importlib
 import json
 import os
@@ -379,6 +380,12 @@ ENV_KEY_NAMES = (
 
 
 def run_version() -> int:
+    with contextlib.suppress(Exception):  # the dragon on the identity command
+        from rich.console import Console as _Console
+
+        from suijin.modules.platform.lib.banner import render_boot_banner
+
+        render_boot_banner(_Console(force_terminal=True))
     """Detailed version info: release, python, platform, package location."""
     import json
     import platform
