@@ -1,3 +1,4 @@
+import contextlib
 import os
 import subprocess
 import sys
@@ -19,7 +20,6 @@ warnings.filterwarnings("ignore", message=".*allowed_objects.*")  # any category
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.text import Text
 
 from suijin.modules.console.lib import tui_settings
 from suijin.modules.redteam.lib.redteamer import main as redteamer_main
@@ -124,7 +124,12 @@ def main():
     except Exception:
         pass
 
-    console.print(Panel(Text("Welcome to Suijin", style="bold #e6b47c"), border_style="#e6b47c", expand=False))
+    try:  # the dragon boot banner — every TUI start
+        from suijin.modules.platform.lib.banner import render_boot_banner
+
+        render_boot_banner(console)
+    except Exception:
+        pass
     print("\n")
     console.print(" [dim]Press [bold #58a6ff]Enter[/] to continue...", end="")
     try:
@@ -138,6 +143,10 @@ def main():
 
     while True:
         print(chr(27) + "[2J\033[H", end="")
+        with contextlib.suppress(Exception):  # the dragon, every redraw of the selector
+            from suijin.modules.platform.lib.banner import render_boot_banner
+
+            render_boot_banner(console)
         console.print(Panel.fit("[bold white]SUIJIN[/] [dim]Mode Selector[/]", border_style="#30363d"))
 
         console.print("\n")
