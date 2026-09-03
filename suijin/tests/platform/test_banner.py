@@ -1,60 +1,88 @@
-"""banner — the dragon boot art: render, skip rules, wordmark."""
+"""banner — the dragon boot art: raw ANSI passthrough, skip rules, wordmark."""
 
-import os
 import sys
 
-from rich.console import Console
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-
-from suijin.modules.platform.lib.banner import WORDMARK, _grid, render_boot_banner  # noqa: E402
+from suijin.modules.platform.lib.banner import WORDMARK, _ans, render_boot_banner
 
 
-def _tty(width=100):
-    return Console(force_terminal=True, width=width, color_system="truecolor", file=sys.stdout)
+class _TtyShim:
+    """A stdout shim that looks like a real 100-col terminal."""
+
+    def __init__(self, width=100, tty=True, columns=None):
+        self._buf = []
+        self._tty = tty
+        self._columns = columns if columns is not None else width
+        self.isatty = lambda: self._tty
+
+    def fileno(self):
+        return 0
+
+    def write(self, s):
+        self._buf.append(s)
+
+    def flush(self):
+        pass
+
+    @property
+    def text(self):
+        return "".join(self._buf)
 
 
-class TestGrid:
-    def test_grid_loads(self):
-        g = _grid()
-        assert g["width"] == 75 and g["height"] == 22
-        # every row expands to exactly 75 cells
-        for row in g["rows"]:
-            assert sum(r[0] for r in row) == 75
+def _render(width=100, tty=True):
+    from suijin.modules.platform.lib import banner as _b
 
-    def test_art_cells_present(self):
-        g = _grid()
-        glyphs = "".join(ch * n for row in g["rows"] for n, ch, *_ in row)
-        assert glyphs.count("▓") > 30 and glyphs.count("▒") > 80 and glyphs.count("░") > 60
+    shim = _TtyShim(width, tty)
+    old, old_w = sys.stdout, _b._terminal_width
+    sys.stdout = shim
+    _b._terminal_width = lambda: width
+    try:
+        ok = render_boot_banner()
+    finally:
+        sys.stdout = old
+        _b._terminal_width = old_w
+    return ok, shim.text
+
+
+class TestArt:
+    def test_ans_ships_and_is_wellformed(self):
+        src = _ans()
+        lines = src.strip("\n").split("\n")
+        assert len(lines) == 22
+        import re
+
+        for ln in lines:
+            plain = re.sub(r"\x1b\[[0-9;]*m", "", ln)
+            assert len(plain) == 75, f"row width {len(plain)} != 75"
+            assert ln.endswith("\x1b[0m")
+
+    def test_glyphs_present(self):
+        src = _ans()
+        assert src.count("▓") > 30 and src.count("▒") > 80 and src.count("░") > 60
 
 
 class TestRender:
-    def test_renders_on_wide_tty(self, capsys):
-        c = _tty(100)
-        assert render_boot_banner(c) is True
-        out = capsys.readouterr().out
-        assert any(ch in out for ch in "▓▒░")
-        assert ".--." in out  # the cyan wordmark
+    def test_renders_raw_on_wide_tty(self):
+        ok, out = _render(100)
+        assert ok is True
+        assert _ans() in out  # the art bytes, VERBATIM
+        assert "\x1b[1;36m" in out  # cyan wordmark
 
-    def test_narrow_renders_nothing(self, capsys):
-        c = _tty(70)
-        assert render_boot_banner(c) is False
-        assert capsys.readouterr().out == ""  # NOTHING — no fallback, no torn art
+    def test_narrow_renders_nothing(self):
+        ok, out = _render(70)
+        assert ok is False
+        assert out == ""  # NOTHING — no fallback, no torn art
 
-    def test_no_color_env_skips(self, capsys, monkeypatch):
+    def test_no_tty_skips(self):
+        ok, out = _render(100, tty=False)
+        assert ok is False
+        assert out == ""
+
+    def test_no_color_env_skips(self, monkeypatch):
         monkeypatch.setenv("NO_COLOR", "1")
-        c = _tty(100)
-        assert render_boot_banner(c) is False
-        assert capsys.readouterr().out == ""
-
-    def test_non_tty_skips(self, capsys):
-        from io import StringIO
-
-        c = Console(file=StringIO(), width=100, force_terminal=False)
-        assert render_boot_banner(c) is False
+        ok, out = _render(100)
+        assert ok is False
 
     def test_wordmark_exact(self):
-        # the operator's exact block text
-        assert ".--." in WORDMARK
-        assert "[___]" in WORDMARK
-        assert "\\____/" in WORDMARK
+        assert "/ ___|" in WORDMARK
+        assert "_ __" in WORDMARK
+        assert "|__/" in WORDMARK
