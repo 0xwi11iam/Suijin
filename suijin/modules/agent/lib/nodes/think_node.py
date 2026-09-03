@@ -282,6 +282,17 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         prior = state.get("_prior_confirmed") or []
         if prior:
             _governor_lines += "## " + prior[0] + "\n" + "\n".join(prior[1:6]) + "\n"
+        with contextlib.suppress(Exception):
+            from suijin.modules.tools.lib.web_session import cross_credential_shortlist
+
+            _wl = cross_credential_shortlist()
+            if _wl:
+                _top = _wl[0]
+                _governor_lines += (
+                    "## PIPELINE READY — cross-credential surfaces detected\n"
+                    f"- {_top['endpoint_shape']} reached by {len(_top['credentials'])} credentials\n"
+                    "→ dispatch_testers(url=<the endpoint>) to analyze · web_session(action=summary) for the full worklist\n"
+                )
         gym = state.get("_gym_notes") or []
         if gym:
             _governor_lines += "## GYM NOTES (bench failures to drill)\n" + "\n".join(gym) + "\n"
