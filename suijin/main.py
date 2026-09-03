@@ -124,17 +124,11 @@ def main():
     except Exception:
         pass
 
-    try:  # the dragon boot banner — every TUI start
+    # the dragon + wordmark + version art (side by side) — STARTUP SCREEN ONLY
+    try:
         from suijin.modules.platform.lib.banner import render_boot_banner
 
-        render_boot_banner(console)
-    except Exception:
-        pass
-    # version block-art — STARTUP SCREEN ONLY (not the selector redraws)
-    try:
-        from suijin.modules.platform.lib.banner import render_version_art
-
-        render_version_art()
+        render_boot_banner(console, version=True)
     except Exception:
         pass
     print("\n")

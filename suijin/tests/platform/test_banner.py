@@ -75,10 +75,12 @@ class TestRenderLine:
         assert "\x1b[97m" not in out
 
     def test_eye_line_white_segment(self):
+
         line = next(ln for ln in _lines() if "NNOT" in ln)
         out = _render_line(0, line)
-        assert "\x1b[97mNNOT" in out
-        assert out.index("\x1b[97m") > out.index("\x1b[36m")  # cyan pre, white eye
+        # per-column coloring: each eye char is individually white
+        assert out.count("\x1b[97mN") >= 2  # N,N of NNOT
+        assert out.count("\x1b[97m") >= 4  # the eye characters
 
     def test_blank_line_empty(self):
         assert _render_line(2, "   ") == ""
@@ -90,7 +92,7 @@ class TestRender:
         assert ok is True
         assert out.count("\x1b[36m") > 20  # cyan rows
         assert out.count("\x1b[31;1m") >= 10  # the red stripe bands
-        assert out.count("\x1b[97m") == 3  # the three eye marks, white
+        assert out.count("\x1b[97m") >= 10  # the eye chars (per-column: NNOT+G CEK+RTRO)
         assert "\x1b[1;36m/ ___|" in out or "/ ___|" in out  # wordmark
 
     def test_narrow_renders_nothing(self):
