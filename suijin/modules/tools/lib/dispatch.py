@@ -107,6 +107,8 @@ from suijin.modules.tools.lib.aux_tools import (
     _write_tool,
 )
 from suijin.modules.tools.lib.bypass_403 import bypass_403 as _bypass_403
+from suijin.modules.tools.lib.capture import crawl as _crawl
+from suijin.modules.tools.lib.capture import proxy_capture as _proxy_capture
 from suijin.modules.tools.lib.code_harness import code_harness as _code_harness
 from suijin.modules.tools.lib.coverage import coverage_check as _coverage_check
 from suijin.modules.tools.lib.exploit_catalog import catalog_exploit
@@ -152,7 +154,11 @@ from suijin.modules.tools.lib.js_tools import google_key_probe, js_bundle_analyz
 from suijin.modules.tools.lib.output_normalizer import normalize_output
 from suijin.modules.tools.lib.payload_mutate import payload_mutate as _payload_mutate
 from suijin.modules.tools.lib.self_config import adjust_config as _adjust_config
+from suijin.modules.tools.lib.skill_library import skill_load as _skill_load
+from suijin.modules.tools.lib.skill_library import skill_search as _skill_search
 from suijin.modules.tools.lib.surface_expand import surface_expand as _surface_expand
+from suijin.modules.tools.lib.tester_fleet import dispatch_testers as _dispatch_testers
+from suijin.modules.tools.lib.tester_fleet import select_lanes as _select_lanes
 from suijin.modules.tools.lib.web_session import web_session as _web_session
 
 
@@ -332,6 +338,22 @@ def _build_routes(config):
         "anonymize_report": lambda a: anonymize_report(a.get("file_path", "")),
         "http_request": lambda a: http_request(a.get("method", "GET"), a.get("url"), a.get("headers"), a.get("body")),
         "bypass_403": lambda a: _bypass_403(a.get("url", "")),
+        "skill_search": lambda a: _skill_search(a.get("query", ""), limit=int(a.get("limit", 10))),
+        "skill_load": lambda a: _skill_load(a.get("skill_id", a.get("id", ""))),
+        "dispatch_testers": lambda a: _dispatch_testers(
+            url=a.get("url", ""), method=a.get("method", "GET"), params=a.get("params"),
+            body_fields=a.get("body_fields"), lanes=a.get("lanes"), max_lanes=int(a.get("max_lanes", 4)),
+        ),
+        "select_lanes": lambda a: _select_lanes(
+            url=a.get("url", ""), method=a.get("method", "GET"), params=a.get("params"),
+            body_fields=a.get("body_fields"), session_creds=int(a.get("session_creds", 0)),
+        ),
+        "proxy_capture": lambda a: _proxy_capture(
+            port=int(a.get("port", 0)), target_host=a.get("target_host", ""),
+            target_port=int(a.get("target_port", 0)),
+        ),
+        "crawl": lambda a: _crawl(url=a.get("url", ""), max_pages=int(a.get("max_pages", 20)),
+                                  credential=a.get("credential", "")),
         "http_replay": lambda a: _http_replay(
             request_id=a.get("request_id", ""),
             method=a.get("method", "GET"),
@@ -772,6 +794,13 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
 ## Core Tools (args in the ALL AVAILABLE TOOLS registry below)
 - **execute_terminal** — Run ANY shell command. Use this for CLI tools: nmap, gobuster, ffuf, nikto, sqlmap, hydra, john, enum4linux, dirb, masscan, and any other pentesting tool installed on the system. Prefer dedicated CLI tools over raw curl/http_request for scanning and brute-forcing.
 - **http_request** — Raw HTTP requests with full browser emulation. Use for manual web testing, not for scanning (use gobuster/nmap via execute_terminal instead).
+- **skill_search** / **skill_load** — The methodology library (125 WSTG + 16 attack methodologies): search by class/technique ('sqli', 'jwt', 'upload') then load the full testing guide. USE BEFORE attacking a new class — the WSTG test cases are the industry standard checklist. skill_search() with no args shows the library summary.
+- **dispatch_testers** — THE one-call vulnerability dispatch: pass a URL (optionally method/params/body_fields) and it selects the right tester lanes using the pattern table (numeric IDs → idor+authz; financial fields → business-logic; url params → ssrf; POST bodies → mass-assignment+injection; free-text → SQLi+XSS+SSTI floor). Returns ready-to-fire deploy_subagent tasks with doctrine attached. THE way to test a discovered endpoint.
+- **select_lanes** — The lane selection table as a query: same inputs as dispatch_testers, returns which lanes would be selected and why (for planning without dispatching).
+- **proxy_capture** — Boot a capture proxy: your browser's traffic feeds the web_session cross-credential model automatically. Then web_session(action=summary) shows the IDOR worklist, then dispatch_testers analyzes it.
+- **crawl** — Autonomous surface discovery: BFS over mcp_playwright, discovers pages/forms/links, feeds everything into the session model. After crawling, check web_session then dispatch_testers.
+- **sqlmap_scan** — After inject_probe confirms SQLi on a parameter, hand off to sqlmap with the EXACT URL + parameter + session cookies. sqlmap --url='<url>' --cookie='<from session>' --batch --level=3 automates extraction. The probe gives you the injection point; sqlmap does the data dump.
+- **nuclei_scan** — After recon discovers hosts/services, run nuclei against them for known CVEs. Feed it the discovered URLs from the target board.
 - **bypass_403** — The 403 breaker: one call fires ~24 bypass variants (path normalization, X-Original-URL/XFF headers, method overrides, path-as-param) through http_request with pacing. Call it whenever a promising path 403s; the verdict table shows which variant got through.
 - **http_replay** — THE governed send path for testing: payloads travel as DATA. Replay a stored request_id or inline spec through 15 mutation ops (add-query enables HPP, body-set-field dot-paths, set-method/target...) + 12 composable codecs (tab = WAF-evasion %09 spaces, url-double, base64, hex, html-dec, unicode...). `compare:{mutations,credential}` returns baseline + exploit + structured DIFF in ONE call — the 3-gate protocol (no measurable difference = NOT a finding). `credential:'name'` swaps auth wholesale (the IDOR/vertical-authz primitive). `sweep:{op,field,values}` tests ≤50 values paced. Every result carries a curl equivalent + DBMS error signatures. http_replay_raw sends VERBATIM bytes (smuggling/desync).
 - **register_credential** / **list_credentials** — Named credential sets (auth headers + cookies) captured from logins you hold; the swap substrate for access-control replay.
