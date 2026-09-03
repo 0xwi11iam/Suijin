@@ -1313,6 +1313,10 @@ def run_exploit(target: str = "", config=None):
 
 
 def main():
+    with contextlib.suppress(Exception):  # the dragon at every red TUI boot
+        from suijin.modules.platform.lib.banner import render_boot_banner
+
+        render_boot_banner(console)
     load_env()
     config = load_config()
     from suijin.modules.loader import set_verbose
