@@ -62,6 +62,7 @@ class TestArt:
         colored = [int(r) for r in runs if int(r) not in (0, 16)]
         assert len(colored) > 500  # the bg-only gradient art
         assert "▓" not in src and "▒" not in src  # bg-only: no glyphs at all
+        assert not any(1 <= c <= 15 for c in colored)  # no saturated speckles
 
 
 class TestRender:
@@ -87,6 +88,6 @@ class TestRender:
         assert ok is False
 
     def test_wordmark_exact(self):
-        assert "_______." in WORDMARK
-        assert "(----`" in WORDMARK
-        assert r"\______/" in WORDMARK
+        assert "/ ___|" in WORDMARK
+        assert "_ __" in WORDMARK
+        assert "|__/" in WORDMARK

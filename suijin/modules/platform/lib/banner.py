@@ -11,7 +11,7 @@ The block-letter wordmark underneath, cyan.
 Rules (operator contract):
 - renders at EVERY TUI start (welcome, mode selector, red boot, blue
   boot, `suijin version`)
-- terminal too narrow (<80 cols — the art is 77 wide), non-TTY, or
+- terminal too narrow (<80 cols — the art is 78 wide), non-TTY, or
   NO_COLOR → NOTHING at all
 """
 
@@ -21,14 +21,14 @@ import os
 import sys
 from pathlib import Path
 
-WORDMARK = r"""
-____        _  _ _
-/ ___| _   _(_)(_|_)_ __
-\___ \| | | | || | | '_ \
- ___) | |_| | || | | | | |
-|____/ \__,_|_|/ |_|_| |_|
-             |__/
-"""
+WORDMARK = (
+    "____        _  _ _       \n"
+    "/ ___| _   _(_)(_|_)_ __  \n"
+    "\\___ \\| | | | || | | '_ \\ \n"
+    " ___) | |_| | || | | | | |\n"
+    "|____/ \\__,_|_|/ |_|_| |_|\n"
+    "             |__/ "
+)
 
 _ANS: str | None = None
 
