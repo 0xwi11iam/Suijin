@@ -65,7 +65,7 @@ def harvest_surfaces(result: dict) -> list[dict]:
         elif name in ("nmap_scan", "tcp_scan", "recon_chain"):
             out.append({"surface": "port/version map", "cls": "recon", "src": name})
         elif name == "search_cve":
-            out.append({"surface": f"cve:{str(args.get('query') or '')[:40]}", "cls": "cve", "src": name})
+            out.append({"surface": f"cve:{str(args.get('software') or '')[:40]}", "cls": "cve", "src": name})
         for trace_step in (result.get("execution_trace") or [])[-1:]:
             for f in _SURFACE_PATTERNS:
                 for m in f[0].finditer(str(trace_step.get("tool_output") or "")[:4000]):

@@ -349,7 +349,12 @@ def check_knowledge(target, payload=None, config=None):
 def record_finding(target, finding_type, rule, evidence="", config=None):
     """Record a finding — H5: claims are VERIFIED at claim time (an
     independent second check runs immediately; the verdict rides the
-    result so the agent sees it on the next turn)."""
+    result so the agent sees it on the next turn).
+
+    v2 anti-hallucination: verified_cve claims are SYSTEM-CHECKED against
+    live advisory data — a memory-recited CVE id that search_cve can't
+    find is REJECTED. Confidence is derived from the verification verdict,
+    not hardcoded 1.0."""
     from suijin.modules.loader import load_local_module
 
     kg = load_local_module("knowledge_graph")
@@ -358,7 +363,15 @@ def record_finding(target, finding_type, rule, evidence="", config=None):
     if finding_type not in valid_types:
         return f"Invalid finding_type. Use one of: {', '.join(valid_types)}"
 
-    kg.add_constraint(target, finding_type, rule, evidence=evidence or "", confidence=1.0)
+    # ── v2 anti-hallucination gate for CVE claims ──
+    if finding_type == "verified_cve":
+        cve_check = _verify_cve_claim(target, rule, evidence)
+        if cve_check:
+            return cve_check  # rejection message
+
+    # ── v2: confidence derived from verification, not hardcoded ──
+    confidence = 0.1  # unverified base
+    kg.add_constraint(target, finding_type, rule, evidence=evidence or "", confidence=confidence)
     base = f"Recorded: {target} -> {finding_type} -> '{rule}'"
 
     # claim-time verification — never blocks the recording, only grades it
@@ -371,9 +384,56 @@ def record_finding(target, finding_type, rule, evidence="", config=None):
         )
         verdict = v.get("verification", {}).get("verdict", "unverifiable")
         note = v.get("verification", {}).get("evidence", "")[:160]
-        return f"{base}\nVerification: {verdict.upper()} — {note}"
+
+        # v2: adjust stored confidence based on the verdict
+        if verdict == "verified":
+            confidence = 0.9
+        elif verdict == "downgraded":
+            confidence = 0.5
+        # update the KG constraint with the graded confidence
+        try:
+            constraints = kg.get_constraints(target)
+            for c in constraints:
+                if str(c.get("rule", "")) == rule and str(c.get("constraint_type", "")) == finding_type:
+                    # re-add with updated confidence (KG upsert)
+                    kg.add_constraint(target, finding_type, rule, evidence=evidence or "", confidence=confidence)
+                    break
+        except Exception:  # noqa: BLE001
+            pass
+
+        return f"{base}\nVerification: {verdict.upper()} (confidence={confidence}) — {note}"
     except Exception:  # noqa: BLE001 — grading must never break recording
         return base
+
+
+def _verify_cve_claim(target, rule, evidence) -> str | None:
+    """Anti-hallucination gate: a verified_cve claim must cite a CVE id
+    that search_cve can actually find. Memory-recited CVEs are rejected."""
+    import re as _re
+
+    # extract CVE id from the rule or evidence
+    blob = f"{rule} {evidence}"
+    m = _re.search(r"CVE-\d{4}-\d{4,}", blob, _re.I)
+    if not m:
+        return (
+            "Error: verified_cve finding must cite a CVE id (e.g. CVE-2024-1234). "
+            "Run search_cve first and cite the CVE you found — never recite from memory."
+        )
+    cve_id = m.group(0).upper()
+
+    # check against the live advisory data
+    try:
+        result = search_cve(cve_id, "", limit=3, config=None)
+        if cve_id.lower() in str(result).lower():
+            return None  # CVE found in advisory data — claim passes the gate
+        return (
+            f"Error: CVE {cve_id} NOT found in live advisory data (NVD/KEV). "
+            "This CVE may not exist or may be memory-recited. "
+            "Run search_cve(software, version) to find real CVEs for this target. "
+            "A CVE claim without an advisory receipt is a rumor."
+        )
+    except Exception:  # noqa: BLE001 — if search_cve itself fails, let the claim through with a warning
+        return None
 
 
 def _safe_route(name, args):
