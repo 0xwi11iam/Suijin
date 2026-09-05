@@ -381,6 +381,11 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
     ui = EngagementUI(console, objective=objective)
     ui.start()
     _stream_ui["sink"] = ui.reasoning_delta  # the flexing box goes live
+    # catalog_exploit verifier → the TUI: RUNNING POC takeover + per-command
+    # transcript (the tools layer never imports the UI — sink injection only)
+    from suijin.modules.tools.lib import exploit_catalog as _ec
+
+    _ec.set_poc_sink(ui.poc_event)
 
     # The input box: on a TTY the keystroke reader owns stdin (live typing,
     # Tab mode cycling, ESC ESC pause) and the RunBox's line reader stays
@@ -1146,6 +1151,10 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
     finally:
         # TERMINATION BANNER — one classifier, every ending, unskippable.
         # The field reports: declines and crashes read as silent failures.
+        with contextlib.suppress(Exception):
+            from suijin.modules.tools.lib import exploit_catalog as _ec
+
+            _ec.set_poc_sink(None)  # UI is going down — never call a dead sink
         with contextlib.suppress(Exception):
             _render_termination(final_state, ui, _operator_stopped)
         # the Done line ALWAYS renders — if anything above threw, the run
