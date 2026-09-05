@@ -1519,16 +1519,18 @@ class TestTypewriterStream:
         assert all(len(ln) > 30 for ln in lines)  # rows are FULL — no fragments
         assert ui._tw._pending == [] and ui._tw._line == ""
 
-    def test_think_dim_speak_plain(self):
-        """ALL highlighting killed: think = dim (no italic), speak = default
-        (no bold, no cyan) — plain text only per operator contract."""
+    def test_think_dim_speak_bright(self):
+        """THE operator contract: long dim reasoning, then a BRIGHTLY
+        colored sentence/paragraph — think = dim plain, speak = bright
+        cyan inline markdown."""
         ui1, c1 = _ui()
         ui1.waiting(True)
         ui1.reasoning_delta("content", " ".join(f"speak{i}" for i in range(60)))
         self._drain(ui1)
         ui1._tw.flush()
         speak_rows = "".join(ln for ln in c1.export_text(styles=True).split("\n") if "speak" in ln)
-        assert "36m" not in speak_rows  # NO cyan
+        assert "\x1b[96m" in speak_rows  # SPEAK = bright cyan
+        assert "\x1b[2m" not in speak_rows  # never dim
 
         ui2, c2 = _ui()
         ui2.waiting(True)
@@ -1537,7 +1539,7 @@ class TestTypewriterStream:
         ui2._tw.flush()
         think_rows = "".join(ln for ln in c2.export_text(styles=True).split("\n") if "think" in ln)
         assert "\x1b[2m" in think_rows  # THINK = dim
-        assert "2;3m" not in think_rows  # NO italic (plain dim only)
+        assert "\x1b[96m" not in think_rows  # never bright
 
     def test_json_action_boxes_itself(self):
         ui, c = _ui()
@@ -1574,18 +1576,91 @@ class TestTypewriterStream:
         out = c.export_text()
         assert "curl -s http://t/graphql" in out and "bash" in out
 
-    def test_markdown_markers_pass_through_plainly(self):
-        """The highlighting is scrapped: prose renders PLAIN — markers show
-        literally (clean terminal-stream behavior), bold spans never render."""
+    def test_content_renders_inline_markdown(self):
+        """The agent SPEAKS markdown: bold/code spans style up, markers
+        are consumed (never literal ** left), text survives intact."""
         ui, c = _ui()
         ui.waiting(True)
-        ui.reasoning_delta("content", " ".join(f"**bold{i}** tail" for i in range(40)))
+        ui.reasoning_delta("content", " ".join(f"**bold{i}** and `code{i}` end" for i in range(30)))
         self._drain(ui)
         ui._tw.flush()
-        out = c.export_text()
-        assert "bold20" in out  # the text survives
+        out = c.export_text(clear=False)  # keep the buffer for the styles pass
+        assert "bold20" in out and "code20" in out  # the text survives
         styled = c.export_text(styles=True)
-        assert "black on white" not in styled and "\x1b[1;36m\x1b[1m" not in styled  # no md span styling
+        assert "**" not in styled  # markers consumed, never literal
+        assert "\x1b[1;96m" in styled  # bold spans actually style (bold bright cyan)
+
+    def test_md_line_dresses_headers_bullets_code(self):
+        from suijin.modules.redteam.lib.red.console_ui import _md_line
+
+        assert _md_line("## Section title").plain == "Section title"
+        t = _md_line("- item one").plain
+        assert "•" in t and "item one" in t
+        t2 = _md_line("run `nmap -sV` now").plain
+        assert "nmap -sV" in t2 and "`" not in t2
+        t3 = _md_line("see [docs](https://x.example/a) ok").plain
+        assert "docs" in t3 and "https://x.example/a" in t3  # link text + URL both visible
+
+    def test_multiline_content_feed_dresses_every_line(self):
+        """One delta carrying several markdown lines (header + bullets):
+        each committed line dresses individually — hashes/bullet markers
+        are consumed, never literal."""
+        ui, c = _ui()
+        ui.waiting(True)
+        ui.reasoning_delta(
+            "content",
+            "The **XSS** is confirmed.\n## Next step\n- chain it into a hijack\n- check the CSP",
+        )
+        self._drain(ui)
+        ui._tw.flush()
+        styled = c.export_text(styles=True)
+        assert "Next step" in styled and "##" not in styled  # header dressed
+        assert "•" in styled  # bullets dressed
+        assert "chain it into a hijack" in styled  # text intact
+
+    def test_kind_switch_starts_a_fresh_styled_line(self):
+        """THE repeatedly-reported bug: content arriving while the live
+        line is mid-REASONING must start its OWN bright line — the first
+        content sentence used to ride the dim reasoning line."""
+        ui, c = _ui()
+        ui.waiting(True)
+        ui.reasoning_delta("reasoning", "thinking hard about the next move")
+        ui._tw.tick(0.5)  # live line is open, kind = reasoning
+        assert ui._tw._line_kind == "reasoning"
+        ui.reasoning_delta("content", "NOW THE BRIGHT SENTENCE arrives mid-thought")
+        self._drain(ui)
+        ui._tw.flush()
+        said = "".join(ln for ln in c.export_text(styles=True).split("\n") if "BRIGHT SENTENCE" in ln)
+        assert said  # the content landed
+        assert "\x1b[96m" in said  # BRIGHT
+        assert "\x1b[2m" not in said  # never dim
+
+    def test_held_span_keeps_its_kind_after_code_blocks(self):
+        """The random-bright-reasoning leak: reasoning text HELD by the
+        splitter (straddling span candidates after a code fence) must
+        never release under the content label — each kind owns its own
+        splitter."""
+        ui, c = _ui()
+        ui.waiting(True)
+        ui.reasoning_delta("reasoning", "probe with ```\ncurl http://t\n```\nthen maybe {")
+        ui.reasoning_delta("content", "The bright answer sentence.")
+        self._drain(ui)
+        ui._tw.flush()
+        think = "".join(ln for ln in c.export_text(styles=True).split("\n") if "maybe" in ln)
+        assert think  # the held reasoning surfaced
+        assert "\x1b[2m" in think  # …as DIM reasoning
+        assert "\x1b[96m" not in think  # never bright
+
+    def test_flush_labels_held_tail_with_its_kind(self):
+        """stream_done flush: reasoning held in the splitter flushes DIM —
+        the old flush hard-labeled every held tail 'content'."""
+        ui, c = _ui()
+        ui.waiting(True)
+        ui.reasoning_delta("reasoning", "final held thought {")
+        ui.stream_done()
+        row = "".join(ln for ln in c.export_text(styles=True).split("\n") if "held thought" in ln)
+        assert row
+        assert "\x1b[2m" in row and "\x1b[96m" not in row
 
     def test_gear_ladder_micro_increments(self):
         from suijin.modules.redteam.lib.red.console_ui import TypewriterStream as TW
@@ -2058,6 +2133,65 @@ class TestIntelligenceAndAsk:
         ui._tw.flush()
         out = c.export_text()
         assert out.count("http_request") == 1  # ONE box — the rehearsal dup is dead
+
+
+class TestPocVerifierTui:
+    """catalog_exploit's verifier takes over the run loop: RUNNING POC in
+    the strip, each command in a numbered Rich panel, output in a black
+    box, strip restored on done. The input box stays (always bottom)."""
+
+    def _strip_text(self, ui, width=110):
+        import io
+
+        from rich.console import Console as C
+
+        sink = C(file=io.StringIO(), width=width, force_terminal=True)
+        sink.print(ui._strip())
+        return sink.file.getvalue()
+
+    def test_poc_takeover_panels_and_strip(self):
+        ui, c = _ui()
+        ui.waiting(True)
+        ui.poc_event("start", {"eid": "EXP-001", "title": "login bypass", "total": 2})
+        assert "RUNNING POC" in self._strip_text(ui)  # the strip shows the takeover
+        ui.poc_event("command", {"i": 1, "total": 2, "cmd": "curl -s http://t/login"})
+        ui.poc_event("output", {"i": 1, "text": "200 OK session set"})
+        ui.poc_event("command", {"i": 2, "total": 2, "cmd": "curl -s http://t/admin?id=1 OR 1=1"})
+        ui.poc_event("output", {"i": 2, "text": "FLAG{pwned} administrator row"})
+        ui.poc_event("done", {"eid": "EXP-001", "verdict": "CONFIRMED"})
+        out = c.export_text()
+        # numbered command panels
+        assert "POC #1/2" in out and "POC #2/2" in out
+        assert "curl -s http://t/login" in out and "id=1 OR 1=1" in out
+        # output inside the black box, readable
+        assert "200 OK session set" in out and "FLAG{pwned}" in out
+        # the takeover state clears
+        assert "RUNNING POC" not in self._strip_text(ui)
+        assert UI_STATE["poc_running"] is False
+
+    def test_poc_start_line_names_the_exploit(self):
+        ui, c = _ui()
+        ui.poc_event("start", {"eid": "EXP-003", "title": "SSRF to metadata", "total": 4})
+        out = c.export_text()
+        assert "RUNNING POC" in out and "EXP-003" in out and "SSRF to metadata" in out
+        assert "AI is paused" in out
+        ui.poc_event("done", {"eid": "EXP-003", "verdict": "FAILED_REPRO"})
+
+    def test_poc_empty_output_still_visible(self):
+        ui, c = _ui()
+        ui.poc_event("start", {"eid": "EXP-001", "title": "t", "total": 1})
+        ui.poc_event("command", {"i": 1, "total": 1, "cmd": "curl -s http://t/x"})
+        ui.poc_event("output", {"i": 1, "text": ""})
+        ui.poc_event("done", {"eid": "EXP-001", "verdict": "FAILED_REPRO"})
+        assert "(no output)" in c.export_text()
+
+    def test_poc_huge_output_capped_in_tui(self):
+        ui, c = _ui()
+        ui.poc_event("start", {"eid": "EXP-001", "title": "t", "total": 1})
+        ui.poc_event("output", {"i": 1, "text": "x" * 9000})
+        ui.poc_event("done", {"eid": "EXP-001", "verdict": "FAILED_REPRO"})
+        out = c.export_text()
+        assert "run-N.log" in out and len(out) < 9000  # capped, points at the receipt
 
 
 class TestExploitVerdictPanel:
