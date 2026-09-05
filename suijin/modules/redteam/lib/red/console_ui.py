@@ -73,6 +73,7 @@ UI_STATE = {
     "fireteams": 0,
     "last_reasoning": "",
     "last_result_success": True,
+    "poc_running": False,  # catalog_exploit verifier has taken over the loop
 }
 
 
@@ -387,6 +388,70 @@ def _md(text: str, style: str = "none") -> Markdown:
     return Markdown(text or "", code_theme="monokai", style=style, hyperlinks=False)
 
 
+SAID = "bright_cyan"  # the SPOKEN content color — dim think, BRIGHT say
+
+# inline markdown tokens for committed content lines (ordered: code/bold/
+# link before italic so ** never half-matches as emphasis)
+_MD_INLINE = re.compile(
+    r"(?P<code>`[^`\n]+?`)"
+    r"|(?P<bold>\*\*(?P<bt>.+?)\*\*)"
+    r"|(?P<link>\[(?P<lt>[^\]\n]+)\]\((?P<lu>[^)\s]+)\))"
+    r"|(?P<ital>\*(?P<it>[^\s*][^*\n]*?)\*)"
+)
+_MD_HEADER = re.compile(r"^(#{1,6})\s+(.*)$")
+_MD_BULLET = re.compile(r"^(\s*)[-*+]\s+(.*)$")
+
+
+def _md_line(line: str) -> Text:
+    """One committed CONTENT line as inline markdown — bright cyan speech
+    with bold/italic/code-span/link styling, headers and bullets dressed.
+    Unbalanced markers stay literal (the regex needs the closer)."""
+    s = (line or "").rstrip()
+    t = Text(style=SAID)
+    m = _MD_HEADER.match(s)
+    if m:
+        t.append(m.group(2), style="bold bright_white")
+        return t
+    m = _MD_BULLET.match(s)
+    if m:
+        t.append(m.group(1) + "• ", style=f"bold {GOLD}")
+        s = m.group(2)
+    pos = 0
+    for mm in _MD_INLINE.finditer(s):
+        if mm.start() > pos:
+            t.append(s[pos : mm.start()])
+        if mm.group("code") is not None:
+            t.append(mm.group("code")[1:-1], style="bold bright_white")
+        elif mm.group("bold") is not None:
+            t.append(mm.group("bt"), style="bold")
+        elif mm.group("lt") is not None:
+            t.append(mm.group("lt"), style="underline")
+            t.append(f" ({mm.group('lu')})", style="dim")
+        elif mm.group("it") is not None:
+            t.append(mm.group("it"), style="italic")
+        else:
+            t.append(mm.group(0))
+        pos = mm.end()
+    if pos < len(s):
+        t.append(s[pos:])
+    return t
+
+
+def _smart_cut(line: str, row: int) -> int:
+    """Row-boundary cut that refuses to split inside an inline markdown
+    marker: if the row would end mid-marker (odd backtick/`**` count in
+    the row), move the cut back before the marker's start — capped at 24
+    chars so genuinely unbalanced text still flows full-width."""
+    cut = row
+    head = line[:row]
+    for marker in ("`", "**"):
+        if head.count(marker) % 2 == 1:
+            start = head.rfind(marker)
+            if start > 0 and row - start <= 24:
+                cut = min(cut, start)
+    return max(1, cut)
+
+
 _BLOCKED_PREFIXES = ("TOOL NOT FOUND", "policy:", "BLOCKED", "Error: tool")
 
 
@@ -554,10 +619,13 @@ class TypewriterStream:
     60 micro-increment gears span 20 → ~3000 chars/sec (beyond the fastest
     models shipping today), so playback ALWAYS catches up. A 50Hz ticker
     moves rate*dt chars from the pending queue into the live line; when
-    the line fills a terminal row it commits to the transcript. Raw
-    markdown never prints: unbalanced markers carry over to the next row
-    and unresolved ones are dropped at flush. Selection + measurement are
-    invisible — only the line, rows, and boxes appear."""
+    the line fills a terminal row it commits to the transcript. Content
+    commits as inline MARKDOWN (bright cyan speech); reasoning commits
+    dim plain. A KIND SWITCH commits the open line first — the two kinds
+    never share a styled line. Each kind owns its OWN splitter, so text
+    held by one stream's span candidates never releases under the other
+    kind's label. Selection + measurement are invisible — only the line,
+    rows, and boxes appear."""
 
     MIN_RATE = 20.0
     LADDER = sorted({max(20, min(3000, round(20 * (1.09**i)))) for i in range(60)})  # 60 micro-increments
@@ -573,9 +641,10 @@ class TypewriterStream:
         self._line_kind = ""  # empty until the first char lands (never default to content)
         self._arrivals: collections.deque = collections.deque()  # (monotonic, chars)
         self._rate = self.MIN_RATE
-        self._splitter = StreamSplitter()
-        self._hold = ""
-        self._last_kind = None
+        # per-kind splitters: a span opened (and held) by REASONING must
+        # never release under the CONTENT label — the shared splitter was
+        # the random-bright-reasoning leak after code blocks
+        self._splitters: dict[str, StreamSplitter] = {}
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._playback_paused = False  # ESC ESC: hide the thought NOW
@@ -614,7 +683,14 @@ class TypewriterStream:
     # ── ingestion ────────────────────────────────────────────────────
 
     def feed(self, kind: str, text: str) -> None:
-        segments = self._splitter.feed(text)
+        """Kind-routed ingestion: each stream kind owns its OWN splitter,
+        so segments (and spans held open across feeds) keep the kind that
+        produced them — reasoning held after a code fence can never
+        surface as bright content."""
+        sp = self._splitters.get(kind)
+        if sp is None:
+            sp = self._splitters[kind] = StreamSplitter()
+        segments = sp.feed(text)
         with self._lock:
             self._arrivals.append((time.monotonic(), len(text)))
             for seg in segments:
@@ -652,7 +728,9 @@ class TypewriterStream:
     def tick(self, dt: float) -> None:
         """One playback step — public for tests. Moves rate*dt chars from
         pending into the line; commits filled rows; emits complete boxes.
-        A paused playback commits NOTHING (ESC ESC froze the stream)."""
+        A KIND SWITCH commits the open line first — content never rides a
+        dim reasoning line (and vice versa). A paused playback commits
+        NOTHING (ESC ESC froze the stream)."""
         if self._playback_paused:
             return
         self._rate = self._select_rate(dt)
@@ -666,11 +744,14 @@ class TypewriterStream:
             kind, text = item
             if kind.startswith("__box__"):
                 with self._lock:
+                    self._commit_line_locked()  # text above, box below — reading order
                     self._pending.pop(0)
                 self._emit_box(kind[len("__box__") :], text)
                 continue  # boxes cost no typewriter budget
-            take = min(len(text), max(1, int(round(budget))), max(1, row - len(self._line)))
             with self._lock:
+                if self._line and self._line_kind != kind:
+                    self._commit_line_locked()  # kind switch = fresh styled line
+                take = min(len(text), max(1, int(round(budget))), max(1, row - len(self._line)))
                 piece = text[:take]
                 rest = text[take:]
                 if rest:
@@ -682,41 +763,59 @@ class TypewriterStream:
                     self._line_kind = kind
                 # model-emitted newlines END the row (paragraph breaks): an
                 # embedded \n rendered mid-Text produced the broken
-                # 'w / ork' fragments — commit up to the last \n instead
+                # 'w / ork' fragments — commit each line separately so
+                # every one dresses as markdown
                 nl = self._line.rfind("\n")
                 if nl != -1:
-                    line, kind_now = self._line[:nl].rstrip(), self._line_kind
+                    done, kind_now = self._line[:nl], self._line_kind
                     self._line = self._line[nl + 1 :].lstrip()
-                    if line:
-                        self._commit_row(line, kind_now)
+                    for seg in done.split("\n"):
+                        if seg.strip():
+                            self._commit_row(seg.rstrip(), kind_now)
                     continue  # newline commits are free (no budget spent)
                 if len(self._line) >= row:
-                    line, kind_now = self._line, self._line_kind
-                    self._line, self._line_kind = "", ""
-                    self._commit_row(line, kind_now)
+                    cut = _smart_cut(self._line, row)  # never split a markdown marker
+                    line, kind_now = self._line[:cut].rstrip(), self._line_kind
+                    self._line = self._line[cut:].lstrip()
+                    if line:
+                        self._commit_row(line, kind_now)
+                    if not self._line:
+                        self._line_kind = ""
                     budget -= take
                     continue
             budget -= take
 
     # ── emission ─────────────────────────────────────────────────────
 
+    def _commit_line_locked(self) -> None:
+        """Commit the open live line NOW (kind switch / box / flush
+        boundary). Caller holds the lock."""
+        if self._line.strip():
+            for seg in self._line.rstrip().split("\n"):
+                if seg.strip():
+                    self._commit_row(seg.rstrip(), self._line_kind or "content")
+        self._line, self._line_kind = "", ""
+
     def _commit_row(self, line: str, kind: str = "content") -> None:
-        """Commit one full-width row — PLAIN styled text only (operator
-        contract: the markdown highlighting experiment is scrapped; prose
-        renders as light think / bold cyan speak, nothing parsed, no
-        dividers)."""
-        # PLAIN — the operator killed all highlighting: no italic, no
-        # bold, no cyan, no syntax. Think = dim, speak = default.
-        style = "dim" if kind == "reasoning" else ""
+        """Commit one full-width row — the operator contract: think = dim
+        plain, SPEAK = bright cyan inline markdown (the contrast between
+        reasoning and content is the whole point)."""
         with contextlib.suppress(Exception):
-            self._ui.console.print(Text(line, style=style) if style else line)
+            if kind == "reasoning":
+                self._ui.console.print(Text(line, style="dim"))
+            else:
+                self._ui.console.print(_md_line(line))
 
     def _emit_wrapped(self, kind: str, text: str) -> None:
-        """Flush-time emission: one merged block, console wraps it —
-        plain styled text, no highlighting, no said/think dividers."""
-        base = "dim" if kind == "reasoning" else ""
+        """Flush-time emission: one merged block — dim plain for
+        reasoning, per-line bright markdown for content."""
         with contextlib.suppress(Exception):
-            self._ui.console.print(Text(text, style=base) if base else text)
+            if kind == "reasoning":
+                self._ui.console.print(Text(text, style="dim"))
+            else:
+                for ln in str(text).split("\n"):
+                    if ln.strip():
+                        self._ui.console.print(_md_line(ln.rstrip()))
 
     def _emit_box(self, lang: str, content: str) -> None:
         """A complete command span: black box, white syntax-highlighted.
@@ -744,23 +843,26 @@ class TypewriterStream:
 
     def flush(self) -> None:
         """stream_done: play everything out instantly — no loss, no litter.
-        Contiguous same-kind text runs print as one wrapped block (the
-        console wraps at width); boxes print complete; an unfinished held
-        span releases as prose — content is never silently dropped."""
-        tail = self._splitter.drain()
+        Each kind's held splitter tail releases UNDER ITS OWN KIND (the
+        old single-splitter drain hard-labeled every held tail 'content'
+        — held reasoning flushed bright). The live line commits first
+        (oldest text), then merged same-kind runs; boxes print complete;
+        content is never silently dropped."""
         with self._lock:
             pending, self._pending = list(self._pending), []
             line, line_kind = self._line, self._line_kind
             self._line, self._line_kind = "", ""
-        if tail.strip():
-            pending.append(("content", tail))
-        if line.strip() and not any(not k.startswith("__box__") for k, _ in pending):
-            pending.append(("content", ""))  # ensure a content run exists to carry the live line
+        if line.strip():
+            pending.insert(0, (line_kind or "content", line))
+        for kind, splitter in self._splitters.items():
+            tail = splitter.drain()
+            if tail and tail.strip():
+                pending.append((kind, tail))
         runs: list[tuple[str, list[str]]] = []
         for kind, text in pending:
             if kind.startswith("__box__"):
                 runs.append((kind, [text]))
-            elif runs and runs[-1][0] == kind and not runs[-1][0].startswith("__box__"):
+            elif runs and runs[-1][0] == kind:
                 runs[-1][1].append(text)
             else:
                 runs.append((kind, [text]))
@@ -768,21 +870,17 @@ class TypewriterStream:
             if kind.startswith("__box__"):
                 self._emit_box(kind[len("__box__") :], "".join(chunks))
             else:
-                merged = (line + "".join(chunks)) if kind == line_kind else "".join(chunks)
-                line = ""
-                if merged.strip():
-                    self._emit_wrapped(kind, merged)
-        if line.strip():  # leftover live line with no same-kind run to carry it
-            self._emit_wrapped(line_kind or "content", line)
+                self._emit_wrapped(kind, "".join(chunks))
 
     def line_renderable(self):
-        """The live partial line for the strip — with a block cursor."""
+        """The live partial line for the strip — dim reasoning, BRIGHT
+        content, block cursor."""
         with self._lock:
             line, kind = self._line, self._line_kind
         if not line:
             return None
-        style = "dim" if kind == "reasoning" else ""
-        return Text.assemble(Text(line, style=style) if style else Text(line), ("▌", style or "white"))
+        style = "dim" if kind == "reasoning" else SAID
+        return Text.assemble(Text(line, style=style), ("▌", style))
 
 
 class EngagementUI:
@@ -815,6 +913,7 @@ class EngagementUI:
             "fireteam",
             "phase_transition",
             "ask",
+            "poc_event",
             "done",
             "failure",
             "flush_open",
@@ -861,6 +960,13 @@ class EngagementUI:
             # ESC ESC: PAUSED, no spinner — the engagement is stopped at
             # the operator's chord; the graph winds down in its own time
             left = Text("PAUSED", style="bold yellow")
+        elif UI_STATE.get("poc_running"):
+            # catalog_exploit: the POC verifier has TAKEN OVER the run
+            # loop — the AI is paused until the yaml finishes; input box
+            # stays live below
+            g = Table.grid(padding=(0, 1))
+            g.add_row(self._spinner, Text("RUNNING POC", style="bold yellow"))
+            left = g
         elif self._waiting:
             # thinking + dots — the label the operator asked for
             g = Table.grid(padding=(0, 1))
@@ -1028,14 +1134,14 @@ class EngagementUI:
     def reasoning_delta(self, kind: str, text: str) -> None:
         """on_delta sink for the provider stream — feeds the typewriter.
 
-        Splitter first: command spans ({"action"...} JSON, ``` fences) are
-        held and rendered as complete black syntax boxes; prose flows to
-        the typewriter, which plays it back at the measured token rate
-        (micro-increment gear ladder, fully under the hood). Colors:
-        think = light dim italic, speak = bold cyan. The green separator
-        is the ITERATION HEADER (one per iteration — no second rule at
-        stream start). TTFT records on the first token of any kind.
-        Provider-worker-thread safe."""
+        Splitter first (per-kind): command spans ({"action"...} JSON,
+        ``` fences) are held and rendered as complete black syntax boxes;
+        prose flows to the typewriter, which plays it back at the
+        measured token rate. Colors: think = dim plain, speak = bright
+        cyan inline markdown. The green separator is the ITERATION
+        HEADER (one per iteration — no second rule at stream start).
+        TTFT records on the first token of any kind. Provider-worker-
+        thread safe."""
         if not text:
             return
         if self._waiting_since is not None:
@@ -1165,6 +1271,59 @@ class EngagementUI:
         self._tick()
 
     _SEV_COLORS = {"CRITICAL": "bold red", "HIGH": "red", "MEDIUM": "bold yellow", "LOW": "yellow"}
+
+    def poc_event(self, event: str, payload: dict) -> None:
+        """Sink for the catalog_exploit VERIFIER (installed via
+        exploit_catalog.set_poc_sink by the red-teamer). The POC takes
+        over the run loop: prominent start line, then per command — a
+        numbered Rich panel with the command, a black box with the
+        output — strip shows RUNNING POC. Thread-safe; never raises
+        (guarded); the run loop itself only WAITS (never-auto-bg'd)."""
+        p = payload or {}
+        if event == "start":
+            UI_STATE["poc_running"] = True
+            self._waiting = False  # the spinner is the POC's now
+            self.console.print(
+                Text.assemble(
+                    ("» RUNNING POC ", "bold yellow"),
+                    (f"{p.get('eid', '?')} — ", "bold yellow"),
+                    (str(p.get("title", ""))[:100], "yellow"),
+                    (f"  ({p.get('total', '?')} commands — the AI is paused until the verifier finishes)", "dim"),
+                )
+            )
+            self._tick()
+        elif event == "command":
+            i, n = p.get("i", "?"), p.get("total", "?")
+            self.console.print(
+                Panel(
+                    Text(str(p.get("cmd", "")), style="bold yellow"),
+                    box=box.SQUARE,
+                    border_style="yellow",
+                    title=f" POC #{i}/{n} ",
+                    title_align="left",
+                    padding=(0, 1),
+                )
+            )
+        elif event == "output":
+            out = str(p.get("text", "")).rstrip()
+            if not out:
+                out = "(no output)"
+            if len(out) > 4000:
+                out = out[:3000] + f"\n… [{len(out) - 3500} chars — full output in run-N.log] …" + out[-500:]
+            self.console.print(
+                Panel(
+                    Text(out, style="bright_white"),
+                    box=box.SQUARE,
+                    border_style="bright_black",
+                    style="on black",  # THE black box — dark fill, readable text
+                    title=" output ",
+                    title_align="left",
+                    padding=(0, 1),
+                )
+            )
+        elif event == "done":
+            UI_STATE["poc_running"] = False
+            self._tick()
 
     def exploit_verdict(self, result_text: str) -> bool:
         """When catalog_exploit fires, the CLASSED registration renders as
