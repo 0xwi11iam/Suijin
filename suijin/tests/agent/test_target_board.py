@@ -276,3 +276,33 @@ class TestH2JobSemantics:
         finally:
             jr.mark_announced(jid)
             jr.cancel(jid)
+
+    def test_catalog_exploit_not_auto_backgrounded(self):
+        """The POC verifier TAKES OVER the run loop by contract — even a
+        slow verification returns INLINE (auto-backgrounding it would
+        break the takeover and resume the AI mid-verification)."""
+        import time as _t
+
+        from suijin.modules.agent.lib.nodes.execute_tool_node import execute_tool_node
+
+        def slow_verifier(name, args, cfg):
+            _t.sleep(11)  # past the 10s auto-bg threshold
+            return "EXP-001 CONFIRMED — proven"
+
+        t0 = _t.monotonic()
+        out = asyncio.run(
+            execute_tool_node(
+                {
+                    "_current_step": {
+                        "tool_name": "catalog_exploit",
+                        "tool_args": {"commands": ["true"]},
+                        "iteration": 2,
+                    },
+                    "current_phase": "exploitation",
+                },
+                route_tool_fn=slow_verifier,
+            )
+        )
+        res = out["_current_step"]["tool_output"]
+        assert "AUTO-BG" not in res and "CONFIRMED" in res
+        assert _t.monotonic() - t0 >= 11  # the node actually WAITED
