@@ -426,6 +426,15 @@ def run_env() -> int:
     return 0
 
 
+def run_custom() -> int:
+    """Add an OpenAI-compatible provider: base URL + API key (ANY value —
+    gateways and self-hosted boxes use arbitrary tokens; blank = keyless).
+    Addressed as provider 'custom:<name>' from then on."""
+    from suijin.modules.redteam.lib.red.config_loader import add_custom_provider
+
+    return 0 if add_custom_provider() else 1
+
+
 def run_status() -> int:
     """One-page system summary: provider, KB, workspace, modules, lab port."""
     import json
@@ -1366,6 +1375,7 @@ def run_providers(args) -> int:
             chain += CLOUD_KEYS + LOCAL_KEYS
         except Exception:  # noqa: BLE001
             pass
+        chain += [f"custom:{e['name']}" for e in (cfg.get("custom_providers") or []) if str(e.get("name", "")).strip()]
     else:
         chain = [cfg.get("provider", "deepseek")] + (cfg.get("fallback_providers") or [])
     ok_count = 0
@@ -1962,6 +1972,7 @@ _KNOWN_VERBS = frozenset(
         "status",
         "version",
         "env",
+        "custom",
         "tools",
         "capability",
         "modules",
@@ -2042,6 +2053,7 @@ def main(argv=None):
         "status": ("one-page system status summary", run_status),
         "version": ("print version, python, and package details", run_version),
         "env": ("show API key presence (names only, never values)", run_env),
+        "custom": ("add an OpenAI-compatible provider — your base URL + API key (anything)", run_custom),
         "tools": ("list all agent tools with availability", run_tools_list),
         "capability": ("no-orphan-code audit: routes ↔ catalog parity + pack integrity (CI gate)", run_capability),
         "modules": ("list loaded module packs", run_modules_list),

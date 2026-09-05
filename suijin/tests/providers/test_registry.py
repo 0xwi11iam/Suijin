@@ -219,3 +219,149 @@ class TestCustomProviders:
 
         out = generate([{"role": "user", "content": "hi"}], {"provider": "custom:ghost"})
         assert out.startswith("Error:")
+
+
+class TestUnrestrictedCustomProvider:
+    """`suijin custom` / wizard option 9: user enters base URL + API key.
+    The key is ANY string — no format policing (gateways, proxies and
+    self-hosted boxes use arbitrary tokens; blank = keyless)."""
+
+    def test_weird_keys_and_urls_pass_verbatim(self):
+        # keys: unicode, symbols, spaces, colons — anything
+        for weird in ("!!! what a key 🐟", "sk-not-a-real-format", "a:b:c", "x" * 200, ""):
+            cfg = {"custom_providers": [{"name": "gw", "base_url": "https://gw.example/api", "api_key": weird}]}
+            spec = resolve_custom_provider("gw", cfg)
+            assert spec is not None and spec.inline_key == weird
+            assert spec.key_envs == () and not spec.requires_key  # never key-gated
+        # URLs: any scheme/host/port/path, trailing slash tolerated
+        for url in ("http://10.0.0.5:8000/v1", "https://api.internal.corp/gateway/openai/v1/", "http://[::1]:1234"):
+            cfg = {"custom_providers": [{"name": "n", "base_url": url}]}
+            spec = resolve_custom_provider("n", cfg)
+            assert spec is not None and spec.base_url == url.rstrip("/")
+
+    def test_end_to_end_weird_key_authenticates(self, fake_server):
+        import suijin.modules.providers.lib as pl
+
+        weird = "!!! my gateway key $$"  # symbols + spaces — exact match required
+        fake_server.require_key = True
+        fake_server.api_key = weird
+        cfg = {
+            "provider": "custom:gw",
+            "custom_providers": [
+                {
+                    "name": "gw",
+                    "base_url": f"http://127.0.0.1:{fake_server.server_port}",
+                    "api_key": weird,
+                    "model": "m-1",
+                }
+            ],
+        }
+        out = pl.generate([{"role": "user", "content": "hi"}], cfg, max_tokens=8, retries=1)
+        assert not str(out).startswith("Error:") and "hello" in str(out)
+
+    def test_non_latin1_key_never_crashes_the_transport(self, fake_server):
+        """A key with characters HTTP headers can't carry (emoji, CJK) flies
+        percent-encoded instead of dying with UnicodeEncodeError."""
+        from urllib.parse import quote
+
+        import suijin.modules.providers.lib as pl
+
+        emoji_key = "k🐟_PASS"
+        fake_server.require_key = True
+        fake_server.api_key = quote(emoji_key, safe="")  # what arrives on the wire
+        cfg = {
+            "provider": "custom:gw",
+            "custom_providers": [
+                {
+                    "name": "gw",
+                    "base_url": f"http://127.0.0.1:{fake_server.server_port}",
+                    "api_key": emoji_key,
+                    "model": "m-1",
+                }
+            ],
+        }
+        out = pl.generate([{"role": "user", "content": "hi"}], cfg, max_tokens=8, retries=1)
+        assert not str(out).startswith("Error:") and "hello" in str(out)
+
+    def test_keyless_custom_works(self, fake_server):
+        import suijin.modules.providers.lib as pl
+
+        fake_server.require_key = False
+        cfg = {
+            "provider": "custom:bare",
+            "custom_providers": [
+                {
+                    "name": "bare",
+                    "base_url": f"http://127.0.0.1:{fake_server.server_port}",
+                    "api_key": "",
+                    "model": "m-1",
+                }
+            ],
+        }
+        out = pl.generate([{"role": "user", "content": "hi"}], cfg, max_tokens=8, retries=1)
+        assert not str(out).startswith("Error:")
+
+
+class TestCustomProviderSetup:
+    """The interactive adder behind `suijin custom` and wizard option 9."""
+
+    def test_add_custom_provider_writes_config(self, tmp_path, monkeypatch):
+        import suijin.modules.platform.lib.config_loader as cl
+
+        monkeypatch.setattr(cl, "CONFIG_PATH", tmp_path / "config.json")
+        monkeypatch.setattr(cl, "ENV_PATH", tmp_path / ".env")
+        monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+        answers = iter(
+            [
+                "https://gw.example/v1",  # base URL
+                "!!! my gateway key 🐟",  # api key — anything
+                "llama4-maverick",  # model
+                "gateway",  # name
+            ]
+        )
+        monkeypatch.setattr("builtins.input", lambda *a: next(answers))
+        assert cl.add_custom_provider() is True
+        cfg = json.loads((tmp_path / "config.json").read_text())
+        assert cfg["provider"] == "custom:gateway"
+        assert cfg["custom_providers"] == [
+            {
+                "name": "gateway",
+                "base_url": "https://gw.example/v1",
+                "api_key": "!!! my gateway key 🐟",
+                "model": "llama4-maverick",
+            }
+        ]
+
+    def test_re_add_same_name_replaces(self, tmp_path, monkeypatch):
+        import suijin.modules.platform.lib.config_loader as cl
+
+        monkeypatch.setattr(cl, "CONFIG_PATH", tmp_path / "config.json")
+        monkeypatch.setattr(cl, "ENV_PATH", tmp_path / ".env")
+        monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+        first = iter(["http://old:8000/v1", "k1", "", "gw"])
+        monkeypatch.setattr("builtins.input", lambda *a: next(first))
+        cl.add_custom_provider()
+        second = iter(["http://new:9000/v1", "k2", "m2", "gw"])
+        monkeypatch.setattr("builtins.input", lambda *a: next(second))
+        cl.add_custom_provider()
+        cfg = json.loads((tmp_path / "config.json").read_text())
+        entries = [e for e in cfg["custom_providers"] if e["name"] == "gw"]
+        assert len(entries) == 1 and entries[0]["base_url"] == "http://new:9000/v1"
+
+    def test_empty_base_url_aborts(self, tmp_path, monkeypatch):
+        import suijin.modules.platform.lib.config_loader as cl
+
+        monkeypatch.setattr(cl, "CONFIG_PATH", tmp_path / "config.json")
+        monkeypatch.setattr(cl, "ENV_PATH", tmp_path / ".env")
+        monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+        monkeypatch.setattr("builtins.input", lambda *a: "")
+        assert cl.add_custom_provider() is False
+
+    def test_headless_refuses_with_instructions(self, tmp_path, monkeypatch, capsys):
+        import suijin.modules.platform.lib.config_loader as cl
+
+        monkeypatch.setattr(cl, "CONFIG_PATH", tmp_path / "config.json")
+        monkeypatch.setattr(cl, "ENV_PATH", tmp_path / ".env")
+        monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+        assert cl.add_custom_provider() is False
+        assert "custom_providers" in capsys.readouterr().out

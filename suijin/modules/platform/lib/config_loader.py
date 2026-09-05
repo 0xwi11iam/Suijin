@@ -97,6 +97,44 @@ def load_config() -> dict:
     return config
 
 
+def add_custom_provider() -> bool:
+    """Interactive: add an OpenAI-compatible provider — the user enters a
+    base URL and an API key. The key is ANY string (no format policing by
+    design — gateways, proxies and self-hosted boxes use arbitrary tokens;
+    blank = keyless). Writes config.json custom_providers + switches
+    provider to custom:<name>."""
+    if not sys.stdin.isatty():
+        console.print("[red]custom provider setup needs a terminal (interactive)[/red]")
+        console.print(
+            '[dim]hand-edit config.json: custom_providers=[{name, base_url, api_key, model}] + provider="custom:<name>"[/dim]'
+        )
+        return False
+    console.print("[bold]Custom OpenAI-compatible provider[/bold]")
+    console.print(
+        "[dim]Any endpoint speaking /chat/completions — vLLM, LiteLLM, OpenRouter-style gateways, LAN boxes…[/dim]"
+    )
+    base = input("Base URL (e.g. https://host/v1 or http://10.0.0.5:8000/v1): ").strip()
+    if not base:
+        console.print("[red]base URL required[/red]")
+        return False
+    key = input("API key (anything — paste it; Enter = keyless): ").strip()
+    model = input("Model id (e.g. llama4-maverick; Enter = decide later): ").strip()
+    name = input("Name for this provider [custom]: ").strip() or "custom"
+    config = load_config()
+    entries = [e for e in (config.get("custom_providers") or []) if str(e.get("name", "")).strip() != name]
+    entry = {"name": name, "base_url": base, "api_key": key}
+    if model:
+        entry["model"] = model
+    entries.append(entry)
+    config["custom_providers"] = entries
+    config["provider"] = f"custom:{name}"
+    with open(CONFIG_PATH, "w") as f:
+        json.dump(config, f, indent=4)
+    console.print(f"[green]provider set to custom:{name} → {base}[/green]")
+    console.print("[dim]switch anytime: suijin config · test: suijin providers[/dim]")
+    return True
+
+
 def load_env():
     """Load API keys from .env. Interactive wizard on TTY, no-op on CI."""
     if not ENV_PATH.exists():
@@ -114,7 +152,8 @@ def load_env():
         console.print("  [bold #58a6ff]7.[/] [white]OpenAI[/]")
         console.print("  [dim white]  …every registry provider activates when its KEY appears in .env[/]")
         console.print("  [bold green]8.[/] [white]Local (Ollama — no key, free)[/]")
-        choice = input("Choice [1-8]: ").strip()
+        console.print("  [bold magenta]9.[/] [white]Custom OpenAI-compatible (your base URL + API key)[/]")
+        choice = input("Choice [1-9]: ").strip()
         config = load_config()
 
         def _save(provider_key: str, env_name: str, key: str):
@@ -136,6 +175,9 @@ def load_env():
         elif choice == "8":
             _save("ollama", "", "")
             console.print("[green]Local mode: ollama serve + ollama pull <model>[/green]")
+        elif choice == "9":
+            if add_custom_provider() and not ENV_PATH.exists():
+                ENV_PATH.write_text("")  # no env key needed — stop the wizard nagging
         elif choice == "2":
             key = input("Enter AMD_API_KEY: ").strip()
             _save("amd", "AMD_API_KEY", key)

@@ -898,6 +898,15 @@ def _compat_call(spec, messages, config, *, temperature, max_tokens, retries, on
 
     headers = {"Content-Type": "application/json"}
     if api_key:
+        # the key is ANY string (no format policing); HTTP headers are
+        # latin-1 — non-latin-1 keys fly percent-encoded rather than
+        # crashing the transport with UnicodeEncodeError
+        try:
+            api_key.encode("latin-1")
+        except UnicodeEncodeError:
+            from urllib.parse import quote
+
+            api_key = quote(api_key, safe="")
         headers["Authorization"] = f"Bearer {api_key}"
     payload = {
         "model": model,
