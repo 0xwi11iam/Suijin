@@ -140,16 +140,26 @@ class TestCatalogExploit:
         assert "CRITICAL" in out or "HIGH" in out or "MEDIUM" in out or "FAILED" in out
 
     def test_ai_claimed_cap(self):
-        """After MAX_CLAIMS AI_CLAIMED entries, further claims are refused."""
+        """After MAX_CLAIMS AI_CLAIMED entries, further claims are refused.
+        v3: a claim is action=worked_anyway citing a real output line."""
         for i in range(4):  # try to exceed the cap of 3
-            out = catalog_exploit(
+            catalog_exploit(  # first: the verifier runs and misses
                 engagement="test",
                 target=f"http://t.com/{i}",
                 vuln_class="sqli",
                 title=f"claim test {i}",
                 poc=[{"cmd": f"curl http://t.com/{i}", "wait": 0}],
                 marker="FLAG{unique_marker_x}",
-                claim=True,
+                route_fn=self._fake_route,
+            )
+            out = catalog_exploit(
+                engagement="test",
+                target=f"http://t.com/{i}",
+                vuln_class="sqli",
+                title=f"claim test {i}",
+                entry_id=f"EXP-00{i + 1}",
+                action="worked_anyway",
+                evidence_line="Some HTTP response from target",  # real output, no marker
                 route_fn=self._fake_route,
             )
             if i < 3:
@@ -166,7 +176,16 @@ class TestCatalogExploit:
             title="prior fail test",
             poc=[{"cmd": "curl http://t.com/api/y", "wait": 0}],
             marker="FLAG{unique_marker}",
-            claim=True,
+            route_fn=self._fake_route,
+        )
+        catalog_exploit(
+            engagement="first_eng",
+            target="http://t.com/api/y",
+            vuln_class="ssrf",
+            title="prior fail test",
+            entry_id="EXP-001",
+            action="worked_anyway",
+            evidence_line="Some HTTP response from target",
             route_fn=self._fake_route,
         )
         out = catalog_exploit(

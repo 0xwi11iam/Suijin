@@ -117,8 +117,12 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
 
     # H2: job-control tools must NEVER be auto-backgrounded — waiting on a
     # slow job is the point of job_wait; promoting the wait itself to a
-    # background job (the old behavior) made results uncollectable
-    if tool_name in ("job_wait", "job_status", "job_output", "job_list", "fireteam_status"):
+    # background job (the old behavior) made results uncollectable.
+    # catalog_exploit: the POC verifier TAKES OVER the loop by contract —
+    # the AI pauses until the yaml finishes (bounded by its 120s wall
+    # cap); backgrounding it would break the takeover and let the AI
+    # keep thinking mid-verification.
+    if tool_name in ("job_wait", "job_status", "job_output", "job_list", "fireteam_status", "catalog_exploit"):
         t0_sync = _time.monotonic()
         result = route_tool_fn(tool_name, tool_args, {})
         output, _ = _maybe_offload(tool_name, str(result))

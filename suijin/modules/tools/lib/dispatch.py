@@ -437,18 +437,26 @@ def _build_routes(config):
         "record_finding": lambda a: record_finding(
             a.get("target"), a.get("finding_type"), a.get("rule"), evidence=a.get("evidence", ""), config=config
         ),
-        # POC-backed exploit catalog — the blocking gate (runs the step-POC
-        # before the agent can continue; verdict: CONFIRMED/FAILED_*)
+        # POC-backed exploit catalog (v3) — the verifier TAKES OVER: it
+        # writes the folder (finding.md + exploit.yaml), runs the yaml
+        # commands sequentially, and only then hands the loop back.
+        # Verdict: CONFIRMED, or the FULL transcript + THREE options.
         "catalog_exploit": lambda a: catalog_exploit(
             a.get("engagement"),
             a.get("target"),
             a.get("vuln_class") or a.get("class"),
             a.get("title", ""),
+            description=a.get("description", ""),
+            commands=a.get("commands"),
+            expected_result=a.get("expected_result", ""),
             poc=a.get("poc"),
             marker=a.get("marker", ""),
             guards=a.get("guards", ""),
             severity=a.get("severity", ""),
             cvss=a.get("cvss"),
+            outcome=a.get("outcome", ""),
+            action=a.get("action", ""),
+            evidence_line=a.get("evidence_line", ""),
             abandon=bool(a.get("abandon")),
             claim=bool(a.get("claim")),
             entry_id=a.get("entry_id", ""),
@@ -786,9 +794,9 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
   ```json
   {"tool": "generate_report", "args": {"engagement": "target-name"}}
   ```
-- **catalog_exploit** — MANDATORY the moment you find something valuable. Register it CLASSED: `severity` (critical/high/medium/low/info) + `cvss` (0.0-10.0) — records display as `CRITICAL CVSS 8.9 : SQL injection in the search parameter`. Write the exploit as a POC step-script (a list of `{"cmd": ..., "wait": N}` commands), give the `marker` that proves success, and call. THE SYSTEM RUNS THE POC BEFORE YOU CONTINUE. Perfect (marker reproduced) -> CONFIRMED, continue. Not perfect -> you get every command's output and THREE choices: (1) EDIT — re-call with `entry_id` + a fixed poc; (2) ABANDON — `entry_id` + `abandon:true` (the combo is memory-poisoned); (3) CLAIM IT WORKED ANYWAY — `entry_id` + `claim:true` (recorded AI_CLAIMED, amber-flagged 'NOT terminal-verified' in every report). A finding without a cataloged POC is a rumor.
+- **catalog_exploit** — MANDATORY the moment you find something valuable. Call it with: `vuln_class`, `title`, `description` (one paragraph — what/where/impact), `severity`+`cvss`, `commands` (list of shell commands to run sequentially) and `expected_result` (the exact string the TARGET's output must contain to prove it). THE SYSTEM CREATES A FOLDER, writes finding.md + exploit.yaml, then the VERIFIER TAKES OVER: it runs every command sequentially and pauses you until it finishes. Match -> CONFIRMED, continue. No match -> you receive EVERY command and ALL its output back (copy-paste style) plus THREE options: (1) EDIT the YAML — re-call with `entry_id` + corrected `commands`/`expected_result`; (2) REWRITE — `entry_id` + `action:"rewrite"` (this exploit is abandoned; catalog a fresh one); (3) FALSE MISTAKE — it worked anyway, the result shows so: `entry_id` + `action:"worked_anyway"` + `evidence_line` (the EXACT output line that shows it — verified against the receipt; a fabricated line is rejected). Markers must be unique target-derived strings (>=8 chars, no generic '200/OK/root:'). A finding without a cataloged POC is a rumor.
   ```json
-  {"tool": "catalog_exploit", "args": {"engagement": "t", "target": "http://t", "vuln_class": "sqli", "title": "login bypass", "poc": [{"cmd": "curl -s -c /tmp/j http://t/login -d 'u=x&p=y'", "wait": 1}, {"cmd": "curl -s -b /tmp/j 'http://t/admin?id=1 OR 1=1'"}], "marker": "root:", "guards": "needs low-priv session first"}}
+  {"tool": "catalog_exploit", "args": {"engagement": "t", "target": "http://t", "vuln_class": "sqli", "title": "login bypass", "description": "The id parameter on /admin concatenates raw SQL; OR 1=1 returns the admin row.", "severity": "critical", "cvss": 8.9, "commands": ["curl -s -c /tmp/j http://t/login -d 'u=x&p=y'", "curl -s -b /tmp/j 'http://t/admin?id=1 OR 1=1'"], "expected_result": "administrator:$(openssl rand -hex 6)", "guards": "needs low-priv session first"}}
   ```
 
 ## Core Tools (args in the ALL AVAILABLE TOOLS registry below)
