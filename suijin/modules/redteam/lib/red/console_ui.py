@@ -664,11 +664,16 @@ class TypewriterStream:
 
     def _run(self) -> None:
         dt = 1.0 / self.TICK_HZ
+        _fail_logged = False
         while not self._stop.wait(dt):
             if self._playback_paused:
                 continue  # paused: nothing types, nothing commits
-            with contextlib.suppress(Exception):
+            try:
                 self.tick(dt)
+            except Exception as e:  # noqa: BLE001 — a frozen typewriter is a silent killer
+                if not _fail_logged:
+                    _fail_logged = True
+                    _crash_log("typewriter", e)
 
     def pause_playback(self) -> None:
         """INSTANT pause: the visible thought line vanishes now (pending
@@ -1073,10 +1078,16 @@ class EngagementUI:
     _LLM_WAIT_REPORT_S = 15  # every 15s of silent thinking, tell the operator
     _last_report_s: int = -1  # dedup — one line per interval, never twice
 
+    _tick_fail_logged = False  # one debug line ever — a frozen strip stays diagnosable
+
     def _heartbeat(self) -> None:
         while not self._refresh_stop.wait(1.0):
-            with contextlib.suppress(Exception):
+            try:
                 UI_STATE["cursor_on"] = not UI_STATE.get("cursor_on", True)  # the blink
+            except Exception as e:  # noqa: BLE001 — the strip must never die
+                if not EngagementUI._tick_fail_logged:
+                    EngagementUI._tick_fail_logged = True
+                    _crash_log("heartbeat", e)
             # LLM-wait progress: the spinner says nothing about TIME — a
             # dim transcript line every 15s proves the program is alive.
             # SUPPRESSED during pause (the PAUSED strip IS the state).

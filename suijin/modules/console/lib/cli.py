@@ -1388,9 +1388,9 @@ def run_providers(args) -> int:
     if getattr(args, "all", False):
         chain = ["deepseek", "zai", "gemini", "anthropic", "amd", "huggingface"]
         try:
-            from suijin.modules.providers.lib.registry import CLOUD_KEYS, LOCAL_KEYS
+            from suijin.modules.providers.lib.registry import CHINA_KEYS, CLOUD_KEYS, LOCAL_KEYS, WESTERN_KEYS
 
-            chain += CLOUD_KEYS + LOCAL_KEYS
+            chain += CLOUD_KEYS + CHINA_KEYS + WESTERN_KEYS + LOCAL_KEYS
         except Exception:  # noqa: BLE001
             pass
         chain += [f"custom:{e['name']}" for e in (cfg.get("custom_providers") or []) if str(e.get("name", "")).strip()]
@@ -1940,6 +1940,11 @@ def run_scope(args) -> int:
         print(f"error: scope TUI needs a real terminal — {e}")
         print("non-interactive: edit suijin/policy.json directly, or `suijin policy show`")
         return 1
+    except Exception as e:  # noqa: BLE001 — any scope-TUI crash: terminal is
+        # restored by wrapper; ONE friendly line instead of a traceback
+        print(f"error: scope TUI failed — {type(e).__name__}: {e}")
+        print("non-interactive: edit suijin/policy.json directly, or `suijin policy show`")
+        return 1
 
 
 def run_approvals(args) -> int:
@@ -2428,7 +2433,29 @@ def main(argv=None):
         sys.exit(2)
 
     _audit_cli_call(args)
-    sys.exit(args.func(args))
+    # ONE guarded dispatch for all ~53 verbs — an internal raise is one
+    # red line + exit 1, never a traceback wall (corrupt files, races,
+    # bad args all land here now)
+    try:
+        sys.exit(args.func(args))
+    except SystemExit:
+        raise
+    except KeyboardInterrupt:
+        print("\ncancelled")
+        sys.exit(130)
+    except Exception as e:  # noqa: BLE001 — the CLI must die gracefully
+        try:
+            from suijin.modules.platform.lib.error_handler import classify_and_handle
+
+            info = classify_and_handle(e, context=f"command '{getattr(args, 'command', '?')}'")
+            print(f"error: {info['error_type']}: {info['message']}", file=sys.stderr)
+            print(f"  {info['guidance']}", file=sys.stderr)
+            import logging
+
+            logging.getLogger("suijin").error(f"cli '{getattr(args, 'command', '?')}' failed: {e}\n{info['traceback']}")
+        except Exception:  # noqa: BLE001 — even the handler must not traceback
+            print(f"error: {type(e).__name__}: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 def _audit_cli_call(args):
