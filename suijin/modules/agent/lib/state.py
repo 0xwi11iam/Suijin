@@ -278,8 +278,6 @@ def new_agent_state(
         # Chain memory
         "chain_findings_memory": [],
         "chain_failures_memory": [],
-        "chain_decisions_memory": [],
-        "chain_waves_memory": [],
         # Productivity tracking
         "tested_axes": {},
         "_iterations_since_state_grew": 0,
@@ -296,7 +294,6 @@ def new_agent_state(
         "_just_transitioned_to": None,
         "completion_reason": None,
         # Q&A
-        "qa_history": [],
         "pending_questions": [],
         # Messages
         "messages": [],
@@ -374,18 +371,13 @@ def format_todo_list(todo_list: list) -> str:
     return "\n".join(lines) if lines else "No tasks tracked."
 
 
-def format_chain_context(
-    chain_findings: list,
-    chain_failures: list,
-    chain_decisions: list,
-    execution_trace: list,
-    chain_waves: list | None = None,
-) -> str:
+def format_chain_context(chain_findings: list, chain_failures: list, execution_trace: list) -> str:
     """Build a compact chain-context summary for the think prompt.
 
     This is the primary "memory" the LLM sees each turn — recent findings,
-    failures (with error_class), decisions, and the last few execution steps
-    with productivity verdicts.
+    failures (with error_class), and the last few execution steps with
+    productivity verdicts. (chain_decisions/chain_waves were accepted and
+    never rendered — dead params removed.)
     """
     parts = []
 
@@ -426,19 +418,6 @@ def format_chain_context(
             )
 
     return "\n\n".join(parts) if parts else "No chain context yet."
-
-
-def format_qa_history(qa_history: list) -> str:
-    """Format Q&A history for the prompt."""
-    if not qa_history:
-        return ""
-    lines = ["## Previous Q&A"]
-    for entry in qa_history[-5:]:
-        if isinstance(entry, dict):
-            q = entry.get("question", entry.get("question_text", "?"))
-            a = entry.get("answer", "(unanswered)")
-            lines.append(f"- Q: {_truncate(str(q), 150)}\n  A: {_truncate(str(a), 150)}")
-    return "\n".join(lines)
 
 
 def format_objective_history(objective_history: list) -> str:

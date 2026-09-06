@@ -124,6 +124,24 @@ def run_doctor() -> int:
     except Exception as e:
         rows.append(_warn("provider failover", str(e)[:60]))
 
+    # Context window resolution (the model_meta chain: config override →
+    # models.dev fetch → 1M fallback) — the budgets scale from this
+    try:
+        from suijin.modules.providers.lib.model_meta import window_status
+
+        _cfg = {}
+        with contextlib.suppress(Exception):
+            import json as _json
+
+            with open(os.path.join(_PKG_DIR, "config.json")) as _f:
+                _cfg = _json.load(_f)
+        _prov = str(_cfg.get("provider") or "")
+        _mdl = str(_cfg.get(f"{_prov}_model") or "")
+        ws = window_status(_prov, _mdl, _cfg)
+        rows.append(_ok("context window", f"{ws['window_tokens']:,} tokens ({ws['source']})"))
+    except Exception as e:
+        rows.append(_warn("context window", str(e)[:60]))
+
     # Required binaries
     for b in REQUIRED_BINARIES:
         p = shutil.which(b)

@@ -96,6 +96,9 @@ class TestPositiveMemory:
         assert target_key("plain words only") == "plain words only"[:60]
 
     def test_what_worked_reads_confirmed(self, tmp_path, monkeypatch):
+        """The REAL catalog shape: entries keyed EXP-### (a DICT, as
+        exploit_catalog writes it) — the old fixture wrote a list and
+        masked the dict/list reader bug that killed what_worked in prod."""
         from suijin.modules.agent.lib import attack_memory as am
 
         eng = tmp_path / "exploits" / "run1"
@@ -103,29 +106,29 @@ class TestPositiveMemory:
         (eng / "catalog.json").write_text(
             json.dumps(
                 {
-                    "entries": [
-                        {
+                    "entries": {
+                        "EXP-001": {
                             "id": "EXP-001",
                             "status": "CONFIRMED",
                             "class": "sqli",
                             "target": "https://citadel.local",
                             "title": "login bypass",
                         },
-                        {
+                        "EXP-002": {
                             "id": "EXP-002",
                             "status": "FAILED_REPRO",
                             "class": "xss",
                             "target": "https://citadel.local",
                             "title": "stored",
                         },
-                        {
+                        "EXP-003": {
                             "id": "EXP-003",
                             "status": "CONFIRMED",
                             "class": "ssti",
                             "target": "https://other.example",
                             "title": "admin tpl",
                         },
-                    ]
+                    }
                 }
             )
         )
@@ -187,3 +190,64 @@ class TestPayloadMutate:
 
         out = route_tool("payload_mutate", {"payload": "' OR 1=1--"}, {})
         assert "variants" in str(out)
+
+
+class TestDeadPathsRevived:
+    """Wave 0 (session memory): the what_worked dict-fix, the supervisor/
+    oracle LLM generate-fn contract, findings written on CONFIRMED, and
+    the cross-engagement recall reaching think context."""
+
+    def test_what_worked_tolerates_legacy_list_shape(self, tmp_path, monkeypatch):
+        """Older catalogs (and the old fixture) wrote entries as a LIST —
+        the reader now tolerates both shapes."""
+        from suijin.modules.agent.lib import attack_memory as am
+
+        eng = tmp_path / "exploits" / "legacy"
+        eng.mkdir(parents=True)
+        (eng / "catalog.json").write_text(
+            json.dumps({"entries": [{"id": "EXP-001", "status": "CONFIRMED", "class": "rce", "target": "http://t", "title": "x"}]})
+        )
+        monkeypatch.setattr(am, "_catalog_root", lambda: tmp_path / "exploits")
+        lines = am.what_worked("http://t")
+        assert any("rce" in ln for ln in lines)
+
+    def test_supervisor_llm_call_matches_generate_contract(self):
+        """The every-15th-iter deep analysis was DEAD: prompt=/system=
+        kwargs mismatched the (messages, max_tokens=…) seam and the
+        TypeError was swallowed. It must now go through as messages."""
+        import asyncio
+
+        from suijin.modules.agent.lib.supervisor import analyze_trace_with_llm
+
+        calls = []
+
+        async def fake_generate(messages, config=None, on_delta=None, **kw):
+            calls.append((messages, kw))
+            return "focus on the upload endpoint"
+
+        trace = [{"tool_name": "http_request", "thought": "probing", "success": True}]
+        out = asyncio.run(analyze_trace_with_llm(trace, {"current_phase": "recon"}, fake_generate))
+        assert out == "focus on the upload endpoint"
+        assert calls and isinstance(calls[0][0], list) and calls[0][0][0]["role"] == "system"
+        assert calls[0][1].get("max_tokens") == 150
+
+    def test_supervisor_llm_dead_contract_still_never_raises(self):
+        import asyncio
+
+        from suijin.modules.agent.lib.supervisor import analyze_trace_with_llm
+
+        async def broken_generate(messages, **kw):
+            raise RuntimeError("provider down")
+
+        assert asyncio.run(analyze_trace_with_llm([{"tool_name": "x"}], {}, broken_generate)) is None
+
+    def test_oracle_llm_hypotheses_now_reach_the_model(self):
+        import asyncio
+
+        from suijin.modules.redteam.lib.intel.oracle import generate_hypotheses_async
+
+        async def fake_generate(messages, config=None, on_delta=None, **kw):
+            return '[{"id": "H1", "hypothesis": "verbose error oracle", "validation_payload": "?id=1 AND SLEEP(5)"}]'
+
+        hyps = asyncio.run(generate_hypotheses_async("MySQL syntax error near", {}, fake_generate))
+        assert hyps and hyps[0]["id"] == "H1"

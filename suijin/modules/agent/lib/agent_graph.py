@@ -206,6 +206,14 @@ class SuijinAgentGraph:
                         prior = what_worked(state.get("_objective") or self.run_config.get("_objective") or "")
                         if prior:
                             result["_prior_confirmed"] = prior
+                        # cross-engagement operational memory: prior runs against
+                        # this target (computed at boot, discarded for 361 sessions)
+                        from suijin.modules.agent.lib import memory as _mem
+                        from suijin.modules.agent.lib.attack_memory import target_key as _tk
+
+                        _rec = _mem.recall(_tk(state.get("_objective") or self.run_config.get("_objective") or ""), limit=3)
+                        if _rec and "no memory of" not in _rec:
+                            result["_target_recall"] = _rec
                         with contextlib.suppress(Exception):
                             from suijin.modules.platform.lib.workspace import WORKSPACE_DIR as _WS
 

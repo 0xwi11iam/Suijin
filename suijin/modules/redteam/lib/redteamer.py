@@ -326,8 +326,20 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
     # .sje resume: seed the fresh thread with the saved engagement's state
     # (messages, traces, chain memory) — the same update_state seam
     # operator guidance uses. The agent CONTINUES, it does not restart.
+    _resume_ledger = None
+    _resume_scratchpad = None
     if resume_state:
         try:
+            # engagement memory travels IN the state but is NOT graph state:
+            # pop it before seeding, write it into the NEW engagement dir
+            _resume_ledger = resume_state.pop("_librarian_ledger", None)
+            _resume_scratchpad = resume_state.pop("_scratchpad_text", None)
+            from suijin.modules.platform.lib.workspace import engagement_dir as _edir2
+
+            if _resume_ledger is not None:
+                (_edir2() / "librarian.json").write_text(json.dumps(_resume_ledger), encoding="utf-8")
+            if _resume_scratchpad:
+                (_edir2() / "scratchpad.md").write_text(str(_resume_scratchpad), encoding="utf-8")
             agent._graph.update_state(langgraph_config, dict(resume_state))
             n_msgs = len(resume_state.get("messages") or [])
             console.print(
@@ -386,6 +398,21 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
     from suijin.modules.tools.lib import exploit_catalog as _ec
 
     _ec.set_poc_sink(ui.poc_event)
+    # THE LIBRARIAN — engagement memory (operator contract: cool things
+    # found early must surface the moment they matter). Daemon thread,
+    # pattern-first extraction + rare LLM digest; ledger persists in the
+    # engagement dir; recall rides the think context + memory_recall tool.
+    from suijin.modules.agent.lib import librarian as _lb
+    from suijin.modules.platform.lib.workspace import engagement_dir as _engdir
+
+    _UI_STATE["librarian"] = 0
+    _lb.set_ui_publish(lambda n: _UI_STATE.__setitem__("librarian", int(n)))
+    _lb.start(
+        generate_fn=_generate_with_stream,
+        engagement_dir=_engdir(),
+        interval=int((config or {}).get("librarian_interval") or 10),
+        target=str(objective),
+    )
 
     # The input box: on a TTY the keystroke reader owns stdin (live typing,
     # Tab mode cycling, ESC ESC pause) and the RunBox's line reader stays
@@ -1096,9 +1123,11 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
         # produced ZERO memory entries because this was never called
         try:
             from suijin.modules.agent.lib import memory as _mem
+            from suijin.modules.agent.lib.attack_memory import target_key as _tk2
 
+            _tk0 = _tk2(str(objective))
             _mem.record_engagement(
-                _tk(str(objective)),
+                _tk0,
                 str(objective)[:200],
                 {
                     "iterations": final_state.get("current_iteration", 0),
@@ -1106,6 +1135,21 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                     "cost_usd": round(float(providers.USAGE.get("est_cost_usd", 0)), 4),
                 },
             )
+            # fingerprint + delta (B16/B17 — the writers never existed): the
+            # final target board becomes the fingerprint; a CHANGE is noted
+            # so the next engagement's recall surfaces it
+            _board = final_state.get("target_info") or {}
+            _fp = {
+                "ports": sorted(str(p) for p in (_board.get("open_ports") or []))[:40],
+                "tech": sorted(str(t) for t in (_board.get("technologies") or []))[:40],
+                "endpoints": len(_board.get("endpoints") or []),
+                "subdomains": len(_board.get("subdomains") or []),
+            }
+            if any(_fp.values()):
+                _d = _mem.delta(_tk0, _fp)
+                if "TARGET DELTA" in _d:
+                    _mem.note(_tk0, _d[:300])
+                _mem.record_fingerprint(_tk0, _fp)
         except Exception:  # noqa: BLE001 — memory is best-effort
             pass
 
@@ -1151,6 +1195,11 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
     finally:
         # TERMINATION BANNER — one classifier, every ending, unskippable.
         # The field reports: declines and crashes read as silent failures.
+        with contextlib.suppress(Exception):
+            from suijin.modules.agent.lib import librarian as _lb
+
+            _lb.stop()  # flush the ledger; the digest state persists for resume
+            _lb.set_ui_publish(None)  # UI is going down — never call a dead sink
         with contextlib.suppress(Exception):
             from suijin.modules.tools.lib import exploit_catalog as _ec
 

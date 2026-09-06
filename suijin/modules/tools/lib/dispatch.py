@@ -162,6 +162,15 @@ from suijin.modules.tools.lib.tester_fleet import select_lanes as _select_lanes
 from suijin.modules.tools.lib.web_session import web_session as _web_session
 
 
+def _librarian_recall(query: str = "", limit: int = 8) -> str:
+    """Route shim — the ledger lives in the agent layer (engagement-owned).
+    Function-local import: the kernel boundary law forbids module-level
+    tools→agent imports."""
+    from suijin.modules.agent.lib import librarian as _lb
+
+    return _lb.recall(query=query, limit=limit)
+
+
 def _kb_read_tool(path: str) -> str:
     from suijin.modules.knowledge.lib.kb import read_doc
 
@@ -380,6 +389,7 @@ def _build_routes(config):
         ),
         "list_credentials": lambda a: _list_credentials(),
         "web_session": lambda a: _web_session(action=a.get("action", "summary")),
+        "memory_recall": lambda a: _librarian_recall(query=a.get("query", ""), limit=int(a.get("limit", 8) or 8)),
         "coverage_check": lambda a: _coverage_check(
             action=a.get("action", "summary"), asset=a.get("asset", ""), vuln_class=a.get("vuln_class", ""),
             status=a.get("status", ""), evidence=a.get("evidence", ""), request_sent=a.get("request_sent", ""),
@@ -813,6 +823,7 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
 - **http_replay** — THE governed send path for testing: payloads travel as DATA. Replay a stored request_id or inline spec through 15 mutation ops (add-query enables HPP, body-set-field dot-paths, set-method/target...) + 12 composable codecs (tab = WAF-evasion %09 spaces, url-double, base64, hex, html-dec, unicode...). `compare:{mutations,credential}` returns baseline + exploit + structured DIFF in ONE call — the 3-gate protocol (no measurable difference = NOT a finding). `credential:'name'` swaps auth wholesale (the IDOR/vertical-authz primitive). `sweep:{op,field,values}` tests ≤50 values paced. Every result carries a curl equivalent + DBMS error signatures. http_replay_raw sends VERBATIM bytes (smuggling/desync).
 - **register_credential** / **list_credentials** — Named credential sets (auth headers + cookies) captured from logins you hold; the swap substrate for access-control replay.
 - **web_session** — The cross-credential session model, built AUTOMATICALLY from every governed send: the access-control worklist (endpoint shapes reached by 2+ credentials, ID fields differing per credential — the IDOR substrate with the exact replay to fire) + hidden params (request fields the UI never exposed — mass-assignment targets). Role cycling: register credentials, replay the same surfaces as each, then action=summary.
+- **memory_recall** — The engagement memory (the librarian): every credential, leak, foothold, confirmed exploit, admin/upload surface and error oracle the run has observed, deduped — plus the latest condensed digest. Relevant entries surface automatically when you touch a matching target; call this when you need the FULL ledger or a filtered slice (`query` matches kind/value/where, `limit` up to 30).
 - **coverage_check** — The coverage ledger: mark (asset × vuln-class) cells tested_vulnerable / tested_not_vulnerable (EVIDENCE REQUIRED — a note without a sent request is a FALSE record that hides real vulnerabilities) / not_applicable; record wide notes (origin-wide facts, once — never re-derive JWT crypto per endpoint); action=untested lists your priority gaps. The completion gate READS this — closure is refused while cells remain.
 - **surface_expand** — Sibling-endpoint enumeration: given a pattern URL ({name} placeholder or a known route's parent), probes the candidate siblings (portal nouns + derived forms .json/.bak/_x) through the governed engine; returns what EXISTS. The missed-pivot fix: a router accepting arbitrary names is an enumeration invitation.
 - **inject_probe** — The evidence engine, NEVER an oracle: fires curated batteries (xss tag-survival + 20 weaponized payloads with sink-context classification; ssti 9-syntax product-discriminators — product-present + literal-absent = evaluated; cmd closed id/ver set; sqli DBMS error fingerprints + boolean pairs against a MEASURED noise floor; lfi file-signatures × 11 traversal shapes verbatim) and returns FACTS — surviving tags, reflection context, block signals ('WAF-blocked is NOT safe — escalate'), not_tested receipts. You craft the real exploit from the facts; confirm via catalog_exploit.
