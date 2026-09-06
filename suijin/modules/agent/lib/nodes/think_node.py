@@ -16,7 +16,6 @@ from suijin.modules.agent.lib.state import (
     ExecutionStep,
     PhaseHistoryEntry,
     format_chain_context,
-    format_qa_history,
     format_todo_list,
 )
 
@@ -206,26 +205,38 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         system_prompt = build_agent_system_prompt(state)
         user_turn = engagement_order(state.get("original_objective", ""))
 
-    # Add state context (chain, todos, QA) after the skill+tools prompt
+    # Add state context (chain, todos) after the skill+tools prompt
     chain_context = format_chain_context(
         state.get("chain_findings_memory", []),
         state.get("chain_failures_memory", []),
-        state.get("chain_decisions_memory", []),
         state.get("execution_trace", []),
-        state.get("chain_waves_memory", []),
     )
     todo_context = format_todo_list(state.get("todo_list", []))
-    qa_context = format_qa_history(state.get("qa_history", []))
 
     # Feed the agent its own recent output so it sees all tool results
     # Context compaction (A7): compress old history BEFORE it is embedded
     # into the prompt (recent message slices + summaries below read the
-    # compacted list). Under budget this is a no-op.
+    # compacted list). The trigger scales with the model's context window
+    # (models.dev / config override / 1M fallback — see model_meta).
+    _win_tokens = 1_000_000
+    try:
+        from suijin.modules.providers.lib.model_meta import resolve_context_window
+
+        _cfg0 = config or {}
+        _prov0 = str(_cfg0.get("provider") or "")
+        _mdl0 = str(_cfg0.get(f"{_prov0}_model") or "") if _prov0 else ""
+        _win_tokens = resolve_context_window(_prov0, _mdl0, _cfg0)
+        # trigger at 25% of the window measured in CHARS: window_chars =
+        # 4×tokens, 25% → win_tokens chars (128k-tok model → 128k-char
+        # trigger ≈ the old fixed 120k; 1M fallback → capped 480k)
+        _win_trigger = max(40_000, min(480_000, _win_tokens))
+    except Exception:  # noqa: BLE001 — window metadata never breaks thinking
+        _win_trigger = 120_000
     try:
         from suijin.modules.agent.lib.compact import compact as _compact_messages
 
         _msgs = state.get("messages") or []
-        _compacted = _compact_messages(_msgs)
+        _compacted = _compact_messages(_msgs, trigger_chars=_win_trigger)
         if _compacted is not _msgs:
             state["messages"] = _compacted
     except Exception:  # noqa: BLE001 — compaction must never break thinking
@@ -235,8 +246,11 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     recent_msgs = ""
     # Token-budgeted embed: the newest messages verbatim, older ones
     # truncated — the compaction digest covers the deep past. Unbounded
-    # embeds (15 x 5,000 chars) drowned the agent's attention.
-    embed_budget = 24_000  # chars (~6k tokens) for the recent window
+    # embeds (15 x 5,000 chars) drowned the agent's attention. The
+    # budget SCALES with the window: ≤24k chars for big-context models
+    # (cost discipline — bigger windows don't buy bigger bills), shrunk
+    # for small-context models so the prompt actually fits.
+    embed_budget = max(8_000, min(24_000, (_win_tokens * 4) // 8))
     for m in reversed(raw_msgs[-15:]):
         role = m.get("role", "?")
         content = str(m.get("content", ""))
@@ -282,6 +296,13 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         prior = state.get("_prior_confirmed") or []
         if prior:
             _governor_lines += "## " + prior[0] + "\n" + "\n".join(prior[1:6]) + "\n"
+        recall = state.get("_target_recall")
+        if recall:
+            _governor_lines += (
+                "## TARGET MEMORY (prior engagements against this target)\n"
+                + "\n".join(f"- {ln.strip()}" for ln in str(recall).splitlines()[:6] if ln.strip())
+                + "\n"
+            )
         with contextlib.suppress(Exception):
             from suijin.modules.tools.lib.web_session import cross_credential_shortlist
 
@@ -296,6 +317,19 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         gym = state.get("_gym_notes") or []
         if gym:
             _governor_lines += "## GYM NOTES (bench failures to drill)\n" + "\n".join(gym) + "\n"
+        # THE LIBRARIAN — engagement memory at the top of its mind: ledger
+        # entries matching the CURRENT step's target/URL (cool things found
+        # at hour 0 surface the moment they matter)
+        with contextlib.suppress(Exception):
+            from suijin.modules.agent.lib import librarian as _lb
+
+            _rel = _lb.relevant_for_step(state, (state.get("_current_step") or {}).get("tool_args") or {})
+            if _rel:
+                _governor_lines += (
+                    "## LIBRARIAN — recalled engagement memory (relevant NOW)\n"
+                    + "\n".join(f"- {r}" for r in _rel)
+                    + "\n→ memory_recall(query=…) for the full ledger\n"
+                )
 
     context_block = f"""
 ## CURRENT STATE
@@ -317,9 +351,6 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
 
 ## CHAIN CONTEXT (recent findings, failures)
 {chain_context or "(no chain context yet)"}
-
-## Q&A HISTORY
-{qa_context or "(none)"}
 
 ## RULES
 - NEVER repeat an IDENTICAL failed call (same tool, same args). A failed payload has taught you one context — vary the class/encoding/position and fire again on a surface that's still unproven.
@@ -407,15 +438,32 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     except Exception:  # noqa: BLE001 — same rule
         pass
 
-    # Prompt profile (D31): snapshot token breakdown before the call
+    # Prompt profile (D31): snapshot the REAL wire payload (system +
+    # context + user turns — the old profile measured the state history
+    # and understated every turn by the full static prompt) vs the
+    # model's context window.
     try:
         from suijin.modules.agent.lib.profiler import record as _record_profile
 
-        _record_profile(state)
+        _record_profile(state, messages)
     except Exception:  # noqa: BLE001 — profiling must never break thinking
         pass
 
     # ── LLM Call with retry ──────────────────────────────────────────
+    # Output headroom: max_tokens must leave room for the input inside
+    # the context window (an 8k output cap on a small-window model made
+    # every call 400 — the window resolver feeds this guard).
+    _call_cfg = config or {}
+    try:
+        _est_in_tok = sum(len(str(m.get("content", ""))) for m in messages) // 4
+        _mt = int(_call_cfg.get("max_tokens_per_request") or 8000)
+        _mt_eff = max(1024, min(_mt, _win_tokens - _est_in_tok - 4096))
+        if _mt_eff < _mt:
+            _call_cfg = dict(_call_cfg)
+            _call_cfg["max_tokens_per_request"] = _mt_eff
+    except Exception:  # noqa: BLE001
+        pass
+
     max_parse_retries = 3
     decision = None
     parse_error = None
@@ -423,7 +471,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
 
     for attempt in range(max_parse_retries):
         try:
-            raw_response = await generate_fn(messages, config or {})
+            raw_response = await generate_fn(messages, _call_cfg)
         except Exception as e:
             logger.error(f"LLM call failed (attempt {attempt + 1}): {e}")
             if attempt < max_parse_retries - 1:

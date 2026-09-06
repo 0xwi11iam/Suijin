@@ -57,7 +57,15 @@ def what_worked(target: str, limit: int = 8) -> list[str]:
                 index = json.loads(idx.read_text())
             except Exception:  # noqa: BLE001 — corrupt catalogs are skipped
                 continue
-            for e in index.get("entries") or []:
+            # entries is a DICT keyed EXP-### (exploit_catalog writer) — the
+            # old list-style iteration yielded string keys and the reader
+            # died silently on every real catalog (the masked what_worked
+            # bug). Legacy list-shaped catalogs are tolerated too.
+            _entries = index.get("entries") or []
+            _iter = _entries.values() if isinstance(_entries, dict) else _entries
+            for e in _iter:
+                if not isinstance(e, dict):
+                    continue
                 if str(e.get("status", "")).upper() != "CONFIRMED":
                     continue
                 cls = str(e.get("class") or e.get("vuln_class") or "?")

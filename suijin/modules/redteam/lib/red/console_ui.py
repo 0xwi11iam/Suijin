@@ -74,6 +74,7 @@ UI_STATE = {
     "last_reasoning": "",
     "last_result_success": True,
     "poc_running": False,  # catalog_exploit verifier has taken over the loop
+    "librarian": 0,  # engagement-memory observations (the librarian thread)
 }
 
 
@@ -982,6 +983,8 @@ class EngagementUI:
         if ft_live:
             label = f"Fireteam {ft_live}/{ft_total} live" if ft_total != ft_live else f"Fireteam {ft_live} live"
             ft_seg = [(" | ", "dim"), (label, "bold magenta")]
+        lb_n = int(UI_STATE.get("librarian") or 0)
+        lb_seg = [(" | ", "dim"), (f"LIB {lb_n}", f"bold {GOLD}")] if lb_n else []
         right = Text.assemble(
             (f"{_fmt_tok(tok)} tok", "cyan"),
             (" | ", "dim"),
@@ -989,6 +992,7 @@ class EngagementUI:
             *([(" | ", "dim"), (f"FLAG {len(UI_STATE['flags'])}", f"bold {GOLD}")] if UI_STATE["flags"] else []),
             *([(" | ", "dim"), (f"CRED {len(UI_STATE['creds'])}", "bold green")] if UI_STATE["creds"] else []),
             *(ft_seg or []),
+            *lb_seg,
         )
         t = Table.grid(expand=True, padding=(0, 1))
         t.add_row(left, Text(), right)
