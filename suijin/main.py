@@ -2,6 +2,7 @@ import contextlib
 import os
 import subprocess
 import sys
+import time
 import warnings
 
 # Make sure the parent dir is on sys.path BEFORE any `from suijin import …`
@@ -21,7 +22,7 @@ warnings.filterwarnings("ignore", message=".*allowed_objects.*")  # any category
 from rich.console import Console
 from rich.panel import Panel
 
-from suijin.modules.console.lib import tui_settings
+from suijin.modules.console.lib import settings_tui
 from suijin.modules.redteam.lib.redteamer import main as redteamer_main
 
 console = Console()
@@ -167,11 +168,33 @@ def main():
 
                 blueteam_main()
             elif c == "3":
-                tui_settings.main()
+                settings_tui.main()
             elif c == "4":
                 operator_menu()
             else:
                 sys.exit(0)
+        except (KeyboardInterrupt, EOFError):
+            sys.exit(0)
+        except Exception as e:  # noqa: BLE001 — the selector is the primary
+            # entrypoint: any mode crash gets ONE red panel, never a
+            # traceback wall (Ctrl+D covered; corrupt state covered)
+            console.print(
+                Panel.fit(
+                    f"[bold red]mode failed[/bold red] {type(e).__name__}: {e}\n[dim]details: outputs/logs/[/dim]",
+                    border_style="red",
+                )
+            )
+            try:
+                from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+                d = WORKSPACE_DIR / "outputs" / "logs"
+                d.mkdir(parents=True, exist_ok=True)
+                with (d / "selector_crash.log").open("a") as f:
+                    import traceback as _tb
+
+                    f.write(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()) + f" {e!r}\n" + _tb.format_exc() + "\n")
+            except Exception:  # noqa: BLE001
+                pass
         except KeyboardInterrupt:
             sys.exit(0)
 
