@@ -94,7 +94,7 @@ class ModuleManager(App):
                 f"permissions: {perms}\n"
                 f"source: {info['source']}"
             )
-        except mgmt.InstallError as e:
+        except (mgmt.InstallError, OSError) as e:  # OSError: module dirs/permissions — no framework crash screen
             self._show(str(e))
 
     def action_toggle(self) -> None:
@@ -132,7 +132,7 @@ class ModuleManager(App):
             try:
                 self._show(mgmt.install(path))
                 self.refresh_table()
-            except mgmt.InstallError as e:
+            except (mgmt.InstallError, OSError) as e:  # OSError: module dirs/permissions — no framework crash screen
                 self._show(f"install failed: {e}")
 
     def action_uninstall(self) -> None:
@@ -143,7 +143,7 @@ class ModuleManager(App):
             if mgmt.uninstall(mid):
                 self._show(f"{mid}: uninstalled")
                 self.refresh_table()
-        except mgmt.InstallError as e:
+        except (mgmt.InstallError, OSError) as e:  # OSError: module dirs/permissions — no framework crash screen
             self._show(f"uninstall refused: {e}")
 
     def action_perms(self) -> None:

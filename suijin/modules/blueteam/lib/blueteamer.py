@@ -187,17 +187,24 @@ async def _run_async():
             # dev servers and common tooling; 41732 is unassigned and nobody
             # scans there by default
             proxy_port = _find_free_port(start=41732)
-            proxy_server = start_proxy(
-                listen_port=proxy_port,
-                target_port=hill_app_port,
-                target_host="127.0.0.1",
-                log_path=_const("BLUE_TRAFFIC_LOG"),
-            )
-            console.print(
-                f"[green]The Hill ready — attack it at :{proxy_port} (app hidden on :{hill_app_port})[/green]"
-            )
-            console.print(
-                "[dim]Your arsenal: blue_block/blue_honeypot/blue_tarpit/… apply at the proxy instantly[/dim]"
+            try:
+                proxy_server = start_proxy(
+                    listen_port=proxy_port,
+                    target_port=hill_app_port,
+                    target_host="127.0.0.1",
+                    log_path=_const("BLUE_TRAFFIC_LOG"),
+                )
+            except Exception as e:  # noqa: BLE001 — a bind failure here used to
+                # traceback through blueteam_main into the mode selector
+                console.print(f"[red]hill proxy failed to bind :{proxy_port} — {type(e).__name__}: {e}[/red]")
+                console.print("[dim]the app still runs on its hidden port; defenses apply next session[/dim]")
+                proxy_server = None
+            if proxy_server is not None:
+                console.print(
+                    f"[green]The Hill ready — attack it at :{proxy_port} (app hidden on :{hill_app_port})[/green]"
+                )
+                console.print(
+                    "[dim]Your arsenal: blue_block/blue_honeypot/blue_tarpit/… apply at the proxy instantly[/dim]"
             )
             app_port = hill_app_port  # sessions/reporting reference the app port
             traffic_log = str(_const("BLUE_TRAFFIC_LOG"))  # the proxy logs here

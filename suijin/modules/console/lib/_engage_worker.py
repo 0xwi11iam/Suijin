@@ -25,7 +25,22 @@ def main() -> int:
     ap.add_argument("--config", default="{}")
     args = ap.parse_args()
 
-    cfg = json.loads(args.config or "{}")
+    try:
+        cfg = json.loads(args.config or "{}")
+        if not isinstance(cfg, dict):
+            raise ValueError("config must be a JSON object")
+    except Exception as e:  # noqa: BLE001 — stderr is DEVNULL'd: write the
+        # crash into the workspace so /events and the operator can see WHY
+        # the worker died (the old silent-death-behind-DEVNULL)
+        try:
+            from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+            d = WORKSPACE_DIR / "outputs" / "logs"
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "engage_worker_crash.log").open("a").write(f"bad --config payload: {type(e).__name__}: {e}\n")
+        except Exception:  # noqa: BLE001
+            pass
+        return 2
 
     from suijin.modules.platform.lib.runtime import init_runtime
 

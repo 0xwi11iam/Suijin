@@ -468,6 +468,11 @@ def main():
             msg = json.loads(line)
         except json.JSONDecodeError:
             continue
+        if not isinstance(msg, dict):  # a valid-JSON list/str/int killed the whole loop once
+            response = {"jsonrpc": "2.0", "error": {"code": -32600, "message": "request must be an object"}}
+            sys.stdout.write(json.dumps(response) + "\n")
+            sys.stdout.flush()
+            continue
         response = handle_message(msg)
         if response is not None:
             sys.stdout.write(json.dumps(response) + "\n")
