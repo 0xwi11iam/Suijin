@@ -30,7 +30,9 @@ def _registry_provider_choices():
     except Exception:  # noqa: BLE001 — Settings must open even headless
         pass
     try:
-        cfg = json.loads(Path(CONFIG_PATH).read_text()) if os.path.exists(CONFIG_PATH) else {}
+        # is_file, not exists — a compose bind-mount can leave config.json
+        # as a DIRECTORY when the host file was absent (the crash-on-open bug)
+        cfg = json.loads(Path(CONFIG_PATH).read_text()) if os.path.isfile(CONFIG_PATH) else {}
         for entry in cfg.get("custom_providers") or []:
             name = str(entry.get("name", "")).strip()
             if name:

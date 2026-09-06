@@ -50,30 +50,60 @@ def active_model(config: dict | None) -> str:
 CONFIG_PATH = BASE_DIR / "config.json"
 
 
+def _default_config() -> dict:
+    return {
+        "stealth": True,  # v5.1: quiet by default
+        "provider": "deepseek",
+        "expert_models": EXPERT_MODELS,
+        "final_model_id": "deepseek-ai/DeepSeek-V4-Flash",
+        "sentinel_model_id": SENTINEL_MODEL,
+        "max_tokens_per_request": 8000,
+        "temperature": 0.4,
+        "metasploit_rpc_host": "127.0.0.1",
+        "metasploit_rpc_port": METASPLOIT_RPC_PORT,
+        "metasploit_rpc_ssl": False,
+        "supervisor_model_id": SUPERVISOR_MODEL,
+        "supervisor_interval": 5,
+        "cost_alert_usd": 0.25,
+        "cost_budget_usd": 1.0,
+        "cost_hard_cap_usd": 2.0,
+        "max_iterations": MAX_ITERATIONS,
+    }
+
+
 def load_config() -> dict:
-    """Load config.json, creating defaults if missing. Validates with Pydantic."""
-    if not CONFIG_PATH.exists():
-        default_config = {
-            "stealth": True,  # v5.1: quiet by default
-            "provider": "deepseek",
-            "expert_models": EXPERT_MODELS,
-            "final_model_id": "deepseek-ai/DeepSeek-V4-Flash",
-            "sentinel_model_id": SENTINEL_MODEL,
-            "max_tokens_per_request": 8000,
-            "temperature": 0.4,
-            "metasploit_rpc_host": "127.0.0.1",
-            "metasploit_rpc_port": METASPLOIT_RPC_PORT,
-            "metasploit_rpc_ssl": False,
-            "supervisor_model_id": SUPERVISOR_MODEL,
-            "supervisor_interval": 5,
-            "cost_alert_usd": 0.25,
-            "cost_budget_usd": 1.0,
-            "cost_hard_cap_usd": 2.0,
-            "max_iterations": MAX_ITERATIONS,
-        }
-        with open(CONFIG_PATH, "w") as f:
-            json.dump(default_config, f, indent=4)
-    config = json.loads(CONFIG_PATH.read_text())
+    """Load config.json, creating defaults if missing. Validates with Pydantic.
+
+    NEVER crashes on a bad path: a docker bind-mount turns config.json
+    into a DIRECTORY when the host file is absent (compose creates the
+    mount point), and `:ro` mounts refuse writes — both boot with
+    defaults + ONE warning instead of a traceback wall."""
+    if CONFIG_PATH.is_dir():
+        console.print(
+            "[bold red]config.json is a DIRECTORY — a docker bind-mount created it because "
+            "suijin/config.json is missing on the host.[/bold red] Fix: rmdir suijin/config.json "
+            "(or create the file), then restart. Using defaults for this run."
+        )
+    raw = None
+    if CONFIG_PATH.is_file():
+        try:
+            raw = json.loads(CONFIG_PATH.read_text())
+            if not isinstance(raw, dict):
+                raise ValueError(f"top level is {type(raw).__name__}, not an object")
+        except Exception as e:  # noqa: BLE001 — a corrupt config never blocks boot
+            console.print(f"[bold red]config.json unreadable ({type(e).__name__}: {e}) — using defaults.[/bold red]")
+            raw = None
+    config = dict(raw or {})
+    if raw is None and not CONFIG_PATH.exists():
+        # genuinely absent (not dir/corrupt) — seed the defaults file and
+        # USE them (the cost caps below are the fresh-install posture);
+        # read-only mounts just ride the in-memory defaults
+        config = _default_config()
+        try:
+            with open(CONFIG_PATH, "w") as f:
+                json.dump(config, f, indent=4)
+        except OSError:
+            pass
     for k, v in {
         "gemini_model": GEMINI_MODEL,
         "deepseek_model": DEFAULT_MODEL,
@@ -95,6 +125,21 @@ def load_config() -> dict:
 
         logging.getLogger("suijin").warning(f"Config validation failed: {e}. Using raw config.")
     return config
+
+
+def _write_config(config: dict) -> bool:
+    """Persist config.json; a read-only bind-mount (compose ':ro') refuses
+    writes — ONE clear warning, never a crash. Returns success."""
+    try:
+        with open(CONFIG_PATH, "w") as f:
+            json.dump(config, f, indent=4)
+        return True
+    except OSError as e:
+        console.print(
+            f"[bold red]cannot write config.json ({e.strerror or e}) — the mount is read-only. "
+            "Set the provider by hand or fix the mount.[/bold red]"
+        )
+        return False
 
 
 def add_custom_provider() -> bool:
@@ -128,8 +173,8 @@ def add_custom_provider() -> bool:
     entries.append(entry)
     config["custom_providers"] = entries
     config["provider"] = f"custom:{name}"
-    with open(CONFIG_PATH, "w") as f:
-        json.dump(config, f, indent=4)
+    if not _write_config(config):
+        return False
     console.print(f"[green]provider set to custom:{name} → {base}[/green]")
     console.print("[dim]switch anytime: suijin config · test: suijin providers[/dim]")
     return True
@@ -158,9 +203,14 @@ def load_env():
 
         def _save(provider_key: str, env_name: str, key: str):
             config["provider"] = provider_key
-            with open(CONFIG_PATH, "w") as f:
-                json.dump(config, f, indent=4)
-            ENV_PATH.write_text(f"{env_name}={key}\n" if env_name else "")
+            _write_config(config)
+            try:
+                ENV_PATH.write_text(f"{env_name}={key}\n" if env_name else "")
+            except OSError as e:
+                console.print(
+                    f"[bold red]cannot write .env ({e.strerror or e}) — export {env_name} by hand.[/bold red]"
+                )
+                return
             if env_name:
                 os.environ[env_name] = key
 
@@ -194,7 +244,8 @@ def load_env():
             token = input("Enter HF_TOKEN: ").strip()
             _save("huggingface", "HF_TOKEN", token)
     else:
-        for line in ENV_PATH.read_text().splitlines():
-            if "=" in line:
-                k, v = line.split("=", 1)
-                os.environ[k.strip()] = v.strip()
+        if ENV_PATH.is_file():  # a bind-mount could make this a directory too
+            for line in ENV_PATH.read_text().splitlines():
+                if "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ[k.strip()] = v.strip()
