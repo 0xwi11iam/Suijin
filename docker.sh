@@ -45,6 +45,7 @@ fi
 
 ENV_FILE=".env"
 ENV_EXAMPLE=".env.example"
+PKG_CFG="suijin/config.json"
 
 ensure_env() {
   if [ ! -f "$ENV_FILE" ]; then
@@ -55,9 +56,23 @@ ensure_env() {
   fi
 }
 
+# compose bind-mounts ./suijin/config.json into the container; when the
+# host file is absent Docker creates a DIRECTORY at the mount point and
+# every boot dies with IsADirectoryError — make sure the file exists first
+ensure_config() {
+  if [ -e "$PKG_CFG" ] && [ ! -f "$PKG_CFG" ]; then
+    die "$PKG_CFG is a directory (an old bind-mount created it) — fix with: rmdir $PKG_CFG"
+  fi
+  if [ ! -f "$PKG_CFG" ]; then
+    echo '{}' > "$PKG_CFG"
+    warn "created empty $PKG_CFG (the compose bind-mount needs a real file)"
+  fi
+}
+
 case "${1:-help}" in
   install)
     ensure_env
+    ensure_config
     say "building the suijin image (minimal kali-core footprint)"
     $COMPOSE build || die "build failed"
     $COMPOSE create >/dev/null 2>&1 || true
@@ -67,6 +82,7 @@ case "${1:-help}" in
 
   run)
     ensure_env
+    ensure_config
     shift
     if [ $# -gt 0 ]; then
       $COMPOSE run --rm suijin python3 /app/suijin/modules/console/lib/cli.py "$@"
@@ -82,10 +98,12 @@ case "${1:-help}" in
 
   doctor)
     ensure_env
+    ensure_config
     $COMPOSE run --rm suijin python3 /app/suijin/modules/console/lib/cli.py doctor
     ;;
 
   update)
+    ensure_config
     say "updating source"
     git pull --ff-only || warn "pull failed — continuing with current checkout"
     ensure_env
