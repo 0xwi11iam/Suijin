@@ -272,10 +272,10 @@ class TestZaiConfig:
 
         assert ZAI_ENDPOINT == "coding"
 
-    def test_tui_settings_has_endpoint_choice(self):
+    def test_settings_tui_has_endpoint_choice(self):
         # Settings TUI must expose the picker so users can switch billing
         # surface without editing config.json by hand.
-        from suijin.modules.console.lib.tui_settings import ALL_FIELDS
+        from suijin.modules.console.lib.settings_tui import ALL_FIELDS
 
         field = ALL_FIELDS["zai_endpoint"]
         assert field[0] == "choice"
