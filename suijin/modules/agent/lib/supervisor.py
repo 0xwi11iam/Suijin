@@ -815,10 +815,17 @@ async def analyze_trace_with_llm(
     )
 
     try:
+        # the generate seam contract is (messages, max_tokens=…, temperature=…)
+        # — prompt/system kwargs were the dead-call bug (TypeError swallowed
+        # → every 15th-iter deep analysis silently never fired)
         response = await generate_fn(
-            model_id=None,
-            prompt=prompt,
-            system="You are a concise security supervisor. Respond with one line.",
+            [
+                {
+                    "role": "system",
+                    "content": "You are a concise security supervisor. Respond with one line.",
+                },
+                {"role": "user", "content": prompt},
+            ],
             max_tokens=150,
             temperature=0.1,
         )

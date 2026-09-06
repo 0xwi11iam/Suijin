@@ -22,6 +22,7 @@ The .sje bundle makes a concluded engagement portable and RESUMABLE:
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import re
@@ -49,10 +50,10 @@ RESUME_KEYS = (
     "target_info",
     "chain_findings_memory",
     "chain_failures_memory",
-    "chain_decisions_memory",
-    "chain_waves_memory",
     "tested_axes",
-    "qa_history",
+    "findings",
+    "_attack_queue",
+    "_foothold_at",
     "_prompt_profile",
 )
 MAX_RESUME_MESSAGES = 80  # the freshest context; the older tail is noise
@@ -114,6 +115,19 @@ def save_engagement(thread_id: str, objective: str, config: dict, state: dict, c
     trace = graph_state.get("execution_trace") or []
     if len(trace) > MAX_RESUME_TRACE:
         graph_state["execution_trace"] = trace[-MAX_RESUME_TRACE:]
+
+    # engagement memory rides the bundle (wave: session memory): the
+    # librarian ledger + the scratchpad — without these, a resume forgot
+    # every observation and re-paid the recon tokens
+    with contextlib.suppress(Exception):
+        from suijin.modules.platform.lib.workspace import engagement_dir as _edir
+
+        _led = _edir() / "librarian.json"
+        if _led.is_file():
+            graph_state["_librarian_ledger"] = json.loads(_led.read_text(encoding="utf-8"))
+        _sp = _edir() / "scratchpad.md"
+        if _sp.is_file():
+            graph_state["_scratchpad_text"] = _sp.read_text(encoding="utf-8")[-8000:]
 
     manifest = {
         "format": "sje",

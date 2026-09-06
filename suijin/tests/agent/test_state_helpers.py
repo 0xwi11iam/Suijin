@@ -230,36 +230,23 @@ class TestFormattingHelpers:
     def test_format_chain_context_empty(self):
         from suijin.modules.agent.lib.state import format_chain_context
 
-        result = format_chain_context([], [], [], [])
+        result = format_chain_context([], [], [])
         assert "No chain context yet" in result
 
     def test_format_chain_context_with_findings(self):
         from suijin.modules.agent.lib.state import format_chain_context
 
         findings = [{"title": "SQLi on /login", "severity": "high", "evidence": "sqlmap output"}]
-        result = format_chain_context(findings, [], [], [])
+        result = format_chain_context(findings, [], [])
         assert "SQLi on /login" in result
 
     def test_format_chain_context_with_failures(self):
         from suijin.modules.agent.lib.state import format_chain_context
 
         failures = [{"tool_name": "nmap", "error_message": "timeout", "error_class": "transport_error"}]
-        result = format_chain_context([], failures, [], [])
+        result = format_chain_context([], failures, [])
         assert "transport_error" in result
         assert "nmap" in result
-
-    def test_format_qa_history_empty(self):
-        from suijin.modules.agent.lib.state import format_qa_history
-
-        assert format_qa_history([]) == ""
-
-    def test_format_qa_history_with_entries(self):
-        from suijin.modules.agent.lib.state import format_qa_history
-
-        qa = [{"question": "what port?", "answer": "443"}]
-        result = format_qa_history(qa)
-        assert "what port?" in result
-        assert "443" in result
 
     def test_format_objective_history_empty(self):
         from suijin.modules.agent.lib.state import format_objective_history

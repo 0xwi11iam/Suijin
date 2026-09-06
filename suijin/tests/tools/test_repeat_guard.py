@@ -136,6 +136,5 @@ class TestChainFailureMemory:
             [],
             [{"tool_name": "nmap", "error_class": "transport_error", "error_message": "timeout", "iteration": 4}],
             [],
-            [],
         )
         assert "nmap" in ctx and "timeout" in ctx  # the dead section now has data

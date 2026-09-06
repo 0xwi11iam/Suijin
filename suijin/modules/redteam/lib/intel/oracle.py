@@ -698,10 +698,16 @@ async def generate_hypotheses_async(
     if generate_fn:
         try:
             prompt = HYPOTHESIS_PROMPT + "\n" + str(diagnostic_snippet)[:2000]
+            # messages-array contract — the old prompt=/system= kwargs were
+            # the dead-call bug (TypeError swallowed → heuristic fallback forever)
             response = await generate_fn(
-                model_id=None,
-                prompt=prompt,
-                system="You are a diagnostic analyst. Output only valid JSON array.",
+                [
+                    {
+                        "role": "system",
+                        "content": "You are a diagnostic analyst. Output only valid JSON array.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
                 max_tokens=600,
                 temperature=0.1,
             )

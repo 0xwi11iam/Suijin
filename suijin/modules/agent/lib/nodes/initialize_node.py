@@ -73,10 +73,7 @@ def initialize_node(state: dict, *, objective: str, config: dict = None) -> dict
         "target_info": target_info,
         "chain_findings_memory": [],
         "chain_failures_memory": [],
-        "chain_decisions_memory": [],
-        "chain_waves_memory": [],
         "tested_axes": {},
         "messages": messages,
-        "qa_history": [],
         "pending_questions": [],
     }

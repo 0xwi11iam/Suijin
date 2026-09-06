@@ -259,6 +259,14 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
                 board_updates = {"target_info": merged}
         except Exception:  # noqa: BLE001 — the board must never break a step
             pass
+        # the librarian's nerve ending: every successful result lands on
+        # its desk (fire-and-forget; no-op headless)
+        try:
+            from suijin.modules.agent.lib import librarian as _lb
+
+            _lb.observe(tool_name, tool_args, output, step_data.get("iteration") or 0)
+        except Exception:  # noqa: BLE001
+            pass
 
     # H3: populate chain_failures_memory — the 'Recent Failures' context
     # section existed but was never written (dead prompt block)
@@ -278,12 +286,29 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
         except Exception:  # noqa: BLE001
             pass
 
+    # H4: state["findings"] — the scoreboard ("findings=N") and the
+    # SQLi/SSRF chain rules read it every turn but nothing ever wrote it.
+    # CONFIRMED catalog exploits are the finding events.
+    finding_updates: dict = {}
+    if tool_name == "catalog_exploit" and success:
+        try:
+            import re as _re
+
+            m = _re.search(r"(EXP-\d+)\s+CONFIRMED\s+—\s+(.+?)(?:\.\s|\n|$)", str(output))
+            if m:
+                founds = list(state.get("findings") or [])
+                founds.append({"id": m.group(1), "type": "exploit", "title": m.group(2)[:120]})
+                finding_updates = {"findings": founds[-20:]}
+        except Exception:  # noqa: BLE001
+            pass
+
     return {
         "_current_step": step_data,
         "execution_trace": [dict(step_data)],
         "_tool_result": {"success": success, "output": output},
         **board_updates,
         **failure_updates,
+        **finding_updates,
         "_target_grew_last_step": grew,
         "messages": [
             {

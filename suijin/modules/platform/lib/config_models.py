@@ -99,6 +99,7 @@ class RedConfig(BaseModel):
     posture: str = Field(default="assertive")  # recon | assertive — the mode-governor dial
     temperature: float = Field(default=0.4, ge=0.0, le=2.0)
     supervisor_interval: int = Field(default=5, ge=1)
+    librarian_interval: int = Field(default=10, ge=1)  # observations per librarian LLM digest
     cost_hard_cap_usd: float = Field(default=0.0, ge=0.0)  # 0 = unlimited (operator)
     cost_budget_usd: float = Field(default=0.0, ge=0.0)  # 0 = unlimited (operator)
     cost_alert_usd: float = Field(default=0.0, ge=0.0)  # 0 = disabled (operator)
@@ -106,6 +107,7 @@ class RedConfig(BaseModel):
     final_model_id: str = ""
     sentinel_model_id: str = ""
     max_tokens_per_request: int = Field(default=8000, ge=100)
+    context_window: int = Field(default=0, ge=0)  # tokens; 0 = auto (models.dev fetch, 1M fallback) — operator-only
     stealth: bool = Field(default=True)  # v5.1: quiet by default (masked identity, pacing, tool rate caps)
 
     @field_validator("posture")
