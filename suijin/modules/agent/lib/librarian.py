@@ -225,9 +225,17 @@ class Librarian:
             self._drain_once(final=True)  # flush the queue into the ledger
 
     def _run(self) -> None:
+        _fail_logged = False
         while not self._stop_flag.wait(0.5):
-            with contextlib.suppress(Exception):
+            try:
                 self._drain_once()
+            except Exception as e:  # noqa: BLE001 — a silently dead librarian is invisible memory loss
+                if not _fail_logged:
+                    _fail_logged = True
+                    with contextlib.suppress(Exception):
+                        import logging
+
+                        logging.getLogger("suijin").warning(f"librarian drain failed (once-logged): {e!r}")
 
     # ── ingestion ────────────────────────────────────────────────────
 

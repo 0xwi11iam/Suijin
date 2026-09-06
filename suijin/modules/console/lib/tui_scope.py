@@ -107,11 +107,17 @@ def run(stdscr):
         stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
         y += 1
         for r, (key, val) in enumerate(entries()):
+            # height bound: more entries than screen rows used to addstr
+            # past the bottom → curses.error mid-TUI (the reproducible crash)
+            if y >= h - 1:
+                stdscr.addstr(h - 1, 2, f" … {len(entries()) - r} more (resize or edit scope.json)", curses.A_DIM)
+                break
             if key == "exclude" and r == 0:
                 y += 1
-                stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
-                stdscr.addstr(y, 2, " EXCLUDE (always wins over include)")
-                stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
+                if y < h - 1:
+                    stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
+                    stdscr.addstr(y, 2, " EXCLUDE (always wins over include)")
+                    stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
                 y += 1
             mark = "+ " if key == "include" else "- "
             color = 3 if key == "include" else 4

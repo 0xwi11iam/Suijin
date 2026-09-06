@@ -155,13 +155,27 @@ class SuijinAgentGraph:
     # ── Node wrappers ──────────────────────────────────────────────
 
     async def _initialize(self, state: dict) -> dict:
-        obj = state.get("_objective", state.get("original_objective", ""))
-        result = initialize_node(state, objective=obj, config={"max_iterations": self.max_iterations})
-        if "original_objective" not in result:
-            result["original_objective"] = obj
-        # Reset circuit breaker
-        result["_consecutive_failures"] = 0
-        return result
+        # the ONE node that previously had no crash wrapper — an exception
+        # here killed the engagement at boot (every other node degrades)
+        try:
+            obj = state.get("_objective", state.get("original_objective", ""))
+            result = initialize_node(state, objective=obj, config={"max_iterations": self.max_iterations})
+            if "original_objective" not in result:
+                result["original_objective"] = obj
+            # Reset circuit breaker
+            result["_consecutive_failures"] = 0
+            return result
+        except Exception as e:  # noqa: BLE001 — boot must degrade, not die
+            logger.exception("initialize crashed")
+            return {
+                "current_phase": "informational",
+                "current_iteration": 0,
+                "messages": [{"role": "user", "content": f"SYSTEM: initialize node crashed: {e} — continuing with minimal state"}],
+                "execution_trace": [],
+                "todo_list": [],
+                "target_info": {},
+                "_consecutive_failures": 0,
+            }
 
     async def _think(self, state: dict) -> dict:
         # Cost governor (D27): warn near budget, hard-stop past it — before
@@ -411,7 +425,10 @@ class SuijinAgentGraph:
             logger.exception("think crashed")
             fails = state.get("_consecutive_failures", 0) + 1
             return {
-                "_current_step": {"thought": f"Think error: {e}", "tool_name": "none", "tool_args": {}},
+                # tool_name MUST stay falsy (invariant #10): the old "none"
+                # was truthy → the router dispatched execute_tool → a wasted
+                # TOOL NOT FOUND turn after every think crash
+                "_current_step": {"thought": f"Think error: {e}", "tool_name": "", "tool_args": {}},
                 "messages": [
                     {
                         "role": "user",

@@ -239,8 +239,9 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         _compacted = _compact_messages(_msgs, trigger_chars=_win_trigger)
         if _compacted is not _msgs:
             state["messages"] = _compacted
-    except Exception:  # noqa: BLE001 — compaction must never break thinking
-        pass
+    except Exception as e:  # noqa: BLE001 — compaction must never break thinking
+        # a chronic compaction failure silently grows context forever — log it
+        logger.warning(f"compaction skipped (check compact.py): {e}")
 
     raw_msgs = state.get("messages", [])
     recent_msgs = ""
