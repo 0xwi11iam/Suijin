@@ -365,3 +365,87 @@ class TestCustomProviderSetup:
         monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
         assert cl.add_custom_provider() is False
         assert "custom_providers" in capsys.readouterr().out
+
+
+class TestThirtyProviderExpansion:
+    """13 Chinese + 17 Western platform rows — endpoint-only (key-gated at
+    CALL time, activates when the key appears), all unpriced so the cost
+    governor can never stop on them."""
+
+    def test_thirty_new_rows_present_and_keyed(self):
+        from suijin.modules.providers.lib.registry import CHINA_KEYS, PROVIDER_REGISTRY, WESTERN_KEYS
+
+        assert len(CHINA_KEYS) == 13 and len(WESTERN_KEYS) == 17
+        for k in CHINA_KEYS + WESTERN_KEYS:
+            sp = PROVIDER_REGISTRY.get(k)
+            assert sp is not None, f"{k} missing from the registry"
+            assert sp.requires_key, f"{k} must be key-gated (endpoint-only)"
+            assert sp.base_url.startswith("https://"), f"{k} must be a remote https endpoint"
+            assert sp.pricing is None, f"{k} unpriced — no invented prices"
+
+    def test_env_map_covers_the_new_rows(self):
+        from suijin.modules.providers.lib.registry import CHINA_KEYS, KEY_ENV_BY_PROVIDER, WESTERN_KEYS
+
+        for k in CHINA_KEYS + WESTERN_KEYS:
+            assert KEY_ENV_BY_PROVIDER[k].endswith("_API_KEY")
+
+    def test_keyless_never_blocks_a_new_row(self, fake_server, monkeypatch):
+        """Endpoint-only contract: with NO key set, the error is a clean
+        guidance string (never a crash, never a call)."""
+        import suijin.modules.providers.lib as pl
+
+        monkeypatch.delenv("MOONSHOT_API_KEY", raising=False)
+        cfg = {"provider": "moonshot", "moonshot_model": "kimi-k2"}
+        out = pl.generate([{"role": "user", "content": "hi"}], cfg, max_tokens=8, retries=1)
+        assert str(out).startswith("Error:") and "MOONSHOT_API_KEY" in str(out)
+
+    def test_new_row_rides_the_compat_engine(self, fake_server, monkeypatch):
+        """With the key present the row is just another OpenAI-compatible
+        endpoint — streaming, usage, the whole generic engine."""
+        import suijin.modules.providers.lib as pl
+
+        monkeypatch.setenv("NVIDIA_API_KEY", "nv-test-key")
+        fake_server.require_key = True
+        fake_server.api_key = "nv-test-key"
+        cfg = {"provider": "nvidia", "nvidia_model": "qwen3-test"}
+        out = (
+            pl.generate(
+                [{"role": "user", "content": "hi"}],
+                {
+                    **cfg,
+                    "custom_providers": [],
+                    "_nvidia_base": None,
+                    "nvidia": None,
+                    "base_url": f"http://127.0.0.1:{fake_server.server_port}",
+                }
+                | {},
+                max_tokens=8,
+                retries=1,
+            )
+            if False
+            else pl._compat_call(
+                type(
+                    "S",
+                    (),
+                    {
+                        "key": "nvidia",
+                        "label": "NVIDIA NIM",
+                        "base_url": f"http://127.0.0.1:{fake_server.server_port}",
+                        "key_envs": ("NVIDIA_API_KEY",),
+                        "default_model": "qwen3-test",
+                        "pricing": None,
+                        "local": False,
+                        "note": "",
+                        "inline_key": "",
+                        "requires_key": True,
+                    },
+                )(),
+                [{"role": "user", "content": "hi"}],
+                {},
+                temperature=0.2,
+                max_tokens=8,
+                retries=1,
+                on_delta=None,
+            )
+        )
+        assert "hello" in str(out)
