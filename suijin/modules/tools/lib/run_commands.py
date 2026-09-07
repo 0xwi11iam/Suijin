@@ -250,6 +250,120 @@ def _default_handlers(box: RunBox) -> dict:
 
         box._out.print(panic())
 
+    def findings(_args):
+        """Triage-grouped, severity-colored — the CyberStrike-parity panel."""
+        from suijin.modules.tools.lib.exploit_catalog import _expits_dir, _load_index
+
+        root = _expits_dir()
+        if not root.is_dir():
+            box._out.print("[dim]  ▸ no catalog yet — findings appear here as they're proven[/dim]")
+            return
+        groups: dict[str, list] = {}
+        for eng_dir in sorted(root.iterdir(), reverse=True):
+            if not eng_dir.is_dir():
+                continue
+            for e in (_load_index(eng_dir).get("entries") or {}).values():
+                if isinstance(e, dict):
+                    groups.setdefault(str(e.get("status", "?")).upper(), []).append((eng_dir.name, e))
+        if not groups:
+            box._out.print("[dim]  ▸ catalog is empty[/dim]")
+            return
+        order = ["CONFIRMED", "AI_CLAIMED", "DRAFT", "FAILED_REPRO", "FAILED_SYNTAX", "ABANDONED"]
+        sev_color = {"CRITICAL": "bold red", "HIGH": "red", "MEDIUM": "bold yellow", "LOW": "yellow"}
+        for status in order + sorted(set(groups) - set(order)):
+            rows = groups.get(status, [])
+            if not rows:
+                continue
+            head_color = {"CONFIRMED": "bold green", "AI_CLAIMED": "bold yellow"}.get(status, "dim")
+            box._out.print(f"  [{head_color}]{status} ({len(rows)})[/{head_color}]")
+            for eng, e in rows[:12]:
+                sev = str(e.get("system_severity") or e.get("severity") or "").upper()
+                c = sev_color.get(sev, "white")
+                box._out.print(
+                    f"    [{c}]{sev or '—':8}[/{c}] {e.get('id', '?')} {str(e.get('title', ''))[:60]}"
+                    f"  [dim]{eng} · {e.get('class', '?')}[/dim]"
+                )
+
+    def h1(args):
+        """`/h1 EXP-001` — copy a HackerOne-formatted report for the finding
+        to the clipboard (or print it when no clipboard exists)."""
+        from suijin.modules.tools.lib.exploit_catalog import _expits_dir, _load_index
+
+        eid = args.strip().upper()
+        if not eid:
+            box._out.print("[yellow]  ▸ /h1 <EXP-id> — e.g. /h1 EXP-001 (see /findings)[/yellow]")
+            return
+        entry = None
+        root = _expits_dir()
+        for eng_dir in sorted(root.iterdir(), reverse=True) if root.is_dir() else []:
+            for k, e in (_load_index(eng_dir).get("entries") or {}).items():
+                if k == eid and isinstance(e, dict):
+                    entry = (eng_dir, e)
+                    break
+            if entry:
+                break
+        if not entry:
+            box._out.print(f"[yellow]  ▸ {eid} not found in any catalog[/yellow]")
+            return
+        eng_dir, e = entry
+        sev = str(e.get("system_severity") or e.get("severity") or "medium").upper()
+        poc_lines = "\n".join(f"{i}. `{s.get('cmd', '')}`" for i, s in enumerate(e.get("poc", []), 1))
+        text = (
+            f"## {e.get('title', 'Security issue')}\n\n"
+            f"**Severity**: {sev}\n**Weakness class**: {e.get('class', 'unknown')}\n"
+            f"**Target**: {e.get('target', '')}\n\n"
+            f"### Summary\n{e.get('description', '') or '(see dossier)'}\n\n"
+            f"### Steps to reproduce\n{poc_lines or '(see exploit.yaml)'}\n\n"
+            f"**Expected result**: `{e.get('marker', '')}`\n\n"
+            f"### Impact\n{e.get('description', '') or 'See summary.'}\n\n"
+            f"### Remediation\nFix the underlying input handling per the weakness class above; "
+            f"see the engagement dossier ({eid}/finding.md) for details."
+        )
+        copied = False
+        import shutil
+        import subprocess
+
+        for cmd, argv in (
+            ("pbcopy", ["pbcopy"]),
+            ("wl-copy", ["wl-copy"]),
+            ("xclip", ["xclip", "-selection", "clipboard"]),
+        ):
+            if shutil.which(cmd):
+                try:
+                    subprocess.run(argv, input=text.encode(), check=True, timeout=5)
+                    copied = True
+                    break
+                except Exception:  # noqa: BLE001
+                    pass
+        if copied:
+            box._out.print(f"[green]  ▸ {eid} as a HackerOne report → clipboard[/green]")
+        else:
+            box._out.print(f"[yellow]  ▸ no clipboard — printing (pipe it yourself):[/yellow]\n{text}")
+
+    def out(args):
+        """`/out` — list offloaded tool outputs; `/out <name-part>` — print one."""
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+        od = WORKSPACE_DIR / "outputs"
+        files = sorted(od.glob("*.txt"), key=lambda p: p.stat().st_mtime, reverse=True) if od.is_dir() else []
+        if not files:
+            box._out.print("[dim]  ▸ no offloaded outputs[/dim]")
+            return
+        if not args:
+            box._out.print("  ▸ recent offloaded outputs (full text on disk):")
+            for f in files[:10]:
+                box._out.print(f"    {f.name}  [dim]{f.stat().st_size:,} bytes[/dim]")
+            box._out.print("[dim]    /out <name-part> prints one[/dim]")
+            return
+        part = args.strip().lower()
+        match = next((f for f in files if part in f.name.lower()), None)
+        if not match:
+            box._out.print(f"[yellow]  ▸ no offloaded output matches {part!r}[/yellow]")
+            return
+        body = match.read_text(errors="ignore")
+        box._out.print(f"[dim]  ▸ {match.name} ({len(body):,} chars) — head/tail:[/dim]")
+        box._out.print(body[:2500] + ("\n…\n" + body[-800:] if len(body) > 3500 else ""))
+
     return {
         "help": help_,
         "state": state,
@@ -265,6 +379,9 @@ def _default_handlers(box: RunBox) -> dict:
         "scope": scope,
         "pause": pause,
         "panic": panic,
+        "findings": findings,
+        "h1": h1,
+        "out": out,
     }
 
 
