@@ -152,8 +152,145 @@ class SubagentResult:
         return f"[{status}] {self.task[:80]} ({self.steps} steps)"
 
 
-def _tool_reference_text(route_tool_fn=None) -> str:
-    """The LIVE tool registry — same surface the main agent sees. When the
+# keyword classes used to scope the subagent tool reference — a focused
+# task does not need 310 tools; matching ~15-25 cuts ~90% of the fireteam
+# input cost (one burst used to ship ~390k tokens of tool lists alone)
+_SCOPE_KEYWORDS: list[tuple[str, tuple[str, ...]]] = [
+    (
+        "web",
+        (
+            "http",
+            "web",
+            "url",
+            "curl",
+            "api",
+            "endpoint",
+            "login",
+            "form",
+            "cookie",
+            "session",
+            "param",
+            "header",
+            "browser",
+            "crawl",
+            "replay",
+            "inject",
+            "coverage",
+            "surface",
+        ),
+    ),
+    (
+        "network",
+        (
+            "port",
+            "nmap",
+            "scan",
+            "host",
+            "network",
+            "smb",
+            "snmp",
+            "dns",
+            "subnet",
+            "ping",
+            "kerberos",
+            "ldap",
+            "proxy",
+            "ssrf",
+        ),
+    ),
+    (
+        "recon",
+        (
+            "subdomain",
+            "whois",
+            "dirbust",
+            "gobuster",
+            "ffuf",
+            "wordlist",
+            "recon",
+            "enum",
+            "fingerprint",
+            "tech",
+            "waf",
+            "ssl",
+            "tls",
+            "certificate",
+        ),
+    ),
+    (
+        "exploit",
+        (
+            "exploit",
+            "payload",
+            "sqli",
+            "xss",
+            "injection",
+            "rce",
+            "ssti",
+            "lfi",
+            "jwt",
+            "auth",
+            "bypass",
+            "privilege",
+            "hydra",
+            "sqlmap",
+            "metasploit",
+            "msf",
+        ),
+    ),
+    ("code", ("python", "script", "code", "write", "file", "parse", "regex", "transform", "json", "decode", "hash")),
+    ("knowledge", ("cve", "kb", "knowledge", "search", "note", "record", "finding", "report", "memory")),
+]
+_SCOPE_ALWAYS = (
+    "execute_terminal",
+    "http_request",
+    "write_note",
+    "job_wait",
+    "job_status",
+    "job_output",
+    "job_list",
+    "search_cve",
+    "check_knowledge",
+    "catalog_exploit",
+)
+
+
+def _scope_tool_reference(full: str, task: str) -> str:
+    """Filter a rendered tool reference down to the lines relevant to the
+    task (+ the always-included operational core). Falls back to the full
+    reference when the parse yields too little (never block a spawn)."""
+    lines = full.splitlines()
+    kept: list[str] = []
+    task_l = str(task or "").lower()
+    matched_classes = {name for name, kws in _SCOPE_KEYWORDS if any(k in task_l for k in kws)}
+    for ln in lines:
+        ls = ln.strip().lower()
+        name = ls.strip("-*• ").split("(")[0].split(":")[0].strip()
+        if not name or len(name) < 3 or " " in name:
+            kept.append(ln)  # headers/section text pass through
+            continue
+        if (
+            name in _SCOPE_ALWAYS
+            or any(a in name for a in _SCOPE_ALWAYS)
+            or matched_classes
+            and any(k in ls for name_, kws in _SCOPE_KEYWORDS if name_ in matched_classes for k in kws)
+        ):
+            kept.append(ln)
+        elif not matched_classes:
+            kept.append(ln)  # no signal — do not silently starve the task
+    out = "\n".join(kept)
+    # too aggressive (lost most of the reference)? the full list rides — a
+    # starved specialist is worse than a fat prompt
+    if len(out) < len(full) * 0.25:
+        return full
+    return out
+
+
+def _tool_reference_text(route_tool_fn=None, task: str = "") -> str:
+    """The LIVE tool registry, SCOPED to the task. The main agent sees the
+    whole catalog; a specialist sees the slice its task implies (a focused
+    probe does not need msf_*/blue_*/report tools — 22k chars of tool list
+    per subagent step was the single biggest fireteam cost). When the
     spawn came from a BLUE graph (route_tool_fn is the blue router), the
     prompt must advertise the BLUE arsenal — a red registry with a blue
     router is the prompt/router mismatch the BF2 audit flagged."""
@@ -165,20 +302,26 @@ def _tool_reference_text(route_tool_fn=None) -> str:
             return render_blue_tools()
     except Exception:  # noqa: BLE001 — never block a spawn on rendering
         pass
+    full = ""
     try:
         from suijin.kernel.controller import last_context
 
         ctx = last_context()
         if ctx is not None:
-            return ctx.tool_reference(core_first=("tools", "platform", "knowledge", "providers"))
+            full = ctx.tool_reference(core_first=("tools", "platform", "knowledge", "providers"))
     except Exception:  # noqa: BLE001 — never block a spawn on rendering
         pass
-    try:
-        from suijin.modules.tools.lib.dispatch import _manifest_reference
+    if not full:
+        try:
+            from suijin.modules.tools.lib.dispatch import _manifest_reference
 
-        return _manifest_reference()
-    except Exception:  # noqa: BLE001
-        return "(tool reference unavailable)"
+            full = _manifest_reference()
+        except Exception:  # noqa: BLE001
+            return "(tool reference unavailable)"
+    try:
+        return _scope_tool_reference(full, task)
+    except Exception:  # noqa: BLE001 — scoping is an optimization, never a blocker
+        return full
 
 
 def _build_system_prompt(task: str, max_steps: int, route_tool_fn=None) -> str:
@@ -194,8 +337,8 @@ def _build_system_prompt(task: str, max_steps: int, route_tool_fn=None) -> str:
 4. Done OR genuinely stuck after trying different approaches? action="complete" immediately.
 5. A tool failing 3 times in a row means STOP and report — do not retry a fourth time.
 
-## TOOLS — the same registry the main agent uses (name(args) — what it does):
-{_tool_reference_text(route_tool_fn)}
+## TOOLS — the registry slice this task needs (name(args) — what it does):
+{_tool_reference_text(route_tool_fn, task)}
 
 ## DECISION FORMAT — exactly ONE JSON object per turn (same as the main agent):
 {{"action": "use_tool", "tool_name": "...", "tool_args": {{...}}, "thought": "one line"}}

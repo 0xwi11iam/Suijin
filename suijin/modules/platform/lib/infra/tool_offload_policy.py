@@ -4,9 +4,14 @@ Declares for each registered tool whether output should be:
     "never"  — output is small/structured; always inline
     "always" — output is reliably huge; always offload to a file
     "auto"   — offload only if len(output) > OFFLOAD_THRESHOLD
+
+8k (was 50k): anything bigger rides into the RECENT MESSAGES embed and
+crowds out everything else — one big result used to eat the whole 24k
+budget every turn. Full text still lands on disk + the preview carries
+the head.
 """
 
-OFFLOAD_THRESHOLD = 50_000
+OFFLOAD_THRESHOLD = 8_000
 
 OFFLOAD_POLICY = {
     "execute_terminal": "auto",

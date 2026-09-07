@@ -31,15 +31,17 @@ class TestOutputOffload:
         assert str(tmp_path / "outputs") in out
         files = list((tmp_path / "outputs").glob("nmap_scan_*.txt"))
         assert len(files) == 1 and files[0].read_text() == big
-        assert out.endswith("…")  # preview truncated with ellipsis
+        assert "middle truncated" in out  # head+tail digest, bounded
 
     def test_unknown_tool_defaults_auto(self):
         assert get_offload_mode("totally_unknown_tool") == "auto"
 
-    def test_preview_boundary_exact_500(self):
-        out, offloaded = oo.maybe_offload("nmap_scan", "B" * (oo.OFFLOAD_THRESHOLD + 600))
+    def test_digest_is_head_and_tail_and_bounded(self):
+        body = "HEAD!" + "B" * (oo.OFFLOAD_THRESHOLD + 600) + "!TAIL"
+        out, offloaded = oo.maybe_offload("nmap_scan", body)
         preview = out.split("Preview:\n", 1)[1]
-        assert len(preview) == 501  # 500 chars + ellipsis
+        assert preview.startswith("HEAD!") and preview.endswith("!TAIL")  # both ends survive
+        assert len(preview) < 1_700  # the middle is dropped, digest bounded
 
 
 class TestFirewall:
