@@ -483,55 +483,37 @@ def get_allowed_tools_for_phase(phase: str) -> list[str]:
 
 
 def build_tool_catalog_prompt(phase: str = "informational") -> str:
-    """Build a dynamic tool catalog section for the system prompt.
+    """Build the tool catalog section for the system prompt.
 
-    Only includes tools allowed in the current phase. Includes purpose,
-    when_to_use, and args_format for each tool.
+    The DIET (the 17.6k-char catalog was ~30% of every turn's input):
+    one line per tool — `name(args) — purpose` — with when_to_use folded
+    in only when it adds signal the purpose line doesn't already carry.
+    The [warn] long-running marker rides the same line. Strategy doctrine
+    lives in base.py, not here (it was duplicated verbatim).
     """
     allowed = get_allowed_tools_for_phase(phase)
     lines = ["## Available Tools (phase: {})".format(phase), ""]
+    lines.append("name(args) — what it does. Copy arg names EXACTLY.")
+    lines.append("")
 
     for tool_name in allowed:
         info = TOOL_REGISTRY.get(tool_name)
         if not info:
             continue
-        lines.append(f"### {tool_name}")
+        args = info.get("args_format", "")
+        purpose = str(info.get("purpose", "")).strip().rstrip(".")
+        extra = ""
         if info.get("long_running"):
-            lines.append('[warn]  **LONG-RUNNING TOOL** — ALWAYS use `"background": true` in args!')
-        lines.append(f"**Purpose**: {info['purpose']}")
-        lines.append(f"**When to use**: {info['when_to_use']}")
-        lines.append(f"**Args**: `{info['args_format']}`")
-        lines.append("")
+            extra = "  [LONG-RUNNING: background=true]"
+        lines.append(f"- {tool_name}({args}) — {purpose}{extra}")
 
-    lines.append("## [warn] BACKGROUND EXECUTION (CRITICAL)")
-    lines.append("Some tools take 30s–10min to complete. You MUST run them as background jobs")
-    lines.append('to avoid blocking the agent loop. Set `"background": true` in tool_args.')
     lines.append("")
-    lines.append("**Tools that ALWAYS need background**:")
     lines.append(
-        '- `nmap_scan` with -p- or --script flags -> `{"target": "...", "flags": "-sV -sC -p-", "background": true}`'
+        "Long-running tools (marked above) MUST set background:true; collect via job_status/job_wait/job_output. "
+        "Attack strategy, evidence discipline, and background workflow are in the doctrine above."
     )
-    lines.append("- `gobuster_dir` / `gobuster_dns` with large wordlists")
-    lines.append("- `ffuf_fuzz` with large wordlists")
-    lines.append("- `feroxbuster_scan` with large wordlists")
-    lines.append("- `nikto_scan` (always long)")
-    lines.append("- `sqlmap_scan` (always long)")
-    lines.append("- `hydra_brute` with large wordlists")
-    lines.append("- `amass_enum` with active enumeration")
-    lines.append("- `execute_terminal` with scan/brute-force commands")
     lines.append("")
-    lines.append("**Background workflow**:")
-    lines.append('1. Spawn: `{"tool_name": "nmap_scan", "tool_args": {"target": "X", "background": true}}`')
-    lines.append("2. You get a job_id back immediately. Continue other work.")
-    lines.append('3. Check: `job_status {"job_id": "abc123"}` or `job_list`')
-    lines.append('4. Collect: `job_wait {"job_id": "abc123", "timeout": 300}` then `job_output`')
-    lines.append("")
-
-    lines.append("## Attack Strategy (MUST FOLLOW)")
-    lines.append("1. **Recon first** — nmap/gobuster/fingerprint BEFORE touching any parameter.")
-    lines.append("2. **CVE before exploit** — search_cve after fingerprinting. Don't guess.")
-    lines.append("3. **KG before payload** — check_knowledge before every new payload.")
-    lines.append("4. **Verify before claiming** — confirm exploits with evidence. No hallucinations.")
+    return "\n".join(lines)
     lines.append("5. **Log everything** — write_note after every finding, even negatives.")
     lines.append("6. **One tool per turn** — emit exactly ONE tool call per decision.")
 
