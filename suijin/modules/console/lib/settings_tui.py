@@ -15,8 +15,8 @@ from collections import OrderedDict
 from pathlib import Path
 
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical
-from textual.widgets import Footer, Header, Input, ListItem, ListView, Select, Static, Switch
+from textual.containers import VerticalScroll
+from textual.widgets import Footer, Header, Input, ListView, Select, Static, Switch
 
 # The package-level config (suijin/config.json) — resolved from this file's
 # location so it works from the dev symlink too.
@@ -145,6 +145,21 @@ def load_config() -> dict:
         return {}
 
 
+def load_state() -> tuple[dict, str]:
+    """(config, status) where status ∈ ok | missing | corrupt — the app
+    REFUSES to save over a corrupt file (saving the in-memory near-empty
+    dict would wipe the operator's config)."""
+    if not os.path.isfile(CONFIG_PATH):
+        return {}, "missing"
+    try:
+        cfg = json.loads(Path(CONFIG_PATH).read_text())
+        if not isinstance(cfg, dict):
+            raise ValueError("top level is not an object")
+        return cfg, "ok"
+    except Exception:  # noqa: BLE001
+        return {}, "corrupt"
+
+
 def save_config(config: dict) -> None:
     Path(CONFIG_PATH).write_text(json.dumps(config, indent=4))
 
@@ -160,76 +175,137 @@ def _visible_fields(config: dict) -> "OrderedDict[str, tuple]":
     return visible
 
 
+def _eq(a, b) -> bool:
+    """Loose echo comparison — '500' == 500 == 500.0 for render-echo checks."""
+    try:
+        return str(a) == str(b)
+    except Exception:  # noqa: BLE001
+        return a == b
+
+
 class SettingsApp(App):
-    """Two-pane settings editor — list + typed editors, notify-bounded."""
+    """Two-pane settings editor — field list left, a SCROLLING FORM of
+    typed editors right (one mounted editor per visible field).
+
+    The hard-won design rules (Textual 8.x):
+      - never mount/remove editors per selection — it wedges the pump
+      - never display-toggle a shared editor — same wedge, different path
+      - every editor carries its field key as its `name`; events write
+        through THAT key, never the current list highlight (cross-field
+        corruption)
+      - mount-time value assignments echo as Changed events — suppressed
+        by comparing against the value we installed
+    """
 
     TITLE = "SUIJIN — Settings"
     CSS = """
     #body { height: 1fr; }
-    #list { width: 44%; border: solid $accent; }
-    #editor { width: 56%; border: solid $surface; padding: 1 2; }
-    #field-title { text-style: bold; color: $text; height: auto; }
-    #field-hint { color: $text-muted; height: auto; }
-    #editor-widget { margin-top: 1; }
+    #list { width: 40%; border: solid $accent; }
+    #form { width: 60%; border: solid $surface; padding: 0 1; }
+    .group-label { text-style: bold; color: $accent; height: auto; margin-top: 1; }
+    .field-label { height: auto; padding-top: 1; color: $text; }
+    .field-hint { height: auto; color: $text-muted; }
+    .field-widget { margin: 0 1 1 1; }
+    #buttons { height: auto; dock: bottom; padding: 0 1; }
     """
     BINDINGS = [
         ("ctrl+s", "save", "Save + exit"),
+        ("q", "save", "Save + exit"),
         ("escape", "cancel", "Exit without saving"),
     ]
 
     def __init__(self) -> None:
         super().__init__()
-        self._cfg = load_config()
+        self._cfg, self._status = load_state()
         self._cfg.setdefault("provider", "deepseek")
-        self._syncing = False  # programmatic widget updates must not echo into config
+        self._rendered: dict[str, object] = {}  # field -> value installed at mount
+        self._editors: dict[str, object] = {}  # field -> its editor widget
 
     # ── layout ────────────────────────────────────────────────────────
 
     def compose(self) -> ComposeResult:
+        from textual.containers import Horizontal as _H
+        from textual.widgets import Button, ListView
+
         yield Header()
-        with Horizontal(id="body"):
+        with _H(id="body"):
             yield ListView(id="list")
-            with Vertical(id="editor"):
-                yield Static("", id="field-title")
-                yield Static("", id="field-hint")
-                # all three editor widgets pre-mounted, shown one at a time —
-                # mounting/removing per selection wedged Textual's message pump
-                yield Switch(id="edit-switch")
-                yield Select([("—", "—")], id="edit-select", allow_blank=False)  # options set per field
-                yield Input(id="edit-input")
+            yield VerticalScroll(id="form")
+        with _H(id="buttons"):
+            yield Button("Save (ctrl+s)", id="btn-save", variant="success")
+            yield Button("Cancel (id: Esc)", id="btn-cancel", variant="default")
         yield Footer()
 
     def on_mount(self) -> None:
-        self._rebuild_list()
-        self.query_one("#list", ListView).focus()
+        self.call_after_refresh(self._rebuild)
 
-    def _rebuild_list(self, keep: str = "") -> None:
-        """Grouped field list (section headers + fields for this provider)."""
+    # ── build the two panes ───────────────────────────────────────────
+
+    async def _rebuild(self, keep: str = "") -> None:
+        """(Re)build list + form for the current provider. Called at mount
+        and on provider swaps — the only mount/remove churn in the app."""
         try:
-            lv = self.query_one("#list", ListView)
-            visible = _visible_fields(self._cfg)
-            lv.clear()
             from textual.widgets import ListItem as _LI
 
-            sel_item = None
+            lv = self.query_one("#list", ListView)
+            form = self.query_one("#form", VerticalScroll)
+            visible = _visible_fields(self._cfg)
+            lv.clear()
+            await form.remove_children()
+            self._rendered.clear()
+            self._editors.clear()
+            sel_idx = None
             first_idx = None
             for title, keys in _GROUPS:
                 vis = [k for k in keys if k in visible]
                 if not vis:
                     continue
                 lv.append(_LI(Static(f"[{title}]", markup=False), disabled=True, name=f"__header__{title}"))
+                await form.mount(Static(f" {title}", classes="group-label"))
                 for k in vis:
                     val = self._fmt(k, self._cfg.get(k, ""))
-                    item = _LI(Static(f"{k}: {val}", markup=False), name=k)
-                    lv.append(item)
+                    lv.append(_LI(Static(f"{k}: {val}", markup=False), name=k))
                     if first_idx is None:
                         first_idx = len(lv.children) - 1
                     if k == keep:
-                        sel_item = len(lv.children) - 1
-            lv.index = sel_item if sel_item is not None else first_idx
-            self._render_editor()
+                        sel_idx = len(lv.children) - 1
+                    await self._mount_field(k, form)
+            lv.index = sel_idx if sel_idx is not None else first_idx
         except Exception as e:  # noqa: BLE001 — never a crash screen
-            self.notify(f"field list failed: {type(e).__name__}: {e}", severity="error")
+            self.notify(f"settings build failed: {type(e).__name__}: {e}", severity="error")
+
+    async def _mount_field(self, key: str, form) -> None:
+
+        fdef = ALL_FIELDS.get(key, ("string", None))
+        ftype = fdef[0]
+        cur = self._cfg.get(key, "")
+        await form.mount(Static(key, classes="field-label"))
+        if ftype == "bool":
+            w = Switch(value=bool(cur), classes="field-widget")
+            self._rendered[key] = bool(cur)
+        elif ftype == "choice":
+            choices = [str(c) for c in fdef[1]]
+            opts = [(c, c) for c in choices]
+            install = str(cur) if cur not in ("", None) else choices[0]
+            if cur not in ("", None) and install not in choices:
+                # the current value rides as an EXTRA option — never silently
+                # rewritten to choices[0]. value and label MUST be identical:
+                # this Textual builds the legal-value set from the tuple's
+                # second slot when they differ (the Illegal-select bug)
+                opts = [(install, install)] + opts
+            # the ctor IGNORES its value param — construct, then assign
+            w = Select(opts, classes="field-widget", allow_blank=False)
+            w.value = install
+            self._rendered[key] = install
+        else:
+            install = "" if cur in ("", None) else str(cur)
+            w = Input(value=install, classes="field-widget")
+            self._rendered[key] = install
+        # the widget's OWN field key rides its id (Select.name is read-only
+        # in Textual 8.x): "f-<key>" — events read it back
+        w.id = f"f-{key}"
+        self._editors[key] = w
+        await form.mount(w)
 
     def _fmt(self, key: str, val) -> str:
         if isinstance(val, bool):
@@ -238,86 +314,54 @@ class SettingsApp(App):
             return f"{val:.2f}"
         return str(val) if val != "" else "—"
 
-    # ── editor pane ───────────────────────────────────────────────────
-
-    def _render_editor(self) -> None:
-        self._syncing = True  # widget .value assignments below are renders, not edits
-        try:
-            key = self._selected_key()
-            title = self.query_one("#field-title", Static)
-            hint = self.query_one("#field-hint", Static)
-            sw = self.query_one("#edit-switch", Switch)
-            sel = self.query_one("#edit-select", Select)
-            inp = self.query_one("#edit-input", Input)
-            sw.display = sel.display = inp.display = False
-            if key is None:
-                title.update("select a field")
-                hint.update("")
-                return
-            fdef = ALL_FIELDS.get(key, ("string", None))
-            ftype = fdef[0]
-            filters = fdef[2] if len(fdef) > 2 else None
-            scope = f" · shown for provider '{self._cfg.get('provider', '')}'" if filters else ""
-            title.update(key)
-            cur = self._cfg.get(key, "")
-            if ftype == "bool":
-                hint.update("toggle the switch" + scope)
-                sw.value = bool(cur)
-                sw.display = True
-            elif ftype == "choice":
-                choices = [str(c) for c in fdef[1]]
-                hint.update("pick from the list" + scope)
-                sel.set_options([(c, c) for c in choices])
-                sel.value = str(cur) if cur in choices else choices[0]
-                sel.display = True
-            else:
-                lohi = fdef[1]
-                hint.update((f"range {lohi[0]}–{lohi[1]}, clamped on save" if lohi else "free text") + scope)
-                inp.value = self._fmt(key, cur) if cur != "" else ""
-                inp.display = True
-        finally:
-            self._syncing = False
-            # let queued render-time events drain past the guard before user edits
-            self.call_after_refresh(lambda: setattr(self, "_syncing", False))
-
-    def _selected_key(self) -> str | None:
-        lv = self.query_one("#list", ListView)
-        item = lv.highlighted_child
-        if item is None:
-            return None
-        name = getattr(item, "name", "") or ""
-        return None if name.startswith("__header__") else name
-
     # ── events ────────────────────────────────────────────────────────
 
     def on_list_view_highlighted(self, event) -> None:
-        self._render_editor()
+        """Scroll the form to the highlighted field's editor."""
+        item = event.list_view.highlighted_child
+        name = getattr(item, "name", "") or ""
+        if not name.startswith("__header__"):
+            w = self._editors.get(name)
+            if w is not None:
+                with contextlib_suppress():
+                    w.scroll_visible()
+
+    def on_button_pressed(self, event) -> None:
+        if event.button.id == "btn-save":
+            self.action_save()
+        elif event.button.id == "btn-cancel":
+            self.action_cancel()
+
+    def _accept(self, key: str | None, value) -> bool:
+        """Echo gate + write-guard: mount-time echoes (value == installed)
+        never write; the key must be a real field."""
+        if not key or key not in ALL_FIELDS:
+            return False
+        return not (key in self._rendered and _eq(self._rendered[key], value))
+
+    def _key_of(widget) -> str | None:
+        wid = getattr(widget, "id", None) or ""
+        return wid.removeprefix("f-") if wid.startswith("f-") else None
 
     def on_switch_changed(self, event) -> None:
-        if self._syncing:
-            return
-        key = self._selected_key()
-        if key:
+        key = SettingsApp._key_of(event.switch)
+        if self._accept(key, event.value):
             self._cfg[key] = bool(event.value)
+            self._rendered.pop(key, None)
             self._refresh_row(key)
 
     def on_select_changed(self, event) -> None:
-        if self._syncing:
-            return
-        key = self._selected_key()
-        fdef = ALL_FIELDS.get(key) if key else None
-        valid = fdef and fdef[0] == "choice" and str(event.value) in [str(c) for c in fdef[1]]
-        if key and event.value is not None and valid:
+        key = SettingsApp._key_of(event.select)
+        if event.value is not None and self._accept(key, event.value):
             self._cfg[key] = str(event.value)
+            self._rendered.pop(key, None)
             self._refresh_row(key)
             if key == "provider":
-                self._rebuild_list(keep=str(event.value))  # provider filters the visible fields
+                self.call_after_refresh(self._rebuild, str(event.value))  # refilters visible fields
 
     def on_input_changed(self, event) -> None:
-        if self._syncing:
-            return
-        key = self._selected_key()
-        if not key or not self.query_one("#edit-input", Input).display:
+        key = SettingsApp._key_of(event.input)
+        if not self._accept(key, event.value):
             return
         raw = event.value.strip()
         try:
@@ -336,6 +380,8 @@ class SettingsApp(App):
 
     def _refresh_row(self, key: str) -> None:
         try:
+            from textual.widgets import ListItem
+
             for item in self.query_one("#list", ListView).children:
                 if getattr(item, "name", "") == key and isinstance(item, ListItem):
                     item.children[0].update(f"{key}: {self._fmt(key, self._cfg.get(key, ''))}")
@@ -345,6 +391,13 @@ class SettingsApp(App):
     # ── actions ───────────────────────────────────────────────────────
 
     def action_save(self) -> None:
+        if self._status == "corrupt":
+            self.notify(
+                f"config.json is corrupt — refusing to save over it. Fix the JSON by hand: {CONFIG_PATH}",
+                severity="error",
+                timeout=10,
+            )
+            return
         try:
             save_config(self._cfg)
             self.notify(f"saved → {CONFIG_PATH}")
@@ -355,6 +408,12 @@ class SettingsApp(App):
     def action_cancel(self) -> None:
         self.notify("exit without saving")
         self.exit()
+
+
+def contextlib_suppress():
+    import contextlib
+
+    return contextlib.suppress(Exception)
 
 
 def main() -> int:
