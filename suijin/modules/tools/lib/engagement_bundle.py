@@ -157,7 +157,11 @@ def save_engagement(thread_id: str, objective: str, config: dict, state: dict, c
                 except OSError:
                     continue
 
-    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+    # ATOMIC write: a KI mid-zip left a truncated bundle on disk (silently
+    # corrupt). Build beside the target, then os.replace — readers never
+    # see a half-written .sje.
+    tmp_path = path.with_suffix(".sje.tmp")
+    with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
         # the manifest cannot hash itself — the seal covers every PAYLOAD
         # file; manifest integrity follows from those hashes
         for rel, data in payload.items():
@@ -167,6 +171,9 @@ def save_engagement(thread_id: str, objective: str, config: dict, state: dict, c
         for rel, data in payload.items():
             if rel != "manifest.json":
                 zf.writestr(rel, data)
+    import os as _os
+
+    _os.replace(tmp_path, path)
     return path
 
 

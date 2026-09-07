@@ -72,6 +72,7 @@ UI_STATE = {
     "creds": [],
     "fireteams": 0,
     "last_reasoning": "",
+    "ctx_pct": None,  # live context-window usage (input tokens / window) — the CyberStrike-parity gauge
     "last_result_success": True,
     "poc_running": False,  # catalog_exploit verifier has taken over the loop
     "librarian": 0,  # engagement-memory observations (the librarian thread)
@@ -353,7 +354,7 @@ def _syntax(console: Console, code: str, lexer: str) -> object:
     if not console.is_terminal or lexer == "text":
         return Text(code, style="dim")
     with contextlib.suppress(Exception):
-        return Syntax(code, lexer, theme="monokai", word_wrap=True, background_color="default", pad=False)
+        return Syntax(code, lexer, theme="monokai", word_wrap=True, background_color="default")
     return Text(code, style="dim")
 
 
@@ -824,7 +825,9 @@ class TypewriterStream:
                         self._ui.console.print(_md_line(ln.rstrip()))
 
     def _emit_box(self, lang: str, content: str) -> None:
-        """A complete command span: black box, white syntax-highlighted.
+        """A complete command span: black box, syntax-highlighted (the
+        plain-white era is over — the visibility bar demands color; the
+        lexer falls back intelligently, monokai on default bg).
         IDENTICAL consecutive spans render ONCE — glm's reasoning stream
         often rehearses the exact decision JSON that arrives again as
         content (the duplicate-box field bug)."""
@@ -833,13 +836,21 @@ class TypewriterStream:
             return
         self._last_box_norm = norm
         with contextlib.suppress(Exception):
-            body = Text(str(content)[:2000], style="white")  # plain — no syntax highlighting
+            lexer = lang if lang not in ("", "bash", "sh") else "bash"
+            if lexer in ("json", "javascript", "js", "python", "bash", "sh", "html", "xml"):
+                body = self._ui.console.is_terminal and Syntax(
+                    str(content)[:2000], lexer, theme="monokai", word_wrap=True, background_color="default"
+                )
+                if not body:
+                    body = Text(str(content)[:2000], style="white")
+            else:
+                body = Text(str(content)[:2000], style="white")
             self._ui.console.print(
                 Panel(
                     body,
                     box=box.SQUARE,
                     border_style="bright_white",
-                    title=f" {lang} ",
+                    title=f" {lang or 'cmd'} ",
                     title_align="left",
                     padding=(0, 1),
                 )
@@ -990,10 +1001,17 @@ class EngagementUI:
             ft_seg = [(" | ", "dim"), (label, "bold magenta")]
         lb_n = int(UI_STATE.get("librarian") or 0)
         lb_seg = [(" | ", "dim"), (f"LIB {lb_n}", f"bold {GOLD}")] if lb_n else []
+        pct = UI_STATE.get("ctx_pct")
+        ctx_seg = None
+        if pct is not None:
+            pf = float(pct)
+            style = "green" if pf < 60 else ("yellow" if pf < 85 else "bold red")
+            ctx_seg = [(" | ", "dim"), (f"ctx {pf:.0f}%", style)]
         right = Text.assemble(
             (f"{_fmt_tok(tok)} tok", "cyan"),
             (" | ", "dim"),
             (f"{approx}${cost:.4f}", "cyan"),
+            *(ctx_seg or []),
             *([(" | ", "dim"), (f"FLAG {len(UI_STATE['flags'])}", f"bold {GOLD}")] if UI_STATE["flags"] else []),
             *([(" | ", "dim"), (f"CRED {len(UI_STATE['creds'])}", "bold green")] if UI_STATE["creds"] else []),
             *(ft_seg or []),
@@ -1059,21 +1077,27 @@ class EngagementUI:
         self._tick()
 
     def start(self) -> None:
+        # FULLY idempotent: the ask flow and pause-resume call start()
+        # repeatedly — the old version was only Live-idempotent and stacked
+        # one heartbeat + typewriter thread per call (thread storm, GIL
+        # starvation, the frozen-ui hang)
         if self._live is None:
             # transient: on stop (pause/end) the strip VANISHES cleanly —
             # no stale bottom artifact painted under the pause prompts
             self._live = Live(self._strip(), console=self.console, refresh_per_second=60, transient=True)
             self._live.start()
+        if self._refresh_thread is None or not self._refresh_thread.is_alive():
             # the heartbeat: rebuild the strip once a second so counters,
             # cost, and the fireteam agent rows stay live (and teams
             # DISAPPEAR the moment they drain) even while nothing prints
             self._refresh_stop.clear()
             self._refresh_thread = threading.Thread(target=self._heartbeat, name="red-strip", daemon=True)
             self._refresh_thread.start()
-            # the typewriter ticker: playback thread at 50Hz — WITHOUT this
-            # nothing streams live (rows only land at stream_done's flush,
-            # which reads as 'clean but no streaming at all')
-            self._tw.start()
+        # the typewriter ticker: playback thread at 20Hz — WITHOUT this
+        # nothing streams live (rows only land at stream_done's flush,
+        # which reads as 'clean but no streaming at all'). start() checks
+        # its own liveness.
+        self._tw.start()
 
     _LLM_WAIT_REPORT_S = 15  # every 15s of silent thinking, tell the operator
     _last_report_s: int = -1  # dedup — one line per interval, never twice
