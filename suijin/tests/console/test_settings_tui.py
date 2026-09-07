@@ -48,38 +48,24 @@ class TestFieldModel:
 
 
 class TestApp:
-    def test_pilot_round_trip(self, cfg):
+    def test_form_mounts_editors_and_save_round_trip(self, cfg):
         import asyncio
 
         async def run():
             app = st.SettingsApp()
             async with app.run_test(size=(100, 34)) as pilot:
                 await pilot.pause()
-                lv = app.query_one("#list", st.ListView)
-
-                def pick(name):
-                    for i, item in enumerate(lv.children):
-                        if getattr(item, "name", "") == name:
-                            lv.index = i
-                            return
-
-                # int editor (clamped on save)
-                pick("max_iterations")
+                await asyncio.sleep(0.3)  # call_after_refresh(_rebuild) drains
+                assert len(app._editors) > 15  # one editor per visible field
+                app._editors["max_iterations"].value = "500"
                 await pilot.pause()
-                app.query_one("#edit-input", st.Input).value = "500"
+                app._editors["mode_hitl"].value = True
                 await pilot.pause()
-                # bool editor
-                pick("mode_hitl")
+                app._editors["zai_model"].value = "glm-4.6"
                 await pilot.pause()
-                app.query_one("#edit-switch", st.Switch).value = True
-                await pilot.pause()
-                # choice editor + provider swap rebuilds visible fields
-                pick("provider")
-                await pilot.pause()
-                sel = app.query_one("#edit-select", st.Select)
-                assert sel.display
-                sel.value = "deepseek"
-                await pilot.pause()
+                assert app._cfg["max_iterations"] == 500
+                assert app._cfg["mode_hitl"] is True
+                assert app._cfg["zai_model"] == "glm-4.6"
                 app.action_save()
                 await pilot.pause()
 
@@ -87,23 +73,24 @@ class TestApp:
         saved = json.loads(cfg.read_text())
         assert saved["max_iterations"] == 500
         assert saved["mode_hitl"] is True
-        assert saved["provider"] == "deepseek"
+        assert saved["zai_model"] == "glm-4.6"
 
-    def test_render_errors_notify_not_crash(self, cfg):
+    def test_provider_swap_rebuilds_visible_fields(self, cfg):
         import asyncio
 
         async def run():
             app = st.SettingsApp()
             async with app.run_test(size=(100, 34)) as pilot:
                 await pilot.pause()
-                # a field with no definition renders gracefully (notify, no crash screen)
-                lv = app.query_one("#list", st.ListView)
-                lv.index = 1
+                await asyncio.sleep(0.3)
+                assert "zai_endpoint" in app._editors  # zai provider
+                app._editors["provider"].value = "deepseek"
                 await pilot.pause()
-                app.action_cancel()
-                await pilot.pause()
+                await asyncio.sleep(0.4)  # rebuild via call_after_refresh
+                assert "zai_endpoint" not in app._editors
+                assert "deepseek_model" in app._editors
 
-        asyncio.run(run())  # completes without raising
+        asyncio.run(run())
 
     def test_non_tty_main_prints_summary(self, cfg, capsys, monkeypatch):
         import io
@@ -113,3 +100,103 @@ class TestApp:
         assert st.main() == 0
         out = capsys.readouterr().out
         assert "settings:" in out and "provider" in out
+
+
+class TestSaveCorruptionFixes:
+    """The reported bug: saving didn't work properly. Root causes fixed:
+    (1) render echoes wrote into config (the _syncing flag reset before
+    the async Changed events arrived); (2) echoed handlers keyed on the
+    CURRENT highlight, so quick navigation wrote field A's value into
+    field B; (3) a choice value outside the static list was silently
+    rewritten to choices[0]; (4) a corrupt config would be wiped on
+    save. The form redesign removes the whole class: one mounted editor
+    per field, events keyed by the WIDGET'S OWN id."""
+
+    def test_walking_the_list_writes_nothing(self, cfg):
+        import asyncio
+
+        async def run():
+            app = st.SettingsApp()
+            async with app.run_test(size=(100, 34)) as pilot:
+                await pilot.pause()
+                await asyncio.sleep(0.3)
+                before = dict(app._cfg)
+                lv = app.query_one("#list", st.ListView)
+                for i in range(len(lv.children)):
+                    lv.index = i
+                await pilot.pause()
+                drift = {k: (before.get(k), v) for k, v in app._cfg.items() if before.get(k) != v}
+                assert not drift, f"a render echo wrote into config: {drift}"
+
+        asyncio.run(run())
+
+    def test_stale_echo_event_cannot_write(self, cfg):
+        import asyncio
+
+        async def run():
+            app = st.SettingsApp()
+            async with app.run_test(size=(100, 34)) as pilot:
+                await pilot.pause()
+                await asyncio.sleep(0.3)
+
+                # a delayed echo of temperature's mount-time "0.4" arriving
+                # late — handler must drop it (value == rendered install)
+                class _E:
+                    class input:  # noqa: N801
+                        id = "f-temperature"
+                        display = True
+
+                    value = "0.4"
+
+                app.on_input_changed(_E())
+                assert app._cfg["temperature"] == 0.4  # unchanged, not re-corrupted
+
+        asyncio.run(run())
+
+    def test_choice_value_outside_list_is_kept(self, cfg):
+        import asyncio
+
+        data = json.loads(cfg.read_text())
+        data["zai_model"] = "glm-4.5-older-custom"  # not in the static list
+        cfg.write_text(json.dumps(data))
+
+        async def run():
+            app = st.SettingsApp()
+            async with app.run_test(size=(100, 34)) as pilot:
+                await pilot.pause()
+                await asyncio.sleep(0.3)
+                assert app._cfg["zai_model"] == "glm-4.5-older-custom"  # kept, shown as (current)
+
+        asyncio.run(run())
+
+    def test_corrupt_config_refuses_save(self, tmp_path, monkeypatch):
+        import asyncio
+
+        p = tmp_path / "config.json"
+        p.write_text("{corrupt")
+        monkeypatch.setattr(st, "CONFIG_PATH", str(p))
+
+        async def run():
+            app = st.SettingsApp()
+            async with app.run_test(size=(100, 34)) as pilot:
+                await pilot.pause()
+                app.action_save()
+                await pilot.pause()
+                assert app.is_running  # refused: did NOT exit, did NOT wipe
+
+        asyncio.run(run())
+        assert p.read_text() == "{corrupt"  # the file is untouched
+
+    def test_save_and_cancel_buttons_exist(self, cfg):
+        import asyncio
+
+        async def run():
+            app = st.SettingsApp()
+            async with app.run_test(size=(100, 34)) as pilot:
+                await pilot.pause()
+                from textual.widgets import Button
+
+                assert "Save" in str(app.query_one("#btn-save", Button).label)
+                assert app.query_one("#btn-cancel", Button)
+
+        asyncio.run(run())
