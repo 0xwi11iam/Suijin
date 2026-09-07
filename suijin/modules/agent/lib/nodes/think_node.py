@@ -521,6 +521,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         logger.debug(f"Parse attempt {attempt + 1} failed: {parse_error}")  # console rendering lives in the UI
         if attempt < max_parse_retries - 1:
             messages.append({"role": "assistant", "content": raw_response})
+            _escalate = attempt >= 1  # the teaching retry failed once — escalate
             messages.append(
                 {
                     "role": "user",
@@ -529,23 +530,41 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
                         "Respond with EXACTLY ONE JSON object and NOTHING else:\n"
                         '{"action": "use_tool", "tool_name": "<tool>", "tool_args": {...}, "thought": "..."}\n'
                         "Pick a tool from the tool list."
+                        + (
+                            "\nYour previous answers were prose/garbage. Output raw JSON ONLY — "
+                            "no markdown fences, no explanation, no preamble."
+                            if _escalate
+                            else ""
+                        )
                     ),
                 }
             )
+            if _escalate:
+                # ladder escalation: identical retries beget identical
+                # garbage — raise temperature for the next attempt
+                with contextlib.suppress(Exception):
+                    _call_cfg = dict(_call_cfg)
+                    _call_cfg["temperature"] = min(1.0, float(_call_cfg.get("temperature", 0.4)) + 0.3)
 
     if decision is None:
         logger.error(f"All parse attempts failed. Last error: {parse_error}")
+        # NOT terminal anymore: 200 iterations of work must not die on a
+        # garbage stretch — return the failure as a turn; the graph loops
+        # (fresh parse attempts) and the no-progress breaker bounds true
+        # garbage with a clean stop.
         return {
             "messages": [
                 {"role": "assistant", "content": raw_response},
                 {
                     "role": "user",
-                    "content": f"SYSTEM: JSON parse failed after {max_parse_retries} attempts: {parse_error}",
+                    "content": (
+                        f"SYSTEM: JSON parse failed after {max_parse_retries} attempts: {parse_error}. "
+                        "Next turn: EXACTLY ONE minimal JSON decision object, nothing else."
+                    ),
                 },
             ],
             "current_iteration": iteration,
-            "completion_reason": "parse_failure",
-            "final_summary": f"Agent stopped: LLM output could not be parsed after {max_parse_retries} attempts.",
+            "_current_step": {},  # falsy tool_name — no phantom dispatch
         }
 
     # ── Process decision ─────────────────────────────────────────────

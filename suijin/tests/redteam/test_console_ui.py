@@ -798,10 +798,11 @@ class TestFieldCrashRegressions:
         assert "parse_failure" in out
         assert "could not be parsed after 3 attempts" in out
 
-    def test_graph_parse_death_is_observable(self):
-        """End-to-end class proof: a garbage model kills the run via
-        parse_failure with corrective messages in state — the exact
-        signals the UI renders (parse_note + failure panel)."""
+    def test_graph_garbage_is_bounded_not_fatal(self):
+        """End-to-end class proof: a garbage model streams corrective
+        turns (the signal the UI renders as parse_note) and the
+        NO-PROGRESS BREAKER ends it cleanly — the run never vanishes and
+        never bills forever."""
         import asyncio
 
         from suijin.modules.agent.lib.agent_graph import SuijinAgentGraph
@@ -811,7 +812,8 @@ class TestFieldCrashRegressions:
 
         graph = SuijinAgentGraph(generate_fn=garbage, route_tool_fn=lambda *a: "ok", max_iterations=5)
         state = asyncio.run(graph.run("probe 127.0.0.1 for flaws", thread_id="parse-death-test"))
-        assert state.get("completion_reason") == "parse_failure"
+        cr = str(state.get("completion_reason", ""))
+        assert "no-progress" in cr  # the breaker, not parse_failure death
         msgs = " ".join(str(m.get("content", "")) for m in state.get("messages", []))
         assert "JSON parse failed" in msgs  # the signal the loop keys on
 

@@ -293,6 +293,15 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
         cfg = dict(config or {})
         with contextlib.suppress(Exception):
             cfg["intelligence"] = _UI_STATE.get("intelligence", "max")
+        # live context gauge: input chars -> tokens vs the model's window —
+        # the strip's ctx % (the CyberStrike-parity visibility item)
+        with contextlib.suppress(Exception):
+            from suijin.modules.providers.lib.model_meta import resolve_context_window
+
+            _prov2 = str(cfg.get("provider") or "")
+            _win = resolve_context_window(_prov2, str(cfg.get(f"{_prov2}_model") or ""), cfg)
+            _in_tok = sum(len(str(m.get("content", ""))) for m in (messages or [])) // 4
+            _UI_STATE["ctx_pct"] = round(100.0 * _in_tok / max(1, _win), 1)
         return generate_async(messages, cfg, on_delta=sink, **kw)
 
     agent = _agent_graph_cls()(
@@ -340,7 +349,22 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                 (_edir2() / "librarian.json").write_text(json.dumps(_resume_ledger), encoding="utf-8")
             if _resume_scratchpad:
                 (_edir2() / "scratchpad.md").write_text(str(_resume_scratchpad), encoding="utf-8")
-            agent._graph.update_state(langgraph_config, dict(resume_state))
+            # seed the fresh thread with the saved engagement's state —
+            # SCHEMA-VALIDATED first: a poisoned/wrong-typed bundle value
+            # used to pass straight into the graph and detonate turns later
+            _seed = dict(resume_state)
+            with contextlib.suppress(Exception):
+                _seed["messages"] = [
+                    m
+                    for m in (_seed.get("messages") or [])
+                    if isinstance(m, dict) and isinstance(m.get("content"), (str, list))
+                ][-200:]
+                if not isinstance(_seed.get("_current_step", {}), dict):
+                    _seed.pop("_current_step", None)
+                _seed["execution_trace"] = [t for t in (_seed.get("execution_trace") or []) if isinstance(t, dict)][
+                    -150:
+                ]
+            agent._graph.update_state(langgraph_config, _seed)
             n_msgs = len(resume_state.get("messages") or [])
             console.print(
                 f"[green]resumed from saved engagement — {n_msgs} message(s), "
@@ -419,6 +443,31 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
     # OFF — one owner of stdin, ever. Piped/CI keeps the line reader.
     _pause_q = None
     _input_reader = None
+    # Shared pause/live holders exist on BOTH paths — the loop's restart
+    # and interrupt handlers reference them unconditionally, and a non-TTY
+    # run (tests, CI, containers) used to UnboundLocalError on any restart
+    # or Ctrl+C (latent since the pause machinery was TTY-only).
+    _pause_live = {"agent": agent, "thread_id": thread_id, "final_state": {}, "objective": objective}
+    _pause_session = {"active": False, "guidance": None, "stop": False, "done": __import__("threading").Event()}
+
+    class _NonTtyPauseCtx:
+        """Attribute-compatible stub: pause commands are TTY-only, but the
+        handlers still assign agent/thread_id/objective onto this."""
+
+        agent = None
+        thread_id = ""
+        objective = ""
+        stop_requested = False
+        guidance_extra = []
+
+    _pause_ctx = _NonTtyPauseCtx()
+    _pause_ctx.agent = agent
+    _pause_ctx.thread_id = thread_id
+    _pause_ctx.objective = objective
+
+    def _start_pause_session():  # no-op off-TTY (the console prompt path drives)
+        pass
+
     if sys.stdin.isatty():
         import queue as _qmod
 
@@ -534,6 +583,11 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
 
     from suijin.modules.redteam.lib.red.console_ui import ask_operator_answer as _ask_op
 
+    def _reader_alive() -> bool:
+        """The keystroke reader's liveness — a dead reader must never turn
+        an ask into 10 minutes of dead air or a pause into a forever-wait."""
+        return _input_reader is not None and _input_reader._thread is not None and _input_reader._thread.is_alive()
+
     def _operator_input(label: str, timeout_s: float = 600.0) -> str:
         """Operator text through the ONE stdin owner. TTY: the keystroke
         reader routes raw lines to an ask queue (console.input fought the
@@ -542,6 +596,9 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
         import queue as _qmod
 
         if _input_reader is not None:
+            if not _reader_alive():
+                console.print("[yellow]  input reader is gone — no answer possible, continuing autonomously[/yellow]")
+                return ""
             q = _qmod.Queue()
             with contextlib.suppress(Exception):
                 console.print(f"[bold cyan]{label}[/bold cyan] [dim]— type your answer in the input box[/dim]")
@@ -575,10 +632,12 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
     console.print(HINT + " [dim]/think (toggle reasoning)[/dim]")
 
     _resume_retry = False  # one clean-restart allowed after a paused resume
+    _restart_stream = False  # provider restart / ask-hold: exit inner loop, re-stream
 
     while True:
         try:
             _got_events = False
+            _restart_stream = False
             input_state = {"_objective": objective, "user_id": "local", "project_id": "default"} if first_run else None
             first_run = False
 
@@ -609,6 +668,8 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                     _q.put_nowait(None)  # sentinel: stream done
 
             _reader_task = asyncio.create_task(_astream_reader())
+            _stream_done = False
+            _completed = False
             while True:
                 try:
                     event = await asyncio.wait_for(asyncio.to_thread(_eq.get, timeout=2.0), timeout=3.0)
@@ -618,15 +679,32 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                         raise KeyboardInterrupt()
                     continue
                 if event is None:  # sentinel — astream completed
+                    # a KI that landed INSIDE the graph/node was swallowed by
+                    # the reader and arrives here as an ordinary end-of-stream
+                    # — without this check the engagement ENDED instead of
+                    # pausing whenever the signal hit the wrong frame
+                    if getattr(_signal, "_suijin_interrupted", False):
+                        _reader_task.cancel()
+                        raise KeyboardInterrupt()
                     if _stream_error:
                         raise _stream_error[0]  # the reader captured the real crash
+                    _stream_done = True
                     break
+                # malformed events degrade to a logged skip — one bad shape
+                # from a changed langgraph or a poisoned bundle must never
+                # end the engagement
+                if not isinstance(event, dict) or not event:
+                    console.print("[yellow]  skipped a malformed stream event[/yellow]")
+                    continue
+                node_name = next(iter(event))
+                node_output = event[node_name]
+                if not isinstance(node_output, dict):
+                    console.print(f"[yellow]  skipped a malformed output from {node_name}[/yellow]")
+                    continue
                 _got_events = True
                 if getattr(_signal, "_suijin_interrupted", False):
                     _reader_task.cancel()
                     raise KeyboardInterrupt()
-                node_name = list(event.keys())[0]
-                node_output = event[node_name]
 
                 # diag: every node transition (think->execute->think...)
                 with contextlib.suppress(Exception):
@@ -697,7 +775,14 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                         # printed prompt — stop it for the whole operator-input
                         # window, restart after.
                         ui.stop()
-                        # Pause graph, ask operator, inject answer, resume.
+                        # ASK = a real pause: cancel the stream so the graph
+                        # HOLDS at its checkpoint instead of thinking past the
+                        # question (the old flow let it run — the answer landed
+                        # >=1 turn late and could contradict it)
+                        _reader_task.cancel()
+                        with contextlib.suppress(Exception):
+                            await _reader_task
+                        # Ask operator, inject answer, resume.
                         # The RunBox reader thread owns stdin — the answer is
                         # taken through its guidance queue (input() on the
                         # main thread raced the reader and hung the agent).
@@ -774,7 +859,8 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                         console.print("[dim]Answer sent. Resuming...[/dim]\n")
                         ui.start()
                         ui.waiting(True)  # straight back to the thinking spinner
-                        continue
+                        _restart_stream = True
+                        break  # inner loop — the outer loop re-streams from the checkpoint
                     if step.get("tool_name") == "catalog_exploit" and ui.exploit_verdict(out):
                         pass  # the classed verdict panel rendered
                     else:
@@ -883,13 +969,18 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                     _cr = str(node_output.get("completion_reason", ""))
                     if _cr in ("provider_failure", "llm_error") and not _provider_retried:
                         # provider flake (timeouts/empty responses under load)
-                        # does NOT end the engagement: one full restart with a
-                        # fresh thread. The field runs died to exactly this.
+                        # does NOT end the engagement: rebuild + CARRY STATE +
+                        # re-stream. (The old code `continue`d the INNER loop —
+                        # the fresh graph was never streamed and the dead one
+                        # re-emitted provider_failure: the restart was fiction.)
                         _provider_retried = True
                         console.print(
-                            f"[yellow]provider trouble ({_cr}) — one automatic restart, then it ends[/yellow]"
+                            f"[yellow]provider trouble ({_cr}) — one automatic restart (state carried), then it ends[/yellow]"
                         )
                         ui.flush_open()
+                        _carry = {}
+                        with contextlib.suppress(Exception):
+                            _carry = agent.get_state(thread_id) or {}
                         agent = _agent_graph_cls()(
                             generate_fn=_generate_with_stream,
                             route_tool_fn=_dispatch_mod().route_tool,
@@ -902,17 +993,42 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                             "recursion_limit": 100000,
                         }  # operator: infinite (250 killed real engagements)
                         agent._build()
+                        if _carry:
+                            # restart as a RESUME, not a reboot: the carried
+                            # snapshot keeps the conversation, board, chains,
+                            # queue and foothold — scrub the failure state
+                            for _bad in (
+                                "completion_reason",
+                                "_consecutive_failures",
+                                "_current_step",
+                                "final_summary",
+                            ):
+                                _carry.pop(_bad, None)
+                            with contextlib.suppress(Exception):
+                                agent._graph.update_state(langgraph_config, _carry)
+                            first_run = False  # continue from the checkpoint
+                            console.print("[green]  state carried — resuming from the checkpoint[/green]")
+                        else:
+                            first_run = True  # nothing to carry — fresh objective turn
                         _pause_live.update({"agent": agent, "thread_id": thread_id})
                         _pause_ctx.agent = agent
                         _pause_ctx.thread_id = thread_id
-                        first_run = True
                         ui.waiting(True)
-                        continue
+                        _restart_stream = True
+                        break  # exit the INNER loop — the outer loop re-streams
                     ui.flush_open()
                     final_state = node_output
+                    _completed = True
                     break
-            else:
-                # If loop completes without break, get final state
+
+            if _restart_stream:
+                continue  # outer loop: fresh astream on the rebuilt graph
+
+            if _stream_done and not _completed:
+                # the stream ended without a completion event — pull the
+                # final state explicitly (the old `while…else` never ran:
+                # both exits were `break`, so this path was dead code and a
+                # stale resume ended as a FALSE no-output diagnosis)
                 final_state = agent.get_state(thread_id) or {}
                 # Resume hardening: zero events from a resumed astream =
                 # the graph's internal state was stale after the KI —
@@ -948,15 +1064,25 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                 # ESC ESC fired MID-TURN: the reader already runs the pause
                 # session (banner + PAUSED visual + instant commands). The
                 # operator may have already typed guidance or /quit — join.
+                # A DEAD reader never sets done — bound the wait and stop
+                # cleanly instead of hanging forever (the pause deadlock).
                 _pause_session["ctx"] = _pause_ctx  # handlers now answer /state etc.
-                _pause_session["done"].wait()
+                while not _pause_session["done"].wait(2.0):
+                    if not _reader_alive():
+                        _pause_session["stop"] = True
+                        console.print("[yellow]  input reader died mid-pause — ending with a full save[/yellow]")
+                        break
             elif _input_reader is not None:
                 # Ctrl+C path (no session yet): start the reader-side
                 # session NOW — same instant behavior, same consumer.
                 _pause_session["ctx"] = _pause_ctx
                 _start_pause_session()
                 _input_reader._on_pause_line = _pause_line
-                _pause_session["done"].wait()
+                while not _pause_session["done"].wait(2.0):
+                    if not _reader_alive():
+                        _pause_session["stop"] = True
+                        console.print("[yellow]  input reader died mid-pause — ending with a full save[/yellow]")
+                        break
             else:
                 # non-TTY: no box exists — the legacy prompt path
                 ui.stop()
@@ -1001,6 +1127,11 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                 _input_reader._on_pause_line = None
                 _input_reader.end_pause()
                 _input_reader.arm_pause(_pause_q)
+            # the ask flow (or a crash) may have stopped the Live — start()
+            # is idempotent; without it an interrupted ask left the strip
+            # dead for the rest of the engagement
+            with contextlib.suppress(Exception):
+                ui.start()
             ui.paused_visual(False)
             ui.waiting(True)
             # Resume hardening: the KI that paused us may have left the
@@ -1201,6 +1332,10 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
             _lb.stop()  # flush the ledger; the digest state persists for resume
             _lb.set_ui_publish(None)  # UI is going down — never call a dead sink
         with contextlib.suppress(Exception):
+            # restore the PRIOR sigint handler — the custom one used to
+            # outlive the engagement (Ctrl+C at the menu still flipped flags)
+            _signal.signal(_signal.SIGINT, _old_sigint)
+        with contextlib.suppress(Exception):
             from suijin.modules.tools.lib import exploit_catalog as _ec
 
             _ec.set_poc_sink(None)  # UI is going down — never call a dead sink
@@ -1218,6 +1353,10 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
             )
         with contextlib.suppress(Exception):
             ui.stop()
+    # the caller (tests, fuzz harness, future API surfaces) gets the final
+    # state — the function used to return None and the outcome was only
+    # observable through UI side effects
+    return final_state
 
 
 #  Helper functions — re-exported from session_control for backwards compat
