@@ -170,7 +170,9 @@ class SuijinAgentGraph:
             return {
                 "current_phase": "informational",
                 "current_iteration": 0,
-                "messages": [{"role": "user", "content": f"SYSTEM: initialize node crashed: {e} — continuing with minimal state"}],
+                "messages": [
+                    {"role": "user", "content": f"SYSTEM: initialize node crashed: {e} — continuing with minimal state"}
+                ],
                 "execution_trace": [],
                 "todo_list": [],
                 "target_info": {},
@@ -205,6 +207,36 @@ class SuijinAgentGraph:
             else:
                 result["_consecutive_failures"] = 0
 
+            # ── No-progress breaker: valid-but-empty decisions (use_tool
+            # with no tool_name, endless bookkeeping no-ops) used to loop
+            # forever with ZERO structural stop — every turn billed. After
+            # a nudge the loop gets ONE last chance, then a clean stop.
+            _step = result.get("_current_step") or {}
+            _did_work = (
+                bool(_step.get("tool_name"))
+                or bool(result.get("completion_reason"))
+                or result.get("_just_transitioned_to")
+            )
+            if _did_work:
+                result["_no_progress_turns"] = 0
+            else:
+                _np = int(state.get("_no_progress_turns", 0)) + 1
+                result["_no_progress_turns"] = _np
+                if _np == 4:
+                    result.setdefault("messages", []).append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "SYSTEM: four consecutive turns produced no tool action and no transition. "
+                                "Decisively use_tool (a real tool_name) or complete with a report — "
+                                "repeated empty turns will end this engagement."
+                            ),
+                        }
+                    )
+                elif _np >= 7 and not result.get("completion_reason"):
+                    result["completion_reason"] = "error: no-progress loop breaker (7 empty turns)"
+                    result["final_summary"] = "Engagement stopped: repeated decisions executed nothing."
+
             # ── Mode governor: surface queue + recon→exploit switch ──
             try:
                 from suijin.modules.agent.lib import mode_governor as _mg
@@ -225,7 +257,9 @@ class SuijinAgentGraph:
                         from suijin.modules.agent.lib import memory as _mem
                         from suijin.modules.agent.lib.attack_memory import target_key as _tk
 
-                        _rec = _mem.recall(_tk(state.get("_objective") or self.run_config.get("_objective") or ""), limit=3)
+                        _rec = _mem.recall(
+                            _tk(state.get("_objective") or self.run_config.get("_objective") or ""), limit=3
+                        )
                         if _rec and "no memory of" not in _rec:
                             result["_target_recall"] = _rec
                         with contextlib.suppress(Exception):

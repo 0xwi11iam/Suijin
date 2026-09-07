@@ -61,7 +61,9 @@ class TestThinkNode:
         assert step.get("tool_name") == "search_kb"
 
     def test_think_node_parse_failure_is_data(self):
-        """Unparseable LLM output must surface as parse_failure, not raise."""
+        """Unparseable LLM output must surface as a NON-TERMINAL corrective
+        turn (never raise, never kill the engagement — the no-progress
+        breaker in agent_graph bounds true garbage)."""
         from suijin.modules.agent.lib.nodes.think_node import think_node
 
         async def fake_generate(messages, config=None, **kw):
@@ -69,7 +71,9 @@ class TestThinkNode:
 
         state = {"objective": "o", "target_info": {}, "messages": [], "current_iteration": 1}
         out = asyncio.run(think_node(state, generate_fn=fake_generate, config={}))
-        assert out.get("completion_reason") == "parse_failure"
+        assert not out.get("completion_reason")  # survival is the contract now
+        assert "JSON parse failed" in out["messages"][-1]["content"]
+        assert not out.get("_current_step", {}).get("tool_name")
 
     def test_subagent_node_imports(self):
         from suijin.modules.agent.lib.nodes.subagent_node import spawn_and_collect

@@ -60,11 +60,15 @@ class TestThinkLoop:
         out = self._think('{"action":"use_tool","tool_name":"search_kb","tool_args":{"keyword":"x"},"thought":"t"}')
         assert out["_current_step"]["tool_name"] == "search_kb"
 
-    def test_garbage_one_retry_then_clean_failure(self):
-        # three parse retries -> all garbage -> clean parse_failure (never
-        # an exception leaking through the mock as llm_error)
+    def test_garbage_retries_then_nonterminal_turn(self):
+        # three parse retries -> all garbage -> a NON-TERMINAL turn: the
+        # engagement survives a garbage stretch (the no-progress breaker
+        # in agent_graph bounds true garbage with a clean stop); never an
+        # exception leaking through the mock as llm_error
         out = self._think(["total garbage not json", "still garbage", "more garbage"])
-        assert out.get("completion_reason") == "parse_failure"
+        assert not out.get("completion_reason")  # NOT parse_failure death
+        assert "minimal JSON" in out["messages"][-1]["content"]
+        assert not out.get("_current_step", {}).get("tool_name")  # falsy — no phantom dispatch
 
     def test_garbage_then_valid_recovers(self):
         out = self._think(

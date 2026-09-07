@@ -1,5 +1,7 @@
 """Execute tool node — AI chooses sync or background (\"background\": true)."""
 
+import asyncio as _asyncio
+import contextlib
 import logging
 import threading
 import time as _time
@@ -122,11 +124,18 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
     # the AI pauses until the yaml finishes (bounded by its 120s wall
     # cap); backgrounding it would break the takeover and let the AI
     # keep thinking mid-verification.
+    # The wait runs OFF the event loop (to_thread): model-authored JSON
+    # once asked for job_wait timeout=3600 and froze the whole pipeline
+    # — interrupts, the reader, everything — for an hour; the timeout is
+    # CLAMPED so the model can never choose its own freeze duration.
     if tool_name in ("job_wait", "job_status", "job_output", "job_list", "fireteam_status", "catalog_exploit"):
-        t0_sync = _time.monotonic()
-        result = route_tool_fn(tool_name, tool_args, {})
+        if tool_name == "job_wait":
+            with contextlib.suppress(Exception):
+                tool_args["timeout"] = min(max(float(tool_args.get("timeout", 30) or 30), 1.0), 120.0)
+        _t0_sync = _time.monotonic()
+        result = await _asyncio.to_thread(route_tool_fn, tool_name, tool_args, {})
         output, _ = _maybe_offload(tool_name, str(result))
-        duration_ms = int((_time.monotonic() - t0_sync) * 1000)
+        duration_ms = int((_time.monotonic() - _t0_sync) * 1000)
         success = not output.startswith("Error:")
         _audit_step(state, tool_name, tool_args, success, duration_ms)
         step_data.update(
