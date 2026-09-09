@@ -633,7 +633,9 @@ class TypewriterStream:
     LADDER = sorted({max(20, min(3000, round(20 * (1.09**i)))) for i in range(60)})  # 60 micro-increments
     TICK_HZ = 20.0  # 50Hz fought the Live refresh → terminal control code conflicts → flashing TUI
     CATCHUP_FACTOR = 1.15  # play slightly faster than arrival — always catch up
-    BACKLOG_ESCAPE = 3  # rows of backlog that allow unbounded gear jumps
+    BACKLOG_ESCAPE = 3  # rows of backlog that allow faster playback
+    MAX_VISUAL = 320.0  # cps — typing reads as typing, not an instant dump
+    MAX_ESCAPE = 1400.0  # cps — real backlog drains fast but still visibly
 
     def __init__(self, ui):
         self._ui = ui
@@ -654,7 +656,12 @@ class TypewriterStream:
     # ── lifecycle ────────────────────────────────────────────────────
 
     def start(self) -> None:
-        if self._thread is not None and self._thread.is_alive():
+        # A thread asked to stop may linger up to one tick (50ms) before
+        # exiting — the ask flow calls stop() then start() within that
+        # window, the old early-return skipped the spawn, and playback
+        # died for the rest of the engagement. If a stop was requested,
+        # always spawn fresh (the dying thread exits within one tick).
+        if self._thread is not None and self._thread.is_alive() and not self._stop.is_set():
             return
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, name="red-typewriter", daemon=True)
@@ -709,25 +716,32 @@ class TypewriterStream:
     # ── playback ─────────────────────────────────────────────────────
 
     def _measured_cps(self) -> float:
+        """Arrival rate over the FULL 5s window — the old span-since-first-
+        arrival made one big chunk measure at megacycles/sec (span ~1ms),
+        snapping the gear to the 3000cps cap = visually instant playback
+        (the 'no smooth typewriting' regression)."""
         now = time.monotonic()
         with self._lock:
             arrivals = [(t, n) for (t, n) in self._arrivals if now - t <= 5.0]
             self._arrivals = collections.deque(arrivals)
             chars = sum(n for _, n in arrivals)
-            span = max(0.001, now - arrivals[0][0]) if arrivals else 5.0
-        return chars / span
+        return min(chars / 5.0, float(self.LADDER[-1]))
 
     def _backlog(self) -> int:
         with self._lock:
             return sum(len(t) for _, t in self._pending) + len(self._line)
 
     def _select_rate(self, dt: float) -> float:
-        """Micro-increment gear selection — smooth steps, backlog escape."""
+        """Micro-increment gear selection — smooth steps, backlog escape.
+        The VISUAL CAP keeps playback readable: typing stays visibly
+        typing at ≤ MAX_VISUAL cps; only real backlog (the model pages
+        ahead) escapes to MAX_ESCAPE so playback never stalls minutes
+        behind the stream."""
         target = max(self.MIN_RATE, self._measured_cps() * self.CATCHUP_FACTOR)
         row = max(20, self._ui.console.width - 4)
+        cap = self.MAX_ESCAPE if self._backlog() > self.BACKLOG_ESCAPE * row else self.MAX_VISUAL
+        target = min(target, cap)
         snap = next((g for g in self.LADDER if g >= target), self.LADDER[-1])
-        if self._backlog() > self.BACKLOG_ESCAPE * row:
-            return snap  # far behind: jump straight to the catching gear
         # smooth: approach the snapped gear at most +18%/-30% per tick
         nxt = min(snap, self._rate * 1.18) if snap > self._rate else max(snap, self._rate * 0.70)
         return max(self.MIN_RATE, nxt)
@@ -1126,6 +1140,10 @@ class EngagementUI:
     def stop(self) -> None:
         self._refresh_stop.set()
         self._tw.stop()
+        # stuck-state insurance: if the POC verifier died between its start
+        # and done events (or the run crashed mid-verification), the strip
+        # would show RUNNING POC forever on the next engagement
+        UI_STATE["poc_running"] = False
         if self._live is not None:
             with contextlib.suppress(Exception):
                 self._live.stop()

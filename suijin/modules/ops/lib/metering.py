@@ -17,6 +17,24 @@ import json
 import statistics
 
 
+def _clean_name(raw: str) -> str:
+    """Engagement names are often whole disclosure policies pasted as the
+    objective — first non-boilerplate line, whitespace-collapsed, 36 chars.
+    The old [:40] chop mid-word rendered '# Disclosure Policy - x\n## Co'
+    garbage rows."""
+    lines = [ln.strip(" #*•-") for ln in str(raw or "?").splitlines()]
+    text = next(
+        (
+            ln
+            for ln in lines
+            if len(ln) >= 4
+            and not ln.lower().startswith(("required", "user agent", "please", "helvetica", "program rules"))
+        ),
+        lines[0] if lines else "?",
+    )
+    return " ".join(text.split())[:36] or "?"
+
+
 def _records() -> list[dict]:
     from suijin.modules.platform.lib.workspace import artifact_dir
 
@@ -30,7 +48,7 @@ def _records() -> list[dict]:
             continue
         out.append(
             {
-                "name": str(d.get("engagement", "?"))[:40],
+                "name": _clean_name(d.get("engagement", "?")),
                 "cost": float(d.get("cost_usd") or 0.0),
                 "actions": int(d.get("total_actions") or 0),
                 "ok_actions": int(d.get("successful_actions") or 0),
@@ -39,6 +57,33 @@ def _records() -> list[dict]:
             }
         )
     return out
+
+
+def leaderboard_table(limit: int = 15):
+    """Rich Table version of the leaderboard — the operator-facing render."""
+    from rich.table import Table
+
+    GREEN = "#3fb950"
+
+    t = Table(title=None, box=None, pad_edge=False, show_header=True, header_style="dim")
+    t.add_column("engagement", style="white", max_width=32, no_wrap=True, overflow="ellipsis")
+    t.add_column("find", justify="right", style="bold cyan", width=4, no_wrap=True)
+    t.add_column("actions", justify="right", style="dim", width=7, no_wrap=True)
+    t.add_column("cost", justify="right", width=7, no_wrap=True)
+    t.add_column("efficiency", justify="right", no_wrap=True)
+    for r in sorted(
+        [r for r in _records() if r["actions"] > 0],
+        key=lambda x: -(x["findings"] / x["cost"] if x["cost"] > 0 else 0.0),
+    )[:limit]:
+        if r["cost"] > 0:
+            eff = f"{r['findings'] / r['cost']:.1f} find/$ · ${r['cost'] / max(r['actions'], 1):.3f}/act"
+            cost = f"${r['cost']:.2f}"
+        else:
+            eff = f"{r['findings']} find · free run"
+            cost = "[dim]$0.00[/dim]"
+        find_style = f"{GREEN}" if r["findings"] else "dim"
+        t.add_row(r["name"], f"[{find_style}]{r['findings']}[/{find_style}]", str(r["actions"]), cost, eff)
+    return t
 
 
 def leaderboard(limit: int = 15) -> str:
@@ -52,7 +97,7 @@ def leaderboard(limit: int = 15) -> str:
             eff = f"{r['findings'] / r['cost']:.1f} find/$"
             ape = f"${r['cost'] / max(r['actions'], 1):.3f}/action"
         else:
-            eff = f"{r['findings']} find (free run)"
+            eff = f"{r['findings']} find · free run"
             ape = "$0.000/action"
         rows.append(
             f"  {r['name']:40} {r['findings']:>3} findings {r['actions']:>4} actions ${r['cost']:>7.3f}  {eff:>14}  {ape}"

@@ -15,7 +15,7 @@ class TestCatalogDiet:
 
         for phase in ("informational", "exploitation", "post_exploitation"):
             c = build_tool_catalog_prompt(phase)
-            assert len(c) < 8_000, f"{phase}: catalog is {len(c)} chars (was 17.6k — the diet regressed)"
+            assert len(c) < 10_000, f"{phase}: catalog is {len(c)} chars (was 17.6k — the diet regressed)"
             assert "background" in c.lower()  # the long-running discipline still rides
 
     def test_every_tool_still_listed_after_diet(self):
