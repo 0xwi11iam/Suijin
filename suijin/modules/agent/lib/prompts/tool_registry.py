@@ -401,6 +401,59 @@ TOOL_REGISTRY = {
         "args_format": '"mode": "clean"',
         "description": "**normalize_output** — trims ANSI, sorts, dedupes raw text.",
     },
+    # ===== The Evidence Engine + POC system + Fleet (the diet dropped
+    # these from the model's view entirely — the agent LITERALLY reported
+    # 'catalog_exploit doesn't exist in my tool list' mid-engagement) =====
+    "catalog_exploit": {
+        "purpose": "MANDATORY on every valuable find — writes the exploit folder (finding.md + exploit.yaml) and the verifier RUNS your POC before you continue; verdict + three options on miss",
+        "when_to_use": "The moment something is exploitable.",
+        "args_format": '"engagement": "...", "target": "...", "vuln_class": "sqli", "title": "...", "description": "one paragraph", "severity": "high", "cvss": 8.9, "commands": ["cmd1", "cmd2"], "expected_result": "unique marker string"',
+    },
+    "memory_recall": {
+        "purpose": "The engagement memory — every credential, leak, foothold, confirmed exploit and admin surface observed, plus the condensed digest",
+        "when_to_use": "Before attacking a surface — check what the engagement already knows about it.",
+        "args_format": '"query": "vault.citadel.local", "limit": 8',
+    },
+    "http_replay": {
+        "purpose": "THE request engine — payloads travel as DATA through 15 mutation ops and 12 codecs; compare mode = baseline vs exploit 3-gate diff in one call; credential swap; sweep",
+        "when_to_use": "Every governed request — never raw curl for evidence work.",
+        "args_format": '"url": "...", "method": "GET", "op": "set-query", "field": "q", "value": "payload", "codec": "url", "compare": true, "credential": "name"',
+    },
+    "inject_probe": {
+        "purpose": "Injection facts, never an oracle — xss tag-survival batteries + sink contexts, ssti product-discriminators, sqli error fingerprints + boolean pairs vs a measured noise floor",
+        "when_to_use": "Any input surface, before crafting payloads by hand.",
+        "args_format": '"url": "...", "vuln_class": "sqli", "field": "q"',
+    },
+    "web_session": {
+        "purpose": "The cross-credential session model — the IDOR worklist (endpoint shapes reached by 2+ credentials, ID fields differing) + hidden params",
+        "when_to_use": "After capturing any second credential; action=summary for the worklist.",
+        "args_format": '"action": "summary"',
+    },
+    "coverage_check": {
+        "purpose": "The coverage ledger (asset × vuln-class) — mark cells with evidence, list untested priority gaps; the completion gate READS this",
+        "when_to_use": "After every probe batch and before complete.",
+        "args_format": '"action": "mark", "asset": "url", "vuln_class": "sqli", "status": "tested_vulnerable", "evidence": "what you sent + what came back"',
+    },
+    "dispatch_testers": {
+        "purpose": "Deploy the tester fleet — pattern-matched lanes with attack doctrines as fireteam subagents (parallel, max 5)",
+        "when_to_use": "Complex surfaces (forms, APIs, multi-param endpoints).",
+        "args_format": '"url": "...", "max_lanes": 4',
+    },
+    "surface_expand": {
+        "purpose": "Enumerate sibling attack surfaces — portal nouns + derived paths, ranked by response",
+        "when_to_use": "When known surfaces are exhausted.",
+        "args_format": '"url": "...", "names": ["admin", "api"]',
+    },
+    "bypass_403": {
+        "purpose": "~24 known 403-bypass variants through http_request pacing — verdict table, confirm before recording",
+        "when_to_use": "Any 403 on an interesting path.",
+        "args_format": '"url": "..."',
+    },
+    "code_harness": {
+        "purpose": "Sandboxed code dev loop — write/run/verify cycles; VERDICT PASS output is finding evidence",
+        "when_to_use": "Building proof-of-concept scripts or parsing captures.",
+        "args_format": '"language": "python", "code": "...", "expect": "substring"',
+    },
 }
 
 # ── FREEDOM: all tools available in all phases ──────────────────────
@@ -416,6 +469,16 @@ _ALL_TOOLS = {
     "google_key_probe",
     "source_map_probe",
     "search_cve",
+    "catalog_exploit",
+    "memory_recall",
+    "http_replay",
+    "inject_probe",
+    "web_session",
+    "coverage_check",
+    "dispatch_testers",
+    "surface_expand",
+    "bypass_403",
+    "code_harness",
     "cve_advise_tools",
     "kb_stats",
     "kb_freshness",

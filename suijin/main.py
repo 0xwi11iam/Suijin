@@ -30,7 +30,6 @@ console = Console()
 CLI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "modules", "console", "lib", "cli.py")
 
 OPERATOR_TOOLS = [
-    ("EXPLOIT now — instant, uses all known intel", ["exploit"]),  # target prompted below
     ("Resume a saved engagement (.sje)", ["load-prompt"]),  # path prompted below
     ("Scope editor (Burp-style TUI)", ["scope"]),
     ("Approvals console (HITL)", ["approvals", "list"]),

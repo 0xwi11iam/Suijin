@@ -503,13 +503,21 @@ def run_status() -> int:
 
     # Efficiency leaderboard + forecast (D28/D30)
     try:
-        from suijin.modules.ops.lib.metering import forecast, leaderboard
+        from rich.console import Console as _RC
 
-        print()
-        print(leaderboard(limit=8))
+        from suijin.modules.ops.lib.metering import forecast, leaderboard, leaderboard_table
+
+        console = _RC()
+        console.print()
+        recs_exist = leaderboard(limit=8)
+        if "No completed engagements" in recs_exist:
+            console.print(f"[dim]{recs_exist}[/dim]")
+        else:
+            console.print(f"[bold]{recs_exist.splitlines()[0]}[/bold]")
+            console.print(leaderboard_table(limit=8))
         fc = forecast()
         if fc:
-            print(f"forecast: {fc.splitlines()[0]}")
+            console.print(f"[dim]forecast: {fc.splitlines()[0]}[/dim]")
     except Exception as e:
         print(f"metering:  {e}")
     return 0
@@ -665,28 +673,49 @@ def _dir_stats(p) -> tuple[int, int]:
 def run_workspace_status() -> int:
     """Canonical workspace layout, per-directory usage, symlink health."""
 
+    from rich.console import Console as _RC
+    from rich.table import Table
+    from rich.text import Text
+
     import suijin.modules.platform.lib.workspace as ws
 
+    console = _RC()
     ws.ensure_workspace_layout()
     inner = ws.PROJECT_DIR / "suijin" / "suijin_agent"
-    print(f"workspace: {ws.WORKSPACE_DIR}")
-    print(
-        f"symlink:   suijin/suijin_agent -> "
-        f"{'../suijin_agent (ok)' if inner.is_symlink() else 'MISSING — run: suijin selftest'}"
+    console.print(f"[bold white]workspace:[/bold white] [cyan]{ws.WORKSPACE_DIR}[/cyan]")
+    sym_ok = inner.is_symlink()
+    console.print(
+        "[bold white]symlink:[/bold white]   "
+        + (
+            "[green]suijin/suijin_agent -> ../suijin_agent (ok)[/green]"
+            if sym_ok
+            else "[red]MISSING — run: suijin selftest[/red]"
+        )
     )
+    t = Table(box=None, pad_edge=False, show_header=True, header_style="dim")
+    t.add_column("entry", style="white", max_width=28, no_wrap=True, overflow="ellipsis")
+    t.add_column("files", justify="right", style="dim", width=6, no_wrap=True)
+    t.add_column("size", justify="right", width=10, no_wrap=True)
     total = 0
+    rows = 0
     if ws.WORKSPACE_DIR.exists():
         for entry in sorted(ws.WORKSPACE_DIR.iterdir()):
+            if rows >= 40:
+                t.add_row(f"… (+{rows} more)", "", "", style="dim")
+                break
+            rows += 1
             if entry.is_dir():
                 n, size = _dir_stats(entry)
                 total += size
-                print(f"  {entry.name + '/':<18} {n:>5} files  {size / 1024:>9.0f} KB")
+                t.add_row(f"[cyan]{entry.name}/[/cyan]", str(n), f"{size / 1024:.0f} KB")
             else:
                 size = entry.stat().st_size
                 total += size
-                print(f"  {entry.name:<18} {'':>11}  {size / 1024:>9.0f} KB")
-    print(f"  {'total':<18} {'':>11}  {total / 1024 / 1024:>9.1f} MB")
-    return 0 if inner.is_symlink() else 1
+                style = "dim" if entry.suffix in (".log",) or entry.name.startswith(".") else None
+                t.add_row(Text(entry.name, style=style), "", f"{size / 1024:.0f} KB")
+    t.add_row(Text("total", style="bold"), "", f"{total / 1024 / 1024:.1f} MB", style="bold")
+    console.print(t)
+    return 0 if sym_ok else 1
 
 
 def run_reports_list() -> int:
