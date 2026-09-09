@@ -6,6 +6,49 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v6.7.0 — The Hardening Release
+
+The run loop cannot die (the provider-restart latch is real, Ctrl+C
+always pauses, malformed events degrade, a fuzz harness proves every
+run ends classified), the model can see its own tools again (the diet
+had silently dropped catalog_exploit + the entire evidence engine from
+the tool list), the POC system verifies from exploit.yaml with three
+explicit recovery options, session memory remembers what worked and
+recalls it the moment it matters, context budgets scale off the
+model's real window, and the bill stops paying for invisible tool
+lists.
+
+### Added
+- POC v3: per-exploit folders (finding.md + exploit.yaml), verifier
+  takeover TUI, transcript + three options (edit/rewrite/worked-anyway
+  with verified evidence)
+- The librarian: pattern-first engagement memory, every-turn relevant
+  recall, memory_recall tool, ledger on .sje
+- Context-window resolution (models.dev fetch, 1M fallback), ctx% gauge
+- 30 providers (13 Chinese, 17 Western, endpoint-only) + `suijin custom`
+- Textual Settings TUI; /findings, /h1, /out; run-loop fuzz harness
+- Oracle verified-hypothesis KG writes; schema findings on CONFIRMED
+
+### Fixed
+- Tool visibility: catalog_exploit + 9 evidence-engine tools restored
+  to the model's tool list (the agent reported them missing)
+- Run loop: restart latch (was fiction), unreachable while/else (false
+  no-output endings), Ctrl+C mid-node ending runs, job_wait freeze,
+  ask answering a turn late, parse garbage killing engagements,
+  no-progress loops billing forever
+- Stream: dim/bright kind separation, syntax-highlighted code boxes
+  (silent pad=False fallback), smooth typewriter pacing restored
+- Coverage lane drift (4/8 lanes' marks were rejected), pack
+  double-imports, openapi/graphql shadowing, stale gauges between
+  engagements, settings save corruption (echo race), bind-mounted
+  config.json container crash, ~53 CLI verbs guarded against tracebacks
+
+### Changed
+- Token diet: catalog one-liners, 8k head+tail offload digests,
+  task-scoped subagent references, prefix-cache-stable prompt head
+- Rich-styled status leaderboard + workspace views; EXPLOIT menu entry
+  removed
+
 ## v6.6.0 — The Web Evidence Engine
 
 Every testing claim has a load-bearing tool underneath it. The agent
