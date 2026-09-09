@@ -16,14 +16,12 @@ _tools = None
 def _get_tools():
     global _tools
     if _tools is None:
-        p = os.path.abspath(
-            os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", "suijin", "modules", "tools", "lib", "dispatch.py"
-            )
-        )
-        spec = importlib.util.spec_from_file_location("tools_dispatch", p)
-        _tools = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(_tools)
+        # CANONICAL import — the old spec_from_file_location force-load
+        # created a SECOND dispatch module instance (independent
+        # repeat-guard ledgers, drift hazard) shadowing core routes
+        from suijin.modules.tools.lib import dispatch as _dispatch_mod
+
+        _tools = _dispatch_mod
     return _tools
 
 

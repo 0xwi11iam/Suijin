@@ -199,7 +199,9 @@ class SuijinAgentGraph:
         except Exception:  # noqa: BLE001 — budgeting must never break the loop
             pass
         try:
-            result = await think_node(state, generate_fn=self.generate_fn, route_tool_fn=self.route_tool_fn)
+            result = await think_node(
+                state, generate_fn=self.generate_fn, config=self.run_config, route_tool_fn=self.route_tool_fn
+            )
             # Circuit breaker: track consecutive provider/parse failures
             if result.get("completion_reason") in ("provider_failure", "parse_failure", "llm_error"):
                 fails = state.get("_consecutive_failures", 0) + 1
@@ -410,6 +412,26 @@ class SuijinAgentGraph:
                                             break
                                 except Exception as _ofire:  # noqa: BLE001 — actuation is best-effort
                                     logger.debug(f"oracle actuation skipped: {_ofire}")
+                                # verified-evidence memory: the fired probe's output is
+                                # EVIDENCE — record it as a KG constraint (the in-graph
+                                # oracle hook used to produce messages only; the KG
+                                # writer existed solely on the standalone CLI path)
+                                if _fired:
+                                    with contextlib.suppress(Exception):
+                                        from suijin.modules.loader import load_local_module
+                                        from suijin.modules.redteam.lib.intel.oracle import (
+                                            _map_hypothesis_to_constraint,
+                                        )
+
+                                        _kg = load_local_module("knowledge_graph")
+                                        _h0 = str((hypotheses or [{}])[0].get("hypothesis", "anomaly"))
+                                        _kg.add_constraint(
+                                            target=str(last_step.get("tool_args", {}).get("url") or "unknown"),
+                                            constraint_type=_map_hypothesis_to_constraint(_h0),
+                                            rule=str((hypotheses or [{}])[0].get("validation_payload") or _h0)[:200],
+                                            evidence=str(_out or "")[:300],
+                                            confidence=0.6,  # probe evidence, not a verified exploit
+                                        )
                                 result.setdefault("messages", []).append(
                                     {
                                         "role": "user",
@@ -475,9 +497,20 @@ class SuijinAgentGraph:
 
     async def _execute_tool(self, state: dict) -> dict:
         try:
+            # the LIVE config rides along (mode/policy gates read it): the
+            # old {} made check_mode_restrictions structurally unreachable
+            # from real engagements — HITL approvals existed but nothing
+            # could ever trigger them
+            _cfg = self.run_config or {}
+
+            def _route(name, args, _c=None):
+                return self.route_tool_fn(name, args, _cfg)
+
+            _route._suijin_cfg = _cfg  # subagents inherit the live config
+
             return await execute_tool_node(
                 state,
-                route_tool_fn=self.route_tool_fn,
+                route_tool_fn=_route,
             )
         except Exception as e:
             logger.exception("execute_tool crashed")

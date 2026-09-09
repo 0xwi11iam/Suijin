@@ -12,6 +12,28 @@ from __future__ import annotations
 import json
 import re
 
+# lane -> the canonical coverage class the lane's marks use. The lanes are
+# doctrine names (hyphenated, task-shaped); coverage.CLASSES is the ledger
+# vocabulary — the old drift had 4 of 8 lanes instructing marks the ledger
+# REJECTED (mass-assignment/business-logic/file-attacks/injection),
+# silently hollowing the completion gate's data.
+_LANE_COVERAGE = {
+    "idor": "idor",
+    "authz": "authz",
+    "mass-assignment": "mass_assignment",
+    "injection": "sqli",  # the lane drills sqli/xss/ssti — mark the class actually tested
+    "authn": "authn",
+    "business-logic": "race",  # negative values/coupons/step-skips are race-adjacent; mark redirect/info when that's what you tested
+    "ssrf": "ssrf",
+    "file-attacks": "upload",  # upload + LFI lane — mark lfi too when traversals were the test
+}
+
+
+def lane_coverage_class(lane: str) -> str:
+    """The ledger-valid class for a doctrine lane."""
+    return _LANE_COVERAGE.get(str(lane or "").strip().lower(), str(lane).replace("-", "_"))
+
+
 TESTER_DOCTRINES = {
     "idor": (
         "IDOR/BOLA tester. Consume web_session(action=summary) for the cross-credential worklist. "
@@ -50,7 +72,7 @@ TESTER_DOCTRINES = {
         "FILTERED != SAFE — 4-5 DISTINCT variations before concluding. "
         "NoSQL operators if document store plausible: name[$ne], $regex. "
         "Record only with http_replay compare diff as evidence. "
-        "Mark coverage: coverage_check(action=mark, vuln_class=injection, ...) with evidence."
+        "Mark coverage: coverage_check(action=mark, vuln_class=sqli|xss|ssti — the class you actually tested, ...) with evidence."
     ),
     "authn": (
         "Authentication tester. Sub-areas: login bypass (type-juggling array on secret param, "
@@ -69,7 +91,7 @@ TESTER_DOCTRINES = {
         "race conditions via concurrent requests (execute_terminal with a Python script). "
         "VERIFICATION BAR: you must verify server-side state change, not just a 200 OK. "
         "If you can only confirm the request was accepted but not the state, do NOT report. "
-        "Mark coverage: coverage_check(action=mark, vuln_class=business-logic, ...) with evidence."
+        "Mark coverage: coverage_check(action=mark, vuln_class=race (or redirect/info — the class you tested), ...) with evidence."
     ),
     "ssrf": (
         "SSRF tester. Target url/redirect/callback/webhook/import parameters. "
@@ -88,12 +110,14 @@ TESTER_DOCTRINES = {
         "LFI: known OS files with content-signatures x 11 traversal shapes. A blocked plain "
         "../ is where the test BEGINS — ....// ..;/ %2e%2e%2f ..%252f are the shapes that matter. "
         "Aim at the app's own config file, not just /etc/passwd. "
-        "Mark coverage: coverage_check(action=mark, vuln_class=file-attacks, ...) with evidence."
+        "Mark coverage: coverage_check(action=mark, vuln_class=upload for the upload face, lfi for traversal, ...) with evidence."
     ),
 }
 
 _ID_RE = re.compile(r"/(\d+|[0-9a-f]{8,}|[a-z0-9_-]{20,})(/|$)", re.I)
-_FINANCE_RE = re.compile(r"amount|total|price|currency|cart|coupon|payment|checkout|balance|credit|withdraw|deposit", re.I)
+_FINANCE_RE = re.compile(
+    r"amount|total|price|currency|cart|coupon|payment|checkout|balance|credit|withdraw|deposit", re.I
+)
 _RACE_RE = re.compile(r"transfer|redeem|vote|claim|withdraw|like|follow|buy|reserve", re.I)
 _FILE_RE = re.compile(r"file|path|download|attachment|upload|multipart", re.I)
 _URL_RE = re.compile(r"^url$|redirect|callback|webhook|import|fetch", re.I)
@@ -102,8 +126,13 @@ _ADMIN_RE = re.compile(r"/admin|/manage|/internal|/system", re.I)
 _TEXT_RE = re.compile(r"name|subject|message|comment|search|filter|query|title|description|content", re.I)
 
 
-def select_lanes(url: str = "", method: str = "GET", params: list | None = None,
-                 body_fields: list | None = None, session_creds: int = 0) -> list[tuple[str, str]]:
+def select_lanes(
+    url: str = "",
+    method: str = "GET",
+    params: list | None = None,
+    body_fields: list | None = None,
+    session_creds: int = 0,
+) -> list[tuple[str, str]]:
     """The pattern-to-lanes table. Returns [(lane, reason), ...] sorted by priority."""
     blob = f"{url} {' '.join(params or [])} {' '.join(body_fields or [])}"
     method_u = method.upper()
@@ -138,9 +167,14 @@ def select_lanes(url: str = "", method: str = "GET", params: list | None = None,
     return [(lane, reason) for lane, _, reason in result]
 
 
-def dispatch_testers(url: str = "", method: str = "GET", params: list | None = None,
-                     body_fields: list | None = None, lanes: list | None = None,
-                     max_lanes: int = 4) -> str:
+def dispatch_testers(
+    url: str = "",
+    method: str = "GET",
+    params: list | None = None,
+    body_fields: list | None = None,
+    lanes: list | None = None,
+    max_lanes: int = 4,
+) -> str:
     """Intelligent dispatch: select the right tester lanes for this request
     shape, build fireteam tasks with doctrine attached."""
     try:
@@ -166,15 +200,25 @@ def dispatch_testers(url: str = "", method: str = "GET", params: list | None = N
                 f"Test {url} for {lane} vulnerabilities. {doctrine} "
                 f"Use web_session(action=summary) for context. "
                 f"Record findings via record_finding with evidence. "
-                f"Mark coverage: coverage_check(action=mark, vuln_class={lane}, asset={url})."
+                f"Mark coverage: coverage_check(action=mark, vuln_class={lane_coverage_class(lane)}, asset={url})."
             )
-            results.append({"lane": lane, "task": task[:600], "coverage": f"coverage_check(action=mark, vuln_class={lane}, asset={url})", "deploy": f'deploy_subagent "{task[:200]}..."'})
+            results.append(
+                {
+                    "lane": lane,
+                    "task": task[:600],
+                    "coverage": f"coverage_check(action=mark, vuln_class={lane_coverage_class(lane)}, asset={url})",
+                    "deploy": f'deploy_subagent "{task[:200]}..."',
+                }
+            )
 
-        return json.dumps({
-            "dispatch": len(results),
-            "lanes": [r["lane"] for r in results],
-            "tasks": results,
-            "note": "Fire via deploy_subagent — doctrine attached, coverage targets set.",
-        }, indent=2)[:5000]
+        return json.dumps(
+            {
+                "dispatch": len(results),
+                "lanes": [r["lane"] for r in results],
+                "tasks": results,
+                "note": "Fire via deploy_subagent — doctrine attached, coverage targets set.",
+            },
+            indent=2,
+        )[:5000]
     except Exception as e:  # noqa: BLE001
         return f"Error: dispatch_testers failed: {e}"

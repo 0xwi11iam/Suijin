@@ -439,7 +439,9 @@ async def run_subagent(
                     continue
                 try:
                     result = await asyncio.wait_for(
-                        asyncio.to_thread(route_tool_fn, tool_name, tool_args, {}),
+                        asyncio.to_thread(
+                            route_tool_fn, tool_name, tool_args, getattr(route_tool_fn, "_suijin_cfg", {})
+                        ),
                         timeout=TOOL_TIMEOUT,
                     )
                     result_str = str(result)[:4000]  # a tester must SEE its evidence
