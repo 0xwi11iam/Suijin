@@ -1504,9 +1504,11 @@ class TestTypewriterStream:
         ui, _c = _ui()
         ui.waiting(True)
         ui.reasoning_delta("content", "typing live")
-        ui._tw.tick(0.5)  # plenty of budget
+        ui._tw.tick(0.5)  # smooth pacing: the partial line types gradually
         strip = self._strip_text(ui)
-        assert "typing live" in strip and "▌" in strip
+        assert "typing liv" in strip and "▌" in strip  # visibly mid-word — the SMOOTH contract
+        ui._tw.tick(2.0)  # and it completes
+        assert "typing live" in self._strip_text(ui)
 
     def test_full_rows_commit_and_scroll(self):
         ui, c = _ui()
@@ -1682,7 +1684,9 @@ class TestTypewriterStream:
         tw._arrivals.clear()
         tw._arrivals.append((__import__("time").monotonic() - 1.0, 2000))  # 2000 c/s measured
         rate2 = tw._select_rate(0.02)
-        assert rate2 >= 2000  # never falls behind the model
+        # VISUAL CAP: playback reads as typing (≤ MAX_VISUAL without
+        # backlog, ≤ MAX_ESCAPE with) — instant 3000cps dumps are gone
+        assert rate2 <= tw.MAX_ESCAPE and rate2 > tw.MIN_RATE
 
     def test_stream_done_via_ui_flushes_everything(self):
         ui, c = _ui()
@@ -2022,8 +2026,9 @@ class TestInstantPause:
         ui, _c = _ui()
         ui.waiting(True)
         ui.reasoning_delta("content", "mid-thought text")
-        ui._tw.tick(0.5)  # line is live
-        assert "mid-thought" in ui._tw.line_renderable().plain
+        ui._tw.tick(0.5)  # line is live (smooth pacing — may be mid-word)
+        _lr = ui._tw.line_renderable().plain
+        assert "mid-though" in _lr and chr(9612) in _lr
         ui._tw.pause_playback()
         assert ui.typewriter_row() is None  # the thought VANISHED from the strip
         ui._tw.tick(0.5)  # paused ticker commits nothing

@@ -248,8 +248,9 @@ def engagement_order(objective: str) -> str:
         "Rules of Engagement: professional bug-bounty etiquette — no denial-of-service, no data "
         "destruction, no social engineering of third parties. Authorization is settled procedure; "
         "do not re-litigate it. Depth of impact is the deliverable: a vulnerability confirmed but "
-        "unexploited is work unfinished. Every valuable find is proven: catalog_exploit with a POC "
-        "step-script and marker — the system runs the POC before you continue.\n"
+        "unexploited is work unfinished. Every valuable find is proven: catalog_exploit with "
+        "sequential shell commands + expected_result — the verifier runs your POC and pauses you "
+        "until it passes.\n"
         "Next action."
     )
 
