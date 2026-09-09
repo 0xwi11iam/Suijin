@@ -274,9 +274,22 @@ class BlueCommandBox:
                 self.ui.note("usage: /unblock <ip>", "yellow")
 
         def tarpits(_):
-            from suijin.modules.blueteam.lib.blue.defense import tarpit
+            import json as _json
 
-            self.ui.note(f"tarpit file: {tarpit.delay_for.__module__} — check /tmp/blue_tarpit.json", "dim")
+
+            state = {}
+            try:
+                from pathlib import Path
+
+                p = Path("/tmp/blue_tarpit.json")
+                state = _json.loads(p.read_text()) if p.is_file() else {}
+            except Exception:  # noqa: BLE001
+                state = {}
+            if not state:
+                self.ui.note("no tarpits engaged — /tarpit <ip> [seconds] to slow one", "dim")
+                return
+            rows = [f"{ip}: engaged for {v.get('seconds', v if isinstance(v, (int, float)) else '?')}s" for ip, v in state.items()]
+            self.ui.note("engaged tarpits — " + " | ".join(rows[:10]), "cyan")
 
         def canaries(_):
             self.ui.note(route_blue_tool("blue_canary_hits", {}), "cyan")

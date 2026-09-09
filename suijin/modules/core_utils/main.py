@@ -16,14 +16,12 @@ _tools = None
 def _get_tools():
     global _tools
     if _tools is None:
-        p = os.path.abspath(
-            os.path.join(
-                os.path.dirname(__file__), "..", "..", "..", "suijin", "modules", "tools", "lib", "dispatch.py"
-            )
-        )
-        spec = importlib.util.spec_from_file_location("tools_core_utils", p)
-        _tools = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(_tools)
+        # CANONICAL import — the old spec_from_file_location force-load
+        # created a SECOND dispatch module instance (independent
+        # repeat-guard ledgers, drift hazard) shadowing core routes
+        from suijin.modules.tools.lib import dispatch as _dispatch_mod
+
+        _tools = _dispatch_mod
     return _tools
 
 
@@ -34,13 +32,18 @@ def search_kb(keyword, limit=5):
     signature here made every documented call with limit= throw."""
     if not keyword:
         return "Error: keyword required"
-    return _get_tools().search_kb(keyword, limit=limit)
+    # through the MODULE attribute, not a frozen from-import binding — the
+    # canonicalization made dispatch import at boot (before any hot-patch),
+    # and the old frozen call bypassed test patches and runtime swaps
+    from suijin.modules.tools.lib import intel as _intel_mod
+
+    return _intel_mod.search_kb(keyword, limit=limit)
 
 
 def apply_patch(vulnerability, file_path="lab.py"):
     if not vulnerability:
         return "Error: vulnerability required"
-    return _get_tools().apply_patch(vulnerability, file_path)
+    return _get_tools().apply_patch(vulnerability, file_path)  # no test-facing hot-patch seam needed
 
 
 def claim_flag(flag):
