@@ -60,6 +60,30 @@ def _spawn_background_job(tool_name: str, tool_args: dict, route_tool_fn) -> str
     return _jr().spawn(tool_name, tool_args, route_tool_fn)
 
 
+def _harvest_findings(state: dict, tool_name: str, output: str) -> dict:
+    """H4: catalog CONFIRMED -> state[findings] + the engagement schema.
+    The scoreboard and the SQLi/SSRF chain rules read findings every turn;
+    the schema's findings/stats list was never populated by anything.
+    Used by BOTH return paths (the never-bg verifier branch AND the sync
+    thread branch) — the inline version missed catalog_exploit entirely
+    once the POC takeover made it never-auto-backgrounded."""
+    if tool_name != "catalog_exploit":
+        return {}
+    with contextlib.suppress(Exception):
+        import re as _re
+
+        m = _re.search(r"(EXP-\d+)\s+CONFIRMED\s+—\s+(.+?)(?:\.\s|\n|$)", str(output))
+        if not m:
+            return {}
+        founds = list(state.get("findings") or [])
+        founds.append({"id": m.group(1), "type": "exploit", "title": m.group(2)[:120]})
+        from suijin.modules.agent.lib.engagement import add_finding_to_schema
+
+        add_finding_to_schema({"id": m.group(1), "title": m.group(2)[:120], "source": "catalog_exploit"})
+        return {"findings": founds[-20:]}
+    return {}
+
+
 async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
     """Execute tool. Set 'background': true in tool_args for async spawn."""
     step_data = state.get("_current_step", {})
@@ -88,7 +112,6 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
             "_current_step": step_data,
             "execution_trace": [dict(step_data)],
             "_tool_result": {"success": True, "output": question},
-            "_ask_operator": True,
             "messages": [{"role": "user", "content": f"AGENT QUESTION: {question}"}],
         }
 
@@ -142,6 +165,7 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
             {"tool_output": output, "success": success, "duration_ms": duration_ms, "error_class": "success"}
         )
         return {
+            **_harvest_findings(state, tool_name, output),
             "_current_step": step_data,
             "execution_trace": [dict(step_data)],
             "_tool_result": {"success": success, "output": output},
@@ -295,21 +319,7 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
         except Exception:  # noqa: BLE001
             pass
 
-    # H4: state["findings"] — the scoreboard ("findings=N") and the
-    # SQLi/SSRF chain rules read it every turn but nothing ever wrote it.
-    # CONFIRMED catalog exploits are the finding events.
-    finding_updates: dict = {}
-    if tool_name == "catalog_exploit" and success:
-        try:
-            import re as _re
-
-            m = _re.search(r"(EXP-\d+)\s+CONFIRMED\s+—\s+(.+?)(?:\.\s|\n|$)", str(output))
-            if m:
-                founds = list(state.get("findings") or [])
-                founds.append({"id": m.group(1), "type": "exploit", "title": m.group(2)[:120]})
-                finding_updates = {"findings": founds[-20:]}
-        except Exception:  # noqa: BLE001
-            pass
+    finding_updates = _harvest_findings(state, tool_name, output)
 
     return {
         "_current_step": step_data,

@@ -152,6 +152,11 @@ def transition_phase(new_phase: str) -> None:
 # ── Session Recovery ────────────────────────────────────────────────────────
 
 
+def recovery_path():
+    """Where the 5-iteration crash snapshot lives."""
+    return _recovery_path()
+
+
 def save_session_state(state: dict) -> str:
     """Save full agent state for crash recovery. Returns the file path."""
     recovery_data = {

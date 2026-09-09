@@ -358,7 +358,11 @@ def run_battle(port: int | None = None, watch_rounds: int = 40) -> dict:
         duration = time.monotonic() - t0
 
         report = battle_report(state, duration)
-        out_dir = Path(__file__).resolve().parents[4] / "suijin_agent" / "reports"
+        # the workspace reports dir — the legacy repo-local suijin_agent path
+        # fought the workspace layout (reports scattered across two roots)
+        from suijin.modules.platform.lib.workspace import artifact_dir
+
+        out_dir = artifact_dir("reports")
         out_dir.mkdir(parents=True, exist_ok=True)
         rp = out_dir / f"battle_{time.strftime('%Y%m%d_%H%M%S')}.md"
         rp.write_text(report)

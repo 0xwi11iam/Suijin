@@ -159,7 +159,15 @@ def save_engagement(thread_id: str, objective: str, config: dict, state: dict, c
 
     # ATOMIC write: a KI mid-zip left a truncated bundle on disk (silently
     # corrupt). Build beside the target, then os.replace — readers never
-    # see a half-written .sje.
+    # see a half-written .sje. Stale tmps from crashes get swept here.
+    tmp_path = path.with_suffix(".sje.tmp")
+    with contextlib.suppress(Exception):
+        import os as _os2
+        import time as _time2
+
+        for stale in _exports_dir().glob("*.sje.tmp"):
+            if _time2.time() - stale.stat().st_mtime > 3600:
+                _os2.unlink(stale)
     tmp_path = path.with_suffix(".sje.tmp")
     with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zf:
         # the manifest cannot hash itself — the seal covers every PAYLOAD

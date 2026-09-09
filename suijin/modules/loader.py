@@ -152,6 +152,14 @@ def discover_modules():
                 for tool_name in manifest.get("tools") or {}:
                     func = getattr(mod, tool_name, None)
                     if callable(func):
+                        if tool_name in _module_tools and _module_tools[tool_name] is not func:
+                            # collision: sorted() order means the LATER pack wins —
+                            # that used to shadow SILENTLY (the openapi/graphql ×2)
+                            import logging as _lg
+
+                            _lg.getLogger("suijin").warning(
+                                f"tool '{tool_name}' declared by multiple packs — {key} shadows the previous one"
+                            )
                         _module_tools[tool_name] = func
                         _loaded_modules[key]["tools"][tool_name] = func
                         tools_found += 1
