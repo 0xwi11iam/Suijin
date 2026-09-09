@@ -1,12 +1,11 @@
-<h3 align="center">v6.6.0 — The Web Evidence Engine</h3> 
 <p align="center">
-<img src="assets/suijin.png" alt="Suijin Logo" width="160"/>
+<img src="assets/suijin.png" alt="Suijin Logo" width="600"/>
 </p>
 <h1 align="center">Suijin</h1>
 
 
 <p align="center">
-  <img height="20" src="https://img.shields.io/badge/v6.6.0-suijin-green?style=flat" alt="Version"/>
+  <img height="20" src="https://img.shields.io/badge/v6.7.0-suijin-green?style=flat" alt="Version"/>
   <img height="20" src="https://img.shields.io/badge/LICENSE-AGPL%20v3-4169A1?style=flat" alt="License"/>
   <img height="20" src="https://img.shields.io/badge/PYTHON-3.10+-306998?style=flat&logo=python&logoColor=white" alt="Python"/>
 </p>
@@ -36,6 +35,32 @@ toolkit, one knowledge base, and one knowledge graph.
 | Payload breadth | **battery+facts engine** — tag survival, noise-floor differentials, WAF-block qualification | model recall |
 | Dead code | **CI-enforced**: `suijin capability` fails the build on orphans | count metrics |
 | Gym | **onboard labs with chain-verification tests + bench grading** (Citadel: 26 vulns, 3 crown chains) | — |
+
+## What's New in v6.7.0 — The Hardening Release
+
+- **The run loop cannot die**: the provider-restart latch is real (state carried across the
+  rebuild), Ctrl+C always pauses (never silently ends), malformed stream events degrade to
+  skips, model-authored waits are clamped off the event loop, `ask_operator` holds the graph
+  until you answer — and a **fuzz harness** drives hostile streams to prove every run ends
+  classified
+- **The tool-visibility fix**: the evidence engine (http_replay, inject_probe, web_session,
+  coverage_check, dispatch_testers…) and the POC verifier are back in the model's tool list —
+  the catalog diet had silently dropped them and the agent reported them missing
+- **POC v3**: per-exploit folders (`finding.md` + `exploit.yaml`), the verifier takes over
+  the run loop (numbered command panels, black-box output, AI paused, input box live), full
+  transcript + three recovery options (edit the yaml / rewrite / worked-anyway with a
+  verified evidence line)
+- **Session memory — the librarian**: credentials, leaks, footholds and confirmed exploits
+  catalogued as they're found and recalled the moment a matching target appears; `memory_recall`
+- **Context-window awareness**: models.dev catalog resolution (1M fallback), window-scaled
+  budgets, live `ctx %` gauge; the token diet (catalog one-liners, 8k result digests,
+  task-scoped subagent references, prefix-cache-stable prompt head)
+- **48 providers** incl. 13 Chinese platforms (Zhipu, Moonshot Kimi, Qwen, Volcengine,
+  StepFun, SiliconFlow, Xiaomi MiMo, Meituan LongCat…) + `suijin custom` (any base URL, any
+  key, no validation)
+- **The Textual Settings TUI** (curses retired), syntax-highlighted code boxes, smooth
+  typewriter pacing, Rich-styled status/workspace, `/findings` `/h1` `/out`, guarded CLI
+  verbs (no tracebacks), containers survive bind-mounted config directories
 
 ## What's New in v6.6.0 — The Web Evidence Engine
 
