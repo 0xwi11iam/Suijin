@@ -9,7 +9,7 @@
   <img height="20" src="https://img.shields.io/badge/LICENSE-AGPL%20v3-4169A1?style=flat" alt="License"/>
   <img height="20" src="https://img.shields.io/badge/PYTHON-3.10+-306998?style=flat&logo=python&logoColor=white" alt="Python"/>
 </p>
-
+Torvalds likes this!
 Suijin is a dual-mode autonomous security platform: a **Red Team** agent that
 chains reconnaissance -> exploitation -> reporting over a LangGraph state machine,
 and a **Blue Team** agent that monitors live HTTP traffic, detects attacks, and
