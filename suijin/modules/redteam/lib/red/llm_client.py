@@ -89,3 +89,21 @@ def _auto_chain(config) -> list[str]:
         return [p for p in chain if p != primary]
     except Exception:  # noqa: BLE001 — self-healing must never break a call
         return []
+
+
+def effective_fallback_chain(config) -> list[str]:
+    """Return the fallback chain that _generate uses for this config.
+
+    A configured fallback_providers list wins. If it is empty, this
+    returns the auto chain. The banner uses this to show the real chain.
+
+    Args:
+        config: The engagement config dict, or None.
+
+    Returns:
+        The provider keys in fallback order.
+    """
+    configured = (config or {}).get("fallback_providers")
+    if configured:
+        return list(configured)
+    return _auto_chain(config)

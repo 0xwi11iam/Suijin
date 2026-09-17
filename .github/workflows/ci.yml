@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v5
@@ -87,7 +87,9 @@ jobs:
 
       - name: Lint check
         run: |
-          pip install ruff && ruff check suijin/
+          # Pin ruff to the version in .pre-commit-config.yaml.
+          # A floating version can change the rules and fail CI.
+          pip install ruff==0.16.8 && ruff check suijin/
 
       - name: Architecture boundaries (kernel purity + module boundaries)
         run: |

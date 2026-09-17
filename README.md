@@ -137,6 +137,7 @@ contracts.
 15. [Troubleshooting](#troubleshooting)
 16. [Glossary](#glossary)
 17. [Contributing & Credits](#contributing--credits)
+18. [License](#license)
 
 ---
 
@@ -156,6 +157,8 @@ contracts.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/0xwi11iam/Suijin/main/install.sh | bash
+```
+```bash
 suijin doctor     # verify the environment
 suijin selftest   # offline smoke test (no network, no API keys)
 suijin            # launch the interface
@@ -1065,4 +1068,12 @@ recorded in [docs/adr/](docs/adr/).
 Created by **William Jiang** (lead developer) and **Roland Poon** (design &
 project management). Inspired by
 [RedAmon](https://github.com/samugit83/redamon) and
-[Sakana Fugu](https://github.com/sakana-ai/Fugu). MIT licensed.
+[Sakana Fugu](https://github.com/sakana-ai/Fugu) (MIT-licensed).
+See [CREDITS.md](CREDITS.md) for third-party attributions.
+
+## License
+
+Suijin is licensed under the **GNU Affero General Public License v3.0 or
+later (AGPL-3.0-or-later)** — see [LICENSE](LICENSE). Under the AGPL network-use
+clause (section 13), if you run a modified Suijin as a network service, you must
+also offer its source to the users of that service.

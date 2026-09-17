@@ -259,8 +259,17 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
         _p = str(config.get("provider", "deepseek")).lower()
         _m = config.get(f"{_p}_model") or "auto"
         _e = f" ({config.get('zai_endpoint')})" if _p == "zai" else ""
-        _fb = config.get("fallback_providers") or []
-        _chain = f" · fallback: {', '.join(_fb)}" if _fb else " · no fallback"
+        from suijin.modules.redteam.lib.red.llm_client import effective_fallback_chain
+
+        _configured = config.get("fallback_providers") or []
+        _eff = effective_fallback_chain(config)
+        if _configured:
+            _chain = f" · fallback: {', '.join(_configured)}"
+        elif _eff:
+            # No configured chain. _generate adds this chain.
+            _chain = f" · fallback (auto): {', '.join(_eff)}"
+        else:
+            _chain = " · no fallback"
         console.print(f"[bold]provider: {_p} / {_m}{_e}{_chain}[/bold]")
 
     # Apply proxy setting from config
