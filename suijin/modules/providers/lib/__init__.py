@@ -869,6 +869,70 @@ def generate(
     return f"Error: Unknown provider '{provider}'"
 
 
+# Env var per local provider for a host override.
+# Ollama uses OLLAMA_HOST. The others use the same pattern.
+_LOCAL_HOST_ENVS = {
+    "ollama": "OLLAMA_HOST",
+    "lmstudio": "LMSTUDIO_HOST",
+    "vllm": "VLLM_HOST",
+    "llamacpp": "LLAMACPP_HOST",
+    "jan": "JAN_HOST",
+}
+
+
+def _resolve_base_url(spec) -> str:
+    """Return the base URL for a provider spec at call time.
+
+    Local providers use localhost in the registry. A container cannot
+    reach localhost, so the local fallback fails in Docker. This function
+    resolves the host in this order:
+
+    1. An env override for the provider wins. It accepts a full URL or a
+       host with an optional port.
+    2. In Docker (SUIJIN_DOCKER=1), it changes localhost to
+       host.docker.internal. It keeps the scheme, port, and path.
+    3. If neither applies, it returns the registry value.
+
+    The function changes only local specs. It does not change cloud specs
+    or custom providers.
+
+    Args:
+        spec: The provider spec.
+
+    Returns:
+        The effective base URL.
+    """
+    import os
+    from urllib.parse import urlsplit, urlunsplit
+
+    base = spec.base_url
+    if not getattr(spec, "local", False):
+        return base
+
+    parts = urlsplit(base)
+
+    env = _LOCAL_HOST_ENVS.get(spec.key)
+    override = os.environ.get(env, "").strip() if env else ""
+    if override:
+        if "://" in override:
+            o = urlsplit(override)
+            scheme = o.scheme or parts.scheme
+            netloc = o.netloc or parts.netloc
+            path = o.path if o.path not in ("", "/") else parts.path
+        else:  # Bare host or host with port. Keep the scheme and path.
+            scheme, netloc, path = parts.scheme, override, parts.path
+        return urlunsplit((scheme, netloc, path, "", ""))
+
+    in_docker = os.environ.get("SUIJIN_DOCKER", "").strip() in ("1", "true", "True")
+    if in_docker and (parts.hostname or "") in ("localhost", "127.0.0.1"):
+        netloc = "host.docker.internal"
+        if parts.port:
+            netloc += f":{parts.port}"
+        return urlunsplit((parts.scheme, netloc, parts.path, "", ""))
+
+    return base
+
+
 def _compat_call(spec, messages, config, *, temperature, max_tokens, retries, on_delta, model_id=None):
     """The generic OpenAI-compatible engine — one code path for every
     registry provider (cloud table rows AND custom: LAN boxes). Streaming
@@ -914,7 +978,8 @@ def _compat_call(spec, messages, config, *, temperature, max_tokens, retries, on
         "max_tokens": max_tokens,
         "temperature": temperature,
     }
-    url = f"{spec.base_url.rstrip('/')}/chat/completions"
+    _base = _resolve_base_url(spec)
+    url = f"{_base.rstrip('/')}/chat/completions"
     _diag_llm_start(spec.key, model, len(messages))
     _t0 = time.monotonic()
     last_diag = "transport failure"
@@ -955,7 +1020,7 @@ def _compat_call(spec, messages, config, *, temperature, max_tokens, retries, on
                     f"for this key). Check the model id and endpoint."
                 )
             if status == 404:
-                last_diag = f"model '{model}' not found at {spec.base_url}"
+                last_diag = f"model '{model}' not found at {_base}"
             elif status == 429:
                 last_diag = "rate-limited (429)"
             elif status != 0:

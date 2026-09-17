@@ -194,8 +194,6 @@ def main():
                     f.write(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()) + f" {e!r}\n" + _tb.format_exc() + "\n")
             except Exception:  # noqa: BLE001
                 pass
-        except KeyboardInterrupt:
-            sys.exit(0)
 
 
 if __name__ == "__main__":
