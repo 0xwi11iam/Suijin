@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import threading
 import time
 
 import requests as req
@@ -27,6 +28,12 @@ _HTTP = req.Session()
 # retry loop handles the rest.
 _TIMEOUT = (10, 120)
 
+#: Stream inactivity bounds (2026-09-12): no line for 90s or 10 min total
+#: → the watchdog closes the response (see _stream_chat — the measured
+#: half-dead-socket hang requests' own timeout never fired on).
+_STREAM_IDLE_S = 90.0
+_STREAM_TOTAL_S = 600.0
+
 # ----------------------------------------------------------------------
 # Token / cost accounting
 # ----------------------------------------------------------------------
@@ -46,7 +53,67 @@ USAGE = {
     "api_reported_calls": 0,  # calls whose tokens came from the API response
     "estimated_calls": 0,  # calls whose tokens were client-side estimated
     "by_provider": {},  # provider -> {calls, input, output, cost_usd}
+    # the real input size of the most recent request (the ctx gauge's truth)
+    "last_request_input_tokens": 0,
 }
+
+#: the effort tier vocabulary, descending; callers gate by model support
+_EFFORT_LADDER = ("max", "xhigh", "high", "med", "low")
+_EFFORT_ALIASES = {"medium": "med", "minimum": "low", "maximum": "max"}
+
+
+def _resolve_effort_tier(model: str, requested: str, provider: str = "") -> str:
+    """Map the requested tier to the model's vocabulary. When models.dev
+    knows the model's effort levels: exact/alias/nearest-neighbour. When
+    it doesn't (generic endpoints, custom providers): pass the alias-
+    resolved tier through unchanged — the endpoint rejects what it
+    doesn't understand and the caller's default stays intact."""
+    want = _EFFORT_ALIASES.get(requested, requested)
+    if want not in _EFFORT_LADDER:
+        return ""
+    with contextlib.suppress(Exception):
+        from suijin.modules.providers.lib.model_meta import supported_effort_levels
+
+        supported = [str(v).lower() for v in supported_effort_levels(provider or "zai", str(model or ""))]
+        if not supported:
+            return want  # unknown model: trust the operator's tier name
+        if want in supported:
+            return want
+        idx = _EFFORT_LADDER.index(want)
+        for offset in range(1, len(_EFFORT_LADDER)):
+            for cand in (idx - offset, idx + offset):
+                if 0 <= cand < len(_EFFORT_LADDER) and _EFFORT_LADDER[cand] in supported:
+                    return _EFFORT_LADDER[cand]
+    return want
+
+
+def _apply_effort(payload: dict, model: str, config: dict | None, mtokens: int,
+                  openai_style: bool = False, provider: str = "") -> None:
+    """Apply the operator's effort tier to ANY provider's payload.
+
+    Two dialects (2026-09-17):
+      zai-style (thinking toggle): low = thinking disabled; graduated
+        output budgets for the rest — the proven glm shape.
+      openai_style (reasoning_effort field): the OpenAI/OpenRouter
+        convention — the tier name emitted directly.
+    When models.dev knows the model, the tier snaps to its supported
+    vocabulary; when it doesn't, the alias-resolved name passes through
+    (generic endpoints). Never raises."""
+    with contextlib.suppress(Exception):
+        intel = str((config or {}).get("intelligence", "") or "").lower()
+        if not intel:
+            return
+        tier = _resolve_effort_tier(str(model or ""), intel, provider=provider)
+        if not tier:
+            return
+        if openai_style:
+            payload["reasoning_effort"] = tier
+        else:
+            payload["thinking"] = {"type": "disabled" if tier == "low" else "enabled"}
+            budget_frac = {"low": 0.0, "med": 0.5, "high": 0.75, "xhigh": 0.9, "max": 1.0}.get(tier, 1.0)
+            if budget_frac < 1.0:
+                payload["max_tokens"] = max(1000, int(int(mtokens) * budget_frac))
+
 
 # Rough public list prices in USD per 1,000,000 tokens (input, output).
 # These are estimates for the cost guardrail — NOT billing-grade. Unknown
@@ -108,6 +175,23 @@ def _price_for(model):
         for _spec in PROVIDER_REGISTRY.values():
             if _spec.default_model and _spec.default_model.split("/")[-1].lower() in m.lower() and _spec.pricing:
                 return _spec.pricing
+    # CUSTOM endpoints (2026-09-12): config-declared pricing, peak/off-peak
+    # resolved by wall clock — without this the spend cap was structurally
+    # unenforceable on operator endpoints (unpriced = the governor cannot
+    # stop, the measured "0 = disabled" trap).
+    with contextlib.suppress(Exception):
+        from suijin.modules.providers.lib.registry import active_pricing, resolve_custom_provider
+        from suijin.modules.tools.lib.services import get as _service
+
+        _cfg = _service("red_config") or {}
+        for _entry in _cfg.get("custom_providers") or []:
+            _name = str(_entry.get("name", "")).strip()
+            _spec = resolve_custom_provider(_name, _cfg) if _name else None
+            if _spec and _spec.default_model and _spec.default_model.lower() in m.lower():
+                _sel = str((_entry.get("pricing") or {}).get("selection", "auto"))
+                _pair = active_pricing(_spec, _sel)
+                if _pair:
+                    return _pair
     # tolerate provider prefixes / suffixes (e.g. "anthropic/claude-opus-4-8")
     # and case drift ("deepseek-ai/DeepSeek-V4-Flash" vs "deepseek-v4-flash")
     m_lower = m.lower()
@@ -153,6 +237,11 @@ def _record_usage(provider, model, in_tok, out_tok, estimated: bool = False):
         USAGE["calls"] += 1
         USAGE["input_tokens"] += in_tok
         USAGE["output_tokens"] += out_tok
+        # THE LIVE CTX GAUGE'S TRUTH (2026-09-17): the real input size of
+        # the request JUST sent — the red-teamer reads this instead of
+        # diffing cumulative counters (parallel background calls polluted
+        # the diff). Per-request, written at record time, race-tight.
+        USAGE["last_request_input_tokens"] = in_tok
         USAGE["estimated_calls" if estimated else "api_reported_calls"] += 1
         price = _price_for(model)
         if price is not None:
@@ -341,12 +430,40 @@ def _stream_chat(url, headers, payload, on_delta=None):
     content: list[str] = []
     reasoning: list[str] = []
     usage = None
+    # INACTIVITY WATCHDOG (2026-09-12, measured): a half-dead socket left
+    # iter_lines blocked in SSL_read FOREVER — requests' read timeout
+    # (10,120) does not fire inside urllib3's buffered stream reads, the
+    # stalled call sat in the MAIN thread, and it swallowed the process
+    # SIGTERM too (the run hung 30+ min past its watchdog). A daemon
+    # thread CLOSES the response when no line arrives for _STREAM_IDLE_S
+    # (any line — tokens or SSE keep-alives — proves liveness), which
+    # forces the blocked read to raise; the caller's existing status-0
+    # path then does its ONE non-stream fallback and the run recovers.
+    _idle = {"last": time.monotonic(), "killed": False}
+
+    def _stream_watchdog(resp_ref, idle_ref, idle_s, total_s, started):
+        while not idle_ref["killed"]:
+            time.sleep(2.0)
+            now = time.monotonic()
+            if now - started > total_s or now - idle_ref["last"] > idle_s:
+                idle_ref["killed"] = True
+                with contextlib.suppress(Exception):
+                    resp_ref.close()
+                return
+
     try:
         with _HTTP.post(url, headers=headers, json=p, timeout=_TIMEOUT, stream=True) as resp:
             if resp.status_code != 200:
                 return resp.status_code, "", "", None, (resp.text or "")[:400]
+            _wt = threading.Thread(
+                target=_stream_watchdog,
+                args=(resp, _idle, _STREAM_IDLE_S, _STREAM_TOTAL_S, time.monotonic()),
+                daemon=True,
+            )
+            _wt.start()
             _first_token_deadline = time.monotonic() + 60.0  # provider sends NOTHING in 60s → kill
             for line in resp.iter_lines(decode_unicode=True):
+                _idle["last"] = time.monotonic()
                 if time.monotonic() > _first_token_deadline and not content and not reasoning:
                     return 0, "", "", None, "first-token timeout: provider sent no data in 60s"
                 if not line or not line.startswith("data:"):
@@ -371,9 +488,13 @@ def _stream_chat(url, headers, payload, on_delta=None):
                     if rpiece:
                         reasoning.append(rpiece)
                         _emit(on_delta, "reasoning", rpiece)
+            if _idle["killed"]:
+                return 0, "".join(content), "".join(reasoning), usage, "stream idle: closed by watchdog"
             return 200, "".join(content), "".join(reasoning), usage, ""
     except Exception as e:
         logger.debug(f"stream transport error: {e}")
+        if _idle["killed"]:
+            return 0, "".join(content), "".join(reasoning), usage, "stream idle: closed by watchdog"
         return 0, "".join(content), "".join(reasoning), usage, str(e)[:200]
 
 
@@ -640,6 +761,7 @@ def generate(
             "max_tokens": mtokens,
             "temperature": temp,
         }
+        _apply_effort(payload, amd_model, config, mtokens, provider="amd")
         for attempt in range(retries):
             try:
                 resp = _HTTP.post(
@@ -690,6 +812,7 @@ def generate(
             "max_tokens": mtokens,
             "temperature": temp,
         }
+        _apply_effort(payload, ds_model, config, mtokens, provider="deepseek")
         ds_url = "https://api.deepseek.com/v1/chat/completions"
         _diag_llm_start("deepseek", ds_model, len(messages))
         _ds_t0 = time.monotonic()
@@ -767,13 +890,8 @@ def generate(
             "max_tokens": mtokens,
             "temperature": temp,
         }
-        # model intelligence (operator's Ctrl+Space tier, applied between
-        # thoughts): glm-4.5+ accepts a thinking toggle; low disables it
-        intel = str((config or {}).get("intelligence", "") or "").lower()
-        if intel in ("max", "high", "medium", "low"):
-            payload["thinking"] = {"type": "disabled" if intel == "low" else "enabled"}
-            if intel == "medium":
-                payload["max_tokens"] = max(1000, int(mtokens) // 2)
+        # MODEL EFFORT: the shared applier (zai thinking-toggle dialect)
+        _apply_effort(payload, zai_model, config, mtokens, provider="zai")
         zai_url = f"{base_url}/chat/completions"
         _diag_llm_start("zai", zai_model, len(messages))
         _zai_t0 = time.monotonic()
@@ -914,6 +1032,7 @@ def _compat_call(spec, messages, config, *, temperature, max_tokens, retries, on
         "max_tokens": max_tokens,
         "temperature": temperature,
     }
+    _apply_effort(payload, model, config, max_tokens, openai_style=True)
     url = f"{spec.base_url.rstrip('/')}/chat/completions"
     _diag_llm_start(spec.key, model, len(messages))
     _t0 = time.monotonic()

@@ -33,8 +33,14 @@ def _reports_dir():
     return _ad("compliance_reports")
 
 
-REPORTS_DIR = _reports_dir()
-REPORTS_DIR.mkdir(parents=True, exist_ok=True)  # parents: fresh/patched workspaces crashed on import
+def _reports_path():
+    """Lazy: resolved per call so a patched WORKSPACE_DIR is honoured
+    (the import-time capture froze the first test's tmp dir into the
+    module for the whole process — measured as cross-test pollution)."""
+    d = _reports_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
 
 # Risk thresholds
 RISK_HIGH = 0.7
@@ -161,12 +167,12 @@ def generate_compliance_report(
     report_clean["statistics"] = {k: v for k, v in stats.items() if k not in ("high_risk_entries", "denied_entries")}
 
     if export_json:
-        path = REPORTS_DIR / f"{report['report_id']}.json"
+        path = _reports_path() / f"{report['report_id']}.json"
         with open(path, "w") as f:
             json.dump(report_clean, f, indent=2)
 
     if export_txt:
-        path = REPORTS_DIR / f"{report['report_id']}.txt"
+        path = _reports_path() / f"{report['report_id']}.txt"
         _write_txt_report(report, path)
 
     return report
@@ -440,4 +446,4 @@ if __name__ == "__main__":
     print(f"Generating {framework} compliance report...\n")
     report = generate_compliance_report(framework=framework)
     print_compliance_report(report)
-    print(f"\nReports saved to: {REPORTS_DIR}")
+    print(f"\nReports saved to: {_reports_path()}")

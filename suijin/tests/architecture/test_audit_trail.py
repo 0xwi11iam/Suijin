@@ -74,6 +74,7 @@ class TestCliSurface:
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
         audit_dir = tmp_path / "outputs" / "audit_trails"
         import contextlib
         import io

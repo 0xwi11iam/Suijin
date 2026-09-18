@@ -59,6 +59,7 @@ class TestOffloadDigest:
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
         assert pol.OFFLOAD_THRESHOLD == 8_000
         big = "HEAD-MARKER\n" + "x" * 20_000 + "\nTAIL-MARKER\n"
         summary, offloaded = oo.maybe_offload("nmap_scan", big)

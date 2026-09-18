@@ -17,15 +17,15 @@ from pathlib import Path
 
 
 def guidance_path() -> Path:
-    from suijin.modules.platform.lib.workspace import engagement_dir
+    from suijin.modules.platform.lib.workspace import state_dir
 
-    return engagement_dir() / "live_guidance.md"
+    return state_dir() / "live_guidance.md"
 
 
 def context_path() -> Path:
-    from suijin.modules.platform.lib.workspace import engagement_dir
+    from suijin.modules.platform.lib.workspace import state_dir
 
-    return engagement_dir() / "context.md"
+    return state_dir() / "context.md"
 
 
 def write_guidance(line: str, mode: str = "") -> None:

@@ -13,6 +13,7 @@ argument patterns. `suijin policy check` lints both.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from pathlib import Path
@@ -282,4 +283,24 @@ def check_policy(tool: str, args: dict, policy: dict | None = None) -> tuple[boo
                 f"policy: target '{host}' is outside allowed scopes "
                 f"({len(pol['allowed_target_scopes'])} configured){detail}"
             )
+    # PROGRAM SCOPE ENFORCEMENT (2026-09-17): out-of-scope assets from a
+    # bound bug-bounty program are HARD-BLOCKED at dispatch — the operator
+    # pulled the scope; the agent must not test past it
+    if host and tool not in _SCOPE_EXEMPT:
+        with contextlib.suppress(Exception):
+            from suijin.modules.ops.lib.authorizations import match_scope_bindings
+
+            for b in match_scope_bindings(host):
+                out = [str(a).lower().lstrip("*.") for a in (b.get("out_of_scope") or [])]
+                for oa in out:
+                    # ONLY the host itself or a SUBDOMAIN of the excluded asset
+                    # is blocked — target.com being in scope does NOT get
+                    # blocked because excluded.target.com (its subdomain) is
+                    # out of scope (the reversed check blocked in-scope parents)
+                    if host == oa or host.endswith("." + oa):
+                        return False, (
+                            f"OUT OF SCOPE — {host} is explicitly excluded by "
+                            f"{b.get('platform', '?')}/{b.get('program', '?')} "
+                            f"(operator-pulled scope binding). Do not test this asset."
+                        )
     return True, ""

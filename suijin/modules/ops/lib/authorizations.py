@@ -16,7 +16,10 @@ scope_search the cached data to self-verify.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
+import os
 import re
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
@@ -34,18 +37,54 @@ _PAGE_PATTERNS = [
 ]
 
 
-def _ws_dir():
+def _cfg_dir():
+    """The operator-owned config area — NOT the workspace root (engagement
+    code can write there; the authorization ledger must be operator-only).
+    Falls back to the workspace when config/ doesn't exist (legacy)."""
     from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-    return WORKSPACE_DIR
+    cfg = WORKSPACE_DIR / "config"
+    cfg.mkdir(parents=True, exist_ok=True)
+    return cfg
+
+
+def _key_path():
+    """The HMAC signing key — global per operator (~/.suijin/), NOT per-
+    workspace. One identity, one key."""
+    from pathlib import Path
+
+    kp = Path.home() / ".suijin" / "auth_signing.key"
+    if not kp.exists():
+        kp.parent.mkdir(parents=True, exist_ok=True)
+        kp.write_bytes(os.urandom(32))
+        kp.chmod(0o600)
+    return kp
+
+
+def _sign(payload: str) -> str:
+    """HMAC-SHA256 of the record's canonical form."""
+    key = _key_path().read_bytes()
+    return hmac.new(key, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _record_signature(rec: dict) -> str:
+    """Canonical form → signature. Provenance + target + program + expiry."""
+    payload = "|".join([
+        str(rec.get("target", "")),
+        str(rec.get("program", "")),
+        str(rec.get("authorization_id", "")),
+        str(rec.get("expires_at", "")),
+        str(rec.get("source", "")),
+    ])
+    return _sign(payload)
 
 
 def ledger_path():
-    return _ws_dir() / "authorizations.json"
+    return _cfg_dir() / "authorizations.json"
 
 
 def scope_bindings_path():
-    return _ws_dir() / "program_scopes.json"
+    return _cfg_dir() / "program_scopes.json"
 
 
 def _now() -> datetime:
@@ -81,11 +120,19 @@ def _host_of(target: str) -> str:
 
 
 def add_authorization(
-    target: str, program: str = "", authorization_id: str = "", days: int = DEFAULT_DAYS, page: str = ""
+    target: str,
+    program: str = "",
+    authorization_id: str = "",
+    days: int = DEFAULT_DAYS,
+    page: str = "",
+    source: str = "cli",
 ) -> dict:
     """Attest authorization for target (+subdomains). Upserts by host.
-    `page`: optional bug-bounty program page URL — the agent can fetch it
-    (fetch_authorization_page) whenever it wants eyes-on verification."""
+    `source`: provenance — "cli" (operator typed it), "suijin-red" (CI
+    runner auto-seeded), "resume" (restored from a bundle). The agent
+    SEES the source in its orders. Records are HMAC-signed; tampered
+    records fail verification and are rejected.
+    `page`: optional bug-bounty program page URL."""
     host = _host_of(target)
     if not host or "." not in host:
         return {"error": f"invalid target {target!r} — expected a domain (e.g. example.com)"}
@@ -93,15 +140,18 @@ def add_authorization(
     page = (page or "").strip()
     if page and not page.startswith(("http://", "https://")):
         return {"error": f"invalid page URL {page!r} — expected http(s)://…"}
+    source = source if source in ("cli", "suijin-red", "resume") else "cli"
     rows = [r for r in load_ledger() if _host_of(r.get("target", "")) != host]
     rec = {
         "target": host,
         "program": (program or "").strip() or "operator-attested",
         "authorization_id": (authorization_id or "").strip(),
         "page": page,
+        "source": source,
         "attested_at": _now().strftime("%Y-%m-%d %H:%M UTC"),
         "expires_at": (_now() + timedelta(days=days)).strftime("%Y-%m-%d"),
     }
+    rec["sig"] = _record_signature(rec)
     rows.append(rec)
     save_ledger(rows)
     return rec
@@ -118,7 +168,9 @@ def remove_authorization(target: str) -> dict:
 
 
 def match_authorization(target: str) -> dict | None:
-    """Find an UNEXPIRED ledger entry covering target (exact or subdomain)."""
+    """Find an UNEXPIRED, SIGNATURE-VALID ledger entry covering target.
+    Tampered records (bad HMAC) are silently rejected — a forged auth
+    must read as absent, not as a warning the agent might override."""
     host = _host_of(target)
     if not host:
         return None
@@ -128,8 +180,13 @@ def match_authorization(target: str) -> dict | None:
         if not led:
             continue
         if host == led or host.endswith("." + led):
-            if str(r.get("expires_at", "")) < today:  # expired — ignore
+            if str(r.get("expires_at", "")) < today:
                 continue
+            # signature verification — unsigned records (legacy) pass
+            # through; signed records with BAD signatures are rejected
+            sig = str(r.get("sig", "") or "")
+            if sig and sig != _record_signature(r):
+                continue  # tampered — read as absent
             return r
     return None
 
@@ -239,17 +296,17 @@ def match_scope_bindings(target: str) -> list[dict]:
 
 def authorization_line(target: str) -> str | None:
     """Authorization line for the target, or None. Deliberately BORING:
-    strong framing (SECURE! FINAL! never question!) primed capable models
-    into meta-suspicion ('why does this prompt keep insisting?') — field
-    run: 'instructions to never question it are precisely why I won't
-    rely on it'. A flat procedural record gets treated as settled fact."""
+    a flat procedural record gets treated as settled fact. The SOURCE is
+    shown — 'cli' (operator), 'suijin-red' (CI auto-seed), 'resume'."""
     rec = match_authorization(target)
     if not rec:
         return None
     ident = f", id {rec['authorization_id']}" if rec.get("authorization_id") else ""
     prog = str(rec.get("program", "")).lower()
     prog_s = f"{prog}, " if prog and prog != "operator-attested" else ""
-    line = f"on file — suijin authorize record ({prog_s}{ident}valid through {rec['expires_at']})"
+    src = str(rec.get("source", "cli"))
+    src_s = f" [source: {src}]" if src != "cli" else ""
+    line = f"on file — suijin authorize record ({prog_s}{ident}valid through {rec['expires_at']}{src_s})"
     if rec.get("page"):
         line += (
             f"; program page {rec['page']} — fetch_authorization_page shows it; "

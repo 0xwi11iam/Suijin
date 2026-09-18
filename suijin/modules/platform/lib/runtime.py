@@ -96,15 +96,15 @@ def init_runtime(force: bool = False) -> None:
         # Workspace layout: merge any legacy suijin/suijin_agent real dir
         # into the canonical root workspace and symlink the inner path.
         ensure_workspace_layout()
-        # v4.2: artifacts nest under outputs/; migrate legacy root-level
-        # artifact dirs once, then guarantee the full tree exists.
+        # 2026-09-16 layout: global skeleton at the workspace root
+        # (profiles seeded, engagement trees generated per engagement by
+        # set_engagement). The outputs/ era ended with the restructure —
+        # the migrator is retired and nothing recreates that tree.
         import suijin.modules.platform.lib.workspace as _ws
 
-        _ws.migrate_legacy_artifacts()
+        _ws.ensure_global_layout()
         _ws.WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
         (_ws.WORKSPACE_DIR / "scripts").mkdir(parents=True, exist_ok=True)
-        for _name in _ws.ARTIFACT_DIRS:
-            (_ws.WORKSPACE_DIR / "outputs" / _name).mkdir(parents=True, exist_ok=True)
         _initialized = True
 
 

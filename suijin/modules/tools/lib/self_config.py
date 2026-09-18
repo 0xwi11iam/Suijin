@@ -115,6 +115,7 @@ FORBIDDEN = (
     "mode_guardrail",
     "proxy_url",
     "max_iterations",
+    "autonomy",  # operator-only trust decision — the agent cannot un-attend itself
 )
 
 

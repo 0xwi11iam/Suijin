@@ -14,6 +14,7 @@ from suijin.modules.blueteam.lib.blue.cases import ATTACK_MAP, CaseStore
 @pytest.fixture(autouse=True)
 def _ws(tmp_path, monkeypatch):
     monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+    ws._reset_engagement()  # hermetic: no engagement pinned from another test
     ws._CURRENT_ENGAGEMENT = None
     ws.set_engagement("bf4 test")
     yield tmp_path

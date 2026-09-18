@@ -25,6 +25,7 @@ from suijin.modules.blueteam.lib.blue.retention import TrafficRetention, hunt, s
 @pytest.fixture(autouse=True)
 def _ws(tmp_path, monkeypatch):
     monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+    ws._reset_engagement()  # hermetic: no engagement pinned from another test
     ws._CURRENT_ENGAGEMENT = None
     ws.set_engagement("scenario")
     yield tmp_path

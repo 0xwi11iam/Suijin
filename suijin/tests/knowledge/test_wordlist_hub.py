@@ -23,6 +23,7 @@ class TestHub:
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
         out = wordlist_hub.catalog()
         assert "common" in out and "dirb-common" in out and "[-]" in out
 

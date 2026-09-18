@@ -104,7 +104,8 @@ class TestLearningFinishers:
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
-        rdir = tmp_path / "outputs" / "reports"
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
+        rdir = tmp_path / "engagements" / "_default" / "reports"
         rdir.mkdir(parents=True)
         (rdir / "critique_e1.md").write_text("# c\n\n## Tactics to remember\n- always probe /api/v2 first\n")
         dry = critique.promote_learnings(dry_run=True)

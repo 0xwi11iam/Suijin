@@ -142,8 +142,12 @@ class RedInputReader:
             return buf[:-1], None
         if key == "\x15":  # ctrl-u
             return "", None
+        if key == "\x05":  # Ctrl+E — toggle reasoning mode (always focused)
+            return buf, "effort"
         if key == "i" and buf == "\x1b":  # Alt/Option+I — model intelligence
             return "", "intel"
+        if key in ("e", "E") and buf == "\x1b":  # Alt/Option+E — reasoning toggle
+            return "", "effort"
         if key == "\t":  # Tab cycles the mode
             return buf, "tab"
         if key.isprintable():
@@ -202,6 +206,11 @@ class RedInputReader:
                     # pair arrived together; the buffer stays untouched)
                     self._cycle_intelligence()
                     continue
+                if seq == "alt-e":
+                    # Alt/Option+E — reasoning on/off (same as Ctrl+E;
+                    # macOS Option sends ESC-prefixed keys)
+                    self._toggle_reasoning()
+                    continue
                 if seq == "esc":
                     # zero-gap double ESC: the chord FIRES right now —
                     # no window check (both presses already happened)
@@ -230,16 +239,83 @@ class RedInputReader:
                 self._cycle_intelligence()
                 self._ui.set_input(buf)  # keep typing intact
                 continue
+            if action == "effort":
+                self._toggle_reasoning()
+                self._ui.set_input(buf)
+                continue
             self._ui.set_input(buf)
+
+    def _suggestions_active(self) -> bool:
+        """The suggestion bar is showing: the buffer starts with '/'."""
+        from suijin.modules.redteam.lib.red.console_ui import UI_STATE
+
+        return str(UI_STATE.get("input_buf") or "").startswith("/")
+
+    def _move_suggestion(self, delta: int) -> None:
+        """Arrow up/down: cycle the suggestion selection."""
+        from suijin.modules.redteam.lib.red.console_ui import UI_STATE
+
+        matches = self._ui._filtered_suggestions() if hasattr(self._ui, "_filtered_suggestions") else []
+        if not matches:
+            return
+        cur = UI_STATE.get("suggest_sel")
+        cur = 0 if cur is None else int(cur)
+        UI_STATE["suggest_sel"] = (cur + delta) % min(len(matches), 8)
+        self._ui.set_input(UI_STATE.get("input_buf") or "")
+
+    def _operator_run(self, cmd: str) -> None:
+        """<run>cmd</run>: execute in the OPERATOR's shell (subprocess,
+        not the agent's execute_terminal). Output prints above the strip
+        in a bordered panel. Timeout 30s; the agent is never touched."""
+        import subprocess
+
+        from rich.panel import Panel as _Panel
+        from rich.text import Text as _Text
+
+        try:
+            r = subprocess.run(
+                cmd, shell=True, capture_output=True, text=True, timeout=30,
+                cwd=os.path.expanduser("~"),
+            )
+            out = (r.stdout or "") + (r.stderr or "")
+            body = _Text.assemble(
+                ("$ ", "bold green"), (cmd, "bold white"), ("\n", ""),
+                (out[:2000] if out.strip() else "(no output)", "dim"),
+            )
+            if r.returncode != 0:
+                body.append(f"\n[rc={r.returncode}]", style="bold red")
+            self._ui.console.print(_Panel(body, title=" run ", title_align="left",
+                                          border_style="cyan", padding=(0, 1)))
+        except subprocess.TimeoutExpired:
+            self._ui.console.print(f"[red]  \u25b8 run timeout (30s): {cmd[:80]}[/red]")
+        except Exception as e:  # noqa: BLE001
+            self._ui.console.print(f"[red]  \u25b8 run failed: {e}[/red]")
+
+    def _toggle_reasoning(self) -> None:
+        """Ctrl+E: reasoning ON <-> OFF. OFF stores the current tier in
+        _last_effort and drops to 'low' (thinking disabled at the
+        provider); ON restores the stored tier (or 'high' when nothing
+        was stored). Applies on the NEXT LLM call — between thoughts."""
+        from suijin.modules.redteam.lib.red.console_ui import UI_STATE
+
+        cur = str(UI_STATE.get("intelligence", "max"))
+        if cur == "low":
+            UI_STATE["intelligence"] = str(UI_STATE.pop("_last_effort", "") or "high")
+        else:
+            UI_STATE["_last_effort"] = cur
+            UI_STATE["intelligence"] = "low"
+        self._ui.set_mode(self._mode)  # tick the strip so the tier renders
 
     def _cycle_intelligence(self) -> None:
         """Alt/Option+I: cycle model intelligence — applies on the NEXT
         LLM call (between thoughts, per the operator contract)."""
         from suijin.modules.redteam.lib.red.console_ui import UI_STATE
 
-        tiers = ("max", "high", "medium", "low")
+        tiers = self._ui._supported_tiers()
         cur = str(UI_STATE.get("intelligence", "max"))
-        UI_STATE["intelligence"] = tiers[(tiers.index(cur) + 1) % len(tiers)] if cur in tiers else "max"
+        if cur not in tiers:
+            cur = tiers[0] if tiers else "max"
+        UI_STATE["intelligence"] = tiers[(tiers.index(cur) + 1) % len(tiers)] if tiers else "max"
         self._ui.set_mode(self._mode)  # tick the strip so the tier renders
 
     def _fire_chord(self) -> None:
@@ -275,9 +351,12 @@ class RedInputReader:
         b2 = os.read(fd, 1)
         if b2 == b"i":
             return "alt-i"  # Alt/Option+I (macOS Option sends ESC-prefixed keys)
+        if b2 in (b"e", b"E"):
+            return "alt-e"  # Alt/Option+E — reasoning toggle (macOS-friendly)
         if b2 in (b"[", b"O"):
             # consume until a final byte of the CSI/SS3 sequence
             deadline = time.monotonic() + 0.05
+            collected = b2
             while time.monotonic() < deadline:
                 try:
                     r, _, _ = select.select([fd], [], [], 0.02)
@@ -286,8 +365,13 @@ class RedInputReader:
                 if not r:
                     break
                 f = os.read(fd, 1)
+                collected += f or b""
                 if f and f.isalpha():
                     break
+            if collected in (b"[A", b"OA"):
+                return "up"
+            if collected in (b"[B", b"OB"):
+                return "down"
             return True
         if b2 == b"\x1b":
             return "esc"  # second ESC back-to-back: the CHORD, zero-gap — caller fires
@@ -352,6 +436,14 @@ class RedInputReader:
             return
         if line.startswith("/"):
             self._run_box.dispatch(line)
+            return
+        # <run>cmd</run> — the operator's inline shell (NOT the agent's)
+        import re as _re_mod
+
+        _runs = _re_mod.findall(r"<run>(.+?)</run>", line)
+        if _runs:
+            for _cmd in _runs:
+                self._operator_run(_cmd)
             return
         # a pending ask_operator consumes plain lines as the ANSWER (raw)
         if getattr(self._run_box, "_ask_mode", False):

@@ -1032,6 +1032,7 @@ class TestUncrashableUI:
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
         c = Console(record=True, width=90)
         ui = m.EngagementUI(c)
         ui.tool("execute_terminal", {"cmd": "x"})  # no open iteration — fine
@@ -1361,10 +1362,15 @@ class TestNoSilentEndings:
         c = Console(record=True, width=90, force_terminal=True)
         ui = m.EngagementUI(c)
         ui.iteration_header(1, "informational")
+        # thinking renders PLAIN dim text (2026-09-17: no markdown spans in
+        # reasoning — the PHP/8.3.33 blue-flash fix), so a dead markdown
+        # renderer cannot touch it; the fallback contract lives on the
+        # _md-consuming paths (tool output):
         ui.thinking("content survives")
+        ui.output("plain tool output survives")
         out = c.export_text()
         assert "content survives" in out
-        assert "render fallback" in out  # the notice, not silence
+        assert "render fallback" in out  # the notice, not silence (via output/_md)
 
 
 class TestFireteamStripRows:
@@ -1524,8 +1530,8 @@ class TestTypewriterStream:
         assert ui._tw._pending == [] and ui._tw._line == ""
 
     def test_think_dim_speak_bright(self):
-        """THE operator contract: long dim reasoning, then a BRIGHTLY
-        colored sentence/paragraph — think = dim plain, speak = bright
+        """THE operator contract (2026-09-17): think = BOLD CYAN plain
+        (directives live in thought — dim buried them), speak = bright
         cyan inline markdown."""
         ui1, c1 = _ui()
         ui1.waiting(True)
@@ -1542,7 +1548,7 @@ class TestTypewriterStream:
         self._drain(ui2)
         ui2._tw.flush()
         think_rows = "".join(ln for ln in c2.export_text(styles=True).split("\n") if "think" in ln)
-        assert "\x1b[2m" in think_rows  # THINK = dim
+        assert "\x1b[2m" in think_rows  # STREAMED reasoning = dim (final 2026-09-17)
         assert "\x1b[96m" not in think_rows  # never bright
 
     def test_json_action_boxes_itself(self):
@@ -1652,8 +1658,8 @@ class TestTypewriterStream:
         ui._tw.flush()
         think = "".join(ln for ln in c.export_text(styles=True).split("\n") if "maybe" in ln)
         assert think  # the held reasoning surfaced
-        assert "\x1b[2m" in think  # …as DIM reasoning
-        assert "\x1b[96m" not in think  # never bright
+        assert "\x1b[2m" in think  # …as DIM reasoning (final 2026-09-17)
+        assert "\x1b[96m" not in think  # never bright-said
 
     def test_flush_labels_held_tail_with_its_kind(self):
         """stream_done flush: reasoning held in the splitter flushes DIM —
@@ -1664,7 +1670,7 @@ class TestTypewriterStream:
         ui.stream_done()
         row = "".join(ln for ln in c.export_text(styles=True).split("\n") if "held thought" in ln)
         assert row
-        assert "\x1b[2m" in row and "\x1b[96m" not in row
+        assert "\x1b[2m" in row and "\x1b[96m" not in row  # dim reasoning, never said
 
     def test_gear_ladder_micro_increments(self):
         from suijin.modules.redteam.lib.red.console_ui import TypewriterStream as TW
@@ -1715,6 +1721,251 @@ class TestTypewriterStream:
         ui.reasoning_delta("reasoning", "tok2")
         assert UI_STATE["last_ttft"] == ttft
         assert first is None or isinstance(first, (int, float))
+
+    def test_burst_measures_its_real_rate(self):
+        """One 300-char chunk in one feed: the measured rate is span-floored
+        (0.5s) — neither the old span-since-first-arrival megacycles (which
+        pegged the gear to instant-dump) nor the old full-5s-window crawl
+        (60cps → clamped to MIN_RATE = the 'short bursts type at a crawl')."""
+        ui, _c = _ui()
+        ui.waiting(True)
+        tw = ui._tw
+        ui.reasoning_delta("content", "x" * 300)
+        cps = tw._measured_cps()
+        assert 60.0 <= cps <= float(tw.MAX_ESCAPE)
+
+    def test_rate_holds_through_arrival_silence(self):
+        """A >5s lull in arrivals with pending prose: the gear HOLDS the
+        last measured rate instead of decaying to MIN_RATE — the stream
+        paused mid-thought, it did not end (flush owns the end). With
+        nothing pending, silence measures zero again."""
+        import time as _t
+
+        ui, _c = _ui()
+        ui.waiting(True)
+        tw = ui._tw
+        ui.reasoning_delta("content", "y" * 200)
+        assert tw._measured_cps() > tw.MIN_RATE
+        tw._arrivals.clear()
+        tw._arrivals.append((_t.monotonic() - 10.0, 200))  # window expired
+        assert tw._measured_cps() > tw.MIN_RATE  # held — backlog keeps draining
+        tw._pending.clear()
+        tw._line = ""
+        assert tw._measured_cps() == 0.0  # truly idle: no stale gear
+
+    def test_ticker_never_prints_under_the_typewriter_lock(self):
+        """THE ABBA freeze: tick() used to console.print committed rows
+        while still holding the typewriter lock — console.print (through
+        the Live render hook) wants the Live lock, and the strip renderer
+        wants the typewriter lock, so a refresh landing in that window
+        deadlocked the whole TUI mid-stream. Every print must now happen
+        with the lock released (asserted from inside the print itself)."""
+        ui, c = _ui()
+        ui.waiting(True)
+        tw = ui._tw
+        blocked = []
+        orig = c.print
+
+        def _spy(*a, **kw):
+            if tw._lock.acquire(blocking=False):
+                tw._lock.release()
+            else:
+                blocked.append(True)
+            return orig(*a, **kw)
+
+        c.print = _spy
+        try:
+            ui.reasoning_delta("content", "z" * 600)
+            for _ in range(6):
+                tw.tick(10.0)  # big budgets → rows commit on every batch
+        finally:
+            c.print = orig
+        assert not blocked, "console.print ran while the typewriter lock was held — the ABBA freeze is back"
+        assert "z" in c.export_text()  # and the rows actually landed
+
+    def test_flush_racing_ticker_never_duplicates_or_drops(self):
+        """flush() (stream_done) vs the live ticker: the old two-lock-step
+        grab let flush swap the queues between the item-grab and the
+        line-update — text printed twice or vanished. The tick mutex makes
+        the whole batch atomic against flush: every char lands exactly once."""
+        import threading
+        import time as _t
+
+        ui, c = _ui()
+        ui.waiting(True)
+        tw = ui._tw
+        ui.reasoning_delta("content", "STREAMRACETOKEN" + "Z" * 400)
+        stop = threading.Event()
+
+        def _spin():
+            while not stop.is_set():
+                tw.tick(0.05)
+
+        t = threading.Thread(target=_spin, daemon=True)
+        t.start()
+        try:
+            for _ in range(25):
+                tw.flush()
+                _t.sleep(0.002)
+        finally:
+            stop.set()
+            t.join(timeout=2)
+            tw.flush()  # final drain
+        compact = "".join(c.export_text().split())
+        assert compact.count("STREAMRACETOKEN") == 1  # exactly once — no duplication
+        assert compact.count("Z") == 400  # nothing dropped, nothing doubled
+
+    def test_commit_updates_the_strip_renderable_before_printing(self):
+        """After a batch commits rows, the strip's typewriter line must not
+        still show text that just scrolled above it (the one-frame
+        duplicate-echo glitch): the renderable is refreshed BEFORE the
+        batch's own prints ride the Live hook re-render."""
+        ui, c = _ui()
+        ui.waiting(True)
+        ui.reasoning_delta("content", "w" * 600)
+        ui._tw.tick(0.4)
+        ui._tw.tick(0.4)
+        # no start(): no painter thread — the ONLY _tick caller below is the
+        # ticker's own commit path
+        _seen = []
+        _orig = ui._tick
+
+        def _capture(refresh=False):
+            _seen.append(ui.typewriter_row())
+            return _orig(refresh)
+
+        ui._tick = _capture
+        try:
+            ui.reasoning_delta("content", "q" * 600)
+            _seen.clear()  # drop the delta-path tick; only commits count
+            ui._tw.tick(10.0)  # big budget → the row fills and commits
+            ui._tw.tick(10.0)
+        finally:
+            ui._tick = _orig
+        assert _seen, "no pre-print strip refresh ran during the commits"
+
+
+class TestPaintCadence:
+    """THE repaint flood: the old Live(refresh_per_second=60) auto-refresh
+    painted the full 4-row strip ~43 times/second for the WHOLE engagement
+    (2.6MB of terminal chatter in a 66s rig run — flickering boxes, laggy
+    ssh/tmux). The painter now refreshes ~10fps ONLY while something
+    animates and ~1fps when the strip is static."""
+
+    def test_static_strip_does_not_storm(self):
+        import time as _t
+
+        ui, c = _ui()
+        ui.start()
+        try:
+            ui.waiting(False)  # static: phase label, no spinner
+            _t.sleep(0.3)
+            base = c.export_text()
+            _t.sleep(1.6)
+            idle = c.export_text()[len(base) :].count("recon")
+            assert idle <= 4, f"static strip repainted {idle}x in 1.6s — the storm is back"
+        finally:
+            ui.stop()
+
+    def test_animated_strip_paints_but_capped(self):
+        import time as _t
+
+        ui, c = _ui()
+        ui.start()
+        try:
+            ui.waiting(True)  # spinner → animated → ~10fps
+            _t.sleep(0.3)
+            base = c.export_text()
+            _t.sleep(1.0)
+            anim = c.export_text()[len(base) :].count("recon")
+            assert anim >= 2, f"animated strip painted only {anim}x in 1s — the painter is dead"
+            assert anim <= 15, f"animated strip painted {anim}x in 1s — storm cadence"
+        finally:
+            ui.stop()
+
+    def test_still_thinking_survives_heartbeat_jitter(self):
+        """The old `waited % 15 == 0` skipped the line whenever heartbeat
+        jitter stepped over the exact second (14→16 under load) — the
+        operator stared at a silent spinner convinced the UI froze.
+        Threshold scheduling always fires."""
+        import time as _t
+
+        ui, c = _ui()
+        ui.waiting(True)
+        ui._waiting_since = _t.monotonic() - 31.4  # 31.4s of silence…
+        ui._next_report_s = 30.0  # …and the 30s report was just missed
+        ui._heartbeat_duties()
+        out = c.export_text()
+        assert "still thinking" in out, "the jittered report line was skipped"
+        assert "31s" in out
+        assert ui._next_report_s == 45.0  # rescheduled forward, never re-fired
+
+    def test_still_thinking_fires_exactly_once_per_interval(self):
+        import time as _t
+
+        ui, c = _ui()
+        ui.waiting(True)
+        ui._waiting_since = _t.monotonic() - 16.0
+        ui._heartbeat_duties()
+        ui._heartbeat_duties()  # same second, second call — no double line
+        assert c.export_text().count("still thinking") == 1
+
+    def test_pause_paints_the_paused_strip_immediately(self):
+        ui, _c = _ui()
+        ui.start()
+        try:
+            ui.waiting(True)
+            ui.paused_visual(True)
+            # the transient Live's current renderable must already say PAUSED
+            import io
+
+            from rich.console import Console as C
+
+            sink = C(file=io.StringIO(), width=100, force_terminal=True)
+            sink.print(ui._live.renderable)
+            assert "PAUSED" in sink.file.getvalue()
+        finally:
+            ui.stop()
+
+    def test_stop_then_start_leaves_exactly_one_painter(self):
+        """The restart race: stop() followed immediately by start() (the ask
+        flow's cadence) must not resurrect the dying painter beside the new
+        one — two painters double the repaint rate forever. Each generation
+        owns its stop event."""
+        import threading
+        import time as _t
+
+        ui, _c = _ui()
+        ui.start()
+        t1 = ui._refresh_thread
+        ui.stop()
+        ui.start()  # immediately — inside the dying thread's 100ms window
+        t2 = ui._refresh_thread
+        assert t2 is not t1
+        _t.sleep(0.35)  # the dying thread wakes, the new one settles
+        assert not t1.is_alive(), "the old painter was resurrected by the restart"
+        assert t2.is_alive()
+        live = sum(1 for th in threading.enumerate() if th.name == "red-strip" and th.is_alive())
+        assert live == 1
+        ui.stop()
+
+    def test_stop_then_start_leaves_exactly_one_ticker(self):
+        """Same race on the typewriter's own thread: a stop→start inside the
+        dying ticker's 50ms window must leave ONE playback thread, not two
+        (two would double the playback rate and interleave commits)."""
+        import time as _t
+
+        ui, _c = _ui()
+        ui._tw.start()
+        t1 = ui._tw._thread
+        ui._tw.stop()
+        ui._tw.start()
+        t2 = ui._tw._thread
+        assert t2 is not t1
+        _t.sleep(0.3)
+        assert not t1.is_alive(), "the old ticker was resurrected by the restart"
+        assert t2.is_alive()
+        ui._tw.stop()
 
 
 class TestInputBox:
