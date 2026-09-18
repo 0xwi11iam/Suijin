@@ -81,8 +81,11 @@ class TestLiveHandlers:
     def test_note_written(self, tmp_path, monkeypatch):
         from suijin.modules.tools.lib import intel
 
-        notes = tmp_path / ".notes"
-        monkeypatch.setattr(intel, "NOTES_DIR", notes)
+        import suijin.modules.platform.lib.workspace as ws
+
+        monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)  # notes live at engagement/.notes (2026-09-16)
+        ws._reset_engagement()
+        notes = tmp_path / "engagements" / "_default" / ".notes"
         box, out = make_box()
         box.dispatch("/note found admin panel")
         assert any(notes.glob("*.md"))

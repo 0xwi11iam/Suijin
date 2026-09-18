@@ -31,6 +31,7 @@ class TestLeaderboard:
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
         _trail(tmp_path, "rich", 1.0, 10, 5)
         _trail(tmp_path, "poor", 5.0, 50, 1)
         out = leaderboard()

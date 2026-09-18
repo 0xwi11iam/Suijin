@@ -191,24 +191,25 @@ class TestRenameMigration:
 
 
 class TestOutputsConsolidation:
-    def test_artifacts_nest_under_outputs(self, tmp_path, monkeypatch):
-        """v4.2 contract: every artifact category lives under outputs/ —
-        one parent for everything an engagement produces."""
+    def test_artifacts_nest_per_engagement(self, tmp_path, monkeypatch):
+        """2026-09-16 contract: engagement categories live INSIDE the
+        engagement folder; global categories at the workspace root."""
         import suijin.modules.platform.lib.workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
-        for name in ws.ARTIFACT_DIRS:
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
+        eng = ws.set_engagement("layout probe")
+        for name in ws.ENGAGEMENT_SUBDIRS:
             d = ws.artifact_dir(name)
-            assert d.parent == tmp_path / "outputs", name
+            assert d.parent == eng, name
+        for name in ws.GLOBAL_DIRS:
+            d = ws.artifact_dir(name)
+            assert d.parent == tmp_path, name
 
     def test_legacy_artifacts_migrate_once(self, tmp_path, monkeypatch):
+        """The 2026-09-16 restructure retired the outputs/ tree by operator
+        decision (workspace wiped); the migrator is a documented no-op."""
         import suijin.modules.platform.lib.workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
-        (tmp_path / "reports").mkdir()
-        (tmp_path / "reports" / "old.md").write_text("x")
-        moved = ws.migrate_legacy_artifacts()
-        assert "reports" in moved
-        assert (tmp_path / "outputs" / "reports" / "old.md").read_text() == "x"
-        assert not (tmp_path / "reports").exists()
-        assert ws.migrate_legacy_artifacts() == []  # idempotent
+        assert ws.migrate_legacy_artifacts() == []

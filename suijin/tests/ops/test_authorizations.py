@@ -13,6 +13,7 @@ def _isolated_ws(tmp_path, monkeypatch):
     from suijin.modules.platform.lib import workspace as ws
 
     monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+    ws._reset_engagement()  # hermetic: no engagement pinned from another test
     yield
 
 

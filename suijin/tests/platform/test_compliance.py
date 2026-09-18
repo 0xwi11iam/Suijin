@@ -106,13 +106,15 @@ class TestLoadRender:
 class TestCliVerb:
     def test_compliance_cli(self, monkeypatch, tmp_path):
         from suijin.tests.console.test_cli_commands import run_cli
+        import suijin.modules.platform.lib.workspace as ws
 
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
         monkeypatch.setattr("suijin.modules.platform.lib.workspace.WORKSPACE_DIR", tmp_path)
         code, out = run_cli(["compliance"])
         assert code == 0 and "No findings" in out
 
-        (tmp_path / "outputs" / "audit_trails").mkdir(parents=True, exist_ok=True)
-        (tmp_path / "outputs" / "audit_trails" / "eng.json").write_text(
+        (tmp_path / "engagements" / "_default" / "audit_trails").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "engagements" / "_default" / "audit_trails" / "eng.json").write_text(
             json.dumps({"findings": [{"type": "sqli", "description": "login bypass", "severity": "high"}]})
         )
         code, out = run_cli(["compliance"])

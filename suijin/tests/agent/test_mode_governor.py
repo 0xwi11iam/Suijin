@@ -50,11 +50,40 @@ class TestSurfaceQueue:
         assert len(q) == 1
         assert len(untried(q)) == 1
 
-    def test_finding_retires_surface(self):
-        q = [{"surface": "http://t/login", "cls": "web", "tried": False, "iter": 1}]
-        r = {"execution_trace": [{"tool_name": "record_finding"}], "current_iteration": 3}
+    def test_finding_retires_only_the_surface_it_names(self):
+        # per-surface retirement (2026-09-12): the blanket rule retired the
+        # WHOLE queue on any finding — a seeded worklist completed over
+        # items it never touched. The finding must name its target.
+        q = [
+            {"surface": "http://t/login", "cls": "web", "tried": False, "iter": 1},
+            {"surface": "http://t/admin", "cls": "web", "tried": False, "iter": 1},
+        ]
+        r = {
+            "execution_trace": [
+                {
+                    "tool_name": "catalog_exploit",
+                    "tool_args": {"finding": "SQLi in login"},
+                    "tool_output": "EXP-001 CONFIRMED — SQLi at http://t/login (app.py:110)",
+                }
+            ],
+            "current_iteration": 3,
+        }
         q2 = update_queue({"_attack_queue": q}, r)
-        assert len(untried(q2)) == 0
+        un = untried(q2)
+        assert len(un) == 1 and un[0]["surface"] == "http://t/admin"
+
+    def test_seeded_whitebox_token_retires_when_named(self):
+        q = [{"surface": "app.py:182 template_injection", "cls": "whitebox", "tried": False, "iter": 0}]
+        r = {
+            "execution_trace": [
+                {
+                    "tool_name": "catalog_exploit",
+                    "tool_output": "EXP-002 CONFIRMED — SSTI in /api/v1/quote (app.py:182 template_injection)",
+                }
+            ],
+            "current_iteration": 12,
+        }
+        assert len(untried(update_queue({"_attack_queue": q}, r))) == 0
 
 
 class TestGovernor:
@@ -79,14 +108,18 @@ class TestGovernor:
         assert d is None
 
     def test_recon_posture_is_patient(self):
-        q = [{"surface": "http://t/a", "cls": "web", "tried": False, "iter": 1},
-             {"surface": "http://t/b", "cls": "web", "tried": False, "iter": 2}]
+        q = [
+            {"surface": "http://t/a", "cls": "web", "tried": False, "iter": 1},
+            {"surface": "http://t/b", "cls": "web", "tried": False, "iter": 2},
+        ]
         assert govern(_state(iters=7, queue=q), {"posture": "recon"}) is None
         assert govern(_state(iters=21, queue=q), {"posture": "recon"}) is not None
 
     def test_recent_surface_blocks_stall_switch(self):
-        q = [{"surface": "http://t/a", "cls": "web", "tried": False, "iter": 7},
-             {"surface": "http://t/b", "cls": "web", "tried": False, "iter": 8}]
+        q = [
+            {"surface": "http://t/a", "cls": "web", "tried": False, "iter": 7},
+            {"surface": "http://t/b", "cls": "web", "tried": False, "iter": 8},
+        ]
         assert govern(_state(iters=8, queue=q), {}) is None  # still finding things
 
 

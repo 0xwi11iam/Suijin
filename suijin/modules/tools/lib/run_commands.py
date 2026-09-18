@@ -31,6 +31,7 @@ class RunBox:
     def __init__(self, get_state=None, thread_id=None, config=None, console: Console | None = None):
         self._out = console or Console()
         self._get_state = get_state  # () -> dict, may return {}
+        self._set_state = None  # (key, value) — wired by the redteamer for /compact
         self._thread_id = thread_id
         self._config = config or {}
         self._handlers: dict[str, callable] = {}
@@ -184,6 +185,78 @@ def _default_handlers(box: RunBox) -> dict:
         res = search_kb(args, limit=3)
         first = escape("\n".join(res.splitlines()[:6]))
         box._out.print(f"[dim]{first}[/dim]")
+
+    def upload(args):
+        """<path> — text-file upload into the agent's next context message.
+        Relative paths resolve to the engagement home; absolute paths must
+        exist on disk. Binary/encrypted/too-large files are REJECTED — the
+        AI never sees them."""
+        if not args:
+            box._out.print("[yellow]  \u25b8 /upload <path> — file path required[/yellow]")
+            return
+        from pathlib import Path as _P
+
+        path = _P(args.strip()).expanduser()
+        if not path.is_absolute():
+            from suijin.modules.platform.lib.workspace import home_dir
+
+            path = home_dir() / path
+        if not path.is_file():
+            box._out.print(f"[yellow]  \u25b8 not found: {path}[/yellow]")
+            return
+        size = path.stat().st_size
+        if size > 50_000:
+            box._out.print(f"[yellow]  \u25b8 too large ({size // 1024}KB > 50KB cap)[/yellow]")
+            return
+        raw = path.read_bytes()
+        if b"\x00" in raw[:4096]:
+            box._out.print("[yellow]  \u25b8 binary file — rejected (text only)[/yellow]")
+            return
+        try:
+            text = raw.decode("utf-8")
+        except (UnicodeDecodeError, ValueError):
+            box._out.print("[yellow]  \u25b8 not UTF-8 decodable — rejected[/yellow]")
+            return
+        printable = sum(1 for ch in text if ch.isprintable() or ch in "\n\r\t")
+        if printable / max(1, len(text)) < 0.7:
+            box._out.print("[yellow]  \u25b8 mostly non-printable — rejected (encrypted or binary)[/yellow]")
+            return
+        # deliver as guidance: the agent receives it as its next context
+        ext = path.suffix.lstrip(".") or "text"
+        with box._lock:
+            box._guidance.append(
+                f"FILE UPLOAD — {path.name} ({size // 1024}KB):\n```{ext}\n{text[:48_000]}\n```"
+            )
+        box._out.print(f"[green]  \u25b8 {path.name} queued for the agent ({size} bytes)[/green]")
+
+    def compact(_args):
+        """Force-compaction NOW — the operator's manual trigger. The next
+        think call uses the compacted context (the gauge drops on the
+        following request). Same algorithm as the automatic 90% trigger."""
+        from suijin.modules.agent.lib.compact import compact as _compact
+        from suijin.modules.agent.lib.compact import history_chars as _hc
+        st = (box._get_state or (lambda: {}))() or {}
+        msgs = st.get("messages") or []
+        if not msgs:
+            box._out.print("[yellow]  \u25b8 no messages to compact[/yellow]")
+            return
+        pre = _hc(msgs)
+        # OPERATOR FORCE: trigger=0 means compact NOW regardless of fill
+        # level — the operator decides, not the threshold
+        compacted = _compact(msgs, trigger_chars=0)
+        post = _hc(compacted)
+        if compacted is msgs:
+            box._out.print(f"[yellow]  \u25b8 nothing to compact ({pre // 1000}k chars, {len(msgs)} msgs — too few to summarize)[/yellow]")
+            return
+        # write the compacted messages back through the state setter
+        if box._set_state:
+            box._set_state("messages", compacted)
+            box._out.print(
+                f"[green]  \u25b8 compacted {pre // 1000}k \u2192 {post // 1000}k chars"
+                f" ({100 - post * 100 // pre}% reduction)[/green]"
+            )
+        else:
+            box._out.print("[yellow]  \u25b8 no state setter wired — compact not applied[/yellow]")
 
     def report(_args):
         from suijin.modules.tools.lib.services import get as _service
@@ -366,6 +439,8 @@ def _default_handlers(box: RunBox) -> dict:
 
     return {
         "help": help_,
+        "upload": upload,
+        "compact": compact,
         "state": state,
         "audit": audit,
         "note": note,

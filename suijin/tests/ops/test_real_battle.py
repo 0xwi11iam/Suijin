@@ -24,6 +24,7 @@ class TestRealBattleMock:
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
         v = run_real_battle(mock=True)
         reports = list((tmp_path / "outputs" / "reports").glob("real_battle_*.json"))
         assert reports, "verdict report not written"

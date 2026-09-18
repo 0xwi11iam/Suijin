@@ -12,6 +12,7 @@ class TestMemory:
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
         memory.record_engagement("t.example", "own the web", {"completion_reason": "complete"})
         memory.note("t.example", "operator prefers quiet scans")
         out = memory.recall("t.example")
@@ -61,7 +62,7 @@ class TestEvidence:
         ok, _ = evidence.verify_chain()
         assert ok
         # tamper with the first record's evidence
-        chain_path = tmp_path / "outputs" / "evidence" / "chain.json"
+        chain_path = tmp_path / "engagements" / "_default" / "evidence" / "chain.json"
         chain = json.loads(chain_path.read_text())
         chain[0]["evidence_text"] = "fabricated"
         chain_path.write_text(json.dumps(chain))

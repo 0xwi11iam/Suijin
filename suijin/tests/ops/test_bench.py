@@ -94,6 +94,7 @@ class TestBenchUnit:
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
         assert bench_history() == []
         assert "No bench runs" in render_history()
         from suijin.modules.ops.lib.bench import _append_history

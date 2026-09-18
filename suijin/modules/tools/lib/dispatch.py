@@ -57,10 +57,23 @@ _MISSING_RX = __import__("re").compile(r"not (?:installed|found)|command not fou
 def _with_install_hint(tool_name: str, result: str) -> str:
     """The catalog's kept promise: a missing-binary error gets THIS
     operator's install command appended — the agent self-serves instead
-    of stalling. Best-effort, never changes success results."""
+    of stalling. Best-effort, never changes success results.
+
+    TWO RESULT SHAPES CAN CARRY A MISSING BINARY (2026-09-11). The Error-
+    prefixed shape (module packs that pre-check), and the [COMMAND]
+    format() shape of run_command-based tools — nmap, sqlmap, gobuster,
+    ffuf and ~20 others — where a missing binary lands as `[EXIT] 127` +
+    `command not found` in STDERR with no Error prefix at all, so the
+    prefix-only gate never fired and the agent saw a bare shell error.
+    The [COMMAND] arm requires the structured signature (exit 127 /
+    command-not-found line), NOT a bare "not found" anywhere in stdout:
+    successful scans say "found" constantly."""
     try:
         text = str(result)
-        if not text.startswith(("Error", "Tool Error", "Tool error")) or not _MISSING_RX.search(text):
+        tier_b = text.startswith("[COMMAND]") and (
+            "[EXIT] 127" in text or "command not found" in text.lower() or "No such file or directory" in text
+        )
+        if not (text.startswith(("Error", "Tool Error", "Tool error")) or tier_b) or not _MISSING_RX.search(text):
             return result
         from suijin.modules.tools.lib.availability import install_hint, tool_dependencies
 
@@ -350,19 +363,28 @@ def _build_routes(config):
         "skill_search": lambda a: _skill_search(a.get("query", ""), limit=int(a.get("limit", 10))),
         "skill_load": lambda a: _skill_load(a.get("skill_id", a.get("id", ""))),
         "dispatch_testers": lambda a: _dispatch_testers(
-            url=a.get("url", ""), method=a.get("method", "GET"), params=a.get("params"),
-            body_fields=a.get("body_fields"), lanes=a.get("lanes"), max_lanes=int(a.get("max_lanes", 4)),
+            url=a.get("url", ""),
+            method=a.get("method", "GET"),
+            params=a.get("params"),
+            body_fields=a.get("body_fields"),
+            lanes=a.get("lanes"),
+            max_lanes=int(a.get("max_lanes", 4)),
         ),
         "select_lanes": lambda a: _select_lanes(
-            url=a.get("url", ""), method=a.get("method", "GET"), params=a.get("params"),
-            body_fields=a.get("body_fields"), session_creds=int(a.get("session_creds", 0)),
+            url=a.get("url", ""),
+            method=a.get("method", "GET"),
+            params=a.get("params"),
+            body_fields=a.get("body_fields"),
+            session_creds=int(a.get("session_creds", 0)),
         ),
         "proxy_capture": lambda a: _proxy_capture(
-            port=int(a.get("port", 0)), target_host=a.get("target_host", ""),
+            port=int(a.get("port", 0)),
+            target_host=a.get("target_host", ""),
             target_port=int(a.get("target_port", 0)),
         ),
-        "crawl": lambda a: _crawl(url=a.get("url", ""), max_pages=int(a.get("max_pages", 20)),
-                                  credential=a.get("credential", "")),
+        "crawl": lambda a: _crawl(
+            url=a.get("url", ""), max_pages=int(a.get("max_pages", 20)), credential=a.get("credential", "")
+        ),
         "http_replay": lambda a: _http_replay(
             request_id=a.get("request_id", ""),
             method=a.get("method", "GET"),
@@ -381,8 +403,11 @@ def _build_routes(config):
             allow_internal=bool(a.get("allow_internal")),
         ),
         "http_replay_raw": lambda a: _http_replay_raw(
-            host=a.get("host", ""), port=int(a.get("port", 443)), tls=bool(a.get("tls", True)),
-            data=a.get("data", ""), timeout=int(a.get("timeout", 15)),
+            host=a.get("host", ""),
+            port=int(a.get("port", 443)),
+            tls=bool(a.get("tls", True)),
+            data=a.get("data", ""),
+            timeout=int(a.get("timeout", 15)),
         ),
         "register_credential": lambda a: _register_credential(
             name=a.get("name", ""), headers=a.get("headers"), cookies=a.get("cookies", "")
@@ -391,14 +416,23 @@ def _build_routes(config):
         "web_session": lambda a: _web_session(action=a.get("action", "summary")),
         "memory_recall": lambda a: _librarian_recall(query=a.get("query", ""), limit=int(a.get("limit", 8) or 8)),
         "coverage_check": lambda a: _coverage_check(
-            action=a.get("action", "summary"), asset=a.get("asset", ""), vuln_class=a.get("vuln_class", ""),
-            status=a.get("status", ""), evidence=a.get("evidence", ""), request_sent=a.get("request_sent", ""),
-            kind=a.get("kind", ""), subject=a.get("subject", ""), text=a.get("text", ""),
+            action=a.get("action", "summary"),
+            asset=a.get("asset", ""),
+            vuln_class=a.get("vuln_class", ""),
+            status=a.get("status", ""),
+            evidence=a.get("evidence", ""),
+            request_sent=a.get("request_sent", ""),
+            kind=a.get("kind", ""),
+            subject=a.get("subject", ""),
+            text=a.get("text", ""),
             assets=a.get("assets"),
         ),
         "surface_expand": lambda a: _surface_expand(
-            url=a.get("url", ""), names=a.get("names"), include_derived=bool(a.get("include_derived", True)),
-            timeout=int(a.get("timeout", 15)), allow_internal=bool(a.get("allow_internal")),
+            url=a.get("url", ""),
+            names=a.get("names"),
+            include_derived=bool(a.get("include_derived", True)),
+            timeout=int(a.get("timeout", 15)),
+            allow_internal=bool(a.get("allow_internal")),
         ),
         "inject_probe": lambda a: _inject_probe(
             url=a.get("url", ""),
@@ -447,6 +481,12 @@ def _build_routes(config):
         "record_finding": lambda a: record_finding(
             a.get("target"), a.get("finding_type"), a.get("rule"), evidence=a.get("evidence", ""), config=config
         ),
+        # Worklist clearing (2026-09-15): the mechanism the worklist
+        # contract always promised — mark a probed-and-clean surface DONE
+        # by naming the concrete defense. Consumed by mode_governor.
+        "surface_verdict": lambda a: _intel.surface_verdict(
+            a.get("surface"), a.get("verdict"), defense=a.get("defense", ""), config=config
+        ),
         # POC-backed exploit catalog (v3) — the verifier TAKES OVER: it
         # writes the folder (finding.md + exploit.yaml), runs the yaml
         # commands sequentially, and only then hands the loop back.
@@ -467,6 +507,7 @@ def _build_routes(config):
             outcome=a.get("outcome", ""),
             action=a.get("action", ""),
             evidence_line=a.get("evidence_line", ""),
+            control_commands=a.get("control_commands"),
             abandon=bool(a.get("abandon")),
             claim=bool(a.get("claim")),
             entry_id=a.get("entry_id", ""),
@@ -717,6 +758,15 @@ def route_tool(tool_name, args, config):
     blocked = check_mode_restrictions(tool_name, args, config)
     if blocked:
         return blocked
+
+    # Guardrail-grade file perms (perms.deny_files, 2026-09-12): refuses
+    # the ORDINARY leak path (a tool argument naming a denied file).
+    # Guardrail, not sandbox — see tools/lib/perms.py for the boundary.
+    from suijin.modules.tools.lib.perms import check_perms
+
+    denied = check_perms(tool_name, args, config)
+    if denied:
+        return denied
 
     # Engagement policy (suijin/policy.json): blocked tools/args and
     # out-of-scope targets. Opt-in — the default policy allows local ranges.

@@ -19,15 +19,14 @@ _INDEX: dict | None = None
 
 # AGPL attribution — required by the license
 _ATTRIBUTION = (
-    "# Source: CyberStrike (https://cyberstrike.io) — AGPL v3\n"
-    "# Imported into Suijin under the same license terms.\n\n"
+    "# Source: CyberStrike (https://cyberstrike.io) — AGPL v3\n# Imported into Suijin under the same license terms.\n\n"
 )
 
 
 def _skills_dir() -> Path:
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+    from suijin.modules.platform.lib.workspace import artifact_dir
 
-    d = WORKSPACE_DIR / "skills"
+    d = artifact_dir("skills")
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -88,16 +87,18 @@ def _build_index() -> None:
     for f in sorted(_skills_dir().glob("*/SKILL.md")):
         text = f.read_text(encoding="utf-8", errors="ignore")
         meta = _parse_frontmatter(text)
-        entries.append({
-            "id": f.parent.name,
-            "name": meta.get("name", f.parent.name),
-            "description": meta.get("description", ""),
-            "category": meta.get("category", ""),
-            "owasp_id": meta.get("owasp_id", ""),
-            "tags": meta.get("tags", []) if isinstance(meta.get("tags"), list) else [],
-            "path": str(f),
-            "_text": text.lower()[:2000],  # for full-text search
-        })
+        entries.append(
+            {
+                "id": f.parent.name,
+                "name": meta.get("name", f.parent.name),
+                "description": meta.get("description", ""),
+                "category": meta.get("category", ""),
+                "owasp_id": meta.get("owasp_id", ""),
+                "tags": meta.get("tags", []) if isinstance(meta.get("tags"), list) else [],
+                "path": str(f),
+                "_text": text.lower()[:2000],  # for full-text search
+            }
+        )
     _INDEX = {"entries": entries}
 
 
@@ -143,14 +144,14 @@ def skill_search(query: str = "", limit: int = 10) -> str:
             if score > 0:
                 scored.append((score, e))
         scored.sort(key=lambda x: -x[0])
-        results = scored[: limit]
+        results = scored[:limit]
         if not results:
             return f"No methodologies match '{query}'. Try: sqli, xss, ssrf, jwt, auth, upload, graphql, race"
         lines = [f"skill search '{query}' — {len(scored)} match(es), top {len(results)}:"]
         for score, e in results:
             desc = e["description"][:80] if e["description"] else e["name"]
             lines.append(f"  {e['id']} [{e['owasp_id'] or e['category']}] — {desc}")
-        lines.append(f"load full methodology: skill_load(\"{results[0][1]['id']}\")")
+        lines.append(f'load full methodology: skill_load("{results[0][1]["id"]}")')
         return "\n".join(lines)
     except Exception as e:  # noqa: BLE001
         return f"Error: skill_search failed: {e}"

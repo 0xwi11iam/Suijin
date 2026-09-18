@@ -11,6 +11,7 @@ def _ws(tmp_path, monkeypatch):
     import suijin.modules.platform.lib.workspace as ws
 
     monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+    ws._reset_engagement()  # hermetic: no engagement pinned from another test
     yield tmp_path
 
 
@@ -221,7 +222,7 @@ class TestSweeps:
 
         from suijin.modules.tools.lib import engagement_bundle as eb
 
-        exports = tmp_path / "outputs" / "exports"
+        exports = tmp_path / "exports"
         exports.mkdir(parents=True)
         stale = exports / "old.sje.tmp"
         stale.write_text("leftover")

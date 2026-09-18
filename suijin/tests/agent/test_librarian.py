@@ -229,13 +229,14 @@ class TestIntegration:
         import suijin.modules.platform.lib.workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
         from suijin.modules.tools.lib import engagement_bundle as eb
 
         (ws.WORKSPACE_DIR / "outputs" / "exports").mkdir(parents=True, exist_ok=True)
         ws.set_engagement("obj http://t.local")  # the bundle reads the LIVE engagement dir
-        edir = ws.engagement_dir()
-        edir.mkdir(parents=True, exist_ok=True)
-        (edir / "librarian.json").write_text(
+        sdir = ws.state_dir()  # 2026-09-16: state files live in state/ now
+        sdir.mkdir(parents=True, exist_ok=True)
+        (sdir / "librarian.json").write_text(
             json.dumps({"entries": [{"kind": "credential", "value": "AKIAX", "where": "t", "iter": 2}]})
         )
         monkeypatch.setattr(eb, "_engagement_slug", lambda o: "x")

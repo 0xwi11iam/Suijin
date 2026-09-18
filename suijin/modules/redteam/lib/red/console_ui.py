@@ -76,6 +76,9 @@ UI_STATE = {
     "last_result_success": True,
     "poc_running": False,  # catalog_exploit verifier has taken over the loop
     "librarian": 0,  # engagement-memory observations (the librarian thread)
+    # verified exploits by id -> severity tier ("low"|"med"|"high"|"crit")
+    # — parsed from catalog CONFIRMED output (the EXP/severity strip row)
+    "exploits": {},
 }
 
 
@@ -113,9 +116,9 @@ def _fireteam_agent_rows() -> list:
     a team is actually running and disappears the moment nothing is.
 
     Smoothness: each running agent gets its OWN Spinner OBJECT (not a
-    pre-rendered frame) — Rich's Live auto-refresh re-renders renderables
-    at refresh_per_second, so the animation is native 60fps; the 1s
-    heartbeat only refreshes the counts."""
+    pre-rendered frame) — the ~10Hz painter re-renders renderables on
+    refresh, so the animation is a calm one-frame-per-repaint cycle; the
+    1s heartbeat only refreshes the counts."""
     rows: list = []
     for team in _fireteam_snapshot():
         running = int(team.get("running", 0))
@@ -136,7 +139,7 @@ def _fireteam_agent_rows() -> list:
                 # a grid cell holds the LIVE spinner object → native animation;
                 # NO truncation — the row flexes as long as the mission needs
                 g = Table.grid(padding=(0, 0))
-                g.add_row(Text(f"  agent {i}: {task} ", style="dim"), Spinner("dots", style="magenta", speed=3.0))
+                g.add_row(Text(f"  agent {i}: {task} ", style="dim"), Spinner("dots", style="magenta", speed=1.0))
                 rows.append(g)
             elif state == "done":
                 ok = bool(t.get("success"))
@@ -645,6 +648,7 @@ class TypewriterStream:
         self._line_kind = ""  # empty until the first char lands (never default to content)
         self._arrivals: collections.deque = collections.deque()  # (monotonic, chars)
         self._rate = self.MIN_RATE
+        self._last_cps = 0.0  # held through arrival silence (see _measured_cps)
         # per-kind splitters: a span opened (and held) by REASONING must
         # never release under the CONTENT label — the shared splitter was
         # the random-bright-reasoning leak after code blocks
@@ -652,6 +656,12 @@ class TypewriterStream:
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._playback_paused = False  # ESC ESC: hide the thought NOW
+        # serializes whole tick() batches against flush(): the grab+take+
+        # line-update happen under ONE lock hold inside a batch, and the
+        # batch's prints happen after — flush takes this mutex so it can
+        # never swap the queues mid-batch (duplicated/dropped text) or
+        # see a half-moved item. Lock order is ALWAYS _tick_mutex → _lock.
+        self._tick_mutex = threading.Lock()
 
     # ── lifecycle ────────────────────────────────────────────────────
 
@@ -660,20 +670,22 @@ class TypewriterStream:
         # exiting — the ask flow calls stop() then start() within that
         # window, the old early-return skipped the spawn, and playback
         # died for the rest of the engagement. If a stop was requested,
-        # always spawn fresh (the dying thread exits within one tick).
+        # always spawn fresh — with the STOP EVENT BAKED INTO THE NEW
+        # THREAD: clearing a shared event before the dying thread wakes
+        # would resurrect it alongside the new one (double-speed playback).
         if self._thread is not None and self._thread.is_alive() and not self._stop.is_set():
             return
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._run, name="red-typewriter", daemon=True)
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, args=(self._stop,), name="red-typewriter", daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
         self._stop.set()
 
-    def _run(self) -> None:
+    def _run(self, stop: threading.Event) -> None:
         dt = 1.0 / self.TICK_HZ
         _fail_logged = False
-        while not self._stop.wait(dt):
+        while not stop.wait(dt):
             if self._playback_paused:
                 continue  # paused: nothing types, nothing commits
             try:
@@ -689,7 +701,7 @@ class TypewriterStream:
         self._playback_paused = True
         with self._lock:
             self._line, self._line_kind = "", ""
-        self._ui._tick()
+        self._ui._tick(refresh=True)
 
     def resume_playback(self) -> None:
         self._playback_paused = False
@@ -716,16 +728,40 @@ class TypewriterStream:
     # ── playback ─────────────────────────────────────────────────────
 
     def _measured_cps(self) -> float:
-        """Arrival rate over the FULL 5s window — the old span-since-first-
+        """Arrival rate. Span-floored at 0.5s: the old span-since-first-
         arrival made one big chunk measure at megacycles/sec (span ~1ms),
         snapping the gear to the 3000cps cap = visually instant playback
-        (the 'no smooth typewriting' regression)."""
+        (the 'no smooth typewriting' regression); a full 5s window made
+        short bursts crawl at MIN_RATE. The floor keeps short streams
+        snappy without letting one chunk peg the gear. Arrival SILENCE
+        with pending prose HOLDS the last measured rate — a mid-thought
+        pause in the stream is not the end of it (flush owns that), and
+        the old decay-to-MIN_RATE made post-lull backlog crawl at 20cps
+        while the operator watched a frozen line."""
         now = time.monotonic()
         with self._lock:
             arrivals = [(t, n) for (t, n) in self._arrivals if now - t <= 5.0]
             self._arrivals = collections.deque(arrivals)
-            chars = sum(n for _, n in arrivals)
-        return min(chars / 5.0, float(self.LADDER[-1]))
+            if arrivals:
+                chars = sum(n for _, n in arrivals)
+                span = max(0.5, now - arrivals[0][0])
+                self._last_cps = chars / span
+            elif not (self._pending or self._line):
+                return 0.0
+        return min(self._last_cps, float(self.MAX_ESCAPE))
+
+    def live_tokens_per_s(self, window: float = 2.0) -> float:
+        """Real generation speed, measured from the provider's own deltas:
+        chars arrived in the rolling window / 4 (the codebase's token
+        convention). 0.0 when nothing has arrived recently (idle)."""
+        now = time.monotonic()
+        with self._lock:
+            recent = [(t, n) for (t, n) in self._arrivals if now - t <= window]
+        if not recent:
+            return 0.0
+        chars = sum(n for _, n in recent)
+        span = max(0.25, now - recent[0][0])
+        return (chars / 4.0) / span
 
     def _backlog(self) -> int:
         with self._lock:
@@ -751,76 +787,98 @@ class TypewriterStream:
         pending into the line; commits filled rows; emits complete boxes.
         A KIND SWITCH commits the open line first — content never rides a
         dim reasoning line (and vice versa). A paused playback commits
-        NOTHING (ESC ESC froze the stream)."""
+        NOTHING (ESC ESC froze the stream).
+
+        LOCKING: state changes happen under ONE short _lock hold per
+        batch; every console.print happens AFTER both locks are released.
+        The old code printed committed rows while still holding _lock —
+        but console.print (through the Live render hook) needs the Live
+        lock, and the strip renderer needs THIS lock: that ABBA pair
+        could (and did) freeze the whole TUI mid-stream."""
         if self._playback_paused:
             return
-        self._rate = self._select_rate(dt)
-        budget = self._rate * dt
-        row = max(20, self._ui.console.width - 4)
-        while budget > 0:
-            with self._lock:
-                item = self._pending[0] if self._pending else None
-            if item is None:
-                break
-            kind, text = item
-            if kind.startswith("__box__"):
+        with self._tick_mutex:
+            self._rate = self._select_rate(dt)
+            budget = self._rate * dt
+            row = max(20, self._ui.console.width - 4)
+            while budget > 0:
+                rows: list[tuple[str, str]] = []  # (line, kind) — printed after the lock
+                box: tuple[str, str] | None = None
+                spent = 0
                 with self._lock:
-                    self._commit_line_locked()  # text above, box below — reading order
-                    self._pending.pop(0)
-                self._emit_box(kind[len("__box__") :], text)
-                continue  # boxes cost no typewriter budget
-            with self._lock:
-                if self._line and self._line_kind != kind:
-                    self._commit_line_locked()  # kind switch = fresh styled line
-                take = min(len(text), max(1, int(round(budget))), max(1, row - len(self._line)))
-                piece = text[:take]
-                rest = text[take:]
-                if rest:
-                    self._pending[0] = (kind, rest)
-                else:
-                    self._pending.pop(0)
-                self._line += piece
-                if not self._line_kind:
-                    self._line_kind = kind
-                # model-emitted newlines END the row (paragraph breaks): an
-                # embedded \n rendered mid-Text produced the broken
-                # 'w / ork' fragments — commit each line separately so
-                # every one dresses as markdown
-                nl = self._line.rfind("\n")
-                if nl != -1:
-                    done, kind_now = self._line[:nl], self._line_kind
-                    self._line = self._line[nl + 1 :].lstrip()
-                    for seg in done.split("\n"):
-                        if seg.strip():
-                            self._commit_row(seg.rstrip(), kind_now)
-                    continue  # newline commits are free (no budget spent)
-                if len(self._line) >= row:
-                    cut = _smart_cut(self._line, row)  # never split a markdown marker
-                    line, kind_now = self._line[:cut].rstrip(), self._line_kind
-                    self._line = self._line[cut:].lstrip()
-                    if line:
-                        self._commit_row(line, kind_now)
-                    if not self._line:
-                        self._line_kind = ""
-                    budget -= take
-                    continue
-            budget -= take
+                    if not self._pending:
+                        break
+                    kind, text = self._pending[0]
+                    if kind.startswith("__box__"):
+                        self._commit_line_locked(rows)  # text above, box below — reading order
+                        self._pending.pop(0)
+                        box = (kind[len("__box__") :], text)
+                    else:
+                        if self._line and self._line_kind != kind:
+                            self._commit_line_locked(rows)  # kind switch = fresh styled line
+                        take = min(len(text), max(1, int(round(budget))), max(1, row - len(self._line)))
+                        piece = text[:take]
+                        rest = text[take:]
+                        if rest:
+                            self._pending[0] = (kind, rest)
+                        else:
+                            self._pending.pop(0)
+                        self._line += piece
+                        if not self._line_kind:
+                            self._line_kind = kind
+                        # model-emitted newlines END the row (paragraph breaks): an
+                        # embedded \n rendered mid-Text produced the broken
+                        # 'w / ork' fragments — commit each line separately so
+                        # every one dresses as markdown. Newline commits spend
+                        # NO budget (paragraph breaks play free).
+                        nl = self._line.rfind("\n")
+                        if nl != -1:
+                            done, kind_now = self._line[:nl], self._line_kind
+                            self._line = self._line[nl + 1 :].lstrip()
+                            for seg in done.split("\n"):
+                                if seg.strip():
+                                    rows.append((seg.rstrip(), kind_now))
+                        elif len(self._line) >= row:
+                            cut = _smart_cut(self._line, row)  # never split a markdown marker
+                            line, kind_now = self._line[:cut].rstrip(), self._line_kind
+                            self._line = self._line[cut:].lstrip()
+                            if line:
+                                rows.append((line, kind_now))
+                            if not self._line:
+                                self._line_kind = ""
+                            spent = take
+                        else:
+                            spent = take
+                # ── I/O strictly OUTSIDE the locks ──
+                # refresh the strip renderable FIRST so the re-render that
+                # rides this batch's own prints shows the post-commit line
+                # (else the strip briefly echoed already-committed text)
+                if rows or box is not None:
+                    self._ui._tick()
+                for ln, k in rows:
+                    self._commit_row(ln, k)
+                if box is not None:
+                    self._emit_box(box[0], box[1])
+                    continue  # boxes cost no typewriter budget
+                budget -= spent
 
     # ── emission ─────────────────────────────────────────────────────
 
-    def _commit_line_locked(self) -> None:
-        """Commit the open live line NOW (kind switch / box / flush
-        boundary). Caller holds the lock."""
+    def _commit_line_locked(self, rows: list) -> None:
+        """Queue the open live line for commit NOW (kind switch / box /
+        flush boundary). Caller holds the lock; printing happens after
+        the lock is released."""
         if self._line.strip():
             for seg in self._line.rstrip().split("\n"):
                 if seg.strip():
-                    self._commit_row(seg.rstrip(), self._line_kind or "content")
+                    rows.append((seg.rstrip(), self._line_kind or "content"))
         self._line, self._line_kind = "", ""
 
     def _commit_row(self, line: str, kind: str = "content") -> None:
-        """Commit one full-width row — the operator contract: think = dim
-        plain, SPEAK = bright cyan inline markdown (the contrast between
-        reasoning and content is the whole point)."""
+        """Commit one full-width row — the operator contract (final,
+        2026-09-17): STREAMED REASONING = dim plain (the monologue),
+        THOUGHT = bold cyan (the declarations, via thinking()), SPEAK =
+        bright cyan inline markdown. Plain spans only."""
         with contextlib.suppress(Exception):
             if kind == "reasoning":
                 self._ui.console.print(Text(line, style="dim"))
@@ -828,8 +886,8 @@ class TypewriterStream:
                 self._ui.console.print(_md_line(line))
 
     def _emit_wrapped(self, kind: str, text: str) -> None:
-        """Flush-time emission: one merged block — dim plain for
-        reasoning, per-line bright markdown for content."""
+        """Flush-time emission: one merged block — dim plain for the
+        reasoning monologue, per-line bright markdown for content."""
         with contextlib.suppress(Exception):
             if kind == "reasoning":
                 self._ui.console.print(Text(text, style="dim"))
@@ -878,30 +936,34 @@ class TypewriterStream:
         old single-splitter drain hard-labeled every held tail 'content'
         — held reasoning flushed bright). The live line commits first
         (oldest text), then merged same-kind runs; boxes print complete;
-        content is never silently dropped."""
-        with self._lock:
-            pending, self._pending = list(self._pending), []
-            line, line_kind = self._line, self._line_kind
-            self._line, self._line_kind = "", ""
-        if line.strip():
-            pending.insert(0, (line_kind or "content", line))
-        for kind, splitter in self._splitters.items():
-            tail = splitter.drain()
-            if tail and tail.strip():
-                pending.append((kind, tail))
-        runs: list[tuple[str, list[str]]] = []
-        for kind, text in pending:
-            if kind.startswith("__box__"):
-                runs.append((kind, [text]))
-            elif runs and runs[-1][0] == kind:
-                runs[-1][1].append(text)
-            else:
-                runs.append((kind, [text]))
-        for kind, chunks in runs:
-            if kind.startswith("__box__"):
-                self._emit_box(kind[len("__box__") :], "".join(chunks))
-            else:
-                self._emit_wrapped(kind, "".join(chunks))
+        content is never silently dropped. Holds the tick mutex for the
+        whole swap+print: the ticker can never be mid-batch (its grab,
+        line-update and prints are atomic against this), so no text is
+        duplicated, dropped, or printed out of order."""
+        with self._tick_mutex:
+            with self._lock:
+                pending, self._pending = list(self._pending), []
+                line, line_kind = self._line, self._line_kind
+                self._line, self._line_kind = "", ""
+            if line.strip():
+                pending.insert(0, (line_kind or "content", line))
+            for kind, splitter in self._splitters.items():
+                tail = splitter.drain()
+                if tail and tail.strip():
+                    pending.append((kind, tail))
+            runs: list[tuple[str, list[str]]] = []
+            for kind, text in pending:
+                if kind.startswith("__box__"):
+                    runs.append((kind, [text]))
+                elif runs and runs[-1][0] == kind:
+                    runs[-1][1].append(text)
+                else:
+                    runs.append((kind, [text]))
+            for kind, chunks in runs:
+                if kind.startswith("__box__"):
+                    self._emit_box(kind[len("__box__") :], "".join(chunks))
+                else:
+                    self._emit_wrapped(kind, "".join(chunks))
 
     def line_renderable(self):
         """The live partial line for the strip — dim reasoning, BRIGHT
@@ -955,10 +1017,11 @@ class EngagementUI:
             setattr(self, _name, types.MethodType(_guarded(_name, _fn), self))
         self._live: Live | None = None
         # Rich speed is a MULTIPLIER over the spinner's base interval
-        # (dots = 80ms/frame): 3.0 → ~27ms/frame ≈ 37fps. (Earlier values
-        # 0.4→0.05 read as "faster" but divided the rate — 0.05 was 20x
-        # SLOWER than default; that's why the spinner looked dead.)
-        self._spinner = Spinner("dots", style=GOLD, speed=3.0)
+        # (dots = 80ms/frame). 1.0 pairs with the ~10fps painter below —
+        # one spinner frame per repaint, the calm classic CLI cadence.
+        # (3.0 spun at ~37fps, which only made sense against the old
+        # 60fps auto-refresh — see _paint_loop for why that had to die.)
+        self._spinner = Spinner("dots", style=GOLD, speed=1.0)
         self.iteration = 0
         self.phase = "starting"
         self._cur: _Iteration | None = None
@@ -977,6 +1040,7 @@ class EngagementUI:
         self._streaming = False  # True between the first delta and stream_done
         self._last_box_norm = None  # duplicate-command-box guard
         self._waiting_since: float | None = None  # think-turn start → TTFT proof
+        self._next_report_s: float = float(self._LLM_WAIT_REPORT_S)  # threshold-scheduled still-thinking
         self._last_cost = 0.0
 
     # ── strip (the ONLY live region — one stable row) ──────────────────
@@ -1014,20 +1078,55 @@ class EngagementUI:
             label = f"Fireteam {ft_live}/{ft_total} live" if ft_total != ft_live else f"Fireteam {ft_live} live"
             ft_seg = [(" | ", "dim"), (label, "bold magenta")]
         lb_n = int(UI_STATE.get("librarian") or 0)
-        lb_seg = [(" | ", "dim"), (f"LIB {lb_n}", f"bold {GOLD}")] if lb_n else []
+        # MEM = engagement-memory observations written by the librarian
+        # thread (was 'LIB' — read as a mystery abbreviation in the field)
+        lb_seg = [(" | ", "dim"), (f"MEM {lb_n}", f"bold {GOLD}")] if lb_n else []
         pct = UI_STATE.get("ctx_pct")
         ctx_seg = None
         if pct is not None:
             pf = float(pct)
             style = "green" if pf < 60 else ("yellow" if pf < 85 else "bold red")
-            ctx_seg = [(" | ", "dim"), (f"ctx {pf:.0f}%", style)]
+            # ABSOLUTE fill beside the pct — 'ctx 2%' beside a cumulative
+            # '650k tok' read as broken (spend vs window are DIFFERENT
+            # metrics; name both and show the fraction)
+            in_t = int(UI_STATE.get("ctx_in_tok") or 0)
+            win = int(UI_STATE.get("ctx_window") or 0)
+            frac = f" {_fmt_tok(in_t)}/{_fmt_tok(win)}" if win else ""
+            ctx_seg = [(" | ", "dim"), (f"ctx {pf:.0f}%{frac}", style)]
+        # verified-exploit severity ladder — light blue to red, every
+        # color unique to its tier (nothing else in the strip uses these)
+        ex = UI_STATE.get("exploits") or {}
+        tiers = {"low": 0, "med": 0, "high": 0, "crit": 0}
+        for t in ex.values():
+            tiers[t] = tiers.get(t, 0) + 1
+        sev_seg = []
+        for label, key, color in (
+            ("LOW", "low", "bright_blue"),
+            ("MED", "med", "bright_yellow"),
+            ("HIGH", "high", "bright_magenta"),
+            ("CRIT", "crit", "bright_red"),
+        ):
+            sev_seg += [(" | ", "dim"), (f"{label} {tiers[key]}", f"bold {color}")]
+        sev_seg += [(" | ", "dim"), (f"EXP {len(ex)}", "bold green")]
+        # LIVE GENERATION SPEED — real, from the arrival stream (the
+        # same measurement that paces playback); hidden when idle AND
+        # when paused (the agent still finishes its turn in the background
+        # but showing t/s during pause reads as a UI pause bug)
+        tps = 0.0
+        if not self._paused:
+            with contextlib.suppress(Exception):
+                tps = self._tw.live_tokens_per_s()
+        tps_seg = [(f"{tps:.0f} t/s", "cyan")] if tps >= 1.0 else []
         right = Text.assemble(
-            (f"{_fmt_tok(tok)} tok", "cyan"),
+            *tps_seg,
+            *sev_seg,
+            (" | ", "dim"),
+            (f"\u03a3 {_fmt_tok(tok)} tok", "cyan"),
             (" | ", "dim"),
             (f"{approx}${cost:.4f}", "cyan"),
             *(ctx_seg or []),
-            *([(" | ", "dim"), (f"FLAG {len(UI_STATE['flags'])}", f"bold {GOLD}")] if UI_STATE["flags"] else []),
-            *([(" | ", "dim"), (f"CRED {len(UI_STATE['creds'])}", "bold green")] if UI_STATE["creds"] else []),
+            (" | ", "dim"),
+            (f"CRED {len(UI_STATE['creds'])}", "bold green"),
             *(ft_seg or []),
             *lb_seg,
         )
@@ -1040,12 +1139,92 @@ class EngagementUI:
             rows.append(tw)  # the typewriter line (live partial row)
         rows.append(t)
         rows.extend(_fireteam_agent_rows())
+        sug = self._suggestion_row()
+        if sug is not None:
+            rows.append(sug)  # the command bar, directly above the input box
         rows.append(self._input_box_row())  # the input box is ALWAYS the bottom row
         return Group(*rows)
 
     # model intelligence tiers — Cmd/Ctrl-style cycler (Ctrl+Space), sent
     # to the provider on the next LLM call (applies between thoughts)
-    INTELLIGENCE_TIERS = ("max", "high", "medium", "low")
+    # the full ladder; the cycler intersects with what the ACTIVE model
+    # supports (models.dev reasoning_options) — unsupported tiers never
+    # show. Gate resolves lazily: unknown model = the full ladder.
+    INTELLIGENCE_TIERS = ("max", "xhigh", "high", "med", "low")
+
+    def _supported_tiers(self) -> tuple:
+        import contextlib
+
+        from suijin.modules.redteam.lib.red.console_ui import UI_STATE
+
+        with contextlib.suppress(Exception):
+            from suijin.modules.providers.lib.model_meta import supported_effort_levels
+
+            label = str(UI_STATE.get("model_label", "") or "")
+            model = label.split()[-1] if label else ""
+            prov = label.split()[0] if label else ""
+            supported = supported_effort_levels(prov, model) if model else []
+            if supported:
+                # expand the model's list onto the ladder order + keep aliases working
+                aliases = {"medium": "med", "minimum": "low"}
+                supported = {aliases.get(v, v) for v in supported}
+                ordered = tuple(t for t in self.INTELLIGENCE_TIERS if t in supported)
+                return ordered or self.INTELLIGENCE_TIERS
+        return self.INTELLIGENCE_TIERS
+
+    # ── slash-command suggestions (opencode-style, 2026-09-17) ─────
+    # State: UI_STATE["suggest_sel"] = selection index (None = auto/top),
+    # set by arrow keys; the row renders when the buffer starts with "/".
+    SUGGESTIONS: dict[str, str] = {}  # "/name" -> one-line description
+
+    def set_suggestion_registry(self, cmds: dict[str, str]) -> None:
+        """The merged command registry (pause handlers + /upload + module
+        verbs) — set once at engagement boot by the redteamer."""
+        self.SUGGESTIONS = {k if k.startswith("/") else f"/{k}": v for k, v in (cmds or {}).items()}
+
+    def _filtered_suggestions(self) -> list[tuple[str, str]]:
+        """Commands matching the current buffer: prefix > substring.
+        Returns (name, description) pairs, best match first."""
+        buf = str(UI_STATE.get("input_buf") or "")
+        if not buf.startswith("/"):
+            return []
+        q = buf[1:].split(" ")[0].lower()  # the command part only
+        items = sorted(self.SUGGESTIONS.items())
+        if not q:
+            return items
+        prefix = [(k, v) for k, v in items if k.lstrip("/").startswith(q)]
+        substr = [(k, v) for k, v in items if q in k.lstrip("/") and (k, v) not in prefix]
+        return prefix + substr
+
+    def _suggestion_row(self):
+        """The floating bar above the input box — matching commands with
+        the selected one highlighted. None when not applicable (never
+        while paused: the pause console owns input then — rendering the
+        bar underneath the pause banner crashed the paint)."""
+        if self._paused:
+            return None
+        matches = self._filtered_suggestions()
+        if not matches:
+            return None
+        sel = UI_STATE.get("suggest_sel")
+        if sel is None or sel >= len(matches):
+            sel = 0
+        lines = []
+        for i, (name, desc) in enumerate(matches[:8]):
+            if i == sel:
+                lines.append(Text.assemble(("  › ", "bold cyan"), (f"{name:<14}", "bold cyan"), (desc[:44], "cyan")))
+            else:
+                lines.append(Text.assemble(("    ", "dim"), (f"{name:<14}", ""), (desc[:44], "dim")))
+        if len(matches) > 8:
+            lines.append(Text(f"    … {len(matches) - 8} more", style="dim"))
+        return Panel(
+            Group(*lines),
+            box=box.SIMPLE,
+            border_style="bright_black",
+            padding=(0, 1),
+            title=" commands ",
+            title_align="left",
+        )
 
     def _input_box_row(self):
         """The operator's prompt — a real white box, ALWAYS the bottom row:
@@ -1081,14 +1260,15 @@ class EngagementUI:
         )
 
     def set_input(self, buf) -> None:
-        """Live typing into the box (None = idle hint)."""
+        """Live typing into the box (None = idle hint). Operator keystrokes
+        paint immediately — a 100ms echo lag reads as dead input."""
         UI_STATE["input_buf"] = None if buf is None else str(buf)
-        self._tick()
+        self._tick(refresh=True)
 
     def set_mode(self, mode: str) -> None:
         """The mode badge (recon/exploit/report) — Tab cycles it."""
         UI_STATE["input_mode"] = str(mode or "recon").lower()
-        self._tick()
+        self._tick(refresh=True)
 
     def start(self) -> None:
         # FULLY idempotent: the ask flow and pause-resume call start()
@@ -1097,15 +1277,33 @@ class EngagementUI:
         # starvation, the frozen-ui hang)
         if self._live is None:
             # transient: on stop (pause/end) the strip VANISHES cleanly —
-            # no stale bottom artifact painted under the pause prompts
-            self._live = Live(self._strip(), console=self.console, refresh_per_second=60, transient=True)
+            # no stale bottom artifact painted under the pause prompts.
+            # auto_refresh=False: WE own the repaint cadence (see
+            # _paint_loop) — the old 60fps auto-refresh repainted the
+            # full 4-row strip ~43 times/second for the WHOLE engagement
+            # (2.6MB of terminal chatter in a 66s rig run): flickering
+            # boxes, laggy ssh/tmux, and control-code races with the
+            # typewriter's own prints.
+            self._live = Live(self._strip(), console=self.console, auto_refresh=False, transient=True)
             self._live.start()
-        if self._refresh_thread is None or not self._refresh_thread.is_alive():
-            # the heartbeat: rebuild the strip once a second so counters,
-            # cost, and the fireteam agent rows stay live (and teams
-            # DISAPPEAR the moment they drain) even while nothing prints
-            self._refresh_stop.clear()
-            self._refresh_thread = threading.Thread(target=self._heartbeat, name="red-strip", daemon=True)
+        # a stopped thread may linger up to one 100ms wait before exiting —
+        # treat a stop-REQUESTED thread as dead (the typewriter's start()
+        # uses the same guard): the ask flow's stop→start could otherwise
+        # land inside that window, skip the spawn, and leave the strip
+        # unpainted for the rest of the engagement. The stop event is
+        # BAKED INTO each spawned thread — clearing a shared event before
+        # a dying thread wakes would resurrect it beside the new painter.
+        if self._refresh_thread is None or not self._refresh_thread.is_alive() or self._refresh_stop.is_set():
+            # the painter + heartbeat: one thread, ~10Hz while anything
+            # animates, 1Hz when the strip is static — so counters, cost,
+            # the cursor blink and the fireteam rows stay live (and teams
+            # DISAPPEAR the moment they drain) without flooding the
+            # terminal when nothing moves
+            self._refresh_stop = threading.Event()
+            stop = self._refresh_stop
+            self._refresh_thread = threading.Thread(
+                target=self._paint_loop, args=(stop,), name="red-strip", daemon=True
+            )
             self._refresh_thread.start()
         # the typewriter ticker: playback thread at 20Hz — WITHOUT this
         # nothing streams live (rows only land at stream_done's flush,
@@ -1114,28 +1312,54 @@ class EngagementUI:
         self._tw.start()
 
     _LLM_WAIT_REPORT_S = 15  # every 15s of silent thinking, tell the operator
-    _last_report_s: int = -1  # dedup — one line per interval, never twice
 
     _tick_fail_logged = False  # one debug line ever — a frozen strip stays diagnosable
 
-    def _heartbeat(self) -> None:
-        while not self._refresh_stop.wait(1.0):
+    def _strip_animated(self) -> bool:
+        """Does the strip contain motion RIGHT NOW? Only those states earn
+        ~10fps repaints (spinner, typewriter line, fireteam rows, POC);
+        everything else is static and paints at the 1s heartbeat."""
+        if self._live is None or self._paused:
+            return False
+        if self._waiting or UI_STATE.get("poc_running"):
+            return True  # the spinner earns its animation
+        if self._streaming and (self._tw._line or self._tw._pending):
+            return True  # the typewriter line is visibly growing/draining
+        with contextlib.suppress(Exception):
+            return _fireteam_live_count() > 0
+        return False
+
+    def _paint_loop(self, stop: threading.Event) -> None:
+        n = 0
+        while not stop.wait(0.1):
+            n += 1
             try:
-                UI_STATE["cursor_on"] = not UI_STATE.get("cursor_on", True)  # the blink
+                if self._strip_animated():
+                    self._tick(refresh=True)
+                if n % 10 == 0:  # the 1s heartbeat duties
+                    self._heartbeat_duties()
+                    if not self._strip_animated():
+                        self._tick(refresh=True)  # static: 1fps keeps blink/stats live
             except Exception as e:  # noqa: BLE001 — the strip must never die
                 if not EngagementUI._tick_fail_logged:
                     EngagementUI._tick_fail_logged = True
-                    _crash_log("heartbeat", e)
-            # LLM-wait progress: the spinner says nothing about TIME — a
-            # dim transcript line every 15s proves the program is alive.
-            # SUPPRESSED during pause (the PAUSED strip IS the state).
-            with contextlib.suppress(Exception):
-                if self._waiting and not self._paused and not self._streaming and self._waiting_since is not None:
-                    waited = int(time.monotonic() - self._waiting_since)
-                    if waited > 0 and waited % self._LLM_WAIT_REPORT_S == 0 and waited != self._last_report_s:
-                        self._last_report_s = waited
-                        self.console.print(f"[dim]  still thinking… {waited}s[/dim]")
-            self._tick()
+                    _crash_log("paint-loop", e)
+
+    def _heartbeat_duties(self) -> None:
+        with contextlib.suppress(Exception):
+            UI_STATE["cursor_on"] = not UI_STATE.get("cursor_on", True)  # the blink
+        # LLM-wait progress: the spinner says nothing about TIME — a
+        # dim transcript line every 15s proves the program is alive.
+        # THRESHOLD-scheduled, not `waited % 15 == 0`: heartbeat jitter
+        # steps whole seconds (14→16 under load), the modulo never hits,
+        # and the operator stares at a silent spinner convinced the UI
+        # froze. SUPPRESSED during pause (the PAUSED strip IS the state).
+        with contextlib.suppress(Exception):
+            if self._waiting and not self._paused and not self._streaming and self._waiting_since is not None:
+                waited = time.monotonic() - self._waiting_since
+                if waited >= self._next_report_s:
+                    self._next_report_s += self._LLM_WAIT_REPORT_S
+                    self.console.print(f"[dim]  still thinking… {int(waited)}s[/dim]")
 
     def stop(self) -> None:
         self._refresh_stop.set()
@@ -1154,10 +1378,10 @@ class EngagementUI:
         self._waiting = bool(on)
         if on and self._waiting_since is None:
             self._waiting_since = time.monotonic()  # TTFT clock starts
-            self._last_report_s = -1  # new turn — fresh progress cadence
+            self._next_report_s = float(self._LLM_WAIT_REPORT_S)  # fresh progress cadence
             self._streaming = False  # previous turn's stream is dead (suppresses still-thinking otherwise)
             self._tw.resume_playback()  # unstick the typewriter if it was paused
-        self._tick()
+        self._tick(refresh=True)  # the spinner state flip paints immediately
 
     def paused_visual(self, on: bool) -> None:
         """ESC ESC instant visual: PAUSED in the strip, spinner stopped,
@@ -1166,11 +1390,11 @@ class EngagementUI:
         self._paused = bool(on)
         if on:
             self._tw.pause_playback()
-            self._last_report_s = -1  # suppress still-thinking during pause
         else:
             self._tw.resume_playback()
             self._waiting_since = time.monotonic()  # restart the clock on resume
-        self._tick()
+            self._next_report_s = float(self._LLM_WAIT_REPORT_S)
+        self._tick(refresh=True)  # the PAUSED flip is operator-visible: paint NOW
 
     def guidance_delivered(self, text: str) -> None:
         """Visible confirmation: the think node CONSUMED the operator's
@@ -1222,10 +1446,14 @@ class EngagementUI:
         """The live partial line for the strip (None when idle)."""
         return self._tw.line_renderable()
 
-    def _tick(self) -> None:
+    def _tick(self, refresh: bool = False) -> None:
+        """Rebuild the strip renderable. refresh=True also paints NOW —
+        reserved for operator-visible state flips (pause, waiting, typed
+        input); the high-frequency paths stay update-only and the ~10Hz
+        painter lands them within 100ms."""
         if self._live is not None:
             with contextlib.suppress(Exception):
-                self._live.update(self._strip())
+                self._live.update(self._strip(), refresh=refresh)
 
     # ── streamed iteration block ───────────────────────────────────────
 
@@ -1276,8 +1504,15 @@ class EngagementUI:
         self.waiting(False)
 
     def thinking(self, thought: str) -> None:
+        # THE THOUGHT = BOLD CYAN, plain spans (final voice map 2026-09-17):
+        # declarations the agent COMMITS to ("Firing the escalation team
+        # per ESCALATION READY…", "Let me analyze what I have so far: …")
+        # are speech-grade. Never markdown — Rich's Markdown gave the
+        # model's backtick spans their own theme color (`PHP/8.3.33` lit
+        # up mid-sentence). The raw reasoning MONOLOGUE stays dim via the
+        # stream paths; this method only renders the parsed thought field.
         if thought:
-            self._section(_md(thought, "dim blue"))  # no label — we know what this is
+            self._section(Text(thought, style="bold cyan"))
             self._tick()
 
     def reasoning(self, text: str) -> None:
@@ -1285,7 +1520,7 @@ class EngagementUI:
             return
         UI_STATE["last_reasoning"] = text
         if UI_STATE["show_reasoning"]:
-            self._section(_md(text, "cyan"))  # no label
+            self._section(Text(text, style="dim"))
             self._tick()
 
     def tool(self, tool_name: str, tool_args: dict) -> None:
@@ -1327,7 +1562,13 @@ class EngagementUI:
         self._section(Text(f"response unparseable — asking again ({attempt}/{max_attempts})", style="bold red"))
         self._tick()
 
-    _SEV_COLORS = {"CRITICAL": "bold red", "HIGH": "red", "MEDIUM": "bold yellow", "LOW": "yellow"}
+    # the strip's severity gradient — same colors, same meaning
+    _SEV_COLORS = {
+        "CRITICAL": "bright_red",
+        "HIGH": "bright_magenta",
+        "MEDIUM": "bright_yellow",
+        "LOW": "bright_blue",
+    }
 
     def poc_event(self, event: str, payload: dict) -> None:
         """Sink for the catalog_exploit VERIFIER (installed via
@@ -1396,6 +1637,16 @@ class EngagementUI:
         if not m:
             return False
         eid, status, rest = m.group(1), m.group(2), m.group(3)
+        # THE SEVERITY LEDGER (2026-09-17): catalog_exploit results bypass
+        # ui.output() (this panel replaces it), so _track_exploit must fire
+        # HERE — otherwise the strip's LOW/MED/HIGH/CRIT/EXP never moves
+        # on a confirmed exploit. Only CONFIRMED counts.
+        if status == "CONFIRMED":
+            sev_m2 = _re.match(r"([A-Z-]+)", rest)
+            sev_word = sev_m2.group(1).lower() if sev_m2 else ""
+            tier = {"critical": "crit", "high": "high", "medium": "med",
+                    "moderate": "med", "low": "low", "informational": "low"}.get(sev_word, "med")
+            UI_STATE["exploits"].setdefault(eid, tier)
         sev_m = _re.match(r"([A-Z-]+)\s+CVSS\s+([0-9.]+)\s*:\s*(.+)", rest)
         title = rest
         sev_line = ""
@@ -1420,10 +1671,44 @@ class EngagementUI:
             )
         return True
 
+    # severity words -> tiers; CVSS floors when no word is present
+    _SEV_TIERS = (
+        ("critical", "crit"), ("crit", "crit"),
+        ("high", "high"),
+        ("medium", "med"), ("med", "med"), ("moderate", "med"),
+        ("low", "low"), ("informational", "low"), ("info", "low"),
+    )
+
+    def _track_exploit(self, out: str) -> None:
+        """EXP severity ledger for the strip. Parses the catalog's ACTUAL
+        output format (classed_title): 'EXP-001 CONFIRMED — CRITICAL CVSS
+        8.9 : title' or 'EXP-001 CONFIRMED — HIGH : title'. The severity
+        word comes FIRST in the tail, then optional CVSS. Best-effort."""
+        with contextlib.suppress(Exception):
+            for m in re.finditer(r"(EXP-\d+)\s+CONFIRMED[^\n]*?[—-]\s*(\w+)", out):
+                eid = m.group(1)
+                sev_word = m.group(2).lower()
+                tier = {"critical": "crit", "crit": "crit",
+                        "high": "high",
+                        "medium": "med", "med": "med", "moderate": "med",
+                        "low": "low", "informational": "low", "info": "low",
+                        "note": "low"}.get(sev_word)
+                if tier is None:
+                    # fallback: look for CVSS in the full line
+                    line = out[m.start():m.end() + 80]
+                    cv = re.search(r"CVSS\s*([0-9.]+)", line, re.I)
+                    if cv:
+                        v = float(cv.group(1))
+                        tier = "crit" if v >= 9 else "high" if v >= 7 else "med" if v >= 4 else "low"
+                    else:
+                        tier = "med"  # unlabeled confirmed = med floor
+                UI_STATE["exploits"].setdefault(eid, tier)
+
     def output(self, text: str, error_class: str = "") -> None:
         out = str(text or "")
         ok = not (is_error(out) or out.startswith("BLOCKED"))
         UI_STATE["last_result_success"] = ok
+        self._track_exploit(out)
         if self._cur is None:
             self._cur = _Iteration(self.iteration or 1, self.phase, 0, 0.0)
             self.console.print(Rule(title=f" #{self._cur.n} · {self._cur.phase} ", style=BORDER, align="left"))
@@ -1459,6 +1744,15 @@ class EngagementUI:
             UI_STATE["creds"].append((kind, v))
             self._section(Text(f"Credentials harvested! {kind}: {v}", style="bold green"))
             self._log_finding("credential", f"{kind}: {v[:120]}")
+        # AGENT-CLASSIFIED credentials (2026-09-17): the agent decides what
+        # counts — write_note with credential-flavored content counts as a
+        # CRED, catching the weird/proprietary formats our regex misses
+        _low = str(text or "")[:300].lower()
+        if any(w in _low for w in ("credential", "password", "api key", "apikey", "token found", "secret found", "session hijack", "auth bypass")):
+            _note_key = ("agent-classified", _low[:80])
+            if _note_key not in UI_STATE["creds"]:
+                UI_STATE["creds"].append(_note_key)
+                self._section(Text(f"Agent flagged: {_low[:100]}", style="dim green"))
 
     def loot(self, text: str) -> None:
         if self._cur is not None:
@@ -1497,8 +1791,11 @@ class EngagementUI:
         self._tick()
 
     def supervisor(self, text: str) -> None:
+        # SPEECH-grade styling (2026-09-17): supervisor guidance reads as
+        # said, not thought — dim italic buried it under reasoning. Bright
+        # cyan + slight bold, same voice tier as content.
         if text:
-            self._note(Text.assemble(("Supervisor  ", "bold magenta"), (str(text), "dim italic")))
+            self._note(Text.assemble(("Supervisor  ", "bold magenta"), (str(text), "bold bright_cyan")))
 
     def oracle(self, hypotheses) -> None:
         """hypotheses: list of dicts ({'id','hypothesis',...}) from the oracle,

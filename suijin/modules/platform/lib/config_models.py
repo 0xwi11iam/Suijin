@@ -109,6 +109,15 @@ class RedConfig(BaseModel):
     max_tokens_per_request: int = Field(default=8000, ge=100)
     context_window: int = Field(default=0, ge=0)  # tokens; 0 = auto (models.dev fetch, 1M fallback) — operator-only
     stealth: bool = Field(default=True)  # v5.1: quiet by default (masked identity, pacing, tool rate caps)
+    autonomy: str = Field(default="")  # "" = interactive (operator attends); "full" = unattended CI run
+
+    @field_validator("autonomy")
+    @classmethod
+    def validate_autonomy(cls, v):
+        v = (v or "").strip().lower()
+        if v not in ("", "full"):
+            raise ValueError("autonomy must be '' (interactive) or 'full' (unattended)")
+        return v
 
     @field_validator("posture")
     @classmethod

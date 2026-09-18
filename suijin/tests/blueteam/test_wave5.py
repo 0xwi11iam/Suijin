@@ -36,6 +36,7 @@ class TestAllowlistAndFP:
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
         assert "allowlisted" in ops.allowlist_add("/health", "uptime probe")
         assert "already" in ops.allowlist_add("/health")
         assert ops.allowlist_check({"path": "/health", "ip": "1.2.3.4"})

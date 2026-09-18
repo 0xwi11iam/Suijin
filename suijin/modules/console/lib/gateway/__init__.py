@@ -370,9 +370,9 @@ def sys_executable() -> str:
 
 
 def _ws_dir() -> Path:
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+    from suijin.modules.platform.lib.workspace import state_dir
 
-    return WORKSPACE_DIR / "outputs"
+    return state_dir()
 
 
 def _approvals_read() -> list[dict]:

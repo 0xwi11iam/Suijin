@@ -93,6 +93,28 @@ def _catalog() -> dict | None:
     return _fetch_catalog()
 
 
+def _window_from_entry(m: dict) -> int:
+    """The context window from one models.dev entry, shape-aware:
+    `context_length` (int, some providers), `limit` as the current catalog
+    dict {"context": N, "output": M}, or `limit` as a legacy bare int.
+    0 when absent — the caller falls back."""
+    for key in ("context_length", "context"):
+        with contextlib.suppress(Exception):
+            w = int(m.get(key) or 0)
+            if w > 0:
+                return w
+    lim = m.get("limit")
+    if isinstance(lim, dict):
+        with contextlib.suppress(Exception):
+            w = int(lim.get("context") or 0)
+            if w > 0:
+                return w
+    elif isinstance(lim, (int, float)):
+        with contextlib.suppress(Exception):
+            return int(lim)
+    return 0
+
+
 def _lookup_in_catalog(catalog: dict, provider: str, model: str) -> int:
     """Provider id → models dict → exact model, then substring match.
     Returns the window in TOKENS, 0 when not found."""
@@ -108,18 +130,16 @@ def _lookup_in_catalog(catalog: dict, provider: str, model: str) -> int:
             continue
         models = pnode.get("models") or {}
         if model in models and isinstance(models[model], dict):
-            w = models[model].get("context_length") or models[model].get("limit") or 0
-            with contextlib.suppress(Exception):
-                if int(w) > 0:
-                    return int(w)
+            w = _window_from_entry(models[model])
+            if w > 0:
+                return w
         # substring: "glm-5.3" matches "glm-5.3-..." ids; also search across
         # ALL providers when the provider itself isn't in the catalog
         for mid, m in models.items():
             if isinstance(m, dict) and model and model.lower() in str(mid).lower():
-                w = m.get("context_length") or m.get("limit") or 0
-                with contextlib.suppress(Exception):
-                    if int(w) > 0:
-                        return int(w)
+                w = _window_from_entry(m)
+                if w > 0:
+                    return w
     # cross-provider search (openrouter-style model ids like "openai/gpt-4o")
     if "/" in model:
         _prov, _m = model.split("/", 1)
@@ -170,3 +190,37 @@ def window_status(provider: str, model: str, config: dict | None = None) -> dict
                 "source": "models.dev",
             }
     return {"window_tokens": DEFAULT_CONTEXT_WINDOW, "source": "fallback (1M assumed)"}
+
+def supported_effort_levels(provider: str, model: str, config: dict | None = None) -> list[str]:
+    """The effort values this model accepts (models.dev reasoning_options),
+    normalized to suijin's tier vocabulary. Empty when unsupported/unknown —
+    callers keep their default behavior. Never raises."""
+    with contextlib.suppress(Exception):
+        catalog = _catalog()
+        if not catalog or not model:
+            return []
+        node = _find_model_node(catalog, provider, str(model))
+        if not node:
+            return []
+        for opt in node.get("reasoning_options") or []:
+            if isinstance(opt, dict) and str(opt.get("type", "")).lower() == "effort":
+                return [str(v).lower() for v in (opt.get("values") or []) if v]
+    return []
+
+
+def _find_model_node(catalog: dict, provider: str, model: str) -> dict | None:
+    provs = catalog.get("providers") or {}
+    for pid in (str(provider or "").strip().lower(), str(provider or "").strip().lower().removeprefix("custom:")):
+        pnode = provs.get(pid)
+        if not isinstance(pnode, dict):
+            continue
+        models = pnode.get("models") or {}
+        if model in models and isinstance(models[model], dict):
+            return models[model]
+        for mid, m in models.items():
+            if isinstance(m, dict) and model.lower() in str(mid).lower():
+                return m
+    if "/" in model:
+        _p, _m = model.split("/", 1)
+        return _find_model_node(catalog, _p, _m.strip())
+    return None

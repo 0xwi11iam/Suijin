@@ -60,6 +60,16 @@ def _merge_state(left: dict, right: dict) -> dict:
     iteration already exists REPLACES it in place (execute_tool_node
     back-fills success/error_class/tool_output onto the step think_node
     opened); new iterations append. Cap 25 either way."""
+    # Context cap configurable (2026-09-12): context_cap, default 25.
+    # A QA verification pass sets 12 — measured on the kestrel runs, the
+    # 25+25 re-read was most of the ~20k tokens per iteration, and every
+    # token is turn latency on a thinking model.
+    cap = 25
+    try:
+        rc = (left or {}).get("_run_config") or {}
+        cap = int(rc.get("context_cap", 25) or 25)
+    except Exception:  # noqa: BLE001 — the cap may never break the merge
+        cap = 25
     merged = dict(left)
     for k, v in right.items():
         if k in ("messages", "execution_trace") and k in merged and isinstance(merged[k], list) and isinstance(v, list):
@@ -72,9 +82,9 @@ def _merge_state(left: dict, right: dict) -> dict:
                     else:
                         by_iter[s.get("iteration")] = len(out)
                         out.append(s)
-                merged[k] = out[-25:]
+                merged[k] = out[-cap:]
             else:
-                merged[k] = (merged[k] + v)[-25:]  # cap at 25 to prevent OOM
+                merged[k] = (merged[k] + v)[-cap:]  # capped to prevent OOM
         else:
             merged[k] = v
     return merged
@@ -247,6 +257,10 @@ class SuijinAgentGraph:
                 if queue != (state.get("_attack_queue") or []):
                     result["_attack_queue"] = queue
                 _mg.update_foothold(state, result)
+                # coverage awareness: wall-clock pressure on unexamined
+                # items (silent without a deadline — operator runs are
+                # unchanged)
+                _mg.coverage_pressure(state, result, queue)
                 if int(result.get("current_iteration") or 0) <= 1 and "_prior_confirmed" not in state:
                     with contextlib.suppress(Exception):
                         from suijin.modules.agent.lib.attack_memory import what_worked
@@ -297,6 +311,8 @@ class SuijinAgentGraph:
             # ── Supervisor check (runs every N iterations) ──────────
             with contextlib.suppress(Exception):
                 supervisor_interval = int((state.get("_run_config") or self.run_config).get("supervisor_interval", 5))
+                # deep-analysis cadence configurable (2026-09-12): 0 = off
+                _deep_iv = int((state.get("_run_config") or self.run_config).get("supervisor_deep_interval", 15) or 0)
             iteration = result.get("current_iteration", state.get("current_iteration", 0))
             if iteration > 0 and iteration % supervisor_interval == 0:
                 try:
@@ -317,7 +333,10 @@ class SuijinAgentGraph:
                             _open = _mg.untried(state.get("_attack_queue") or result.get("_attack_queue") or [])
                         except Exception:  # noqa: BLE001
                             _open = []
-                        if "generate your report" in guidance and _open:
+                        # findings bypass (2026-09-15): a run with confirmed
+                        # findings completes — "1 vuln = done" outranks the
+                        # wrap-up gate, same as the think-node completion gate
+                        if "generate your report" in guidance and _open and not (state.get("findings") or result.get("findings")):
                             guidance = (
                                 f"Recon yield is exhausted but {len(_open)} attack surfaces remain UNTRIED — "
                                 "switch to exploitation and work the queue before any report. "
@@ -331,7 +350,7 @@ class SuijinAgentGraph:
                             }
                         )
                         result["_supervisor_guidance"] = guidance
-                    elif iteration % 15 == 0:
+                    elif _deep_iv > 0 and iteration % _deep_iv == 0:
                         # LLM deep analysis — RARELY (was: every silent check,
                         # i.e. every 5th iteration — constant chatter that
                         # derailed exploitation runs). Every 15th, max.
@@ -353,7 +372,12 @@ class SuijinAgentGraph:
                     logger.warning(f"Supervisor check failed: {e}")
 
             # ── Oracle anomaly detection ───────────────────────────
-            if iteration > 0 and iteration % 4 == 0:
+            # Cadence configurable (2026-09-12): oracle_interval, 0 = off.
+            # Default 4 preserves operator behavior; a QA verification pass
+            # disables it — its validation probe is an LLM call the worklist
+            # does not need (measured: supervision added ~1.5 calls/iter).
+            _oracle_iv = int((state.get("_run_config") or self.run_config or {}).get("oracle_interval", 4) or 0)
+            if _oracle_iv > 0 and iteration > 0 and iteration % _oracle_iv == 0:
                 try:
                     from suijin.modules.redteam.lib.intel.oracle import detect_anomaly, generate_hypotheses_async
 
@@ -443,7 +467,9 @@ class SuijinAgentGraph:
                     logger.debug(f"Oracle check skipped: {e}")
 
             # ── Drift analysis ─────────────────────────────────────
-            if iteration > 0 and iteration % 7 == 0:
+            # Cadence configurable (2026-09-12): drift_interval, 0 = off.
+            _drift_iv = int((state.get("_run_config") or self.run_config or {}).get("drift_interval", 7) or 0)
+            if _drift_iv > 0 and iteration > 0 and iteration % _drift_iv == 0:
                 try:
                     from suijin.modules.redteam.lib.intel.drift_analyser import analyse_drift
 

@@ -19,6 +19,7 @@ def stores(tmp_path, monkeypatch):
     from suijin.modules.platform.lib import workspace as ws
 
     monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+    ws._reset_engagement()  # hermetic: no engagement pinned from another test
     from suijin.modules.console.lib import gateway as gw
     from suijin.modules.ops.lib import approvals as ap
 
@@ -71,7 +72,7 @@ class TestAskOperatorBridge:
         gw, _ap, tmp = stores
         qid = gw.push_question("Should I pivot to 10.10.10.0/24?")
         # the file the gateway serves
-        qs = json.loads((tmp / "outputs" / "questions.jsonl").read_text().splitlines()[0])
+        qs = json.loads((tmp / "engagements" / "_default" / "state" / "questions.jsonl").read_text().splitlines()[0])
         assert qs["id"] == qid and qs["answered"] is False
 
         # the OPERATOR answers via the gateway API

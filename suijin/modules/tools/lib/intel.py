@@ -445,7 +445,15 @@ def _safe_route(name, args):
 
 
 # ── Note-taking ──────────────────────────────────────────────────────
-NOTES_DIR = BASE_DIR / ".notes"
+# 2026-09-16: notes live INSIDE the engagement (engagement/.notes) via
+# workspace.notes_dir() — resolved at CALL time, never a module constant.
+# The old BASE_DIR/.notes wrote into the package tree (repo/site-packages),
+# leaked across hermetic runs, and shipped inside vendored builds.
+def NOTES_DIR():  # noqa: N806 — compat callable for dispatch re-exports
+    """The live notes dir (engagement-scoped). Callable, not a path."""
+    from suijin.modules.platform.lib.workspace import notes_dir
+
+    return notes_dir()
 
 
 def write_note(content, success=True, category="general", engagement=None, config=None):
@@ -461,7 +469,9 @@ def write_note(content, success=True, category="general", engagement=None, confi
     except Exception:  # noqa: BLE001 — never break note-taking
         pass
 
-    NOTES_DIR.mkdir(parents=True, exist_ok=True)
+    from suijin.modules.platform.lib.workspace import notes_dir
+
+    notes_dir().mkdir(parents=True, exist_ok=True)
 
     now = datetime.datetime.now()
     timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
@@ -474,7 +484,7 @@ def write_note(content, success=True, category="general", engagement=None, confi
         datestamp = now.strftime("%Y-%m-%d")
         filename = f"{datestamp}_notes.md"
 
-    note_file = NOTES_DIR / filename
+    note_file = notes_dir() / filename
 
     header = f"\n---\n### {timestamp} — {status}\n**Category:** {category}\n\n"
     entry = header + content.strip() + "\n"
@@ -487,3 +497,41 @@ def write_note(content, success=True, category="general", engagement=None, confi
             f.write(entry)
 
     return f"Note written to .notes/{filename} [{category}] - {status}"
+
+
+def surface_verdict(surface, verdict, defense="", config=None):
+    """Clear a worklist item (2026-09-15, the worklist deadlock).
+
+    The worklist contract promised "cleared it, naming the concrete
+    defense" but no mechanism existed — only findings retired their own
+    tokens, so a probed-and-clean surface trapped the agent behind the
+    completion gate until the watchdog killed it. This appends one line
+    to the verdict ledger; mode_governor.update_queue consumes it and
+    marks the matching queue item tried.
+
+    The defense string is REQUIRED for verdict="cleared" — 'looks safe'
+    clears nothing (the contract's own words)."""
+    import json as _json
+
+    surface = str(surface or "").strip()
+    verdict = str(verdict or "").strip().lower()
+    defense = str(defense or "").strip()
+    if not surface:
+        return "Error: surface is required (the worklist item's token, e.g. 'app.py:47 sql_injection' or '/api/report')"
+    if verdict not in ("cleared", "not_applicable"):
+        return "Error: verdict must be 'cleared' or 'not_applicable'"
+    if verdict == "cleared" and len(defense) < 8:
+        return (
+            "Error: a cleared item names the CONCRETE defense (parameterized query, auth enforced "
+            "at X, output escaped by Y). 'looks safe' clears nothing."
+        )
+    try:
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+        ledger = WORKSPACE_DIR / "outputs" / "surface_verdicts.jsonl"
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        with ledger.open("a", encoding="utf-8") as f:
+            f.write(_json.dumps({"surface": surface, "verdict": verdict, "defense": defense[:400]}) + "\n")
+        return f"Verdict recorded: {surface} → {verdict}" + (f" ({defense[:120]})" if defense else "")
+    except Exception as e:  # noqa: BLE001 — the ledger must never break a run
+        return f"Error: verdict ledger unavailable: {e}"

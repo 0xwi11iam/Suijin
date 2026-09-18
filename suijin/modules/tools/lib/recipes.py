@@ -125,7 +125,7 @@ def mine_recipes(min_support: int = 2, min_len: int = 3, max_recipes: int = 5) -
 
     seqs: list[tuple[str, ...]] = []
     trails = artifact_dir("audit_trails")
-    if not trails.is_dir():
+    if not any(trails.glob("*.json")):
         return "No audit trails to mine."
     for p in sorted(trails.glob("*.json")):
         try:

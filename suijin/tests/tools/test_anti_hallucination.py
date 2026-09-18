@@ -20,7 +20,8 @@ def _hermetic(tmp_path, monkeypatch):
     from suijin.modules.tools.lib import exploit_catalog as ec
 
     store = tmp_path / "exploits"
-    monkeypatch.setattr(ec, "_expits_dir", lambda: store)
+    monkeypatch.setattr(ec, "_engagement_dir", lambda e="default": store)
+    monkeypatch.setattr(ec, "_catalog_roots", lambda: [store])
     yield
 
 
@@ -84,7 +85,7 @@ class TestCatalogExploit:
         return "Some HTTP response from target"
 
     def test_echo_poc_rejected(self):
-        """POC: echo PWNED-FLAG | marker: PWNED-FLAG → FAILED_REPRO (echo-block)."""
+        """POC: echo PWNED-FLAG | marker: PWNED-FLAG → FAILED_TO_CONFIRM (echo-block)."""
         out = catalog_exploit(
             engagement="test",
             target="http://t.com/api/x",
@@ -94,11 +95,11 @@ class TestCatalogExploit:
             marker="PWNED-FLAG",
             route_fn=self._fake_route,
         )
-        assert "FAILED_REPRO" in out
+        assert "FAILED_TO_CONFIRM" in out
         assert "self-confirmation" in out.lower() or "echo" in out.lower()
 
     def test_no_target_ref_rejected(self):
-        """POC that never touches the target → FAILED_REPRO."""
+        """POC that never touches the target → FAILED_TO_CONFIRM."""
         out = catalog_exploit(
             engagement="test",
             target="http://t.com/api/x",
@@ -108,7 +109,7 @@ class TestCatalogExploit:
             marker="FLAG{unique_string_here}",
             route_fn=self._fake_route,
         )
-        assert "FAILED_REPRO" in out
+        assert "FAILED_TO_CONFIRM" in out
         assert "never touches the target" in out or "does not reference" in out.lower()
 
     def test_generic_marker_rejected(self):

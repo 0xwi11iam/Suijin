@@ -46,6 +46,7 @@ class TestCritique:
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
         recorded = []
 
         from suijin.modules.redteam.lib.intel import knowledge_graph as kg
@@ -61,7 +62,7 @@ class TestCritique:
         )
         assert out and out["verdict"].startswith("B+")
         # report written
-        reports = list((tmp_path / "outputs" / "reports").glob("critique_eng-42.md"))
+        reports = list((tmp_path / "engagements" / "_default" / "reports").glob("critique_eng-42.md"))
         assert reports and "Tactics to remember" in reports[0].read_text()
         assert "/api/v2" in reports[0].read_text()
         # KG learnings recorded with the prefix + heuristic confidence

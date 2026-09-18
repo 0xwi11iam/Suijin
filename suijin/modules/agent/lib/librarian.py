@@ -158,7 +158,16 @@ _PATTERNS: list[tuple[str, re.Pattern, int]] = [
         ),
         7,
     ),
-    ("secret leak", re.compile(r"(?i)\b((?:api|secret|access|private|auth)[_a-z]*key[_a-z]*\s*[=:]\s*\S{8,})"), 6),
+    (
+        "secret leak",
+        re.compile(
+            r"(?i)\b((?:api|secret|access|private|auth)[_a-z]*key[_a-z]*\s*[=:]\s*\S{8,})"
+            r"|(?:password|passwd|pwd)\s*[=:]\s*\S{6,}"
+            r"|(?:token|bearer)\s*[=:]\s*[A-Za-z0-9._-]{12,}"
+            r"|session[_a-z]*\s*[=:]\s*[A-Za-z0-9._-]{12,}"
+        ),
+        6,
+    ),
     ("private key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"), 6),
     ("idor candidate", re.compile(r"(?i)(cross[- ]credential|id fields differ|hidden param\w*)[^\n]{0,80}"), 5),
     (
@@ -274,7 +283,7 @@ class Librarian:
         if got:
             self._since_digest += got
             self._persist()
-            self._publish_count()
+        self._publish_count()  # every cycle: the strip's MEM never goes stale
         if (self._since_digest >= self._interval or final) and self._gen is not None:
             self._digest(final=final)
 
@@ -348,12 +357,17 @@ class Librarian:
             )
 
             async def _call():
+                # on_delta=False: the digest is BOOKKEEPING — its tokens
+                # streamed into the live strip as if the agent said them
+                # ("Note WordPress 5.9 version (iter 8)…" randomly
+                # appearing mid-run). Silent, always.
                 return await self._gen(
                     [
                         {"role": "system", "content": "You are a terse memory indexer. Output only the lines."},
                         {"role": "user", "content": prompt},
                     ],
                     {"max_tokens_per_request": 600, "temperature": 0.1},
+                    on_delta=False,
                 )
 
             out = str(asyncio.run(_call()) or "")

@@ -27,6 +27,11 @@ class ProviderSpec:
     key_envs: tuple[str, ...] = ()  # any-of; empty = keyless (local)
     default_model: str = ""
     pricing: tuple[float, float] | None = None  # per-M USD (input, output); None = unpriced
+    # The off-peak tier (2026-09-12): custom endpoints may declare a second
+    # rate pair with the wall-clock window it applies in. `pricing` stays
+    # the PEAK/base pair — every existing reader keeps its meaning.
+    pricing_off_peak: tuple[float, float] | None = None
+    off_peak_hours: str = ""
     local: bool = False
     note: str = ""
     inline_key: str = ""  # custom: providers may carry their key in config
@@ -543,6 +548,47 @@ def registry_model_config_key(provider_key: str) -> str:
     return f"{provider_key}_model"
 
 
+def _parse_pricing_block(block) -> tuple[float, float] | None:
+    """A pricing sub-block {input_per_m, output_per_m} -> the pair, or None
+    when absent/all-zero. A $0.00 'rate' would make the governor silently
+    price everything as free — None (unpriced) is the honest state."""
+    if not isinstance(block, dict):
+        return None
+    pair = (float(block.get("input_per_m", 0) or 0), float(block.get("output_per_m", 0) or 0))
+    return pair if pair[0] > 0 or pair[1] > 0 else None
+
+
+def _in_window(hours: str, now=None) -> bool:
+    """'22:00-08:00' membership, wrap-midnight legal. Local time — the
+    operator's bill is in their timezone."""
+    import datetime as _dt
+    import re
+
+    m = re.fullmatch(r"(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})", str(hours).strip()) if hours else None
+    if not m:
+        return False
+    h1, m1, h2, m2 = (int(x) for x in m.groups())
+    t = now or _dt.datetime.now()
+    minutes = t.hour * 60 + t.minute
+    a, b = h1 * 60 + m1, h2 * 60 + m2
+    return a <= minutes < b if a <= b else (minutes >= a or minutes < b)
+
+
+def active_pricing(spec: ProviderSpec, selection: str = "auto", now=None) -> tuple[float, float] | None:
+    """The ACTIVE (input, output) per-M pair for a spec with an off-peak
+    tier. selection: auto (wall clock) | peak | off_peak. Falls back to the
+    base pair whenever the off-peak tier is absent or empty."""
+    base = spec.pricing
+    off = spec.pricing_off_peak
+    if selection == "off_peak":
+        return off or base
+    if selection == "peak":
+        return base
+    if off and spec.off_peak_hours and _in_window(spec.off_peak_hours, now):
+        return off
+    return base
+
+
 def resolve_custom_provider(name: str, config: dict | None) -> ProviderSpec | None:
     """custom:<name> → ProviderSpec from config['custom_providers'].
 
@@ -561,7 +607,7 @@ def resolve_custom_provider(name: str, config: dict | None) -> ProviderSpec | No
                 base_url=base,
                 key_envs=(),  # key rides the config entry, not the env
                 default_model=str(entry.get("model", "") or ""),
-                pricing=None,
+                pricing=_parse_pricing_block(entry.get("pricing")),
                 local=base.startswith(
                     (
                         "http://localhost",
@@ -574,5 +620,11 @@ def resolve_custom_provider(name: str, config: dict | None) -> ProviderSpec | No
                 ),
                 note=str(entry.get("note", "") or "operator-declared endpoint"),
                 inline_key=str(entry.get("api_key", "") or ""),
+                pricing_off_peak=_parse_pricing_block((entry.get("pricing") or {}).get("off_peak"))
+                if isinstance(entry.get("pricing"), dict)
+                else None,
+                off_peak_hours=str(((entry.get("pricing") or {}).get("off_peak") or {}).get("hours", "") or "")
+                if isinstance(entry.get("pricing"), dict)
+                else "",
             )
     return None

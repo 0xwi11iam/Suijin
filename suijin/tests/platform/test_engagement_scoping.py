@@ -14,6 +14,7 @@ import suijin.modules.platform.lib.workspace as ws
 @pytest.fixture(autouse=True)
 def _ws(tmp_path, monkeypatch):
     monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+    ws._reset_engagement()  # hermetic: no engagement pinned from another test
     ws._CURRENT_ENGAGEMENT = None
     yield tmp_path
     ws._CURRENT_ENGAGEMENT = None
@@ -76,7 +77,7 @@ class TestScratchpadScoping:
         from suijin.modules.agent.lib import scratchpad as sp
 
         d = ws.set_engagement("pad test")
-        assert sp.scratchpad_path().parent == d
+        assert sp.scratchpad_path().parent == d / "state"  # 2026-09-16: state lives in state/
 
     def test_operator_tag_becomes_guidance_memory(self):
         from suijin.modules.agent.lib import scratchpad as sp
