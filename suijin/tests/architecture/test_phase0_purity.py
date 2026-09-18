@@ -74,15 +74,19 @@ class TestInitRuntime:
         rt = __import__("suijin.modules.platform.lib.runtime", fromlist=["x"])
         # point workspace at a fresh tree and force a re-init
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
         import contextlib
 
         with contextlib.suppress(AttributeError):  # v4.2: runtime reads the workspace module directly
             monkeypatch.setattr(rt, "WORKSPACE_DIR", tmp_path)
         rt.init_runtime(force=True)
-        assert (tmp_path / "scripts").is_dir()
-        assert (tmp_path / "outputs").is_dir()
-        for name in ("reports", "audit_trails", "sessions", "payloads", "wordlists"):
-            assert (tmp_path / "outputs" / name).is_dir(), f"outputs/{name}"
+        # 2026-09-16 layout: global skeleton at the root, engagement tree
+        # generated per engagement (set_engagement)
+        for name in ("profiles", "skills", "exports", "logs", "archive"):
+            assert (tmp_path / name).is_dir(), f"{name}"
+        eng = ws.set_engagement("phase0 probe")
+        for sub in ("home", ".notes", "exploits", "audit_trails", "reports", "state", "memory", "sessions"):
+            assert (eng / sub).is_dir(), f"engagement/{sub}"
 
     def test_lazy_session_auto_initializes(self):
         from suijin.modules.platform.lib import runtime as rt

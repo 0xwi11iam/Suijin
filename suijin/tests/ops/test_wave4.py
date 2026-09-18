@@ -56,6 +56,7 @@ class TestEngagementTemplates:
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
         assert "external_web" in et.list_templates()
         resolved = et.apply_template("external_web", "https://acme.com")
         assert resolved["target"] == "https://acme.com"

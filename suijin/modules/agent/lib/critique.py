@@ -87,7 +87,7 @@ def run_self_critique(
     try:
         import asyncio
 
-        raw = asyncio.run(generate_fn([{"role": "user", "content": prompt}], config))
+        raw = asyncio.run(generate_fn([{"role": "user", "content": prompt}], config, on_delta=False))
     except Exception as e:  # noqa: BLE001 — critique is never fatal
         logger.warning("self-critique LLM call failed: %s", e)
         return None

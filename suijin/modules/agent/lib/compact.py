@@ -9,7 +9,12 @@ recent K exchanges are preserved verbatim.
 from __future__ import annotations
 
 DEFAULT_TRIGGER_CHARS = 120_000  # ~30k tokens of history
-KEEP_RECENT = 8  # messages kept verbatim at the tail
+# messages kept verbatim at the tail — 16 for a 1M-token window is still
+# conservative; the old 8 amputated the working set mid-chain (measured:
+# a 900k-token engagement with only 13.8k of live context — the agent
+# was effectively amnesiac, forgetting every observation older than 8
+# exchanges)
+KEEP_RECENT = 16
 
 
 def _chars(msg) -> int:

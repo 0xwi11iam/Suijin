@@ -95,13 +95,34 @@ def update_queue(state: dict, result: dict) -> dict:
                 {"surface": key, "cls": s.get("cls", "?"), "tried": False, "iter": result.get("current_iteration", 0)}
             )
             known.add(key)
-    # a confirmed finding on a surface retires it
-    for s in queue:
-        if not s.get("tried"):
-            for tr in (result.get("execution_trace") or [])[-2:]:
-                tn = str(tr.get("tool_name") or "")
-                if tn in ("catalog_exploit", "record_finding"):
+    # a confirmed finding retires the surface(s) it actually NAMED, not
+    # every untried entry at once (2026-09-12). The blanket rule retired
+    # the whole queue on the first catalog_exploit — a worklist-seeded run
+    # completed over items it never touched. Matching is containment: the
+    # finding's args+output text carries the target URL (harvested
+    # surfaces) or the source token (seeded whitebox items — the verifier
+    # is directed to name path:line in the finding title, and observed
+    # behavior does: "... q parameter (app.py:97 string-concatenated)").
+    _finding_texts = []
+    for tr in (result.get("execution_trace") or [])[-2:]:
+        if str(tr.get("tool_name") or "") in ("catalog_exploit", "record_finding"):
+            _finding_texts.append(str(tr.get("tool_args") or "") + " " + str(tr.get("tool_output") or ""))
+    if _finding_texts:
+        blob = " ".join(_finding_texts)
+        for s in queue:
+            if not s.get("tried"):
+                tok = str(s.get("surface") or "")
+                if tok and tok in blob:
                     s["tried"] = True
+    # EXPLICIT VERDICTS (2026-09-15, the worklist deadlock): the contract
+    # promised "cleared it, naming the concrete defense" but NO mechanism
+    # existed to clear an item — only findings retired their own tokens.
+    # A probed-and-clean surface stayed "untried" forever, the completion
+    # gate refused forever, and every seeded run died at the watchdog with
+    # the whole list deferred. The surface_verdict tool writes a ledger
+    # line; this is its consumer. Matching is containment both ways — the
+    # worklist DISPLAYS "path [kind]" while queue tokens are "path kind".
+    _apply_surface_verdicts(queue)
     # same-surface grind counter: the repeat-guard catches IDENTICAL calls;
     # same-surface-different-args grinding was unguarded (the field-review
     # loop hole). 4+ attempts without target growth = forced-pivot signal.
@@ -109,25 +130,150 @@ def update_queue(state: dict, result: dict) -> dict:
     tgt = str((step.get("tool_args") or {}).get("url") or "")
     if tgt:
         attempts = list(state.get("_surface_attempts") or [])
-        attempts.append({"surface": tgt, "iter": result.get("current_iteration", 0),
-                         "grew": bool(result.get("_target_grew_last_step"))})
+        attempts.append(
+            {
+                "surface": tgt,
+                "iter": result.get("current_iteration", 0),
+                "grew": bool(result.get("_target_grew_last_step")),
+            }
+        )
         attempts = attempts[-30:]
         recent = [a for a in attempts if a["surface"] == tgt][-4:]
         result["_surface_attempts"] = attempts
         if len(recent) >= 4 and not any(a["grew"] for a in recent):
-            result.setdefault("messages", []).append({
-                "role": "user",
-                "content": (
-                    f"SURFACE STALL: 4+ attempts against {tgt[:70]} with no new target data — this surface is "
-                    "confirming dead in its current form. Vary the attack CLASS (payload_mutate family escalation) "
-                    "or move to another untried surface; re-testing with near-identical args is the loop failure mode."
-                ),
-            })
+            result.setdefault("messages", []).append(
+                {
+                    "role": "user",
+                    "content": (
+                        f"SURFACE STALL: 4+ attempts against {tgt[:70]} with no new target data — this surface is "
+                        "confirming dead in its current form. Vary the attack CLASS (payload_mutate family escalation) "
+                        "or move to another untried surface; re-testing with near-identical args is the loop failure mode."
+                    ),
+                }
+            )
     return queue
 
 
 def untried(queue: list) -> list[dict]:
     return [s for s in (queue or []) if not s.get("tried")]
+
+
+#: The verdict ledger the surface_verdict tool appends to — one jsonl line
+#: per verdict {"surface": str, "verdict": "cleared"|"not_applicable", "defense": str}.
+#: File-based on the live_guidance pattern: the tool (dispatch layer) and
+#: the governor (graph layer) share no state object, but share the workspace.
+_VERDICT_LEDGER = "outputs/surface_verdicts.jsonl"
+
+
+def _apply_surface_verdicts(queue: list) -> None:
+    """Retire queue items the agent explicitly cleared. Never raises —
+    accounting must not break the run it measures."""
+    try:
+        import json as _json
+
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+        ledger = WORKSPACE_DIR / _VERDICT_LEDGER
+        if not ledger.is_file():
+            return
+        verdicts = []
+        for line in ledger.read_text(encoding="utf-8", errors="ignore").splitlines()[-80:]:
+            try:
+                d = _json.loads(line)
+                if isinstance(d, dict) and d.get("surface"):
+                    verdicts.append(str(d["surface"]).strip())
+            except ValueError:
+                continue
+        if not verdicts:
+            return
+        for s in queue:
+            if s.get("tried"):
+                continue
+            tok = str(s.get("surface") or "").strip()
+            if not tok:
+                continue
+            for v in verdicts:
+                if v == tok or v in tok or tok in v:
+                    s["tried"] = True
+                    s["cleared"] = True
+                    break
+    except Exception:  # noqa: BLE001
+        return
+
+
+# ── coverage pressure ─────────────────────────────────────────────────
+# Coverage Without Captivity: the agent keeps full autonomy over route,
+# order and depth. The governor only delivers AWARENESS — which worklist
+# items remain unexamined and how much wall clock is left. No forced
+# rotation, no per-item budgets: path control kills effectiveness
+# (measured); awareness does not. The completion gate remains the
+# end-game enforcement (complete refused while unexamined items remain).
+#
+# THE LADDER IS ABSOLUTE (2026-09-15): a check-in at 5 min ("where you
+# at"), one 3 min later ("yo"), ten more increments, then "what the hell
+# are you doing". Not fractions of a budget — elapsed wall clock, so the
+# escalation is identical whether the estimate was 6 minutes or 60. The
+# watchdog (wall_minutes) remains the only hard stop.
+_PRESSURE_LADDER = (
+    (5.0, "CHECK-IN: 5 min — You done?"),
+    (8.0, "CHECK-IN: 8 min — Faster."),
+    (11.0, "PRESSURE: 11 min — get on with it."),
+    (14.0, "PRESSURE: 14 min. Wrap this up now."),
+    (17.0, "PRESSURE: 17 min. This is dragging — report what you have."),
+    (20.0, "URGENT: 20 min. Two thirds of your time is GONE. Report NOW."),
+    (23.0, "URGENT: 23 min. Stop testing. Catalog findings and complete."),
+    (26.0, "URGENT: 26 min. FINAL CHANCE — report immediately."),
+    (28.0, "INSANE: 28 min. THE WALL IS AT 30. Whatever you have — a finding, "
+           "a clear, a suspicion — WRITE IT DOWN NOW. REPORT."),
+)
+
+
+def coverage_pressure(state: dict, result: dict, queue: list) -> None:
+    """Wall-clock coverage awareness, escalating at 50/75/90% elapsed.
+    Silent when no deadline is known or no items remain. Never raises —
+    pressure is a context message, and a broken message must not break
+    the run it decorates."""
+    try:
+        import time as _time
+
+        deadline = state.get("_wall_deadline")
+        if not deadline:
+            return
+        remaining = float(deadline) - _time.monotonic()
+        if remaining <= 0:
+            return
+        cfg = state.get("_run_config") or {}
+        wall_min = float(cfg.get("wall_minutes") or 0)
+        if wall_min <= 0:
+            return
+        # elapsed is ABSOLUTE wall clock (budget - remaining), and the
+        # ladder keys on it directly — the escalation is the same whether
+        # the estimate was 6 minutes or 60
+        elapsed_min = (wall_min * 60.0 - remaining) / 60.0
+        sent = list(state.get("_pressure_sent") or [])
+        open_items = untried(queue)
+        # highest applicable UNSENT level first — a run that jumps from
+        # 14 min to 38 (slow turns, an interrupted poll) must land on the
+        # final warnings, not discover the gentle 11-min message late
+        for level, template in reversed(_PRESSURE_LADDER):
+            if elapsed_min >= level and level not in sent and open_items:
+                toks = [str(s.get("surface") or "")[:60] for s in open_items if str(s.get("surface") or "").strip()]
+                result.setdefault("messages", []).append(
+                    {
+                        "role": "user",
+                        "content": template
+                        + (
+                            f" ({len(open_items)} untried: {'; '.join(toks[:4])}"
+                            + (" …" if len(toks) > 4 else "")
+                            + f"; {remaining / 60.0:.0f} min left)"
+                        ),
+                    }
+                )
+                sent.append(level)
+                result["_pressure_sent"] = sent
+                break  # one message per turn; the next level fires later
+    except Exception:  # noqa: BLE001 — awareness must never break the run
+        pass
 
 
 # ── foothold engine ──────────────────────────────────────────────────
@@ -189,7 +335,19 @@ def govern(state: dict, cfg: dict | None) -> dict | None:
         # FOOTHOLD (forced): in exploitation mode with a foothold, promote
         # to post_exploitation with the doctrine swap — the same proven
         # mechanism as the recon → exploitation switch.
-        if str(state.get("current_phase") or "") == "exploitation" and state.get("_foothold_at"):
+        #
+        # THE qa_verifier EXEMPTION (2026-09-12, measured): a QA
+        # verification pass stops at CONFIRMED reproduction — captured
+        # credentials are a FINDING to catalog, not a foothold to pivot
+        # from. Measured on the kestrel run: 63+ of 98 iterations burned
+        # in doctrine-forced post_exploitation while the worklist waited,
+        # zero completion attempts ever made. The profile opts out of the
+        # doctrine entirely; the foothold still sets `_foothold_at` so
+        # evidence and memory remain intact.
+        _profile = str((cfg or {}).get("adversary_profile", "") or "").lower()
+        if _profile == "qa_verifier":
+            pass  # no forced phase transitions for the QA profile
+        elif str(state.get("current_phase") or "") == "exploitation" and state.get("_foothold_at"):
             if not state.get("_post_exploit_done"):
                 return {
                     "current_phase": "post_exploitation",

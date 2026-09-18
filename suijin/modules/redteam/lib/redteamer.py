@@ -169,9 +169,10 @@ def _render_termination(final_state: dict, ui, operator_stopped: bool) -> None:
                     border_style="red",
                 )
             )
-            console.print("[dim]  press Enter to return to the menu...[/dim]")
-            with contextlib.suppress(Exception):
-                input()
+            if not _unattended():
+                console.print("[dim]  press Enter to return to the menu...[/dim]")
+                with contextlib.suppress(Exception):
+                    input()
             return
         if reason == "parse_failure":
             detail = (detail + "\n\n" if detail else "") + (
@@ -189,10 +190,84 @@ def _render_termination(final_state: dict, ui, operator_stopped: bool) -> None:
         )
 
 
+def _install_sigterm_save():
+    """FULL-AUTO: docker stop sends SIGTERM with a 10s grace before KILL.
+    The handler converts it into the STOP-WITH-SAVE path (the /quit block):
+    set the flags the KI handler already knows, then interrupt in-place.
+    Backstop: recovery.json snapshots every 5 iterations."""
+    import signal as _signal
+
+    def _sigterm(sig, frame):
+        _signal._suijin_interrupted = True
+        _signal._suijin_sigterm = True
+        raise KeyboardInterrupt
+
+    _signal.signal(_signal.SIGTERM, _sigterm)
+
+
+def _unattended() -> bool:
+    """True when stdin can never answer a prompt (CI: /dev/null, closed, or
+    non-TTY pipes) — press-Enter banners would block forever on an open
+    pipe; EOF'd stdin passes but skipping is cleaner."""
+    try:
+        return not sys.stdin.isatty()
+    except Exception:  # noqa: BLE001
+        return True
+
+
 #  Main agent loop
 
 
-async def run_red_team_async(config, objective, api_key=None, resume_state=None):
+def _suggest_descriptions(run_box) -> list[tuple[str, str]]:
+    """(command, one-line description) for the suggestion bar — the RunBox
+    handlers plus the engagement verbs, each with a terse description.
+    Never raises; the bar degrades to name-only when descriptions miss."""
+    descs = {
+        "help": "list all commands",
+        "state": "agent state (phase, iteration, messages)",
+        "audit": "audit trail summary",
+        "note": "write an engagement note now",
+        "kb": "quick knowledge-base search",
+        "report": "force-generate a report now",
+        "sessions": "saved session list",
+        "cost": "token + spend breakdown",
+        "approvals": "pending approval requests",
+        "approve": "approve a pending request",
+        "deny": "deny a pending request",
+        "scope": "scope and target info",
+        "pause": "open the pause console",
+        "findings": "confirmed findings so far",
+        "upload": "send a text file to the agent",
+        "quit": "end run + save .sje (full save)",
+        "compact": "force-compact the agent's context NOW",
+        "h1": "HackerOne program info",
+        "out": "force-complete the current iteration",
+        "panic": "emergency stop",
+    }
+    out = []
+    with contextlib.suppress(Exception):
+        for name in run_box.commands():
+            out.append((name, descs.get(name, "")))
+    return out
+
+
+def _merge_profile_overrides(cfg: dict) -> dict:
+    """A folder-backed profile's config.json overrides the run config
+    (2026-09-16): /profiles/<name>/config.json wins per-key, exactly once,
+    at engagement boot. Never raises — the profile is decoration, not a
+    dependency."""
+    try:
+        from suijin.modules.agent.lib.profiles import get_profile
+
+        p = get_profile(cfg)
+        if isinstance(p, dict) and p.get("config_overrides"):
+            cfg.update({k: v for k, v in p["config_overrides"].items() if k != "adversary_profile"})
+    except Exception:  # noqa: BLE001
+        pass
+    return cfg
+
+
+async def run_red_team_async(config, objective, api_key=None, resume_state=None, seed_queue=None):
     # the pydantic cost-cap warning echoes validator internals as a wall of
     # text — silenced everywhere; ONE red line below instead
     import warnings
@@ -284,25 +359,67 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
             _model = str(active_model(config) or "")
         _UI_STATE["model_label"] = f"{_prov} {_model}".strip()
 
-    def _generate_with_stream(messages, config=None, on_delta=None, **kw):
+    async def _generate_with_stream(messages, config=None, on_delta=None, **kw):
         # on_delta=False from subagents SUPPRESSES display streaming (only
         # the primary's thought renders — fireteam deltas never interleave)
         sink = _stream_ui["sink"] if on_delta is None else (None if on_delta is False else on_delta)
         # model intelligence (Ctrl+Space) applies to the NEXT call — it is
         # read per-call, never mid-thought, per the operator contract
         cfg = dict(config or {})
-        with contextlib.suppress(Exception):
-            cfg["intelligence"] = _UI_STATE.get("intelligence", "max")
-        # live context gauge: input chars -> tokens vs the model's window —
-        # the strip's ctx % (the CyberStrike-parity visibility item)
-        with contextlib.suppress(Exception):
-            from suijin.modules.providers.lib.model_meta import resolve_context_window
+        # THE CALLER'S intelligence WINS (2026-09-12): an embedded harness
+        # (suijin-red's QA dials set "low" — thinking off, the measured
+        # 35s→8s turn lever) was silently stomped by the TUI default here
+        # on EVERY call, and the run burned 20k tokens/iter anyway. The
+        # UI tier still applies when the caller set nothing — the
+        # operator's Ctrl+Space contract is unchanged.
+        if "intelligence" not in cfg:
+            with contextlib.suppress(Exception):
+                cfg["intelligence"] = _UI_STATE.get("intelligence", "max")
+        # LIVE CONTEXT GAUGE — PRIMARY THINK ONLY (2026-09-17 hardening).
+        # Bookkeeping calls (librarian digest, supervisor analysis, critique,
+        # fireteam subagents) all pass on_delta=False — their small prompts
+        # were OVERWRITING the gauge with ~500-token readings between real
+        # turns. The gauge updates only when this wrapper is the primary
+        # think call (on_delta is None). Truth source: the provider layer's
+        # per-request last_request_input_tokens (the real prompt size,
+        # system prompt + trace + scratchpad included); chars//4 estimate
+        # as the pre-call fallback, cumulative diff as the last fallback.
+        _is_primary = on_delta is None
+        _win = 1_000_000
+        if _is_primary:
+            with contextlib.suppress(Exception):
+                from suijin.modules.providers.lib.model_meta import resolve_context_window
 
-            _prov2 = str(cfg.get("provider") or "")
-            _win = resolve_context_window(_prov2, str(cfg.get(f"{_prov2}_model") or ""), cfg)
-            _in_tok = sum(len(str(m.get("content", ""))) for m in (messages or [])) // 4
-            _UI_STATE["ctx_pct"] = round(100.0 * _in_tok / max(1, _win), 1)
-        return generate_async(messages, cfg, on_delta=sink, **kw)
+                _prov2 = str(cfg.get("provider") or "")
+                _win = resolve_context_window(_prov2, str(cfg.get(f"{_prov2}_model") or ""), cfg)
+                _est_tok = sum(len(str(m.get("content", ""))) for m in (messages or [])) // 4
+                _UI_STATE["ctx_pct"] = round(100.0 * _est_tok / max(1, _win), 1)
+                _UI_STATE["ctx_in_tok"] = _est_tok
+                _UI_STATE["ctx_window"] = _win
+        _pre_in = 0
+        if _is_primary:
+            with contextlib.suppress(Exception):
+                from suijin.modules.providers.lib import get_usage
+
+                _pre_in = int(get_usage().get("input_tokens") or 0)
+        try:
+            return await generate_async(messages, cfg, on_delta=sink, **kw)
+        finally:
+            if _is_primary:
+                with contextlib.suppress(Exception):
+                    from suijin.modules.providers.lib import get_usage
+
+                    _u = get_usage()
+                    # CUMULATIVE DIFF FIRST (race-proof): last_request can be
+                    # overwritten by a concurrent subagent/librarian call
+                    # between our record and this read. The diff brackets
+                    # OUR await, so only OUR call's tokens are counted.
+                    _real_in = int(_u.get("input_tokens") or 0) - _pre_in
+                    if _real_in <= 0:
+                        _real_in = int(_u.get("last_request_input_tokens") or 0)
+                    if _real_in > 0:
+                        _UI_STATE["ctx_in_tok"] = _real_in
+                        _UI_STATE["ctx_pct"] = round(100.0 * _real_in / max(1, _win), 1)
 
     agent = _agent_graph_cls()(
         generate_fn=_generate_with_stream,
@@ -327,10 +444,24 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
     _operator_stopped = False  # unbound-local crash: the finally referenced
     # this before ANY assignment when an early exception jumped the loop
     _provider_retried = False
+    # FULL-AUTO mode (unattended/CI): headless runs — asks
+    # auto-answer, no press-Enter prompts, SIGTERM saves. Default off:
+    # interactive operator runs are unchanged.
+    _autonomy_full = str((config or {}).get("autonomy") or "").strip().lower() == "full"
+    if _autonomy_full:
+        console.print("[dim]unattended mode — asks auto-answered, no prompts[/dim]")
+        _install_sigterm_save()
+    _iter_budget = int((config or {}).get("max_iterations") or 100000)
     langgraph_config = {
         "configurable": {"thread_id": thread_id},
-        "recursion_limit": 100000,
-    }  # operator: infinite (250 killed real engagements)
+        # THE CALLER'S BUDGET IS REAL (2026-09-11): hardcoded 100000 made
+        # max_iterations advisory-only — nothing ever stopped at it, so an
+        # embedded unattended run ground on until an outer watchdog. The
+        # graph takes ~2 recursions per iteration (measured, the agent.run
+        # seam uses max_iterations * 5 for its node-rich path; the astream
+        # path averages tighter). Capped at 1M = Pydantic's own ceiling.
+        "recursion_limit": min(_iter_budget * 2, 1_000_000),
+    }  # absent/0 max_iterations → the operator's infinite (250 killed real engagements)
 
     # .sje resume: seed the fresh thread with the saved engagement's state
     # (messages, traces, chain memory) — the same update_state seam
@@ -343,12 +474,12 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
             # pop it before seeding, write it into the NEW engagement dir
             _resume_ledger = resume_state.pop("_librarian_ledger", None)
             _resume_scratchpad = resume_state.pop("_scratchpad_text", None)
-            from suijin.modules.platform.lib.workspace import engagement_dir as _edir2
+            from suijin.modules.platform.lib.workspace import state_dir as _sdir2
 
             if _resume_ledger is not None:
-                (_edir2() / "librarian.json").write_text(json.dumps(_resume_ledger), encoding="utf-8")
+                (_sdir2() / "librarian.json").write_text(json.dumps(_resume_ledger), encoding="utf-8")
             if _resume_scratchpad:
-                (_edir2() / "scratchpad.md").write_text(str(_resume_scratchpad), encoding="utf-8")
+                (_sdir2() / "scratchpad.md").write_text(str(_resume_scratchpad), encoding="utf-8")
             # seed the fresh thread with the saved engagement's state —
             # SCHEMA-VALIDATED first: a poisoned/wrong-typed bundle value
             # used to pass straight into the graph and detonate turns later
@@ -398,6 +529,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
 
     _old_sigint = _signal.signal(_signal.SIGINT, _sigint)
     _signal._suijin_interrupted = False
+    _signal._suijin_sigterm = False
 
     # Live command box — /state /note /kb /pause … usable WHILE the agent runs
     from suijin.modules.tools.lib.run_commands import HINT, RunBox
@@ -410,11 +542,22 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
         # with the live strip (field garbling: 'queued as guidance' painted
         # over the spinner line)
     )
+    # /compact's write path: update_state through the live graph (the same
+    # seam guidance uses — thread-safe, checkpoint-consistent)
+    with contextlib.suppress(Exception):
+        run_box._set_state = lambda k, v: agent._graph.update_state(
+            langgraph_config, {k: v}
+        )
 
     # Engagement console UI — transcript + pinned strip (Rich only)
     from suijin.modules.redteam.lib.red.console_ui import EngagementUI, toggle_reasoning
 
     ui = EngagementUI(console, objective=objective)
+    # the suggestion bar's command registry (2026-09-17): the RunBox's live
+    # handlers + the pause-console verbs — one merged set, one line each
+    with contextlib.suppress(Exception):
+        _sugg = {f"/{name}": (desc or "") for name, desc in _suggest_descriptions(run_box)}
+        ui.set_suggestion_registry(_sugg)
     ui.start()
     _stream_ui["sink"] = ui.reasoning_delta  # the flexing box goes live
     # catalog_exploit verifier → the TUI: RUNNING POC takeover + per-command
@@ -430,10 +573,17 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
     from suijin.modules.platform.lib.workspace import engagement_dir as _engdir
 
     _UI_STATE["librarian"] = 0
+    # per-engagement gauge state — a stale FLAG count / ctx % from the
+    # previous run read as phantom progress on the next
+    _UI_STATE["flags"] = []
+    _UI_STATE["creds"] = []
+    _UI_STATE["ctx_pct"] = None
+    _UI_STATE["poc_running"] = False
+    _UI_STATE["fireteams"] = 0
     _lb.set_ui_publish(lambda n: _UI_STATE.__setitem__("librarian", int(n)))
     _lb.start(
         generate_fn=_generate_with_stream,
-        engagement_dir=_engdir(),
+        engagement_dir=_engdir().parent / "state",
         interval=int((config or {}).get("librarian_interval") or 10),
         target=str(objective),
     )
@@ -490,7 +640,6 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
             _pause_session["done"].clear()
             ui.paused_visual(True)
             console.print(sc.PAUSE_BANNER)
-            console.print("[dim]paused — commands answer instantly; the current turn finishes in the background[/dim]")
 
         def _pause_line(line):
             """READER THREAD: one entered line = one pause-console step.
@@ -600,8 +749,26 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                 console.print("[yellow]  input reader is gone — no answer possible, continuing autonomously[/yellow]")
                 return ""
             q = _qmod.Queue()
+            # the question renders as a Rich Panel (2026-09-17): fixed at the
+            # bottom, the input box stays live right below it — the
+            # agent-initiated pause look. No weird functionality: the same
+            # queue, the same reader, just a proper visual.
             with contextlib.suppress(Exception):
-                console.print(f"[bold cyan]{label}[/bold cyan] [dim]— type your answer in the input box[/dim]")
+                from rich.panel import Panel as _AskPanel
+                from rich.text import Text as _AskText
+
+                console.print(
+                    _AskPanel(
+                        _AskText.assemble(
+                            (str(label or "").strip()[:300] or "Operator input needed.", "bold white"),
+                            ("\n\nType your answer in the input box below...", "dim"),
+                        ),
+                        title=" agent question ",
+                        title_align="left",
+                        border_style="yellow",
+                        padding=(0, 1),
+                    )
+                )
             # STRIP BACK UP for the typing window: the ask flow stops the
             # Live before printing the question, but the input box lives
             # INSIDE the strip — without restarting it the operator types
@@ -638,7 +805,41 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
         try:
             _got_events = False
             _restart_stream = False
-            input_state = {"_objective": objective, "user_id": "local", "project_id": "default"} if first_run else None
+            input_state = (
+                {
+                    "_objective": objective,
+                    "user_id": "local",
+                    "project_id": "default",
+                    # THE EMBEDDED-HARNESS SEAM (2026-09-11): without this key
+                    # every think-node read of state["_run_config"] (adversary_
+                    # profile, posture, mode_deploy_subagent, subagent_count,
+                    # mode_hitl/guardrail in prompts/base.py) sees NOTHING and
+                    # silently falls back to the on-disk config.json — a caller
+                    # like suijin-red that passes its own dict was half-wired:
+                    # the _think wrapper read it, the prompt builder did not.
+                    # agent.run() already seeds this (agent_graph.py); this is
+                    # the same contract for the async entry point.
+                    "_run_config": _merge_profile_overrides(dict(config or {})),
+                    # SEEDED WORKLIST ENTRIES (2026-09-12): each becomes a
+                    # gated _attack_queue item — the completion gate refuses
+                    # while any remain untried, so an embedded QA harness
+                    # cannot complete over work it never did (measured: 161
+                    # iterations fixated on 3 surfaces while 3 seeded items
+                    # waited, unmentioned).
+                    **({"_attack_queue": [dict(q) for q in seed_queue]} if seed_queue else {}),
+                # the wall deadline for coverage pressure (2026-09-12):
+                # wall_minutes in the caller's config → a monotonic
+                # deadline the governor escalates against. Absent (operator
+                # interactive runs) → no pressure, behavior unchanged.
+                **(
+                    {"_wall_deadline": time.monotonic() + float(config.get("wall_minutes")) * 60.0}
+                    if (config or {}).get("wall_minutes")
+                    else {}
+                ),
+                }
+                if first_run
+                else None
+            )
             first_run = False
 
             # Queue-bridge astream: LangGraph's generator SWALLOWS the KI
@@ -763,12 +964,33 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                             )
                             agent._graph.update_state(
                                 langgraph_config,
-                                {
-                                    "messages": [{"role": "user", "content": _final}],
-                                    "_ask_operator": False,
-                                },
+                                {"messages": [{"role": "user", "content": _final}]},
                             )
                             console.print("[dim]scope question auto-answered from the authorization record[/dim]\n")
+                            ui.waiting(True)
+                            continue
+                        if _autonomy_full:
+                            # FULL-AUTO (unattended): no human attends
+                            # this run. The question is LOGGED (file protocol →
+                            # becomes a hypothesis in the result doc) and the
+                            # agent is told to decide — never a 600s stall.
+                            with contextlib.suppress(Exception):
+                                from suijin.modules.console.lib.gateway import push_question
+
+                                push_question(out)
+                            _final = (
+                                "OPERATOR (unattended): no human is attending this run. "
+                                "Authorization for the target is on file. Proceed on your best "
+                                "judgment, keep the engagement moving, and record this open "
+                                f"question in your final report. (Question was: {out[:300]})"
+                            )
+                            agent._graph.update_state(
+                                langgraph_config,
+                                {"messages": [{"role": "user", "content": _final}]},
+                            )
+                            console.print(
+                                "[yellow]ask auto-answered (unattended mode) — logged as a hypothesis[/yellow]\n"
+                            )
                             ui.waiting(True)
                             continue
                         # B1: the strip's Live repaints at 4fps and CLOBBERS a
@@ -851,10 +1073,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
                             objective = _confirmed_obj
                         agent._graph.update_state(
                             langgraph_config,
-                            {
-                                "messages": [{"role": "user", "content": _final}],
-                                "_ask_operator": False,
-                            },
+                            {"messages": [{"role": "user", "content": _final}]},
                         )
                         console.print("[dim]Answer sent. Resuming...[/dim]\n")
                         ui.start()
@@ -1046,6 +1265,31 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
 
         except (KeyboardInterrupt, asyncio.CancelledError):
             _signal._suijin_interrupted = False
+            # SIGTERM in FULL-AUTO = docker stop: skip the pause entirely,
+            # go straight to the stop-with-full-save path (the /quit block)
+            if getattr(_signal, "_suijin_sigterm", False):
+                _signal._suijin_sigterm = False
+                console.print("[yellow]SIGTERM — stopping with a full save[/yellow]")
+                _pause_live.update(
+                    {"agent": agent, "thread_id": thread_id, "final_state": final_state, "objective": objective}
+                )
+                _pause_ctx.agent = agent
+                _pause_ctx.thread_id = thread_id
+                _pause_ctx.objective = objective
+                _pause_session["ctx"] = _pause_ctx
+                _pause_session["stop"] = True
+                _pause_session["done"].set()
+                # fall through to the shared stop handling below (same code
+                # path /quit takes: full save + operator-stopped banner)
+                with contextlib.suppress(Exception):
+                    _input_reader.end_pause() if _input_reader is not None else None
+                ui.stop()
+                run_box.stop()
+                if _input_reader is not None:
+                    _input_reader.stop()
+                final_state = agent.get_state(thread_id) or {}
+                _operator_stopped = True
+                break
             # _sigint STAYS installed through the pause: Ctrl+C raises
             # KeyboardInterrupt instantly anywhere — SIG_DFL here would
             # have KILLED the app with no save.
@@ -1166,16 +1410,28 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None)
             )
             console.print("[dim]  press Enter to return to the menu...[/dim]")
             with contextlib.suppress(Exception):
-                input()
+                # the crash-path recovery pointer: recovery.json snapshots
+                # every 5 iterations — surface WHERE it is so the operator
+                # knows the last-known state survives
+                from suijin.modules.agent.lib.engagement import recovery_path as _rp
+
+                _rp_ = _rp()
+                import pathlib as _pl
+
+                if _rp_ and _pl.Path(str(_rp_)).exists():
+                    console.print(f"[dim]  last snapshot: {_rp_} (suijin load <latest .sje> resumes)[/dim]")
+            if not _unattended():
+                with contextlib.suppress(Exception):
+                    input()
             try:  # field crashes must be diagnosable after the fact
                 from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
                 _d = WORKSPACE_DIR / "outputs" / "logs"
                 _d.mkdir(parents=True, exist_ok=True)
                 (_d / "engage_crash.log").open("a").write(
-                    f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {objective[:80]}\\n"
+                    f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {objective[:80]}\n"
                     + traceback.format_exc()
-                    + "\\n"
+                    + "\n"
                 )
             except Exception:  # noqa: BLE001
                 pass

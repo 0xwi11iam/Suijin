@@ -138,6 +138,12 @@ TOOL_REGISTRY = {
         "args_format": '"target": "TARGET", "finding_type": "blocks|verified_cve|bypass|behavior", "rule": "the rule", "evidence": "what proved it"',
         "description": "**record_finding** — writes to the knowledge graph. Deduplicates automatically. Confidence 1.0 for binary-verified findings.",
     },
+    "surface_verdict": {
+        "purpose": "Mark a WORKLIST item DONE without a finding — clear it by naming the concrete defense",
+        "when_to_use": "When you PROBED a worklist surface and it held: name the defense that held. Also for items that cannot apply (no such endpoint, static asset). This is the ONLY way a clean surface leaves the worklist — without it the completion gate refuses.",
+        "args_format": '"surface": "the worklist item token (e.g. \\"app.py:47 sql_injection\\" or \\"/api/report\\")", "verdict": "cleared|not_applicable", "defense": "the concrete defense that held (required for cleared)"',
+        "description": "**surface_verdict** — clears a worklist item. cleared requires the concrete defense ('parameterized query at app.py:30', 'output escaped by Jinja autoescape'). 'looks safe' clears nothing.",
+    },
     "write_note": {
         "purpose": "MANDATORY — Log EVERY action, finding, and decision to the engagement file",
         "when_to_use": "After EVERY tool call without exception. Tested endpoint? write_note. Found a vulnerability? write_note. Tool failed? write_note. This is NOT optional — your engagement report depends on these notes.",
@@ -407,7 +413,8 @@ TOOL_REGISTRY = {
     "catalog_exploit": {
         "purpose": "MANDATORY on every valuable find — writes the exploit folder (finding.md + exploit.yaml) and the verifier RUNS your POC before you continue; verdict + three options on miss",
         "when_to_use": "The moment something is exploitable.",
-        "args_format": '"engagement": "...", "target": "...", "vuln_class": "sqli", "title": "...", "description": "one paragraph", "severity": "high", "cvss": 8.9, "commands": ["cmd1", "cmd2"], "expected_result": "unique marker string"',
+        "args_format": '"engagement": "...", "target": "...", "vuln_class": "sqli", "title": "...", "description": "one paragraph", "severity": "high", "cvss": 8.9, "commands": ["cmd1", "cmd2"], "expected_result": "the DESIRED OUTCOME — what string must appear in the output when the exploit works (a flag value, a specific error message, a data fragment only the payload produces)", "control_commands": ["same request(s) WITHOUT the payload"]',
+        "description": "**catalog_exploit** — the verifier runs your POC. Injection classes (sqli/ssti/xss/rce/lfi/ssrf/deserialization) REQUIRE control_commands: the same request minus the payload. CONFIRMED needs the marker WITH the payload and NOT without it — a word the endpoint prints on every response proves nothing (e.g. a key from its normal JSON). Pick a marker only the payload can produce: {{7*7}}→49, an attacker-chosen UNION literal, an echoed id.",
     },
     "memory_recall": {
         "purpose": "The engagement memory — every credential, leak, foothold, confirmed exploit and admin surface observed, plus the condensed digest",
@@ -484,6 +491,7 @@ _ALL_TOOLS = {
     "kb_freshness",
     "check_knowledge",
     "record_finding",
+    "surface_verdict",
     "target_dossier",
     "write_note",
     "msf_check",

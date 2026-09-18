@@ -24,6 +24,7 @@ class TestRecipes:
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
         out = recipe_list()
         for name in BUILT_IN_RECIPES:
             assert name in out
@@ -65,7 +66,7 @@ class TestMiner:
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
-        d = tmp_path / "outputs" / "audit_trails"
+        d = tmp_path / "engagements" / "_default" / "audit_trails"
         d.mkdir(parents=True)
         seq = [{"tool": t, "success": True} for t in ("a", "b", "c")]
         for name in ("eng1", "eng2"):

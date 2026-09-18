@@ -19,6 +19,7 @@ class TestCmdSmith:
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
         m = load_pack("cmdsmith")
         assert "defined 'probe'" in m.custom_cmd_define("probe", "echo hi {name}")
         assert "probe" in m.custom_cmd_list()

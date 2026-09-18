@@ -95,7 +95,7 @@ def execute_terminal(cmd, timeout=30):
         result = run_command(
             cmd_parts if len(cmd_parts) > 1 else ["/bin/sh", "-c", cmd],
             timeout=timeout,
-            cwd=str(_ws().WORKSPACE_DIR),
+            cwd=str(_ws().home_dir()),  # the agent's ~ (engagement home)
             env=env,
             command_text=cmd,
         )

@@ -12,11 +12,9 @@ from pathlib import Path
 
 
 def scratchpad_path() -> Path:
-    from suijin.modules.platform.lib.workspace import engagement_dir
+    from suijin.modules.platform.lib.workspace import state_dir
 
-    d = engagement_dir()
-    d.mkdir(parents=True, exist_ok=True)
-    return d / "scratchpad.md"
+    return state_dir() / "scratchpad.md"
 
 
 def read_scratchpad(max_chars: int = 4000) -> str:

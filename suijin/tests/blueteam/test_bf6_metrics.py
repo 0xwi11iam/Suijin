@@ -17,6 +17,7 @@ from suijin.modules.blueteam.lib.blue.metrics import (
 @pytest.fixture(autouse=True)
 def _ws(tmp_path, monkeypatch):
     monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+    ws._reset_engagement()  # hermetic: no engagement pinned from another test
     ws._CURRENT_ENGAGEMENT = None
     yield tmp_path
     ws._CURRENT_ENGAGEMENT = None

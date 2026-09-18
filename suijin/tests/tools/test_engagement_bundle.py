@@ -23,6 +23,7 @@ def _ws(tmp_path, monkeypatch):
     import suijin.modules.platform.lib.workspace as ws
 
     monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+    ws._reset_engagement()  # hermetic: no engagement pinned from another test
     yield tmp_path
 
 
@@ -118,7 +119,7 @@ class TestLoad:
         # wipe the workspace catalogs, restore from the bundle
         import shutil
 
-        shutil.rmtree(ec._expits_dir())
+        shutil.rmtree(ec._catalog_roots()[0] if ec._catalog_roots() else Path(tempfile.mkdtemp()))
         n = eb.restore_side_files(path)
         assert n >= 1
         assert (ec._engagement_dir("t") / "catalog.json").is_file()

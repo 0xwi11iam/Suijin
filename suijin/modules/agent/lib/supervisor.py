@@ -828,6 +828,7 @@ async def analyze_trace_with_llm(
             ],
             max_tokens=150,
             temperature=0.1,
+            on_delta=False,  # bookkeeping call — tokens never stream into the TUI
         )
     except Exception:
         return None

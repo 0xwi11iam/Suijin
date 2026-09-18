@@ -1,4 +1,26 @@
-"""Workspace path management — extracted from dispatch.py for maintainability."""
+"""Workspace path management — the ONE owner of every path (2026-09-16 restructure).
+
+The layout (per-engagement containment — nothing escapes the engagement folder):
+
+    workspace/
+    ├── profiles/<name>/{SOUL.md, rules.md, config.json}   # CTF + BBP seeded
+    ├── engagements/<stamp>_<slug>/                         # generated at start
+    │   ├── home/          # the agent's ~ — downloads, loot, scratch (its cwd)
+    │   ├── .notes/        # engagement notes (write_note)
+    │   ├── exploits/EXP-NNN/{description.md, exploit.yaml, run-N.log}
+    │   ├── audit_trails/
+    │   ├── dossiers/
+    │   ├── toollogs/      # nmap_scan_*.txt, execute_terminal_*.txt
+    │   ├── reports/
+    │   └── state/         # scratchpad, guidance, questions, coverage, .sje
+    ├── skills/            # SKILL.md library (knowledge, like profiles)
+    ├── exports/           # the .sje inbox (resume artifacts)
+    ├── logs/              # crash/engage logs
+    └── archive/           # ended engagements (immutable)
+
+Everything the engagement produces lives inside its folder and dies with it
+(archived on end). The agent's files land in home/ — no junk outside, ever.
+"""
 
 from __future__ import annotations
 
@@ -20,10 +42,7 @@ def _resolve_workspace() -> Path:
          survives repo re-clones, reinstalls and dev-tree wipes)
       3. repo-local suijin_agent (source checkouts, tests, back-compat) —
          if it is a symlink (install.sh wires this), follow it
-
-    The workspace holds sessions, memory, the authorization ledger,
-    bugscope pulls and reports — losing it to a reinstall lost every
-    engagement artifact at once (field complaint)."""
+    """
     env = os.environ.get("SUIJIN_WORKSPACE")
     if env:
         return Path(env).expanduser()
@@ -32,11 +51,6 @@ def _resolve_workspace() -> Path:
         return durable
     local = PROJECT_DIR / "suijin_agent"
     if local.is_symlink():
-        # installed/dev layout wires suijin_agent -> the durable home.
-        # Follow it ONLY when the target exists — a dangling symlink (a
-        # fresh clone of a repo that accidentally committed the link)
-        # must not leak an un-creatable path into module-level mkdirs
-        # (CI died creating '/Users' on Linux). Dangling -> durable.
         try:
             resolved = local.resolve()
             if resolved.is_dir() and not resolved.is_symlink():
@@ -49,42 +63,87 @@ def _resolve_workspace() -> Path:
 
 WORKSPACE_DIR = _resolve_workspace()
 
-# v4.2: ALL agent artifacts nest under outputs/ — one parent for everything
-# the engagement produces. State/config (blue_config.json, notify.json,
-# approvals.json, engagement_schema.json, caches/) stays at the workspace
-# root by design.
-ARTIFACT_DIRS = (
-    "reports",
-    "dossiers",
-    "exports",
-    "sessions",
+#: everything the engagement owns — created by set_engagement(). The
+#: operator ruling (2026-09-17): ONLY knowledge libraries and artifacts
+#: that must outlive the engagement stay global; everything else lives
+#: and dies with its session folder.
+ENGAGEMENT_SUBDIRS = (
+    "home",  # the agent's ~ (cwd for tools, downloads, loot)
+    ".notes",  # engagement notes
+    "exploits",  # EXP-NNN/{description.md, exploit.yaml, run-N.log}
     "audit_trails",
+    "dossiers",
+    "toollogs",  # timestamped tool dumps (nmap, terminal, ...)
+    "reports",
+    "state",  # scratchpad, live guidance, questions, coverage, .sje
+    "memory",  # per-engagement intel (fresh session = fresh memory)
+    "sessions",  # session snapshots for THIS engagement
+)
+
+#: routed INSIDE the engagement on demand (modules that predate the
+#: restructure keep their category names — the paths follow the layout)
+ENGAGEMENT_LAZY = (
     "blue_state",
+    "bugscope",
     "compliance_reports",
+    "engagement_templates",
+    "evidence",
+    "fireteam",
+    "portal",
+    "spar_baselines",
     "wordlists",
     "payloads",
     "sandbox",
-    "spar_baselines",
-    "memory",
-    "evidence",
-    "engagement_templates",
-    "portal",
-    "bugscope",
-    "fireteam",
-    "engagements",  # per-engagement state (schema/recovery/scratchpad/approvals)
-    "archive",  # ended engagements land here (timestamped, immutable)
 )
+
+#: workspace-global: knowledge libraries + survival artifacts
+GLOBAL_DIRS = (
+    "profiles",  # <name>/{SOUL.md, rules.md, config.json} — operator-owned
+    "skills",  # the SKILL.md library (imported knowledge, like profiles)
+    "exports",  # the .sje inbox — resume artifacts must outlive the run
+    "logs",  # crash/engage logs that must survive engagement end
+    "archive",  # ended engagements (immutable)
+)
+
+#: names accepted by artifact_dir() — engagement-scoped when an engagement
+#: is active, global otherwise (legacy callers keep working)
+ARTIFACT_DIRS = tuple(ENGAGEMENT_SUBDIRS) + tuple(ENGAGEMENT_LAZY) + GLOBAL_DIRS
+
+
+def _ensure(path: Path) -> Path:
+    with contextlib.suppress(OSError):
+        path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def ensure_global_layout() -> None:
+    """Create the workspace-global skeleton (idempotent, never raises)."""
+    for name in GLOBAL_DIRS:
+        _ensure(WORKSPACE_DIR / name)
 
 
 def artifact_dir(name: str) -> Path:
-    """Canonical home for one artifact category (honours patched WORKSPACE_DIR)."""
-    if name not in ARTIFACT_DIRS:
+    """Canonical home for one artifact category.
+
+    Engagement-scoped categories resolve INSIDE the current engagement when
+    one is active (auto-created `_default` otherwise); global categories
+    always resolve at the workspace root.
+    """
+    if name in GLOBAL_DIRS:
+        return _ensure(WORKSPACE_DIR / name)
+    if name not in ENGAGEMENT_SUBDIRS and name not in ENGAGEMENT_LAZY:
         raise ValueError(f"unknown artifact dir {name!r} (one of {ARTIFACT_DIRS})")
-    return WORKSPACE_DIR / "outputs" / name
+    return _ensure(engagement_dir() / name)
 
 
-# ── per-engagement state (the immortal-root-state fix) ─────────────────
+# ── per-engagement state ──────────────────────────────────────────────
 _CURRENT_ENGAGEMENT: Path | None = None
+
+
+def _reset_engagement() -> None:
+    """Test seam: clear the active engagement (hermetic fixtures)."""
+    global _CURRENT_ENGAGEMENT
+    _CURRENT_ENGAGEMENT = None
 
 
 def _slugify(text: str) -> str:
@@ -95,31 +154,60 @@ def _slugify(text: str) -> str:
 
 
 def set_engagement(objective: str = "") -> Path:
-    """Scope all per-engagement state (schema, recovery, scratchpad,
-    approvals) to outputs/engagements/<slug>/ — state DIES with its
-    engagement instead of accumulating at the workspace root forever."""
+    """Create the engagement folder — everything it produces lives inside —
+    and scope all per-engagement state to it."""
     global _CURRENT_ENGAGEMENT
     from datetime import datetime, timezone
 
+    ensure_global_layout()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    d = artifact_dir("engagements") / f"{stamp}_{_slugify(objective[:60])}"
-    d.mkdir(parents=True, exist_ok=True)
+    d = WORKSPACE_DIR / "engagements" / f"{stamp}_{_slugify(objective[:60])}"
+    for sub in ENGAGEMENT_SUBDIRS:
+        (d / sub).mkdir(parents=True, exist_ok=True)
     _CURRENT_ENGAGEMENT = d
     return d
 
 
 def engagement_dir() -> Path:
-    """The current engagement's state dir (auto-created; `_default` before
+    """The current engagement's folder (auto-created; `_default` before
     set_engagement boots — legacy callers keep working)."""
-    d = _CURRENT_ENGAGEMENT or artifact_dir("engagements") / "_default"
-    with contextlib.suppress(OSError):
-        d.mkdir(parents=True, exist_ok=True)
-    return d
+    d = _CURRENT_ENGAGEMENT or WORKSPACE_DIR / "engagements" / "_default"
+    return _ensure(d)
+
+
+def home_dir() -> Path:
+    """The agent's ~ for this engagement — tool cwd, downloads, loot."""
+    return _ensure(engagement_dir() / "home")
+
+
+def notes_dir() -> Path:
+    """Engagement notes (write_note) — inside the engagement, always."""
+    return _ensure(engagement_dir() / ".notes")
+
+
+def exploits_dir() -> Path:
+    """The engagement's exploit catalog root (EXP-NNN/ folders)."""
+    return _ensure(engagement_dir() / "exploits")
+
+
+def state_dir() -> Path:
+    """Per-engagement state files (scratchpad, guidance, questions, .sje)."""
+    return _ensure(engagement_dir() / "state")
+
+
+def toollogs_dir() -> Path:
+    """Timestamped tool output dumps (nmap_scan_*, execute_terminal_*)."""
+    return _ensure(engagement_dir() / "toollogs")
+
+
+def profiles_root() -> Path:
+    """File-backed profile folders: <name>/{SOUL.md, rules.md, config.json}."""
+    return _ensure(WORKSPACE_DIR / "profiles")
 
 
 def archive_engagement(reason: str = "ended") -> Path | None:
-    """Move the current engagement's state dir into outputs/archive/
-    (timestamped) — the .sje bundle remains the resume artifact."""
+    """Move the engagement folder into archive/ (timestamped, immutable) —
+    the .sje bundle inside state/ remains the resume artifact."""
     global _CURRENT_ENGAGEMENT
     if _CURRENT_ENGAGEMENT is None:
         return None
@@ -131,7 +219,7 @@ def archive_engagement(reason: str = "ended") -> Path | None:
     if not src.is_dir() or not any(src.iterdir()):
         return None
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    dest = artifact_dir("archive") / f"{stamp}_{src.name}_{_slugify(reason)}"
+    dest = WORKSPACE_DIR / "archive" / f"{stamp}_{src.name}_{_slugify(reason)}"
     dest.parent.mkdir(parents=True, exist_ok=True)
     try:
         move(str(src), str(dest))
@@ -140,62 +228,56 @@ def archive_engagement(reason: str = "ended") -> Path | None:
         return None
 
 
+def resolve_workspace_path(file_path: str | Path) -> Path:
+    """Resolve a file path relative to the agent's HOME (engagement home
+    when active, workspace root otherwise — the agent's ~).
+
+    - Relative paths -> resolved from the agent home
+    - Absolute paths -> REJECTED unless within WORKSPACE_DIR or allowlisted
+    - Symlinks -> resolved to real path before boundary check
+    """
+    p = Path(file_path)
+    if p.is_absolute():
+        try:
+            real = p.resolve()
+        except Exception:
+            real = p
+        try:
+            real.relative_to(WORKSPACE_DIR.resolve())
+            return real
+        except ValueError:
+            allowlisted = ["/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp", os.environ.get("HOME", "/tmp")]
+            if any(str(real).startswith(d) for d in allowlisted):
+                return real
+            raise PermissionError(
+                f"Absolute path '{file_path}' resolves to '{real}' which is outside workspace '{WORKSPACE_DIR}'. "
+                f"Use a relative path or write to /tmp/."
+            )
+    return (home_dir() / p).resolve()
+
+
+# ── legacy-layout compatibility (one release) ─────────────────────────
+
+
 def migrate_legacy_artifacts(workspace: Path | None = None) -> list[str]:
-    """One-time move: root-level artifact dirs -> outputs/<name> (merge).
-
-    Idempotent; returns the moved names. Never raises into the caller."""
-    moved = []
-    try:
-        ws = Path(workspace) if workspace else WORKSPACE_DIR
-        out_root = ws / "outputs"
-        for name in ARTIFACT_DIRS:
-            legacy = ws / name
-            if not legacy.is_dir():
-                continue
-            target = out_root / name
-            target.mkdir(parents=True, exist_ok=True)
-            for item in list(legacy.iterdir()):
-                dest = target / item.name
-                if dest.exists():
-                    if item.name == ".DS_Store":
-                        item.unlink(missing_ok=True)
-                    continue  # target wins; keep both eras' files otherwise
-                item.rename(dest)
-            if not any(legacy.iterdir()):
-                legacy.rmdir()
-            moved.append(name)
-    except OSError:
-        pass
-    return moved
+    """Retired with the 2026-09-16 restructure (the outputs/ era ended by
+    operator decision — workspace wiped, nothing to migrate). Kept as a
+    documented no-op for external callers. Never raises."""
+    return []
 
 
-# Pre-rename (Medusa era) names — data under them is migrated, never dropped.
 _LEGACY_ROOT_NAMES = ("medusa_agent",)
 _LEGACY_INNER_NAMES = ("medusa_agent",)
 
 
 def ensure_workspace_layout(base_dir: Path | None = None, workspace_dir: Path | None = None) -> bool:
-    """Enforce the canonical workspace layout.
-
-    The contract (README): agent artifacts live in <repo>/suijin_agent/ and
-    suijin/suijin_agent is a symlink -> ../suijin_agent for legacy code that
-    still references the inner path. If the inner path exists as a REAL
-    directory (the pre-2.6 split-brain layout), its contents are merged into
-    the root workspace first — the inner dir holds the live legacy data, so
-    it wins on name collisions.
-
-    Also migrates the pre-rename workspace name: a legacy medusa_agent/
-    root is renamed (or merged, when both exist) into suijin_agent/, and
-    stale legacy inner symlinks are removed.
-
-    Idempotent. Returns True if a migration or symlink creation happened.
-    """
+    """Enforce the repo/workspace symlink contract (legacy inner path ->
+    workspace). Idempotent; returns True when something changed."""
     base = Path(base_dir) if base_dir else BASE_DIR
     root = Path(workspace_dir) if workspace_dir else WORKSPACE_DIR
     inner = base / "suijin_agent"
     migrated = False
 
-    # legacy root: rename when root is absent, merge when both exist
     for legacy in _LEGACY_ROOT_NAMES:
         legacy_root = root.parent / legacy
         if legacy_root.exists() and not legacy_root.is_symlink():
@@ -207,7 +289,6 @@ def ensure_workspace_layout(base_dir: Path | None = None, workspace_dir: Path | 
                 legacy_root.rmdir()
                 migrated = True
 
-    # stale legacy inner entries (e.g. suijin/medusa_agent symlink/dir)
     for legacy in _LEGACY_INNER_NAMES:
         legacy_inner = base / legacy
         if legacy_inner.is_symlink():
@@ -218,18 +299,18 @@ def ensure_workspace_layout(base_dir: Path | None = None, workspace_dir: Path | 
             legacy_inner.rmdir()
             migrated = True
 
+    ensure_global_layout()
+
     if inner.is_symlink():
         return migrated
     if inner.exists():
         root.mkdir(parents=True, exist_ok=True)
         _merge_tree(inner, root)
-        inner.rmdir()  # empty after the merge
+        inner.rmdir()
     try:
         inner.symlink_to(os.path.relpath(root, base))
         return True
     except OSError:
-        # Symlinks unavailable (unprivileged Windows) — leave an empty dir;
-        # all writes go through WORKSPACE_DIR, so nothing lands there anyway.
         inner.mkdir(exist_ok=True)
         return migrated
 
@@ -248,31 +329,3 @@ def _merge_tree(src: Path, dst: Path) -> None:
                 else:
                     target.unlink()
             shutil.move(str(item), str(target))
-
-
-def resolve_workspace_path(file_path: str | Path) -> Path:
-    """Resolve a file path relative to the agent workspace.
-
-    - Relative paths -> resolved from WORKSPACE_DIR
-    - Absolute paths -> REJECTED unless within WORKSPACE_DIR or allowlisted
-    - Symlinks -> resolved to real path before boundary check
-    """
-    p = Path(file_path)
-    if p.is_absolute():
-        try:
-            real = p.resolve()
-        except Exception:
-            real = p
-        # Reject paths outside workspace
-        try:
-            real.relative_to(WORKSPACE_DIR.resolve())
-            return real
-        except ValueError:
-            allowlisted = ["/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp", os.environ.get("HOME", "/tmp")]
-            if any(str(real).startswith(d) for d in allowlisted):
-                return real
-            raise PermissionError(
-                f"Absolute path '{file_path}' resolves to '{real}' which is outside workspace '{WORKSPACE_DIR}'. "
-                f"Use a relative path or write to /tmp/."
-            )
-    return (WORKSPACE_DIR / p).resolve()

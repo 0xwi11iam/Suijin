@@ -19,6 +19,7 @@ def client(tmp_path, monkeypatch):
     from suijin.modules.platform.lib import workspace as ws
 
     monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+    ws._reset_engagement()  # hermetic: no engagement pinned from another test
     app = create_app(token="testtok")
     return TestClient(app), {"Authorization": "Bearer testtok"}
 
@@ -99,8 +100,8 @@ class TestHitlRoundTrip:
         assert c.post("/api/approvals/99", headers=h, json={"action": "approve"}).status_code == 404
 
     def test_question_answer(self, client, tmp_path):
-        (tmp_path / "outputs").mkdir(parents=True, exist_ok=True)
-        (tmp_path / "outputs" / "questions.jsonl").write_text(
+        (tmp_path / "engagements" / "_default" / "state").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "engagements" / "_default" / "state" / "questions.jsonl").write_text(
             json.dumps({"id": 1, "question": "scope ok?", "answered": False}) + "\n"
         )
         c, h = client

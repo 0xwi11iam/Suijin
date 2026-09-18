@@ -17,6 +17,7 @@ def fireteam_env(tmp_path, monkeypatch):
     from suijin.modules.platform.lib import workspace as ws
 
     monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+    ws._reset_engagement()  # hermetic: no engagement pinned from another test
     sn._reset_fireteams()
     yield tmp_path
     sn._reset_fireteams()
@@ -49,7 +50,7 @@ class TestStateMirror:
 
         dep = asyncio.run(go())
         assert dep["team_id"]
-        state = json.loads((fireteam_env / "outputs" / "fireteam" / "registry.json").read_text())
+        state = json.loads((fireteam_env / "engagements" / "_default" / "fireteam" / "registry.json").read_text())
         team = state["teams"][0]
         assert team["team_id"] == dep["team_id"]
         assert team["running"] >= 1
@@ -71,7 +72,7 @@ class TestStateMirror:
 
         dep, msgs = asyncio.run(go())
         assert any("FIRETEAM RESULT" in m for m in msgs)
-        state = json.loads((fireteam_env / "outputs" / "fireteam" / "registry.json").read_text())
+        state = json.loads((fireteam_env / "engagements" / "_default" / "fireteam" / "registry.json").read_text())
         # fully drained -> the team is forgotten
         assert all(t["team_id"] != dep["team_id"] for t in state["teams"])
 
@@ -86,9 +87,9 @@ class TestStateMirror:
             )
 
         asyncio.run(go())
-        assert (fireteam_env / "outputs" / "fireteam" / "registry.json").exists()
+        assert (fireteam_env / "engagements" / "_default" / "fireteam" / "registry.json").exists()
         sn._reset_fireteams()
-        state = json.loads((fireteam_env / "outputs" / "fireteam" / "registry.json").read_text())
+        state = json.loads((fireteam_env / "engagements" / "_default" / "fireteam" / "registry.json").read_text())
         assert state["teams"] == []
 
 
@@ -110,7 +111,7 @@ class TestGatewayFireteam:
             ],
             "updated": "2026-08-22T00:00:01",
         }
-        d = fireteam_env / "outputs" / "fireteam"
+        d = fireteam_env / "engagements" / "_default" / "fireteam"
         d.mkdir(parents=True, exist_ok=True)
         (d / "registry.json").write_text(json.dumps(mirror))
 

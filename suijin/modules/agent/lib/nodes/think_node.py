@@ -204,6 +204,15 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
 
         system_prompt = build_agent_system_prompt(state)
         user_turn = engagement_order(state.get("original_objective", ""))
+        # FULL-AUTO (unattended CI): the strongest-position correction — the
+        # static doctrine encourages asking; this override sits on the order
+        # itself (last-user-message attention slot)
+        if str((state.get("_run_config") or {}).get("autonomy") or "").strip().lower() == "full":
+            user_turn += (
+                "\n\nUNATTENDED MODE: no human is attending this engagement. Do NOT ask_operator — "
+                "there is nobody to answer. Decide with your best professional judgment, keep the "
+                "engagement moving, and record any open questions in your final report."
+            )
 
     # Add state context (chain, todos) after the skill+tools prompt
     chain_context = format_chain_context(
@@ -226,19 +235,31 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         _prov0 = str(_cfg0.get("provider") or "")
         _mdl0 = str(_cfg0.get(f"{_prov0}_model") or "") if _prov0 else ""
         _win_tokens = resolve_context_window(_prov0, _mdl0, _cfg0)
-        # trigger at 25% of the window measured in CHARS: window_chars =
-        # 4×tokens, 25% → win_tokens chars (128k-tok model → 128k-char
-        # trigger ≈ the old fixed 120k; 1M fallback → capped 480k)
-        _win_trigger = max(40_000, min(480_000, _win_tokens))
+        # COMPACT AT 90% OF THE REAL WINDOW (2026-09-17): the operator's
+        # cycle — the gauge climbs toward 100%, at 90% compaction fires,
+        # the gauge SNAPS DOWN, and the context grows again until the next
+        # 90% crossing. Window size is the model's REAL limit (models.dev),
+        # measured in CHARS = tokens×4. 90% leaves room for the output
+        # turn + the compaction summary itself.
+        _win_trigger = int(_win_tokens * 4 * 0.90)
+        _win_trigger = max(160_000, _win_trigger)  # floor: 160k chars (≈40k tok)
     except Exception:  # noqa: BLE001 — window metadata never breaks thinking
         _win_trigger = 120_000
     try:
         from suijin.modules.agent.lib.compact import compact as _compact_messages
+        from suijin.modules.agent.lib.compact import history_chars as _hc
 
         _msgs = state.get("messages") or []
         _compacted = _compact_messages(_msgs, trigger_chars=_win_trigger)
         if _compacted is not _msgs:
             state["messages"] = _compacted
+            # compaction notice: printed ONCE above the strip — the gauge
+            # snaps down on the next request automatically; no persistent
+            # badge (operator call: not a big deal, the drop is the signal)
+            with contextlib.suppress(Exception):
+                print(
+                    f"  [dim]compacted {_hc(_msgs) // 1000}k → {_hc(_compacted) // 1000}k chars[/dim]"
+                )
     except Exception as e:  # noqa: BLE001 — compaction must never break thinking
         # a chronic compaction failure silently grows context forever — log it
         logger.warning(f"compaction skipped (check compact.py): {e}")
@@ -787,17 +808,43 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         # gate only intercepted the supervisor's nudge — the exit door was
         # unlocked. ──
         _refusal = None
-        with contextlib.suppress(Exception):
-            from suijin.modules.agent.lib.mode_governor import untried as _untried
+        # OBJECTIVE TOKEN GATE (2026-09-16, the korp_terminal lesson): soft
+        # doctrine loses to habit — the agent confirmed a vuln and declared
+        # "per engagement order, one confirmed vulnerability is sufficient"
+        # while the actual order was CAPTURE THE FLAG. When the run config
+        # carries a completion_token, completion is REFUSED until the token
+        # appears in the completion reason (e.g. the literal 'HTB{...' of a
+        # captured flag). Findings, surfaces, coverage — none of it satisfies
+        # the objective except the objective's own token.
+        _cfg = state.get("_run_config") or {}
+        _token = str(_cfg.get("completion_token") or "").strip()
+        if _token and _token.lower() not in str(completion_reason or "").lower():
+            _refusal = (
+                f"COMPLETION REFUSED (objective gate): the engagement order requires "
+                f"'{_token}' in your completion — you have not captured it. A confirmed "
+                "vulnerability is PROGRESS, not the objective: exploit it, chain it "
+                "(credential control, file read, RCE — whatever the bug gives you), and "
+                "return only when you possess the literal token string. Continue."
+            )
+        # FINDINGS BYPASS (2026-09-15): "1 confirmed vuln = catalog and
+        # COMPLETE IMMEDIATELY" is the objective's own contract, but the
+        # surface gate refused completion while ≥2 seeded items remained
+        # untried — the agent catalogued a vuln and was then trapped into
+        # grinding until the watchdog killed it. A run WITH findings is
+        # done: the verdict gates on the findings themselves.
+        _has_findings = bool(state.get("findings"))
+        if _refusal is None and not _has_findings:
+            with contextlib.suppress(Exception):
+                from suijin.modules.agent.lib.mode_governor import untried as _untried
 
-            _open = _untried(state.get("_attack_queue") or [])
-            if len(_open) >= 2:
-                _refusal = (
-                    f"COMPLETION REFUSED (surface gate): {len(_open)} attack surfaces remain UNTRIED "
-                    f"(top: {', '.join(str(s['surface'])[:40] for s in _open[:3])}). Test them or mark "
-                    "why they cannot apply — then complete."
-                )
-        if _refusal is None:
+                _open = _untried(state.get("_attack_queue") or [])
+                if len(_open) >= 2:
+                    _refusal = (
+                        f"COMPLETION REFUSED (surface gate): {len(_open)} attack surfaces remain UNTRIED "
+                        f"(top: {', '.join(str(s['surface'])[:40] for s in _open[:3])}). Test them, clear them "
+                        "with surface_verdict (naming the concrete defense), then complete."
+                    )
+        if _refusal is None and not _has_findings:
             with contextlib.suppress(Exception):
                 from suijin.modules.tools.lib.coverage import completion_blocked
 

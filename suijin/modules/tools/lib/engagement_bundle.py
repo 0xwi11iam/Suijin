@@ -89,9 +89,12 @@ def _sha256(data: bytes) -> str:
 
 
 def _exploits_root() -> Path:
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+    """The 2026-09-16 layout keeps catalogs inside engagements — harvest
+    the CURRENT engagement's exploits (plus the legacy flat root when an
+    old workspace is resumed)."""
+    from suijin.modules.platform.lib.workspace import exploits_dir
 
-    return WORKSPACE_DIR / "exploits"
+    return exploits_dir()
 
 
 def save_engagement(thread_id: str, objective: str, config: dict, state: dict, cost: float = 0.0) -> Path:
@@ -120,12 +123,15 @@ def save_engagement(thread_id: str, objective: str, config: dict, state: dict, c
     # librarian ledger + the scratchpad — without these, a resume forgot
     # every observation and re-paid the recon tokens
     with contextlib.suppress(Exception):
-        from suijin.modules.platform.lib.workspace import engagement_dir as _edir
+        from suijin.modules.platform.lib.workspace import state_dir as _sdir
 
-        _led = _edir() / "librarian.json"
+        # 2026-09-16 layout: state files live in engagements/<slug>/state/
+        # (the restructure moved them out of the engagement root — the old
+        # paths silently missed, so resumes forgot every observation)
+        _led = _sdir() / "librarian.json"
         if _led.is_file():
             graph_state["_librarian_ledger"] = json.loads(_led.read_text(encoding="utf-8"))
-        _sp = _edir() / "scratchpad.md"
+        _sp = _sdir() / "scratchpad.md"
         if _sp.is_file():
             graph_state["_scratchpad_text"] = _sp.read_text(encoding="utf-8")[-8000:]
 

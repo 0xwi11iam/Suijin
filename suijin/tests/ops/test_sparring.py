@@ -26,11 +26,12 @@ class TestSparCycle:
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
 
         # first run saves the baseline automatically
         r1, line1 = run_spar(name="unit")
         assert r1["verdict"] == "baseline-saved"
-        assert (tmp_path / "outputs" / "spar_baselines" / "unit.json").exists()
+        assert (tmp_path / "engagements" / "_default" / "spar_baselines" / "unit.json").exists()
 
         # identical second run = stable
         r2, line2 = run_spar(name="unit")
@@ -38,7 +39,7 @@ class TestSparCycle:
         assert "STABLE" in line2
 
         # tamper the baseline upward -> regression + fail flag
-        bp = tmp_path / "outputs" / "spar_baselines" / "unit.json"
+        bp = tmp_path / "engagements" / "_default" / "spar_baselines" / "unit.json"
         import json
 
         data = json.loads(bp.read_text())
