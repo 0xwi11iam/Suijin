@@ -90,6 +90,7 @@ Every concluded engagement saves to `suijin_agent/outputs/exports/<name>.sje`
 phase, todos), the exploit catalogs (POCs + receipts), and the config
 (secrets stripped). Resume anytime:
 
+    suijin load                   # pick from the ten newest bundles
     suijin load <file.sje>        # or Operator Tools → Resume a saved engagement
 
 The saved state is injected into a fresh graph thread — the agent

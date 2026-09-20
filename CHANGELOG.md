@@ -6,6 +6,36 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v6.8.0 — Crash-Proof Engagements
+
+An .sje exists for every exit path, resume no longer requires memorizing
+timestamped filenames, and the benchmark scores go on the record: 100%
+Cybench HTB Cyber Apocalypse 2024 (web) and 83.9% NYU CTF.
+
+### Added
+- CrashSaver: idempotent emergency .sje writer armed at engagement
+  start — conclusion, finally backstop, SIGTERM/SIGHUP (chained after
+  the FULL-AUTO handler), sys.excepthook, and atexit all funnel into
+  one once-flagged save; the provider-restart rebind is followed
+  automatically (late-bound state getter)
+- `suijin load` picker: the ten newest bundles (date, size, cost,
+  objective) with number/name/path selection; bare names resolve from
+  the exports inbox; non-TTY takes the newest automatically
+- README benchmark section with bar charts; docs updated
+
+### Fixed
+- `***stripped***` config placeholders no longer survive the resume
+  merge — a stale marker could override a good default for any key the
+  operator's config.json does not pin
+- `suijin load` with a missing/garbage reference now fails with the
+  exact reason instead of an opaque path error
+
+### Changed
+- Operator Tools → Resume: opens the picker instead of a raw
+  path prompt
+- Engagement conclusion routes through the shared saver (a SIGTERM
+  backstop having already saved is a no-op, not a second file)
+
 ## v6.7.0 — The Hardening Release
 
 The run loop cannot die (the provider-restart latch is real, Ctrl+C
