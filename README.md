@@ -54,8 +54,7 @@ Suijin        ██████████████████████
 ```
 
 Every flag was captured by the agent's own exploit chain (terminal-verified),
-not asserted. Engagement bundles (`.sje`) for these runs are resumable — you
-can load one and watch the chain re-execute.
+not asserted.
 
 ## What's New in v6.8.0 — Crash-Proof Engagements
 
@@ -142,13 +141,13 @@ What's being built next:
 | 1 | **Beta capability waves** — source audit (treeaudit), web breadth + external bench adapter, mobile, forensics, binary packs | B1–B5 in plan |
 | 2 | **Blue-team SOC loop** — the process_event pipeline: enrich (identity, assets), incidents with lifecycle, identity-level containment, retention + retro-hunt; headless `suijin blue` | wave A foundations landed; loop waves queued |
 | 3 | **Marketplace community index** — the decentralized pack index goes live (hash-pinned installs already ship) | queued |
+| 4 | **`suijin bench`** — graded lab runs, agent performance tracked per release | queued |
 
 > **Desktop app (deprecated):** the Tauri desktop client and its gateway
 > API shipped as a technical preview in v5.1.0 and are currently
 > **not under active maintenance** — the gateway module and desktop code
 > are retained in-tree so the surface can be revived later; the console
 > UI is the supported operator interface.
-| 4 | **`suijin bench`** — graded lab runs, agent performance tracked per release | queued |
 
 Everything above builds on the stable core without churn: the kernel,
 module boundaries, prompt budget, and catalog parity are enforced

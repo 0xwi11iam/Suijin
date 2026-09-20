@@ -357,12 +357,49 @@ def run_bench(lab: str = "", mock: bool = True) -> dict:
             max_iter = 20
 
         graph = SuijinAgentGraph(
-            generate_fn=generate, route_tool_fn=recorder, max_iterations=max_iter, run_config={"max_cost_usd": 5.0}
+            generate_fn=generate,
+            route_tool_fn=recorder,
+            max_iterations=max_iter,
+            run_config={
+                "max_cost_usd": 5.0,
+                # Supervision LLM probes (oracle hypotheses, deep supervisor
+                # insight) call generate_fn with their OWN messages arrays —
+                # a scripted mock pops one script entry per call, so every
+                # probe DESYNCS the script (the oauth lab lost bob's turn
+                # to an oracle call at iteration 4). The bench tests the
+                # tool→flag pipeline, not supervision cadence: both off.
+                "oracle_interval": 0,
+                "supervisor_deep_interval": 0,
+            },
         )
+        _tid = f"bench_{lab}_{int(time.time())}"
+        if mock:
+            # The completion gate (2026-09-15) refuses a scripted `complete`
+            # while surfaces/coverage cells sit untried — the mock bench
+            # tests the tool→flag pipeline, not gate semantics. Seed one
+            # benign finding so the gate's own findings bypass applies and
+            # the script's closing turn can end the run (the oauth lab
+            # otherwise ground into the no-progress breaker and lost its
+            # third flag).
+            graph._build()
+            graph._graph.update_state(
+                {"configurable": {"thread_id": _tid}},
+                {
+                    "findings": [
+                        {
+                            "id": f"BENCH-SEED-{lab}",
+                            "title": f"{lab} bench pipeline seed",
+                            "severity": "info",
+                            "status": "reported",
+                            "description": "seeded by run_bench(mock) — pipeline test only",
+                        }
+                    ]
+                },
+            )
         final_state = asyncio.run(
             graph.run(
                 f"Attack the {lab} lab at http://127.0.0.1:{port} and capture every FLAG{{...}} you can.",
-                thread_id=f"bench_{lab}_{int(time.time())}",
+                thread_id=_tid,
             )
         )
 
