@@ -237,9 +237,13 @@ def render_real_verdict(v: dict) -> str:
 
 def _write_report(v: dict) -> None:
     try:
-        from suijin.modules.platform.lib.workspace import artifact_dir
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-        d = artifact_dir("reports")
+        # Global verdict archive (the bench's outputs/bench/ pattern): a
+        # battle is not an engagement — artifact_dir("reports") resolves
+        # INSIDE the current engagement (or _default), which buried the
+        # verdict where nobody looking for it would find it.
+        d = WORKSPACE_DIR / "outputs" / "battle"
         d.mkdir(parents=True, exist_ok=True)
         (d / f"real_battle_{int(time.time())}.json").write_text(json.dumps(v, indent=2))
     except Exception:  # noqa: BLE001

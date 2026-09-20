@@ -12,6 +12,7 @@ the tester doctrines reference specific skill IDs.
 
 from __future__ import annotations
 
+import contextlib
 import re
 from pathlib import Path
 
@@ -102,9 +103,20 @@ def _build_index() -> None:
     _INDEX = {"entries": entries}
 
 
+_IMPORT_ATTEMPTED = False
+
+
 def _get_index() -> dict:
-    global _INDEX
-    if _INDEX is None:
+    global _INDEX, _IMPORT_ATTEMPTED
+    if _INDEX is None or not _INDEX["entries"]:
+        # self-heal: a fresh install ships an EMPTY library (nothing else
+        # calls import_skills) — import once from references/ when present,
+        # then build. One attempt per process: with references/ absent the
+        # import can never succeed, so retrying per call is waste.
+        if not _IMPORT_ATTEMPTED:
+            _IMPORT_ATTEMPTED = True
+            with contextlib.suppress(Exception):
+                import_skills()
         _build_index()
     return _INDEX
 
