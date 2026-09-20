@@ -1767,12 +1767,19 @@ def run_exploit_cmd(args) -> int:
 
 
 def run_load_cmd(args) -> int:
-    """`suijin load <file.sje>` — resume a saved engagement (state restored,
-    agent continues with full memory)."""
-    from suijin.modules.tools.lib.engagement_bundle import resume_engagement
+    """`suijin load [file.sje]` — resume a saved engagement (state restored,
+    agent continues with full memory). No argument: pick from the ten
+    newest bundles (nobody memorizes timestamped filenames)."""
+    from suijin.modules.tools.lib import engagement_bundle as eb
 
+    ref = getattr(args, "bundle", None)
+    if not str(ref or "").strip():
+        picked = eb.pick_bundle()
+        if picked is None:
+            return 1
+        ref = str(picked)
     try:
-        return resume_engagement(getattr(args, "bundle", ""))
+        return eb.resume_engagement(ref)
     except ValueError as e:
         print(f"error: {e}")
         return 1
@@ -2167,7 +2174,9 @@ def main(argv=None):
     exploit_p.set_defaults(func=run_exploit_cmd)
 
     load_p = sub.add_parser("load", help="resume a saved engagement (.sje bundle)")
-    load_p.add_argument("bundle", help="path to the .sje file (see outputs/exports/)")
+    load_p.add_argument(
+        "bundle", nargs="?", default=None, help="path or bundle name (omit to pick from the ten newest)"
+    )
     load_p.set_defaults(func=run_load_cmd)
 
     theater_p = sub.add_parser("theater", help="animated replay of the latest session")

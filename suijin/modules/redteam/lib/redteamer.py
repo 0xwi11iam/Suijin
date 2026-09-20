@@ -430,6 +430,21 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
 
     thread_id = f"redteam_{int(time.time())}"
 
+    # CRASH-SAVER — an .sje exists for EVERY exit path: the conclusion
+    # save, the finally backstop (final-block crashes/KI), SIGTERM/SIGHUP,
+    # an uncaught exception anywhere (setup included), and interpreter
+    # exit (atexit). The lambda is late-bound: the provider-restart path
+    # below rebinds agent/thread_id and the saver follows automatically.
+    from suijin.modules.tools.lib.engagement_bundle import CRASH_SAVER
+
+    CRASH_SAVER.arm(
+        thread_id,
+        objective,
+        config,
+        lambda: (agent.get_state(thread_id) or {}) if agent is not None else {},
+    )
+    CRASH_SAVER.hook_excepthook()
+
     provider_name = config.get("provider", "unknown")
     model_name = active_model(config)
     console.print("\n[bold #e6b47c] Launching Agent[/bold #e6b47c] [dim](Ctrl+C to guide)[/dim]")
@@ -1484,12 +1499,21 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
 
             logging.getLogger("suijin").warning(f"Session save failed: {e}")
 
-        # .sje bundle — the concluded engagement, resumable (`suijin load`)
+        # .sje bundle — the concluded engagement, resumable (`suijin load`).
+        # Routed through the crash-saver so the once-flag is shared: if a
+        # SIGTERM/exception backstop already wrote the bundle, this is a
+        # no-op instead of a second file.
         try:
-            from suijin.modules.tools.lib.engagement_bundle import save_engagement
+            _sje = CRASH_SAVER.save("conclusion")
+            if _sje is None and CRASH_SAVER.last_path is None:
+                from suijin.modules.tools.lib.engagement_bundle import save_engagement
 
-            _sje = save_engagement(thread_id, objective, config, final_state, spend)
-            console.print(f"[dim]engagement bundle saved — resume anytime: suijin load {_sje.name}[/dim]")
+                _sje = save_engagement(thread_id, objective, config, final_state, spend)
+                CRASH_SAVER.mark_saved()
+            if CRASH_SAVER.last_path is not None:
+                console.print(
+                    f"[dim]engagement bundle saved — resume anytime: suijin load {CRASH_SAVER.last_path.name}[/dim]"
+                )
         except Exception as e:
             import logging
 
@@ -1580,6 +1604,11 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
 
         traceback.print_exc()
     finally:
+        # CRASH-SAVER backstop — runs on EVERY exit from the final block
+        # (normal, exception, KeyboardInterrupt). Idempotent: the
+        # conclusion save above already claimed the once-flag.
+        with contextlib.suppress(Exception):
+            CRASH_SAVER.save("end")
         # TERMINATION BANNER — one classifier, every ending, unskippable.
         # The field reports: declines and crashes read as silent failures.
         with contextlib.suppress(Exception):
@@ -1609,6 +1638,11 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
             )
         with contextlib.suppress(Exception):
             ui.stop()
+        # disarm LAST: while finally-teardown runs, the backstops stay live
+        # (a crash INSIDE teardown still saves). After this, the process
+        # holds no engagement — menu-level exits save nothing (correct).
+        with contextlib.suppress(Exception):
+            CRASH_SAVER.disarm()
     # the caller (tests, fuzz harness, future API surfaces) gets the final
     # state — the function used to return None and the outcome was only
     # observable through UI side effects

@@ -5,7 +5,7 @@
 
 
 <p align="center">
-  <img height="20" src="https://img.shields.io/badge/v6.7.0-suijin-green?style=flat" alt="Version"/>
+  <img height="20" src="https://img.shields.io/badge/v6.8.0-suijin-green?style=flat" alt="Version"/>
   <img height="20" src="https://img.shields.io/badge/LICENSE-AGPL%20v3-4169A1?style=flat" alt="License"/>
   <img height="20" src="https://img.shields.io/badge/PYTHON-3.10+-306998?style=flat&logo=python&logoColor=white" alt="Python"/>
 </p>
@@ -35,6 +35,44 @@ toolkit, one knowledge base, and one knowledge graph.
 | Payload breadth | **battery+facts engine** — tag survival, noise-floor differentials, WAF-block qualification | model recall |
 | Dead code | **CI-enforced**: `suijin capability` fails the build on orphans | count metrics |
 | Gym | **onboard labs with chain-verification tests + bench grading** (Citadel: 26 vulns, 3 crown chains) | — |
+
+## Benchmarks
+
+Autonomous web-exploitation runs — one agent, one objective, no human in the
+loop, scored by exact flag match.
+
+**Cybench — HTB Cyber Apocalypse 2024 (web track, 9 tasks)**
+
+```
+Suijin        ████████████████████████████████████████  100.0%  (9/9)
+```
+
+**NYU CTF**
+
+```
+Suijin        ███████████████████████████████████        83.9%
+```
+
+Every flag was captured by the agent's own exploit chain (terminal-verified),
+not asserted. Engagement bundles (`.sje`) for these runs are resumable — you
+can load one and watch the chain re-execute.
+
+## What's New in v6.8.0 — Crash-Proof Engagements
+
+- **An `.sje` for every exit**: a crash-saver armed at engagement start
+  guarantees the bundle exists no matter how the run ends — random crash,
+  teardown failure, `SIGTERM`/`SIGHUP`, uncaught exception, interpreter exit.
+  One idempotent save per engagement; the conclusion path and every backstop
+  share a single once-flag
+- **`suijin load` picks, you don't memorize**: bare `suijin load` lists the
+  ten newest bundles (date, size, cost, objective) — pick a number, a name,
+  or paste a path; bare bundle names resolve from the exports inbox;
+  non-interactive runs auto-take the newest
+- **Resume-config hardening**: `***stripped***` placeholders can no longer
+  leak into a resumed engagement's config — live `config.json` fills those
+  keys instead
+- **Benchmarks on the record**: 100% Cybench HTB Cyber Apocalypse 2024 web
+  track, 83.9% NYU CTF (see above)
 
 ## What's New in v6.7.0 — The Hardening Release
 
