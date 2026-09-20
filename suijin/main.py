@@ -74,12 +74,9 @@ def operator_menu():
             if target:
                 _run_cli(["exploit", target])
         elif args == ["load-prompt"]:  # resume a saved engagement
-            try:
-                path = input("  .sje path (or name from outputs/exports/): ").strip()
-            except (KeyboardInterrupt, EOFError):
-                continue
-            if path:
-                _run_cli(["load", path])
+            # the CLI picker lists the ten newest bundles — no need to
+            # memorize a timestamped filename
+            _run_cli(["load"])
         elif args is None:  # dossier needs a target
             try:
                 target = input("  target (IP / hostname / URL): ").strip()
