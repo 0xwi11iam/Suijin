@@ -41,20 +41,22 @@ def web_search(query: str, max_results: int = 5) -> str:
             return f"Search error: HTTP {resp.status_code}"
 
         html = resp.text
-        # Parse DuckDuckGo Lite results — they use <a> tags with class="result-link"
+        # Parse DuckDuckGo Lite results. The markup drifts: class may use
+        # single OR double quotes and href may precede or follow the class
+        # attribute (the double-quote/class-first pattern silently returned
+        # zero results for weeks). Match quote- and order-agnostically.
         results = []
-        # Pattern: <a rel="nofollow" class="result-link" href="URL">Title</a>
-        # followed by <td class="result-snippet">Snippet</td>
         link_pattern = re.compile(
-            r'<a[^>]*class="result-link"[^>]*href="([^"]+)"[^>]*>(.*?)</a>',
+            r"<a[^>]*class=['\"]result-link['\"][^>]*href=['\"]([^'\"]+)['\"][^>]*>(.*?)</a>"
+            r"|<a[^>]*href=['\"]([^'\"]+)['\"][^>]*class=['\"]result-link['\"][^>]*>(.*?)</a>",
             re.DOTALL | re.IGNORECASE,
         )
         snippet_pattern = re.compile(
-            r'<td[^>]*class="result-snippet"[^>]*>(.*?)</td>',
+            r"<t[d][^>]*class=['\"]result-snippet['\"][^>]*>(.*?)</t[d]>",
             re.DOTALL | re.IGNORECASE,
         )
 
-        links = link_pattern.findall(html)
+        links = [(u1 or u2, t1 or t2) for (u1, t1, u2, t2) in link_pattern.findall(html)]
         snippets = snippet_pattern.findall(html)
 
         for i, (url, title) in enumerate(links[:max_results]):
