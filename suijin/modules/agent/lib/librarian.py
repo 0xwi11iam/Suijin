@@ -60,7 +60,18 @@ def start(generate_fn, engagement_dir: Path, interval: int = 10, target: str = "
     global _ACTIVE
     with _lock:
         if _ACTIVE is not None and _ACTIVE.alive:
-            return _ACTIVE
+            # Idempotent ONLY for the same engagement. A live librarian left
+            # over from a PREVIOUS engagement (its stop() lost on a crash
+            # path) would serve that run's ledger to this one — the field
+            # 'cross-engagement pollution' incident: memory_recall surfaced
+            # another engagement's secrets as this run's leads. Stale →
+            # stop and replace.
+            with contextlib.suppress(Exception):
+                if Path(getattr(_ACTIVE, "_dir", None) or "") == Path(engagement_dir):
+                    return _ACTIVE
+            with contextlib.suppress(Exception):
+                _ACTIVE._stop()
+            _ACTIVE = None
         try:
             _ACTIVE = Librarian(generate_fn, engagement_dir, interval=int(interval or 10), target=target)
             _ACTIVE._start()

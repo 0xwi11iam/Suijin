@@ -8,6 +8,7 @@ memory_recall tool, and the ledger riding the .sje bundle.
 
 import asyncio
 import json
+from pathlib import Path
 
 import pytest
 
@@ -245,3 +246,33 @@ class TestIntegration:
         bundle = eb.load_engagement(path)
         led = bundle["graph_state"].get("_librarian_ledger")
         assert led and led["entries"][0]["value"] == "AKIAX"
+
+
+class TestStaleLibrarianReplacement:
+    """A live librarian left over from a PREVIOUS engagement must NOT serve
+    its ledger to the next one (the cross-engagement pollution incident:
+    memory_recall surfaced another run's secrets as fresh leads)."""
+
+    def test_new_engagement_replaces_stale_librarian(self, tmp_path):
+        lb.stop()
+        old_dir = tmp_path / "eng_old"
+        old_dir.mkdir()
+        first = lb.start(generate_fn=None, engagement_dir=old_dir, interval=10, target="http://old.local")
+        assert first is not None and first.alive
+
+        new_dir = tmp_path / "eng_new"
+        new_dir.mkdir()
+        second = lb.start(generate_fn=None, engagement_dir=new_dir, interval=10, target="http://new.local")
+
+        assert second is not None and second is not first  # replaced, not reused
+        assert lb.active() is second
+        assert Path(lb.active()._dir) == new_dir  # serving THIS engagement
+        assert not first.alive
+        lb.stop()
+
+    def test_same_engagement_start_is_idempotent(self, tmp_path):
+        lb.stop()
+        one = lb.start(generate_fn=None, engagement_dir=tmp_path, interval=10, target="http://t.local")
+        two = lb.start(generate_fn=None, engagement_dir=tmp_path, interval=10, target="http://t.local")
+        assert one is two  # same engagement dir: idempotent, no restart churn
+        lb.stop()
