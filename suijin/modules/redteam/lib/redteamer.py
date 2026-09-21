@@ -588,13 +588,30 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
     from suijin.modules.platform.lib.workspace import engagement_dir as _engdir
 
     _UI_STATE["librarian"] = 0
-    # per-engagement gauge state — a stale FLAG count / ctx % from the
-    # previous run read as phantom progress on the next
-    _UI_STATE["flags"] = []
-    _UI_STATE["creds"] = []
-    _UI_STATE["ctx_pct"] = None
-    _UI_STATE["poc_running"] = False
-    _UI_STATE["fireteams"] = 0
+    # ── ENGAGEMENT SCOPE: everything per-run resets ─────────────────────
+    # The UI gauges (flags/creds/EXP/ctx) AND the module-level runtime
+    # state (coverage ledger, repeat-guard counters, supervisor cooldowns,
+    # surface-verdict ledger) — a previous engagement's leftovers read as
+    # phantom progress, false repeats and cleared-but-untested surfaces.
+    from suijin.modules.redteam.lib.red.console_ui import reset_gauges as _reset_gauges
+
+    _reset_gauges()
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.coverage import reset as _cov_reset
+
+        _cov_reset()
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.dispatch import reset_repeat_state as _rrs
+
+        _rrs()
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.supervisor import reset_cooldowns as _sc_reset
+
+        _sc_reset()
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.mode_governor import reset_verdict_ledger as _vl_reset
+
+        _vl_reset()
     _lb.set_ui_publish(lambda n: _UI_STATE.__setitem__("librarian", int(n)))
     _lb.start(
         generate_fn=_generate_with_stream,

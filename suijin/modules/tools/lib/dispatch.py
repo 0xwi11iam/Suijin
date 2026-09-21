@@ -7,6 +7,7 @@ re-exports the public API for backwards compatibility.
 Layout:
   runtime.py      shared state (session, proxy, paths, helpers)
   terminal.py     execute_terminal
+  shell_session  shell_start / shell_send / shell_stop / shell_list
   http_tools.py   http_request, apply_patch, read_file, write_file
   metasploit.py   msf_* integration
   intel.py        search_cve, search_kb, knowledge graph, write_note
@@ -206,6 +207,7 @@ def _target_dossier_tool(target: str) -> str:
 
 
 # ── Re-export the public tool surface ─────────────────────────────────
+from suijin.modules.tools.lib import local_ops, local_recon, shell_session
 from suijin.modules.tools.lib.job_registry import _job_lock, _jobs  # noqa: F401 — re-exports (THE registry)
 from suijin.modules.tools.lib.metasploit import (
     _msf_console_fallback,
@@ -248,6 +250,31 @@ __all__ = [
     "truncate",  # noqa: F822 — via module __getattr__ delegation
     # terminal / http
     "execute_terminal",
+    "shell_start",  # noqa: F822 — persistent-shell toolkit
+    "shell_send",  # noqa: F822
+    "shell_stop",  # noqa: F822
+    "shell_list",  # noqa: F822
+    "local_sys_info",  # noqa: F822
+    "local_priv_check",  # noqa: F822
+    "local_services",  # noqa: F822
+    "local_users",  # noqa: F822
+    "local_sched",  # noqa: F822
+    "local_cred_hunt",  # noqa: F822
+    "local_proc",  # noqa: F822
+    "local_net",  # noqa: F822
+    "local_lpe_scan",  # noqa: F822
+    "local_suid_audit",  # noqa: F822
+    "local_path_hijack",  # noqa: F822
+    "local_service_hijack",  # noqa: F822
+    "local_docker_sock",  # noqa: F822
+    "local_hist_search",  # noqa: F822
+    "local_env_secrets",  # noqa: F822
+    "local_file_find",  # noqa: F822
+    "local_mounts",  # noqa: F822
+    "ssh_exec",  # noqa: F822
+    "ssh_pull",  # noqa: F822
+    "ssh_push",  # noqa: F822
+    "ssh_inventory",  # noqa: F822
     "apply_patch",
     "http_request",
     "read_file",
@@ -325,6 +352,64 @@ def _build_routes(config):
         "execute_terminal": lambda a: execute_terminal(
             a.get("cmd") or a.get("command"), timeout=int(a.get("timeout", 30))
         ),
+        # persistent shells — local-device work (cwd/env survive between sends)
+        "shell_start": lambda a: shell_session.shell_start(shell=a.get("shell", ""), cwd=a.get("cwd", "")),
+        "shell_send": lambda a: shell_session.shell_send(
+            a.get("session_id", a.get("session", "")),
+            a.get("cmd") or a.get("command"),
+            timeout=int(a.get("timeout", 30)),
+        ),
+        "shell_stop": lambda a: shell_session.shell_stop(
+            a.get("session_id", a.get("session", "all" if a.get("all") else ""))
+        ),
+        "shell_list": lambda a: shell_session.shell_list(),
+        # local-device toolkit — recon half (read-only enumeration)
+        "local_sys_info": lambda a: local_recon.local_sys_info(),
+        "local_priv_check": lambda a: local_recon.local_priv_check(),
+        "local_services": lambda a: local_recon.local_services(),
+        "local_users": lambda a: local_recon.local_users(),
+        "local_sched": lambda a: local_recon.local_sched(),
+        "local_cred_hunt": lambda a: local_recon.local_cred_hunt(),
+        "local_proc": lambda a: local_recon.local_proc(a.get("pattern", "")),
+        "local_net": lambda a: local_recon.local_net(),
+        # local-device toolkit — exploitation half
+        "local_lpe_scan": lambda a: local_ops.local_lpe_scan(),
+        "local_suid_audit": lambda a: local_ops.local_suid_audit(),
+        "local_path_hijack": lambda a: local_ops.local_path_hijack(),
+        "local_service_hijack": lambda a: local_ops.local_service_hijack(),
+        "local_docker_sock": lambda a: local_ops.local_docker_sock(),
+        "local_hist_search": lambda a: local_ops.local_hist_search(a.get("pattern", "")),
+        "local_env_secrets": lambda a: local_ops.local_env_secrets(),
+        "local_file_find": lambda a: local_ops.local_file_find(
+            a.get("name", ""), int(a.get("newer_than_days", 0) or 0), a.get("root", "/")
+        ),
+        "local_mounts": lambda a: local_ops.local_mounts(),
+        # ssh-reached target interaction
+        "ssh_exec": lambda a: local_ops.ssh_exec(
+            a.get("host", ""),
+            a.get("cmd", ""),
+            user=a.get("user", ""),
+            port=int(a.get("port", 22) or 22),
+            key=a.get("key", ""),
+            timeout=int(a.get("timeout", 60) or 60),
+        ),
+        "ssh_pull": lambda a: local_ops.ssh_pull(
+            a.get("host", ""),
+            a.get("remote_path", ""),
+            a.get("local_path", ""),
+            user=a.get("user", ""),
+            port=int(a.get("port", 22) or 22),
+            key=a.get("key", ""),
+        ),
+        "ssh_push": lambda a: local_ops.ssh_push(
+            a.get("host", ""),
+            a.get("local_path", ""),
+            a.get("remote_path", ""),
+            user=a.get("user", ""),
+            port=int(a.get("port", 22) or 22),
+            key=a.get("key", ""),
+        ),
+        "ssh_inventory": lambda a: local_ops.ssh_inventory(),
         "search_kb": lambda a: _intel.search_kb(a.get("keyword"), limit=a.get("limit") or 5),
         # SPA attack-surface mining (one call instead of hand-rolled curl+grep)
         "js_bundle_analyze": lambda a: js_bundle_analyze(a.get("url", "")),
@@ -671,6 +756,16 @@ def _fetch_auth_page(target, url):
 # any success clears the counter. Env kill switch: SUIJIN_REPEAT_GUARD=0.
 
 _REPEAT_STATE = {"fails": {}, "last_error": {}, "blocked": 0}
+
+
+def reset_repeat_state() -> None:
+    """Engagement scope: repeat-guard counters from a previous run made
+    the first repeated tool of the next run read as a repeat offender."""
+    _REPEAT_STATE["fails"].clear()
+    _REPEAT_STATE["last_error"].clear()
+    _REPEAT_STATE["blocked"] = 0
+
+
 _REPEAT_LIMIT = 3
 _FAILURE_PREFIXES = ("Error:", "Tool Error", "Tool error", "HTTP Error:", "Execution Fault:")
 
