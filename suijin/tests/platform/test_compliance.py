@@ -105,8 +105,8 @@ class TestLoadRender:
 
 class TestCliVerb:
     def test_compliance_cli(self, monkeypatch, tmp_path):
-        from suijin.tests.console.test_cli_commands import run_cli
         import suijin.modules.platform.lib.workspace as ws
+        from suijin.tests.console.test_cli_commands import run_cli
 
         ws._reset_engagement()  # hermetic: no engagement pinned from another test
         monkeypatch.setattr("suijin.modules.platform.lib.workspace.WORKSPACE_DIR", tmp_path)
