@@ -25,12 +25,23 @@ _BLOCKED_PATTERNS = [
 
 
 def is_dangerous(cmd: str):
-    """Check command against blocked patterns. Returns (is_dangerous, pattern)."""
+    """Check command against blocked patterns. Returns (is_dangerous, pattern).
+
+    The patterns are REGEX-SHAPED (``curl .*\\|.*sh``) — the old plain
+    substring check never matched them, so the intended blocks (curl|sh
+    pipe-to-shell among them) were silently inert. Regex both sides,
+    spaces stripped, exactly like the original intent."""
+    import re
+
     cmd_lower = cmd.lower().replace(" ", "")
     for pattern in _BLOCKED_PATTERNS:
         p = pattern.lower().replace(" ", "")
-        if p in cmd_lower:
-            return True, pattern
+        try:
+            if re.search(p, cmd_lower):
+                return True, pattern
+        except re.error:
+            if p in cmd_lower:  # a non-regex pattern still works as a substring
+                return True, pattern
     return False, None
 
 

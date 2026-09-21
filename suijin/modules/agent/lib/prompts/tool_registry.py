@@ -24,7 +24,9 @@ TOOL_REGISTRY = {
         "args_format": '"cmd": "full shell command here"',
         "long_running": True,
         "description": (
-            "**execute_terminal** — runs commands on the attack host.\n"
+            "**execute_terminal** — runs commands on the attack host (one-shot).\n"
+        "**shell_start/shell_send** — a PERSISTENT shell on the local device: cwd, env and shell state survive between sends (shell_start → shell_send → shell_stop). Use it for local recon/privesc walks and multi-step toolchain work; no tty, so non-interactive flags only (sudo -n).\n"
+        "**local_* toolkit** — same-computer + ssh-reached-target operations: local_sys_info (identity/OS), local_lpe_scan (one-call privesc sweep), local_suid_audit, local_path_hijack, local_service_hijack, local_docker_sock, local_hist_search, local_env_secrets, local_file_find, local_mounts, local_proc, local_services, local_users, local_sched, local_cred_hunt, local_net; remote side: ssh_exec (BatchMode command on a credentialed box), ssh_pull/ssh_push (scp), ssh_inventory (config+known_hosts map). Read-only enumeration; pair with shell_send for anything interactive.\n"
             "- Commands run in the suijin_agent/ workspace directory.\n"
             "- Timeout: 30s default. Long scans (nmap -p-, gobuster with big wordlists) will be truncated.\n"
             "- Dangerous commands (pip install, sudo, rm -rf /) trigger user confirmation.\n"
