@@ -17,8 +17,8 @@ Red's mission: chain six guarded stages to RCE and read the flag file
                 and forwards your custom headers
   S3 SSRF       the blocklist matches STRINGS (127.0.0.1, localhost,
                 ::1, 10./192.168./169.254.) — IP-literal NOTATION slips
-                through: http://2130706433:8080/, http://0177.0.0.1:8080/,
-                http://[::ffff:127.0.0.1]:8080/ — land on the internal
+                through: http://2130706433:5050/, http://0177.0.0.1:5050/,
+                http://[::ffff:127.0.0.1]:5050/ — land on the internal
                 mgmt console with X-Internal-Net: true
   S4 INTERNAL   /mgmt/config hands out the backup signing key;
                 /mgmt/session-mint mints an ADMIN session for anyone
@@ -221,7 +221,7 @@ def connectors():
         """<!doctype html><html><body><h1>Enterprise connectors</h1>
 <p>Outbound webhooks notify your systems on signing events. Configure the
 target URL and any custom headers your side requires. The fetcher honors
-http/https on ports 80, 443, 8080 and never follows redirects.</p>
+http/https on ports 80, 443, 5050 and never follows redirects.</p>
 <p><em>Internal integrations note (legacy): on-prem relays identify with
 X-Internal-Net: true; the edge strips client copies of this header.</em></p>
 </body></html>""",
@@ -400,8 +400,8 @@ def hooks():
         return jsonify({"error": "bad url"}), 400
     if p.scheme not in ("http", "https"):
         return jsonify({"error": "scheme must be http/https"}), 400
-    if p.port not in (80, 443, 8080):
-        return jsonify({"error": "port must be 80, 443 or 8080"}), 400
+    if p.port not in (80, 443, 5050):
+        return jsonify({"error": "port must be 80, 443 or 5050"}), 400
     host = p.hostname or ""
     lv = defenses.levers()
     if _blocked_host(host, bool(lv["ssrf_strict"])):
