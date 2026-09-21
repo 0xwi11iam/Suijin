@@ -31,6 +31,14 @@ CLASSES = (
 _NOTES: dict[str, list] = {}  # "wide" | "local" -> list of note dicts
 
 
+def reset() -> None:
+    """Engagement scope: a fresh run starts with a fresh ledger — stale
+    coverage notes from a previous target kept tripping the completion
+    gate of the next."""
+    with _LOCK:
+        _NOTES.clear()
+
+
 def _store_path() -> Path:
     from suijin.modules.platform.lib.workspace import WORKSPACE_DIR, engagement_dir
 

@@ -706,6 +706,12 @@ _DETECTOR_COOLDOWN_ITERS = 15
 _last_fired: dict[str, float] = {}
 
 
+def reset_cooldowns() -> None:
+    """Engagement scope: cooldown timestamps are iteration-keyed — a new
+    run starts at iteration 0 and stale entries misjudge cadence."""
+    _last_fired.clear()
+
+
 def analyze_trace(trace: list, iteration: float | None = None, **extra_kw) -> Optional[str]:
     """Analyze recent execution trace and return guidance if intervention needed.
 
