@@ -10,7 +10,7 @@ copies; here — as in far too many real estates — nobody checked.
   POST /mgmt/session-mint    mint a signed session for ANY user (the SSO
                              bridge the front app is supposed to call)
 
-Runs on 127.0.0.1:8080 (MGMT_PORT) — never exposed, only reachable.
+Runs on 127.0.0.1:5050 (MGMT_PORT) — never exposed, only reachable.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from events import emit  # noqa: E402
 from flask import Flask, jsonify, request  # noqa: E402
 
 app = Flask("aegis_mgmt")
-MGMT_PORT = int(os.environ.get("MGMT_PORT", "8080"))
+MGMT_PORT = int(os.environ.get("MGMT_PORT", "5050"))
 
 
 @app.before_request
@@ -59,7 +59,7 @@ def config():
                 "notifier": {
                     "account": "svc-notifications@aegisvault.io",
                     "key": seed.USERS["svc-notifications@aegisvault.io"]["hook_key"],
-                    "allowlist_ports": [80, 443, 8080],
+                    "allowlist_ports": [80, 443, 5050],
                 }
             },
             "notes": "edge strips X-Internal-Net from client traffic — verify before 5.x",
