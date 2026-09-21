@@ -2490,3 +2490,56 @@ class TestExploitVerdictPanel:
     def test_non_exploit_output_not_matched(self):
         ui, _c = _ui()
         assert not ui.exploit_verdict("nmap scan completed: 22/tcp open ssh")
+
+
+class TestPhaseBadgeFollowsAgent:
+    """The input-box mode badge must follow the agent's phase transitions —
+    it was pinned to 'recon' forever (the 'always says recon' complaint)."""
+
+    def test_badge_follows_transitions(self):
+        from rich.console import Console
+
+        from suijin.modules.redteam.lib.red import console_ui as cu
+
+        cu.UI_STATE["input_mode"] = "recon"
+        import io
+
+        ui = cu.EngagementUI(Console(file=io.StringIO()))
+        ui.phase_transition("exploitation")
+        assert cu.UI_STATE["input_mode"] == "exploit"
+        ui.phase_transition("post_exploitation")
+        assert cu.UI_STATE["input_mode"] == "exploit"
+        ui.phase_transition("reporting")
+        assert cu.UI_STATE["input_mode"] == "report"
+        ui.phase_transition("informational")
+        assert cu.UI_STATE["input_mode"] == "recon"
+
+    def test_reset_gauges_clears_every_run_key(self):
+        from suijin.modules.redteam.lib.red import console_ui as cu
+
+        # dirty every per-run key like a finished engagement leaves them
+        cu.UI_STATE.update(
+            {
+                "flags": ["FLAG{x}"],
+                "creds": ["bob:pw"],
+                "exploits": {"EXP-1": "high"},
+                "fireteams": 3,
+                "ctx_pct": 91.2,
+                "ctx_in_tok": 90000,
+                "ctx_window": 100000,
+                "poc_running": True,
+                "librarian": 42,
+                "last_reasoning": "leftover thought",
+                "last_result_success": False,
+                "input_mode": "exploit",
+                "input_buf": "ha",
+                "suggest_sel": 2,
+            }
+        )
+        cu.reset_gauges()
+        assert cu.UI_STATE["flags"] == [] and cu.UI_STATE["creds"] == []
+        assert cu.UI_STATE["exploits"] == {} and cu.UI_STATE["fireteams"] == 0
+        assert cu.UI_STATE["ctx_pct"] is None and cu.UI_STATE["poc_running"] is False
+        assert cu.UI_STATE["librarian"] == 0 and cu.UI_STATE["last_reasoning"] == ""
+        assert cu.UI_STATE["input_mode"] == "recon" and cu.UI_STATE["input_buf"] is None
+        assert cu.UI_STATE["suggest_sel"] is None
