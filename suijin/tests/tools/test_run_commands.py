@@ -79,7 +79,6 @@ class TestDispatch:
 
 class TestLiveHandlers:
     def test_note_written(self, tmp_path, monkeypatch):
-        from suijin.modules.tools.lib import intel
 
         import suijin.modules.platform.lib.workspace as ws
 

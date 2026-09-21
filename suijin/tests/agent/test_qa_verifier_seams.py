@@ -232,11 +232,11 @@ class TestCoveragePressure:
     def test_ladder_texts_are_the_owners_words(self):
         from suijin.modules.agent.lib import mode_governor as mg
 
-        texts = dict(zip((l for l, _ in mg._PRESSURE_LADDER), (t for _, t in mg._PRESSURE_LADDER)))
+        texts = dict(zip((lvl for lvl, _ in mg._PRESSURE_LADDER), (t for _, t in mg._PRESSURE_LADDER), strict=False))
         assert "You done?" in texts[5.0]
         assert "Faster" in texts[8.0]
         assert "get on with it" in texts[11.0]
-        assert max(l for l, _ in mg._PRESSURE_LADDER) < 30.0  # the wall kills at 30
+        assert max(lvl for lvl, _ in mg._PRESSURE_LADDER) < 30.0  # the wall kills at 30
 
     def test_silent_without_deadline(self):
         from suijin.modules.agent.lib.mode_governor import coverage_pressure
