@@ -260,3 +260,91 @@ class TestCoveragePressure:
         st, res = self._state(0.10), {}
         coverage_pressure(st, res, st["_attack_queue"])
         assert "messages" not in res
+
+
+class TestEngagementScopeResets:
+    """Everything per-run resets — a previous engagement's leftovers read
+    as phantom progress, false repeats and cleared-but-untested surfaces."""
+
+    def test_coverage_ledger_resets(self):
+        from suijin.modules.tools.lib import coverage
+
+        coverage.note("local", "https://a", "old engagement note")
+        coverage.reset()
+        assert coverage._NOTES == {}
+
+    def test_repeat_guard_resets(self):
+        from suijin.modules.tools.lib import dispatch
+
+        dispatch._REPEAT_STATE["fails"]["http_request|x"] = 3
+        dispatch._REPEAT_STATE["blocked"] = 9
+        dispatch.reset_repeat_state()
+        assert dispatch._REPEAT_STATE["fails"] == {} and dispatch._REPEAT_STATE["blocked"] == 0
+
+    def test_supervisor_cooldowns_reset(self):
+        from suijin.modules.agent.lib import supervisor
+
+        supervisor._last_fired["loop"] = 40
+        supervisor.reset_cooldowns()
+        assert supervisor._last_fired == {}
+
+    def test_verdict_ledger_resets(self, tmp_path, monkeypatch):
+        import suijin.modules.platform.lib.workspace as ws
+        from suijin.modules.agent.lib import mode_governor as mg
+
+        monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ledger = tmp_path / mg._VERDICT_LEDGER
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        ledger.write_text('{"surface": "old-target", "verdict": "cleared"}\n')
+        mg.reset_verdict_ledger()
+        assert not ledger.is_file()
+
+
+class TestComponentHealthSweep:
+    """The canary dispatch at health_interval — old parts rot silently."""
+
+    def _graph(self):
+        from suijin.modules.agent.lib.agent_graph import SuijinAgentGraph
+
+        async def _gen(msgs, cfg=None, **kw):
+            return '{"action": "use_tool", "tool_name": "job_list", "tool_args": {}, "thought": "t"}'
+
+        return SuijinAgentGraph(generate_fn=_gen, route_tool_fn=lambda n, a, c: "ok", max_iterations=100, run_config={})
+
+    def test_sweep_surfaces_dead_component_once(self, monkeypatch):
+        import asyncio
+
+        graph = self._graph()
+
+        async def fake_think(state, *, generate_fn, config=None, route_tool_fn=None):
+            return {"messages": [], "current_iteration": 50, "_current_step": {"tool_name": "x"}}
+
+        monkeypatch.setattr("suijin.modules.agent.lib.agent_graph.think_node", fake_think)
+
+        def dead_route(name, args, config):
+            return "Error: job registry exploded"
+
+        monkeypatch.setattr("suijin.modules.tools.lib.dispatch.route_tool", dead_route)
+
+        state = {"current_iteration": 50, "messages": [], "_run_config": {"health_interval": 25}}
+        out = asyncio.run(graph._think(state))
+        msgs = [str(m.get("content", "")) for m in out.get("messages", [])]
+        assert any("component health" in m for m in msgs)  # reported
+        out2 = asyncio.run(graph._think(state))
+        msgs2 = [str(m.get("content", "")) for m in out2.get("messages", [])]
+        assert sum("component health" in m for m in msgs2) == 0  # once, no spam
+
+    def test_sweep_no_crash_without_iteration_key(self, monkeypatch):
+        """The field crash: the sweep referenced think-local `iteration`
+        before assignment — every think crashed (node_crash banner)."""
+        import asyncio
+
+        graph = self._graph()
+
+        async def fake_think(state, *, generate_fn, config=None, route_tool_fn=None):
+            return {"messages": [], "_current_step": {"tool_name": "x"}}
+
+        monkeypatch.setattr("suijin.modules.agent.lib.agent_graph.think_node", fake_think)
+        state = {"current_iteration": 25, "messages": []}  # exactly on the interval
+        out = asyncio.run(graph._think(state))
+        assert "_current_step" in out  # completed, no UnboundLocalError

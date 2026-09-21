@@ -118,6 +118,7 @@ class SuijinAgentGraph:
         self.max_iterations = max_iterations
         self.run_config = run_config or {}
         self.checkpointer = checkpoint_saver or MemorySaver()
+        self._health_reported: set = set()  # component-health dedupe (once per failure)
         self._graph = None
         self._built = False  # per-instance, no module-level state
 
@@ -249,6 +250,42 @@ class SuijinAgentGraph:
                     result["completion_reason"] = "error: no-progress loop breaker (7 empty turns)"
                     result["final_summary"] = "Engagement stopped: repeated decisions executed nothing."
 
+            # ── Component health sweep: old parts rot silently ─────────
+            # Every health_interval iterations a canary dispatch proves
+            # the tool plane still answers; a DEAD component surfaces as
+            # a visible system note (once per failure — no spam). Rot is
+            # otherwise invisible until the operator needs the tool.
+            _health_iv = int((state.get("_run_config") or self.run_config or {}).get("health_interval", 25) or 0)
+            _health_iter = int(state.get("current_iteration") or 0)
+            if _health_iv > 0 and _health_iter > 0 and _health_iter % _health_iv == 0:
+                try:
+                    from suijin.modules.tools.lib.dispatch import route_tool as _rt
+
+                    _canary = str(_rt("job_list", {}, {}) or "")
+                    if (_canary.startswith("Error:") or "unknown tool" in _canary.lower()) and (
+                        "job_list" not in self._health_reported
+                    ):
+                        self._health_reported.add("job_list")
+                        result.setdefault("messages", []).append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    "SYSTEM (component health): the job registry answers with an error "
+                                    f"({_canary[:120]}). Background jobs may be dead — prefer foreground "
+                                    "tools until it recovers."
+                                ),
+                            }
+                        )
+                except Exception as _he:  # noqa: BLE001 — health checks never break the run
+                    if "dispatch" not in self._health_reported:
+                        self._health_reported.add("dispatch")
+                        result.setdefault("messages", []).append(
+                            {
+                                "role": "user",
+                                "content": f"SYSTEM (component health): tool dispatch raised {_he!r} — report this.",
+                            }
+                        )
+
             # ── Mode governor: surface queue + recon→exploit switch ──
             try:
                 from suijin.modules.agent.lib import mode_governor as _mg
@@ -336,7 +373,11 @@ class SuijinAgentGraph:
                         # findings bypass (2026-09-15): a run with confirmed
                         # findings completes — "1 vuln = done" outranks the
                         # wrap-up gate, same as the think-node completion gate
-                        if "generate your report" in guidance and _open and not (state.get("findings") or result.get("findings")):
+                        if (
+                            "generate your report" in guidance
+                            and _open
+                            and not (state.get("findings") or result.get("findings"))
+                        ):
                             guidance = (
                                 f"Recon yield is exhausted but {len(_open)} attack surfaces remain UNTRIED — "
                                 "switch to exploitation and work the queue before any report. "
