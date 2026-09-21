@@ -131,3 +131,7 @@ npm-debug.log*
 node_modules/
 .claude*
 .codex*
+
+# aegis_vault lab runtime artifacts (flag file + defense levers)
+suijin/lab/aegis_vault/flag_aegis_*
+suijin/lab/aegis_vault/aegis_defense.json

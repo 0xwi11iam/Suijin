@@ -145,9 +145,64 @@ async def _run_async():
         console.print("\n  [bold white]Built-in labs:[/bold white]")
         console.print("  [bold]1.[/] blue_target (classic, 25 endpoints — port 5906)")
         console.print("  [bold]2.[/] hill_ctf (four perimeters, rotating vault token)")
+        console.print("  [bold]3.[/] aegis_vault (hardened SaaS, six stages to RCE — :5060)")
         try:
             lab_choice = console.input("\n  Lab  ").strip()
         except (KeyboardInterrupt, EOFError):
+            return
+        if lab_choice == "3":
+            # aegis_vault: public estate :5060 behind the proxy, internal
+            # mgmt on 127.0.0.1:8080 (SSRF lane only in principle)
+            import subprocess
+            import urllib.request
+
+            for port in (5060, 8080):
+                try:
+                    result = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True, timeout=3)
+                    for pid in result.stdout.strip().split("\n"):
+                        if pid.strip():
+                            os.kill(int(pid.strip()), _signal.SIGTERM)
+                except Exception:  # noqa: BLE001
+                    pass
+            time.sleep(0.5)
+            _aegis_dir = BASE_DIR / "lab" / "aegis_vault"
+            subprocess.Popen(
+                [sys.executable, str(_aegis_dir / "internal.py")],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            subprocess.Popen(
+                [sys.executable, str(_aegis_dir / "app.py")],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            for _ in range(12):
+                time.sleep(0.3)
+                try:
+                    urllib.request.urlopen("http://127.0.0.1:5060/health", timeout=1)
+                    break
+                except Exception:  # noqa: BLE001
+                    pass
+            else:
+                console.print("[red]Failed to start aegis_vault[/red]")
+                return
+            from suijin.modules.blueteam.lib.blue.proxy import start_proxy
+
+            proxy_port = _find_free_port(start=41732)
+            try:
+                proxy_server = start_proxy(
+                    listen_port=proxy_port,
+                    target_port=5060,
+                    target_host="127.0.0.1",
+                    log_path=_const("BLUE_TRAFFIC_LOG"),
+                )
+            except Exception as e:  # noqa: BLE001
+                console.print(f"[red]aegis proxy failed to bind :{proxy_port} — {type(e).__name__}: {e}[/red]")
+                proxy_server = None
+            if proxy_server is not None:
+                console.print(
+                    f"[green]Aegis Vault ready — attack it at :{proxy_port} (app hidden on :5060, events in AEGIS_EVENTS_LOG)[/green]"
+                )
             return
         if lab_choice == "2":
             target_path = str(BASE_DIR / "lab" / "hill_ctf")
@@ -205,7 +260,7 @@ async def _run_async():
                 )
                 console.print(
                     "[dim]Your arsenal: blue_block/blue_honeypot/blue_tarpit/… apply at the proxy instantly[/dim]"
-            )
+                )
             app_port = hill_app_port  # sessions/reporting reference the app port
             traffic_log = str(_const("BLUE_TRAFFIC_LOG"))  # the proxy logs here
         else:
