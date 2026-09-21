@@ -82,6 +82,26 @@ UI_STATE = {
 }
 
 
+def reset_gauges() -> None:
+    """Engagement scope — EVERY per-run key resets. The old partial reset
+    left the EXP gauge, the reasoning cache and the mode badge from the
+    previous engagement on screen (phantom exploits + a pinned badge)."""
+    UI_STATE["flags"] = []
+    UI_STATE["creds"] = []
+    UI_STATE["exploits"] = {}
+    UI_STATE["fireteams"] = 0
+    UI_STATE["ctx_pct"] = None
+    UI_STATE["ctx_in_tok"] = None
+    UI_STATE["ctx_window"] = None
+    UI_STATE["poc_running"] = False
+    UI_STATE["librarian"] = 0
+    UI_STATE["last_reasoning"] = ""
+    UI_STATE["last_result_success"] = True
+    UI_STATE["input_mode"] = "recon"  # fresh run: the badge re-syncs on the first transition
+    UI_STATE["input_buf"] = None
+    UI_STATE["suggest_sel"] = None
+
+
 def _fireteam_snapshot() -> list:
     """Live fireteam registry (same process as the agent). Guarded — a UI
     render must never crash on agent internals."""
@@ -1841,6 +1861,20 @@ class EngagementUI:
         if reason:
             line.append(f"  ({reason})", style="dim")
         self._note(line)
+        # the input badge FOLLOWS the agent's phase — the mode was pinned to
+        # "recon" forever (Tab is still there for a manual override; the
+        # next transition re-syncs it)
+        _phase = str(self.phase or "").lower()
+        for frag, mode in (
+            ("post_exploit", "exploit"),
+            ("exploit", "exploit"),
+            ("report", "report"),
+            ("recon", "recon"),
+            ("informational", "recon"),
+        ):
+            if frag in _phase:
+                UI_STATE["input_mode"] = mode
+                break
 
     def ask(self, question: str) -> None:
         """Ask-operator turn: the FULL question as dim markdown (no clips,
