@@ -29,12 +29,12 @@ LAB = Path(__file__).resolve().parents[2] / "lab" / "aegis_vault"
 sys.path.insert(0, str(LAB))
 
 PUBLIC = 5960
-MGMT = 8080  # the REAL port the webhook allowlist permits — the SSRF lane is honest
+MGMT = 5050  # the REAL port the webhook allowlist permits — the SSRF lane is honest
 
 
 @pytest.fixture(scope="module")
 def aegis(tmp_path_factory):
-    """Boot public (:5960) + internal mgmt (:8080) once for the module.
+    """Boot public (:5960) + internal mgmt (:5050) once for the module.
     Rate levers are pinned high for the test context (real values stay
     in the lab defaults)."""
     tmp = tmp_path_factory.mktemp("aegis")

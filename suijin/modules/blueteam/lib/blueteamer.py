@@ -152,11 +152,11 @@ async def _run_async():
             return
         if lab_choice == "3":
             # aegis_vault: public estate :5060 behind the proxy, internal
-            # mgmt on 127.0.0.1:8080 (SSRF lane only in principle)
+            # mgmt on 127.0.0.1:5050 (SSRF lane only in principle)
             import subprocess
             import urllib.request
 
-            for port in (5060, 8080):
+            for port in (5060, 5050):
                 try:
                     result = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True, timeout=3)
                     for pid in result.stdout.strip().split("\n"):
