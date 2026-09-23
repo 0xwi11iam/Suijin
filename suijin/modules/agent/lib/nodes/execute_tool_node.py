@@ -12,6 +12,12 @@ logger = logging.getLogger(__name__)
 # These aliases keep older references working — they are the SAME objects.
 
 
+
+def _artifact_dir(name):
+    from suijin.modules.platform.lib.workspace import artifact_dir
+
+    return artifact_dir(name)
+
 def _jr():
     """Tools job registry (lazy: boundary rule)."""
     from suijin.modules.tools.lib import job_registry
@@ -350,10 +356,9 @@ def _audit_step(state, tool_name, tool_args, success, duration_ms):
     impossible)."""
     try:
         from suijin.kernel.audit import ToolAudit
-        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
         iteration = (state.get("_current_step") or {}).get("iteration") or state.get("current_iteration") or "?"
-        ToolAudit(WORKSPACE_DIR / "outputs" / "audit_trails", "agent_steps.jsonl", flush_every=1).record(
+        ToolAudit(_artifact_dir("audit_trails"), "agent_steps.jsonl", flush_every=1).record(
             surface="agent",
             name=tool_name,
             args=tool_args,

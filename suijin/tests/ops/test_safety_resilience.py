@@ -79,23 +79,6 @@ class TestApprovals:
         items = ap.list_approvals()
         assert any(i["tool"] == "msf_run" for i in items)
 
-    def test_cli_list_approve_deny(self, monkeypatch, tmp_path):
-        from suijin.modules.ops.lib import approvals as ap
-
-        monkeypatch.setattr(ap, "APPROVALS_PATH", tmp_path / "a.json")
-        monkeypatch.setattr(ap, "SESSION_PATH", tmp_path / "s.json")
-        code, out = run_cli(["approvals", "list"])
-        assert code == 0 and "No HITL blocks" in out
-        ap.record_pending("hydra_brute", {"target": "t"})
-        code, out = run_cli(["approvals", "approve", "1"])
-        assert "approved" in out and "allowed for this session" in out
-        code, out = run_cli(["approvals", "deny", "1"])
-        assert "denied" in out
-        code, out = run_cli(["approvals", "clear"])
-        assert "cleared" in out
-
-
-# ── Panic button ───────────────────────────────────────────────────────
 
 
 class TestPanic:

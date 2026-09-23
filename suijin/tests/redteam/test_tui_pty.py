@@ -76,8 +76,9 @@ def test_pause_chord_commands_and_resume(rig):
     fifo = rig
     time.sleep(5)  # engagement boots, turn 1 in flight (6s hold)
 
-    # ESC ESC mid-think: instant PAUSED + banner — the LLM is STILL stuck
-    _send(fifo, b"\x1b\x1b")
+    # /pause mid-think: instant PAUSED + banner — the LLM is STILL stuck
+    # (ESC ESC was removed 2026-09-23: the chord was a landmine)
+    _send(fifo, b"/pause\r")
     time.sleep(5)  # timeout-poll is 2s; allow a full poll + processing
     out = _log_text()
     assert "Paused" in out, "no pause banner within 5s of the chord"

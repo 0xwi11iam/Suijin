@@ -68,14 +68,6 @@ class TestSimpleVerbs:
         assert code == 0
         assert "blue_recon" in out
 
-    def test_labs_lists_real_labs(self):
-        code, out = run_cli(["labs"])
-        assert code == 0
-        # every real lab directory is present with its actual port
-        assert "blue_target" in out and ":5906" in out
-        assert "devops_dashboard" in out and ":5700" in out
-        assert "oauth_lab" in out and ":5902" in out
-        assert "python3 suijin/lab/" in out
 
     def test_workspace_status(self):
         code, out = run_cli(["workspace"])

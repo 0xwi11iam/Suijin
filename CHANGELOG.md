@@ -6,6 +6,27 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v6.9.0 — The Focus Release
+
+The surface shrinks to what an operator uses; the .sje bundle is the
+one durability story.
+
+### Removed
+- Settings knobs: supervisor model/interval, guardrail mode
+- Pickers: Blue Team + Settings unlisted (code kept); Operator Tools
+  = resume / replay / cleaner only
+- CLI verbs: dossier, scope, approvals, labs, timeline, battle,
+  debrief (+ CLI-only libs)
+- Operation-state recovery machinery (recovery.json snapshots, resume
+  gate, legacy dump) — the .sje covers durability
+
+### Fixed
+- Replay: engagement-scoped audit trails + history-aware picker
+- Workspace cleaner works on the real layout (proof-tested)
+- Live models.dev pricing; coding-plan runs labeled PAYG-equivalent
+- MEM = this engagement; /compact always works; strip shrink-gap dead
+- Evidence-joined reports; engagement folder stays at run end
+
 ## v6.8.0 — Crash-Proof Engagements
 
 An .sje exists for every exit path, resume no longer requires memorizing

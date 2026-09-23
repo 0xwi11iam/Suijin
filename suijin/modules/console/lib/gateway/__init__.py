@@ -71,6 +71,12 @@ class EngageBody(BaseModel):
 # ── app + auth ────────────────────────────────────────────────────────────
 
 
+
+def _artifact_dir(name):
+    from suijin.modules.platform.lib.workspace import artifact_dir
+
+    return artifact_dir(name)
+
 def create_app(token: str | None = None) -> FastAPI:
     """Build the gateway app. token=None -> generate (server mode)."""
     app = FastAPI(
@@ -279,7 +285,7 @@ def create_app(token: str | None = None) -> FastAPI:
             """Tail the audit JSONLs and push structured frames."""
             from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-            trails = WORKSPACE_DIR / "outputs" / "audit_trails"
+            trails = _artifact_dir("audit_trails")
             from suijin.modules.agent.lib.nodes.subagent_node import _state_path as _ft_path
 
             ft_path = _ft_path()

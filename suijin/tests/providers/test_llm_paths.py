@@ -19,13 +19,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 
 class TestProviderPricing:
-    def test_exact_model(self):
+    def test_exact_model(self, monkeypatch):
         from suijin.modules.providers.lib import _price_for
+        from suijin.modules.providers.lib import model_meta as _mm
+
+        monkeypatch.setattr(_mm, "_catalog", lambda: None)  # offline: the fallback table answers
+
 
         assert _price_for("deepseek-v4-flash") == (0.27, 1.10)
 
-    def test_prefix_match(self):
+    def test_prefix_match(self, monkeypatch):
         from suijin.modules.providers.lib import _price_for
+        from suijin.modules.providers.lib import model_meta as _mm
+
+        monkeypatch.setattr(_mm, "_catalog", lambda: None)  # offline: the fallback table answers
+
 
         price = _price_for("anthropic/claude-opus-4-8")
         assert price == (15.0, 75.0)

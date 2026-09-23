@@ -161,7 +161,6 @@ Engagement config at `suijin/engagement_schema.json`. Tracks:
 - Primary/secondary targets, scope, allowed ports/techniques
 - Current phase (recon/exploit/post-exploit), completed phases
 - All findings with severity, endpoint, evidence
-- Session recovery data for crash resilience
 
 ###  REPORT WRITING — MANDATORY ON COMPLETION
 At the END of every engagement, BEFORE calling complete, you MUST:

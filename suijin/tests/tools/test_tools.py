@@ -387,18 +387,6 @@ class TestConstantsExist:
         assert PROVIDER_GEMINI == "gemini"
         assert PROVIDER_ANTHROPIC == "anthropic"
 
-    def test_model_ids(self):
-        from suijin.modules.platform.lib.constants import (
-            DEFAULT_MODEL,
-            GEMINI_MODEL,
-            SENTINEL_MODEL,
-            SUPERVISOR_MODEL,
-        )
-
-        assert "deepseek" in DEFAULT_MODEL
-        assert "Qwen" in SENTINEL_MODEL
-        assert "Qwen" in SUPERVISOR_MODEL
-        assert "gemini" in GEMINI_MODEL
 
     def test_expert_models_is_list(self):
         from suijin.modules.platform.lib.constants import EXPERT_MODELS

@@ -92,7 +92,6 @@ def red_mocks(monkeypatch, tmp_path):
     used to pollute the operator's real outputs/logs/engage_crash.log)."""
     fake_agent = FakeAgent(_happy_events())
     monkeypatch.setattr(rt, "SuijinAgentGraph", lambda **kwargs: fake_agent)
-    monkeypatch.setattr(rt, "DUMP_PATH", Path(str(tmp_path)) / "recovery.json")
     from suijin.modules.platform.lib import workspace as _ws
 
     monkeypatch.setattr(_ws, "WORKSPACE_DIR", tmp_path)
@@ -113,12 +112,6 @@ class TestRedTeamSmoke:
         _run_smoke()
         assert red_mocks["agent"].built is True
 
-    def test_state_dump_written(self, red_mocks):
-        _run_smoke()
-        dump = Path(red_mocks["tmpdir"]) / "recovery.json"
-        assert dump.exists()
-        data = __import__("json").loads(dump.read_text())
-        assert data["objective"] == "test target"
 
     def test_proxy_config_applied(self, red_mocks, monkeypatch):
         """proxy_url in config -> set_proxy called with it."""

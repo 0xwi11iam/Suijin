@@ -98,7 +98,6 @@ class RedConfig(BaseModel):
     max_iterations: int = Field(default=100000, ge=1, le=1000000)  # operator: infinite by default
     posture: str = Field(default="assertive")  # recon | assertive — the mode-governor dial
     temperature: float = Field(default=0.4, ge=0.0, le=2.0)
-    supervisor_interval: int = Field(default=5, ge=1)
     librarian_interval: int = Field(default=10, ge=1)  # observations per librarian LLM digest
     cost_hard_cap_usd: float = Field(default=0.0, ge=0.0)  # 0 = unlimited (operator)
     cost_budget_usd: float = Field(default=0.0, ge=0.0)  # 0 = unlimited (operator)

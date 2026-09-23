@@ -789,15 +789,6 @@ def run_export(args) -> int:
     return 0 if ok else 1
 
 
-def run_debrief(args) -> int:
-    """`suijin debrief` — engagement analytics from audit trails."""
-    from suijin.modules.ops.lib.debrief import load_audits, render_debrief
-
-    trails = load_audits()
-    print(render_debrief(trails, verbose=bool(getattr(args, "verbose", False))))
-    return 0
-
-
 def run_replay(args) -> int:
     """`suijin replay` — step through an engagement timeline."""
     from suijin.modules.ops.lib import replay as rp
@@ -878,19 +869,6 @@ def run_eval(args) -> int:
             do_sweep=not getattr(args, "no_sweep", False),
         )
     )
-    return 0
-
-
-def run_real_battle_cmd(args) -> int:
-    """`suijin battle --real|--mock` — the actual red agent vs the live lab."""
-    from suijin.modules.ops.lib.real_battle import render_real_verdict, run_real_battle
-
-    mock = not getattr(args, "real", False)  # default --mock semantics unless --real
-    port = getattr(args, "port", 0) or 0
-    if port == 5906:
-        port = None  # default scripted port not for real battles
-    v = run_real_battle(port=port, mock=mock, objective=getattr(args, "objective", "") or "")
-    print(render_real_verdict(v))
     return 0
 
 
@@ -1056,21 +1034,6 @@ def run_bench_cmd(args) -> int:
     return 0 if ok else 1
 
 
-def run_battle_cmd(args) -> int:
-    """`suijin battle` — purple team: scripted red vs pattern blue, live scoreboard."""
-    if getattr(args, "real", False) or getattr(args, "mock", False):
-        return run_real_battle_cmd(args)
-    from suijin.modules.ops.lib.battle import run_battle
-
-    result = run_battle(port=int(getattr(args, "port", 0) or 5906))
-    print(
-        f"\nred {result['red_score']} — blue {result['blue_score']} | "
-        f"flags {len(result['flags'])} | detected {result['detected']} | "
-        f"tarpits {result['tarpitted']} | blocked {result['blocked']}"
-    )
-    return 0
-
-
 def _first_docstring(path: str) -> str:
     import re
 
@@ -1099,33 +1062,6 @@ def _lab_port(path: str) -> str:
         # docstring hints like "Port 5906" / "Port: 5700"
         m = re.search(r"[Pp]ort[:\s]+(\d{4,5})", text[:4000])
     return m.group(1) if m else "?"
-
-
-def run_labs_list() -> int:
-    """Built-in vulnerable labs: ports, descriptions, launch commands."""
-    lab_dir = os.path.join(_PKG_DIR, "lab")
-    found = 0
-    for name in sorted(os.listdir(lab_dir)):
-        d = os.path.join(lab_dir, name)
-        if not os.path.isdir(d) or name.startswith("__"):
-            continue
-        app = next((c for c in ("app.py", "vulnerable_app.py") if os.path.exists(os.path.join(d, c))), None)
-        if not app:
-            continue
-        found += 1
-        port = _lab_port(os.path.join(d, app))
-        suffix = ""
-        if port != "?":
-            suffix = "" if _port_free(int(port)) else "  (IN USE)"
-        print(f"  {name:18} :{port:<5} python3 suijin/lab/{name}/{app}{suffix}")
-        doc = _first_docstring(os.path.join(d, app))
-        if doc:
-            print(f"  {'':18} {doc}")
-    if not found:
-        print("No labs found under suijin/lab/.")
-        return 1
-    print("\nStart one, then point Red Team at http://127.0.0.1:<port>.")
-    return 0
 
 
 def run_selftest() -> int:
@@ -1344,17 +1280,6 @@ def run_creds(args) -> int:
             print(f"No credentials matching '{args.service}'.")
     elif action == "export":
         print(vault.export_credentials(_pass(), redact=not getattr(args, "plain", False)))
-    return 0
-
-
-def run_dossier(args) -> int:
-    from suijin.modules.ops.lib.dossier import build_dossier, render_dossier
-
-    try:
-        print(render_dossier(build_dossier(args.target)))
-    except ValueError as e:
-        print(f"error: {e}")
-        return 1
     return 0
 
 
@@ -1580,67 +1505,6 @@ def run_skills(args) -> int:
         print(si.skill_rollback(name, rev=getattr(args, "rev", None)))
         return 0
     return 1
-
-
-def run_labs_campaign(args) -> int:
-    from suijin.modules.ops.lib.housekeeping import render_campaign, run_campaign
-
-    specs = []
-    lab_dir = Path(_PKG_DIR) / "lab"
-    for d in sorted(lab_dir.iterdir()):
-        if not d.is_dir() or d.name.startswith("__"):
-            continue
-        app = next((c for c in ("app.py", "vulnerable_app.py") if (d / c).exists()), None)
-        if not app:
-            continue
-        port = _lab_port(d / app)
-        if port:
-            specs.append({"name": d.name, "port": int(port)})
-    if not specs:
-        print("No labs found.")
-        return 1
-    # boot each lab, probe, stop — sequential to keep ports clean
-    import subprocess
-    import sys
-    import urllib.request
-
-    results = {}
-    for spec in specs:
-        app = next(
-            (
-                lab_dir / spec["name"] / c
-                for c in ("app.py", "vulnerable_app.py")
-                if (lab_dir / spec["name"] / c).exists()
-            )
-        )
-        proc = subprocess.Popen([sys.executable, str(app)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        try:
-            for _ in range(15):
-                try:
-                    urllib.request.urlopen(f"http://127.0.0.1:{spec['port']}/", timeout=1)
-                    break
-                except Exception:
-                    time.sleep(0.3)
-            single = run_campaign([spec], out_dir=_ad("reports"))
-            results.update(single["labs"])
-        finally:
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-    merged = {
-        "ran_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-        "labs": results,
-        "summary": {
-            "total": len(results),
-            "reachable": sum(1 for v in results.values() if v["reachable"]),
-            "flags_exposed": sum(len(v["flags"]) for v in results.values()),
-        },
-    }
-    print(render_campaign(merged))
-    print("\ncapability baseline — landing-page exposure only; exploitation is the agent's job.")
-    return 0
 
 
 def _enrich_traffic(entries: list) -> list:
@@ -1945,23 +1809,6 @@ def run_watch(args) -> int:
     return 0
 
 
-def run_timeline() -> int:
-    from suijin.modules.ops.lib.housekeeping import build_timeline
-
-    events = build_timeline()
-    if not events:
-        print("No engagement history yet (audits, sessions, reports all empty).")
-        return 0
-    last_day = None
-    for e in events:
-        day, clock = e["ts"].split(" ")
-        if day != last_day:
-            print(f"\n{day}")
-            last_day = day
-        print(f"  {clock}  {e['kind']:20} {e['detail'][:70]}")
-    return 0
-
-
 def run_clean(args) -> int:
     from suijin.modules.ops.lib.housekeeping import clean_workspace
 
@@ -1991,47 +1838,6 @@ def run_notify(args) -> int:
     return 1
 
 
-def run_scope(args) -> int:
-    """`suijin scope` — Burp-style scope TUI (edits suijin/policy.json)."""
-    import curses
-
-    from suijin.modules.console.lib import tui_scope
-
-    try:
-        curses.wrapper(tui_scope.run)
-        return 0
-    except curses.error as e:
-        print(f"error: scope TUI needs a real terminal — {e}")
-        print("non-interactive: edit suijin/policy.json directly, or `suijin policy show`")
-        return 1
-    except Exception as e:  # noqa: BLE001 — any scope-TUI crash: terminal is
-        # restored by wrapper; ONE friendly line instead of a traceback
-        print(f"error: scope TUI failed — {type(e).__name__}: {e}")
-        print("non-interactive: edit suijin/policy.json directly, or `suijin policy show`")
-        return 1
-
-
-def run_approvals(args) -> int:
-    from suijin.modules.ops.lib import approvals as ap
-
-    action = getattr(args, "approvals_action", "list")
-    if action == "list":
-        print(ap.render_list())
-        return 0
-    if action == "clear":
-        print(ap.clear_session())
-        return 0
-    item_id = getattr(args, "id", None)
-    if item_id is None:
-        print("error: approval id required (see: suijin approvals list)")
-        return 2
-    if action == "approve":
-        print(ap.decide(int(item_id), approve=True))
-    elif action == "deny":
-        print(ap.decide(int(item_id), approve=False))
-    return 0
-
-
 def run_panic(args) -> int:
     from suijin.modules.ops.lib.panic import panic
 
@@ -2045,7 +1851,7 @@ def run_compliance(args) -> int:
     findings = load_findings(getattr(args, "engagement", None))
     if not findings:
         print(
-            "No findings recorded for this engagement (findings land in suijin_agent/audit_trails/ during engagements)."
+            "No findings recorded for this engagement (findings land in the engagement's audit_trails/ during engagements)."
         )
         return 0
     print(render(map_findings(findings)))
@@ -2066,8 +1872,6 @@ _KNOWN_VERBS = frozenset(
         "workspace",
         "reports",
         "sessions",
-        "timeline",
-        "dossier",
         "clean",
         "wordlist",
         "gateway",
@@ -2085,12 +1889,9 @@ _KNOWN_VERBS = frozenset(
         "spar",
         "watch",
         "skills",
-        "labs",
         "export",
-        "debrief",
         "replay",
         "eval",
-        "battle",
         "bench",
         "pack",
         "install",
@@ -2105,9 +1906,7 @@ _KNOWN_VERBS = frozenset(
         "module",
         "notify",
         "compliance",
-        "approvals",
         "panic",
-        "scope",
         "config",
     }
 )
@@ -2148,15 +1947,10 @@ def main(argv=None):
         "workspace": ("workspace layout, usage, and symlink health", run_workspace_status),
         "reports": ("list engagement reports", run_reports_list),
         "sessions": ("list saved engagement sessions", run_sessions_list),
-        "timeline": ("unified engagement timeline across artifacts", run_timeline),
     }
     for name, (help_text, fn) in SIMPLE_COMMANDS.items():
         p = sub.add_parser(name, help=help_text)
         p.set_defaults(func=lambda _a, _fn=fn: _fn())
-
-    dossier = sub.add_parser("dossier", help="per-target intelligence dossier (KG + failures + history)")
-    dossier.add_argument("target", help="IP / hostname / URL")
-    dossier.set_defaults(func=run_dossier)
 
     clean = sub.add_parser("clean", help="workspace cleaner — dry-run by default")
     clean.add_argument("--apply", action="store_true", help="archive stale files then delete")
@@ -2260,21 +2054,11 @@ def main(argv=None):
     skills.set_defaults(func=lambda _a: run_skills_list())
 
     # labs: list (default) + run campaign
-    labs = sub.add_parser("labs", help="built-in labs: list / run campaign")
-    labs_sub = labs.add_subparsers(dest="labs_action")
-    labs_sub.add_parser("list", help="list labs with ports").set_defaults(func=lambda _a: run_labs_list())
-    labs_sub.add_parser("run", help="boot + probe every lab; capability matrix").set_defaults(func=run_labs_campaign)
-    labs.set_defaults(func=lambda _a: run_labs_list())
-
     export = sub.add_parser("export", help="chain-of-custody evidence bundle (zip + SHA-256 manifest)")
     export.add_argument("--out", help="output zip path (default suijin_agent/exports/<ts>.zip)")
     export.add_argument("--with-creds", action="store_true", help="include credentials.json (sensitive)")
     export.add_argument("--verify", metavar="ZIP", help="verify an existing bundle's hashes")
     export.set_defaults(func=run_export)
-
-    debrief = sub.add_parser("debrief", help="engagement analytics from audit trails")
-    debrief.add_argument("-v", "--verbose", action="store_true", help="per-engagement detail")
-    debrief.set_defaults(func=run_debrief)
 
     replay = sub.add_parser("replay", help="step through an engagement timeline")
     replay.add_argument("--list", dest="list_replays", action="store_true", help="list replayable engagements")
@@ -2288,19 +2072,6 @@ def main(argv=None):
     ev.add_argument("--threshold", type=int, default=5, help="score threshold to evaluate (default 5)")
     ev.add_argument("--no-sweep", action="store_true", help="skip the threshold sweep")
     ev.set_defaults(func=run_eval)
-
-    battle = sub.add_parser("battle", help="red vs blue on the lab: --real drives the actual LLM agent")
-    battle.add_argument("--port", type=int, default=5906, help="lab port (default 5906; --real/--mock use 5907)")
-    battle.add_argument(
-        "--real",
-        action="store_true",
-        help="REAL battle: the LLM red agent attacks the live lab; blue scores every request (uses your configured provider)",
-    )
-    battle.add_argument(
-        "--mock", action="store_true", help="real battle pipeline with a scripted red (offline, deterministic)"
-    )
-    battle.add_argument("--objective", default="", help="override the red objective (--real)")
-    battle.set_defaults(func=run_battle_cmd)
 
     # bench: graded lab benchmark (flags/tools/cost) with persisted history
     bench_p = sub.add_parser("bench", help="graded lab benchmark: agent vs lab, flags/tools/cost score")
@@ -2456,24 +2227,9 @@ def main(argv=None):
     compliance.add_argument("engagement", nargs="?", default=None, help="engagement name (default: newest audit trail)")
     compliance.set_defaults(func=run_compliance)
 
-    approvals = sub.add_parser("approvals", help="HITL approval console: list/approve/deny/clear")
-    approvals_sub = approvals.add_subparsers(dest="approvals_action")
-    approvals_sub.add_parser("list", help="list approval requests").set_defaults(func=run_approvals)
-    a_ok = approvals_sub.add_parser("approve", help="allow a tool for this session")
-    a_ok.add_argument("id", type=int, help="approval request id")
-    a_ok.set_defaults(func=run_approvals)
-    a_no = approvals_sub.add_parser("deny", help="hard-block a tool for this session")
-    a_no.add_argument("id", type=int, help="approval request id")
-    a_no.set_defaults(func=run_approvals)
-    approvals_sub.add_parser("clear", help="reset session verdicts (keep the log)").set_defaults(func=run_approvals)
-    approvals.set_defaults(func=lambda _a: run_approvals(argparse.Namespace(approvals_action="list")))
-
     panic_cmd = sub.add_parser("panic", help="stop all Suijin processes + clear live state NOW")
     panic_cmd.add_argument("--dry-run", action="store_true", help="report what would happen")
     panic_cmd.set_defaults(func=run_panic)
-
-    scope_cmd = sub.add_parser("scope", help="Burp-style target scope TUI (include/exclude/subdomains)")
-    scope_cmd.set_defaults(func=run_scope)
 
     config = sub.add_parser("config", help="inspect and validate configuration")
     config_sub = config.add_subparsers(dest="config_action")
@@ -2532,7 +2288,6 @@ def _audit_cli_call(args):
     """One audit line per CLI verb invocation (never raises)."""
     try:
         from suijin.kernel.audit import ToolAudit
-        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
         verb = getattr(args, "command", "") or "?"
         tool_args = {
@@ -2540,7 +2295,7 @@ def _audit_cli_call(args):
             for k, v in vars(args).items()
             if k not in ("func", "command") and isinstance(v, (str, int, bool, float))
         }
-        ToolAudit(WORKSPACE_DIR / "outputs" / "audit_trails", "cli_calls.jsonl", flush_every=1).record(
+        ToolAudit(_ad("audit_trails"), "cli_calls.jsonl", flush_every=1).record(
             surface="cli", name=verb, args=tool_args, outcome="invoked"
         )
     except Exception:  # noqa: BLE001 — audit must never break the CLI

@@ -194,9 +194,7 @@ def test_workspace_fs():
 def test_engagement_schema():
     from suijin.modules.agent.lib.engagement import (
         add_finding_to_schema,
-        clear_recovery_state,
         load_engagement_schema,
-        save_session_state,
         transition_phase,
         update_engagement_stats,
     )
@@ -212,16 +210,6 @@ def test_engagement_schema():
     transition_phase("exploitation")
     schema3 = load_engagement_schema()
     assert schema3["phases"]["current"] == "exploitation"
-    # Session save
-    state = {"original_objective": "test_recovery", "current_phase": "recon", "current_iteration": 5}
-    path = save_session_state(state)
-    assert path.endswith("recovery.json") and "engagements" in path  # scoped per engagement
-    from suijin.modules.agent.lib.engagement import has_recovery_state, load_session_state
-
-    assert has_recovery_state()
-    recovery = load_session_state()
-    assert recovery["objective"] == "test_recovery"
-    clear_recovery_state()
 
 
 def test_compliance_module():

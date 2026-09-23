@@ -3,18 +3,15 @@ suijin/core/engagement.py — Engagement schema, validation, and session persist
 
 Handles:
 - Loading and validating engagement_schema.json
-- Session save/restore for crash recovery (operation_state_recovery.json)
 - Auto-save every N iterations
 - Restore from checkpoint on startup
 """
 
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -34,20 +31,9 @@ def _schema_path():
     return engagement_dir() / "schema.json"
 
 
-def _recovery_path():
-    v = globals().get("RECOVERY_PATH")
-    if v is not None:
-        return v  # monkeypatched / set by the operator
-    from suijin.modules.platform.lib.workspace import engagement_dir
-
-    return engagement_dir() / "recovery.json"
-
-
 def __getattr__(name):
     if name == "SCHEMA_PATH":
         return _schema_path()
-    if name == "RECOVERY_PATH":
-        return _recovery_path()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -147,95 +133,6 @@ def transition_phase(new_phase: str) -> None:
     if old_phase not in schema["phases"].get("completed", []):
         schema["phases"].setdefault("completed", []).append(old_phase)
     save_engagement_schema(schema)
-
-
-# ── Session Recovery ────────────────────────────────────────────────────────
-
-
-def recovery_path():
-    """Where the 5-iteration crash snapshot lives."""
-    return _recovery_path()
-
-
-def save_session_state(state: dict) -> str:
-    """Save full agent state for crash recovery. Returns the file path."""
-    recovery_data = {
-        "_recovery_version": "2.0",
-        "saved_at": _utc_now(),
-        "objective": state.get("original_objective", ""),
-        "phase": state.get("current_phase", "informational"),
-        "iteration": state.get("current_iteration", 0),
-        "cost_usd": state.get("total_cost_usd", 0.0),
-        "findings": state.get("findings", []),
-        "flags_found": state.get("flags_found", []),
-        "messages": state.get("messages", [])[-20:],  # last 20 messages
-        "execution_trace": _serialize_trace(state.get("execution_trace", [])),
-        "todo_list": state.get("todo_list", []),
-        "knowledge_graph_snapshot": state.get("knowledge_graph", {}),
-        "chain_findings_memory": state.get("chain_findings_memory", []),
-        "audit_trail": state.get("audit_trail", [])[-50:],
-        "target_info": _serialize_target(state.get("target_info", {})),
-        "engagement_stats": load_engagement_schema().get("stats", {}),
-    }
-    _recovery_path().write_text(json.dumps(recovery_data, indent=2, default=str))
-    return str(_recovery_path())
-
-
-_GARBAGE_MARKERS = (";;", "\\*", "# program rules", "# program", "helvetica")
-
-
-def _objective_is_garbage(objective: str) -> bool:
-    """A pasted policy page is not an objective. Heuristics from the field:
-    the 92KB blob whose 'objective' was 'Helvetica;; \\*;; # Program Rules…'."""
-    obj = str(objective or "").strip()
-    if len(obj) < 10:
-        return True
-    low = obj.lower()
-    if any(m in low for m in _GARBAGE_MARKERS[:3]):
-        return True
-    return obj.count("\n") > 8 and obj.count("\n") / max(1, len(obj)) > 0.05  # wall of pasted text
-
-
-def load_session_state() -> Optional[dict]:
-    """Load a previously saved session for recovery. Returns None if no save
-    exists — or when the saved objective is garbage (a pasted policy page):
-    the blob is quarantined to archive/ and the run starts fresh."""
-    if not _recovery_path().exists():
-        return None
-    try:
-        data = json.loads(_recovery_path().read_text())
-    except json.JSONDecodeError:
-        logger.warning("Corrupt recovery file — ignoring")
-        return None
-    if not data.get("objective"):
-        return None
-    if _objective_is_garbage(data.get("objective")):
-        with contextlib.suppress(Exception):
-            import shutil
-
-            quarantine = _recovery_path().with_suffix(".garbage.json")
-            shutil.move(str(_recovery_path()), str(quarantine))
-        logger.warning("Recovery objective is garbage (pasted policy?) — quarantined, starting fresh")
-        return None
-    logger.info(
-        "Recovery state found: phase=%s iteration=%s saved=%s",
-        data.get("phase"),
-        data.get("iteration"),
-        data.get("saved_at"),
-    )
-    return data
-
-
-def clear_recovery_state() -> None:
-    """Remove the recovery file after successful completion."""
-    if _recovery_path().exists():
-        _recovery_path().unlink()
-        logger.info("Recovery state cleared — engagement completed normally")
-
-
-def has_recovery_state() -> bool:
-    """Check if a recovery save exists."""
-    return _recovery_path().exists() and _recovery_path().stat().st_size > 0
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

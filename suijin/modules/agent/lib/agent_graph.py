@@ -533,16 +533,6 @@ class SuijinAgentGraph:
                 except Exception as e:
                     logger.debug(f"Drift analysis skipped: {e}")
 
-            # ── Session persistence (save every 5 iterations) ──────
-            if iteration > 0 and iteration % 5 == 0:
-                try:
-                    from suijin.modules.agent.lib.engagement import save_session_state
-
-                    merged = {**state, **result}
-                    save_session_state(merged)
-                except Exception as e:
-                    logger.warning(f"Session save failed: {e}")
-
             return result
         except Exception as e:
             logger.exception("think crashed")
@@ -613,7 +603,6 @@ class SuijinAgentGraph:
         user_id: str = "local",
         project_id: str = "default",
         session_id: str = "",
-        resume_from_recovery: bool = False,
     ) -> dict:
         """Run the agent for an objective. Returns the final state dict.
 
@@ -623,21 +612,15 @@ class SuijinAgentGraph:
             user_id: User identifier.
             project_id: Project identifier.
             session_id: Session identifier.
-            resume_from_recovery: If True, restore state from operation_state_recovery.json.
 
         Returns:
             Final agent state dict with execution_trace, target_info, messages.
         """
         self._build()
 
-        # Initialize engagement schema and recovery
-        from suijin.modules.agent.lib.engagement import (
-            clear_recovery_state,
-            has_recovery_state,
-            load_engagement_schema,
-            load_session_state,
-            save_engagement_schema,
-        )
+        # Initialize the engagement schema (crash durability is the .sje
+        # bundle's job — the recovery.json machinery was removed)
+        from suijin.modules.agent.lib.engagement import load_engagement_schema, save_engagement_schema
 
         initial_state = {
             "_run_config": self.run_config,
@@ -646,26 +629,6 @@ class SuijinAgentGraph:
             "project_id": project_id,
             "session_id": session_id,
         }
-
-        # Check for crash recovery
-        if resume_from_recovery and has_recovery_state():
-            recovery = load_session_state()
-            if recovery and recovery.get("objective") == objective:
-                logger.info(f"Resuming from recovery: iteration {recovery.get('iteration', 0)}")
-                initial_state["_recovery_data"] = recovery
-                initial_state["original_objective"] = recovery["objective"]
-                initial_state["current_phase"] = recovery.get("phase", "informational")
-                initial_state["current_iteration"] = recovery.get("iteration", 0)
-                initial_state["total_cost_usd"] = recovery.get("cost_usd", 0.0)
-                initial_state["findings"] = recovery.get("findings", [])
-                initial_state["flags_found"] = recovery.get("flags_found", [])
-                initial_state["todo_list"] = recovery.get("todo_list", [])
-                initial_state["chain_findings_memory"] = recovery.get("chain_findings_memory", [])
-                initial_state["knowledge_graph"] = recovery.get("knowledge_graph_snapshot", {})
-                if recovery.get("messages"):
-                    initial_state["messages"] = [
-                        {"role": "system", "content": "Session restored from crash recovery. Resume operations."}
-                    ] + recovery["messages"]
 
         # Init engagement schema
         schema = load_engagement_schema()
@@ -688,17 +651,10 @@ class SuijinAgentGraph:
         try:
             final_state = await self._graph.ainvoke(initial_state, config)
         except Exception:
-            logger.exception("Agent graph crashed — saving recovery state")
-            try:
-                from suijin.modules.agent.lib.engagement import save_session_state
-
-                save_session_state(initial_state)
-            except Exception:
-                pass
+            # crash durability is the crash-saver's .sje (redteamer) —
+            # mid-run snapshots were removed with the recovery machinery
+            logger.exception("Agent graph crashed")
             raise
-
-        # Clear recovery on clean completion
-        clear_recovery_state()
 
         logger.info(
             f"Agent run complete: {final_state.get('current_iteration', 0)} iterations, "

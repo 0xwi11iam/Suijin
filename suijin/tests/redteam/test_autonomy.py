@@ -60,7 +60,6 @@ def isolated(monkeypatch, tmp_path):
     from suijin.modules.platform.lib import workspace as _ws
 
     monkeypatch.setattr(_ws, "WORKSPACE_DIR", tmp_path)
-    monkeypatch.setattr(rt, "DUMP_PATH", Path(str(tmp_path)) / "recovery.json")
     monkeypatch.setattr(rt.sc, "pause_console", lambda ctx, input_fn: "")
     return tmp_path
 

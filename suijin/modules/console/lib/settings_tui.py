@@ -77,8 +77,6 @@ ALL_FIELDS = OrderedDict(
         ("max_tokens_per_request", ("int", (1, 128000))),
         ("context_window", ("int", (0, 10_000_000))),
         ("max_iterations", ("int", (1, 1000000))),
-        ("supervisor_model_id", ("string",)),
-        ("supervisor_interval", ("int", (1, 100))),
         ("librarian_interval", ("int", (1, 1000))),
         # ---- Cost guardrails ----
         ("cost_alert_usd", ("float", (0.0, 1000.0))),
@@ -88,7 +86,6 @@ ALL_FIELDS = OrderedDict(
         ("proxy_url", ("string",)),
         # ---- Operational Modes ----
         ("mode_hitl", ("bool",)),
-        ("mode_guardrail", ("bool",)),
         ("mode_deploy_subagent", ("bool",)),
         ("mode_audit_trail", ("bool",)),
         ("subagent_count", ("int", (1, 5))),
@@ -120,8 +117,6 @@ _GROUPS = [
             "max_tokens_per_request",
             "context_window",
             "max_iterations",
-            "supervisor_model_id",
-            "supervisor_interval",
             "librarian_interval",
         ],
     ),
@@ -129,7 +124,7 @@ _GROUPS = [
     ("Proxy", ["proxy_url"]),
     (
         "Operational modes",
-        ["mode_hitl", "mode_guardrail", "mode_deploy_subagent", "mode_audit_trail", "subagent_count"],
+        ["mode_hitl", "mode_deploy_subagent", "mode_audit_trail", "subagent_count"],
     ),
     ("Integrations", ["metasploit_rpc_host", "metasploit_rpc_port"]),
 ]

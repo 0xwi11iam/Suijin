@@ -9,6 +9,8 @@ Offline, no API keys.
 
 from __future__ import annotations
 
+import contextlib
+import json
 import sys
 from pathlib import Path
 
@@ -19,9 +21,49 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from suijin.modules.ops.lib.debrief import load_audits
-
 console = Console()
+
+
+def _iter_audit_files() -> list[Path]:
+    """Every audit trail on disk: the live engagement + all past ones
+    (engagement folders stay in place at run end — history is finally
+    enumerable) + the legacy root path while it still has content."""
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR, engagement_dir
+
+    roots = []
+    with contextlib.suppress(Exception):
+        engs = WORKSPACE_DIR / "engagements"
+        if engs.is_dir():
+            roots.extend(sorted(engs.glob("*/audit_trails")))
+    roots.append(engagement_dir() / "audit_trails")  # live one last (newest)
+    legacy = WORKSPACE_DIR / "outputs" / "audit_trails"
+    if legacy.is_dir():
+        roots.insert(0, legacy)
+    files: dict[str, Path] = {}
+    for r in roots:
+        if r.is_dir():
+            for f in sorted(r.glob("*.json")):
+                files.setdefault(str(f), f)
+    return list(files.values())
+
+
+def load_audits(audit_dir: Path | None = None) -> list[dict]:
+    """Load every audit trail across engagements, oldest first."""
+    if audit_dir is not None:
+        d = Path(audit_dir)
+        files = sorted(d.glob("*.json")) if d.is_dir() else []
+    else:
+        files = _iter_audit_files()
+    out: list[dict] = []
+    for f in files:
+        try:
+            t = json.loads(f.read_text())
+            t["_file"] = f.name
+            t.setdefault("engagement", f.parent.parent.name)
+            out.append(t)
+        except (OSError, ValueError):
+            continue
+    return out
 
 
 def list_replays(audit_dir: Path | None = None) -> list[dict]:

@@ -5,7 +5,6 @@ import zipfile
 
 import pytest
 
-from suijin.modules.ops.lib import debrief as db
 from suijin.modules.ops.lib import replay as rp
 from suijin.modules.ops.lib.export_bundle import build_bundle, verify_bundle
 
@@ -132,41 +131,6 @@ class TestExport:
 
 
 # ── debrief ────────────────────────────────────────────────────────────
-
-
-class TestDebrief:
-    def test_load_and_stats(self, ws):
-        trails = db.load_audits(ws["ws"] / "outputs" / "audit_trails")
-        assert len(trails) == 1
-        s = db.engagement_stats(trails[0])
-        assert s["engagement"] == "testlab"
-        assert s["actions"] == 3 and s["success"] == 2 and s["failed"] == 1
-        assert s["findings"] == 2
-        assert s["findings_by_severity"] == {"HIGH": 1, "LOW": 1}
-        assert s["duration_s"] == 300.0
-        assert s["tools"]["http_request"] == 2
-
-    def test_fleet_trends(self, ws):
-        trails = db.load_audits(ws["ws"] / "outputs" / "audit_trails")
-        f = db.fleet_stats(trails)
-        assert f["engagements"] == 1
-        assert f["total_findings"] == 2
-        assert f["total_cost_usd"] == 0.5
-        assert f["avg_duration_s"] == 300.0
-
-    def test_render(self, ws):
-        trails = db.load_audits(ws["ws"] / "outputs" / "audit_trails")
-        out = db.render_debrief(trails, verbose=True)
-        assert "ENGAGEMENTS (1)" in out
-        assert "testlab" in out
-        assert "FLEET TRENDS" in out
-        assert "http_request" in out  # verbose: tool breakdown
-
-    def test_empty(self, tmp_path):
-        assert "No audit trails" in db.render_debrief(db.load_audits(tmp_path))
-
-
-# ── replay ─────────────────────────────────────────────────────────────
 
 
 class TestReplay:
