@@ -1050,6 +1050,15 @@ class EngagementUI:
         self._refresh_thread: threading.Thread | None = None
         self._refresh_stop = threading.Event()
         self._paused = False  # ESC ESC: the strip shows PAUSED, spinner stops
+        # SHRINK PADDING: Rich's Live cannot erase rows below a shorter
+        # region — when the suggestion panel (or the typewriter line)
+        # disappears, the stale lines lingered under the input box for
+        # seconds (until the next transcript print scrolled them away).
+        # The region is blank-padded to its recent height instead; the pad
+        # clears on the next stop()/start() cycle (a restart re-anchors
+        # the Live at the fresh cursor — nothing stale survives that).
+        self._pad_sug = 0  # last suggestion-panel height (rows to blank)
+        self._pad_tw = 0  # typewriter line height (1 when it has shown)
         # streaming reasoning (the flexing box): deltas land here live
         # streaming: the TypewriterStream (below the class) owns playback.
         # Deltas feed the splitter; prose typewrites through the gear
@@ -1157,11 +1166,19 @@ class EngagementUI:
         tw = self.typewriter_row()
         if tw is not None:
             rows.append(tw)  # the typewriter line (live partial row)
+            self._pad_tw = 1
+        elif self._pad_tw:
+            rows.append(Text(""))  # hold the slot: no stale line below the box
         rows.append(t)
         rows.extend(_fireteam_agent_rows())
         sug = self._suggestion_row()
         if sug is not None:
             rows.append(sug)  # the command bar, directly above the input box
+            # _pad_sug set inside _suggestion_row (it knows its height)
+        elif self._pad_sug:
+            # blank-hold the panel's rows until the next strip restart —
+            # the input box stays locked at its row, no gap below it
+            rows.extend(Text("") for _ in range(min(self._pad_sug, 10)))
         rows.append(self._input_box_row())  # the input box is ALWAYS the bottom row
         return Group(*rows)
 
@@ -1237,6 +1254,7 @@ class EngagementUI:
                 lines.append(Text.assemble(("    ", "dim"), (f"{name:<14}", ""), (desc[:44], "dim")))
         if len(matches) > 8:
             lines.append(Text(f"    … {len(matches) - 8} more", style="dim"))
+        self._pad_sug = len(lines) + 2  # SIMPLE box edges — the blank-hold height
         return Panel(
             Group(*lines),
             box=box.SIMPLE,
@@ -1384,6 +1402,10 @@ class EngagementUI:
     def stop(self) -> None:
         self._refresh_stop.set()
         self._tw.stop()
+        # shrink-pad reset: the next start() re-anchors the Live region at
+        # the fresh cursor — stale rows die there, so the blank-hold ends
+        self._pad_sug = 0
+        self._pad_tw = 0
         # stuck-state insurance: if the POC verifier died between its start
         # and done events (or the run crashed mid-verification), the strip
         # would show RUNNING POC forever on the next engagement
