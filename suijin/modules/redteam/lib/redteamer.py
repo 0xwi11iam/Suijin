@@ -430,6 +430,29 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
 
     thread_id = f"redteam_{int(time.time())}"
 
+    # THE OPERATOR'S PROMPT (prompt.md): their text REPLACES the generated
+    # core; the dynamic zone (tool availability, KB, packs) refreshes every
+    # boot below the marker — never touching the user zone. Overrides
+    # declared in the file outrank the hardcoded gates (completion gate,
+    # guardrails). Fails soft: any error falls back to the generated core.
+    try:
+        from suijin.modules.agent.lib.prompts import prompt_file as _pf
+
+        _pbase = _pf.boot(config)
+        config["_prompt_user_base"] = _pbase
+        config["_operator_overrides"] = _pf.collect_overrides(_pf.user_zone())
+        from suijin.modules.tools.lib import guardrails as _gr
+
+        _gr.set_operator_override("guardrails" in config["_operator_overrides"])
+        console.print(
+            "[dim]prompt: operator prompt.md active"
+            + (f" (overrides: {', '.join(config['_operator_overrides'])})" if config["_operator_overrides"] else "")
+            + " — edits apply next engagement[/dim]"
+        )
+    except Exception as _pe:  # noqa: BLE001 — the prompt file can never block a run
+        with contextlib.suppress(Exception):
+            console.print(f"[yellow]prompt.md skipped ({_pe}) — using the generated core[/yellow]")
+
     # CRASH-SAVER — an .sje exists for EVERY exit path: the conclusion
     # save, the finally backstop (final-block crashes/KI), SIGTERM/SIGHUP,
     # an uncaught exception anywhere (setup included), and interpreter
@@ -560,9 +583,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
     # /compact's write path: update_state through the live graph (the same
     # seam guidance uses — thread-safe, checkpoint-consistent)
     with contextlib.suppress(Exception):
-        run_box._set_state = lambda k, v: agent._graph.update_state(
-            langgraph_config, {k: v}
-        )
+        run_box._set_state = lambda k, v: agent._graph.update_state(langgraph_config, {k: v})
 
     # Engagement console UI — transcript + pinned strip (Rich only)
     from suijin.modules.redteam.lib.red.console_ui import EngagementUI, toggle_reasoning
@@ -859,15 +880,15 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                     # iterations fixated on 3 surfaces while 3 seeded items
                     # waited, unmentioned).
                     **({"_attack_queue": [dict(q) for q in seed_queue]} if seed_queue else {}),
-                # the wall deadline for coverage pressure (2026-09-12):
-                # wall_minutes in the caller's config → a monotonic
-                # deadline the governor escalates against. Absent (operator
-                # interactive runs) → no pressure, behavior unchanged.
-                **(
-                    {"_wall_deadline": time.monotonic() + float(config.get("wall_minutes")) * 60.0}
-                    if (config or {}).get("wall_minutes")
-                    else {}
-                ),
+                    # the wall deadline for coverage pressure (2026-09-12):
+                    # wall_minutes in the caller's config → a monotonic
+                    # deadline the governor escalates against. Absent (operator
+                    # interactive runs) → no pressure, behavior unchanged.
+                    **(
+                        {"_wall_deadline": time.monotonic() + float(config.get("wall_minutes")) * 60.0}
+                        if (config or {}).get("wall_minutes")
+                        else {}
+                    ),
                 }
                 if first_run
                 else None
@@ -889,8 +910,9 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
             async def _astream_reader(
                 _g=agent._graph, _is=input_state, _lc=langgraph_config, _q=_eq, _err=_stream_error
             ):
+                _agen = _g.astream(_is, _lc)
                 try:
-                    async for _ev in _g.astream(_is, _lc):
+                    async for _ev in _agen:
                         _q.put_nowait(_ev)
                 except BaseException as _be:
                     if isinstance(_be, (KeyboardInterrupt, asyncio.CancelledError)):
@@ -898,6 +920,8 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                     else:
                         _err.append(_be)  # GraphRecursionError, node crashes, etc
                 finally:
+                    with contextlib.suppress(Exception):
+                        await _agen.aclose()  # orphaned asyncgen: interpreter complained at exit
                     _q.put_nowait(None)  # sentinel: stream done
 
             _reader_task = asyncio.create_task(_astream_reader())
@@ -1270,9 +1294,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                         # (a forced compact after a provider restart was a
                         # no-op the operator could not see)
                         with contextlib.suppress(Exception):
-                            run_box._set_state = lambda k, v: agent._graph.update_state(
-                                langgraph_config, {k: v}
-                            )
+                            run_box._set_state = lambda k, v: agent._graph.update_state(langgraph_config, {k: v})
                         ui.waiting(True)
                         _restart_stream = True
                         break  # exit the INNER loop — the outer loop re-streams
@@ -1545,14 +1567,21 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
 
             logging.getLogger("suijin").warning(f".sje save failed: {e}")
 
-        # the .sje bundle IS the resume artifact — retire the live state dir
-        # into outputs/archive/ (the immortal-root-state fix)
+        # The engagement folder STAYS at engagements/<name> after the run —
+        # the operator works out of it (reports, audit trails, memory) and
+        # the end-of-run disappearance burned real sessions. Archiving is
+        # opt-in via config (archive_on_end: true) or `suijin clean`.
         try:
-            from suijin.modules.platform.lib.workspace import archive_engagement
+            if str((config or {}).get("archive_on_end", "")).strip().lower() in ("true", "1", "yes"):
+                from suijin.modules.platform.lib.workspace import archive_engagement
 
-            _arch = archive_engagement("ended")
-            if _arch is not None:
-                console.print(f"[dim]engagement state archived: {_arch.name}[/dim]")
+                _arch = archive_engagement("ended")
+                if _arch is not None:
+                    console.print(f"[dim]engagement archived: {_arch}[/dim]")
+            else:
+                console.print(
+                    "[dim]engagement folder kept in place — reports, trails and memory stay where they are[/dim]"
+                )
         except Exception:
             pass
 
