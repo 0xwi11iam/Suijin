@@ -255,8 +255,21 @@ def engagement_order(objective: str) -> str:
     )
 
 
+def _static_prompt_core(phase: str = "informational", state: dict | None = None) -> str:
+    """The STATIC system-prompt core: role, modes, capabilities, skills,
+    tool catalog, workflow, decision format — everything that does not
+    depend on the live turn. This is what prompt.md ships as its starting
+    user zone, and what the operator's edit REPLACES (their text wins)."""
+    return _assemble_prompt(state or {}, phase=phase, core_only=True)
+
+
 def build_agent_system_prompt(state: dict) -> str:
     """Build the complete system prompt for the current agent turn.
+
+    The OPERATOR'S prompt.md base (state["_prompt_user_base"], seeded at
+    engagement boot) REPLACES the generated static core — operator text
+    outranks the generated doctrine. Dynamic per-turn context (orders,
+    board, phase pressure) is always appended fresh by code.
 
     Args:
         state: Current AgentState dict with phase, attack_path_type, etc.
@@ -265,6 +278,28 @@ def build_agent_system_prompt(state: dict) -> str:
         Full system prompt string for the LLM.
     """
     phase = state.get("current_phase", "informational")
+    _user_base = str(state.get("_prompt_user_base") or "").strip()
+    if _user_base:
+        return _user_base + "\n\n" + _dynamic_tail(state, phase)
+    return _assemble_prompt(state, phase=phase, core_only=False) + "\n\n" + _dynamic_tail(state, phase)
+
+
+def _dynamic_tail(state: dict, phase: str) -> str:
+    """Per-turn context appended below ANY base (generated or user)."""
+    objective = state.get("original_objective", "")
+    parts = [engagement_order(objective)]
+    try:
+        from suijin.modules.agent.lib.nodes.think_node import _render_board
+
+        board = _render_board(state)
+        if board:
+            parts.append("## TARGET BOARD\n" + board)
+    except Exception:  # noqa: BLE001 — the board is decoration, never a dependency
+        pass
+    return "\n".join(parts)
+
+
+def _assemble_prompt(state: dict, phase: str, core_only: bool) -> str:
     attack_path = state.get("attack_path_type", "")
     objective = state.get("original_objective", "")
 
