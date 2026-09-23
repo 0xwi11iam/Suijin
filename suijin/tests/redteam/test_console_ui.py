@@ -5,7 +5,7 @@ import json
 import pytest
 from rich.console import Console
 
-from suijin.modules.redteam.lib.red.console_ui import (
+from suijin.client.tui.console_ui import (
     UI_STATE,
     EngagementUI,
     loot_in,
@@ -148,7 +148,7 @@ class TestEveryCoreToolRenders:
     def test_core_tool_inventory_covers_dispatch_routes(self):
         """Every explicit dispatch route renders with a dedicated style or
         the JSON fallback — and the no-args set is exactly the argless ones."""
-        from suijin.modules.redteam.lib.red.console_ui import _LEXERS, _NO_ARGS_TOOLS
+        from suijin.client.tui.console_ui import _LEXERS, _NO_ARGS_TOOLS
 
         for name, _, expect in CORE_TOOLS:
             if expect is not None:
@@ -235,7 +235,7 @@ class TestTranscript:
         assert "BLOCKED" in c.export_text()
 
     def test_graceful_errors(self):
-        from suijin.modules.redteam.lib.red.console_ui import graceful_error, is_error
+        from suijin.client.tui.console_ui import graceful_error, is_error
 
         # the exact wall of text from the field-target.example field run
         raw = (
@@ -355,7 +355,7 @@ class TestTranscript:
         import threading
         import time
 
-        from suijin.modules.redteam.lib.red.console_ui import ask_operator_answer
+        from suijin.client.tui.console_ui import ask_operator_answer
         from suijin.modules.tools.lib.run_commands import RunBox
 
         box = RunBox().start()
@@ -376,7 +376,7 @@ class TestTranscript:
         assert elapsed < 4  # slash line skipped, not stalled to timeout
 
     def test_ask_operator_answer_timeout_returns_empty(self):
-        from suijin.modules.redteam.lib.red.console_ui import ask_operator_answer
+        from suijin.client.tui.console_ui import ask_operator_answer
         from suijin.modules.tools.lib.run_commands import RunBox
 
         box = RunBox().start()
@@ -1004,7 +1004,7 @@ class TestUncrashableUI:
         monkeypatch.setattr(_ws, "WORKSPACE_DIR", __import__("pathlib").Path(__import__("tempfile").mkdtemp()))
         from rich.console import Console
 
-        import suijin.modules.redteam.lib.red.console_ui as m
+        import suijin.client.tui.console_ui as m
 
         def boom(text, style="none"):
             raise RuntimeError("simulated renderer crash")
@@ -1021,7 +1021,7 @@ class TestUncrashableUI:
     def test_crash_log_written(self, tmp_path, monkeypatch):
         from rich.console import Console
 
-        import suijin.modules.redteam.lib.red.console_ui as m
+        import suijin.client.tui.console_ui as m
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
@@ -1232,7 +1232,7 @@ class TestAnswerFlowFieldBugs:
     def test_ask_mode_suppresses_guidance_echo(self):
         from rich.console import Console
 
-        from suijin.modules.redteam.lib.red.console_ui import ask_operator_answer
+        from suijin.client.tui.console_ui import ask_operator_answer
         from suijin.modules.tools.lib.run_commands import RunBox
 
         box = RunBox(console=Console(record=True, width=90, force_terminal=True)).start()
@@ -1346,7 +1346,7 @@ class TestNoSilentEndings:
         monkeypatch.setattr(_ws, "WORKSPACE_DIR", __import__("pathlib").Path(__import__("tempfile").mkdtemp()))
         from rich.console import Console
 
-        import suijin.modules.redteam.lib.red.console_ui as m
+        import suijin.client.tui.console_ui as m
 
         def boom(text, style="none"):
             raise RuntimeError("renderer died")
@@ -1380,7 +1380,7 @@ class TestFireteamStripRows:
         return sink.file.getvalue()
 
     def test_no_fireteams_no_row(self, monkeypatch):
-        import suijin.modules.redteam.lib.red.console_ui as m
+        import suijin.client.tui.console_ui as m
 
         monkeypatch.setattr(m, "_fireteam_snapshot", lambda: [])
         ui, _c = _ui()
@@ -1389,7 +1389,7 @@ class TestFireteamStripRows:
         assert "Fireteam" not in strip and "FT" not in strip
 
     def test_full_word_and_agent_rows(self, monkeypatch):
-        import suijin.modules.redteam.lib.red.console_ui as m
+        import suijin.client.tui.console_ui as m
 
         fake = [
             {
@@ -1414,7 +1414,7 @@ class TestFireteamStripRows:
         assert "agent 3:" in strip and "robots.txt" in strip  # done agents stay visible with ✓
 
     def test_failed_agent_marks_red_cross(self, monkeypatch):
-        import suijin.modules.redteam.lib.red.console_ui as m
+        import suijin.client.tui.console_ui as m
 
         fake = [
             {
@@ -1435,7 +1435,7 @@ class TestFireteamStripRows:
     def test_block_hidden_when_nothing_running(self, monkeypatch):
         """Operator contract: the fireteam block appears ONLY while a team
         is actually running — finished-but-undrained teams show NOTHING."""
-        import suijin.modules.redteam.lib.red.console_ui as m
+        import suijin.client.tui.console_ui as m
 
         fake = [
             {
@@ -1451,7 +1451,7 @@ class TestFireteamStripRows:
         assert "Fireteam" not in strip and "agent" not in strip
 
     def test_live_count_sums_running(self, monkeypatch):
-        import suijin.modules.redteam.lib.red.console_ui as m
+        import suijin.client.tui.console_ui as m
 
         fake = [
             {"team_id": "a", "running": 2, "tasks": []},
@@ -1465,7 +1465,7 @@ class TestFireteamStripRows:
         assert "Fireteam 3 live" in strip
 
     def test_rows_disappear_when_registry_empties(self, monkeypatch):
-        import suijin.modules.redteam.lib.red.console_ui as m
+        import suijin.client.tui.console_ui as m
 
         state = {"teams": [{"team_id": "t1", "running": 1, "tasks": [{"task": "x" * 40, "state": "running"}]}]}
         monkeypatch.setattr(m, "_fireteam_snapshot", lambda: state["teams"])
@@ -1594,7 +1594,7 @@ class TestTypewriterStream:
         assert "\x1b[1;96m" in styled  # bold spans actually style (bold bright cyan)
 
     def test_md_line_dresses_headers_bullets_code(self):
-        from suijin.modules.redteam.lib.red.console_ui import _md_line
+        from suijin.client.tui.console_ui import _md_line
 
         assert _md_line("## Section title").plain == "Section title"
         t = _md_line("- item one").plain
@@ -1666,7 +1666,7 @@ class TestTypewriterStream:
         assert "\x1b[2m" in row and "\x1b[96m" not in row  # dim reasoning, never said
 
     def test_gear_ladder_micro_increments(self):
-        from suijin.modules.redteam.lib.red.console_ui import TypewriterStream as TW
+        from suijin.client.tui.console_ui import TypewriterStream as TW
 
         assert len(TW.LADDER) >= 60  # a lot of small increments
         assert all(TW.LADDER[i] < TW.LADDER[i + 1] for i in range(len(TW.LADDER) - 1))  # monotonic
@@ -2000,7 +2000,7 @@ class TestInputBox:
         assert "thinking" not in strip  # idle: phase label, no stale indicator
 
     def test_fireteam_task_text_never_truncated(self, monkeypatch):
-        import suijin.modules.redteam.lib.red.console_ui as m
+        import suijin.client.tui.console_ui as m
 
         long_task = (
             "MISSION: locate + fingerprint the admin panel the operator keeps flagging across every engagement we have ever run together"
@@ -2017,7 +2017,7 @@ class TestInputBox:
         assert long_task[:120] in strip  # full mission text, no 52-char clip
 
     def test_tab_cycles_modes(self):
-        from suijin.modules.redteam.lib.red.console_input import next_mode
+        from suijin.client.tui.console_input import next_mode
 
         assert next_mode("recon") == "exploit"
         assert next_mode("exploit") == "report"
@@ -2032,7 +2032,7 @@ class TestInputBox:
 
     def test_mode_tags_plain_prompts(self):
         """Plain lines dispatch as mode-tagged guidance; slash commands pass raw."""
-        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+        from suijin.client.tui.console_input import RedInputReader
 
         class _Box:
             def __init__(self):
@@ -2053,7 +2053,7 @@ class TestInputBox:
         assert box.lines[-1] == "/state"  # slash commands never tagged
 
     def test_apply_key_contract(self):
-        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+        from suijin.client.tui.console_input import RedInputReader
 
         assert RedInputReader.apply_key("ab", "\x7f") == ("a", None)
         buf, action = RedInputReader.apply_key("", "\t")
@@ -2063,7 +2063,7 @@ class TestInputBox:
 
     def test_double_esc_fires_pause(self):
         """ESC ESC within 0.6s pauses the agent (the ^C replacement)."""
-        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+        from suijin.client.tui.console_input import RedInputReader
 
         fired = []
         reader = RedInputReader.__new__(RedInputReader)
@@ -2078,7 +2078,7 @@ class TestInputBox:
         assert fired == [True]
 
     def test_box_is_last_row_even_with_fireteam_and_stream(self, monkeypatch):
-        import suijin.modules.redteam.lib.red.console_ui as m
+        import suijin.client.tui.console_ui as m
 
         monkeypatch.setattr(
             m,
@@ -2100,7 +2100,7 @@ class TestLiveGuidanceInjection:
     """Plain prompts inject into the graph NOW — no turn-boundary wait."""
 
     def test_on_guidance_receives_the_line(self):
-        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+        from suijin.client.tui.console_input import RedInputReader
 
         got = []
 
@@ -2118,7 +2118,7 @@ class TestLiveGuidanceInjection:
         assert got == [("graph", "hit the admin panel now")]  # instant — not queued
 
     def test_ask_mode_answers_go_to_the_box_raw(self):
-        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+        from suijin.client.tui.console_input import RedInputReader
 
         got = []
 
@@ -2171,7 +2171,7 @@ class TestPauseThroughTheBox:
     prompt; lines route RAW (slash and guidance alike)."""
 
     def _reader(self):
-        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+        from suijin.client.tui.console_input import RedInputReader
 
         class _Box:
             def dispatch(self, line):
@@ -2198,7 +2198,7 @@ class TestPauseThroughTheBox:
     def test_end_pause_restores_live_routing(self):
         import queue
 
-        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+        from suijin.client.tui.console_input import RedInputReader
 
         got = []
 
@@ -2284,7 +2284,7 @@ class TestInstantPause:
     def test_esc_chord_self_routes_to_armed_queue(self):
         import queue as _q
 
-        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+        from suijin.client.tui.console_input import RedInputReader
 
         fired = []
         reader = RedInputReader.__new__(RedInputReader)
@@ -2310,7 +2310,7 @@ class TestIntelligenceAndAsk:
     fallback fought the cbreak reader — typing died)."""
 
     def test_alt_plus_i_is_intel_action(self):
-        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+        from suijin.client.tui.console_input import RedInputReader
 
         # Alt/Option+I arrives as ESC then 'i' — _sequence detects the pair
         buf, action = RedInputReader.apply_key("", "i")
@@ -2354,7 +2354,7 @@ class TestIntelligenceAndAsk:
     def test_ask_queue_routes_raw_lines(self):
         import queue as _q
 
-        from suijin.modules.redteam.lib.red.console_input import RedInputReader
+        from suijin.client.tui.console_input import RedInputReader
 
         reader = RedInputReader.__new__(RedInputReader)
         reader._run_box = type("B", (), {"dispatch": lambda self, line: None})()

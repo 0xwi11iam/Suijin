@@ -48,7 +48,7 @@ class TestCoverageLaneDrift:
 
 class TestStaleUiState:
     def test_engagement_start_resets_gauges(self):
-        from suijin.modules.redteam.lib.red.console_ui import UI_STATE
+        from suijin.client.tui.console_ui import UI_STATE
 
         UI_STATE["flags"] = ["FLAG{stale}"]
         UI_STATE["creds"] = [("AWS key", "AKIAOLD")]
@@ -64,7 +64,7 @@ class TestStaleUiState:
 
         ui = rt._ui_cls() if hasattr(rt, "_ui_cls") else None
         if ui is None:
-            from suijin.modules.redteam.lib.red.console_ui import EngagementUI
+            from suijin.client.tui.console_ui import EngagementUI
 
             ui = EngagementUI(Console(file=__import__("io").StringIO(), force_terminal=False))
         ui.stop()
