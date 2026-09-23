@@ -214,42 +214,65 @@ def _normalize_ts(raw: str) -> str:
 
 # ── Workspace cleaner ──────────────────────────────────────────────────
 
-_CLEAN_TARGETS = ("outputs", "notifications.log")
+#: transient junk patterns inside engagement folders (never data the
+#: engagement's own artifacts depend on)
+_JUNK_GLOBS = ("*.sje.tmp", "*.tmp", "job_*.log", "*.garbage.json")
 
 
 def find_stale(workspace: Path | None = None, age_days: int = 30, now: float | None = None) -> list[Path]:
-    """Files in churn dirs older than age_days."""
+    """Stale junk across the REAL layout: engagement tmp/job files, old
+    logs, legacy outputs/ leftovers, workspace-root notifications.log."""
     ws = Path(workspace) if workspace else _ws().WORKSPACE_DIR
     cutoff = (now or time.time()) - age_days * 86400
     stale: list[Path] = []
-    for folder in _CLEAN_TARGETS[:-1]:
-        d = ws / folder
-        if d.is_dir():
-            stale.extend(f for f in d.rglob("*") if f.is_file() and f.stat().st_mtime < cutoff)
-    log = ws / _CLEAN_TARGETS[-1]
-    if log.exists() and log.stat().st_mtime < cutoff:
-        stale.append(log)
-    return stale
+
+    def _add(f: Path) -> None:
+        try:
+            if f.is_file() and f.stat().st_mtime < cutoff:
+                stale.append(f)
+        except OSError:
+            pass
+
+    engs = ws / "engagements"
+    if engs.is_dir():
+        for eng in engs.iterdir():
+            if not eng.is_dir():
+                continue
+            for pat in _JUNK_GLOBS:
+                for f in eng.rglob(pat):
+                    _add(f)
+    logs = ws / "logs"
+    if logs.is_dir():
+        for f in logs.glob("*.log"):
+            _add(f)
+    legacy = ws / "outputs"  # pre-restructure leftovers
+    if legacy.is_dir():
+        for f in legacy.rglob("*"):
+            _add(f)
+    _add(ws / "notifications.log")
+    return sorted(set(stale))
 
 
 def clean_workspace(apply: bool = False, age_days: int = 30, workspace: Path | None = None) -> str:
-    """Dry-run by default; with apply=True archives then deletes stale files."""
+    """Dry-run by default; with apply=True archives then deletes stale files.
+    The archive lands in logs/ (cleaned_*.zip) — engagement data itself is
+    NEVER touched: reports, trails, exploits, memory and .sje bundles stay."""
     import zipfile
 
     ws = Path(workspace) if workspace else _ws().WORKSPACE_DIR
     stale = find_stale(ws, age_days)
-    total_kb = sum(f.stat().st_size for f in stale) / 1024
+    total_kb = sum(f.stat().st_size for f in stale) / 1024 if stale else 0.0
     noun = f"{len(stale)} file(s), {total_kb:.0f} KB"
     if not stale:
-        return f"Nothing stale (>{age_days}d) in outputs/sandbox — workspace is tidy."
+        return f"Nothing stale (>{age_days}d) — workspace is tidy."
     if not apply:
         lines = [f"[dry-run] would archive + delete {noun} (> {age_days} days old):"]
         lines += [f"  {f.relative_to(ws)}" for f in stale[:20]]
-        lines.append("\nRun with --apply to archive them into suijin_agent/exports/ then delete.")
+        lines.append("\nRun with --apply to archive them into logs/ then delete. Engagement data is never touched.")
         return "\n".join(lines)
-    export_dir = ws / "exports"
-    export_dir.mkdir(parents=True, exist_ok=True)
-    archive = export_dir / f"cleaned_{time.strftime('%Y%m%d_%H%M%S')}.zip"
+    dest = ws / "logs"
+    dest.mkdir(parents=True, exist_ok=True)
+    archive = dest / f"cleaned_{time.strftime('%Y%m%d_%H%M%S')}.zip"
     with zipfile.ZipFile(archive, "w") as zf:
         for f in stale:
             zf.write(f, str(f.relative_to(ws)))

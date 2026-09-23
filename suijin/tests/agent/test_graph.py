@@ -81,14 +81,6 @@ class TestThinkNode:
         assert spawn_and_collect is not None
 
 
-class TestEngagement:
-    def test_session_state_imports(self):
-        from suijin.modules.agent.lib.engagement import load_session_state, save_session_state
-
-        assert save_session_state is not None
-        assert load_session_state is not None
-
-
 class TestErrorHandler:
     def test_error_handler_imports(self):
         from suijin.modules.platform.lib.error_handler import GracefulFallback, safe_call

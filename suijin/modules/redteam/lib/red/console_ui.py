@@ -392,13 +392,13 @@ def _fmt_tok(n: int) -> str:
 
 def _crash_log(where: str, exc: BaseException) -> None:
     """Field crashes died silently and took the diagnosis with them —
-    every guarded render failure lands here: outputs/logs/ui_crash.log"""
+    every guarded render failure lands here: logs/ui_crash.log"""
     import traceback
 
     try:
         from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-        d = WORKSPACE_DIR / "outputs" / "logs"
+        d = WORKSPACE_DIR / "logs"
         d.mkdir(parents=True, exist_ok=True)
         (d / "ui_crash.log").open("a").write(
             f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} [{where}] {exc!r}\n" + traceback.format_exc() + "\n"
@@ -1005,7 +1005,7 @@ class EngagementUI:
         self.objective = objective
         # UNCRASHABLE: a render bug must never kill an engagement (a field
         # run died mid-render back to the menu with zero output). Every
-        # public method is guarded; failures log to outputs/logs/ui_crash.log
+        # public method is guarded; failures log to logs/ui_crash.log
         # and fall back to plain text.
         import types
 

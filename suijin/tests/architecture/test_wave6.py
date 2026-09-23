@@ -120,7 +120,7 @@ class TestLearningFinishers:
         drop.mkdir()
         (drop / "used-skill.md").write_text("## cors_check\nuse cors_check first")
         (drop / "ancient-skill.md").write_text("## telnet_bounce\nrare telnet_bounce trick")
-        trails = tmp_path / "outputs" / "audit_trails"
+        trails = tmp_path / "engagements" / "_default" / "audit_trails"
         trails.mkdir(parents=True)
         (trails / "e.json").write_text(json.dumps({"engagement": "e", "iterations": [{"tool": "cors_check"}]}))
         with mock.patch.object(entry, "_drop_roots", lambda: [drop]):

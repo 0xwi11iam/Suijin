@@ -57,7 +57,6 @@ oracle.set_providers(providers)
 
 
 console = Console()
-DUMP_PATH = BASE_DIR / "operation_state_recovery.json"
 
 _SCOPE_CONFIRM_RE = __import__("re").compile(
     r"(?i)(permission|authoriz|authoris|in scope|scope confirmed|i own|owned by me|my (server|domain|site|vm|box)"
@@ -141,7 +140,7 @@ def _render_termination(final_state: dict, ui, operator_stopped: bool) -> None:
         console.print(
             Panel(
                 "the agent produced no iterations — check the provider key (suijin env), "
-                "provider config (suijin config show) and outputs/logs/engage_crash.log",
+                "provider config (suijin config show) and logs/engage_crash.log",
                 title=" ENGAGEMENT FAILED — NO OUTPUT ",
                 title_align="left",
                 border_style="red",
@@ -163,7 +162,7 @@ def _render_termination(final_state: dict, ui, operator_stopped: bool) -> None:
                     "[dim]Fix: top up the provider account or switch provider:\n"
                     "  suijin providers   (list / test / switch)\n"
                     "  suijin env         (check keys)\n"
-                    "Logs: outputs/logs/engagement.log[/dim]",
+                    "Logs: logs/engagement.log[/dim]",
                     title=" ENGAGEMENT FAILED — PROVIDER OUT OF CREDITS ",
                     title_align="left",
                     border_style="red",
@@ -194,7 +193,7 @@ def _install_sigterm_save():
     """FULL-AUTO: docker stop sends SIGTERM with a 10s grace before KILL.
     The handler converts it into the STOP-WITH-SAVE path (the /quit block):
     set the flags the KI handler already knows, then interrupt in-place.
-    Backstop: recovery.json snapshots every 5 iterations."""
+    Backstop: the crash-saver .sje."""
     import signal as _signal
 
     def _sigterm(sig, frame):
@@ -1477,23 +1476,17 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
             )
             console.print("[dim]  press Enter to return to the menu...[/dim]")
             with contextlib.suppress(Exception):
-                # the crash-path recovery pointer: recovery.json snapshots
-                # every 5 iterations — surface WHERE it is so the operator
-                # knows the last-known state survives
-                from suijin.modules.agent.lib.engagement import recovery_path as _rp
+                from suijin.modules.tools.lib.engagement_bundle import CRASH_SAVER
 
-                _rp_ = _rp()
-                import pathlib as _pl
-
-                if _rp_ and _pl.Path(str(_rp_)).exists():
-                    console.print(f"[dim]  last snapshot: {_rp_} (suijin load <latest .sje> resumes)[/dim]")
+                if CRASH_SAVER.last_path is not None:
+                    console.print(f"[dim]  bundle saved — suijin load {CRASH_SAVER.last_path.name} resumes[/dim]")
             if not _unattended():
                 with contextlib.suppress(Exception):
                     input()
             try:  # field crashes must be diagnosable after the fact
                 from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-                _d = WORKSPACE_DIR / "outputs" / "logs"
+                _d = WORKSPACE_DIR / "logs"
                 _d.mkdir(parents=True, exist_ok=True)
                 (_d / "engage_crash.log").open("a").write(
                     f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {objective[:80]}\n"
@@ -1517,21 +1510,6 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
         spend = float(providers.USAGE.get("est_cost_usd", 0))
 
         # Save state
-        DUMP_PATH.write_text(
-            json.dumps(
-                {
-                    "objective": objective,
-                    "phase": final_state.get("current_phase"),
-                    "iterations": final_state.get("current_iteration"),
-                    # final_state, NOT the loop-local `trace` — an early
-                    # crash (zero events) left `trace` unbound and the
-                    # NameError killed EVERY save below it (.sje, session,
-                    # memory) — the run ended with nothing on disk
-                    "trace_count": len(final_state.get("execution_trace", [])),
-                },
-                indent=2,
-            )
-        )
 
         # End audit trail and save session
         try:
@@ -1798,7 +1776,7 @@ def run_red_team(config, objective, api_key=None, resume_state=None):
 
         console.print(
             _Panel(
-                f"{e}\n\n[dim]{traceback.format_exc()[-1500:]}[/dim]\nlogged: outputs/logs/engage_crash.log",
+                f"{e}\n\n[dim]{traceback.format_exc()[-1500:]}[/dim]\nlogged: logs/engage_crash.log",
                 title=" engagement crashed ",
                 title_align="left",
                 border_style="red",
@@ -1807,7 +1785,7 @@ def run_red_team(config, objective, api_key=None, resume_state=None):
         try:
             from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-            _d = WORKSPACE_DIR / "outputs" / "logs"
+            _d = WORKSPACE_DIR / "logs"
             _d.mkdir(parents=True, exist_ok=True)
             (_d / "engage_crash.log").open("a").write(
                 f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {str(objective)[:80]}\n"

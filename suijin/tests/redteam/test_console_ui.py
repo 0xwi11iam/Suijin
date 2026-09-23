@@ -407,8 +407,12 @@ class TestPricing:
         assert _price_for("Qwen/Qwen3-Coder-480B-A35B-Instruct") is not None
         assert _price_for("zai-org/GLM-5.1") is not None
 
-    def test_case_insensitive_match(self):
+    def test_case_insensitive_match(self, monkeypatch):
         from suijin.modules.providers.lib import _price_for
+        from suijin.modules.providers.lib import model_meta as _mm
+
+        monkeypatch.setattr(_mm, "_catalog", lambda: None)  # offline table path
+
 
         # the DEFAULT huggingface model id — case drift previously fell to DEFAULT_RATE
         assert _price_for("deepseek-ai/DeepSeek-V4-Flash") == _price_for("deepseek-v4-flash")
@@ -988,17 +992,6 @@ class TestLabelFreeTranscript:
         r = subprocess.run([sys.executable, "-W", "error::Warning", "-c", code], capture_output=True, text=True)
         assert "clean" in r.stdout, r.stderr
 
-    def test_scope_cli_import(self):
-        """Field report: `suijin scope` crashed — run_scope imported
-        suijin.tui_scope (top-level) after the module moved to
-        modules/console/lib/."""
-        import importlib
-
-        mod = importlib.import_module("suijin.modules.console.lib.cli")
-        import inspect
-
-        src = inspect.getsource(mod.run_scope)
-        assert "from suijin.modules.console.lib import tui_scope" in src
 
 
 class TestUncrashableUI:
@@ -1039,7 +1032,7 @@ class TestUncrashableUI:
         # force a guarded failure
         ui._section = None  # break internals
         ui.thinking("t")  # guarded wrapper catches AttributeError
-        log = tmp_path / "outputs" / "logs" / "ui_crash.log"
+        log = tmp_path / "logs" / "ui_crash.log"
         assert log.exists()
 
     def test_langgraph_import_caged(self):

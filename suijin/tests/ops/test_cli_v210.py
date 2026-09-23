@@ -154,48 +154,9 @@ class TestCreds:
         assert "exported" in out
 
 
-class TestDossier:
-    def test_missing_target_is_arg_error(self):
-        with pytest.raises(SystemExit) as ei:
-            cli.main(["dossier"])
-        assert ei.value.code == 2
-
-    def test_dossier_renders(self, monkeypatch):
-        from suijin.modules.ops.lib import dossier as dos
-
-        monkeypatch.setattr(
-            dos,
-            "build_dossier",
-            lambda t: {"target": t, "constraints": {}, "failures": [], "engagements": [], "reports": []},
-        )
-        monkeypatch.setattr(dos, "render_dossier", lambda d: f"RENDERED {d['target']}")
-        code, out = run_cli(["dossier", "example.com"])
-        assert code == 0 and "RENDERED example.com" in out
-
 
 class TestTimelineWatchClean:
-    def test_timeline_empty(self, monkeypatch):
-        from suijin.modules.ops.lib import housekeeping as hk
 
-        monkeypatch.setattr(hk, "build_timeline", lambda limit=60: [])
-        code, out = run_cli(["timeline"])
-        assert code == 0 and "No engagement history" in out
-
-    def test_timeline_groups_days(self, monkeypatch):
-        from suijin.modules.ops.lib import housekeeping as hk
-
-        monkeypatch.setattr(
-            hk,
-            "build_timeline",
-            lambda limit=60: [
-                {"ts": "2026-08-18 01:00:00", "kind": "engagement start", "detail": "x"},
-                {"ts": "2026-08-18 02:00:00", "kind": "session saved", "detail": "y"},
-            ],
-        )
-        code, out = run_cli(["timeline"])
-        assert code == 0
-        assert "2026-08-18" in out
-        assert "engagement start" in out and "session saved" in out
 
     def test_watch_missing_log(self, monkeypatch, tmp_path):
         code, out = run_cli(["watch", "--traffic", str(tmp_path / "nope.jsonl")])

@@ -22,7 +22,6 @@ from suijin.modules.platform.lib.constants import (
     MAX_ITERATIONS,
     METASPLOIT_RPC_PORT,
     SENTINEL_MODEL,
-    SUPERVISOR_MODEL,
     ZAI_ENDPOINT,
     ZAI_MODEL,
 )
@@ -62,8 +61,6 @@ def _default_config() -> dict:
         "metasploit_rpc_host": "127.0.0.1",
         "metasploit_rpc_port": METASPLOIT_RPC_PORT,
         "metasploit_rpc_ssl": False,
-        "supervisor_model_id": SUPERVISOR_MODEL,
-        "supervisor_interval": 5,
         "cost_alert_usd": 0.25,
         "cost_budget_usd": 1.0,
         "cost_hard_cap_usd": 2.0,
@@ -109,8 +106,6 @@ def load_config() -> dict:
         "deepseek_model": DEFAULT_MODEL,
         "zai_model": ZAI_MODEL,
         "zai_endpoint": ZAI_ENDPOINT,
-        "supervisor_model_id": SUPERVISOR_MODEL,
-        "supervisor_interval": 5,
         "max_iterations": MAX_ITERATIONS,
     }.items():
         config.setdefault(k, v)
