@@ -19,6 +19,7 @@ Key features:
 from __future__ import annotations
 
 import asyncio
+import atexit
 import contextlib
 import json
 import sys
@@ -466,6 +467,16 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
         lambda: (agent.get_state(thread_id) or {}) if agent is not None else {},
     )
     CRASH_SAVER.hook_excepthook()
+
+    # EVENT LOG — append-only, records only; THE truth for replay. Every
+    # record lands BEFORE the in-process consumers act on it.
+    from suijin.modules.agent.lib.event_log import EventLog, tool_output_cap
+    from suijin.modules.platform.lib.workspace import engagement_dir as _ed_for_events
+
+    _events = EventLog(_ed_for_events() / "events.jsonl")
+    _events.append("session.start", objective=str(objective)[:2000], provider=str(config.get("provider") or ""), model=str(active_model(config)))
+    with contextlib.suppress(Exception):
+        atexit.register(_events.close)
 
     provider_name = config.get("provider", "unknown")
     model_name = active_model(config)
@@ -1212,6 +1223,25 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                             except Exception:
                                 pass
 
+                # ── event log: the record lands before consumption ────
+                with contextlib.suppress(Exception):
+                    if node_name == "think":
+                        _events.append(
+                            "iteration",
+                            n=int(node_output.get("current_iteration") or 0),
+                            phase=str(node_output.get("current_phase") or "informational"),
+                        )
+                        for _m in node_output.get("messages", []):
+                            if _m.get("role") == "assistant" and str(_m.get("content", "")).strip().startswith("{"):
+                                _events.append("assistant.message", content=str(_m.get("content"))[:16000])
+                    elif node_name == "execute_tool":
+                        _st = (node_output.get("execution_trace") or [])[-1] if node_output.get("execution_trace") else {}
+                        if _st.get("tool_name"):
+                            _tid = f"t{_events and int(time.time() * 1000) % 10_000_000}"
+                            _events.append("tool.call", id=_tid, name=str(_st.get("tool_name")), args={k: str(v)[:400] for k, v in dict(_st.get("tool_args") or {}).items()})
+                            _out, _trunc = tool_output_cap(_st.get("tool_output"))
+                            _events.append("tool.result", id=_tid, ok=bool(_st.get("success", True)), error_kind=_st.get("error_class"), duration_ms=int(_st.get("duration_ms") or 0), output=_out, truncated=_trunc)
+
                 # ── think-side signals (streamed into the open block) ──
                 if node_name == "think":
                     # parse failures must be VISIBLE — a run that dies on 3
@@ -1225,6 +1255,8 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                             ui.parse_note(min(_parse_retries, 3))
                     _jt = node_output.get("_just_transitioned_to", "")
                     if _jt:
+                        _last_phase_hint = [str(ui.phase or "")]
+                        _events.append("phase.transition", **{"from": str(_last_phase_hint[0]), "to": str(_jt)})
                         ui.phase_transition(_jt)
                     _sv = node_output.get("_supervisor_guidance", "")
                     if _sv:
@@ -1428,6 +1460,8 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                 from suijin.modules.agent.lib.live_guidance import write_guidance
 
                 write_guidance(guidance, mode="PAUSED")
+                with contextlib.suppress(Exception):
+                    _events.append("guidance.delivered", text=str(guidance)[:4000], source="pause")
                 console.print("[dim]  guidance written — the AI reads it next turn[/dim]\n")
             # resume: session closes, the box returns to live routing, the
             # thought stream resumes, the strip un-pauses
@@ -1641,6 +1675,11 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
 
         traceback.print_exc()
     finally:
+        with contextlib.suppress(Exception):
+            _ev_kind = "session.complete" if final_state.get("completion_reason") else "session.interrupt"
+            _events.append(_ev_kind, reason=str(final_state.get("completion_reason") or final_state.get("final_summary") or "operator interrupt")[:400])
+            _events.append("usage", input_tokens=int(providers.USAGE.get("input_tokens") or 0), output_tokens=int(providers.USAGE.get("output_tokens") or 0), cost_usd=float(providers.USAGE.get("est_cost_usd") or 0.0), priced=bool(providers.USAGE.get("priced")))
+            _events.close()
         # CRASH-SAVER backstop — runs on EVERY exit from the final block
         # (normal, exception, KeyboardInterrupt). Idempotent: the
         # conclusion save above already claimed the once-flag.
