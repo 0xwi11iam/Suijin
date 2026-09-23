@@ -191,59 +191,75 @@ class RedInputReader:
             b = self._decoder.decode(raw)  # select-consistent: no text buffering
             if not b:
                 continue  # mid multi-byte char — wait for the rest
-            if os.environ.get("SUIJIN_DRIVE_DEBUG"):
-                with contextlib.suppress(Exception), open("/tmp/rig_keys.log", "a") as _kl:
-                    _kl.write(f"{b!r}\n")
-            if b == "\x1b":
-                # disambiguate: arrow/page sequences start ESC [ / ESC O;
-                # a second ESC within 0.6s (or back-to-back in one write)
-                # is the pause chord
-                seq = self._sequence(fd)
-                if seq is True:
-                    continue  # arrow keys etc — swallowed, never land in the buffer
-                if seq == "alt-i":
-                    # Alt/Option+I — cycle model intelligence (the ESC+i
-                    # pair arrived together; the buffer stays untouched)
-                    self._cycle_intelligence()
-                    continue
-                if seq == "alt-e":
-                    # Alt/Option+E — reasoning on/off (same as Ctrl+E;
-                    # macOS Option sends ESC-prefixed keys)
-                    self._toggle_reasoning()
-                    continue
-                if seq == "esc":
-                    # zero-gap double ESC: the chord FIRES right now —
-                    # no window check (both presses already happened)
-                    self._fire_chord()
-                    continue
-                # lone ESC — the 0.6s chord window opens/updates
-                self._esc_chord()
-                continue
-            buf, action = self.apply_key(buf, b)
-            if action == "line":
-                if os.environ.get("SUIJIN_DRIVE_DEBUG"):
-                    with contextlib.suppress(Exception), open("/tmp/rig_keys.log", "a") as _kl:
-                        _kl.write(f"ENTER line={buf!r}\n")
-                line, buf = buf, ""
-                self._ui.set_input(None)  # clear FIRST — no residual artifact
-                if line.strip():
-                    with contextlib.suppress(Exception):
-                        self._dispatch(line)
-                continue
-            if action == "tab":
-                self._mode = next_mode(self._mode)
-                self._ui.set_mode(self._mode)
-                self._ui.set_input(buf)
-                continue
-            if action == "intel":
+            try:
+                buf = self._handle_key(fd, b, buf)
+            except Exception:  # noqa: BLE001 — the reader thread IS the app:
+                # one bad key must never kill it (the "loop crashed" class).
+                # KI/Cancelled pass through (pause path owns those).
+                with contextlib.suppress(Exception):
+                    import traceback as _tb
+
+                    with open("/tmp/suijin_reader_crash.log", "a") as _fh:
+                        _fh.write(f"key {b!r}: {_tb.format_exc()}\n")
+                with contextlib.suppress(Exception):
+                    self._ui.set_input(buf)
+
+    def _handle_key(self, fd: int, b: str, buf: str) -> str:
+        """One decoded key → the updated buffer. Every branch RETURNS; the
+        caller's recovery net is the only catcher (the old inline body
+        could unwind the thread on any UI-callback fault — dead input for
+        the rest of the engagement)."""
+        if os.environ.get("SUIJIN_DRIVE_DEBUG"):
+            with contextlib.suppress(Exception), open("/tmp/rig_keys.log", "a") as _kl:
+                _kl.write(f"{b!r}\n")
+        if b == "\x1b":
+            # disambiguate: arrow/page sequences start ESC [ / ESC O; the
+            # pause chord is a lone or doubled ESC
+            seq = self._sequence(fd)
+            if seq is True:
+                return buf  # page keys etc — swallowed, never land in the buffer
+            if seq in ("up", "down"):
+                # the instinct every user has: arrows navigate the
+                # suggestion list
+                with contextlib.suppress(Exception):
+                    self._move_suggestion(-1 if seq == "up" else 1)
+                return buf
+            if seq == "alt-i":
+                # Alt/Option+I — cycle model intelligence
                 self._cycle_intelligence()
-                self._ui.set_input(buf)  # keep typing intact
-                continue
-            if action == "effort":
+                return buf
+            if seq == "alt-e":
+                # Alt/Option+E — reasoning on/off (macOS Option is ESC-prefixed)
                 self._toggle_reasoning()
-                self._ui.set_input(buf)
-                continue
+                return buf
+            if seq == "esc":
+                self._fire_chord()  # zero-gap double ESC
+                return buf
+            self._esc_chord()  # lone ESC — the chord window opens/updates
+            return buf
+        buf, action = self.apply_key(buf, b)
+        if action == "line":
+            line, buf = buf, ""
+            self._ui.set_input(None)  # clear FIRST — no residual artifact
+            if line.strip():
+                with contextlib.suppress(Exception):
+                    self._dispatch(line)
+            return buf
+        if action == "tab":
+            self._mode = next_mode(self._mode)
+            self._ui.set_mode(self._mode)
             self._ui.set_input(buf)
+            return buf
+        if action == "intel":
+            self._cycle_intelligence()
+            self._ui.set_input(buf)  # keep typing intact
+            return buf
+        if action == "effort":
+            self._toggle_reasoning()
+            self._ui.set_input(buf)
+            return buf
+        self._ui.set_input(buf)
+        return buf
 
     def _suggestions_active(self) -> bool:
         """The suggestion bar is showing: the buffer starts with '/'."""
@@ -274,18 +290,23 @@ class RedInputReader:
 
         try:
             r = subprocess.run(
-                cmd, shell=True, capture_output=True, text=True, timeout=30,
+                cmd,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
                 cwd=os.path.expanduser("~"),
             )
             out = (r.stdout or "") + (r.stderr or "")
             body = _Text.assemble(
-                ("$ ", "bold green"), (cmd, "bold white"), ("\n", ""),
+                ("$ ", "bold green"),
+                (cmd, "bold white"),
+                ("\n", ""),
                 (out[:2000] if out.strip() else "(no output)", "dim"),
             )
             if r.returncode != 0:
                 body.append(f"\n[rc={r.returncode}]", style="bold red")
-            self._ui.console.print(_Panel(body, title=" run ", title_align="left",
-                                          border_style="cyan", padding=(0, 1)))
+            self._ui.console.print(_Panel(body, title=" run ", title_align="left", border_style="cyan", padding=(0, 1)))
         except subprocess.TimeoutExpired:
             self._ui.console.print(f"[red]  \u25b8 run timeout (30s): {cmd[:80]}[/red]")
         except Exception as e:  # noqa: BLE001
