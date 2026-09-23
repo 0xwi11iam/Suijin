@@ -232,10 +232,9 @@ class RedInputReader:
                 # Alt/Option+E — reasoning on/off (macOS Option is ESC-prefixed)
                 self._toggle_reasoning()
                 return buf
-            if seq == "esc":
-                self._fire_chord()  # zero-gap double ESC
-                return buf
-            self._esc_chord()  # lone ESC — the chord window opens/updates
+            # ESC does nothing (2026-09-23): the chord was a landmine —
+            # an accidental double-tap mid-save killed engagements. Pause
+            # is /pause or Ctrl+C, both explicit.
             return buf
         buf, action = self.apply_key(buf, b)
         if action == "line":

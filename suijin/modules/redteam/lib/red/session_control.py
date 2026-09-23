@@ -426,9 +426,7 @@ def build_pause_handlers(ctx: PauseContext) -> dict:
 
 
 PAUSE_BANNER = (
-    "\n[bold yellow]  Paused[/bold yellow] [dim]— /objective /phase /focus /skip /finish /loot /jobs "
-    "/kill /cost /report /audit /state /sessions /template /health /quit — or type guidance "
-    "(/quit ends the run and saves a resumable .sje)[/dim]"
+    "\n[bold yellow]  Paused[/bold yellow] [dim]— type guidance, or /help for commands · Enter to resume · /quit saves[/dim]"
 )
 
 
