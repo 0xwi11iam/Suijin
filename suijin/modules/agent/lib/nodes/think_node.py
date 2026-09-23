@@ -202,6 +202,9 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     else:
         from suijin.modules.agent.lib.prompts.base import build_agent_system_prompt, engagement_order
 
+        if not state.get("_prompt_user_base"):
+            with contextlib.suppress(Exception):
+                state["_prompt_user_base"] = (state.get("_run_config") or {}).get("_prompt_user_base")
         system_prompt = build_agent_system_prompt(state)
         user_turn = engagement_order(state.get("original_objective", ""))
         # FULL-AUTO (unattended CI): the strongest-position correction — the
@@ -817,6 +820,10 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         # captured flag). Findings, surfaces, coverage — none of it satisfies
         # the objective except the objective's own token.
         _cfg = state.get("_run_config") or {}
+        # OPERATOR OVERRIDE (prompt.md): "@suijin override completion-gate"
+        # — the operator's prompt outranks this hardcoded refusal
+        if "completion-gate" in (_cfg.get("_operator_overrides") or []):
+            _refusal = None
         _token = str(_cfg.get("completion_token") or "").strip()
         if _token and _token.lower() not in str(completion_reason or "").lower():
             _refusal = (
