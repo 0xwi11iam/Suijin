@@ -1329,7 +1329,8 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                         # (a forced compact after a provider restart was a
                         # no-op the operator could not see)
                         with contextlib.suppress(Exception):
-                            run_box._set_state = lambda k, v: agent._graph.update_state(langgraph_config, {k: v})
+                            _ag, _lc = agent, langgraph_config  # bind NOW (B023)
+                            run_box._set_state = lambda k, v, _a=_ag, _c=_lc: _a._graph.update_state(_c, {k: v})
                         ui.waiting(True)
                         _restart_stream = True
                         break  # exit the INNER loop — the outer loop re-streams
@@ -1802,14 +1803,22 @@ def run_red_team(config, objective, api_key=None, resume_state=None):
         else:
             asyncio.run(run_red_team_async(config, objective, api_key=api_key))
     except KeyboardInterrupt:
+        # NO interrupt may end a run silently: the async finally already
+        # saved (crash-saver .sje + session) — surface the resume pointer
+        # instead of a bare OPERATOR STOP (the old message read as a crash)
         console.print(
             _Panel(
-                "operator interrupt — engagement ended",
-                title=" OPERATOR STOP ",
+                "interrupted — the engagement was saved and can resume exactly where it stopped",
+                title=" PAUSED SAFE ",
                 title_align="left",
                 border_style="yellow",
             )
         )
+        with contextlib.suppress(Exception):
+            from suijin.modules.tools.lib.engagement_bundle import CRASH_SAVER
+
+            if CRASH_SAVER.last_path is not None:
+                console.print(f"[dim]resume: suijin load {CRASH_SAVER.last_path.name}[/dim]")
     except Exception as e:  # noqa: BLE001 — the TUI must show, not swallow
         import traceback
 
