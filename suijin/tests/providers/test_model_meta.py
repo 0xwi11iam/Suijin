@@ -105,3 +105,36 @@ class TestHelpers:
         monkeypatch.setattr(mm, "_fetch_catalog", lambda: None)
         s2 = mm.window_status("p", "m", {})
         assert s2["source"].startswith("fallback")
+
+
+class TestPricingAccuracy:
+    """The price table matches the live PAYG rates (models.dev, verified
+    2026-09-23) — glm-5.3 ran at 0.80/2.60 and under-billed ~70%."""
+
+    def test_glm_table_matches_live_rates(self):
+        from suijin.modules.providers.lib import _price_for
+
+        assert _price_for("glm-5.3") == (1.40, 4.40)
+        assert _price_for("glm-5.3-flash") == (0.15, 0.50)
+        assert _price_for("glm-5.3-flashx") == (0.37, 1.25)
+        assert _price_for("glm-4.7") == (0.60, 2.20)
+        assert _price_for("glm-5.1") == (1.40, 4.40)
+
+    def test_cost_math_uses_the_table(self):
+        import suijin.modules.providers.lib as P
+
+        P.reset_usage()
+        P._record_usage("zai", "glm-5.3", 1_000_000, 1_000_000)
+        u = P.get_usage()
+        assert abs(u["est_cost_usd"] - (1.40 + 4.40)) < 1e-6
+
+    def test_plan_billing_flag(self, monkeypatch):
+        import suijin.modules.providers.lib as P
+        import suijin.modules.tools.lib.services as svc
+
+        monkeypatch.setattr(
+            svc, "get", lambda name: {"provider": "zai", "zai_endpoint": "coding"} if name == "red_config" else {}
+        )
+        P.reset_usage()
+        P._record_usage("zai", "glm-5.3", 100, 100)
+        assert P.get_usage()["plan_billing"] is True

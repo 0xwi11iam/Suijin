@@ -608,6 +608,10 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
     from suijin.modules.agent.lib import librarian as _lb
     from suijin.modules.platform.lib.workspace import engagement_dir as _engdir
 
+    with contextlib.suppress(Exception):
+        from suijin.modules.providers.lib import get_usage as _gu
+
+        _UI_STATE["plan_billing"] = bool(_gu().get("plan_billing"))
     _UI_STATE["librarian"] = 0
     # ── ENGAGEMENT SCOPE: everything per-run resets ─────────────────────
     # The UI gauges (flags/creds/EXP/ctx) AND the module-level runtime

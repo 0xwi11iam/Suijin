@@ -351,3 +351,49 @@ class TestResumeConfigMerge:
         assert cfg["provider"] == "deepseek"  # current config wins
         assert "api_key" not in cfg or cfg.get("api_key") != "***stripped***"
         assert "***stripped***" not in json.dumps(cfg)
+
+
+class TestGroundedReports:
+    """Reports are deterministic and evidence-joined: findings carry their
+    catalog verification status, CONFIRMED POCs render reproduction steps,
+    no-catalog findings stay UNVERIFIED (honest, never inflated)."""
+
+    def test_unverified_without_catalog(self, tmp_path):
+        import suijin.modules.platform.lib.workspace as ws
+        from suijin.modules.tools.lib.report_exporter import generate_report
+
+        monkeypatch_target = ws.WORKSPACE_DIR
+        ws.WORKSPACE_DIR = tmp_path
+        try:
+            path = generate_report(
+                "unit grounded",
+                [{"tool_name": "http_request", "success": True, "thought": "t"}],
+                [{"type": "sqli", "severity": "high", "endpoint": "/x", "description": "d"}],
+                {},
+                [],
+                cost_usd=0.01,
+            )
+            body = Path(path).read_text()
+            assert "UNVERIFIED" in body
+            assert "## Findings" in body
+        finally:
+            ws.WORKSPACE_DIR = monkeypatch_target
+
+    def test_remediation_deterministic(self, tmp_path):
+        import suijin.modules.platform.lib.workspace as ws
+        from suijin.modules.tools.lib.report_exporter import generate_report
+
+        keep = ws.WORKSPACE_DIR
+        ws.WORKSPACE_DIR = tmp_path
+        try:
+            path = generate_report(
+                "unit rem",
+                [],
+                [{"type": "sourcemap", "severity": "medium", "endpoint": "cdn", "description": "d"}],
+                {},
+                [],
+            )
+            body = Path(path).read_text()
+            assert "Strip source maps" in body
+        finally:
+            ws.WORKSPACE_DIR = keep
