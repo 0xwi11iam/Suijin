@@ -276,3 +276,49 @@ class TestStaleLibrarianReplacement:
         two = lb.start(generate_fn=None, engagement_dir=tmp_path, interval=10, target="http://t.local")
         assert one is two  # same engagement dir: idempotent, no restart churn
         lb.stop()
+
+
+class TestRunScopedCount:
+    """MEM counts THIS engagement's observations — a resumed ledger's
+    carried entries are memory, not live progress (the gauge showed the
+    whole resume chain's total)."""
+
+    def test_carried_entries_do_not_inflate_the_gauge(self, tmp_path):
+        import json
+
+        lb.stop()
+        d = tmp_path / "state"
+        d.mkdir()
+        carried = [{"kind": "cred", "value": f"c{i}", "where": "prior"} for i in range(75)]
+        (d / "librarian.json").write_text(json.dumps({"entries": carried, "digests": []}))
+        published = []
+        lb.set_ui_publish(lambda n: published.append(n))
+        try:
+            inst = lb.start(generate_fn=None, engagement_dir=d, interval=10, target="t")
+            import time as _t
+
+            _t.sleep(0.6)
+            assert published[-1] == 0  # 75 carried, 0 this run
+            lb.observe("http_request", {"url": "http://t/x"}, "token: sk-new-abc123", 1)
+            _t.sleep(1.0)
+            assert published[-1] == 1  # exactly the new observation
+        finally:
+            lb.set_ui_publish(None)
+            lb.stop()
+
+    def test_render_ledger_scopes_the_story(self, tmp_path):
+        import json
+        import time as _t
+
+        lb.stop()
+        d = tmp_path / "state2"
+        d.mkdir()
+        carried = [{"kind": "cred", "value": f"c{i}", "where": "prior"} for i in range(5)]
+        (d / "librarian.json").write_text(json.dumps({"entries": carried, "digests": []}))
+        inst = lb.start(generate_fn=None, engagement_dir=d, interval=10, target="t")
+        _t.sleep(0.5)
+        lb.observe("http_request", {"url": "http://t/x"}, "token: sk-fresh-9zz", 1)
+        _t.sleep(1.0)
+        head = inst.render_ledger().splitlines()[0]
+        assert "this run: 1" in head and "(+5 carried from resume)" in head
+        lb.stop()
