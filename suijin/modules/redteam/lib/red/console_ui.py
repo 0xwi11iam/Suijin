@@ -1686,8 +1686,14 @@ class EngagementUI:
         if status == "CONFIRMED":
             sev_m2 = _re.match(r"([A-Z-]+)", rest)
             sev_word = sev_m2.group(1).lower() if sev_m2 else ""
-            tier = {"critical": "crit", "high": "high", "medium": "med",
-                    "moderate": "med", "low": "low", "informational": "low"}.get(sev_word, "med")
+            tier = {
+                "critical": "crit",
+                "high": "high",
+                "medium": "med",
+                "moderate": "med",
+                "low": "low",
+                "informational": "low",
+            }.get(sev_word, "med")
             UI_STATE["exploits"].setdefault(eid, tier)
         sev_m = _re.match(r"([A-Z-]+)\s+CVSS\s+([0-9.]+)\s*:\s*(.+)", rest)
         title = rest
@@ -1715,10 +1721,15 @@ class EngagementUI:
 
     # severity words -> tiers; CVSS floors when no word is present
     _SEV_TIERS = (
-        ("critical", "crit"), ("crit", "crit"),
+        ("critical", "crit"),
+        ("crit", "crit"),
         ("high", "high"),
-        ("medium", "med"), ("med", "med"), ("moderate", "med"),
-        ("low", "low"), ("informational", "low"), ("info", "low"),
+        ("medium", "med"),
+        ("med", "med"),
+        ("moderate", "med"),
+        ("low", "low"),
+        ("informational", "low"),
+        ("info", "low"),
     )
 
     def _track_exploit(self, out: str) -> None:
@@ -1730,14 +1741,21 @@ class EngagementUI:
             for m in re.finditer(r"(EXP-\d+)\s+CONFIRMED[^\n]*?[—-]\s*(\w+)", out):
                 eid = m.group(1)
                 sev_word = m.group(2).lower()
-                tier = {"critical": "crit", "crit": "crit",
-                        "high": "high",
-                        "medium": "med", "med": "med", "moderate": "med",
-                        "low": "low", "informational": "low", "info": "low",
-                        "note": "low"}.get(sev_word)
+                tier = {
+                    "critical": "crit",
+                    "crit": "crit",
+                    "high": "high",
+                    "medium": "med",
+                    "med": "med",
+                    "moderate": "med",
+                    "low": "low",
+                    "informational": "low",
+                    "info": "low",
+                    "note": "low",
+                }.get(sev_word)
                 if tier is None:
                     # fallback: look for CVSS in the full line
-                    line = out[m.start():m.end() + 80]
+                    line = out[m.start() : m.end() + 80]
                     cv = re.search(r"CVSS\s*([0-9.]+)", line, re.I)
                     if cv:
                         v = float(cv.group(1))
@@ -1790,7 +1808,19 @@ class EngagementUI:
         # counts — write_note with credential-flavored content counts as a
         # CRED, catching the weird/proprietary formats our regex misses
         _low = str(text or "")[:300].lower()
-        if any(w in _low for w in ("credential", "password", "api key", "apikey", "token found", "secret found", "session hijack", "auth bypass")):
+        if any(
+            w in _low
+            for w in (
+                "credential",
+                "password",
+                "api key",
+                "apikey",
+                "token found",
+                "secret found",
+                "session hijack",
+                "auth bypass",
+            )
+        ):
             _note_key = ("agent-classified", _low[:80])
             if _note_key not in UI_STATE["creds"]:
                 UI_STATE["creds"].append(_note_key)
@@ -1913,9 +1943,15 @@ class EngagementUI:
         self._flush()
         self.waiting(False)
         self.stop()
+        _phase = str(phase or "").strip() or self.phase or "—"
         self.console.print(
-            f"\n[bold]Done:[/bold] {ok}/{total} steps | phase={escape(phase)} | ${cost:.4f} | {escape(str(reason))}"
+            f"\n[bold]Done:[/bold] {ok} steps"
+            + (f" ({total} actions)" if total and total != ok else "")
+            + f" | phase={escape(_phase)} | ${cost:.4f}"
+            + (f" | {escape(str(reason))}" if str(reason).strip() and len(str(reason)) < 90 else "")
         )
+        if str(reason).strip() and len(str(reason)) >= 90:
+            self.console.print(f"[dim]{escape(str(reason)[:500])}[/dim]")
         if UI_STATE["flags"]:
             self.console.print(f"[bold {GOLD}]Flags:[/bold {GOLD}] {', '.join(escape(f) for f in UI_STATE['flags'])}")
         if UI_STATE["creds"]:
