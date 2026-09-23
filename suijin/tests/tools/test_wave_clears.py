@@ -222,8 +222,11 @@ class TestSweeps:
 
         from suijin.modules.tools.lib import engagement_bundle as eb
 
-        exports = tmp_path / "exports"
-        exports.mkdir(parents=True)
+        import suijin.modules.platform.lib.workspace as _ws
+
+        _ws._reset_engagement()
+        exports = _ws.engagement_dir() / "state"
+        exports.mkdir(parents=True, exist_ok=True)
         stale = exports / "old.sje.tmp"
         stale.write_text("leftover")
         import os
