@@ -445,8 +445,9 @@ class CrashSaver:
                 state = dict(self._get_state() or {})
             path = save_engagement(self._thread_id, self._objective, self._config, state, 0.0)
             self.last_path = path
-            with contextlib.suppress(Exception):
-                print(f"[sje] engagement saved ({reason}) — resume: suijin load {path.name}", file=sys.stderr)
+            if reason != "conclusion":  # the conclusion path prints its own line upstairs
+                with contextlib.suppress(Exception):
+                    print(f"[sje] engagement saved ({reason}) — resume: suijin load {path.name}", file=sys.stderr)
         except Exception:  # noqa: BLE001 — the emergency save must never raise
             path = None
         return path

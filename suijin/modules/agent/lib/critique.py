@@ -15,6 +15,7 @@ logged, not fatal.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 
@@ -86,8 +87,24 @@ def run_self_critique(
     )
     try:
         import asyncio
+        import concurrent.futures
 
-        raw = asyncio.run(generate_fn([{"role": "user", "content": prompt}], config, on_delta=False))
+        # critique runs INSIDE the engagement's event loop — asyncio.run
+        # here raises "cannot be called from a running event loop" and the
+        # freshly created coroutine leaks (the "never awaited" warning at
+        # engagement end). A private loop on a worker thread is always safe.
+        _coro = generate_fn([{"role": "user", "content": prompt}], config, on_delta=False)
+
+        def _run():
+            return asyncio.run(_coro)
+
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
+                raw = _pool.submit(_run).result(timeout=180)
+        except BaseException:
+            with contextlib.suppress(Exception):
+                _coro.close()  # never leak the coroutine, whatever happened
+            raise
     except Exception as e:  # noqa: BLE001 — critique is never fatal
         logger.warning("self-critique LLM call failed: %s", e)
         return None
