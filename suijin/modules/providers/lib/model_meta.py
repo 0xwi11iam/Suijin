@@ -191,6 +191,7 @@ def window_status(provider: str, model: str, config: dict | None = None) -> dict
             }
     return {"window_tokens": DEFAULT_CONTEXT_WINDOW, "source": "fallback (1M assumed)"}
 
+
 def supported_effort_levels(provider: str, model: str, config: dict | None = None) -> list[str]:
     """The effort values this model accepts (models.dev reasoning_options),
     normalized to suijin's tier vocabulary. Empty when unsupported/unknown —
@@ -223,4 +224,109 @@ def _find_model_node(catalog: dict, provider: str, model: str) -> dict | None:
     if "/" in model:
         _p, _m = model.split("/", 1)
         return _find_model_node(catalog, _p, _m.strip())
+    return None
+
+
+# ── pricing (models.dev is the source of truth — nothing hardcoded) ──────
+
+
+def _pricing_from_entry(m: dict) -> tuple[float, float] | None:
+    """(input, output) $/1M from a models.dev entry's cost object. None
+    when absent or zero (zero = bundled in a plan, not a real price)."""
+    with contextlib.suppress(Exception):
+        c = m.get("cost") or {}
+        i = float(c.get("input") or 0)
+        o = float(c.get("output") or 0)
+        if i > 0 and o > 0:
+            return (i, o)
+    return None
+
+
+def _lookup_pricing(catalog: dict, provider: str, model: str) -> tuple[float, float] | None:
+    provs = catalog.get("providers") or {}
+    p = str(provider or "").strip().lower()
+    cands = [p, p.removeprefix("custom:")]
+    for pid in cands:
+        pnode = provs.get(pid)
+        if not isinstance(pnode, dict):
+            continue
+        models = pnode.get("models") or {}
+        # exact then substring model match
+        for mid, m in models.items():
+            if isinstance(m, dict) and mid.lower() == str(model).lower():
+                pr = _pricing_from_entry(m)
+                if pr:
+                    return pr
+        for mid, m in models.items():
+            if isinstance(m, dict) and str(model).lower() in mid.lower():
+                pr = _pricing_from_entry(m)
+                if pr:
+                    return pr
+    # global scan: model ids are near-unique across providers — a bare
+    # id like glm-5.3 resolves even when the caller's provider string is
+    # generic. TWO passes: full-id equality, then BASE-id equality (after
+    # any aggregator prefix, "deepseek-ai/X" == "x") so the same model
+    # costs the same however it is listed.
+    _m = str(model).lower()
+    for pnode in provs.values():
+        if not isinstance(pnode, dict):
+            continue
+        for mid, m in (pnode.get("models") or {}).items():
+            if isinstance(m, dict) and mid.lower() == _m:
+                pr = _pricing_from_entry(m)
+                if pr:
+                    return pr
+    _base = _m.split("/")[-1]
+    if _base != _m:
+        for pnode in provs.values():
+            if not isinstance(pnode, dict):
+                continue
+            for mid, m in (pnode.get("models") or {}).items():
+                if isinstance(m, dict) and mid.lower().split("/")[-1] == _base:
+                    pr = _pricing_from_entry(m)
+                    if pr:
+                        return pr
+    # coding-plan rows price at 0 (credits) — the honest USD is the
+    # PAY-AS-YOU-GO row of the same family: retry without the plan suffix
+    if any(c.endswith("-coding-plan") for c in cands):
+        for pid in (c.removesuffix("-coding-plan") for c in cands if c.endswith("-coding-plan")):
+            pnode = provs.get(pid)
+            if isinstance(pnode, dict):
+                for mid, m in (pnode.get("models") or {}).items():
+                    if isinstance(m, dict) and str(model).lower() in mid.lower():
+                        pr = _pricing_from_entry(m)
+                        if pr:
+                            return pr
+    return None
+
+
+def resolve_pricing(provider: str, model: str, config: dict | None = None) -> tuple[float, float] | None:
+    """(input, output) $/1M from the LIVE models.dev catalog (cached,
+    7-day TTL — same seam as context windows). Operator-config pricing for
+    custom providers wins first; None when the catalog has no real price
+    (the caller's offline fallback applies and is labeled approximate).
+    Never raises."""
+    cfg = config or {}
+    # 1. operator-declared custom provider pricing (their endpoint, their
+    #    word — models.dev cannot know a LAN box)
+    with contextlib.suppress(Exception):
+        from suijin.modules.providers.lib.registry import active_pricing, resolve_custom_provider
+
+        for _entry in cfg.get("custom_providers") or []:
+            _name = str(_entry.get("name", "")).strip()
+            _spec = resolve_custom_provider(_name, cfg) if _name else None
+            if _spec and _spec.default_model and _spec.default_model.lower() in str(model or "").lower():
+                _sel = str((_entry.get("pricing") or {}).get("selection", "auto"))
+                _pair = active_pricing(_spec, _sel)
+                if _pair:
+                    return _pair
+    # 2. models.dev (cached/fetched)
+    model_id = str(model or "").strip()
+    if model_id:
+        with contextlib.suppress(Exception):
+            catalog = _catalog()
+            if catalog:
+                pr = _lookup_pricing(catalog, provider, model_id)
+                if pr:
+                    return pr
     return None

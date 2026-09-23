@@ -87,8 +87,9 @@ def _resolve_effort_tier(model: str, requested: str, provider: str = "") -> str:
     return want
 
 
-def _apply_effort(payload: dict, model: str, config: dict | None, mtokens: int,
-                  openai_style: bool = False, provider: str = "") -> None:
+def _apply_effort(
+    payload: dict, model: str, config: dict | None, mtokens: int, openai_style: bool = False, provider: str = ""
+) -> None:
     """Apply the operator's effort tier to ANY provider's payload.
 
     Two dialects (2026-09-17):
@@ -119,6 +120,9 @@ def _apply_effort(payload: dict, model: str, config: dict | None, mtokens: int,
 # These are estimates for the cost guardrail — NOT billing-grade. Unknown
 # models contribute 0.0 to est_cost_usd and flip USAGE["priced"] to a
 # best-effort flag so the UI can label the number as approximate.
+#: OFFLINE FALLBACK ONLY — the live source of truth is models.dev
+#: (resolve_pricing, cached 7d). This table answers when the catalog is
+#: unreachable; such costs are flagged approximate (USAGE["priced"]=False).
 MODEL_PRICING = {
     # Anthropic
     "claude-opus-4-7": (15.0, 75.0),
@@ -166,11 +170,31 @@ MODEL_PRICING = {
 DEFAULT_RATE = (0.20, 0.60)
 
 
-def _price_for(model):
-    """Return (input_$per_1M, output_$per_1M) for a model id, or None."""
+def _price_for(model, provider: str = ""):
+    """(input_$per_1M, output_$per_1M) for a model id — LIVE-FIRST:
+
+    1. operator config (custom_providers, their word for their endpoint)
+    2. the models.dev catalog (cached 7d — the source of truth; coding-
+       plan rows price at 0 and resolve to the PAYG equivalent)
+    3. MODEL_PRICING + registry specs — the OFFLINE fallback only,
+       labeled approximate via USAGE["priced"] = False
+    """
     if not model:
         return None
     m = str(model).strip()
+    # 1+2. live resolution (config first, then the catalog)
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.services import get as _service
+
+        _cfg = _service("red_config") or {}
+        from suijin.modules.providers.lib.model_meta import resolve_pricing
+
+        _pair = resolve_pricing(str(provider or _cfg.get("provider") or ""), m, _cfg)
+        if _pair:
+            USAGE["_priced_exact"] = True  # live rate, not a fallback
+            return _pair
+    # 3. offline fallbacks (approximate)
+    USAGE["_priced_exact"] = False
     if m in MODEL_PRICING:
         return MODEL_PRICING[m]
     # registry providers price their own default models
@@ -180,23 +204,6 @@ def _price_for(model):
         for _spec in PROVIDER_REGISTRY.values():
             if _spec.default_model and _spec.default_model.split("/")[-1].lower() in m.lower() and _spec.pricing:
                 return _spec.pricing
-    # CUSTOM endpoints (2026-09-12): config-declared pricing, peak/off-peak
-    # resolved by wall clock — without this the spend cap was structurally
-    # unenforceable on operator endpoints (unpriced = the governor cannot
-    # stop, the measured "0 = disabled" trap).
-    with contextlib.suppress(Exception):
-        from suijin.modules.providers.lib.registry import active_pricing, resolve_custom_provider
-        from suijin.modules.tools.lib.services import get as _service
-
-        _cfg = _service("red_config") or {}
-        for _entry in _cfg.get("custom_providers") or []:
-            _name = str(_entry.get("name", "")).strip()
-            _spec = resolve_custom_provider(_name, _cfg) if _name else None
-            if _spec and _spec.default_model and _spec.default_model.lower() in m.lower():
-                _sel = str((_entry.get("pricing") or {}).get("selection", "auto"))
-                _pair = active_pricing(_spec, _sel)
-                if _pair:
-                    return _pair
     # tolerate provider prefixes / suffixes (e.g. "anthropic/claude-opus-4-8")
     # and case drift ("deepseek-ai/DeepSeek-V4-Flash" vs "deepseek-v4-flash")
     m_lower = m.lower()
@@ -263,9 +270,11 @@ def _record_usage(provider, model, in_tok, out_tok, estimated: bool = False):
         USAGE["estimated_calls" if estimated else "api_reported_calls"] += 1
         if provider == "zai":
             _flag_plan_billing()
-        price = _price_for(model)
+        price = _price_for(model, provider=str(provider or ""))
         if price is not None:
-            USAGE["priced"] = USAGE["priced"] and True  # exact price used
+            # exact = live models.dev rate or operator config; the offline
+            # table is honest about being approximate
+            USAGE["priced"] = USAGE["priced"] and bool(USAGE.pop("_priced_exact", False))
         else:
             USAGE["priced"] = False  # fallback rate in play — cost is approximate
             price = DEFAULT_RATE  # estimate anyway so the guardrail works
