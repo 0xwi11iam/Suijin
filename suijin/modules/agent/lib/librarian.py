@@ -44,6 +44,7 @@ _lock = threading.Lock()
 # UI publish hook (set by the red-teamer): fn(count). The agent layer
 # never imports the red TUI — the hook is wired where the UI lives.
 _UI_PUBLISH = None
+_UI_PUBLISH_COUNT: list = [0, 0]  # (this run, total incl. carried) — render_ledger breakdown
 
 
 def set_ui_publish(fn) -> None:
@@ -222,6 +223,12 @@ class Librarian:
         self._dir = Path(engagement_dir)
         self._interval = max(1, int(interval or 10))
         self._target = str(target or "")
+        # THIS RUN's stamp: every entry extracted here carries it; entries
+        # loaded from a resumed ledger keep their original stamp. The MEM
+        # gauge counts THIS RUN only — carried observations are memory, not
+        # live progress (the gauge used to show the whole resume chain's
+        # total, 70-80, as if it were this engagement's work).
+        self.run_id = time.strftime("%Y%m%dT%H%M%S")
         self._q: queue.Queue = queue.Queue(maxsize=2000)
         self._stop_flag = threading.Event()
         self._thread: threading.Thread | None = None
@@ -278,8 +285,10 @@ class Librarian:
 
     def _publish_count(self) -> None:
         with contextlib.suppress(Exception):
+            _mine = sum(1 for e in (self._ledger.get("entries") or []) if e.get("run") == self.run_id)
+            _UI_PUBLISH_COUNT[0] = (_mine, len(self._ledger.get("entries") or []))
             if _UI_PUBLISH is not None:
-                _UI_PUBLISH(len(self._ledger.get("entries") or []))
+                _UI_PUBLISH(_mine)  # the MEM gauge: THIS engagement's observations
 
     def _drain_once(self, final: bool = False) -> None:
         """Consume queued observations: extract → ledger → maybe digest."""
@@ -319,7 +328,14 @@ class Librarian:
                 seen.add((kind, val))
                 kind_counts[kind] = kind_counts.get(kind, 0) + 1
                 entries.append(
-                    {"kind": kind, "value": val, "where": where, "iter": iteration, "ts": time.strftime("%H:%M:%S")}
+                    {
+                        "kind": kind,
+                        "value": val,
+                        "where": where,
+                        "iter": iteration,
+                        "ts": time.strftime("%H:%M:%S"),
+                        "run": self.run_id,
+                    }
                 )
         # args themselves can carry the surface (a probe against /admin
         # IS the observation)
@@ -338,6 +354,7 @@ class Librarian:
                                     "value": val,
                                     "where": _u[:120],
                                     "iter": iteration,
+                                    "run": self.run_id,
                                     "ts": time.strftime("%H:%M:%S"),
                                 }
                             )
@@ -423,7 +440,10 @@ class Librarian:
     def render_ledger(self, query: str = "", limit: int = 8) -> str:
         """The memory_recall tool body."""
         digests = self._ledger.get("digests") or []
-        head = [f"Engagement memory: {len(self._ledger['entries'])} observations"]
+        _mine = sum(1 for e in (self._ledger.get("entries") or []) if e.get("run") == self.run_id)
+        _carried = len(self._ledger.get("entries") or []) - _mine
+        _scope = f"this run: {_mine}" + (f" (+{_carried} carried from resume)" if _carried else "")
+        head = [f"Engagement memory: {len(self._ledger['entries'])} observations ({_scope})"]
         for d in digests[-1:]:
             head.append("Latest condensed digest (" + str(d.get("ts", "")) + "):")
             head.extend("  - " + ln for ln in (d.get("lines") or [])[:10])
