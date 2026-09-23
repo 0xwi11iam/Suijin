@@ -165,6 +165,19 @@ def untried(queue: list) -> list[dict]:
 _VERDICT_LEDGER = "outputs/surface_verdicts.jsonl"
 
 
+def reset_verdict_ledger() -> None:
+    """Engagement scope: surface verdicts belong to THEIR engagement — a
+    stale ledger cleared surfaces the next target never tested."""
+    try:
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+        ledger = WORKSPACE_DIR / _VERDICT_LEDGER
+        if ledger.is_file():
+            ledger.unlink()
+    except Exception:  # noqa: BLE001 — accounting must never block a run
+        pass
+
+
 def _apply_surface_verdicts(queue: list) -> None:
     """Retire queue items the agent explicitly cleared. Never raises —
     accounting must not break the run it measures."""
@@ -402,7 +415,9 @@ def govern(state: dict, cfg: dict | None) -> dict | None:
 
 
 def best_skill_for(state: dict) -> str:
-    """Best-fit doctrine from the collected surfaces."""
+    """Best-fit doctrine from the collected surfaces. Local engagements
+    (this-machine privesc/hardening) have no WEB surfaces — the swap would
+    bolt sqli/xss doctrine onto a shell walk, so it stands down."""
     texts = " ".join(str(s.get("surface")) for s in (state.get("_attack_queue") or []))
     texts += " " + " ".join(
         str(t.get("tool_name")) + " " + str(t.get("tool_output"))[:200]
