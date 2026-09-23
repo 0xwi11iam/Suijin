@@ -1785,6 +1785,34 @@ def run_load_cmd(args) -> int:
         return 1
 
 
+def run_prompt_cmd(args) -> int:
+    """`suijin prompt [show|reset|diff]` — the operator-editable system prompt."""
+    from suijin.modules.agent.lib.prompts import prompt_file as pf
+
+    action = getattr(args, "action", "") or "show"
+    p = pf.prompt_path()
+    if action == "reset":
+        print(f"regenerated (previous backed up): {pf.reset()}")
+        return 0
+    if action == "diff":
+        import difflib
+
+        gen = pf.generated_core().splitlines()
+        usr = pf.user_zone().splitlines()
+        delta = list(difflib.unified_diff(gen, usr, fromfile="generated", tofile="your prompt", lineterm="", n=1))
+        print("\n".join(delta[:80]) if delta else "your prompt matches the generated core")
+        return 0
+    if not p.is_file():
+        print("no prompt.md yet — it is created at the next engagement boot (or: suijin prompt reset)")
+        return 0
+    text = p.read_text(encoding="utf-8", errors="replace")
+    print(f"path: {p}")
+    print("edit freely ABOVE the marker line; suijin refreshes only below it.")
+    print("overrides: '@suijin override completion-gate | guardrails'\n")
+    print(text[:4000] + ("\n… (truncated — open the file to edit)" if len(text) > 4000 else ""))
+    return 0
+
+
 def run_theater_cmd(args) -> int:
     """`suijin theater` — C26 animated session replay."""
     import json as _json
@@ -2049,6 +2077,7 @@ _KNOWN_VERBS = frozenset(
         "engage",
         "exploit",
         "load",
+        "prompt",
         "theater",
         "plan",
         "recipes",
@@ -2173,6 +2202,9 @@ def main(argv=None):
     exploit_p.add_argument("target", help="IP / hostname / URL (authorization checked)")
     exploit_p.set_defaults(func=run_exploit_cmd)
 
+    prompt_p = sub.add_parser("prompt", help="the operator-editable system prompt (prompt.md)")
+    prompt_p.add_argument("action", nargs="?", default="show", choices=["show", "reset", "diff"])
+    prompt_p.set_defaults(func=run_prompt_cmd)
     load_p = sub.add_parser("load", help="resume a saved engagement (.sje bundle)")
     load_p.add_argument(
         "bundle", nargs="?", default=None, help="path or bundle name (omit to pick from the ten newest)"
