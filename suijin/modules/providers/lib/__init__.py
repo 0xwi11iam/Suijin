@@ -139,15 +139,20 @@ MODEL_PRICING = {
     "zai-org/GLM-5.1": (0.60, 2.20),
     "deepseek-v4-flash": (0.27, 1.10),
     "deepseek-v4-pro": (0.55, 2.19),
-    # Z.ai GLM (coding-plan models; requests for older GLM ids are
-    # auto-routed by the server, e.g. glm-5.1 -> glm-5.3).
-    "glm-5.3": (0.80, 2.60),
-    "glm-5.3-flash": (0.14, 0.70),
+    # Z.ai GLM PAYG rates (models.dev, verified 2026-09-23 — the old
+    # table ran glm-5.3 at 0.80/2.60 and under-billed ~70%). Coding-plan
+    # requests bill CREDITS, not USD: usage carries the plan flag and the
+    # cost line is labeled a PAYG-equivalent estimate.
+    "glm-5.3": (1.40, 4.40),
+    "glm-5.3-flash": (0.15, 0.50),
+    "glm-5.3-flashx": (0.37, 1.25),
+    "glm-5.3-highspeed": (1.40, 4.40),  # plan-only id; PAYG equivalent
     "glm-5-turbo": (0.50, 2.00),
-    "glm-5.1": (0.60, 2.20),
-    "glm-5.1-flash": (0.11, 0.58),
+    "glm-5.1": (1.40, 4.40),
+    "glm-5.1-flash": (0.15, 0.50),
     "glm-4.7": (0.60, 2.20),
     "glm-4.7-flash": (0.11, 0.58),
+    "glm-4.7-flashx": (0.07, 0.40),
     "glm-4.6": (0.60, 2.20),
     # Legacy
     "deepseek-chat": (0.27, 1.10),
@@ -225,6 +230,19 @@ def estimate_tokens(text) -> int:
     return int(cjk + words * 1.3 + punct * 0.5)
 
 
+def _flag_plan_billing():
+    """True when the ACTIVE zai endpoint is the Coding Plan — those calls
+    burn plan credits, not USD. The cost tally then carries
+    plan_billing=True so displays can label dollars as PAYG-equivalent."""
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.services import get as _service
+
+        _cfg = _service("red_config") or {}
+        _prov = str(_cfg.get("provider") or "")
+        if _prov == "zai" and str(_cfg.get("zai_endpoint") or "coding").strip().lower() == "coding":
+            USAGE["plan_billing"] = True
+
+
 def _record_usage(provider, model, in_tok, out_tok, estimated: bool = False):
     """Add one call's token usage to the running tally. Never raises.
 
@@ -243,6 +261,8 @@ def _record_usage(provider, model, in_tok, out_tok, estimated: bool = False):
         # the diff). Per-request, written at record time, race-tight.
         USAGE["last_request_input_tokens"] = in_tok
         USAGE["estimated_calls" if estimated else "api_reported_calls"] += 1
+        if provider == "zai":
+            _flag_plan_billing()
         price = _price_for(model)
         if price is not None:
             USAGE["priced"] = USAGE["priced"] and True  # exact price used
@@ -284,6 +304,7 @@ def reset_usage():
             "input_tokens": 0,
             "output_tokens": 0,
             "est_cost_usd": 0.0,
+            "plan_billing": False,
             "priced": True,
             "api_reported_calls": 0,
             "estimated_calls": 0,
