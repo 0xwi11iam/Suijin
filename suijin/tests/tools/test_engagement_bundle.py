@@ -397,3 +397,28 @@ class TestGroundedReports:
             assert "Strip source maps" in body
         finally:
             ws.WORKSPACE_DIR = keep
+
+
+class TestV3BundleLocations:
+    """v3: bundles live in the engagement's state/; the picker also reads
+    the legacy exports/ inbox so old workspaces keep resuming."""
+
+    def test_bundle_saved_inside_engagement(self, tmp_path, monkeypatch):
+        import suijin.modules.platform.lib.workspace as ws
+
+        monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ws._reset_engagement()
+        ws.set_engagement("v3 bundle location test")
+        path = eb.save_engagement("t", "obj", {}, _state())
+        assert "/engagements/" in str(path) and "/state/" in str(path)
+
+    def test_picker_reads_legacy_exports_too(self, tmp_path, monkeypatch):
+        import suijin.modules.platform.lib.workspace as ws
+
+        monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ws._reset_engagement()
+        legacy = tmp_path / "exports"
+        legacy.mkdir()
+        (legacy / "old_run_20260101.sje").write_bytes(b"placeholder")
+        files = eb._bundle_files()
+        assert any("old_run_20260101.sje" in str(f) for f in files)

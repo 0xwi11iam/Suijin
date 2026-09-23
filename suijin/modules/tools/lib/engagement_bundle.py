@@ -67,9 +67,14 @@ _SENSITIVE = ("key", "token", "secret", "password")
 
 
 def _exports_dir() -> Path:
-    from suijin.modules.platform.lib.workspace import artifact_dir  # function-local (boundary law)
+    """Where bundles live: INSIDE the engagement (v3 — the folder stays in
+    place, so the bundle survives with it). Falls back to the legacy
+    workspace exports/ for pre-v3 workspaces when no engagement is
+    active (the picker reads both)."""
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR, engagement_dir  # function-local (boundary law)
 
-    d = artifact_dir("exports")
+    eng = engagement_dir()
+    d = eng / "state" if eng.parent.name != "_default" else WORKSPACE_DIR / "exports"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -272,13 +277,30 @@ def resume_engagement(path: str | Path) -> int:
 #  filenames; `suijin load` with no argument lists the ten newest.
 
 
+def _bundle_files() -> list[Path]:
+    """All .sje on disk: v3 engagement state dirs first (the current one's
+    bundles excluded), then the legacy workspace exports inbox."""
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+    out: dict[str, Path] = {}
+    engs = WORKSPACE_DIR / "engagements"
+    if engs.is_dir():
+        for f in sorted(engs.glob("*/state/*.sje")):
+            out.setdefault(str(f), f)
+    legacy = WORKSPACE_DIR / "exports"
+    if legacy.is_dir():
+        for f in sorted(legacy.glob("*.sje")):
+            out.setdefault(str(f), f)
+    return list(out.values())
+
+
 def recent_bundles(limit: int = 10) -> list[dict]:
     """The newest .sje bundles (newest first) with display metadata read
     straight from each manifest. Never raises; unreadable bundles still
     list (name/size/date only)."""
     out: list[dict] = []
     with contextlib.suppress(Exception):
-        files = [p for p in _exports_dir().glob("*.sje") if p.is_file()]
+        files = [p for p in _bundle_files() if p.is_file()]
         for p in sorted(files, key=lambda f: f.stat().st_mtime, reverse=True)[: max(1, limit)]:
             st = p.stat()
             meta = {

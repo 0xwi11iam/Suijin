@@ -53,7 +53,7 @@ class PlatformModule(Module):
 
         init_runtime()
         ensure_workspace_layout()
-        for sub in ("payloads", "scripts", "outputs", "reports", "audit_trails"):
+        for sub in ("payloads", "scripts", "reports", "audit_trails"):
             (Path(ctx.workspace) / sub).mkdir(parents=True, exist_ok=True)
         self._initialized = True
         ctx.journal.append("platform", f"workspace ready at {ctx.workspace}")

@@ -68,16 +68,29 @@ WORKSPACE_DIR = _resolve_workspace()
 #: that must outlive the engagement stay global; everything else lives
 #: and dies with its session folder.
 ENGAGEMENT_SUBDIRS = (
-    "home",  # the agent's ~ (cwd for tools, downloads, loot)
+    "home",  # the agent's USERLAND (see home_dir) — the write-jail root
     ".notes",  # engagement notes
     "exploits",  # EXP-NNN/{description.md, exploit.yaml, run-N.log}
     "audit_trails",
     "dossiers",
     "toollogs",  # timestamped tool dumps (nmap, terminal, ...)
     "reports",
+    "log",  # engagement.log — the logging subprocess's per-run file
     "state",  # scratchpad, live guidance, questions, coverage, .sje
     "memory",  # per-engagement intel (fresh session = fresh memory)
     "sessions",  # session snapshots for THIS engagement
+)
+
+#: the userland seeded inside every engagement home/ — a small
+#: Linux-feeling user space: the agent feels at home, operators read
+#: artifacts where they expect them (v3, 2026-09-23)
+HOME_USERLAND = (
+    "Downloads",
+    "Documents",
+    "Pictures",
+    ".config",
+    ".local/share",
+    ".ssh",  # keys the agent generates live WITH the engagement
 )
 
 #: routed INSIDE the engagement on demand (modules that predate the
@@ -100,10 +113,13 @@ ENGAGEMENT_LAZY = (
 GLOBAL_DIRS = (
     "profiles",  # <name>/{SOUL.md, rules.md, config.json} — operator-owned
     "skills",  # the SKILL.md library (imported knowledge, like profiles)
-    "exports",  # the .sje inbox — resume artifacts must outlive the run
     "logs",  # crash/engage logs that must survive engagement end
-    "archive",  # ended engagements (immutable)
 )
+
+#: RETIRED (v3): exports/ and archive/ — the .sje bundle and everything
+#: else live INSIDE the engagement folder, which stays in place at run
+#: end. Legacy callers that still ask for these resolve to logs/ or the
+#: engagement root so nothing breaks on old workspaces.
 
 #: names accepted by artifact_dir() — engagement-scoped when an engagement
 #: is active, global otherwise (legacy callers keep working)
@@ -131,6 +147,10 @@ def artifact_dir(name: str) -> Path:
     """
     if name in GLOBAL_DIRS:
         return _ensure(WORKSPACE_DIR / name)
+    if name in ("exports", "archive"):
+        # v3 retirees: the .sje lives in the engagement now; old callers
+        # (bundle pickers on legacy workspaces) get the engagement root
+        return _ensure(engagement_dir())
     if name not in ENGAGEMENT_SUBDIRS and name not in ENGAGEMENT_LAZY:
         raise ValueError(f"unknown artifact dir {name!r} (one of {ARTIFACT_DIRS})")
     return _ensure(engagement_dir() / name)
@@ -176,8 +196,15 @@ def engagement_dir() -> Path:
 
 
 def home_dir() -> Path:
-    """The agent's ~ for this engagement — tool cwd, downloads, loot."""
-    return _ensure(engagement_dir() / "home")
+    """The agent's USERLAND for this engagement — a small Linux-feeling
+    home (Downloads/ Documents/ .config/ ...) so tools that assume a
+    user space behave naturally. This is the WRITE-JAIL ROOT: everything
+    the agent writes resolves inside the engagement folder."""
+    h = _ensure(engagement_dir() / "home")
+    for sub in HOME_USERLAND:
+        with contextlib.suppress(OSError):
+            (h / sub).mkdir(parents=True, exist_ok=True)
+    return h
 
 
 def notes_dir() -> Path:
