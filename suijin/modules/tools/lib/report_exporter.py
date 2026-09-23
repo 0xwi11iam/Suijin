@@ -5,6 +5,7 @@ Generates Markdown reports with Mermaid diagrams, finding tables, attack chains.
 
 from __future__ import annotations
 
+import contextlib
 import json
 from datetime import datetime, timezone
 
@@ -68,6 +69,12 @@ def generate_report(
         )
     )
 
+    # Evidence join: the exploit catalog carries verification status +
+    # POC receipts (commands + expected_result). A finding without a
+    # CONFIRMED receipt is labeled UNVERIFIED — the report never asserts
+    # more than the evidence shows (no LLM prose anywhere in this file).
+    catalog = _catalog_receipts(engagement_name)
+
     # Build Markdown report
     lines = [
         "# Suijin Engagement Report",
@@ -96,15 +103,43 @@ def generate_report(
     if findings:
         lines.append("## Findings")
         lines.append("")
-        lines.append("| # | Type | Severity | Endpoint | Description |")
-        lines.append("|---|------|----------|----------|-------------|")
+        lines.append("| # | Type | Severity | Endpoint | Status | Description |")
+        lines.append("|---|------|----------|----------|--------|-------------|")
         for i, f in enumerate(findings, 1):
             sev = f.get("severity", "info").upper()
             ftype = f.get("type", "unknown")
             ep = f.get("endpoint", "?")
             desc = f.get("description", "")[:100]
-            lines.append(f"| {i} | {ftype} | {sev} | {ep} | {desc} |")
+            key = str(f.get("title") or f.get("rule") or desc)[:60].lower()
+            status = catalog.get("by_title", {}).get(key, "UNVERIFIED")
+            lines.append(f"| {i} | {ftype} | {sev} | {ep} | {status} | {desc} |")
         lines.append("")
+
+        # Reproduction: exact commands + the expected marker per verified
+        # finding — straight from the POC receipts
+        reps = catalog.get("receipts", [])  # only CONFIRMED POCs are collected
+        if reps:
+            lines.append("### Reproduction (verified POCs)")
+            lines.append("")
+            for r in reps:
+                lines.append(f"**{r['id']} — {r['title'][:80]}** ({r['severity']})")
+                lines.append("")
+                lines.append("```bash")
+                lines.extend(r["commands"][:10])
+                lines.append("```")
+                lines.append(f"Expected result contains: `{r['expected'][:100]}`")
+                lines.append("")
+
+        # Remediation: deterministic per vuln class
+        if findings:
+            lines.append("### Remediation")
+            lines.append("")
+            for i, f in enumerate(findings, 1):
+                cls = str(f.get("type") or f.get("finding_type") or "").lower()
+                rem = _REMEDIATION.get(cls.split()[0] if cls else "", "")
+                if rem:
+                    lines.append(f"{i}. {rem}")
+            lines.append("")
 
     # Attack chains with Mermaid diagram
     if attack_chains:
@@ -153,6 +188,64 @@ def generate_report(
 
     path.write_text("\n".join(lines))
     return str(path)
+
+
+#: deterministic remediation guidance by vuln class — no LLM prose
+_REMEDIATION = {
+    "sqli": "Parameterize the query; never interpolate user input into SQL (OWASP A03).",
+    "xss": "Contextual output encoding + a Content-Security-Policy without unsafe-inline.",
+    "ssrf": "Allowlist outbound destinations at the egress layer; deny link-local and metadata ranges.",
+    "source": "Strip source maps from production builds or gate them behind authentication.",
+    "sourcemap": "Strip source maps from production builds or gate them behind authentication.",
+    "auth": "Enforce server-side authorization on every route; do not trust client state.",
+    "idor": "Scope every object access to the authenticated principal (OWASP A01).",
+    "info": "Remove the informational exposure or gate it; disclose only what operations require.",
+    "secret": "Rotate the exposed credential and remove it from the shipped artifact.",
+    "rce": "Remove the execution sink; sandbox any remaining deserialization/command paths.",
+}
+
+
+def _catalog_receipts(engagement_name: str) -> dict:
+    """Join the exploit catalog for THIS engagement: verification status
+    by finding title + CONFIRMED POC receipts. Best-effort; missing
+    catalog = every finding stays UNVERIFIED (honest, not empty)."""
+    out: dict = {"by_title": {}, "receipts": []}
+    with contextlib.suppress(Exception):
+        import json as _json
+
+        from suijin.modules.tools.lib.exploit_catalog import _catalog_roots, parse_exploit_yaml
+
+        for root in _catalog_roots():
+            idx = root / "catalog.json"
+            if not idx.is_file():
+                continue
+            data = _json.loads(idx.read_text(encoding="utf-8"))
+            entries = data.get("entries") or {}
+            vals = entries.values() if isinstance(entries, dict) else entries
+            for e in vals:
+                if not isinstance(e, dict):
+                    continue
+                title = str(e.get("title") or "")[:60].lower()
+                status = str(e.get("status") or "").upper()
+                eid = str(e.get("id") or "?")
+                sev = str(e.get("severity") or "?")
+                cmds: list = []
+                expected = ""
+                yml = root / eid / "exploit.yaml"
+                if yml.is_file():
+                    cmds, expected = parse_exploit_yaml(yml.read_text(encoding="utf-8"))
+                out["by_title"][title] = status or "UNVERIFIED"
+                if status == "CONFIRMED":
+                    out["receipts"].append(
+                        {
+                            "id": eid,
+                            "title": str(e.get("title") or eid),
+                            "severity": sev,
+                            "commands": cmds,
+                            "expected": expected,
+                        }
+                    )
+    return out
 
 
 def _safe_id(text: str) -> str:

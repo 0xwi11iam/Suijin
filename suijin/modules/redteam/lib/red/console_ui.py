@@ -1948,6 +1948,9 @@ class EngagementUI:
             f"\n[bold]Done:[/bold] {ok} steps"
             + (f" ({total} actions)" if total and total != ok else "")
             + f" | phase={escape(_phase)} | ${cost:.4f}"
+            + (" [dim](PAYG-equivalent — coding plan burns credits)[/dim]"
+               if UI_STATE.get("plan_billing")
+               else "")
             + (f" | {escape(str(reason))}" if str(reason).strip() and len(str(reason)) < 90 else "")
         )
         if str(reason).strip() and len(str(reason)) >= 90:
