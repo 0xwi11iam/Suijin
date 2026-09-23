@@ -138,3 +138,48 @@ class TestDispatchWiring:
             "local_hist_search",
         ):
             assert f'"{tool}"' in src, tool
+
+
+class TestForceCompact:
+    """/compact (trigger_chars=0) must always work: no refusal on message
+    COUNT (10 giant tool outputs were uncompactable), honest no-op reasons."""
+
+    def test_few_huge_messages_compact(self):
+        from suijin.modules.agent.lib.compact import compact, history_chars
+
+        msgs = [{"role": "system", "content": "sys"}] + [
+            {"role": "assistant" if i % 2 else "user", "content": "X" * 30000} for i in range(10)
+        ]
+        out = compact(msgs, trigger_chars=0)
+        assert out is not msgs, "300k chars in 10 messages must compact"
+        assert history_chars(out) < history_chars(msgs) // 2
+
+    def test_genuinely_tiny_conversation_stays(self):
+        from suijin.modules.agent.lib.compact import compact
+
+        msgs = [{"role": "system", "content": "sys"}] + [{"role": "user", "content": f"t{i}"} for i in range(4)]
+        assert compact(msgs, trigger_chars=0) is msgs
+
+    def test_normal_trigger_path_unchanged(self):
+        from suijin.modules.agent.lib.compact import compact
+
+        small = [{"role": "user", "content": "x" * 500}] * 10
+        assert compact(small, trigger_chars=120_000) is small  # under trigger: no-op
+        many = [{"role": "user", "content": "x" * 6000}] * 30
+        out = compact(many, trigger_chars=120_000)
+        assert out is not many
+
+    def test_restart_rewires_set_state(self):
+        """The provider-restart path must re-wire run_box._set_state onto
+        the NEW thread (a forced /compact after restart was a silent
+        no-op into the dead checkpoint)."""
+        import inspect
+
+        import suijin.modules.redteam.lib.redteamer as rt
+
+        src = inspect.getsource(rt)
+        start = src.find("one automatic restart")
+        end = src.find("_restart_stream = True", start)
+        assert start > 0 and end > start
+        restart = src[start:end]
+        assert "run_box._set_state" in restart, "restart path must re-wire the run box"
