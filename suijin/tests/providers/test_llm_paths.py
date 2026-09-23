@@ -39,9 +39,15 @@ class TestProviderPricing:
 
 
 class TestProviderUsage:
-    def test_reset_and_record(self):
+    def test_reset_and_record(self, monkeypatch):
+        """Cost math against the LIVE pricing seam (models.dev catalog,
+        pinned here for determinism) — the hardcoded table is only the
+        offline fallback and is labeled approximate."""
         from suijin.modules.providers.lib import _record_usage, get_usage, reset_usage
+        from suijin.modules.providers.lib import model_meta as mm
 
+        fake = {"providers": {"deepseek": {"models": {"deepseek-v4-flash": {"cost": {"input": 0.27, "output": 1.10}}}}}}
+        monkeypatch.setattr(mm, "_catalog", lambda: fake)
         reset_usage()
         _record_usage("deepseek", "deepseek-v4-flash", 1000, 500)
         usage = get_usage()
