@@ -82,7 +82,7 @@ class TestInitRuntime:
         rt.init_runtime(force=True)
         # 2026-09-16 layout: global skeleton at the root, engagement tree
         # generated per engagement (set_engagement)
-        for name in ("profiles", "skills", "exports", "logs", "archive"):
+        for name in ("profiles", "skills", "logs"):  # v3: exports/archive retired — bundles live in engagements
             assert (tmp_path / name).is_dir(), f"{name}"
         eng = ws.set_engagement("phase0 probe")
         for sub in ("home", ".notes", "exploits", "audit_trails", "reports", "state", "memory", "sessions"):
