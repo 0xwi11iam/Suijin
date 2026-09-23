@@ -22,7 +22,6 @@ warnings.filterwarnings("ignore", message=".*allowed_objects.*")  # any category
 from rich.console import Console
 from rich.panel import Panel
 
-from suijin.modules.console.lib import settings_tui
 from suijin.modules.redteam.lib.redteamer import main as redteamer_main
 
 console = Console()
@@ -30,20 +29,9 @@ console = Console()
 CLI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "modules", "console", "lib", "cli.py")
 
 OPERATOR_TOOLS = [
-    ("Resume a saved engagement (.sje)", ["load-prompt"]),  # path prompted below
-    ("Scope editor (Burp-style TUI)", ["scope"]),
-    ("Approvals console (HITL)", ["approvals", "list"]),
-    ("Battle — red vs blue on the lab", ["battle"]),
-    ("Engagement debrief", ["debrief"]),
+    ("Resume a saved engagement (.sje)", ["load-prompt"]),
     ("Replay an engagement", ["replay"]),
-    ("Target dossier", None),  # prompts for target
-    ("Unified timeline", ["timeline"]),
-    ("Lab fleet + campaign", ["labs", "list"]),
-    ("Knowledge base status", ["pull", "kb", "--status"]),
     ("Workspace cleaner", ["clean"]),
-    ("Notifications test", ["notify", "test"]),
-    ("Provider health probe", ["providers"]),
-    ("PANIC — stop everything", ["panic"]),
 ]
 
 
@@ -66,24 +54,10 @@ def operator_menu():
         if not c.isdigit() or not (1 <= int(c) <= len(OPERATOR_TOOLS)):
             return
         label, args = OPERATOR_TOOLS[int(c) - 1]
-        if args == ["exploit"]:  # /exploit needs a target
-            try:
-                target = input("  target (IP / hostname / URL): ").strip()
-            except (KeyboardInterrupt, EOFError):
-                continue
-            if target:
-                _run_cli(["exploit", target])
-        elif args == ["load-prompt"]:  # resume a saved engagement
+        if args == ["load-prompt"]:  # resume a saved engagement
             # the CLI picker lists the ten newest bundles — no need to
             # memorize a timestamped filename
             _run_cli(["load"])
-        elif args is None:  # dossier needs a target
-            try:
-                target = input("  target (IP / hostname / URL): ").strip()
-            except (KeyboardInterrupt, EOFError):
-                continue
-            if target:
-                _run_cli(["dossier", target])
         else:
             _run_cli(args)
         try:
@@ -150,22 +124,14 @@ def main():
 
         console.print("[bold white]Select Operational Module:[/]")
         console.print("  [bold #ff5555]1.[/] [white]Red Team (Autonomous Agent)[/]")
-        console.print("  [bold #58a6ff]2.[/] [white]Blue Team (Active Defense)[/]")
-        console.print("  [bold yellow]3.[/] [white]Settings[/]")
-        console.print("  [bold #e6b47c]4.[/] [white]Operator Tools (scope, approvals, battle, debrief, …)[/]")
-        console.print("  [bold white]5.[/] [dim]Exit[/]\n")
+        console.print("  [bold #e6b47c]2.[/] [white]Operator Tools (resume, replay, clean)[/]")
+        console.print("  [bold white]3.[/] [dim]Exit[/]\n")
 
         try:
             c = input(" ").strip()
             if c == "1":
                 redteamer_main()
             elif c == "2":
-                from suijin.modules.blueteam.lib.blueteamer import main as blueteam_main
-
-                blueteam_main()
-            elif c == "3":
-                settings_tui.main()
-            elif c == "4":
                 operator_menu()
             else:
                 sys.exit(0)
@@ -183,7 +149,7 @@ def main():
             try:
                 from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-                d = WORKSPACE_DIR / "outputs" / "logs"
+                d = WORKSPACE_DIR / "logs"
                 d.mkdir(parents=True, exist_ok=True)
                 with (d / "selector_crash.log").open("a") as f:
                     import traceback as _tb

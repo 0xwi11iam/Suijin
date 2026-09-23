@@ -88,7 +88,6 @@ def isolated(monkeypatch, tmp_path):
     from suijin.modules.platform.lib import workspace as _ws
 
     monkeypatch.setattr(_ws, "WORKSPACE_DIR", tmp_path)
-    monkeypatch.setattr(rt, "DUMP_PATH", Path(str(tmp_path)) / "recovery.json")
     # non-TTY: pause console + asks resolve instantly, no stdin fights
     monkeypatch.setattr(rt.sc, "pause_console", lambda ctx, input_fn: "")
     monkeypatch.setattr(rt, "_operator_input", lambda label, timeout_s=600.0: "test answer", raising=False)

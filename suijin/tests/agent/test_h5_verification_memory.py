@@ -155,5 +155,5 @@ class TestH6Telemetry:
                 route_tool_fn=lambda n, a, c: "Status: 200",
             )
         )
-        rows = (tmp_path / "outputs" / "audit_trails" / "agent_steps.jsonl").read_text().splitlines()
+        rows = (tmp_path / "engagements" / "_default" / "audit_trails" / "agent_steps.jsonl").read_text().splitlines()
         assert rows and "iteration=7" in rows[-1] and "iteration=?" not in rows[-1]

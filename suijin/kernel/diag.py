@@ -30,7 +30,7 @@ def _log_path() -> Path:
     ws = os.environ.get("SUIJIN_WORKSPACE")
     if not ws:
         ws = str(Path.home() / ".suijin" / "workspace")
-    d = Path(ws) / "outputs" / "logs"
+    d = Path(ws) / "logs" / "logs"
     d.mkdir(parents=True, exist_ok=True)
     return d / "diag.log"
 

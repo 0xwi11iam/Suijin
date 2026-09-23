@@ -455,27 +455,31 @@ class TestClean:
 
         from suijin.modules.ops.lib.housekeeping import clean_workspace
 
-        self._old_file(tmp_path / "outputs" / "sandbox" / "x.txt")
+        eng = tmp_path / "engagements" / "20260901_old"
+        eng.mkdir(parents=True)
+        f = eng / "bundle.sje.tmp"
+        f.write_text("junk")
+        import os
+        import time as _t
+
+        os.utime(f, (_t.time() - 40 * 86400,) * 2)
         out = clean_workspace(apply=True, workspace=tmp_path)
         assert "archived" in out
-        assert not (tmp_path / "outputs" / "sandbox" / "x.txt").exists()
-        zips = list((tmp_path / "exports").glob("cleaned_*.zip"))
-        assert zips and "outputs/sandbox/x.txt" in zipfile.ZipFile(zips[0]).namelist()
+        assert not f.exists()
+        zips = list((tmp_path / "logs").glob("cleaned_*.zip"))
+        assert zips and any("bundle.sje.tmp" in n for n in zipfile.ZipFile(zips[0]).namelist())
 
     def test_fresh_files_kept(self, tmp_path):
         from suijin.modules.ops.lib.housekeeping import clean_workspace
 
-        (tmp_path / "outputs").mkdir()
-        (tmp_path / "outputs" / "new.log").write_text("recent")
+        eng = tmp_path / "engagements" / "live_one"
+        eng.mkdir(parents=True)
+        f = eng / "recent.tmp"
+        f.write_text("recent")
         out = clean_workspace(apply=True, workspace=tmp_path)
         assert "tidy" in out
-        assert (tmp_path / "outputs" / "new.log").exists()
+        assert f.exists()  # fresh junk is kept; engagement data never touched
 
-
-# ── Recon auto-suggest hook ────────────────────────────────────────────
-
-
-class TestReconHook:
     def test_exploit_leads_appended(self, monkeypatch, tmp_path):
         import suijin.modules.knowledge.lib.kb as kbmod
         import suijin.modules.knowledge.lib.kb_tools as kbt

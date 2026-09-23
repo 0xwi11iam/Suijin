@@ -35,7 +35,7 @@ def main() -> int:
         try:
             from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-            d = WORKSPACE_DIR / "outputs" / "logs"
+            d = WORKSPACE_DIR / "logs"
             d.mkdir(parents=True, exist_ok=True)
             (d / "engage_worker_crash.log").open("a").write(f"bad --config payload: {type(e).__name__}: {e}\n")
         except Exception:  # noqa: BLE001

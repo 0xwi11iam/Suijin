@@ -2,7 +2,7 @@
 
 Contract: a tool invoked through ANY surface (kernel ctx.call_tool, the
 agent execute loop, a CLI verb) produces a JSONL entry under
-<workspace>/outputs/audit_trails/ — with arg KEY NAMES and a digest but
+<workspace>/engagements/_default/audit_trails/ — with arg KEY NAMES and a digest but
 NEVER raw values (secrets must not land in the audit log), and entries
 are only ever appended, never rewritten.
 """
@@ -38,7 +38,7 @@ class TestKernelSurface:
         ctx, _ = controller.boot(module_roots=[MODULES], workspace=tmp_path, quiet=True)
         ctx.call_tool("search_kb", {"keyword": "sqli"})
         ctx.tool_audit.flush()
-        raw = (tmp_path / "outputs" / "audit_trails" / "tool_calls.jsonl").read_text()
+        raw = (tmp_path / "engagements" / "_default" / "audit_trails" / "tool_calls.jsonl").read_text()
         assert "sqli" not in raw  # the VALUE never appears
         entry = json.loads(raw.strip().splitlines()[-1])
         assert entry["args"]["keys"] == ["keyword"]
@@ -60,10 +60,10 @@ class TestKernelSurface:
         ctx, _ = controller.boot(module_roots=[MODULES], workspace=tmp_path, quiet=True)
         ctx.call_tool("search_kb", {"keyword": "a"})
         ctx.tool_audit.flush()
-        first = (tmp_path / "outputs" / "audit_trails" / "tool_calls.jsonl").read_text()
+        first = (tmp_path / "engagements" / "_default" / "audit_trails" / "tool_calls.jsonl").read_text()
         ctx.call_tool("search_kb", {"keyword": "b"})
         ctx.tool_audit.flush()
-        second = (tmp_path / "outputs" / "audit_trails" / "tool_calls.jsonl").read_text()
+        second = (tmp_path / "engagements" / "_default" / "audit_trails" / "tool_calls.jsonl").read_text()
         assert second.startswith(first) and len(second) > len(first)
         ctx.shutdown()
 
@@ -75,7 +75,8 @@ class TestCliSurface:
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
         ws._reset_engagement()  # hermetic: no engagement pinned from another test
-        audit_dir = tmp_path / "outputs" / "audit_trails"
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
+        audit_dir = tmp_path / "engagements" / "_default" / "audit_trails"
         import contextlib
         import io
 
@@ -94,6 +95,7 @@ class TestAgentSurface:
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        ws._reset_engagement()  # hermetic: no engagement pinned from another test
 
         async def fake_route(tool_name, args, config):
             return "ok result"
@@ -101,7 +103,7 @@ class TestAgentSurface:
         state = {"_current_step": {"tool_name": "search_kb", "tool_args": {"keyword": "x"}}, "current_iteration": 3}
         out = asyncio.run(execute_tool_node(state, route_tool_fn=fake_route))
         assert out["_tool_result"]["success"]
-        path = tmp_path / "outputs" / "audit_trails" / "agent_steps.jsonl"
+        path = tmp_path / "engagements" / "_default" / "audit_trails" / "agent_steps.jsonl"
         assert path.exists(), "agent step left no audit entry"
         entry = json.loads(path.read_text().strip().splitlines()[-1])
         assert entry["surface"] == "agent"

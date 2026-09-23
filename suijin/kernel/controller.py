@@ -142,7 +142,7 @@ def boot(
     ctx.journal = Journal(ctx.workspace / "logs")
     from suijin.kernel.audit import ToolAudit
 
-    ctx.tool_audit = ToolAudit(ctx.workspace / "outputs" / "audit_trails", "tool_calls.jsonl")
+    ctx.tool_audit = ToolAudit(ctx.workspace / "engagements" / "_default" / "audit_trails", "tool_calls.jsonl")
     ctx.health = HealthTracker()
     ctx.journal.append("boot", report.summary())
     started: list[object] = []
