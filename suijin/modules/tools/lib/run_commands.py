@@ -224,9 +224,7 @@ def _default_handlers(box: RunBox) -> dict:
         # deliver as guidance: the agent receives it as its next context
         ext = path.suffix.lstrip(".") or "text"
         with box._lock:
-            box._guidance.append(
-                f"FILE UPLOAD — {path.name} ({size // 1024}KB):\n```{ext}\n{text[:48_000]}\n```"
-            )
+            box._guidance.append(f"FILE UPLOAD — {path.name} ({size // 1024}KB):\n```{ext}\n{text[:48_000]}\n```")
         box._out.print(f"[green]  \u25b8 {path.name} queued for the agent ({size} bytes)[/green]")
 
     def compact(_args):
@@ -235,6 +233,7 @@ def _default_handlers(box: RunBox) -> dict:
         following request). Same algorithm as the automatic 90% trigger."""
         from suijin.modules.agent.lib.compact import compact as _compact
         from suijin.modules.agent.lib.compact import history_chars as _hc
+
         st = (box._get_state or (lambda: {}))() or {}
         msgs = st.get("messages") or []
         if not msgs:
@@ -246,14 +245,18 @@ def _default_handlers(box: RunBox) -> dict:
         compacted = _compact(msgs, trigger_chars=0)
         post = _hc(compacted)
         if compacted is msgs:
-            box._out.print(f"[yellow]  \u25b8 nothing to compact ({pre // 1000}k chars, {len(msgs)} msgs — too few to summarize)[/yellow]")
+            # honest no-op: WHAT floor blocked it, not a bare "0k"
+            box._out.print(
+                f"[yellow]  ▸ nothing older than the compact floor "
+                f"(~{max(1, pre // 4 // 1000)}k tok in {len(msgs)} msgs — a conversation this small keeps everything)[/yellow]"
+            )
             return
         # write the compacted messages back through the state setter
         if box._set_state:
             box._set_state("messages", compacted)
             box._out.print(
-                f"[green]  \u25b8 compacted {pre // 1000}k \u2192 {post // 1000}k chars"
-                f" ({100 - post * 100 // pre}% reduction)[/green]"
+                f"[green]  ▸ compacted ~{pre // 4 // 1000}k → ~{post // 4 // 1000}k tok "
+                f"({100 - post * 100 // pre}% reduction, {len(msgs) - len(compacted) + 1} msgs summarized)[/green]"
             )
         else:
             box._out.print("[yellow]  \u25b8 no state setter wired — compact not applied[/yellow]")

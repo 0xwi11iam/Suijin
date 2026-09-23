@@ -57,13 +57,28 @@ def _summarize_older(messages: list) -> str:
 
 def compact(messages: list, trigger_chars: int = DEFAULT_TRIGGER_CHARS, keep_recent: int = KEEP_RECENT) -> list:
     """Return a new message list, compacted when over budget. Never
-    mutates the input; no-op under the trigger."""
-    if not needs_compaction(messages, trigger_chars):
+    mutates the input; no-op under the trigger.
+
+    FORCE mode (trigger_chars=0, the operator's /compact): never refuses
+    on message COUNT — a conversation of 10 giant tool outputs (300k
+    chars) was uncompactable because the guard counted messages. Under
+    the floor the keep-window shrinks adaptively instead."""
+    forced = int(trigger_chars or 0) == 0 and bool(messages)
+    if not needs_compaction(messages, trigger_chars) and not forced:
         return messages
     system = [m for m in messages if m.get("role") == "system"]
     convo = [m for m in messages if m.get("role") != "system"]
-    if len(convo) <= keep_recent + 1:
-        return messages
-    older, recent = convo[:-keep_recent], convo[-keep_recent:]
+    if forced:
+        # adaptive floor: keep a third (min 4, max KEEP_RECENT) — there is
+        # always something to summarize unless the convo is tiny
+        keep = max(4, min(keep_recent, len(convo) // 3))
+        if len(convo) <= keep + 1:
+            # genuinely tiny (≤5 messages): nothing older than the floor
+            return messages
+    else:
+        keep = keep_recent
+        if len(convo) <= keep + 1:
+            return messages
+    older, recent = convo[:-keep], convo[-keep:]
     summary = {"role": "user", "content": _summarize_older(older)}
     return system + [summary] + recent

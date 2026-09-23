@@ -1264,6 +1264,15 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                         _pause_live.update({"agent": agent, "thread_id": thread_id})
                         _pause_ctx.agent = agent
                         _pause_ctx.thread_id = thread_id
+                        # RE-WIRE the run box onto the NEW thread — /compact
+                        # and any state write kept the boot-time wiring and
+                        # silently wrote into the dead thread's checkpoint
+                        # (a forced compact after a provider restart was a
+                        # no-op the operator could not see)
+                        with contextlib.suppress(Exception):
+                            run_box._set_state = lambda k, v: agent._graph.update_state(
+                                langgraph_config, {k: v}
+                            )
                         ui.waiting(True)
                         _restart_stream = True
                         break  # exit the INNER loop — the outer loop re-streams
