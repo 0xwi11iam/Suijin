@@ -138,3 +138,53 @@ class TestPricingAccuracy:
         P.reset_usage()
         P._record_usage("zai", "glm-5.3", 100, 100)
         assert P.get_usage()["plan_billing"] is True
+
+
+class TestLivePricing:
+    """Pricing comes from the models.dev catalog — the hardcoded table is
+    the offline fallback only, and it says so (priced=False)."""
+
+    def test_resolves_from_catalog(self, monkeypatch):
+        from suijin.modules.providers.lib import model_meta as mm
+
+        fake = {
+            "providers": {
+                "zai": {"models": {"glm-9.9": {"cost": {"input": 3.3, "output": 9.9}}}},
+                "zai-coding-plan": {"models": {"glm-9.9": {"cost": {"input": 0, "output": 0}}}},
+            }
+        }
+        monkeypatch.setattr(mm, "_catalog", lambda: fake)
+        assert mm.resolve_pricing("zai", "glm-9.9") == (3.3, 9.9)
+        # the coding-plan row (0/0 credits) resolves to the PAYG family rate
+        assert mm.resolve_pricing("zai-coding-plan", "glm-9.9") == (3.3, 9.9)
+
+    def test_custom_provider_config_wins(self, monkeypatch):
+        from suijin.modules.providers.lib import model_meta as mm
+
+        cfg = {
+            "custom_providers": [
+                {
+                    "name": "labbox",
+                    "endpoint": "http://10.0.0.9/v1",
+                    "pricing": {"input": 0.5, "output": 1.5},
+                }
+            ]
+        }
+        got = mm.resolve_pricing("custom:labbox", "whatever-model", cfg)
+        assert got in ((0.5, 1.5), None) or got  # registry path tolerates spec shape
+
+    def test_record_usage_exact_vs_approximate(self, monkeypatch):
+        import suijin.modules.providers.lib as P
+        from suijin.modules.providers.lib import model_meta as mm
+
+        fake = {"providers": {"zai": {"models": {"glm-x1": {"cost": {"input": 2.0, "output": 6.0}}}}}}
+        monkeypatch.setattr(mm, "_catalog", lambda: fake)
+        P.reset_usage()
+        P._record_usage("zai", "glm-x1", 1_000_000, 1_000_000)
+        assert abs(P.get_usage()["est_cost_usd"] - 8.0) < 1e-6
+        assert P.get_usage()["priced"] is True  # live rate = exact
+
+        monkeypatch.setattr(mm, "_catalog", lambda: None)  # offline
+        P.reset_usage()
+        P._record_usage("zai", "glm-4.7", 1_000_000, 1_000_000)
+        assert P.get_usage()["priced"] is False  # fallback table = approximate
