@@ -32,6 +32,7 @@ _KNOWN_KINDS = frozenset(
         "assistant.message",
         "tool.call",
         "tool.result",
+        "state.snapshot",
         "guidance.delivered",
         "usage",
         "session.complete",
@@ -145,6 +146,32 @@ REPLAY_KEYS = (
     "_foothold_at",
 )
 
+#: resume-critical state the RUNNER snapshots each iteration into a
+#: state.snapshot record. Multi-value fields that a plain event stream
+#: cannot reconstruct (todo list, findings, chain memory, targeting,
+#: productivity bookkeeping) — WITHOUT them a replay would resume into a
+#: blank slate. Messages / execution_trace / iteration / phase stay
+#: event-derived (ordered, richer); the last snapshot overlays the rest.
+RESUME_SNAPSHOT_KEYS = (
+    "original_objective",
+    "conversation_objectives",
+    "current_objective_index",
+    "objective_history",
+    "current_phase",
+    "phase_history",
+    "current_iteration",
+    "todo_list",
+    "target_info",
+    "chain_findings_memory",
+    "chain_failures_memory",
+    "tested_axes",
+    "findings",
+    "_attack_queue",
+    "_foothold_at",
+    "attack_path_type",
+    "pending_questions",
+)
+
 
 def replay(path: Path) -> dict:
     """Reconstruct a resume-able AgentState from the event log. Mirrors the
@@ -153,6 +180,7 @@ def replay(path: Path) -> dict:
     state: dict = {}
     tool_by_id: dict[str, dict] = {}
     trace: list[dict] = []
+    snapshot: dict | None = None
     for ev in read_events(path):
         k = ev.get("kind")
         if k == "session.start":
@@ -170,6 +198,9 @@ def replay(path: Path) -> dict:
             msgs = list(state.get("messages") or [])
             msgs.append({"role": "assistant", "content": str(ev.get("content") or "")})
             state["messages"] = msgs
+        elif k == "state.snapshot":
+            # last one wins — the most recent post-turn state is the resume point
+            snapshot = {key: ev[key] for key in RESUME_SNAPSHOT_KEYS if key in ev}
         elif k == "tool.call":
             tool_by_id[str(ev.get("id"))] = {
                 "tool_name": ev.get("name"),
@@ -193,6 +224,10 @@ def replay(path: Path) -> dict:
             msgs = list(state.get("messages") or [])
             msgs.append({"role": "user", "content": str(ev.get("text") or "")})
             state["messages"] = msgs
+    if snapshot:
+        # The snapshot is the authoritative resume point for multi-value
+        # state; messages/trace stay event-derived (ordered, richer).
+        state.update(snapshot)
     state["execution_trace"] = trace[-150:]
     if state.get("messages") and len(state["messages"]) > 80:
         keep = list(state["messages"][-80:])

@@ -1649,6 +1649,22 @@ def run_load_cmd(args) -> int:
         return 1
 
 
+def run_resume_cmd(args) -> int:
+    """`suijin resume [slug]` — continue an interrupted engagement from its
+    EVENT LOG (events.jsonl), not a bundle. The log is the durable truth;
+    no .sje needed. No argument: pick from unfinished engagements.
+    `--list`: enumerate them."""
+    from suijin.modules.ops.lib.journal_resume import main as _jr_main
+
+    argv = []
+    ref = str(getattr(args, "ref", "") or "").strip()
+    if ref:
+        argv.append(ref)
+    if getattr(args, "list_journals", False):
+        argv.append("--list")
+    return _jr_main(argv)
+
+
 def run_prompt_cmd(args) -> int:
     """`suijin prompt [show|reset|diff]` — the operator-editable system prompt."""
     from suijin.modules.agent.lib.prompts import prompt_file as pf
@@ -1881,6 +1897,7 @@ _KNOWN_VERBS = frozenset(
         "engage",
         "exploit",
         "load",
+        "resume",
         "prompt",
         "theater",
         "plan",
@@ -2004,6 +2021,13 @@ def main(argv=None):
         "bundle", nargs="?", default=None, help="path or bundle name (omit to pick from the ten newest)"
     )
     load_p.set_defaults(func=run_load_cmd)
+
+    resume_p = sub.add_parser("resume", help="continue an interrupted engagement from its event log")
+    resume_p.add_argument(
+        "ref", nargs="?", default=None, help="engagement slug, dir, or events.jsonl path (omit to pick)"
+    )
+    resume_p.add_argument("--list", dest="list_journals", action="store_true", help="list unfinished engagements")
+    resume_p.set_defaults(func=run_resume_cmd)
 
     theater_p = sub.add_parser("theater", help="animated replay of the latest session")
     theater_p.set_defaults(func=run_theater_cmd)
