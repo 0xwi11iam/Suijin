@@ -60,28 +60,37 @@ def shell_start(shell: str = "", cwd: str = "") -> str:
             if len(_SESSIONS) >= _MAX_SESSIONS:
                 return f"Error: {_MAX_SESSIONS} shell sessions already open — shell_stop one first (shell_list shows them)."
         exe = shell or ("/bin/zsh" if os.path.exists("/bin/zsh") else "/bin/bash")
+        from suijin.server.confinement import executor_env, wrap_exec
+
+        env = executor_env()
+        env.update({"PS1": "", "PROMPT_COMMAND": ""})
+        shell_argv, jailed = wrap_exec([exe, "-l"])
         try:
             proc = subprocess.Popen(
-                [exe, "-l"],
+                shell_argv,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                cwd=cwd or os.getcwd(),
-                env={**os.environ, "PS1": "", "PROMPT_COMMAND": ""},
+                cwd=str(env["HOME"]),
+                env=env,
             )
         except (OSError, ValueError):
+            # primary argv (possibly sandbox-wrapped) failed to spawn —
+            # degrade to a plain /bin/sh (env confinement still applies)
             proc = subprocess.Popen(
                 ["/bin/sh"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                cwd=cwd or os.getcwd(),
+                cwd=str(env["HOME"]),
+                env=env,
             )
         sid = "sh_" + uuid.uuid4().hex[:8]
         with _lock:
             _SESSIONS[sid] = {"proc": proc, "last": time.time(), "shell": exe, "born": time.time()}
+        note = " [jailed]" if jailed else ""
         return (
-            f"session {sid} ({exe}) started. shell_send commands to it — cwd, env and "
+            f"session {sid} ({exe}) started{note}. shell_send commands to it — cwd, env and "
             "shell state PERSIST between sends. Non-interactive doctrine only "
             "(sudo -n, no password prompts: sessions have no tty). shell_stop closes it."
         )
