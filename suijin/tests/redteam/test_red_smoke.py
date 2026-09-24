@@ -176,6 +176,32 @@ class TestRedTeamSmoke:
         # a completed run must NOT present itself as resumable
         assert not _is_resumable(logs[0])
 
+    def test_conclusion_bundle_derived_from_the_journal(self, red_mocks):
+        """The run's conclusion .sje is a DERIVED export: its graph_state
+        is the journal's replay, not a copy of a live frame — the bundle
+        can never contradict events.jsonl."""
+        import json
+        import zipfile
+
+        _run_smoke()
+        from suijin.modules.ops.lib import sje_export
+        from suijin.modules.tools.lib.engagement_bundle import CRASH_SAVER
+
+        logs = list((Path(red_mocks["tmpdir"]) / "engagements").glob("*/events.jsonl"))
+        assert logs and CRASH_SAVER.last_path is not None
+        with zipfile.ZipFile(CRASH_SAVER.last_path) as zf:
+            gs = json.loads(zf.read("graph_state.json"))
+        want = sje_export.derive_graph_state(logs[0])
+        # every journal fact reached the bundle (the stub run emits no
+        # assistant messages, so compare over the keys the log actually
+        # carries); completion_reason absent — resumed = run, not re-complete
+        common = set(gs) & set(want)
+        for k in common:
+            assert gs[k] == want[k], f"{k}: bundle {gs[k]!r} != journal {want[k]!r}"
+        assert gs["original_objective"] == want["original_objective"]
+        assert gs["current_iteration"] >= want["current_iteration"]
+        assert "completion_reason" not in gs
+
     def test_agent_error_path(self, red_mocks, monkeypatch):
         """A graph that raises inside astream is caught and reported."""
 
