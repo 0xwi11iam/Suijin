@@ -52,6 +52,7 @@ CONFIG_PATH = BASE_DIR / "config.json"
 def _default_config() -> dict:
     return {
         "stealth": True,  # v5.1: quiet by default
+        "executor_sandbox": True,  # v2 executor jail: OS write-deny for shells
         "provider": "deepseek",
         "expert_models": EXPERT_MODELS,
         "final_model_id": "deepseek-ai/DeepSeek-V4-Flash",
@@ -107,6 +108,7 @@ def load_config() -> dict:
         "zai_model": ZAI_MODEL,
         "zai_endpoint": ZAI_ENDPOINT,
         "max_iterations": MAX_ITERATIONS,
+        "executor_sandbox": True,
     }.items():
         config.setdefault(k, v)
     # Validate with Pydantic — catch typos at startup

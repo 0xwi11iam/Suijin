@@ -56,8 +56,12 @@ def execute_terminal(cmd, timeout=30):
             return f"Command denied by user (matched: {pattern}).\nCommand was: {cmd[:200]}"
         # Approved (or not dangerous) — proceed with execution
 
-        # Build environment with homebrew paths (macOS)
-        env = os.environ.copy()
+        # Build environment with homebrew paths (macOS) on top of the
+        # v2 executor confinement (HOME/TMPDIR always point INTO the
+        # engagement home; sandbox-exec write-deny when enabled).
+        from suijin.server.confinement import executor_env, wrap_exec
+
+        env = executor_env()
         brew_paths = ["/opt/homebrew/bin", "/usr/local/bin", "/opt/homebrew/sbin"]
         current_path = env.get("PATH", "")
         for bp in brew_paths:
@@ -92,8 +96,11 @@ def execute_terminal(cmd, timeout=30):
                 cmd_parts = sanitize_command(cmd_parts)
         except Exception:  # noqa: BLE001 — never block execution
             pass
+        # v2 executor jail: run the command under the OS process sandbox
+        # (write-deny outside workspace) when it is installed & enabled.
+        run_cmd, _jailed = wrap_exec(cmd_parts if len(cmd_parts) > 1 else ["/bin/sh", "-c", cmd])
         result = run_command(
-            cmd_parts if len(cmd_parts) > 1 else ["/bin/sh", "-c", cmd],
+            run_cmd,
             timeout=timeout,
             cwd=str(_ws().home_dir()),  # the agent's ~ (engagement home)
             env=env,
