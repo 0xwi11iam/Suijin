@@ -97,7 +97,13 @@ def boot(
     global _LAST_BOOT_ENTRIES, _LAST_CONTEXT
 
     reg = Registry()
-    for root in module_roots or []:
+    if not module_roots:
+        # the split (phase B): first-party homes under suijin/server,
+        # packs under suijin/modules — both roots, always
+
+        _pkg = Path(__file__).resolve().parents[1]
+        module_roots = [_pkg / "server", _pkg / "modules"]
+    for root in module_roots:
         reg.scan(Path(root))
     report = reg.resolve()
 

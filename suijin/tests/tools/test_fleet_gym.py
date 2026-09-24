@@ -61,10 +61,16 @@ def citadel():
     app_py = str(Path(__file__).resolve().parents[2] / "lab" / "citadel" / "app.py")
     proc = subprocess.Popen(
         [sys.executable, app_py],
-        env={**os.environ, "PORT": str(PUB), "CITADEL_DB": "/tmp/suijin_fleet_test.db",
-             "CITADEL_TRAFFIC": "/tmp/fleet_test_traffic.jsonl", "CITADEL_RATE_LIMIT": "100000",
-             "CITADEL_NO_INTERNAL": "1"},
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        env={
+            **os.environ,
+            "PORT": str(PUB),
+            "CITADEL_DB": "/tmp/suijin_fleet_test.db",
+            "CITADEL_TRAFFIC": "/tmp/fleet_test_traffic.jsonl",
+            "CITADEL_RATE_LIMIT": "100000",
+            "CITADEL_NO_INTERNAL": "1",
+        },
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     for _ in range(40):
         try:
@@ -82,13 +88,18 @@ def citadel():
 
 
 def _login(user, pw):
-    out = http_replay(method="POST", url=f"{BASE}/login", allow_internal=True,
-                      headers={"Content-Type": "application/x-www-form-urlencoded"},
-                      body=f"u={user}&p={pw}")
+    out = http_replay(
+        method="POST",
+        url=f"{BASE}/login",
+        allow_internal=True,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        body=f"u={user}&p={pw}",
+    )
     return json.loads(json.loads(out)["body"])["token"]
 
 
 # ── Phase 1: crawl (playwright-gated) ───────────────────────────────
+
 
 class TestCrawl:
     def test_crawl_feeds_session_model(self, citadel):
@@ -120,6 +131,7 @@ class TestCrawl:
 
 # ── Phase 2: session model (logins + role cycling) ─────────────────
 
+
 class TestSessionModel:
     def test_role_cycling_builds_idor_worklist(self, citadel):
         from suijin.modules.tools.lib.web_session import cross_credential_shortlist, web_session
@@ -144,20 +156,32 @@ class TestSessionModel:
     def test_hidden_params_flags_role(self, citadel):
         from suijin.modules.tools.lib.web_session import hidden_params, record_ui_fields
 
-        record_ui_fields(f"{BASE}/login", [{"name": "u", "type": "text", "hidden": False},
-                                           {"name": "p", "type": "password", "hidden": False}])
+        record_ui_fields(
+            f"{BASE}/login",
+            [{"name": "u", "type": "text", "hidden": False}, {"name": "p", "type": "password", "hidden": False}],
+        )
         # also register the register page's UI (no role field in the UI)
-        record_ui_fields(f"{BASE}/api/register", [{"name": "username", "type": "text", "hidden": False},
-                                                  {"name": "password", "type": "password", "hidden": False}])
-        http_replay(method="POST", url=f"{BASE}/api/register", allow_internal=True,
-                    headers={"Content-Type": "application/json"},
-                    body=json.dumps({"username": "hp", "password": "x", "role": "user"}))
+        record_ui_fields(
+            f"{BASE}/api/register",
+            [
+                {"name": "username", "type": "text", "hidden": False},
+                {"name": "password", "type": "password", "hidden": False},
+            ],
+        )
+        http_replay(
+            method="POST",
+            url=f"{BASE}/api/register",
+            allow_internal=True,
+            headers={"Content-Type": "application/json"},
+            body=json.dumps({"username": "hp", "password": "x", "role": "user"}),
+        )
         hp = hidden_params()
         flat = [p for h in hp for p in h["params_not_in_ui"]]
         assert "role" in flat, f"role should be flagged: {flat}"
 
 
 # ── Phase 3: dispatch (session feeds lane selection) ───────────────
+
 
 class TestDispatchChain:
     def test_dispatch_with_session_selects_authz(self, citadel):
@@ -169,8 +193,7 @@ class TestDispatchChain:
         for cred in ("alice", "ceo"):
             http_replay(url=f"{BASE}/api/v2/health", allow_internal=True, credential=cred)
 
-        out = dispatch_testers(url=f"{BASE}/api/register", method="POST",
-                               body_fields=["username", "password", "role"])
+        out = dispatch_testers(url=f"{BASE}/api/register", method="POST", body_fields=["username", "password", "role"])
         d = json.loads(out)
         assert "authz" in d["lanes"], f"session creds should trigger authz: {d['lanes']}"
 
@@ -181,8 +204,7 @@ class TestDispatchChain:
         old = ws._store_path
         ws._store_path = lambda: Path("/tmp/_nonexistent_fleet_test.json")
         try:
-            out = dispatch_testers(url=f"{BASE}/api/register", method="POST",
-                                   body_fields=["username", "password"])
+            out = dispatch_testers(url=f"{BASE}/api/register", method="POST", body_fields=["username", "password"])
             d = json.loads(out)
             assert "authz" not in d["lanes"], d["lanes"]
         finally:
@@ -194,8 +216,7 @@ class TestDispatchChain:
         assert "ssrf" in d["lanes"], d["lanes"]
 
     def test_finance_selects_business_logic(self, citadel):
-        out = dispatch_testers(url=f"{BASE}/api/transfer", method="POST",
-                               body_fields=["to", "amount"])
+        out = dispatch_testers(url=f"{BASE}/api/transfer", method="POST", body_fields=["to", "amount"])
         d = json.loads(out)
         assert "business-logic" in d["lanes"], d["lanes"]
 
@@ -223,6 +244,7 @@ class TestDispatchChain:
 
 # ── Phase 4: live probes per lane (doctrine lands on Citadel) ──────
 
+
 class TestLaneProbes:
     def test_idor_compare_diff(self, citadel):
         alice_tok = _login("alice", "alice123")
@@ -232,7 +254,9 @@ class TestLaneProbes:
 
         # the real IDOR: classified doc alice 403 vs ceo 200
         out2 = http_replay(
-            url=f"{BASE}/api/docs/d-8b2e40d1", allow_internal=True, credential="alice",
+            url=f"{BASE}/api/docs/d-8b2e40d1",
+            allow_internal=True,
+            credential="alice",
             compare={"credential": "ceo"},
         )
         res2 = json.loads(out2)
@@ -240,32 +264,48 @@ class TestLaneProbes:
         assert res2["exploit"]["status"] == 200
 
     def test_mass_assignment_to_executive(self, citadel):
-        out = http_replay(method="POST", url=f"{BASE}/api/register", allow_internal=True,
-                          headers={"Content-Type": "application/json"},
-                          body=json.dumps({"username": "fleet_exec", "password": "pw", "role": "executive"}))
+        out = http_replay(
+            method="POST",
+            url=f"{BASE}/api/register",
+            allow_internal=True,
+            headers={"Content-Type": "application/json"},
+            body=json.dumps({"username": "fleet_exec", "password": "pw", "role": "executive"}),
+        )
         res = json.loads(out)
         assert res["status"] == 200
         body = json.loads(res["body"])
         assert body.get("role") == "executive"
 
     def test_sqli_error_fingerprint(self, citadel):
-        out = http_replay(method="GET", url=f"{BASE}/api/items", allow_internal=True,
-                          mutations=[{"op": "set-query", "field": "category", "value": "hardware'"}])
+        out = http_replay(
+            method="GET",
+            url=f"{BASE}/api/items",
+            allow_internal=True,
+            mutations=[{"op": "set-query", "field": "category", "value": "hardware'"}],
+        )
         res = json.loads(out)
         assert res["status"] == 500
         assert "sqli_sqlite" in res.get("error_signatures", [])
 
     def test_ssrf_redirect_bypass(self, citadel):
-        out = http_replay(method="POST", url=f"{BASE}/api/webhook", allow_internal=True,
-                          headers={"Content-Type": "application/json"},
-                          body=json.dumps({"url": "http://127.0.0.1:5909/"}))
+        out = http_replay(
+            method="POST",
+            url=f"{BASE}/api/webhook",
+            allow_internal=True,
+            headers={"Content-Type": "application/json"},
+            body=json.dumps({"url": "http://127.0.0.1:5909/"}),
+        )
         res = json.loads(out)
         assert res["status"] == 400  # direct blocked
 
     def test_upload_blocklist_bypass(self, citadel):
-        out = http_replay(method="POST", url=f"{BASE}/api/upload", allow_internal=True,
-                          headers={"Content-Type": "multipart/form-data"},
-                          body="--b\r\nContent-Disposition: form-data; name=file; filename=shell.phtml\r\n\r\n<?php\r\n--b--")
+        out = http_replay(
+            method="POST",
+            url=f"{BASE}/api/upload",
+            allow_internal=True,
+            headers={"Content-Type": "multipart/form-data"},
+            body="--b\r\nContent-Disposition: form-data; name=file; filename=shell.phtml\r\n\r\n<?php\r\n--b--",
+        )
         res = json.loads(out)
         # the multipart may not parse via http_replay raw body — just verify the route responds
         assert res["status"] in (200, 400)
@@ -273,12 +313,15 @@ class TestLaneProbes:
 
 # ── Phase 5: coverage gate closes the chain ─────────────────────────
 
+
 class TestCoverageChain:
     def test_lane_coverage_translation(self, citadel):
         """dispatch emits lane names; coverage expects class names — the
         translation is a known mapping (hyphen↔underscore, compound lanes)."""
         LANE_TO_COVERAGE = {
-            "idor": "idor", "authz": "authz", "authn": "authn",
+            "idor": "idor",
+            "authz": "authz",
+            "authn": "authn",
             "mass-assignment": "mass_assignment",
             "injection": "sqli",  # injection maps to sqli/xss/ssti
             "business-logic": "race",  # maps to race/redirect
@@ -295,9 +338,23 @@ class TestCoverageChain:
 
         ev = "verified by direct request and response diff — see traffic store"
         asset = asset_of(BASE)
-        for cls in ("idor", "authz", "authn", "mass_assignment", "sqli", "xss",
-                     "ssti", "cmdi", "ssrf", "lfi", "upload", "xxe", "race",
-                     "redirect", "info"):
+        for cls in (
+            "idor",
+            "authz",
+            "authn",
+            "mass_assignment",
+            "sqli",
+            "xss",
+            "ssti",
+            "cmdi",
+            "ssrf",
+            "lfi",
+            "upload",
+            "xxe",
+            "race",
+            "redirect",
+            "info",
+        ):
             mark(asset, cls, "not_applicable", evidence=ev, request_sent="GET /")
 
         assert completion_blocked([asset]) is None

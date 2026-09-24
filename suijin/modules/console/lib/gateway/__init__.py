@@ -71,11 +71,11 @@ class EngageBody(BaseModel):
 # ── app + auth ────────────────────────────────────────────────────────────
 
 
-
 def _artifact_dir(name):
     from suijin.modules.platform.lib.workspace import artifact_dir
 
     return artifact_dir(name)
+
 
 def create_app(token: str | None = None) -> FastAPI:
     """Build the gateway app. token=None -> generate (server mode)."""
@@ -115,8 +115,9 @@ def create_app(token: str | None = None) -> FastAPI:
             from suijin.kernel import controller
             from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
+            _pkg = _P(__file__).resolve().parents[3]
             ctx, _rep = controller.boot(
-                module_roots=[_P(__file__).resolve().parents[3]],
+                module_roots=[_pkg.parent / "server", _pkg],
                 workspace=WORKSPACE_DIR,
                 quiet=True,
             )

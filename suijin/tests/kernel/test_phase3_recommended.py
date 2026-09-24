@@ -8,12 +8,13 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
 MODULES = REPO / "suijin" / "modules"
+SERVER = REPO / "suijin" / "server"  # the split: first-party homes
 
 
 def boot_all(tmp_path):
     from suijin.kernel import controller
 
-    return controller.boot(module_roots=[MODULES], workspace=tmp_path, quiet=True)
+    return controller.boot(module_roots=[SERVER, MODULES], workspace=tmp_path, quiet=True)
 
 
 class TestRecommendedTier:
@@ -64,9 +65,11 @@ class TestRecommendedTier:
         from suijin.kernel import controller
 
         tree = tmp_path / "modules"
+        srv = tmp_path / "server"
         shutil.copytree(MODULES, tree, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
-        shutil.rmtree(tree / "redteam")
-        ctx, report = controller.boot(module_roots=[tree], workspace=tmp_path / "ws", quiet=True)
+        shutil.copytree(SERVER, srv, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.rmtree(srv / "redteam")
+        ctx, report = controller.boot(module_roots=[srv, tree], workspace=tmp_path / "ws", quiet=True)
         assert "redteam" not in report.bootable
         hooks = ctx.service("console_hooks")
         assert [e["id"] for e in hooks.menu()] == ["blueteam", "ops"]

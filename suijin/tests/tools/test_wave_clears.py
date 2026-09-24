@@ -220,9 +220,8 @@ class TestSweeps:
     def test_stale_sje_tmp_swept_on_save(self, tmp_path, monkeypatch):
         import time
 
-        from suijin.modules.tools.lib import engagement_bundle as eb
-
         import suijin.modules.platform.lib.workspace as _ws
+        from suijin.modules.tools.lib import engagement_bundle as eb
 
         _ws._reset_engagement()
         exports = _ws.engagement_dir() / "state"

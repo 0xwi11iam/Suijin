@@ -6,6 +6,7 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[3]
 MODULES = REPO / "suijin" / "modules"
+SERVER = REPO / "suijin" / "server"  # the split: first-party homes
 
 
 @pytest.fixture
@@ -24,7 +25,10 @@ class TestDisabledBoot:
         isolated_state.set_enabled("redteam", False)
         isolated_state.set_enabled("blueteam", False)
         ctx, report = controller.boot(
-            module_roots=[MODULES], workspace=Path("/tmp/disboot"), quiet=True, enabled_check=isolated_state.is_enabled
+            module_roots=[SERVER, MODULES],
+            workspace=Path("/tmp/disboot"),
+            quiet=True,
+            enabled_check=isolated_state.is_enabled,
         )
         assert "redteam" not in report.bootable
         assert "blueteam" not in report.bootable
@@ -41,7 +45,7 @@ class TestDisabledBoot:
         isolated_state.set_enabled("platform", False)
         with pytest.raises(RuntimeError, match="core module 'platform' is disabled"):
             controller.boot(
-                module_roots=[MODULES],
+                module_roots=[SERVER, MODULES],
                 workspace=Path("/tmp/discore"),
                 quiet=True,
                 enabled_check=isolated_state.is_enabled,
@@ -50,7 +54,7 @@ class TestDisabledBoot:
     def test_enabled_default_untouched(self, isolated_state):
         from suijin.kernel import controller
 
-        ctx, report = controller.boot(module_roots=[MODULES], workspace=Path("/tmp/disok"), quiet=True)
+        ctx, report = controller.boot(module_roots=[SERVER, MODULES], workspace=Path("/tmp/disok"), quiet=True)
         assert "redteam" in report.bootable
         hooks = ctx.service("console_hooks")
         assert {"redteam", "blueteam", "ops"} == {e["id"] for e in hooks.menu()}

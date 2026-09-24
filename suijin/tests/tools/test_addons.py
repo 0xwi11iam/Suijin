@@ -81,7 +81,10 @@ class TestBootGate:
         from suijin.kernel import controller
 
         ctx, report = controller.boot(
-            module_roots=[Path(__file__).resolve().parents[3] / "suijin" / "modules"],
+            module_roots=[
+                Path(__file__).resolve().parents[3] / "suijin" / "server",
+                Path(__file__).resolve().parents[3] / "suijin" / "modules",
+            ],
             workspace=tmp_path / "ws",
             quiet=True,
         )
@@ -111,7 +114,11 @@ class TestAdopt:
         from suijin.kernel import controller
 
         ctx, report = controller.boot(
-            module_roots=[tmp_path / "packs", Path(__file__).resolve().parents[3] / "suijin" / "modules"],
+            module_roots=[
+                tmp_path / "packs",
+                Path(__file__).resolve().parents[3] / "suijin" / "server",
+                Path(__file__).resolve().parents[3] / "suijin" / "modules",
+            ],
             workspace=tmp_path / "ws2",
             quiet=True,
         )

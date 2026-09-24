@@ -81,7 +81,13 @@ class TestCatalogExploit:
         """Fake terminal that returns different outputs for different commands."""
         cmd = args.get("cmd", "")
         if "echo" in cmd.split()[0] if cmd.split() else False:
-            return cmd.split("'", 1)[-1].rstrip("'") if "'" in cmd else cmd.split(None, 1)[-1] if len(cmd.split()) > 1 else ""
+            return (
+                cmd.split("'", 1)[-1].rstrip("'")
+                if "'" in cmd
+                else cmd.split(None, 1)[-1]
+                if len(cmd.split()) > 1
+                else ""
+            )
         return "Some HTTP response from target"
 
     def test_echo_poc_rejected(self):
@@ -214,7 +220,13 @@ class TestCveAntiHallucination:
         # mock search_cve to return real results that DON'T contain the fake CVE
         monkeypatch.setattr(intel, "search_cve", lambda *a, **kw: "CVE-2024-1234: some real vuln")
         out = intel.record_finding("http://t.com", "verified_cve", "CVE-9999-99999")
-        assert "NOT found" in out or "Error" in out or "rumor" in out or "memory" in out.lower() or "advisory" in out.lower()
+        assert (
+            "NOT found" in out
+            or "Error" in out
+            or "rumor" in out
+            or "memory" in out.lower()
+            or "advisory" in out.lower()
+        )
 
     def test_confidence_not_hardcoded(self):
         """record_finding no longer stores confidence=1.0 unconditionally."""

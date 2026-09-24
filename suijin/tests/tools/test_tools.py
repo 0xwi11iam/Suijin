@@ -387,7 +387,6 @@ class TestConstantsExist:
         assert PROVIDER_GEMINI == "gemini"
         assert PROVIDER_ANTHROPIC == "anthropic"
 
-
     def test_expert_models_is_list(self):
         from suijin.modules.platform.lib.constants import EXPERT_MODELS
 

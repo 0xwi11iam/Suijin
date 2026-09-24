@@ -35,8 +35,13 @@ BASE = f"http://127.0.0.1:{PUB}"
 # ── unit: mutations ──────────────────────────────────────────────────
 class TestMutations:
     def _req(self):
-        return {"method": "GET", "url": "http://t/api/x?id=1", "headers": {"Authorization": "Bearer A", "X-Misc": "1"},
-                "body": '{"a": 1, "nested": {"b": 2}}', "cookies": ""}
+        return {
+            "method": "GET",
+            "url": "http://t/api/x?id=1",
+            "headers": {"Authorization": "Bearer A", "X-Misc": "1"},
+            "body": '{"a": 1, "nested": {"b": 2}}',
+            "cookies": "",
+        }
 
     def test_set_query_replaces(self):
         r = apply_mutation(self._req(), "set-query", "id", "2")
@@ -109,11 +114,24 @@ class TestCodecs:
 class TestCredentialSwap:
     def test_swap_strips_all_common_auth(self):
         register_credential("alice", headers={"Authorization": "Bearer ALICE", "X-Session": "tok-a"})
-        r = apply_credential({"url": "http://t/x", "headers": {
-            "Authorization": "Bearer BOB", "Cookie": "sess=bob", "X-Api-Key": "k",
-            "X-Access-Token": "t", "X-Session-Token": "s", "X-Csrf-Token": "c",
-            "X-Auth-Token": "a", "Content-Type": "application/json",
-        }, "body": "", "cookies": ""}, "alice")
+        r = apply_credential(
+            {
+                "url": "http://t/x",
+                "headers": {
+                    "Authorization": "Bearer BOB",
+                    "Cookie": "sess=bob",
+                    "X-Api-Key": "k",
+                    "X-Access-Token": "t",
+                    "X-Session-Token": "s",
+                    "X-Csrf-Token": "c",
+                    "X-Auth-Token": "a",
+                    "Content-Type": "application/json",
+                },
+                "body": "",
+                "cookies": "",
+            },
+            "alice",
+        )
         lower = {k.lower() for k in r["headers"]}
         assert "cookie" not in lower and "x-api-key" not in lower and "x-csrf-token" not in lower
         assert r["headers"]["Authorization"] == "Bearer ALICE"
@@ -174,10 +192,16 @@ def citadel():
     app_py = str(Path(__file__).resolve().parents[2] / "lab" / "citadel" / "app.py")
     proc = subprocess.Popen(
         [sys.executable, app_py],
-        env={**os.environ, "PORT": str(PUB), "CITADEL_DB": "/tmp/suijin_replay_test.db",
-             "CITADEL_TRAFFIC": "/tmp/replay_test_traffic.jsonl", "CITADEL_RATE_LIMIT": "100000",
-             "CITADEL_NO_INTERNAL": "1"},
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        env={
+            **os.environ,
+            "PORT": str(PUB),
+            "CITADEL_DB": "/tmp/suijin_replay_test.db",
+            "CITADEL_TRAFFIC": "/tmp/replay_test_traffic.jsonl",
+            "CITADEL_RATE_LIMIT": "100000",
+            "CITADEL_NO_INTERNAL": "1",
+        },
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     for _ in range(40):
         try:
@@ -198,7 +222,9 @@ def citadel():
 def _login_as(user, pw):
     """replay-mode login: returns the session token (the agent's flow)."""
     out = http_replay(
-        method="POST", url=f"{BASE}/login", allow_internal=True,
+        method="POST",
+        url=f"{BASE}/login",
+        allow_internal=True,
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         body=f"u={user}&p={pw}",
     )
@@ -216,7 +242,9 @@ class TestCitadelReplay:
         register_credential("alice", headers={"X-Session": json.loads(alice["body"])["token"]})
 
         out = http_replay(
-            url=f"{BASE}/api/docs/d-8b2e40d1", allow_internal=True, credential="alice",
+            url=f"{BASE}/api/docs/d-8b2e40d1",
+            allow_internal=True,
+            credential="alice",
             compare={"credential": "ceo"},  # baseline alice vs exploit ceo
         )
         res = json.loads(out)
@@ -231,14 +259,21 @@ class TestCitadelReplay:
     def test_codec_pipeline_delivers_waf_evasive_sqli(self, citadel):
         # plain boolean SQLi is WAF'd (fake-404); url-double encoding sails through
         plain = http_replay(
-            method="GET", url=f"{BASE}/api/items", allow_internal=True,
-            mutations=[{"op": "set-query", "field": "category", "value": "hardware' OR 1=1 -- "}],  # the WAF-matching form (+ terminator)
+            method="GET",
+            url=f"{BASE}/api/items",
+            allow_internal=True,
+            mutations=[
+                {"op": "set-query", "field": "category", "value": "hardware' OR 1=1 -- "}
+            ],  # the WAF-matching form (+ terminator)
         )
         assert json.loads(plain).get("status") == 404  # the WAF ate it
         evaded = http_replay(
-            method="GET", url=f"{BASE}/api/items", allow_internal=True,
+            method="GET",
+            url=f"{BASE}/api/items",
+            allow_internal=True,
             mutations=[{"op": "set-query", "field": "category", "value": "hardware' OR 1=1 -- "}],
-            codec=["tab"], codec_field="category",  # %09 slips the separator class; SQLite eats tabs
+            codec=["tab"],
+            codec_field="category",  # %09 slips the separator class; SQLite eats tabs
         )
         res = json.loads(evaded)
         assert res.get("status") == 200, res
@@ -246,7 +281,8 @@ class TestCitadelReplay:
 
     def test_sweep_sibling_enumeration(self, citadel):
         out = http_replay(
-            url=f"{BASE}/api/v2", allow_internal=True,
+            url=f"{BASE}/api/v2",
+            allow_internal=True,
             sweep={"op": "set-target", "field": "", "values": ["/api/v2/health", "/api/v2/executive", "/api/v2/ghost"]},
         )
         res = json.loads(out)
@@ -256,14 +292,20 @@ class TestCitadelReplay:
 
     def test_error_signatures_flag_sqli(self, citadel):
         out = http_replay(
-            method="GET", url=f"{BASE}/api/items", allow_internal=True,
+            method="GET",
+            url=f"{BASE}/api/items",
+            allow_internal=True,
             mutations=[{"op": "set-query", "field": "category", "value": "hardware'"}],
         )
         assert "sqli_sqlite" in json.loads(out).get("error_signatures", [])
 
     def test_raw_mode_gets_bytes(self, citadel):
-        out = http_replay_raw(host="127.0.0.1", port=PUB, tls=False,
-                              data=f"GET /health HTTP/1.1\r\nHost: 127.0.0.1:{PUB}\r\nConnection: close\r\n\r\n")
+        out = http_replay_raw(
+            host="127.0.0.1",
+            port=PUB,
+            tls=False,
+            data=f"GET /health HTTP/1.1\r\nHost: 127.0.0.1:{PUB}\r\nConnection: close\r\n\r\n",
+        )
         res = json.loads(out)
         assert res["mode"] == "raw" and "200 OK" in res["response_head"]
 

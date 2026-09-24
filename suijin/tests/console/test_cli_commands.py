@@ -68,7 +68,6 @@ class TestSimpleVerbs:
         assert code == 0
         assert "blue_recon" in out
 
-
     def test_workspace_status(self):
         code, out = run_cli(["workspace"])
         assert code == 0

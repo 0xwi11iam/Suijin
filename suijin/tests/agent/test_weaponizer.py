@@ -205,7 +205,13 @@ class TestDeadPathsRevived:
         eng = tmp_path / "exploits" / "legacy"
         eng.mkdir(parents=True)
         (eng / "catalog.json").write_text(
-            json.dumps({"entries": [{"id": "EXP-001", "status": "CONFIRMED", "class": "rce", "target": "http://t", "title": "x"}]})
+            json.dumps(
+                {
+                    "entries": [
+                        {"id": "EXP-001", "status": "CONFIRMED", "class": "rce", "target": "http://t", "title": "x"}
+                    ]
+                }
+            )
         )
         monkeypatch.setattr(am, "_catalog_root", lambda: tmp_path / "exploits")
         lines = am.what_worked("http://t")

@@ -112,7 +112,6 @@ class TestRedTeamSmoke:
         _run_smoke()
         assert red_mocks["agent"].built is True
 
-
     def test_proxy_config_applied(self, red_mocks, monkeypatch):
         """proxy_url in config -> set_proxy called with it."""
         seen = {}

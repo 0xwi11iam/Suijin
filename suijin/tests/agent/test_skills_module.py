@@ -54,7 +54,12 @@ class TestBootGate:
         from suijin.kernel import controller
 
         ctx, report = controller.boot(
-            module_roots=[Path(__file__).resolve().parents[3] / "suijin" / "modules"], workspace=tmp_path, quiet=True
+            module_roots=[
+                Path(__file__).resolve().parents[3] / "suijin" / "server",
+                Path(__file__).resolve().parents[3] / "suijin" / "modules",
+            ],
+            workspace=tmp_path,
+            quiet=True,
         )
         assert any(u.id == "skills" for u in report.boot_order)
         docs = ctx.service("skills.docs")

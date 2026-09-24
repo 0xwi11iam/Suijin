@@ -111,17 +111,18 @@ class TestFileOps:
         assert "not found" in result.lower()
 
     def test_read_file_outside_workspace_rejected(self):
-        """Absolute paths outside workspace + allowlist are rejected — as an
-        Error: string (tool contract: never raise)."""
+        """Absolute paths outside the workspace + allowlist never resolve to
+        the host file — the jail mirrors them under home/ so the read is
+        contained (Error: string, tool contract: never raise)."""
         from suijin.modules.tools.lib.dispatch import read_file
 
         result = read_file("/etc/passwd")
         assert isinstance(result, str)
         assert result.startswith("Error:")
-        assert "outside workspace" in result
+        assert "home/etc/passwd" in result
 
     def test_write_and_read_roundtrip_tmp(self):
-        """Write to /tmp (allowlisted) and read it back."""
+        """Write to /tmp (mirrored under the engagement home) and read it back."""
         import uuid
 
         from suijin.modules.tools.lib.dispatch import read_file, write_file

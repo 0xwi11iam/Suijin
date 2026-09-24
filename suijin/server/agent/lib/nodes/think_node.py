@@ -260,9 +260,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
             # snaps down on the next request automatically; no persistent
             # badge (operator call: not a big deal, the drop is the signal)
             with contextlib.suppress(Exception):
-                print(
-                    f"  [dim]compacted {_hc(_msgs) // 1000}k → {_hc(_compacted) // 1000}k chars[/dim]"
-                )
+                print(f"  [dim]compacted {_hc(_msgs) // 1000}k → {_hc(_compacted) // 1000}k chars[/dim]")
     except Exception as e:  # noqa: BLE001 — compaction must never break thinking
         # a chronic compaction failure silently grows context forever — log it
         logger.warning(f"compaction skipped (check compact.py): {e}")

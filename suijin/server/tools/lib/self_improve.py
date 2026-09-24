@@ -25,7 +25,7 @@ def _skills_dir():
     v = globals().get("SKILLS_DIR")
     if v is not None:
         return v
-    return globals()["BASE_DIR"] / "modules" / "agent" / "lib" / "skills"
+    return globals()["BASE_DIR"] / "server" / "agent" / "lib" / "skills"
 
 
 HISTORY_DIR = BASE_DIR.parent / "suijin_agent" / "skill_history"

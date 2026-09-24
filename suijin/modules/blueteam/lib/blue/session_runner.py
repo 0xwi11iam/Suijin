@@ -276,7 +276,6 @@ class BlueCommandBox:
         def tarpits(_):
             import json as _json
 
-
             state = {}
             try:
                 from pathlib import Path
@@ -288,7 +287,10 @@ class BlueCommandBox:
             if not state:
                 self.ui.note("no tarpits engaged — /tarpit <ip> [seconds] to slow one", "dim")
                 return
-            rows = [f"{ip}: engaged for {v.get('seconds', v if isinstance(v, (int, float)) else '?')}s" for ip, v in state.items()]
+            rows = [
+                f"{ip}: engaged for {v.get('seconds', v if isinstance(v, (int, float)) else '?')}s"
+                for ip, v in state.items()
+            ]
             self.ui.note("engaged tarpits — " + " | ".join(rows[:10]), "cyan")
 
         def canaries(_):

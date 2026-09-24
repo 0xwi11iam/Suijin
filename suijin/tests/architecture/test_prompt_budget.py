@@ -7,13 +7,14 @@ universal call format — in under 10k tokens of static prompt.
 from pathlib import Path
 
 MODULES = Path(__file__).resolve().parents[3] / "suijin" / "modules"
+SERVER = Path(__file__).resolve().parents[3] / "suijin" / "server"
 BUDGET_TOKENS = 10_000
 
 
 def _boot():
     from suijin.kernel import controller
 
-    ctx, _ = controller.boot(module_roots=[MODULES], workspace=Path("/tmp/promptbudget"), quiet=True)
+    ctx, _ = controller.boot(module_roots=[SERVER, MODULES], workspace=Path("/tmp/promptbudget"), quiet=True)
     return ctx
 
 
