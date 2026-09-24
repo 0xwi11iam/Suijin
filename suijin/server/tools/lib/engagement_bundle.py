@@ -107,16 +107,37 @@ def _exploits_root() -> Path:
     return exploits_dir()
 
 
-def save_engagement(thread_id: str, objective: str, config: dict, state: dict, cost: float = 0.0) -> Path:
-    """Bundle the concluded engagement. Never raises into the caller's flow."""
+def save_engagement(
+    thread_id: str,
+    objective: str,
+    config: dict,
+    state: dict,
+    cost: float = 0.0,
+    events_path: str | Path | None = None,
+) -> Path:
+    """Bundle the concluded engagement. Never raises into the caller's flow.
+
+    ``events_path`` (the engagement's events.jsonl) makes this a DERIVED
+    export: graph_state is replayed from the log (THE truth — every exit
+    path gets the same resume contract as `suijin resume`), with the
+    caller's state filling only journal gaps. Without a usable journal
+    the call falls back to the caller's in-memory state.
+    """
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     name = f"{_engagement_slug(objective)}_{ts}.sje"
     path = _exports_dir() / name
 
     graph_state = {}
-    for k in RESUME_KEYS:
-        if k in state:
-            graph_state[k] = state[k]
+    if events_path:
+        with contextlib.suppress(Exception):
+            from suijin.modules.ops.lib.sje_export import derive_graph_state as _derive
+
+            graph_state = _derive(events_path, overlay=state)
+    if not graph_state:
+        for k in RESUME_KEYS:
+            if k in state:
+                graph_state[k] = state[k]
+    graph_state = {k: graph_state[k] for k in RESUME_KEYS if k in graph_state}
     msgs = graph_state.get("messages") or []
     if len(msgs) > MAX_RESUME_MESSAGES:
         keep = msgs[-MAX_RESUME_MESSAGES:]
@@ -400,12 +421,15 @@ class CrashSaver:
         self._objective = ""
         self._config: dict = {}
         self._get_state = None
+        self._events_path: Path | None = None
         self._orig_handlers: dict = {}
         self._orig_hook = None
         self.last_path: Path | None = None
 
     # -- lifecycle -----------------------------------------------------
-    def arm(self, thread_id: str, objective: str, config: dict, get_state) -> None:
+    def arm(
+        self, thread_id: str, objective: str, config: dict, get_state, events_path: str | Path | None = None
+    ) -> None:
         """Arm for a live engagement. Re-arming (a second engagement in the
         same process) resets the once-flag."""
         with self._lock:
@@ -416,6 +440,7 @@ class CrashSaver:
             self._objective = str(objective or "")
             self._config = dict(config or {})
             self._get_state = get_state
+            self._events_path = Path(events_path) if events_path else None
         # process-level backstops: interpreter exit, uncaught exception,
         # termination signals. Registered per-arm; disarm restores.
         with contextlib.suppress(Exception):
@@ -452,6 +477,13 @@ class CrashSaver:
         """The conclusion path already wrote the bundle — backstops no-op."""
         self._saved = True
 
+    def bind_events_path(self, events_path: str | Path) -> None:
+        """Late-bind the engagement's event journal (created after arm).
+        The saver then writes a DERIVED bundle: graph_state replayed from
+        the log instead of whatever mid-turn frame get_state() returns."""
+        with self._lock:
+            self._events_path = Path(events_path) if events_path else None
+
     def save(self, reason: str = "crash") -> Path | None:
         """Write the bundle if armed and unsaved. Never raises (signal
         handlers and atexit must not explode)."""
@@ -465,7 +497,7 @@ class CrashSaver:
             state = {}
             with contextlib.suppress(Exception):
                 state = dict(self._get_state() or {})
-            path = save_engagement(self._thread_id, self._objective, self._config, state, 0.0)
+            path = save_engagement(self._thread_id, self._objective, self._config, state, 0.0, self._events_path)
             self.last_path = path
             if reason != "conclusion":  # the conclusion path prints its own line upstairs
                 with contextlib.suppress(Exception):

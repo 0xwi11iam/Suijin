@@ -473,6 +473,9 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
     from suijin.modules.platform.lib.workspace import engagement_dir as _ed_for_events
 
     _events = EventLog(_ed_for_events() / "events.jsonl")
+    # journal = truth: the crash-saver's bundle is a DERIVED export of the
+    # log (replayed graph_state), not a snapshot of a live thread id
+    CRASH_SAVER.bind_events_path(_events.path)
 
     # THE BUS: every event record fans out here (log worker today; the
     # TUI adapter and gateway subscribe next). _emit = durable log + bus.
@@ -1614,7 +1617,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
             if _sje is None and CRASH_SAVER.last_path is None:
                 from suijin.modules.tools.lib.engagement_bundle import save_engagement
 
-                _sje = save_engagement(thread_id, objective, config, final_state, spend)
+                _sje = save_engagement(thread_id, objective, config, final_state, spend, _events.path)
                 CRASH_SAVER.mark_saved()
             if CRASH_SAVER.last_path is not None:
                 console.print(
