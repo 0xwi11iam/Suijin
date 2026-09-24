@@ -115,3 +115,69 @@ class TestReplay:
         st = replay(tmp_path / "e.jsonl")
         assert len(st["messages"]) == 80
         assert "replayed from the event log" in st["messages"][0]["content"]
+
+    def test_snapshot_overlays_resume_state(self, tmp_path):
+        """Snapshots are cumulative full-state dumps, one per iteration;
+        the LAST one is the authoritative resume point for the multi-value
+        fields a plain event stream cannot rebuild. A key absent from the
+        final snapshot means the state genuinely cleared it."""
+        el = EventLog(tmp_path / "s.jsonl")
+        el.append("session.start", objective="recon http://t")
+        el.append("iteration", n=1, phase="informational")
+        el.append(
+            "state.snapshot",
+            current_iteration=1,
+            current_phase="informational",
+            todo_list=[{"task": "probe login"}],
+            target_info={"host": "http://t"},
+            chain_findings_memory=[{"type": "cred", "value": "x"}],
+            tested_axes={"fuzz": 2},
+            findings=[{"class": "idor", "target": "http://t/1"}],
+            _attack_queue=["http://t/2"],
+            _foothold_at="shell@http://t",
+        )
+        el.append("iteration", n=2, phase="exploitation")
+        el.append("phase.transition", **{"from": "informational", "to": "exploitation"})
+        el.append(
+            "state.snapshot",
+            current_iteration=2,
+            current_phase="exploitation",
+            todo_list=[{"task": "escalate"}, {"task": "persist"}],
+            target_info={"host": "http://t"},
+            chain_findings_memory=[{"type": "cred", "value": "x"}, {"type": "cred", "value": "y"}],
+            tested_axes={"fuzz": 2, "enum": 1},
+            findings=[{"class": "idor", "target": "http://t/1"}, {"class": "rce", "target": "http://t/2"}],
+            _attack_queue=["http://t/3"],
+            # _foothold_at deliberately absent: the foothold was consumed
+        )
+        el.close()
+        st = replay(tmp_path / "s.jsonl")
+        # last full snapshot wins for iteration/phase
+        assert st["current_iteration"] == 2
+        assert st["current_phase"] == "exploitation"
+        # multi-value state came from the final snapshot
+        assert st["todo_list"] == [{"task": "escalate"}, {"task": "persist"}]
+        assert len(st["chain_findings_memory"]) == 2
+        assert len(st["findings"]) == 2
+        assert st["tested_axes"] == {"fuzz": 2, "enum": 1}
+        assert st["_attack_queue"] == ["http://t/3"]
+        assert "target_info" in st
+        # a key the final snapshot dropped is NOT resurrected from the stale one
+        assert "_foothold_at" not in st
+
+    def test_snapshot_messages_stay_event_derived(self, tmp_path):
+        """Messages and execution_trace are rebuilt from the ordered event
+        stream, not the snapshot — ordering and truncation are preserved."""
+        el = EventLog(tmp_path / "m.jsonl")
+        el.append("session.start", objective="x")
+        el.append("assistant.message", content="first")
+        el.append("tool.call", id="t1", name="http_request", args={})
+        el.append("tool.result", id="t1", ok=True, output="ok")
+        el.append(
+            "state.snapshot", current_iteration=1, messages=[{"role": "assistant", "content": "SHOULD NOT APPEAR"}]
+        )
+        el.close()
+        st = replay(tmp_path / "m.jsonl")
+        assert all(m.get("content") != "SHOULD NOT APPEAR" for m in st["messages"])
+        assert "first" in [m.get("content") for m in st["messages"]]
+        assert st["execution_trace"][0]["tool_name"] == "http_request"

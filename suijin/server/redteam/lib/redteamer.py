@@ -1249,6 +1249,11 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                             n=int(node_output.get("current_iteration") or 0),
                             phase=str(node_output.get("current_phase") or "informational"),
                         )
+                        from suijin.modules.agent.lib.event_log import RESUME_SNAPSHOT_KEYS as _snap_keys
+
+                        _snap = {k: node_output.get(k) for k in _snap_keys if node_output.get(k) is not None}
+                        if _snap:
+                            _emit("state.snapshot", **_snap)
                         for _m in node_output.get("messages", []):
                             if _m.get("role") == "assistant" and str(_m.get("content", "")).strip().startswith("{"):
                                 _emit("assistant.message", content=str(_m.get("content"))[:16000])
@@ -1710,6 +1715,11 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
         traceback.print_exc()
     finally:
         with contextlib.suppress(Exception):
+            from suijin.modules.agent.lib.event_log import RESUME_SNAPSHOT_KEYS as _snap_keys
+
+            _snap = {k: final_state.get(k) for k in _snap_keys if final_state.get(k) is not None}
+            if _snap:
+                _emit("state.snapshot", **_snap)
             _ev_kind = "session.complete" if final_state.get("completion_reason") else "session.interrupt"
             _emit(
                 _ev_kind,
