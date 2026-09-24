@@ -62,12 +62,23 @@ def _happy_events():
         }
     ]
     return [
-        {"think": {"execution_trace": trace1, "_current_step": {}, "current_phase": "informational"}},
+        {
+            "think": {
+                "execution_trace": trace1,
+                "_current_step": {},
+                "current_phase": "informational",
+                "current_iteration": 1,
+                "todo_list": [{"task": "scan"}],
+                "findings": [],
+                "target_info": {"host": "x"},
+            }
+        },
         {
             "execute_tool": {
                 "execution_trace": trace1,
                 "_current_step": {"tool_output": "22/tcp open", "error_class": ""},
                 "current_phase": "informational",
+                "current_iteration": 1,
             }
         },
         {
@@ -124,6 +135,27 @@ class TestRedTeamSmoke:
         monkeypatch.setattr(rt.providers, "reset_usage", lambda: seen.append(True))
         _run_smoke()
         assert seen == [True]
+
+    def test_journal_written_and_replayable(self, red_mocks):
+        """The run appends the durable journal (iteration + snapshot +
+        complete) and replay() reconstructs a resume-able state."""
+        _run_smoke()
+        logs = list((Path(red_mocks["tmpdir"]) / "engagements").glob("*/events.jsonl"))
+        assert logs, "runner wrote no events.jsonl"
+        from suijin.modules.agent.lib.event_log import read_events, replay
+        from suijin.modules.ops.lib.journal_resume import _is_resumable
+
+        evs = read_events(logs[0])
+        kinds = {e["kind"] for e in evs}
+        assert "session.start" in kinds and "iteration" in kinds
+        assert "state.snapshot" in kinds  # resume-critical fields persisted
+        assert "session.complete" in kinds
+        st = replay(logs[0])
+        assert st["original_objective"] == "test target"
+        assert st["current_iteration"] >= 1
+        assert isinstance(st["execution_trace"], list)
+        # a completed run must NOT present itself as resumable
+        assert not _is_resumable(logs[0])
 
     def test_agent_error_path(self, red_mocks, monkeypatch):
         """A graph that raises inside astream is caught and reported."""
