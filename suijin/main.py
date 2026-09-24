@@ -124,14 +124,19 @@ def main():
 
         console.print("[bold white]Select Operational Module:[/]")
         console.print("  [bold #ff5555]1.[/] [white]Red Team (Autonomous Agent)[/]")
-        console.print("  [bold #e6b47c]2.[/] [white]Operator Tools (resume, replay, clean)[/]")
-        console.print("  [bold white]3.[/] [dim]Exit[/]\n")
+        console.print("  [bold yellow]2.[/] [white]Settings[/]")
+        console.print("  [bold #e6b47c]3.[/] [white]Operator Tools (resume, replay, clean)[/]")
+        console.print("  [bold white]4.[/] [dim]Exit[/]\n")
 
         try:
             c = input(" ").strip()
             if c == "1":
                 redteamer_main()
             elif c == "2":
+                from suijin.modules.console.lib import settings_tui
+
+                settings_tui.main()
+            elif c == "3":
                 operator_menu()
             else:
                 sys.exit(0)
