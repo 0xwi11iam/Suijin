@@ -1218,21 +1218,15 @@ class TestLaunchModeDefault:
 
         assert _default_config()["launch_mode"] == "daemon"
 
-    def test_tui_menu_choice_runs_in_process(self, monkeypatch):
-        """Menu option 3/4 = 'this console' — the classic run, no daemon."""
+    def test_menu_is_unchanged_three_options(self):
+        """The objective menu stays EXACTLY as it was (1 type / 2 upload /
+        3 back) — the daemon default never rewrites the operator's menu."""
         from suijin.modules.redteam.lib import redteamer
 
-        seen = {}
-        answers = iter(["3", "foreground target"])  # menu choice, then objective
-        monkeypatch.setattr("builtins.input", lambda *a, **k: next(answers))
-        monkeypatch.setattr(redteamer, "load_config", lambda: {"launch_mode": "daemon"})
-        monkeypatch.setattr(redteamer, "load_env", lambda: None)
-        monkeypatch.setattr(redteamer, "discover_modules", lambda *a, **k: None)
-        monkeypatch.setattr("suijin.modules.loader.set_verbose", lambda *a, **k: None)
-        monkeypatch.setattr(redteamer, "run_red_team", lambda config, obj: seen.update(obj=obj))
-        monkeypatch.setattr(redteamer.console, "print", lambda *a, **k: None)
-        redteamer.main()
-        assert seen["obj"] == "foreground target"
+        source = Path(redteamer.__file__).read_text()
+        assert "Type manually" in source and "Upload file (.txt / .md / .rtf)" in source
+        assert "[bold white]3.[/] [dim]Back[/]" in source
+        assert "classic live TUI" not in source  # no extra menu rows added
 
     def test_menu_choice_one_starts_daemon(self, monkeypatch):
         """The DEFAULT path: detached. The in-process runner is never called."""
