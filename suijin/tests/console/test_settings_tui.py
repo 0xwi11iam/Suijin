@@ -388,66 +388,65 @@ class TestCursesScreen:
     line-mode fallback is what CI/no-terminfo terminals actually get."""
 
     def test_screen_model_is_pure_and_complete(self, cfg):
+        """One flat list: every visible field on one screen, with the
+        cursor on exactly one of them."""
         config = st.load_config()
         lines = st.screen_lines(config, cursor=0)
         text = "\n".join(t for t, _r in lines)
         assert "SUIJIN — Settings" in text
-        assert "Model" in text and "Limits" in text and "Spending" in text
-        assert any(role == "cursor" for _t, role in lines)  # exactly one cursor
+        assert "provider" in text and "max_iterations" in text
+        assert sum(1 for _t, role in lines if role == "cursor") == 1
         # re-rendering with no edit changes nothing (no echo path)
         assert st.screen_lines(config, cursor=0) == lines
 
     def test_screen_marks_the_cursor_row(self, cfg):
         config = st.load_config()
-        lines = st.screen_lines(config, cursor=1)  # the section menu
+        items = st._row_items(st._visible_fields(config))
+        lines = st.screen_lines(config, cursor=2)
         cursor_rows = [t for t, role in lines if role == "cursor"]
-        assert len(cursor_rows) == 1 and "Limits" in cursor_rows[0]
+        assert len(cursor_rows) == 1 and cursor_rows[0].strip().startswith("› ")
+        # the highlighted row shows its VALUE (reverse video alone is easy to miss)
+        assert cursor_rows[0].split()[1] == items[2][1]
 
-    def test_section_screen_lists_fields_with_plain_labels(self, cfg):
+    def test_every_field_is_listed_and_grouped(self, cfg):
         config = st.load_config()
-        lines = st.screen_lines(config, cursor=0, section="limits")
-        text = "\n".join(t for t, _r in lines)
-        # human labels, not config keys
-        assert "Iteration cap" in text and "max_iterations" not in text
-        # the highlighted field's meaning is spelled out
-        assert any(role == "help" for _t, role in lines)
-        # values are said the way a person says them
-        assert st.human_value("max_iterations", config) in text
-
-    def test_section_menu_leads_with_the_summary(self, cfg):
-        config = st.load_config()
+        visible = st._visible_fields(config)
         lines = st.screen_lines(config, cursor=0)
-        summary = next(t for t, role in lines if role == "summary")
-        assert "zai" in summary and "glm-5.3" in summary
-        assert summary == st.running_summary(config)
-        # the words a person needs: 0 caps mean nothing stops the bill
-        assert "nothing stops the bill" in summary
-        # and the live model is on the top screen, not behind a menu
-        assert any("glm-5.3" in t for t, role in st.screen_lines(config, cursor=0) if role == "model")
-
-    def test_big_iteration_cap_reads_as_infinite(self, cfg):
-        """1,000,000 cycles is a de-facto 'until it finishes' — saying
-        'up to 1,000,000 cycles' is unreadable and sounds like a wall."""
-        config = dict(st.load_config(), max_iterations=1_000_000, cost_budget_usd=0.0, cost_hard_cap_usd=0.0)
-        summary = st.running_summary(config)
-        assert "runs until it finishes" in summary
-        assert "1,000,000" not in summary
-        small = dict(config, max_iterations=250)
-        assert "stops at 250 cycles" in st.running_summary(small)
-
-    def test_esc_legend_differs_per_level(self, cfg):
-        assert "choose" in st._legend(None)
-        assert "back" in st._legend("limits")
+        listed = [k for _g, k in st._row_items(visible)]
+        body = "\n".join(t for t, role in lines if role in ("row", "cursor"))
+        missing = [k for k in listed if f" {k}" not in body]
+        assert not missing, f"fields not on screen: {missing}"
+        assert any(role == "group" for _t, role in lines)
 
     def test_model_fields_advertise_live_ids(self, cfg):
         config = st.load_config()
-        lines = st.screen_lines(config, cursor=0, section="model")
-        assert any("live ids" in t for t, _r in lines)
+        lines = st.screen_lines(config, cursor=0)
+        assert any("zai_model" in t and "m: live ids" in t for t, _r in lines)
 
     def test_screen_note_warns(self, cfg):
         config = st.load_config()
         lines = st.screen_lines(config, cursor=0, note="fetch failed: boom", status="warn")
         assert any("fetch failed" in t and role == "warn" for t, role in lines)
+
+    def test_legend_names_the_real_keys(self, cfg):
+        legend = st._legend(None)
+        for key in ("Enter", "m", "s", "q"):
+            assert key in legend, f"the legend never mentions {key!r}"
+
+    def test_curses_keeps_the_cursor_visible(self, cfg):
+        """A list taller than the window scrolls, keeping the cursor row on
+        screen (the old scrolling-terminal failure)."""
+        config = st.load_config()
+        win = _Win(14, 80)
+        with contextlib.suppress(Exception):
+            st._draw(win, config, None, 3, "", "ok", None)
+        rows = [r for r in win.rows if r.strip()]
+        assert len(rows) <= 14  # never overflows the window
+        assert any(r.strip().startswith("› ") for r in rows)  # the cursor row is on screen
+        # ONE frame: the legend sits inside, never on the left border
+        legend = next((r for r in win.rows if "m live model ids" in r or "live model ids" in r), "")
+        assert legend, f"the legend was never drawn: {win.rows}"
+        assert legend.startswith(" "), f"legend overwrites the left border: {legend!r}"
 
     def test_editor_falls_back_when_curses_cannot_start(self, cfg, monkeypatch):
         """A broken TERM/terminfo must not traceback — the line-mode editor
@@ -474,25 +473,6 @@ class TestCursesScreen:
         inputs = iter(["wat", "q"])
         monkeypatch.setattr(Console, "input", lambda self, *a, **k: next(inputs))
         assert st._run_line_mode(_console()) == 0
-
-    def test_curses_keeps_the_cursor_visible(self, cfg):
-        """A list taller than the screen scrolls, keeping the cursor row on
-        screen (the old scrolling-terminal failure)."""
-
-        config = st.load_config()
-        win = _Win(16, 80)
-        with contextlib.suppress(Exception):
-            st._draw(win, config, None, 3, "", "ok", None)
-        rows = [r for r in win.rows if r.strip()]
-        assert len(rows) <= 16  # never overflows the window
-        assert any(r.strip().startswith("› ") for r in rows)  # the cursor row is on screen
-        # the frame hugs the content: a short menu is not a full-screen box
-        used = max(i for i, r in enumerate(win.rows) if r.strip())
-        assert used < 15, f"frame padded with empty rows (used {used + 1} of 16)"
-        # ONE frame: the legend sits inside, never on the left border
-        legend = next((r for r in win.rows if "choose" in r or "change" in r), "")
-        assert legend, "the legend was never drawn"
-        assert legend.startswith(" "), f"legend overwrites the left border: {legend!r}"
 
     def test_legend_sits_inside_the_frame(self, cfg):
         """The legend used to be written over the right border (…quitqqqq)."""
