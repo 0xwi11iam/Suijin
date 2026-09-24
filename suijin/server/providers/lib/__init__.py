@@ -561,6 +561,73 @@ def _diagnose_transport(exc) -> str:
 
 
 # ----------------------------------------------------------------------
+# Model catalog — where a provider's model ids come from
+# ----------------------------------------------------------------------
+def provider_models_endpoint(provider, config=None):
+    """(base_url, headers) for listing a provider's model ids, or
+    (None, reason) when the layer can't know it.
+
+    Endpoints live HERE (this layer owns provider wiring); callers like the
+    Settings TUI ask instead of keeping their own copy. Never raises.
+
+      - registry providers: their spec's base_url + env key
+      - custom:<name>: the operator's base_url + key from config
+      - zai: the exported coding/paas constants (endpoint per config)
+      - amd: its configured endpoint
+      - anthropic / gemini / huggingface: SDK-managed — the caller is told
+        honestly rather than sent to a guessed URL
+    """
+    provider = str(provider or "").strip()
+    config = dict(config or {})
+    if not provider:
+        return None, "no provider selected"
+    with contextlib.suppress(Exception):
+        from suijin.modules.platform.lib.config_loader import load_env
+
+        load_env()
+    # --- registry ---
+    with contextlib.suppress(Exception):
+        from suijin.modules.providers.lib.registry import PROVIDER_REGISTRY
+
+        spec = PROVIDER_REGISTRY.get(provider)
+        if spec is not None:
+            key = ""
+            for env in spec.key_envs:
+                key = os.environ.get(env, "") or ""
+                if key:
+                    break
+            if spec.local:
+                return None, f"{provider} is a local box — its models are whatever the server loaded"
+            return str(spec.base_url or ""), ({"Authorization": f"Bearer {key}"} if key else {})
+    # --- custom boxes ---
+    if provider.startswith("custom:"):
+        want = provider[len("custom:") :]
+        for entry in config.get("custom_providers") or []:
+            if str(entry.get("name") or "") == want:
+                base = str(entry.get("base_url") or "").rstrip("/")
+                key = str(entry.get("api_key") or "")
+                if not base:
+                    return None, f"custom:{want} has no base_url"
+                return base, ({"Authorization": f"Bearer {key}"} if key else {})
+        return None, f"no custom provider named {want} in config.json"
+    # --- bespoke code paths ---
+    if provider == "zai":
+        base = (
+            ZAI_PAAS_BASE_URL if str(config.get("zai_endpoint") or "coding").lower() == "paas" else ZAI_CODING_BASE_URL
+        )
+        key = os.environ.get("ZAI_API_KEY", "") or ""
+        return base, ({"Authorization": f"Bearer {key}"} if key else {})
+    if provider == "deepseek":
+        key = os.environ.get("DEEPSEEK_API_KEY", "") or ""
+        return "https://api.deepseek.com/v1", ({"Authorization": f"Bearer {key}"} if key else {})
+    if provider == "amd":
+        base = str((config.get("amd_config") or {}).get("endpoint") or "https://api.amd.com/v1").rstrip("/")
+        key = os.environ.get("AMD_API_KEY", "") or ""
+        return base, ({"Authorization": f"Bearer {key}"} if key else {})
+    return None, (f"{provider} talks through its own SDK — the layer does not expose a model list; type the model id")
+
+
+# ----------------------------------------------------------------------
 # Core call – all providers
 # ----------------------------------------------------------------------
 def generate(
