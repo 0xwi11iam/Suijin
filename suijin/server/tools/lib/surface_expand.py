@@ -14,11 +14,38 @@ import json
 
 _WORDLIST = [
     # portal/app nouns (the review's exact misses first)
-    "settings", "forgot-password", "reset-password", "profile", "account",
-    "admin", "login", "logout", "signup", "register", "help", "support",
-    "dashboard", "payments", "billing", "orders", "uploads", "export",
-    "search", "users", "api", "internal", "debug", "config", "backup",
-    "v1", "v2", "v3", "health", "status", "graphql", "metrics",
+    "settings",
+    "forgot-password",
+    "reset-password",
+    "profile",
+    "account",
+    "admin",
+    "login",
+    "logout",
+    "signup",
+    "register",
+    "help",
+    "support",
+    "dashboard",
+    "payments",
+    "billing",
+    "orders",
+    "uploads",
+    "export",
+    "search",
+    "users",
+    "api",
+    "internal",
+    "debug",
+    "config",
+    "backup",
+    "v1",
+    "v2",
+    "v3",
+    "health",
+    "status",
+    "graphql",
+    "metrics",
 ]
 
 _DERIVATIONS = [
@@ -29,8 +56,13 @@ _DERIVATIONS = [
 ]
 
 
-def surface_expand(url: str = "", names: list | None = None, include_derived: bool = True,
-                   timeout: int = 15, allow_internal: bool = False) -> str:
+def surface_expand(
+    url: str = "",
+    names: list | None = None,
+    include_derived: bool = True,
+    timeout: int = 15,
+    allow_internal: bool = False,
+) -> str:
     """Enumerate sibling endpoints for a pattern URL. {name} placeholder
     or the last path segment is replaced with each candidate; existing
     (non-404) hits return ranked. Paced through the governed engine."""
@@ -70,8 +102,15 @@ def surface_expand(url: str = "", names: list | None = None, include_derived: bo
             if st and st != 404:
                 results.append({"path": p, "status": st, "len": res.get("length", 0)})
         if not results:
-            return json.dumps({"pattern": tmpl, "probed": len(candidates), "existing": [],
-                               "note": "no siblings found — the router/pattern may be unique"}, indent=2)
+            return json.dumps(
+                {
+                    "pattern": tmpl,
+                    "probed": len(candidates),
+                    "existing": [],
+                    "note": "no siblings found — the router/pattern may be unique",
+                },
+                indent=2,
+            )
         ranked = sorted(results, key=lambda r: (r["status"] != 200, -r["len"]))
         return json.dumps({"pattern": tmpl, "probed": len(candidates), "existing": ranked[:15]}, indent=2)[:4000]
     except Exception as e:  # noqa: BLE001

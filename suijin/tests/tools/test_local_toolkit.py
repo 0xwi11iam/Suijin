@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-LAB = Path(__file__).resolve().parents[2] / "modules" / "tools" / "lib"
+LAB = Path(__file__).resolve().parents[2] / "server" / "tools" / "lib"
 
 
 def _mod(name):

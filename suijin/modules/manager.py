@@ -72,7 +72,9 @@ def set_enabled(module_id: str, enabled: bool) -> bool:
 def _all_units(module_roots: list[Path] | None):
     reg = Registry()
     roots = list(module_roots or [])
-    roots.append(Path(__file__).resolve().parent)  # bundled modules always known
+    _modules = Path(__file__).resolve().parent
+    roots.append(_modules)  # bundled modules always known
+    roots.append(_modules.parent / "server")  # first-party server region
     if USER_MODULES.is_dir():
         roots.append(USER_MODULES)
     for root in roots:
@@ -198,5 +200,7 @@ def uninstall(module_id: str) -> bool:
 
 def _bundled(module_id: str) -> bool:
     reg = Registry()
-    reg.scan(Path(__file__).resolve().parent)
+    _modules = Path(__file__).resolve().parent
+    reg.scan(_modules)
+    reg.scan(_modules.parent / "server")
     return module_id in reg.resolve().units

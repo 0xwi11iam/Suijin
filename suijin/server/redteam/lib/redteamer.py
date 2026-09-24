@@ -27,7 +27,6 @@ import time
 
 from rich.console import Console
 from rich.panel import Panel
-
 from suijin.modules.redteam.lib.red import session_control as sc
 
 # ENV_PATH / CONFIG_PATH re-exported for callers and tests that still import
@@ -474,7 +473,26 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
     from suijin.modules.platform.lib.workspace import engagement_dir as _ed_for_events
 
     _events = EventLog(_ed_for_events() / "events.jsonl")
-    _events.append("session.start", objective=str(objective)[:2000], provider=str(config.get("provider") or ""), model=str(active_model(config)))
+
+    # THE BUS: every event record fans out here (log worker today; the
+    # TUI adapter and gateway subscribe next). _emit = durable log + bus.
+    from suijin.server import EventBus
+    from suijin.server.log_worker import LogWorker
+
+    _bus = EventBus()
+
+    def _emit(kind: str, **fields):
+        _events.append(kind, **fields)
+        _bus.publish(kind, **fields)
+
+    _logw = LogWorker(_bus, _ed_for_events() / "log" / "engagement.log")
+    _logw.start()
+    _emit(
+        "session.start",
+        objective=str(objective)[:2000],
+        provider=str(config.get("provider") or ""),
+        model=str(active_model(config)),
+    )
     with contextlib.suppress(Exception):
         atexit.register(_events.close)
 
@@ -1226,21 +1244,36 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                 # ── event log: the record lands before consumption ────
                 with contextlib.suppress(Exception):
                     if node_name == "think":
-                        _events.append(
+                        _emit(
                             "iteration",
                             n=int(node_output.get("current_iteration") or 0),
                             phase=str(node_output.get("current_phase") or "informational"),
                         )
                         for _m in node_output.get("messages", []):
                             if _m.get("role") == "assistant" and str(_m.get("content", "")).strip().startswith("{"):
-                                _events.append("assistant.message", content=str(_m.get("content"))[:16000])
+                                _emit("assistant.message", content=str(_m.get("content"))[:16000])
                     elif node_name == "execute_tool":
-                        _st = (node_output.get("execution_trace") or [])[-1] if node_output.get("execution_trace") else {}
+                        _st = (
+                            (node_output.get("execution_trace") or [])[-1] if node_output.get("execution_trace") else {}
+                        )
                         if _st.get("tool_name"):
                             _tid = f"t{_events and int(time.time() * 1000) % 10_000_000}"
-                            _events.append("tool.call", id=_tid, name=str(_st.get("tool_name")), args={k: str(v)[:400] for k, v in dict(_st.get("tool_args") or {}).items()})
+                            _emit(
+                                "tool.call",
+                                id=_tid,
+                                name=str(_st.get("tool_name")),
+                                args={k: str(v)[:400] for k, v in dict(_st.get("tool_args") or {}).items()},
+                            )
                             _out, _trunc = tool_output_cap(_st.get("tool_output"))
-                            _events.append("tool.result", id=_tid, ok=bool(_st.get("success", True)), error_kind=_st.get("error_class"), duration_ms=int(_st.get("duration_ms") or 0), output=_out, truncated=_trunc)
+                            _emit(
+                                "tool.result",
+                                id=_tid,
+                                ok=bool(_st.get("success", True)),
+                                error_kind=_st.get("error_class"),
+                                duration_ms=int(_st.get("duration_ms") or 0),
+                                output=_out,
+                                truncated=_trunc,
+                            )
 
                 # ── think-side signals (streamed into the open block) ──
                 if node_name == "think":
@@ -1256,7 +1289,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                     _jt = node_output.get("_just_transitioned_to", "")
                     if _jt:
                         _last_phase_hint = [str(ui.phase or "")]
-                        _events.append("phase.transition", **{"from": str(_last_phase_hint[0]), "to": str(_jt)})
+                        _emit("phase.transition", **{"from": str(_last_phase_hint[0]), "to": str(_jt)})
                         ui.phase_transition(_jt)
                     _sv = node_output.get("_supervisor_guidance", "")
                     if _sv:
@@ -1462,7 +1495,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
 
                 write_guidance(guidance, mode="PAUSED")
                 with contextlib.suppress(Exception):
-                    _events.append("guidance.delivered", text=str(guidance)[:4000], source="pause")
+                    _emit("guidance.delivered", text=str(guidance)[:4000], source="pause")
                 console.print("[dim]  guidance written — the AI reads it next turn[/dim]\n")
             # resume: session closes, the box returns to live routing, the
             # thought stream resumes, the strip un-pauses
@@ -1678,9 +1711,21 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
     finally:
         with contextlib.suppress(Exception):
             _ev_kind = "session.complete" if final_state.get("completion_reason") else "session.interrupt"
-            _events.append(_ev_kind, reason=str(final_state.get("completion_reason") or final_state.get("final_summary") or "operator interrupt")[:400])
-            _events.append("usage", input_tokens=int(providers.USAGE.get("input_tokens") or 0), output_tokens=int(providers.USAGE.get("output_tokens") or 0), cost_usd=float(providers.USAGE.get("est_cost_usd") or 0.0), priced=bool(providers.USAGE.get("priced")))
+            _emit(
+                _ev_kind,
+                reason=str(
+                    final_state.get("completion_reason") or final_state.get("final_summary") or "operator interrupt"
+                )[:400],
+            )
+            _emit(
+                "usage",
+                input_tokens=int(providers.USAGE.get("input_tokens") or 0),
+                output_tokens=int(providers.USAGE.get("output_tokens") or 0),
+                cost_usd=float(providers.USAGE.get("est_cost_usd") or 0.0),
+                priced=bool(providers.USAGE.get("priced")),
+            )
             _events.close()
+            _logw.stop()
         # CRASH-SAVER backstop — runs on EVERY exit from the final block
         # (normal, exception, KeyboardInterrupt). Idempotent: the
         # conclusion save above already claimed the once-flag.

@@ -44,10 +44,17 @@ def citadel(tmp_path_factory):
     app_py = str(Path(__file__).resolve().parents[2] / "lab" / "citadel" / "app.py")
     proc = subprocess.Popen(
         [sys.executable, app_py],
-        env={**os.environ, "PORT": str(PUB), "CITADEL_DB": "/tmp/suijin_ws_test.db",
-             "CITADEL_TRAFFIC": "/tmp/ws_test_traffic.jsonl", "CITADEL_RATE_LIMIT": "100000",
-             "CITADEL_NO_INTERNAL": "1", "SUIJIN_WORKSPACE": str(store_dir)},
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        env={
+            **os.environ,
+            "PORT": str(PUB),
+            "CITADEL_DB": "/tmp/suijin_ws_test.db",
+            "CITADEL_TRAFFIC": "/tmp/ws_test_traffic.jsonl",
+            "CITADEL_RATE_LIMIT": "100000",
+            "CITADEL_NO_INTERNAL": "1",
+            "SUIJIN_WORKSPACE": str(store_dir),
+        },
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     for _ in range(40):
         try:
@@ -67,8 +74,11 @@ def citadel(tmp_path_factory):
 
 def _login(user, pw):
     out = http_replay(
-        method="POST", url=f"{BASE}/login", allow_internal=True,
-        headers={"Content-Type": "application/x-www-form-urlencoded"}, body=f"u={user}&p={pw}",
+        method="POST",
+        url=f"{BASE}/login",
+        allow_internal=True,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        body=f"u={user}&p={pw}",
     )
     return json.loads(json.loads(out)["body"])["token"]
 
@@ -105,19 +115,24 @@ class TestRoleCycling:
 
     def test_auto_attribution_without_registration(self, citadel):
         # unregistered sends are attributed by their auth-header label
-        http_replay(url=f"{BASE}/api/v2/health", allow_internal=True,
-                    headers={"X-Session": "auto-tok-123"})
+        http_replay(url=f"{BASE}/api/v2/health", allow_internal=True, headers={"X-Session": "auto-tok-123"})
         out = web_session(action="observations")
         assert "auto-tok-123" in out or "x-session:auto" in out.lower()
 
     def test_hidden_params_correlation(self, citadel):
         # the login UI exposes u+p; the register API sends username+password+role
         # (role is the mass-assignment target that never appears in any UI)
-        record_ui_fields(f"{BASE}/login", [{"name": "u", "type": "text", "hidden": False},
-                                           {"name": "p", "type": "password", "hidden": False}])
-        http_replay(method="POST", url=f"{BASE}/api/register", allow_internal=True,
-                    headers={"Content-Type": "application/json"},
-                    body=json.dumps({"username": "hp_test", "password": "x", "role": "user"}))
+        record_ui_fields(
+            f"{BASE}/login",
+            [{"name": "u", "type": "text", "hidden": False}, {"name": "p", "type": "password", "hidden": False}],
+        )
+        http_replay(
+            method="POST",
+            url=f"{BASE}/api/register",
+            allow_internal=True,
+            headers={"Content-Type": "application/json"},
+            body=json.dumps({"username": "hp_test", "password": "x", "role": "user"}),
+        )
         hp = hidden_params()
         flat = [p for h in hp for p in h["params_not_in_ui"]]
         assert "role" in flat  # the UI never exposed it — mass-assignment target

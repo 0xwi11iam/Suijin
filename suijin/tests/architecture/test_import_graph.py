@@ -17,10 +17,22 @@ def _live_files():
     return [p for p in PKG.rglob("*.py") if not any(part in EXCLUDE for part in p.parts)]
 
 
+_SPLIT_HOMES = {"agent", "platform", "providers", "tools", "ops", "redteam"}
+
+
 def _module_targets(m: str) -> set[Path]:
     """File paths a module string can refer to."""
     rel = m.replace(".", "/")
-    return {PKG.parent / (rel + ".py"), PKG.parent / rel / "__init__.py"}
+    targets = {PKG.parent / (rel + ".py"), PKG.parent / rel / "__init__.py"}
+    # Split-aware: `suijin.modules.<home>.*` legacy imports resolve at runtime
+    # through the relocation shim to the canonical suijin.server.<home>.*.
+    if m.startswith("suijin.modules."):
+        head = m.split(".")[2]
+        if head in _SPLIT_HOMES:
+            alt = m.replace("suijin.modules." + head, "suijin.server." + head, 1)
+            alt_rel = alt.replace(".", "/")
+            targets.update({PKG.parent / (alt_rel + ".py"), PKG.parent / alt_rel / "__init__.py"})
+    return targets
 
 
 def _collect_imports(path: Path) -> set[str]:

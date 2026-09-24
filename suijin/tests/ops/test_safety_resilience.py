@@ -80,7 +80,6 @@ class TestApprovals:
         assert any(i["tool"] == "msf_run" for i in items)
 
 
-
 class TestPanic:
     def test_dry_run_kills_nothing(self, monkeypatch):
         from suijin.modules.ops.lib import panic as pk

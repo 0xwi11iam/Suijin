@@ -236,8 +236,11 @@ _PRESSURE_LADDER = (
     (20.0, "URGENT: 20 min. Two thirds of your time is GONE. Report NOW."),
     (23.0, "URGENT: 23 min. Stop testing. Catalog findings and complete."),
     (26.0, "URGENT: 26 min. FINAL CHANCE — report immediately."),
-    (28.0, "INSANE: 28 min. THE WALL IS AT 30. Whatever you have — a finding, "
-           "a clear, a suspicion — WRITE IT DOWN NOW. REPORT."),
+    (
+        28.0,
+        "INSANE: 28 min. THE WALL IS AT 30. Whatever you have — a finding, "
+        "a clear, a suspicion — WRITE IT DOWN NOW. REPORT.",
+    ),
 )
 
 

@@ -48,10 +48,19 @@ class FakeAgent:
 
 
 def _ok_events(reason="objective_complete"):
-    tr = [{"iteration": 1, "thought": "t", "tool_name": "nmap_scan", "tool_args": {}, "success": True, "phase": "recon"}]
+    tr = [
+        {"iteration": 1, "thought": "t", "tool_name": "nmap_scan", "tool_args": {}, "success": True, "phase": "recon"}
+    ]
     return [
         {"think": {"execution_trace": tr, "_current_step": {}, "current_phase": "recon"}},
-        {"generate_response": {"execution_trace": tr, "current_phase": "recon", "completion_reason": reason, "messages": [{"role": "assistant", "content": "done"}]}},
+        {
+            "generate_response": {
+                "execution_trace": tr,
+                "current_phase": "recon",
+                "completion_reason": reason,
+                "messages": [{"role": "assistant", "content": "done"}],
+            }
+        },
     ]
 
 
@@ -79,7 +88,16 @@ class TestAutonomyAskPolicy:
         pushed = []
         monkeypatch.setattr(_gw, "push_question", lambda q: pushed.append(q) or "qid-1")
 
-        trace = [{"iteration": 1, "thought": "t", "tool_name": "ask_operator", "tool_args": {}, "success": True, "phase": "recon"}]
+        trace = [
+            {
+                "iteration": 1,
+                "thought": "t",
+                "tool_name": "ask_operator",
+                "tool_args": {},
+                "success": True,
+                "phase": "recon",
+            }
+        ]
 
         async def ask_then_done(ig):
             # FULL-AUTO never holds the stream: the ask is answered inline
@@ -88,7 +106,11 @@ class TestAutonomyAskPolicy:
                 {
                     "execute_tool": {
                         "execution_trace": trace,
-                        "_current_step": {"tool_output": "should I poke /admin?", "error_class": "ask_operator", "tool_name": "ask_operator"},
+                        "_current_step": {
+                            "tool_output": "should I poke /admin?",
+                            "error_class": "ask_operator",
+                            "tool_name": "ask_operator",
+                        },
                         "current_phase": "recon",
                     }
                 },
@@ -148,7 +170,13 @@ class TestUnattendedDoctrine:
             seen.append(messages)
             return '{"action":"use_tool","tool_name":"search_kb","tool_args":{"keyword":"x"},"thought":"t"}'
 
-        st = {"objective": "o", "original_objective": "pentest http://t.local", "target_info": {}, "messages": [], "current_iteration": 1}
+        st = {
+            "objective": "o",
+            "original_objective": "pentest http://t.local",
+            "target_info": {},
+            "messages": [],
+            "current_iteration": 1,
+        }
         asyncio.run(think_node(st, generate_fn=gen, config={}))
         user_turn = next(m["content"] for m in seen[0] if m["role"] == "user")
         assert "UNATTENDED MODE" not in user_turn

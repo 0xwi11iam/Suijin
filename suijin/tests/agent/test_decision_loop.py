@@ -128,7 +128,10 @@ class TestContextWindowWiring:
     def test_profiler_records_the_real_wire_payload(self):
         from suijin.modules.agent.lib.profiler import record
 
-        st = {"messages": [{"role": "user", "content": "tiny state history"}], "_run_config": {"context_window": 50_000}}
+        st = {
+            "messages": [{"role": "user", "content": "tiny state history"}],
+            "_run_config": {"context_window": 50_000},
+        }
         wire = [
             {"role": "system", "content": "x" * 40_000},
             {"role": "user", "content": "y" * 4_000},
@@ -142,7 +145,14 @@ class TestContextWindowWiring:
         from suijin.modules.agent.lib.profiler import render
 
         st = {
-            "_prompt_profile": {"est_tokens": 90_000, "system_chars": 200_000, "history_chars": 160_000, "messages": 3, "window_tokens": 100_000, "window_pct": 90.0},
+            "_prompt_profile": {
+                "est_tokens": 90_000,
+                "system_chars": 200_000,
+                "history_chars": 160_000,
+                "messages": 3,
+                "window_tokens": 100_000,
+                "window_pct": 90.0,
+            },
             "_prompt_profile_trend": [80_000, 90_000],
         }
         out = render(st)

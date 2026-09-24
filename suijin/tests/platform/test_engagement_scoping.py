@@ -4,7 +4,6 @@ Schema/scratchpad/approvals live under outputs/engagements/<slug>/ and
 die with the engagement (the .sje bundle is the resume artifact).
 objectives (pasted policy pages masquerading as objectives)."""
 
-
 import pytest
 
 import suijin.modules.platform.lib.workspace as ws

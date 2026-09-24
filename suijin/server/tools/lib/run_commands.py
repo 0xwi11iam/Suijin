@@ -277,7 +277,11 @@ def _default_handlers(box: RunBox) -> dict:
         from suijin.modules.providers.lib import get_usage
 
         u = get_usage()
-        plan = " [gold](coding plan: credits burned, USD shown is the PAYG-equivalent)[/gold]" if u.get("plan_billing") else ""
+        plan = (
+            " [gold](coding plan: credits burned, USD shown is the PAYG-equivalent)[/gold]"
+            if u.get("plan_billing")
+            else ""
+        )
         box._out.print(
             f"  ▸ calls={u['calls']} in={u['input_tokens']:,} out={u['output_tokens']:,} "
             f"≈${u['est_cost_usd']:.4f}" + ("" if u["priced"] else " [yellow](approximate)[/yellow]") + plan
