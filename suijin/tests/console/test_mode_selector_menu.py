@@ -87,15 +87,20 @@ class TestSelectorMenu:
         out = capsys.readouterr().out
         assert "settings:" in out  # the config path is always shown
 
-    def test_settings_tui_starts_the_app_in_a_terminal(self, monkeypatch):
-        """A TTY actually opens the Textual app (not just the summary)."""
+    def test_settings_tui_starts_the_editor_in_a_terminal(self, monkeypatch):
+        """A TTY actually opens the editor (not just the summary)."""
         from suijin.modules.console.lib import settings_tui
 
         ran = []
         monkeypatch.setattr(settings_tui, "sys_stdin_tty", lambda: True)
-        monkeypatch.setattr(settings_tui.SettingsApp, "run", lambda self, *a, **k: ran.append(1))
+        monkeypatch.setattr(settings_tui, "run_editor", lambda console: ran.append(1) or 0)
         assert settings_tui.main() == 0
         assert ran == [1]
+
+    def test_settings_tui_is_rich_not_textual(self):
+        source = (MAIN.parent / "modules" / "console" / "lib" / "settings_tui.py").read_text()
+        assert "import textual" not in source and "from textual" not in source
+        assert "from rich" in source
 
     @pytest.mark.parametrize("row", ["1", "2", "3", "4"])
     def test_rows_are_numbered_without_gaps(self, row):

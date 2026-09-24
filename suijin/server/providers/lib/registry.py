@@ -163,6 +163,16 @@ PROVIDER_REGISTRY: dict[str, ProviderSpec] = {
         None,
         note="one key, every major model; 'openrouter/auto' routes automatically",
     ),
+    "opencode": _spec(
+        "opencode",
+        "OpenCode Zen",
+        "https://opencode.ai/zen/v1",
+        "OPENCODE_API_KEY",
+        "glm-5.3",
+        None,
+        note="curated models for coding agents; chat/completions ids: glm-5.3, deepseek-v4-flash, "
+        "kimi-k2.7-code, minimax-m3, big-pickle (+ free tiers). gpt/claude ids need /responses or /messages",
+    ),
     # ---- Chinese platforms (endpoint-only: activates on key presence) ----
     "zhipu": _spec(
         "zhipu",
@@ -536,6 +546,7 @@ CLOUD_KEYS = [
     "cohere",
     "lambda",
     "openrouter",
+    "opencode",
 ]
 LOCAL_KEYS = ["ollama", "lmstudio", "vllm", "llamacpp", "jan"]
 
