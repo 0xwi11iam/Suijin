@@ -104,6 +104,7 @@ class TestPacksBoot:
         assert not report.aborted
         # packs require platform (absent from this tree) — skipped until the
         # first-party homes are scanned too
+        reg.scan(REPO / "suijin" / "server")
         reg.scan(REPO / "suijin" / "modules")
         report = reg.resolve()
         assert not report.aborted

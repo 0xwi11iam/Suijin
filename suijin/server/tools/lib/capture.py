@@ -64,12 +64,14 @@ def proxy_capture(port: int = 0, target_host: str = "", target_port: int = 0) ->
                 host = headers.get("host", target_host or "unknown")
 
                 # feed the session model
-                record_send({
-                    "method": method,
-                    "url": f"http://{host}{path}",
-                    "headers": {k: v for k, v in headers.items() if k not in ("host",)},
-                    "body": "",
-                })
+                record_send(
+                    {
+                        "method": method,
+                        "url": f"http://{host}{path}",
+                        "headers": {k: v for k, v in headers.items() if k not in ("host",)},
+                        "body": "",
+                    }
+                )
 
                 # forward to target if configured
                 if target_port:
@@ -165,19 +167,21 @@ def crawl(url: str = "", max_pages: int = 20, credential: str = "") -> str:
                 continue
 
             # feed the session model
-            record_send({
-                "method": "GET",
-                "url": current,
-                "headers": {},
-                "body": "",
-            })
+            record_send(
+                {
+                    "method": "GET",
+                    "url": current,
+                    "headers": {},
+                    "body": "",
+                }
+            )
 
             # extract links for BFS
             base = urlsplit(current)
             origin = f"{base.scheme}://{base.netloc}"
             for line in snap.split("\n"):
                 # snapshot lines like "[  1] LINK    "text" href=/path"
-                m2 = re.search(r'href=(\S+)', line)
+                m2 = re.search(r"href=(\S+)", line)
                 if m2:
                     href = m2.group(1).strip('"')
                     if href.startswith("/"):
@@ -196,11 +200,14 @@ def crawl(url: str = "", max_pages: int = 20, credential: str = "") -> str:
 
         mcp_browser_close()
 
-        return json.dumps({
-            "pages_crawled": pages,
-            "surfaces_discovered": surfaces_found,
-            "queued_unvisited": len(queue),
-            "note": "Session model updated — check web_session(action=summary) for the cross-credential worklist, then dispatch_testers.",
-        }, indent=2)
+        return json.dumps(
+            {
+                "pages_crawled": pages,
+                "surfaces_discovered": surfaces_found,
+                "queued_unvisited": len(queue),
+                "note": "Session model updated — check web_session(action=summary) for the cross-credential worklist, then dispatch_testers.",
+            },
+            indent=2,
+        )
     except Exception as e:  # noqa: BLE001
         return f"Error: crawl failed: {e}"

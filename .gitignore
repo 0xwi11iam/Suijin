@@ -135,3 +135,7 @@ node_modules/
 # aegis_vault lab runtime artifacts (flag file + defense levers)
 suijin/lab/aegis_vault/flag_aegis_*
 suijin/lab/aegis_vault/aegis_defense.json
+
+# ── Runtime server-region data (generated, never commit) ───────
+suijin/server/redteam/lib/intel/knowledge_graph.json
+loot/

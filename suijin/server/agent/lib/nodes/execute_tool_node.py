@@ -12,11 +12,11 @@ logger = logging.getLogger(__name__)
 # These aliases keep older references working — they are the SAME objects.
 
 
-
 def _artifact_dir(name):
     from suijin.modules.platform.lib.workspace import artifact_dir
 
     return artifact_dir(name)
+
 
 def _jr():
     """Tools job registry (lazy: boundary rule)."""

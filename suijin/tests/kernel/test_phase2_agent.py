@@ -8,6 +8,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
 MODULES = REPO / "suijin" / "modules"
+SERVER = REPO / "suijin" / "server"  # the split: first-party homes
 
 
 class TestNestedScan:
@@ -15,7 +16,7 @@ class TestNestedScan:
         from suijin.kernel.registry import Registry
 
         reg = Registry()
-        found = reg.scan(MODULES)
+        found = reg.scan(SERVER) | reg.scan(SERVER) | reg.scan(MODULES)
         for expected in ("agent", "agent.graph", "agent.nodes", "agent.memory"):
             assert expected in found, expected
 
@@ -23,7 +24,7 @@ class TestNestedScan:
         from suijin.kernel.registry import Registry
 
         reg = Registry()
-        reg.scan(MODULES)
+        reg.scan(SERVER) | reg.scan(MODULES)
         report = reg.resolve()
         assert not report.aborted
         order_ids = [u.id for u in report.boot_order]
@@ -33,12 +34,12 @@ class TestNestedScan:
         assert order_ids.index("agent.memory") < order_ids.index("agent")
 
     def test_parent_manifest_declares_children(self):
-        parent = json.loads((MODULES / "agent" / "plugin.json").read_text())
+        parent = json.loads((SERVER / "agent" / "plugin.json").read_text())
         assert parent["id"] == "agent"
         assert parent["tier"] == "core"
         assert set(parent.get("modules", [])) == {"graph", "nodes", "memory"}
         # children carry the dotted id
-        graph = json.loads((MODULES / "agent" / "graph" / "plugin.json").read_text())
+        graph = json.loads((SERVER / "agent" / "graph" / "plugin.json").read_text())
         assert graph["id"] == "agent.graph"
 
 
@@ -46,7 +47,7 @@ class TestAgentModuleBoots:
     def test_full_boot_includes_agent(self, tmp_path):
         from suijin.kernel import controller
 
-        ctx, report = controller.boot(module_roots=[MODULES], workspace=tmp_path, quiet=True)
+        ctx, report = controller.boot(module_roots=[SERVER, MODULES], workspace=tmp_path, quiet=True)
         order_ids = [u.id for u in report.boot_order]
         assert {"platform", "tools", "agent.graph", "agent.nodes", "agent.memory", "agent"} <= set(order_ids)
         # the agent service materializes (the run loop factory)
@@ -56,7 +57,7 @@ class TestAgentModuleBoots:
     def test_submodule_entries_materialize(self, tmp_path):
         from suijin.kernel import controller
 
-        ctx, _ = controller.boot(module_roots=[MODULES], workspace=tmp_path, quiet=True)
+        ctx, _ = controller.boot(module_roots=[SERVER, MODULES], workspace=tmp_path, quiet=True)
         assert any(u.id == "agent.graph" for u in controller._LAST_BOOT_ENTRIES.values()) or "agent.graph" in {
             getattr(m, "id", "") for m in controller._LAST_BOOT_ENTRIES.values()
         }

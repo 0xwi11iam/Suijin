@@ -22,6 +22,28 @@ _ALLOWLIST = {
     "cli.py": "console surface — the CLI may launch any surface (the console tier is the edge)",
 }
 
+# Legacy-path relocation shims: their whole job is re-exporting the real
+# suijin.client.* / suijin.server.* package at the old import path, so a
+# module-level import of the canonical target is the defining act, not a
+# boundary violation. Keep in sync with the shims in modules/*/__init__.py.
+_SPLIT_SHIMS = {
+    # phase A — TUI moved to suijin/client/tui/
+    "redteam/lib/red/console_ui.py",
+    "redteam/lib/red/console_input.py",
+    "redteam/lib/session_control.py",
+    "redteam/lib/red/session_control.py",
+    "redteam/lib/red/__init__.py",
+    # phase B — server region relocated to suijin/server/
+    "agent/__init__.py",
+    "agent/graph/__init__.py",
+    "platform/__init__.py",
+    "providers/__init__.py",
+    "tools/__init__.py",
+    "ops/__init__.py",
+    "redteam/__init__.py",
+    "redteam/lib/__init__.py",
+}
+
 
 def _module_level_imports(tree: ast.Module, file: Path = None):
     """Imports at TOP level only (function bodies are lazy by definition).
@@ -72,15 +94,10 @@ class TestModuleBoundaries:
             # PARTY module homes; packs are data-in/code-in bricks.
             if (py.parent / "manifest.json").exists():
                 continue
-            # SPLIT SHIMS (the client/server split, phase A): files whose
-            # whole job is re-exporting suijin.client.* at the legacy paths
-            if rel.replace("\\", "/") in (
-                "redteam/lib/red/console_ui.py",
-                "redteam/lib/red/console_input.py",
-                "redteam/lib/session_control.py",
-                "redteam/lib/red/session_control.py",
-                "redteam/lib/red/__init__.py",
-            ):
+            # SPLIT SHIMS (the client/server split): files whose
+            # whole job is re-exporting suijin.client.* / suijin.server.*
+            # at the legacy paths (phase A client + phase B server region)
+            if rel.replace("\\", "/") in _SPLIT_SHIMS:
                 continue
             tree = ast.parse(py.read_text(errors="ignore"))
             # lib/ = module-INTERNAL implementation: stdlib + third-party +

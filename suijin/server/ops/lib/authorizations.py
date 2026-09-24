@@ -69,13 +69,15 @@ def _sign(payload: str) -> str:
 
 def _record_signature(rec: dict) -> str:
     """Canonical form → signature. Provenance + target + program + expiry."""
-    payload = "|".join([
-        str(rec.get("target", "")),
-        str(rec.get("program", "")),
-        str(rec.get("authorization_id", "")),
-        str(rec.get("expires_at", "")),
-        str(rec.get("source", "")),
-    ])
+    payload = "|".join(
+        [
+            str(rec.get("target", "")),
+            str(rec.get("program", "")),
+            str(rec.get("authorization_id", "")),
+            str(rec.get("expires_at", "")),
+            str(rec.get("source", "")),
+        ]
+    )
     return _sign(payload)
 
 

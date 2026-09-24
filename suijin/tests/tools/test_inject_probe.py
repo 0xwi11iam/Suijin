@@ -37,10 +37,16 @@ def citadel():
     app_py = str(Path(__file__).resolve().parents[2] / "lab" / "citadel" / "app.py")
     proc = subprocess.Popen(
         [sys.executable, app_py],
-        env={**os.environ, "PORT": str(PUB), "CITADEL_DB": "/tmp/suijin_probe_test.db",
-             "CITADEL_TRAFFIC": "/tmp/probe_test_traffic.jsonl", "CITADEL_RATE_LIMIT": "100000",
-             "CITADEL_NO_INTERNAL": "1"},
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        env={
+            **os.environ,
+            "PORT": str(PUB),
+            "CITADEL_DB": "/tmp/suijin_probe_test.db",
+            "CITADEL_TRAFFIC": "/tmp/probe_test_traffic.jsonl",
+            "CITADEL_RATE_LIMIT": "100000",
+            "CITADEL_NO_INTERNAL": "1",
+        },
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     for _ in range(40):
         try:
@@ -103,16 +109,30 @@ class TestSSTI:
     def test_true_evaluation_via_admin(self, citadel):
         from suijin.modules.tools.lib.http_replay import http_replay
 
-        http_replay(method="POST", url=f"{BASE}/api/register", allow_internal=True,
-                    headers={"Content-Type": "application/json"},
-                    body=json.dumps({"username": "probe_admin", "password": "pw1", "role": "admin"}))
-        out = http_replay(method="POST", url=f"{BASE}/login", allow_internal=True,
-                          headers={"Content-Type": "application/x-www-form-urlencoded"},
-                          body="u=probe_admin&p=pw1")
+        http_replay(
+            method="POST",
+            url=f"{BASE}/api/register",
+            allow_internal=True,
+            headers={"Content-Type": "application/json"},
+            body=json.dumps({"username": "probe_admin", "password": "pw1", "role": "admin"}),
+        )
+        out = http_replay(
+            method="POST",
+            url=f"{BASE}/login",
+            allow_internal=True,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            body="u=probe_admin&p=pw1",
+        )
         tok = json.loads(json.loads(out)["body"])["token"] if isinstance(out, str) else out["body"]
         # the SSTI sink is POST /api/settings — probe the BODY field with the session
-        f = _facts(url=f"{BASE}/api/settings", method="POST", in_body=True, field="custom_message",
-                   vuln_class="ssti", headers={"Content-Type": "application/json", "X-Session": tok})
+        f = _facts(
+            url=f"{BASE}/api/settings",
+            method="POST",
+            in_body=True,
+            field="custom_message",
+            vuln_class="ssti",
+            headers={"Content-Type": "application/json", "X-Session": tok},
+        )
         assert "{{7919*6841}}" in f["evaluated_syntaxes"]  # real Jinja2 evaluation
 
 
@@ -150,7 +170,10 @@ class TestDispatch:
     def test_route_tool_reaches_probe(self, citadel):
         from suijin.modules.tools.lib.dispatch import route_tool
 
-        out = route_tool("inject_probe", {"url": f"{BASE}/search?fmt=html", "field": "q", "vuln_class": "xss",
-                                          "allow_internal": True}, {})
+        out = route_tool(
+            "inject_probe",
+            {"url": f"{BASE}/search?fmt=html", "field": "q", "vuln_class": "xss", "allow_internal": True},
+            {},
+        )
         f = json.loads(str(out))
         assert f["marker_reflected"] is True

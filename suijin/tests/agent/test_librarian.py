@@ -294,7 +294,7 @@ class TestRunScopedCount:
         published = []
         lb.set_ui_publish(lambda n: published.append(n))
         try:
-            inst = lb.start(generate_fn=None, engagement_dir=d, interval=10, target="t")
+            lb.start(generate_fn=None, engagement_dir=d, interval=10, target="t")
             import time as _t
 
             _t.sleep(0.6)

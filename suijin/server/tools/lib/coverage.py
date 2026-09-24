@@ -24,8 +24,21 @@ _LOCK = threading.Lock()
 
 # the vuln-class lanes (WSTG-condensed)
 CLASSES = (
-    "idor", "authz", "authn", "mass_assignment", "sqli", "xss", "ssti",
-    "cmdi", "ssrf", "lfi", "upload", "xxe", "race", "redirect", "info",
+    "idor",
+    "authz",
+    "authn",
+    "mass_assignment",
+    "sqli",
+    "xss",
+    "ssti",
+    "cmdi",
+    "ssrf",
+    "lfi",
+    "upload",
+    "xxe",
+    "race",
+    "redirect",
+    "info",
 )
 
 _NOTES: dict[str, list] = {}  # "wide" | "local" -> list of note dicts
@@ -86,15 +99,22 @@ def mark(asset: str, vuln_class: str, status: str, evidence: str = "", request_s
             return "Error: status must be tested_vulnerable | tested_not_vulnerable | not_applicable"
         if st == "tested_not_vulnerable":
             if not str(evidence).strip() or len(str(evidence).strip()) < 30:
-                return ("Error: tested_not_vulnerable REQUIRES evidence (≥30 chars: what you sent, what came back, "
-                        "why it holds). A note without a sent request is a FALSE record — it makes later checks SKIP "
-                        "this class and hides a real vulnerability.")
+                return (
+                    "Error: tested_not_vulnerable REQUIRES evidence (≥30 chars: what you sent, what came back, "
+                    "why it holds). A note without a sent request is a FALSE record — it makes later checks SKIP "
+                    "this class and hides a real vulnerability."
+                )
             if not str(request_sent).strip():
                 return "Error: tested_not_vulnerable requires request_sent (the verb/command you actually fired)."
         d = _load()
         key = f"{asset_of(asset)}|{vc}"
-        d["cells"][key] = {"asset": asset_of(asset), "vuln_class": vc, "status": st,
-                           "evidence": str(evidence)[:400], "request_sent": str(request_sent)[:200]}
+        d["cells"][key] = {
+            "asset": asset_of(asset),
+            "vuln_class": vc,
+            "status": st,
+            "evidence": str(evidence)[:400],
+            "request_sent": str(request_sent)[:200],
+        }
         _save(d)
         return f"coverage: {asset_of(asset)} · {vc} → {st}"
     except Exception as e:  # noqa: BLE001
@@ -142,7 +162,9 @@ def summary() -> str:
         for c in cells.values():
             counts[c["status"]] = counts.get(c["status"], 0) + 1
         wide = d.get("notes", {}).get("wide") or []
-        lines = [f"COVERAGE: {len(cells)} cells recorded ({', '.join(f'{k}={v}' for k, v in sorted(counts.items())) or 'none'})"]
+        lines = [
+            f"COVERAGE: {len(cells)} cells recorded ({', '.join(f'{k}={v}' for k, v in sorted(counts.items())) or 'none'})"
+        ]
         if wide:
             lines.append("WIDE NOTES (origin-wide facts — do NOT re-derive per endpoint):")
             lines.extend(f"  - {n['subject']}: {n['text'][:120]}" for n in wide[-5:])
@@ -166,9 +188,18 @@ def completion_blocked(assets: list[str]) -> str | None:
     )
 
 
-def coverage_check(action: str = "summary", asset: str = "", vuln_class: str = "", status: str = "",
-                   evidence: str = "", request_sent: str = "", kind: str = "", subject: str = "",
-                   text: str = "", assets: list | None = None) -> str:
+def coverage_check(
+    action: str = "summary",
+    asset: str = "",
+    vuln_class: str = "",
+    status: str = "",
+    evidence: str = "",
+    request_sent: str = "",
+    kind: str = "",
+    subject: str = "",
+    text: str = "",
+    assets: list | None = None,
+) -> str:
     """The ledger tool: mark cells (with evidence), record wide/local
     notes, or read the summary/untested list."""
     try:

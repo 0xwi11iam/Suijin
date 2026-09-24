@@ -33,8 +33,7 @@ def audit() -> tuple[int, str]:
 
         # 1) every route appears in the catalog (bullet or explicit mention)
         uncataloged = sorted(
-            r for r in routes
-            if f"`{r}`" not in catalog and f"**{r}**" not in catalog and f"- {r}" not in catalog
+            r for r in routes if f"`{r}`" not in catalog and f"**{r}**" not in catalog and f"- {r}" not in catalog
         )
         # 2) every catalog bullet has a route (docs don't lie)
         cataloged = set(re.findall(r"\*\*([a-z0-9_]+)\*\*", catalog))

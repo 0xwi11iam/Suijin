@@ -150,12 +150,14 @@ def cross_credential_shortlist() -> list[dict]:
                     distinct = {v for vs in per_cred.values() for v in vs}
                     if len(distinct) >= 2:
                         differing_ids.append({"field": field, "values_by_credential": per_cred})
-            out.append({
-                "endpoint_shape": slot["endpoint_shape"],
-                "credentials": sorted(creds),
-                "observed_examples": slot["examples"],
-                "id_fields_differing_by_credential": differing_ids[:4],
-            })
+            out.append(
+                {
+                    "endpoint_shape": slot["endpoint_shape"],
+                    "credentials": sorted(creds),
+                    "observed_examples": slot["examples"],
+                    "id_fields_differing_by_credential": differing_ids[:4],
+                }
+            )
     return sorted(out, key=lambda s: -len(s["id_fields_differing_by_credential"]))[:12]
 
 
@@ -183,14 +185,17 @@ def hidden_params() -> list[dict]:
         parts = re.sub(r"^(\w+) ", "", o.get("endpoint") or "")
         ui_names = set()
         for path, fields in ui_paths.items():
-            if path.rstrip("/").endswith(parts.rstrip("/").split("/")[-1]) or parts.rstrip("/").endswith(path.rstrip("/")):
+            if path.rstrip("/").endswith(parts.rstrip("/").split("/")[-1]) or parts.rstrip("/").endswith(
+                path.rstrip("/")
+            ):
                 ui_names |= {f.get("name", "").lower() for f in fields}
         if not ui_names:
             ui_names = all_ui_names
         hidden = sorted(sent - ui_names - {"csrf_token", "authenticity_token", "_token"})
         if hidden:
-            out.append({"endpoint": o.get("endpoint"), "params_not_in_ui": hidden[:8],
-                        "credential": o.get("credential")})
+            out.append(
+                {"endpoint": o.get("endpoint"), "params_not_in_ui": hidden[:8], "credential": o.get("credential")}
+            )
     # dedupe by endpoint+params
     seen = set()
     deduped = []
@@ -214,8 +219,10 @@ def web_session(action: str = "summary") -> str:
         hp = hidden_params()
         lines = ["WEB SESSION MODEL — access-control worklist"]
         if not shortlist:
-            lines.append("(no cross-credential endpoints yet — register credentials and replay "
-                         "the same surfaces as each; every governed send is captured automatically)")
+            lines.append(
+                "(no cross-credential endpoints yet — register credentials and replay "
+                "the same surfaces as each; every governed send is captured automatically)"
+            )
         for s in shortlist:
             lines.append(
                 f"  ▸ {s['endpoint_shape']}  reached by {len(s['credentials'])} credentials "
@@ -224,8 +231,10 @@ def web_session(action: str = "summary") -> str:
             for f in s["id_fields_differing_by_credential"]:
                 per = "; ".join(f"{c.split(':')[0]}={'|'.join(v[:3])}" for c, v in f["values_by_credential"].items())
                 lines.append(f"      ID field {f['field']}: {per}")
-            lines.append("      → IDOR test: replay with the OTHER credential's id value (http_replay "
-                         "compare:{mutations:[set-query/body-set-field], credential:...})")
+            lines.append(
+                "      → IDOR test: replay with the OTHER credential's id value (http_replay "
+                "compare:{mutations:[set-query/body-set-field], credential:...})"
+            )
         if hp:
             lines.append("HIDDEN PARAMS (in requests, never in the UI — mass-assignment targets):")
             for h in hp[:6]:

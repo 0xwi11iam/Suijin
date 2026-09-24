@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[3]
+SERVER = REPO / "suijin" / "server"
 MODULES = REPO / "suijin" / "modules"
 
 
@@ -21,7 +22,7 @@ class TestKernelSurface:
     def test_call_tool_audited(self, tmp_path):
         from suijin.kernel import controller
 
-        ctx, _ = controller.boot(module_roots=[MODULES], workspace=tmp_path, quiet=True)
+        ctx, _ = controller.boot(module_roots=[SERVER, MODULES], workspace=tmp_path, quiet=True)
         ctx.call_tool("search_kb", {"keyword": "sqli"})
         ctx.tool_audit.flush()
         entries = ctx.tool_audit.entries()
@@ -35,7 +36,7 @@ class TestKernelSurface:
     def test_args_are_digested_never_raw(self, tmp_path):
         from suijin.kernel import controller
 
-        ctx, _ = controller.boot(module_roots=[MODULES], workspace=tmp_path, quiet=True)
+        ctx, _ = controller.boot(module_roots=[SERVER, MODULES], workspace=tmp_path, quiet=True)
         ctx.call_tool("search_kb", {"keyword": "sqli"})
         ctx.tool_audit.flush()
         raw = (tmp_path / "engagements" / "_default" / "audit_trails" / "tool_calls.jsonl").read_text()
@@ -48,7 +49,7 @@ class TestKernelSurface:
     def test_unknown_tool_audited(self, tmp_path):
         from suijin.kernel import controller
 
-        ctx, _ = controller.boot(module_roots=[MODULES], workspace=tmp_path, quiet=True)
+        ctx, _ = controller.boot(module_roots=[SERVER, MODULES], workspace=tmp_path, quiet=True)
         ctx.call_tool("no_such_tool", {})
         ctx.tool_audit.flush()
         assert any(e["name"] == "no_such_tool" and e["outcome"] == "unknown-tool" for e in ctx.tool_audit.entries())
@@ -57,7 +58,7 @@ class TestKernelSurface:
     def test_append_only(self, tmp_path):
         from suijin.kernel import controller
 
-        ctx, _ = controller.boot(module_roots=[MODULES], workspace=tmp_path, quiet=True)
+        ctx, _ = controller.boot(module_roots=[SERVER, MODULES], workspace=tmp_path, quiet=True)
         ctx.call_tool("search_kb", {"keyword": "a"})
         ctx.tool_audit.flush()
         first = (tmp_path / "engagements" / "_default" / "audit_trails" / "tool_calls.jsonl").read_text()

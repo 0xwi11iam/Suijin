@@ -15,6 +15,13 @@ from pathlib import Path
 
 MODULES_ROOT = Path.home() / ".suijin" / "modules"  # user extension home (vendored packs live in the package)
 
+
+def _vendored_home() -> Path:
+    """The package's vendored pack estate: suijin/modules/ (packs did not
+    move with the first-party homes to suijin/server/)."""
+    return Path(__file__).resolve().parents[2].parent / "modules"
+
+
 _ENTRY_TEMPLATE = '''
 """Auto-generated pack entry — do not edit by hand."""
 
@@ -331,7 +338,7 @@ def test_pack(name: str, root: Path | None = None) -> tuple[bool, list[str]]:
     declared tool, and callable shape for each. Returns (ok, report).
     """
     lines: list[str] = []
-    base = Path(root) if root else Path(__file__).resolve().parents[2]
+    base = Path(root) if root else _vendored_home()
     pdir = base / name
     if not pdir.is_dir():
         return False, [f"[XX] no pack directory: {pdir}"]
@@ -367,7 +374,7 @@ def test_pack(name: str, root: Path | None = None) -> tuple[bool, list[str]]:
         from suijin.kernel import controller
 
         ctx, report = controller.boot(
-            module_roots=[base if root else Path(__file__).resolve().parents[2]],
+            module_roots=None if root is None else [base],
             workspace=base.parent / ".moduletest_ws",
             quiet=True,
         )

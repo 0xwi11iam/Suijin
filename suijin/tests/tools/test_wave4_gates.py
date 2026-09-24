@@ -56,10 +56,17 @@ def citadel(tmp_path_factory):
     app_py = str(Path(__file__).resolve().parents[2] / "lab" / "citadel" / "app.py")
     proc = subprocess.Popen(
         [sys.executable, app_py],
-        env={**os.environ, "PORT": str(PUB), "CITADEL_DB": "/tmp/suijin_cov_test.db",
-             "CITADEL_TRAFFIC": "/tmp/cov_test_traffic.jsonl", "CITADEL_RATE_LIMIT": "100000",
-             "CITADEL_NO_INTERNAL": "1", "SUIJIN_WORKSPACE": str(ws)},
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        env={
+            **os.environ,
+            "PORT": str(PUB),
+            "CITADEL_DB": "/tmp/suijin_cov_test.db",
+            "CITADEL_TRAFFIC": "/tmp/cov_test_traffic.jsonl",
+            "CITADEL_RATE_LIMIT": "100000",
+            "CITADEL_NO_INTERNAL": "1",
+            "SUIJIN_WORKSPACE": str(ws),
+        },
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     for _ in range(40):
         try:
@@ -86,9 +93,13 @@ class TestLedger:
     def test_not_vulnerable_requires_evidence(self):
         out = mark(BASE, "sqli", "tested_not_vulnerable", evidence="short", request_sent="GET /x")
         assert "FALSE record" in out
-        out = mark(BASE, "sqli", "tested_not_vulnerable",
-                   evidence="fired three encoded boolean pairs; all responses byte-identical to the noise floor",
-                   request_sent="GET /api/items?category=hardware%27")
+        out = mark(
+            BASE,
+            "sqli",
+            "tested_not_vulnerable",
+            evidence="fired three encoded boolean pairs; all responses byte-identical to the noise floor",
+            request_sent="GET /api/items?category=hardware%27",
+        )
         assert "→ tested_not_vulnerable" in out
 
     def test_unknown_class_rejected(self):
@@ -107,8 +118,9 @@ class TestLedger:
     def test_dispatch_route(self):
         from suijin.modules.tools.lib.dispatch import route_tool
 
-        out = route_tool("coverage_check", {"action": "mark", "asset": BASE, "vuln_class": "xss",
-                                            "status": "not_applicable"}, {})
+        out = route_tool(
+            "coverage_check", {"action": "mark", "asset": BASE, "vuln_class": "xss", "status": "not_applicable"}, {}
+        )
         assert "not_applicable" in str(out)
 
 
@@ -134,11 +146,13 @@ class TestCompletionGate:
         from suijin.modules.agent.lib.nodes.think_node import think_node
 
         async def fake_gen(messages, config):
-            return json.dumps({
-                "action": "complete",
-                "completion_reason": "Objective complete",
-                "thought": "done",
-            })
+            return json.dumps(
+                {
+                    "action": "complete",
+                    "completion_reason": "Objective complete",
+                    "thought": "done",
+                }
+            )
 
         state = {
             "current_phase": "exploitation",
@@ -162,8 +176,9 @@ class TestSurfaceExpand:
     def test_sibling_enumeration_finds_existing(self, citadel):
         from suijin.modules.tools.lib.surface_expand import surface_expand
 
-        out = surface_expand(url=f"{BASE}/api/v2/health", allow_internal=True,
-                             names=["health", "executive", "ghost", "settings"])
+        out = surface_expand(
+            url=f"{BASE}/api/v2/health", allow_internal=True, names=["health", "executive", "ghost", "settings"]
+        )
         res = json.loads(out)
         paths = {r["path"]: r["status"] for r in res["existing"]}
         assert paths.get("/api/v2/executive") in (200, 403)  # exists (role-gated)
@@ -172,8 +187,7 @@ class TestSurfaceExpand:
     def test_pattern_placeholder(self, citadel):
         from suijin.modules.tools.lib.surface_expand import surface_expand
 
-        out = surface_expand(url=f"{BASE}/modals/{{name}}", allow_internal=True,
-                             names=["login", "ghost"])
+        out = surface_expand(url=f"{BASE}/modals/{{name}}", allow_internal=True, names=["login", "ghost"])
         res = json.loads(out)
         assert res["probed"] >= 2
 

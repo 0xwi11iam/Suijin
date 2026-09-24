@@ -490,7 +490,8 @@ def http_replay(
                 parts = urlsplit(r["url"])
                 q = parse_qsl(parts.query, keep_blank_values=True)
                 segs = [
-                    f"{quote_plus(k)}={apply_codec(v, pipeline)}" if k == target_field
+                    f"{quote_plus(k)}={apply_codec(v, pipeline)}"
+                    if k == target_field
                     else f"{quote_plus(k)}={quote_plus(v)}"
                     for k, v in q
                 ]

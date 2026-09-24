@@ -208,10 +208,13 @@ def _resolve_target(file_path):
 
 
 def read_file(file_path):
-    """Read a file — scoped to the agent workspace by default."""
-    target, err = _resolve_target(file_path)
-    if err:
-        return err
+    """Read a file — jail-symmetric with write_file: paths outside the
+    engagement mirror under the agent's home/ (the same mapping the write
+    used), relative paths resolve against home/. Operator surfaces
+    (skills/, prompts/) pass through."""
+    from suijin.server.confinement import jail_path
+
+    target = jail_path(file_path)
     if not target.exists():
         return f"Error: File not found: {target}"
     try:
@@ -221,10 +224,13 @@ def read_file(file_path):
 
 
 def write_file(file_path, content):
-    """Write content to a file — scoped to the agent workspace by default."""
-    target, err = _resolve_target(file_path)
-    if err:
-        return err
+    """Write content to a file — JAILED to the engagement folder: paths
+    outside mirror under the agent's home/ (the write always succeeds,
+    never escapes). Operator surfaces (skills/, prompts/) pass through."""
+    from suijin.server.confinement import jail_path
+
+    jailed = jail_path(file_path)
+    target = jailed
     target.parent.mkdir(parents=True, exist_ok=True)
     try:
         target.write_text(str(content), encoding="utf-8")

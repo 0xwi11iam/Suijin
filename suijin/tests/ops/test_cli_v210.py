@@ -154,10 +154,7 @@ class TestCreds:
         assert "exported" in out
 
 
-
 class TestTimelineWatchClean:
-
-
     def test_watch_missing_log(self, monkeypatch, tmp_path):
         code, out = run_cli(["watch", "--traffic", str(tmp_path / "nope.jsonl")])
         assert code == 1 and "No traffic log" in out

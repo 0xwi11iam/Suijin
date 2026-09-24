@@ -17,11 +17,11 @@ MAX_FILE_BYTES = 8 * 1024
 MAX_TOTAL_BYTES = 64 * 1024
 
 
-
 def _artifact_dir(name):
     from suijin.modules.platform.lib.workspace import artifact_dir
 
     return artifact_dir(name)
+
 
 def _drop_roots() -> list[Path]:
     """Bundled package drop root (wheel-shipped)."""
@@ -94,7 +94,6 @@ class PackModule(Module):
 def decay_report() -> str:
     """Flag drop-in skills never referenced in any engagement audit."""
     import re as _re
-
 
     # gather every tool word the agent actually used across trails
     used = set()

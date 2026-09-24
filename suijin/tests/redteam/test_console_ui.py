@@ -413,7 +413,6 @@ class TestPricing:
 
         monkeypatch.setattr(_mm, "_catalog", lambda: None)  # offline table path
 
-
         # the DEFAULT huggingface model id — case drift previously fell to DEFAULT_RATE
         assert _price_for("deepseek-ai/DeepSeek-V4-Flash") == _price_for("deepseek-v4-flash")
         assert _price_for("deepseek-ai/DeepSeek-V4-Pro") == _price_for("deepseek-v4-pro")
@@ -991,7 +990,6 @@ class TestLabelFreeTranscript:
         )
         r = subprocess.run([sys.executable, "-W", "error::Warning", "-c", code], capture_output=True, text=True)
         assert "clean" in r.stdout, r.stderr
-
 
 
 class TestUncrashableUI:
