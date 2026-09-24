@@ -558,44 +558,34 @@ def screen_lines(
     section: str | None = None,
 ) -> list[tuple[str, str]]:
     """The whole screen as [(text, role)] — a PURE function of state, so it
-    is asserted without a terminal and drawn by any backend.
+    is asserted without a terminal.
 
-    Two levels, one job each:
-      sections — what is running + the five groups
-      a group  — its fields, with the highlighted one's meaning spelled out
+    One flat list, every field, grouped by heading. What a person needs
+    from the layout is: aligned columns, nothing cut off, and a visible
+    cursor — not a second menu level.
 
-    roles: title | summary | group | cursor | row | help | status | legend
+    roles: title | head | group | cursor | row | blank | status | warn | legend
     """
     visible = visible if visible is not None else _visible_fields(config)
-    lines: list[tuple[str, str]] = [("SUIJIN — Settings", "title"), (running_summary(config), "summary"), ("", "blank")]
-
-    if section is None:
-        # the current model, spelled out — most visits start and end here
-        provider = str(config.get("provider") or "not set")
-        model_key = f"{provider}_model"
-        model = str(config.get(model_key) or config.get("final_model_id") or "")
-        lines.append((f"Model:  {provider} · {model or 'default'}", "model"))
-        lines.append(("", "blank"))
-        for idx, (key, title, purpose) in enumerate(SECTIONS):
-            count = len(section_items(visible, key))
-            marker = "› " if idx == cursor else "  "
-            label = f"{marker}{title}  —  {purpose}"
-            lines.append((f"{label}  ({count})", "cursor" if idx == cursor else "row"))
-    else:
-        title = next((t for k, t, _p in SECTIONS if k == section), section)
-        lines.append((f"‹ {title}", "group"))
-        rows = section_items(visible, section)
-        for idx, (label, key) in enumerate(rows):
-            marker = "› " if idx == cursor else "  "
-            value = human_value(key, config)
-            live = "  (m: live ids)" if is_model_field(key) else ""
-            lines.append((f"{marker}{label:<26}{value}{live}", "cursor" if idx == cursor else "row"))
-        if rows:
-            key = rows[max(0, min(cursor, len(rows) - 1))][1]
-            lines.append(("", "blank"))
-            lines.append((human_help(key) or human_label(key), "help"))
+    items = items if items is not None else _row_items(visible)
+    lines: list[tuple[str, str]] = [
+        ("SUIJIN — Settings", "title"),
+        (f"config: {CONFIG_PATH}", "head"),
+        ("", "blank"),
+    ]
+    # two aligned columns: the field on the left, its value on the right.
+    # A settings list where you can only see one value at a time is useless,
+    # so EVERY row shows its value.
+    width = max((len(k) for _g, k in items), default=10)
+    for idx, (group, key) in enumerate(items):
+        if idx == 0 or group != items[idx - 1][0]:
+            lines.append((group, "group"))
+        marker = "› " if idx == cursor else "  "
+        value = _fmt_plain(key, config.get(key, ""))
+        suffix = "  · m: live ids" if is_model_field(key) else ""
+        lines.append((f"{marker}{key.ljust(width)}  {value}{suffix}", "cursor" if idx == cursor else "row"))
     lines.append(("", "blank"))
-    lines.append((_fit(note or visible_provider_note(config), 200), "warn" if status == "warn" else "status"))
+    lines.append((note or visible_provider_note(config), "warn" if status == "warn" else "status"))
     return lines
 
 
@@ -607,19 +597,24 @@ def _fit(text: str, width: int) -> str:
     return text[: max(0, width - 1)] + "…"
 
 
-def _legend(section: str | None) -> str:
-    if section is None:
-        return "↑↓/jk choose · Enter open · m live model ids · q quit"
-    return "↑↓/jk change · Enter edit · m live model ids · Esc back · q save & quit"
+def _legend(section: str | None = None) -> str:
+    return "↑↓/jk move · Enter edit · m live model ids · s save · q save & quit"
 
 
 def _fmt_plain(key: str, value) -> str:
-    """Render one value for the curses screen (no markup)."""
+    """Render one value for the curses screen — plain text, no Rich markup
+    (markup tags printed literally on a terminal)."""
     fdef = ALL_FIELDS.get(key, ("string",))
     if fdef[0] == "bool":
         return "on" if value else "off"
     if value is None or value == "":
-        return "(unset)"
+        return "(not set)"
+    if isinstance(value, float) and value.is_integer() and abs(value) < 1e6:
+        return f"{value:g}"
+    if isinstance(value, (dict, list)):
+        import json as _json
+
+        return _json.dumps(value, default=str)[:60]
     return str(value)
 
 
@@ -883,59 +878,83 @@ def _draw_popup(stdscr, title: str, options: list[str], picked: int, height_cap:
 
 
 def _prompt(stdscr, label: str, default: str = "", choices: list[str] | None = None) -> str | None:
-    """One input line at the bottom (curses), with an optional framed
-    picker above it. Returns None when cancelled (Esc).
+    """One input line at the bottom, with a filtering picker above it.
 
-    With `choices`: a scrolling picker — ↑/↓ + Enter, or type letters to
-    jump. Without: free text with backspace. The screen is repainted
-    through the redraw hook so the table underneath stays intact."""
+    A human facing 55 providers does NOT arrow through them — they type.
+    So typing FILTERS the list live ("op" → openai, openrouter, opencode),
+    ↑/↓ move within what is left, Enter takes the highlight, Esc cancels.
+
+    The buffer starts EMPTY: pre-filling it with the current value made
+    Enter return that same value, so arrowing and pressing Enter appeared
+    to do nothing at all.
+    """
     import curses
 
-    buf = list(default or "")
+    opts_all = list(choices or [])
+    typed = ""
     picked = 0
     h, w = stdscr.getmaxyx()
     stdscr.keypad(True)
     repaint = getattr(stdscr, "_suijin_repaint", None)
-    # the input line owns the LAST row: always clear it before drawing
+
+    def matches() -> list[str]:
+        if not typed:
+            return list(opts_all)
+        low = typed.lower()
+        return [o for o in opts_all if low in o.lower()]
+
+    def reset_highlight(rows: list[str]) -> None:
+        """Keep the current value under the cursor when it still matches."""
+        nonlocal picked
+        picked = rows.index(default) if (default and default in rows) else 0
+
     while True:
-        opts = list(choices or [])
-        if opts:
-            _draw_popup(stdscr, label, opts, min(picked, len(opts) - 1), max(3, h - 8))
+        rows = matches()
+        if not rows:
+            rows = [""]
+        picked = max(0, min(picked, len(rows) - 1))
+        if opts_all:
+            hint = f"matching {len(rows)} of {len(opts_all)}" if typed else f"{len(opts_all)} options · type to filter"
+            _draw_popup(stdscr, f"{label} — {hint}", rows, picked, max(5, h - 8))
+        # the input line: what you typed, or the current value as a hint
         _put(stdscr, h - 1, 0, " " * max(1, w - 1), "input", w)
-        text = f"{label}: {''.join(buf)}"
-        _put(stdscr, h - 1, 1, _fit(text, w - 2), "input", w)
+        shown = typed or (default or "")
+        _put(stdscr, h - 1, 1, _fit(f"{label}: {shown}", w - 2), "input", w)
+        if not typed and default:
+            _put(stdscr, h - 1, 2 + len(label) + 2, _fit(" (current — type to change)", w - 4), "legend", w)
         stdscr.refresh()
         with contextlib.suppress(curses.error):
-            stdscr.move(h - 1, min(w - 2, 2 + len(text)))
+            stdscr.move(h - 1, min(w - 2, 2 + len(label) + 2 + len(shown)))
+
         ch = stdscr.getch()
         if ch in (curses.KEY_ENTER, 10, 13):
-            value = "".join(buf).strip()
-            if opts and not value:
-                return opts[min(picked, len(opts) - 1)]
-            if not opts and not value:
-                return None
+            if not opts_all:  # free text
+                value = typed.strip()
+                if repaint:
+                    repaint()
+                return value or None
+            if not rows or rows == [""]:
+                continue
+            choice = rows[picked]
             if repaint:
                 repaint()
-            return value
+            return choice
         if ch == 27:  # Esc cancels
             if repaint:
                 repaint()
             return None
         if ch in (curses.KEY_BACKSPACE, 127, 8):
-            if buf:
-                buf.pop()
-        elif opts and ch in (curses.KEY_UP, ord("k")):
+            if typed:
+                typed = typed[:-1]
+                reset_highlight(matches())
+        elif opts_all and ch in (curses.KEY_UP, ord("k")):
             picked = max(0, picked - 1)
-        elif opts and ch in (curses.KEY_DOWN, ord("j")):
-            picked = min(len(opts) - 1, picked + 1)
+        elif opts_all and ch in (curses.KEY_DOWN, ord("j")):
+            picked = min(len(rows) - 1, picked + 1)
         elif 32 <= ch < 127:
-            buf.append(chr(ch))
-            if opts:
-                typed = "".join(buf)
-                match = next((i for i, o in enumerate(opts) if o.lower().startswith(typed.lower())), None)
-                if match is not None:
-                    picked = match
-        elif repaint and ch in (curses.KEY_RESIZE,):
+            typed += chr(ch)
+            picked = 0
+        elif repaint and ch == curses.KEY_RESIZE:
             repaint()
 
 
@@ -946,10 +965,11 @@ def edit_field_curses(stdscr, config: dict, key: str) -> tuple[str, bool]:
     current = str(config.get(key, "") or "")
     try:
         if kind == "bool":
-            raw = _prompt(stdscr, f"{key} (on/off)", default="off" if current in ("", "False") else "on")
-            if raw is None:
-                return "", False
-            return _commit(config, key, raw, f"{key} = {raw}")
+            # A checkbox flips on Enter. It must never open a prompt where
+            # Enter means "cancel" — that made every bool un-togglable.
+            flipped = "off" if config.get(key) else "on"
+            changed = _apply(config, key, flipped)
+            return f"{key}: {flipped}" + ("" if changed else "  (unchanged)"), changed
         if kind == "provider":
             choices = provider_choices(config)
             if current and current not in choices:
@@ -1047,63 +1067,36 @@ def _curses_loop(stdscr) -> int:
         return 1
     _init_colors(stdscr)
     stdscr.keypad(True)
-    section: str | None = None  # None = the section menu
     cursor = 0
     note = ""
     loop_status = "ok"
 
-    def _rows() -> list[tuple[str, str]]:
-        """What the current level lists: sections, or that section's fields."""
-        visible = _visible_fields(config)
-        if section is None or not any(k == section for k, _t, _p in SECTIONS):
-            return [(title, purpose) for key, title, purpose in SECTIONS]
-        return section_items(visible, section)
-
     def _repaint() -> None:
-        _draw(stdscr, config, None, cursor, note, loop_status, section)
+        _draw(stdscr, config, None, cursor, note, loop_status)
 
     with contextlib.suppress(Exception):
         stdscr._suijin_repaint = _repaint
 
     while True:
-        if section is not None and not any(k == section for k, _t, _p in SECTIONS):
-            section = None
-            cursor = 0
-        rows = _rows()
-        if not rows:
-            section = None
-            cursor = 0
-            continue
-        cursor = max(0, min(cursor, len(rows) - 1))
+        items = _row_items(_visible_fields(config))
+        if not items:
+            return 0
+        cursor = max(0, min(cursor, len(items) - 1))
         _repaint()
         note, loop_status = "", "ok"
         ch = stdscr.getch()
+        key = items[cursor][1]
 
-        if ch in (ord("q"), ord("Q"), 27) and not (section is not None and ch == 27):
-            # q saves and quits; Esc quits from the menu, goes BACK inside a section
+        if ch in (ord("q"), ord("Q"), 27):  # q / Esc leave (after saving)
             _save_line_quiet(config, status)
             return 0
         if ch in (curses.KEY_UP, ord("k")):
-            cursor = (cursor - 1) % len(rows)
-            continue
-        if ch in (curses.KEY_DOWN, ord("j")):
-            cursor = (cursor + 1) % len(rows)
-            continue
-        if section is None:
-            if ch in (10, 13, curses.KEY_ENTER, ord("e")):
-                section = SECTIONS[cursor][0]
-                cursor = 0
-            continue
-        # inside a section
-        if ch == 27:  # Esc: back to the menu, cursor on the section we left
-            leaving = section
-            section = None
-            cursor = next((i for i, (sk, _t, _p) in enumerate(SECTIONS) if sk == leaving), 0)
-            continue
-        key = rows[cursor][1] if section is not None and len(rows[cursor]) > 1 else None
-        if ch in (10, 13, curses.KEY_ENTER, ord("e")) and key:
+            cursor = (cursor - 1) % len(items)
+        elif ch in (curses.KEY_DOWN, ord("j")):
+            cursor = (cursor + 1) % len(items)
+        elif ch in (curses.KEY_ENTER, 10, 13, ord("e")):  # edit this field
             note, _ = edit_field_curses(stdscr, config, key)
-        elif ch in (ord("m"), ord("M")) and key:
+        elif ch in (ord("m"), ord("M")):  # fetch the live model ids
             note = pick_model_curses(stdscr, config, key)
         elif ch in (ord("s"), ord("S")):
             ok = _save_line(stdscr, config, status)
