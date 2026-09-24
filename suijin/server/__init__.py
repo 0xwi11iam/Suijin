@@ -50,3 +50,33 @@ class EventBus:
     def subscriber_count(self) -> int:
         with self._lock:
             return len(self._subs)
+
+
+# ── active-run registry ────────────────────────────────────────────────────
+# Surfaces OUTSIDE the runner (gateway live-stream, TUI adapter, /cost) need
+# to find the CURRENT run's bus. The runner registers on start and clears on
+# end; external consumers track identity, never assuming a bus survives.
+_ACTIVE_LOCK = threading.Lock()
+_ACTIVE_BUS: EventBus | None = None
+
+
+def register_active_bus(bus: EventBus) -> None:
+    """The runner announces its live bus (start of run)."""
+    global _ACTIVE_BUS
+    with _ACTIVE_LOCK:
+        _ACTIVE_BUS = bus
+
+
+def active_bus() -> EventBus | None:
+    """The current run's bus, or None when idle. Callers must hold the
+    reference before subscribing — the run may end at any moment."""
+    return _ACTIVE_BUS
+
+
+def clear_active_bus(bus: EventBus) -> None:
+    """The runner announces its run ended. Identity-guarded: a NEW run's
+    bus is never cleared by an old run's finally that lands late."""
+    global _ACTIVE_BUS
+    with _ACTIVE_LOCK:
+        if _ACTIVE_BUS is bus:
+            _ACTIVE_BUS = None

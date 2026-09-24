@@ -21,6 +21,7 @@ because the UI's types ARE the gateway's schema.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import secrets
 from pathlib import Path
@@ -75,6 +76,68 @@ def _artifact_dir(name):
     from suijin.modules.platform.lib.workspace import artifact_dir
 
     return artifact_dir(name)
+
+
+# ── LiveEventRelay: bus -> gateway frames ─────────────────────────────────
+# The RUNNER's bus is the live fan-out; the gateway's job is carrying its
+# records to the client over the /events WS. Bus records arrive on the
+# RUNNER's thread; the WS send must run on the event loop, so records are
+# enqueued via call_soon_threadsafe and drained as coroutines. Subscribers
+# never raise (the bus drops dead ones anyway).
+class LiveEventRelay:
+    def __init__(self, sender) -> None:
+        """sender: async callable(rec: dict) -> None (a ws.send_json)."""
+        self._sender = sender
+        self._q: "asyncio.Queue[dict]" = asyncio.Queue()
+        self._bus: Any | None = None
+        self._sub: Any | None = None
+
+    def _enqueue_from_runner_thread(self, rec: dict, loop) -> None:
+        loop.call_soon_threadsafe(self._q.put_nowait, rec)
+
+    def sync(self) -> None:
+        """Called on the loop thread each pump tick: attach to the CURRENT
+        run's bus, detach from one that ended (identity-tracked)."""
+        from suijin.server import active_bus
+
+        cur = active_bus()
+        if cur is self._bus:
+            return
+        if self._bus is not None and self._sub is not None:
+            self._bus.unsubscribe(self._sub)
+        self._bus = cur
+        self._sub = None
+        if cur is None:
+            return
+        loop = asyncio.get_running_loop()
+
+        def _sub(rec: dict) -> None:
+            self._enqueue_from_runner_thread(rec, loop)
+
+        self._sub = _sub
+        cur.subscribe(_sub)
+
+    async def drain(self) -> None:
+        """Forward every queued bus record to the sender (loop thread)."""
+        while True:
+            try:
+                rec = self._q.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+            try:
+                await self._sender({"kind": "event", "record": rec})
+            except asyncio.CancelledError:  # pragma: no cover — teardown
+                raise
+            except Exception:  # noqa: BLE001 — a dropped client ends the pump elsewhere
+                return
+
+    def detach(self) -> None:
+        """Unsubscribe; safe after the run ends / on teardown."""
+        if self._bus is not None and self._sub is not None:
+            with contextlib.suppress(Exception):
+                self._bus.unsubscribe(self._sub)
+        self._bus = None
+        self._sub = None
 
 
 def create_app(token: str | None = None) -> FastAPI:
@@ -282,8 +345,10 @@ def create_app(token: str | None = None) -> FastAPI:
             return
         await ws.accept()
 
+        relay = LiveEventRelay(lambda rec, _ws=ws: _ws.send_json(rec))
+
         async def pump() -> None:
-            """Tail the audit JSONLs and push structured frames."""
+            """Tail the audit JSONLs + the runner's live bus → frames."""
             from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
             trails = _artifact_dir("audit_trails")
@@ -294,6 +359,9 @@ def create_app(token: str | None = None) -> FastAPI:
             last_cost = -1.0
             last_ft = ""
             while True:
+                # live bus records FIRST (the current run's events)
+                relay.sync()
+                await relay.drain()
                 if trails.is_dir():
                     for f in sorted(trails.glob("*.jsonl")):
                         key = f.name
@@ -361,6 +429,8 @@ def create_app(token: str | None = None) -> FastAPI:
         except WebSocketDisconnect:
             pass
         finally:
+            with contextlib.suppress(Exception):
+                relay.detach()
             if pump_task is not None:
                 pump_task.cancel()
 
