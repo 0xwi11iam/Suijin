@@ -7,6 +7,7 @@ is best-effort: a panic command must never itself fail.
 
 from __future__ import annotations
 
+import contextlib
 import glob
 import subprocess
 import tempfile
@@ -19,6 +20,7 @@ _PATTERNS = [
     "suijin/cli.py ui",
     "suijin/lab/",
     "vulnerable_app.py",
+    "suijin.main daemon-run",  # detached daemon engagements (see _stop_daemons)
 ]
 
 # Live blue-team state in /tmp (constants are session-scoped by design).
@@ -31,9 +33,31 @@ _STATE_GLOBS = [
 ]
 
 
+def _stop_daemons(dry_run: bool, lines: list[str]) -> None:
+    """Detached daemon engagements run real tools — an emergency stop MUST
+    reach them. They are stopped through the daemon seam (SIGTERM → the
+    runner's full-save path), never a bare kill, so each lands a final
+    record the operator can resume from. Best-effort by design."""
+    with contextlib.suppress(Exception):
+        from suijin.modules.ops.lib import daemon
+
+        live = [r for r in daemon._records() if daemon.is_live(r)]
+        if not live:
+            lines.append("daemon engagements: none running")
+            return
+        if dry_run:
+            lines.append(f"daemon engagements: would stop {len(live)} (full save)")
+            return
+        for rec in live:
+            with contextlib.suppress(Exception):
+                daemon.stop_daemon(str(rec.get("id") or ""), wait=False)
+        lines.append(f"daemon engagements: SIGTERM → full save ({len(live)})")
+
+
 def panic(dry_run: bool = False) -> str:
     """Kill our processes + clear live state. Returns a report."""
     lines: list[str] = []
+    _stop_daemons(dry_run, lines)
     for pat in _PATTERNS:
         try:
             r = subprocess.run(["pkill", "-f", pat], capture_output=True, timeout=10)

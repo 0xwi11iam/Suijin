@@ -1665,6 +1665,34 @@ def run_resume_cmd(args) -> int:
     return _jr_main(argv)
 
 
+def _daemon_mod():
+    """The daemon module, lazily (boundary rule): spawn/attach/stop/list."""
+    from suijin.modules.ops.lib import daemon
+
+    return daemon
+
+
+def run_daemon_start(args) -> int:
+    return _daemon_mod().run_daemon_start(args)
+
+
+def run_attach_cmd(args) -> int:
+    return _daemon_mod().attach_daemon(getattr(args, "id", "") or "")
+
+
+def run_stop_cmd(args) -> int:
+    return _daemon_mod().stop_daemon(getattr(args, "id", "") or "")
+
+
+def run_ps_cmd(args) -> int:
+    return _daemon_mod().list_daemons()
+
+
+def run_daemon_child_cmd(args) -> int:
+    """Internal: the DETACHED child entry (spawned by suijin daemon start)."""
+    return _daemon_mod().run_daemon_child(getattr(args, "id", "") or "")
+
+
 def run_prompt_cmd(args) -> int:
     """`suijin prompt [show|reset|diff]` — the operator-editable system prompt."""
     from suijin.modules.agent.lib.prompts import prompt_file as pf
@@ -1925,6 +1953,11 @@ _KNOWN_VERBS = frozenset(
         "compliance",
         "panic",
         "config",
+        "daemon",
+        "daemon-run",
+        "ps",
+        "attach",
+        "stop",
     }
 )
 
@@ -2028,6 +2061,36 @@ def main(argv=None):
     )
     resume_p.add_argument("--list", dest="list_journals", action="store_true", help="list unfinished engagements")
     resume_p.set_defaults(func=run_resume_cmd)
+
+    # daemon split: engagements that outlive the console (detached child,
+    # durable control record, live attach via the event journal).
+    daemon = sub.add_parser("daemon", help="background engagements (daemon split): start / list")
+    daemon_sub = daemon.add_subparsers(dest="daemon_action")
+    daemon_start = daemon_sub.add_parser("start", help="launch a detached engagement")
+    daemon_start.add_argument("objective", help="the engagement objective")
+    daemon_start.add_argument("--resume", default="", help="resume a .sje bundle or journal (engagement slug/path)")
+    daemon_start.add_argument("--set", action="append", default=[], help="config override (k=v; repeatable)")
+    daemon_start.add_argument(
+        "--wait", type=float, default=0.0, help="seconds to wait for the child to boot (fails fast on a dead child)"
+    )
+    daemon_start.set_defaults(func=run_daemon_start)
+    daemon_sub.add_parser("list", help="same as `suijin ps`").set_defaults(func=run_ps_cmd)
+
+    ps_p = sub.add_parser("ps", help="list daemon (background) engagements, newest first")
+    ps_p.set_defaults(func=run_ps_cmd)
+
+    attach_p = sub.add_parser("attach", help="live-follow a daemon engagement (guidance + /stop)")
+    attach_p.add_argument("id", help="daemon id (or unique prefix / objective substring)")
+    attach_p.set_defaults(func=run_attach_cmd)
+
+    stop_p = sub.add_parser("stop", help="graceful stop of a daemon engagement (full save)")
+    stop_p.add_argument("id", help="daemon id (or unique prefix / objective substring)")
+    stop_p.set_defaults(func=run_stop_cmd)
+
+    daemon_run_p = sub.add_parser("daemon-run", help=argparse.SUPPRESS)
+    daemon_run_p.add_argument("--id", required=True, help="daemon record id")
+    daemon_run_p.add_argument("--config", default="", help="config overrides file (informational; the record wins)")
+    daemon_run_p.set_defaults(func=run_daemon_child_cmd)
 
     theater_p = sub.add_parser("theater", help="animated replay of the latest session")
     theater_p.set_defaults(func=run_theater_cmd)
