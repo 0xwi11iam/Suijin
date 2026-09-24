@@ -155,6 +155,82 @@ class TestWorkspaceAnchoring:
         assert list(scratch.iterdir()) == [], f"cwd polluted: {[p.name for p in scratch.iterdir()]}"
 
 
+class TestLiveEventRelay:
+    """The gateway's /events pump carries the RUNNER's live bus to the
+    client — records arrive on the runner's thread, the WS send runs on
+    the event loop, so the relay threadsafe-enqueues and drains."""
+
+    def test_relay_streams_and_detaches(self):
+        import asyncio
+
+        from suijin.modules.console.lib.gateway import LiveEventRelay
+        from suijin.server import EventBus, clear_active_bus, register_active_bus
+
+        async def scenario():
+            bus = EventBus()
+            register_active_bus(bus)
+            out: list[dict] = []
+
+            async def sender(rec: dict) -> None:
+                out.append(rec)
+
+            relay = LiveEventRelay(sender)
+            relay.sync()  # attach to the active run
+            assert bus.subscriber_count == 1
+            bus.publish("iteration", n=1)  # runner thread publish
+            await asyncio.sleep(0)  # let the threadsafe enqueue land
+            await relay.drain()
+            assert out and out[0]["kind"] == "event"
+            assert out[0]["record"]["kind"] == "iteration" and out[0]["record"]["n"] == 1
+
+            # run ends: clear the bus, next sync detaches
+            clear_active_bus(bus)
+            relay.sync()
+            assert bus.subscriber_count == 0
+            bus.publish("iteration", n=2)
+            await asyncio.sleep(0)
+            await relay.drain()
+            assert len(out) == 1  # detached: no post-run records
+            relay.detach()  # idempotent teardown
+
+        asyncio.run(scenario())
+
+    def test_relay_attaches_new_run_after_replacement(self):
+        import asyncio
+
+        from suijin.modules.console.lib.gateway import LiveEventRelay
+        from suijin.server import EventBus, clear_active_bus, register_active_bus
+
+        async def scenario():
+            out: list[dict] = []
+
+            async def sender(rec: dict) -> None:
+                out.append(rec)
+
+            relay = LiveEventRelay(sender)
+            bus1 = EventBus()
+            register_active_bus(bus1)
+            relay.sync()
+            bus1.publish("step", tool="scan")
+            await asyncio.sleep(0)
+            await relay.drain()
+            assert len(out) == 1
+
+            # a NEW run replaces the bus: relay re-attaches on next sync
+            bus2 = EventBus()
+            register_active_bus(bus2)
+            relay.sync()
+            assert bus1.subscriber_count == 0 and bus2.subscriber_count == 1
+            bus2.publish("step", tool="exploit")
+            await asyncio.sleep(0)
+            await relay.drain()
+            assert len(out) == 2
+            clear_active_bus(bus2)
+            relay.detach()
+
+        asyncio.run(scenario())
+
+
 class TestCostFrameTokens:
     def test_cost_frame_carries_token_counts(self):
         """The right-side token counter (desktop topbar + TUI) reads the
