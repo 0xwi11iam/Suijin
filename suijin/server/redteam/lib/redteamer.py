@@ -1979,38 +1979,33 @@ over claims, reports over trophies.
     except OSError:
         pass
 
-    #  Objective input: type or upload — each in EITHER launch mode
-    #  (detached daemon is the default; the classic in-process TUI stays
-    #  one keystroke away for operators who want the live graph)
+    #  Objective input: type or upload
     print()
     console.print("[bold white]Load Objective:[/]")
-    console.print("  [bold #ff5555]1.[/] [white]Type manually[/] [dim](detached — the run outlives this console)[/]")
-    console.print("  [bold #58a6ff]2.[/] [white]Upload file (.txt / .md / .rtf)[/] [dim](detached)[/]")
-    console.print("  [bold #ff5555]3.[/] [white]Type manually[/] [dim](this console — classic live TUI)[/]")
-    console.print("  [bold #58a6ff]4.[/] [white]Upload file[/] [dim](this console — classic live TUI)[/]")
-    console.print("  [bold white]5.[/] [dim]Back[/]\n")
+    console.print("  [bold #ff5555]1.[/] [white]Type manually[/]")
+    console.print("  [bold #58a6ff]2.[/] [white]Upload file (.txt / .md / .rtf)[/]")
+    console.print("  [bold white]3.[/] [dim]Back[/]\n")
 
     try:
         choice = input(" ").strip()
     except (KeyboardInterrupt, EOFError):
         return
 
-    if choice in ("1", "2", "3", "4"):
-        foreground = choice in ("3", "4")
-        if choice in ("2", "4"):
-            console.print("\n[dim]Drag file here or type path:[/]")
-            try:
-                raw_path = input(" ").strip()
-            except (KeyboardInterrupt, EOFError):
-                return
-            obj = sc.load_objective_from_file(raw_path)
-            if not obj:
-                return  # error already printed
-        else:
-            # Default: type manually (old behavior)
-            obj = input("\nTarget / Objective  ").strip()
-    else:
+    foreground = False
+    if choice == "2":
+        console.print("\n[dim]Drag file here or type path:[/]")
+        try:
+            raw_path = input(" ").strip()
+        except (KeyboardInterrupt, EOFError):
+            return
+        obj = sc.load_objective_from_file(raw_path)
+        if not obj:
+            return  # error already printed
+    elif choice == "3":
         return
+    else:
+        # Default: type manually (old behavior)
+        obj = input("\nTarget / Objective  ").strip()
 
     if obj:
         # Preview
