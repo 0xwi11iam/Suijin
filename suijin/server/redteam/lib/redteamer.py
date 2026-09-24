@@ -1979,32 +1979,38 @@ over claims, reports over trophies.
     except OSError:
         pass
 
-    #  Objective input: type or upload
+    #  Objective input: type or upload — each in EITHER launch mode
+    #  (detached daemon is the default; the classic in-process TUI stays
+    #  one keystroke away for operators who want the live graph)
     print()
     console.print("[bold white]Load Objective:[/]")
-    console.print("  [bold #ff5555]1.[/] [white]Type manually[/]")
-    console.print("  [bold #58a6ff]2.[/] [white]Upload file (.txt / .md / .rtf)[/]")
-    console.print("  [bold white]3.[/] [dim]Back[/]\n")
+    console.print("  [bold #ff5555]1.[/] [white]Type manually[/] [dim](detached — the run outlives this console)[/]")
+    console.print("  [bold #58a6ff]2.[/] [white]Upload file (.txt / .md / .rtf)[/] [dim](detached)[/]")
+    console.print("  [bold #ff5555]3.[/] [white]Type manually[/] [dim](this console — classic live TUI)[/]")
+    console.print("  [bold #58a6ff]4.[/] [white]Upload file[/] [dim](this console — classic live TUI)[/]")
+    console.print("  [bold white]5.[/] [dim]Back[/]\n")
 
     try:
         choice = input(" ").strip()
     except (KeyboardInterrupt, EOFError):
         return
 
-    if choice == "2":
-        console.print("\n[dim]Drag file here or type path:[/]")
-        try:
-            raw_path = input(" ").strip()
-        except (KeyboardInterrupt, EOFError):
-            return
-        obj = sc.load_objective_from_file(raw_path)
-        if not obj:
-            return  # error already printed
-    elif choice == "3":
-        return
+    if choice in ("1", "2", "3", "4"):
+        foreground = choice in ("3", "4")
+        if choice in ("2", "4"):
+            console.print("\n[dim]Drag file here or type path:[/]")
+            try:
+                raw_path = input(" ").strip()
+            except (KeyboardInterrupt, EOFError):
+                return
+            obj = sc.load_objective_from_file(raw_path)
+            if not obj:
+                return  # error already printed
+        else:
+            # Default: type manually (old behavior)
+            obj = input("\nTarget / Objective  ").strip()
     else:
-        # Default: type manually (old behavior)
-        obj = input("\nTarget / Objective  ").strip()
+        return
 
     if obj:
         # Preview
@@ -2026,6 +2032,17 @@ over claims, reports over trophies.
         except Exception:  # noqa: BLE001 — the hook must never block a launch
             pass
 
+        # THE SPLIT IS THE DEFAULT (2026-09-24): an engagement runs in the
+        # DAEMON — detached, so closing this console (or the SSH dying)
+        # never kills the run. This console follows the journal and queues
+        # guidance. `launch_mode: tui` (config), menu option 3/4, or
+        # `suijin tui "<obj>"` keeps the classic in-process TUI.
+        if not foreground and str(config.get("launch_mode") or "daemon").strip().lower() != "tui":
+            from suijin.modules.ops.lib.daemon import launch_and_attach
+
+            console.print("[dim]starting detached — follow it here, or leave and `suijin ps`[/dim]\n")
+            launch_and_attach(obj)
+            return
         run_red_team(config, obj)
 
 

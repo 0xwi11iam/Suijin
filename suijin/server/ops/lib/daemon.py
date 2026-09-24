@@ -319,14 +319,18 @@ def start_daemon(
 
 def _confirm_booted(rid: str, seconds: float) -> None:
     """Wait briefly for the child to prove itself: it records its own pid
-    and the engagement paths, or dies. A dead-on-arrival child is marked
-    (never left as a ghost 'running' record)."""
+    and the engagement paths, or it dies. A dead-on-arrival child is
+    marked (never left as a ghost 'running' record) — but a child that
+    already landed a FINAL record (a fast run that completed inside the
+    window) keeps it: its exit is the success, not a boot failure."""
     deadline = time.time() + max(0.0, seconds)
     rec = {}
     while time.time() < deadline:
         rec = _read_record(rid) or {}
         if int(rec.get("pid") or 0) != 0 and str(rec.get("engagement") or ""):
             return  # fully booted
+        if str(rec.get("status") or "") not in LIVE_STATUSES:
+            return  # the child already finished on its own — leave it be
         if not actor_alive(int(rec.get("pid") or 0)):
             break
         time.sleep(0.1)
@@ -676,6 +680,100 @@ def write_guidance(rec: dict, line: str) -> Path | None:
     return p
 
 
+#: what an attached console can do vs. what needs the foreground TUI
+ATTACH_HELP = """attached console (a detached run — the agent keeps working if you leave):
+  <any text>   queue guidance for the agent's next think turn
+  /state       phase, iteration, todos, open questions (last journal snapshot)
+  /findings    confirmed findings so far
+  /cost        tokens + spend (journal usage records)
+  /note <text> write an engagement note
+  /bundle      path of the saved .sje (once it exists)
+  /stop        graceful stop with a full save (SIGTERM)  ·  /quit same
+  /detach      leave — the daemon keeps running
+  Ctrl+C       same as /detach (the RUN is never killed by leaving)
+  (in-process commands like /compact or /approvals need `suijin tui` —
+   they act on a live graph this console does not own)"""
+
+
+def _journal_state(events_path) -> dict:
+    """The latest state.snapshot from the journal (empty when none)."""
+    state: dict = {}
+    with contextlib.suppress(Exception):
+        recs, _ = tail_events(events_path, 0)
+        for rec in recs:
+            if rec.get("kind") == "state.snapshot":
+                state = dict(rec)
+    return state
+
+
+def _journal_usage(events_path) -> tuple[int, int, float]:
+    """(input, output, cost) summed from the journal's usage records."""
+    tin = tout = 0
+    cost = 0.0
+    with contextlib.suppress(Exception):
+        recs, _ = tail_events(events_path, 0)
+        for rec in recs:
+            if rec.get("kind") == "usage":
+                tin += int(rec.get("input_tokens") or 0)
+                tout += int(rec.get("output_tokens") or 0)
+                cost += float(rec.get("cost_usd") or 0.0)
+    return tin, tout, cost
+
+
+def _cmd_state(rec: dict) -> None:
+    state = _journal_state(rec.get("events") or "")
+    if not state:
+        print("no state snapshot yet")
+        return
+    todos = state.get("todo_list") or []
+    questions = state.get("pending_questions") or []
+    print(
+        f"phase: {state.get('current_phase', '?')}  ·  iteration: {state.get('current_iteration', 0)}"
+        f"  ·  findings: {len(state.get('findings') or [])}  ·  todos: {len(todos)}"
+    )
+    for todo in todos[:8]:
+        text = todo.get("task") if isinstance(todo, dict) else todo
+        print(f"  - {str(text)[:100]}")
+    if questions:
+        print(f"open questions ({len(questions)}):")
+        for q in questions[:4]:
+            qq = q.get("question") if isinstance(q, dict) else q
+            print(f"  ? {str(qq)[:120]}")
+
+
+def _cmd_findings(rec: dict) -> None:
+    findings = _journal_state(rec.get("events") or "").get("findings") or []
+    if not findings:
+        print("no findings recorded yet")
+        return
+    for f in findings:
+        if isinstance(f, dict):
+            print(f"  - [{f.get('severity', '?')}] {str(f.get('title') or f.get('name') or f)[:110]}")
+        else:
+            print(f"  - {str(f)[:110]}")
+
+
+def _cmd_cost(rec: dict) -> None:
+    tin, tout, cost = _journal_usage(rec.get("events") or "")
+    print(f"tokens: {tin} in / {tout} out   ·   spend: ${cost:.4f}")
+
+
+def _cmd_note(rec: dict, text: str) -> None:
+    base = str(rec.get("engagement") or "")
+    if not base:
+        print("engagement not booted yet — no note written")
+        return
+    notes = Path(base) / ".notes"
+    with contextlib.suppress(OSError):
+        notes.mkdir(parents=True, exist_ok=True)
+        stamp = _stamp()
+        with (notes / f"operator_{stamp}.md").open("a", encoding="utf-8") as f:
+            f.write(text.strip() + "\n")
+        print(f"note written: {(notes / f'operator_{stamp}.md').name}")
+        return
+    print("note failed (workspace not writable?)")
+
+
 def _print_final(rec: dict) -> None:
     status = str(rec.get("status") or "unknown")
     reason = str(rec.get("exit_reason") or "")
@@ -701,16 +799,28 @@ def attach_daemon(ref: str, poll: float = 0.7, heartbeat: float = 15.0) -> int:
         return 1
     rec = _read_record(rid) or {}
     print(f"attached: {rid} — {str(rec.get('objective') or '')[:100]}")
-    print("type a line to queue guidance  ·  /stop  ·  /bundle  ·  /detach")
+    print("type a line to queue guidance  ·  /help  ·  /state  ·  /stop  ·  /detach")
 
-    offset = 0
-    names: dict[str, str] = {}
-    last_line = time.time()
-    last_iter = "?"
     stdin_fd = None
     with contextlib.suppress(AttributeError, OSError, ValueError):
         stdin_fd = sys.stdin.fileno() if sys.stdin is not None and sys.stdin.isatty() else None
 
+    # Ctrl+C while following = leave, NEVER kill: the run is detached and
+    # outliving this console is the entire point of the split.
+    try:
+        return _attach_loop(rid, stdin_fd, poll, heartbeat)
+    except KeyboardInterrupt:
+        print("\ndetached — the daemon keeps running")
+        return 0
+
+
+def _attach_loop(rid, stdin_fd, poll, heartbeat) -> int:
+    """The follow loop: tail the journal, service the console, end when
+    the run does. (Ctrl+C is handled one frame up, as a detach.)"""
+    offset = 0
+    names: dict[str, str] = {}
+    last_line = time.time()
+    last_iter = "?"
     while True:
         rec = _read_record(rid) or {}
         events = str(rec.get("events") or "")
@@ -731,18 +841,34 @@ def attach_daemon(ref: str, poll: float = 0.7, heartbeat: float = 15.0) -> int:
             except (OSError, ValueError):
                 ready = []
             if ready:
-                line = ""
-                with contextlib.suppress(Exception):
+                try:
                     line = sys.stdin.readline() or ""
+                except KeyboardInterrupt:
+                    print("\ndetached — the daemon keeps running")
+                    return 0
+                except Exception:  # noqa: BLE001 — a broken read must not kill the follower
+                    line = ""
                 cmd = line.strip()
                 low = cmd.lower()
-                if low == "/stop":
+                if low in ("/stop", "/quit"):
                     return stop_daemon(rid)
                 if low == "/bundle":
                     print((_read_record(rid) or {}).get("bundle") or "no bundle yet")
-                elif low in ("/detach", "/quit", "q"):
+                elif low == "/state":
+                    _cmd_state(rec)
+                elif low == "/findings":
+                    _cmd_findings(rec)
+                elif low == "/cost":
+                    _cmd_cost(rec)
+                elif low in ("/help", "/?"):
+                    print(ATTACH_HELP)
+                elif low.startswith("/note"):
+                    _cmd_note(rec, cmd.partition(" ")[2] or "(empty note)")
+                elif low in ("/detach", "/leave", "q"):
                     print("detached — the daemon keeps running")
                     return 0
+                elif low.startswith("/"):
+                    print(f"unknown command {cmd.split()[0]} — /help lists what this console can do")
                 elif cmd:
                     p = write_guidance(rec, cmd)
                     if p is not None:
@@ -760,6 +886,40 @@ def attach_daemon(ref: str, poll: float = 0.7, heartbeat: float = 15.0) -> int:
 
 
 # ── CLI entry (suijin daemon start) ────────────────────────────────────
+
+
+def launch_and_attach(
+    objective: str,
+    overrides: dict | None = None,
+    resume_ref: str = "",
+    attach: bool = True,
+    wait: float = 0.0,
+) -> int:
+    """Start one detached engagement and (by default) follow it — the
+    single path behind `suijind` and the default `suijin` launch. Fail
+    fast on a bad --resume ref, report a dead-on-arrival child, and only
+    attach once the record is real. Returns a process exit code."""
+    resume_ref = str(resume_ref or "").strip()
+    if resume_ref:
+        problem = preflight_resume(resume_ref)
+        if problem:
+            print(f"error: cannot resume — {problem}")
+            return 1
+    rec = start_daemon(objective, overrides=overrides, resume_ref=resume_ref, confirm_seconds=max(wait, 0.0))
+    rid = str(rec.get("id") or "")
+    status = str(rec.get("status") or "")
+    if status in ("failed-to-spawn", "dead"):
+        print(f"error: daemon {rid} {status} — {rec.get('exit_reason') or ''}")
+        tail = _log_tail(rec.get("log") or "")
+        if tail:
+            print(f"  run log:\n    {tail}")
+        return 1
+    print(f"started {rid} (pid {rec.get('pid')}) — detached; this console can exit safely")
+    print(f"  follow: suijin attach {rid}   ·   list: suijin ps   ·   stop: suijin stop {rid}")
+    if not attach:
+        return 0
+    print()
+    return attach_daemon(rid)
 
 
 def run_daemon_start(args) -> int:
