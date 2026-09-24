@@ -399,36 +399,218 @@ def _row_items(visible: "OrderedDict[str, tuple]"):
     return items
 
 
+# ── reading it like a human ──────────────────────────────────────────────
+#
+# A person opens Settings to answer "what am I running?" and to change ONE
+# thing. So the screen leads with the answer (a plain-language summary),
+# groups the fields the way a person thinks (which model / how far it may
+# run / what it may spend), spells every value out ("disabled", "100,000",
+# "not set") and never shows a raw config key as the label.
+
+#: (config key) → (human label, what it does, section)
+#: Sections are ordered the way an operator reasons: which model, how far,
+#: what it may do, what it may spend, then the rest.
+FIELD_INFO = {
+    # -- which model --
+    "provider": ("Provider", "which company serves the model", "model"),
+    "deepseek_model": ("Model", "the model DeepSeek serves", "model"),
+    "zai_model": ("Model", "the model z.ai serves", "model"),
+    "gemini_model": ("Model", "the model Gemini serves", "model"),
+    "anthropic_model": ("Model", "the model Anthropic serves", "model"),
+    "final_model_id": ("Main model", "the HuggingFace model the agent runs on", "model"),
+    "sentinel_model_id": ("Sentinel model", "the second opinion on every finding", "model"),
+    "zai_endpoint": ("z.ai plan", "coding plan (monthly) or pay-per-token", "model"),
+    # -- how far it may run --
+    "max_iterations": ("Iteration cap", "hard ceiling on think→act→respond cycles", "limits"),
+    "max_tokens_per_request": ("Reply size", "max tokens per model response", "limits"),
+    "context_window": ("Context window", "0 = ask the model registry (1M fallback)", "limits"),
+    "librarian_interval": ("Memory digest every", "how often observations are distilled", "limits"),
+    "temperature": ("Creativity", "0 = strict and literal, 2 = loose", "limits"),
+    "posture": ("Posture", "recon watches; assertive acts", "limits"),
+    "launch_mode": ("Launch", "daemon keeps running if this console closes; tui stays here", "limits"),
+    # -- what it may do --
+    "mode_hitl": ("Check with me first", "ask before irreversible actions", "conduct"),
+    "mode_deploy_subagent": ("Hire subagents", "let the agent delegate in parallel", "conduct"),
+    "mode_audit_trail": ("Audit trail", "record every decision and action", "conduct"),
+    "subagent_count": ("Subagents at once", "1–5 parallel workers", "conduct"),
+    "proxy_url": ("Proxy", "route traffic through http://host:port", "conduct"),
+    # -- what it may spend --
+    "cost_alert_usd": ("Warn me at", "off means it never warns you", "spend"),
+    "cost_budget_usd": ("Soft cap", "off means the agent is told, not stopped", "spend"),
+    "cost_hard_cap_usd": ("Hard cap", "off means nothing can stop a runaway", "spend"),
+    # -- plumbing --
+    "metasploit_rpc_host": ("Metasploit host", "where the Metasploit RPC server listens", "advanced"),
+    "metasploit_rpc_port": ("Metasploit port", "its TCP port", "advanced"),
+}
+
+#: section → (title, one-line purpose)
+SECTIONS = [
+    ("model", "Model", "which company and which model"),
+    ("limits", "Limits", "how far and how long a run may go"),
+    ("conduct", "Conduct", "what the agent may do on its own"),
+    ("spend", "Spending", "what the run may cost"),
+    ("advanced", "Advanced", "plumbing you rarely touch"),
+]
+
+
+def human_label(key: str) -> str:
+    return FIELD_INFO.get(key, (key.replace("_", " "), "", "advanced"))[0]
+
+
+def human_help(key: str) -> str:
+    return FIELD_INFO.get(key, (key, "", ""))[1]
+
+
+def human_value(key: str, config: dict) -> str:
+    """The value, said the way a person says it. The zero-means cases are
+    the whole point: '0.0' reads as free, it actually means unlimited."""
+    raw = config.get(key)
+    fdef = ALL_FIELDS.get(key, ("string",))
+    kind = fdef[0]
+    if kind == "bool":
+        return "on" if raw else "off"
+    if raw is None or raw == "":
+        return "not set"
+    if key in ("cost_alert_usd", "cost_budget_usd", "cost_hard_cap_usd"):
+        try:
+            v = float(raw)
+        except (TypeError, ValueError):
+            return str(raw)
+        if v > 0:
+            return f"${v:,.2f}"
+        # each zero means something different — say which
+        return {
+            "cost_alert_usd": "off — never warn",
+            "cost_budget_usd": "off — no soft stop",
+            "cost_hard_cap_usd": "off — nothing stops a runaway",
+        }.get(key, "off")
+    if key == "context_window":
+        try:
+            v = int(raw)
+        except (TypeError, ValueError):
+            return str(raw)
+        return "auto (from the model registry)" if v <= 0 else f"{v:,} tokens"
+    if key == "max_iterations":
+        try:
+            return f"{int(raw):,} cycles"
+        except (TypeError, ValueError):
+            return str(raw)
+    if key in ("max_tokens_per_request", "librarian_interval", "subagent_count", "metasploit_rpc_port"):
+        try:
+            return f"{int(raw):,}"
+        except (TypeError, ValueError):
+            return str(raw)
+    if key == "temperature":
+        try:
+            return f"{float(raw):.2f}"
+        except (TypeError, ValueError):
+            return str(raw)
+    if key == "launch_mode":
+        return "daemon (survives this console)" if str(raw) == "daemon" else "this console only"
+    if key == "posture":
+        return "act on its own" if str(raw) == "assertive" else "watch and report"
+    if key == "zai_endpoint":
+        return "coding plan (monthly)" if str(raw) == "coding" else "pay per token"
+    if key == "mode_hitl":
+        return "asks first" if raw else "acts on its own"
+    return str(raw)
+
+
+def running_summary(config: dict) -> str:
+    """The one line a person actually came for: what is running, how far
+    it can go, and whether anything can stop the bill. A cap of 1,000,000
+    is a de-facto 'until it finishes', so it is said as that."""
+    provider = human_value("provider", config)
+    model = ""
+    for key in (f"{provider}_model", "final_model_id", "anthropic_model", "gemini_model", "deepseek_model"):
+        if key in ALL_FIELDS and config.get(key):
+            model = str(config[key])
+            break
+    bits = [f"{provider} · {model or 'default model'}"]
+    with contextlib.suppress(TypeError, ValueError):
+        iters = int(config.get("max_iterations") or 0)
+        bits.append("runs until it finishes" if iters >= 1_000_000 else f"stops at {iters:,} cycles")
+    caps = [float(config.get(k) or 0) for k in ("cost_budget_usd", "cost_hard_cap_usd")]
+    if all(c <= 0 for c in caps):
+        bits.append("nothing stops the bill")
+    else:
+        hard = next((f"${c:,.0f}" for c in caps if c > 0), "")
+        bits.append(f"bill stops at {hard}" if hard else "soft budget only")
+    return " · ".join(bits)
+
+
+def section_items(visible, section: str):
+    """[(group, key)] for one section, in field order."""
+    out = []
+    for key, fdef in visible.items():
+        if FIELD_INFO.get(key, (key, "", "advanced"))[2] == section:
+            out.append((human_label(key), key))
+    return out
+
+
 def screen_lines(
-    config: dict, visible, items, cursor: int, note: str = "", status: str = "ok"
+    config: dict,
+    visible=None,
+    items=None,
+    cursor: int = 0,
+    note: str = "",
+    status: str = "ok",
+    section: str | None = None,
 ) -> list[tuple[str, str]]:
     """The whole screen as [(text, role)] — a PURE function of state, so it
-    can be asserted without a terminal and drawn by any backend.
+    is asserted without a terminal and drawn by any backend.
 
-    roles: title | head | cursor | row | group | status | legend | warn
+    Two levels, one job each:
+      sections — what is running + the five groups
+      a group  — its fields, with the highlighted one's meaning spelled out
+
+    roles: title | summary | group | cursor | row | help | status | legend
     """
-    lines: list[tuple[str, str]] = [("SUIJIN — Settings", "title")]
-    lines.append((f"config: {CONFIG_PATH}", "head"))
-    lines.append(("", "head"))
-    width = max((len(k) for _g, k in items), default=10)
-    for idx, (group, key) in enumerate(items):
-        if idx == 0 or group != items[idx - 1][0]:
-            lines.append((f"-- {group} --", "group"))
-        marker = "> " if idx == cursor else "  "
-        value = _fmt_plain(key, config.get(key, ""))
-        suffix = " *" if is_model_field(key) else ""
-        text = f"{marker}{key.ljust(width)}  {value}{suffix}"
-        lines.append((text, "cursor" if idx == cursor else "row"))
-    lines.append(("", "status"))
-    note_text = note or visible_provider_note(config)
-    lines.append((note_text[:200], "warn" if status == "warn" else "status"))
-    lines.append(
-        (
-            "UP/DOWN or j/k move | Enter edit | * = fetch live model ids (m) | s save | q quit | ^C cancels a prompt",
-            "legend",
-        )
-    )
+    visible = visible if visible is not None else _visible_fields(config)
+    lines: list[tuple[str, str]] = [("SUIJIN — Settings", "title"), (running_summary(config), "summary"), ("", "blank")]
+
+    if section is None:
+        # the current model, spelled out — most visits start and end here
+        provider = str(config.get("provider") or "not set")
+        model_key = f"{provider}_model"
+        model = str(config.get(model_key) or config.get("final_model_id") or "")
+        lines.append((f"Model:  {provider} · {model or 'default'}", "model"))
+        lines.append(("", "blank"))
+        for idx, (key, title, purpose) in enumerate(SECTIONS):
+            count = len(section_items(visible, key))
+            marker = "› " if idx == cursor else "  "
+            label = f"{marker}{title}  —  {purpose}"
+            lines.append((f"{label}  ({count})", "cursor" if idx == cursor else "row"))
+    else:
+        title = next((t for k, t, _p in SECTIONS if k == section), section)
+        lines.append((f"‹ {title}", "group"))
+        rows = section_items(visible, section)
+        for idx, (label, key) in enumerate(rows):
+            marker = "› " if idx == cursor else "  "
+            value = human_value(key, config)
+            live = "  (m: live ids)" if is_model_field(key) else ""
+            lines.append((f"{marker}{label:<26}{value}{live}", "cursor" if idx == cursor else "row"))
+        if rows:
+            key = rows[max(0, min(cursor, len(rows) - 1))][1]
+            lines.append(("", "blank"))
+            lines.append((human_help(key) or human_label(key), "help"))
+    lines.append(("", "blank"))
+    lines.append((_fit(note or visible_provider_note(config), 200), "warn" if status == "warn" else "status"))
     return lines
+
+
+def _fit(text: str, width: int) -> str:
+    """Truncate with an ellipsis so a line NEVER runs off the screen."""
+    width = max(1, width)
+    if len(text) <= width:
+        return text
+    return text[: max(0, width - 1)] + "…"
+
+
+def _legend(section: str | None) -> str:
+    if section is None:
+        return "↑↓/jk choose · Enter open · m live model ids · q quit"
+    return "↑↓/jk change · Enter edit · m live model ids · Esc back · q save & quit"
 
 
 def _fmt_plain(key: str, value) -> str:
@@ -505,105 +687,256 @@ _ROLE_ATTRS = {
 }
 
 
-def _init_colors() -> None:
+def _init_colors(stdscr=None) -> bool:
+    """Real curses colors. Returns whether color is available (dumb
+    terminals fall back to attributes only)."""
     import curses
 
-    if not sys.stdout.isatty():
-        return
     with contextlib.suppress(Exception):
+        if not curses.has_colors():
+            return False
         curses.start_color()
-        curses.use_default_colors()
-        for i, _role in enumerate(("title", "head", "group", "cursor", "row", "status", "warn", "legend"), start=1):
-            curses.init_pair(i, -1, -1)
+        with contextlib.suppress(Exception):
+            curses.use_default_colors()  # -1 = the terminal's own bg/fg
+        # pair id → (fg, bg, attr)
+        _COLOR_PAIRS.update(
+            {
+                1: (curses.COLOR_CYAN, -1, 0),  # labels / keys
+                2: (curses.COLOR_YELLOW, -1, curses.A_BOLD),  # group headers
+                3: (curses.COLOR_GREEN, -1, curses.A_BOLD),  # status ok
+                4: (curses.COLOR_RED, -1, curses.A_BOLD),  # status warn/error
+                5: (-1, curses.COLOR_CYAN, curses.A_BOLD),  # input line
+                6: (curses.COLOR_BLUE, -1, 0),  # legend
+                7: (curses.COLOR_BLACK, curses.COLOR_CYAN, 0),  # picker cursor
+                8: (curses.COLOR_WHITE, curses.COLOR_BLUE, curses.A_BOLD),  # title bar
+                9: (curses.COLOR_MAGENTA, -1, curses.A_BOLD),  # live-ids hint
+                10: (curses.COLOR_CYAN, -1, curses.A_DIM),  # config path
+                12: (curses.COLOR_GREEN, -1, curses.A_NORMAL),  # the summary line
+                13: (curses.COLOR_YELLOW, -1, curses.A_BOLD),  # the live model
+            }
+        )
+        for pid, (fg, bg, attr) in list(_COLOR_PAIRS.items()):
+            with contextlib.suppress(Exception):
+                curses.init_pair(pid, fg, bg)
+        return True
+    return False
 
 
-def _put(stdscr, y: int, x: int, text: str, role: str) -> None:
+#: color pair ids (filled by _init_colors; empty → attributes only)
+_COLOR_PAIRS: dict[int, tuple] = {}
+
+
+def _role_attr(role: str) -> int:
     import curses
 
-    with contextlib.suppress(curses.error):  # bottom-right cell — harmless
-        stdscr.addstr(y, x, text, _curses_attr(role))
+    return {
+        "label": curses.A_NORMAL,
+        "value": curses.A_NORMAL,
+        "group": curses.A_BOLD,
+        "cursor": curses.A_REVERSE,
+        "status": curses.A_NORMAL,
+        "warn": curses.A_BOLD,
+        "legend": curses.A_DIM,
+        "title": curses.A_BOLD,
+        "path": curses.A_DIM,
+        "hint": curses.A_BOLD,
+        "input": curses.A_BOLD,
+        "pick": curses.A_REVERSE,
+    }.get(role, curses.A_NORMAL)
 
 
-def _curses_attr(role: str) -> int:
+_ROLE_PAIR = {
+    "summary": 12,
+    "model": 13,
+    "blank": 1,
+    "rule": 6,
+    "label": 1,
+    "group": 2,
+    "status": 3,
+    "warn": 4,
+    "input": 5,
+    "legend": 6,
+    "pick": 7,
+    "title": 8,
+    "path": 10,
+    "hint": 9,
+}
+
+
+def _put(stdscr, y: int, x: int, text: str, role: str, width: int | None = None) -> None:
+    """One styled write at (y, x). Never raises (the bottom-right cell and
+    a stale layout must not kill the editor)."""
     import curses
 
-    attr = 0
-    for name in _ROLE_ATTRS.get(role, ()):
-        attr |= getattr(curses, f"A_{name.upper()}", 0)
-    return attr
+    if not text:
+        return
+    limit = max(1, (width or (stdscr.getmaxyx()[1] - x)) - 1)
+    line = text[:limit]
+    attr = _role_attr(role)
+    pair = _ROLE_PAIR.get(role)
+    if pair and pair in _COLOR_PAIRS:
+        attr |= curses.color_pair(pair)
+    with contextlib.suppress(curses.error):
+        stdscr.addstr(y, x, line, attr)
 
 
-def _draw(stdscr, config: dict, items, cursor: int, note: str, status: str) -> None:
-    """One full repaint, in place."""
+def _fit(text: str, width: int) -> str:
+    """Truncate to width with an ellipsis so a line NEVER runs off the
+    screen (the old legend was cut mid-word)."""
+    width = max(1, width)
+    if len(text) <= width:
+        return text
+    return text[: max(0, width - 1)] + "…"
+
+
+def _draw(stdscr, config: dict, items, cursor: int, note: str, status: str, section: str | None = None) -> None:
+    """One full repaint, IN PLACE. ONE frame, sized to the content, with
+    the status line and the key legend INSIDE it — a screen with a second
+    border under the first reads as broken."""
+    import curses
+
     stdscr.erase()
     h, w = stdscr.getmaxyx()
-    lines = screen_lines(config, _visible_fields(config), items, cursor, note, status)
-    # keep the tail visible when the field list is taller than the screen
-    body = [ln for ln in lines if ln[1] not in ("legend", "status", "warn")]
-    footer = [ln for ln in lines if ln[1] in ("legend", "status", "warn")]
-    room = max(1, h - len(footer) - 1)
-    if len(body) > room:
-        # scroll so the cursor stays on screen
-        cursor_line = next((i for i, (_t, role) in enumerate(body) if role == "cursor"), 0)
-        top = max(0, min(cursor_line - room // 2, len(body) - room))
-        body = body[top : top + room]
-    for y, (text, role) in enumerate(body):
-        _put(stdscr, y, 0, text[: w - 1], role)
-    for i, (text, role) in enumerate(footer):
-        _put(stdscr, min(h - len(footer) + i, h - 1), 0, text[: w - 1], role)
+    if h < 10 or w < 40:  # tiny window: say so instead of drawing garbage
+        _put(stdscr, 0, 0, _fit("terminal too small — resize to edit settings", w - 1), "warn", w)
+        stdscr.refresh()
+        return
+
+    body = screen_lines(config, items=items, cursor=cursor, note=note, status=status, section=section)
+    content = [ln for ln in body if ln[0] != "" and ln[1] not in ("status", "warn")]
+    status_line = next((ln for ln in body if ln[1] in ("status", "warn")), ("", "status"))
+    legend = _fit(_legend(section), w - 6)
+
+    # fit the content to the window: frame(2) + status(1) + legend(1) + a
+    # spare row, so a long section scrolls and keeps the cursor visible
+    max_rows = max(3, h - 6)
+    room = min(len(content), max_rows)
+    cursor_pos = next((i for i, (_t, role) in enumerate(content) if role == "cursor"), 0)
+    top = 0
+    if len(content) > room:
+        top = max(0, min(cursor_pos - room // 2, len(content) - room))
+    window = content[top : top + room]
+
+    # ONE frame: top border, content, rule, status, legend, bottom border
+    inner = len(window)
+    box_h = inner + 5
+    sub = None
+    with contextlib.suppress(curses.error):
+        sub = stdscr.subwin(min(box_h, h - 1), w, 0, 0)
+        sub.border()
+        _put(stdscr, 0, max(1, (w - len(" SUIJIN — Settings ")) // 2), " SUIJIN — Settings ", "title", w)
+
+    for i, (text, role) in enumerate(window):
+        if role == "title":
+            continue  # the frame border carries it
+        _put(stdscr, 1 + i, 2, _fit(text, w - 4), role, w)
+    if len(content) > room:  # only when rows are actually hidden
+        more = f" {top + room}/{len(content)} "
+        _put(stdscr, 1 + inner, max(2, w - len(more) - 3), more, "legend", w)
+    # rule + status + legend, inside the frame
+    _put(stdscr, 1 + inner + 1, 2, _fit("─" * max(4, w - 6), w - 4), "rule", w)
+    _put(stdscr, 1 + inner + 2, 2, _fit(status_line[0], w - 5), status_line[1], w)
+    _put(stdscr, 1 + inner + 3, 2, _fit(" " + legend, w - 5), "legend", w)
+
     stdscr.refresh()
+    with contextlib.suppress(Exception):
+        if sub is not None:
+            sub.delete()
+    with contextlib.suppress(curses.error):
+        stdscr.move(min(h - 1, 1 + inner + 3), 2)
+
+
+def _draw_popup(stdscr, title: str, options: list[str], picked: int, height_cap: int) -> None:
+    """A framed picker ABOVE the input line. It draws into the list area
+    only and the caller repaints the frame afterwards, so nothing is left
+    smeared over the table."""
+    import curses
+
+    if not options:
+        return
+    h, w = stdscr.getmaxyx()
+    rows = max(3, min(len(options) + 2, height_cap, h - 6))
+    width = min(max(len(o) for o in options) + 6, w - 4)
+    top = max(1, (h - 3) - rows - 1)
+    left = max(1, (w - width) // 2)
+    inner = rows - 2
+    first = max(0, min(picked - inner // 2, len(options) - inner))
+
+    with contextlib.suppress(curses.error):
+        sub = stdscr.subwin(rows, width, top, left)
+        sub.border()
+    with contextlib.suppress(curses.error):
+        stdscr.addstr(top, left + 2, _fit(f" {title} ", width - 4), _role_attr("title"))
+    for i, opt in enumerate(options[first : first + inner]):
+        idx = first + i
+        line = f" {'›' if idx == picked else ' '} {opt} "
+        _put(
+            stdscr,
+            top + 1 + i,
+            left + 1,
+            _fit(line.ljust(width - 2), width - 2),
+            "pick" if idx == picked else "label",
+            width,
+        )
+    if len(options) > inner:
+        _put(stdscr, top + rows - 1, left + width - 9, f" {first + 1}-{first + inner}/{len(options)} ", "legend", width)
 
 
 def _prompt(stdscr, label: str, default: str = "", choices: list[str] | None = None) -> str | None:
-    """A one-line editor at the bottom. Returns None when cancelled.
+    """One input line at the bottom (curses), with an optional framed
+    picker above it. Returns None when cancelled (Esc).
 
-    With `choices` it is a scrolling picker (UP/DOWN + Enter, or type to
-    filter by first letters); without, free text. Both are the same
-    screen — the operator's eyes never leave the terminal."""
+    With `choices`: a scrolling picker — ↑/↓ + Enter, or type letters to
+    jump. Without: free text with backspace. The screen is repainted
+    through the redraw hook so the table underneath stays intact."""
     import curses
 
     buf = list(default or "")
     picked = 0
     h, w = stdscr.getmaxyx()
-    row = h - 2
     stdscr.keypad(True)
+    repaint = getattr(stdscr, "_suijin_repaint", None)
+    # the input line owns the LAST row: always clear it before drawing
     while True:
-        opts = choices or []
+        opts = list(choices or [])
         if opts:
-            view = opts[max(0, picked - 1) : max(0, picked - 1) + max(1, h - 5)]
-            lines = [f"  {('>' if opts[picked] == o and opts.index(o) == picked else ' ')} {o}" for o in view]
-            y = row - len(lines) - 1
-            for line in lines:
-                _put(stdscr, max(0, y), 0, line[: w - 1], "row")
-                y += 1
-            text = f"{label}: {''.join(buf)}"
-        else:
-            text = f"{label}: {''.join(buf)}"
-        _put(stdscr, row, 0, text[: w - 1], "head")
+            _draw_popup(stdscr, label, opts, min(picked, len(opts) - 1), max(3, h - 8))
+        _put(stdscr, h - 1, 0, " " * max(1, w - 1), "input", w)
+        text = f"{label}: {''.join(buf)}"
+        _put(stdscr, h - 1, 1, _fit(text, w - 2), "input", w)
         stdscr.refresh()
+        with contextlib.suppress(curses.error):
+            stdscr.move(h - 1, min(w - 2, 2 + len(text)))
         ch = stdscr.getch()
         if ch in (curses.KEY_ENTER, 10, 13):
             value = "".join(buf).strip()
-            if choices and not value:
-                return opts[picked]
-            return value or None
-        if ch in (27, curses.KEY_F1):  # Esc cancels
+            if opts and not value:
+                return opts[min(picked, len(opts) - 1)]
+            if not opts and not value:
+                return None
+            if repaint:
+                repaint()
+            return value
+        if ch == 27:  # Esc cancels
+            if repaint:
+                repaint()
             return None
         if ch in (curses.KEY_BACKSPACE, 127, 8):
             if buf:
                 buf.pop()
-        elif choices and ch in (curses.KEY_UP, ord("k")):
+        elif opts and ch in (curses.KEY_UP, ord("k")):
             picked = max(0, picked - 1)
-        elif choices and ch in (curses.KEY_DOWN, ord("j")):
-            picked = min(len(choices) - 1, picked + 1)
+        elif opts and ch in (curses.KEY_DOWN, ord("j")):
+            picked = min(len(opts) - 1, picked + 1)
         elif 32 <= ch < 127:
-            if choices:
-                # typing jumps to the first option starting with those letters
+            buf.append(chr(ch))
+            if opts:
                 typed = "".join(buf)
-                match = next((i for i, o in enumerate(choices) if o.lower().startswith(typed.lower())), None)
+                match = next((i for i, o in enumerate(opts) if o.lower().startswith(typed.lower())), None)
                 if match is not None:
                     picked = match
-            buf.append(chr(ch))
+        elif repaint and ch in (curses.KEY_RESIZE,):
+            repaint()
 
 
 def edit_field_curses(stdscr, config: dict, key: str) -> tuple[str, bool]:
@@ -702,36 +1035,90 @@ def _curses_loop(stdscr) -> int:
 
     config, status = load_state()
     if status == "corrupt":
-        _put(stdscr, 0, 0, f"config.json is CORRUPT — refusing to overwrite. Fix it by hand: {CONFIG_PATH}", "warn")
+        _put(
+            stdscr,
+            0,
+            0,
+            _fit(f"config.json is CORRUPT — refusing to overwrite. Fix it by hand: {CONFIG_PATH}", 120),
+            "warn",
+        )
         stdscr.refresh()
         stdscr.getch()  # any key dismisses
         return 1
-    _init_colors()
+    _init_colors(stdscr)
     stdscr.keypad(True)
+    section: str | None = None  # None = the section menu
     cursor = 0
     note = ""
-    stdscr_status = "ok"
+    loop_status = "ok"
+
+    def _rows() -> list[tuple[str, str]]:
+        """What the current level lists: sections, or that section's fields."""
+        visible = _visible_fields(config)
+        if section is None or not any(k == section for k, _t, _p in SECTIONS):
+            return [(title, purpose) for key, title, purpose in SECTIONS]
+        return section_items(visible, section)
+
+    def _repaint() -> None:
+        _draw(stdscr, config, None, cursor, note, loop_status, section)
+
+    with contextlib.suppress(Exception):
+        stdscr._suijin_repaint = _repaint
+
     while True:
-        items = _row_items(_visible_fields(config))
-        if not items:
-            return 0
-        cursor = max(0, min(cursor, len(items) - 1))
-        _draw(stdscr, config, items, cursor, note, stdscr_status)
-        note, stdscr_status = "", "ok"
+        if section is not None and not any(k == section for k, _t, _p in SECTIONS):
+            section = None
+            cursor = 0
+        rows = _rows()
+        if not rows:
+            section = None
+            cursor = 0
+            continue
+        cursor = max(0, min(cursor, len(rows) - 1))
+        _repaint()
+        note, loop_status = "", "ok"
         ch = stdscr.getch()
-        if ch in (ord("q"), ord("Q"), 27):  # q / Esc quit
+
+        if ch in (ord("q"), ord("Q"), 27) and not (section is not None and ch == 27):
+            # q saves and quits; Esc quits from the menu, goes BACK inside a section
+            _save_line_quiet(config, status)
             return 0
         if ch in (curses.KEY_UP, ord("k")):
-            cursor = (cursor - 1) % len(items)
-        elif ch in (curses.KEY_DOWN, ord("j")):
-            cursor = (cursor + 1) % len(items)
+            cursor = (cursor - 1) % len(rows)
+            continue
+        if ch in (curses.KEY_DOWN, ord("j")):
+            cursor = (cursor + 1) % len(rows)
+            continue
+        if section is None:
+            if ch in (10, 13, curses.KEY_ENTER, ord("e")):
+                section = SECTIONS[cursor][0]
+                cursor = 0
+            continue
+        # inside a section
+        if ch == 27:  # Esc: back to the menu, cursor on the section we left
+            leaving = section
+            section = None
+            cursor = next((i for i, (sk, _t, _p) in enumerate(SECTIONS) if sk == leaving), 0)
+            continue
+        key = rows[cursor][1] if section is not None and len(rows[cursor]) > 1 else None
+        if ch in (10, 13, curses.KEY_ENTER, ord("e")) and key:
+            note, _ = edit_field_curses(stdscr, config, key)
+        elif ch in (ord("m"), ord("M")) and key:
+            note = pick_model_curses(stdscr, config, key)
         elif ch in (ord("s"), ord("S")):
-            _save_line(stdscr, config, status)
-            note, stdscr_status = "saved", "ok"
-        elif ch in (10, 13, curses.KEY_ENTER):  # Enter edits
-            note, _ = edit_field_curses(stdscr, config, items[cursor][1])
-        elif ch in (ord("m"), ord("M")):
-            note = pick_model_curses(stdscr, config, items[cursor][1])
+            ok = _save_line(stdscr, config, status)
+            note, loop_status = ("saved — " + CONFIG_PATH, "ok") if ok else (f"save failed — {CONFIG_PATH}", "warn")
+
+
+def _save_line_quiet(config: dict, status: str) -> int:
+    """q saves and quits (the operator never loses an edit they made)."""
+    if status == "corrupt":
+        return 1
+    try:
+        save_config(config)
+    except Exception:  # noqa: BLE001
+        return 1
+    return 0
 
 
 def _save_line(stdscr, config: dict, status: str) -> int:
