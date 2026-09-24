@@ -480,6 +480,9 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
     from suijin.server.log_worker import LogWorker
 
     _bus = EventBus()
+    from suijin.server import clear_active_bus, register_active_bus
+
+    register_active_bus(_bus)
 
     def _emit(kind: str, **fields):
         _events.append(kind, **fields)
@@ -1770,6 +1773,10 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
             )
         with contextlib.suppress(Exception):
             ui.stop()
+        # the run is no longer live: external surfaces (gateway live stream)
+        # stop attaching new subscribers — final records already fanned out
+        with contextlib.suppress(Exception):
+            clear_active_bus(_bus)
         # disarm LAST: while finally-teardown runs, the backstops stay live
         # (a crash INSIDE teardown still saves). After this, the process
         # holds no engagement — menu-level exits save nothing (correct).

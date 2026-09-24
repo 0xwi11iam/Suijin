@@ -136,6 +136,25 @@ class TestRedTeamSmoke:
         _run_smoke()
         assert seen == [True]
 
+    def test_bus_registered_and_cleared(self, red_mocks, monkeypatch):
+        """The runner announces its live bus on start and clears it on
+        end — the gateway live-stream watches that registry."""
+        import suijin.server
+
+        registered = {}
+        real_reg = suijin.server.register_active_bus
+
+        def _reg(bus):
+            registered["bus"] = bus
+            real_reg(bus)
+
+        monkeypatch.setattr("suijin.server.register_active_bus", _reg)
+        _run_smoke()
+        assert isinstance(registered.get("bus"), suijin.server.EventBus)
+        from suijin.server import active_bus
+
+        assert active_bus() is None  # cleared by the finally
+
     def test_journal_written_and_replayable(self, red_mocks):
         """The run appends the durable journal (iteration + snapshot +
         complete) and replay() reconstructs a resume-able state."""
