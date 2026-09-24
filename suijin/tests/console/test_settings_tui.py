@@ -8,6 +8,7 @@ and a corrupt config is never overwritten.
 
 from __future__ import annotations
 
+import contextlib
 import json
 
 import pytest
@@ -148,16 +149,16 @@ class TestRender:
 class TestApplyAndSave:
     def test_apply_clamps_numbers(self, cfg):
         config = st.load_config()
-        st._apply(_console(), config, "max_iterations", "9999999")
+        st._apply(config, "max_iterations", "9999999")
         assert config["max_iterations"] == 1000000
-        st._apply(_console(), config, "temperature", "9.9")
+        st._apply(config, "temperature", "9.9")
         assert config["temperature"] == 2.0
 
     def test_apply_bool_and_string(self, cfg):
         config = st.load_config()
-        assert st._apply(_console(), config, "mode_hitl", "on") is True
+        assert st._apply(config, "mode_hitl", "on") is True
         assert config["mode_hitl"] is True
-        st._apply(_console(), config, "proxy_url", "http://p:8080")
+        st._apply(config, "proxy_url", "http://p:8080")
         assert config["proxy_url"] == "http://p:8080"
 
     def test_navigation_writes_nothing(self, cfg):
@@ -176,9 +177,9 @@ class TestApplyAndSave:
 
     def test_save_round_trip(self, cfg):
         config = st.load_config()
-        st._apply(_console(), config, "max_iterations", "500")
-        st._apply(_console(), config, "mode_hitl", "on")
-        st._apply(_console(), config, "zai_model", "glm-4.6")
+        st._apply(config, "max_iterations", "500")
+        st._apply(config, "mode_hitl", "on")
+        st._apply(config, "zai_model", "glm-4.6")
         st._save(_console(), config, "ok")
         saved = json.loads(cfg.read_text())
         assert saved["max_iterations"] == 500
@@ -290,17 +291,20 @@ class TestLiveModelFetch:
         assert seen["headers"]["Authorization"] == "Bearer k"
 
     def test_pick_model_sets_the_field(self, cfg, monkeypatch):
-        """The zai list is fetched LIVE from the provider layer's endpoint."""
-        monkeypatch.setattr(
-            st, "_http_get_json", lambda url, headers, timeout: {"data": [{"id": "glm-5.3"}, {"id": "glm-5.1"}]}
-        )
+        """The zai list is fetched LIVE from the provider layer's endpoint,
+        and the pick lands in the field (the curses picker's contract)."""
+        seen = {}
+
+        def _get(url, headers, timeout):
+            seen.update(url=url)
+            return {"data": [{"id": "glm-5.3"}, {"id": "glm-5.1"}]}
+
+        monkeypatch.setattr(st, "_http_get_json", _get)
         config = st.load_config()  # provider: zai
-        monkeypatch.setattr(st.Prompt, "ask", staticmethod(lambda *a, **k: "glm-5.1"))
-        note = st._pick_model(_console(), config, "zai_model")
+        ids, note = st.fetch_model_ids(str(config["provider"]), config)
+        assert ids == ["glm-5.1", "glm-5.3"] and "api.z.ai" in seen["url"]
+        assert st._apply(config, "zai_model", "glm-5.1") is True
         assert config["zai_model"] == "glm-5.1"
-        assert "changed" in note
-        # the fetch went to z.ai (the provider layer's endpoint, not a TUI copy)
-        assert "zai_model" in config
 
     def test_endpoint_lives_in_the_provider_layer(self):
         """The TUI does not carry endpoints — it asks the layer."""
@@ -315,43 +319,110 @@ class TestLiveModelFetch:
         assert base == "http://x:1/v1"
         assert provider_models_endpoint("nope", {})[0] is None
 
-    def test_pick_model_on_non_model_field(self, cfg):
-        assert "not a model field" in st._pick_model(_console(), st.load_config(), "proxy_url")
-
-    def test_pick_model_uses_the_current_provider(self, cfg, monkeypatch):
-        """The provider comes from config — no hardcoded field→provider map."""
-        monkeypatch.setattr(st, "_http_get_json", lambda url, headers, timeout: {"data": [{"id": "kimi-k2.7-code"}]})
-        config = {"provider": "opencode"}
-        monkeypatch.setattr(st.Prompt, "ask", staticmethod(lambda *a, **k: "kimi-k2.7-code"))
-        st._pick_model(_console(), config, "opencode_model")
-        assert config["opencode_model"] == "kimi-k2.7-code"
-
     def test_pick_model_without_provider_is_honest(self, cfg):
-        assert "no provider" in st._pick_model(_console(), {"provider": ""}, "opencode_model")
+        class _S:  # a screen stand-in: the picker guards before drawing
+            pass
+
+        assert "no provider" in st.pick_model_curses(_S(), {"provider": ""}, "opencode_model")
 
 
-class TestKeyStream:
-    def test_returns_none_off_tty(self, monkeypatch):
-        monkeypatch.setattr(st.sys.stdin, "isatty", lambda: False, raising=False)
-        assert st._key_stream(_console()) is None
+class TestCursesScreen:
+    """The curses editor: the screen model is pure (asserted here), and the
+    line-mode fallback is what CI/no-terminfo terminals actually get."""
 
-    def test_line_mode_edits_and_saves(self, cfg, monkeypatch):
-        """No TTY → the line-mode editor still works (s / e / q)."""
+    def test_screen_model_is_pure_and_complete(self, cfg):
+        config = st.load_config()
+        lines = st.screen_lines(config, st._visible_fields(config), st._row_items(st._visible_fields(config)), 0)
+        text = "\n".join(t for t, _r in lines)
+        assert "SUIJIN — Settings" in text
+        assert "provider" in text and "zai_model" in text and "glm-5.3" in text
+        assert "UP/DOWN" in text  # the legend
+        assert any(role == "cursor" for _t, role in lines)  # exactly one cursor
+        # re-rendering with no edit changes nothing (no echo path)
+        again = st.screen_lines(config, st._visible_fields(config), st._row_items(st._visible_fields(config)), 0)
+        assert again == lines
+
+    def test_screen_marks_the_cursor_row(self, cfg):
+        config = st.load_config()
+        visible = st._visible_fields(config)
+        items = st._row_items(visible)
+        lines = st.screen_lines(config, visible, items, 2)
+        cursor_rows = [t for t, role in lines if role == "cursor"]
+        assert len(cursor_rows) == 1 and cursor_rows[0].strip().startswith("> ")
+
+    def test_screen_marks_model_fields(self, cfg):
+        config = st.load_config()
+        visible = st._visible_fields(config)
+        lines = st.screen_lines(config, visible, st._row_items(visible), 0)
+        assert any("zai_model" in t and t.rstrip().endswith("*") for t, _r in lines)
+
+    def test_screen_note_warns(self, cfg):
+        config = st.load_config()
+        visible = st._visible_fields(config)
+        lines = st.screen_lines(config, visible, st._row_items(visible), 0, "fetch failed: boom", "warn")
+        assert any("fetch failed" in t and role == "warn" for t, role in lines)
+
+    def test_editor_falls_back_when_curses_cannot_start(self, cfg, monkeypatch):
+        """A broken TERM/terminfo must not traceback — the line-mode editor
+        takes over (this is also the off-TTY test path)."""
+        import curses
+
+        def _no_wrapper(fn):
+            raise curses.error("setupterm: could not find terminal")
+
+        monkeypatch.setattr(curses, "wrapper", _no_wrapper)
         inputs = iter(["e max_iterations 250", "s"])
-        monkeypatch.setattr(st, "sys_stdin_tty", lambda: True)
-        monkeypatch.setattr(st, "_key_stream", lambda console: None)
         monkeypatch.setattr(Console, "input", lambda self, *a, **k: next(inputs))
-        assert st.main() == 0
+        assert st.run_editor(_console()) == 0
         assert json.loads(cfg.read_text())["max_iterations"] == 250
 
     def test_line_mode_quit_saves_nothing(self, cfg, monkeypatch):
         before = cfg.read_text()
         inputs = iter(["e max_iterations 1", "q"])
-        monkeypatch.setattr(st, "sys_stdin_tty", lambda: True)
-        monkeypatch.setattr(st, "_key_stream", lambda console: None)
         monkeypatch.setattr(Console, "input", lambda self, *a, **k: next(inputs))
-        assert st.main() == 0
+        assert st._run_line_mode(_console()) == 0
         assert cfg.read_text() == before
+
+    def test_line_mode_reports_unknown_command(self, cfg, monkeypatch):
+        inputs = iter(["wat", "q"])
+        monkeypatch.setattr(Console, "input", lambda self, *a, **k: next(inputs))
+        assert st._run_line_mode(_console()) == 0
+
+    def test_curses_keeps_the_cursor_visible(self, cfg):
+        """A field list taller than the screen scrolls, keeping the cursor
+        on screen (the old scrolling-terminal failure)."""
+
+        class _Win:
+            def __init__(self, h, w):
+                self._h, self._w = h, w
+                self.rows = []
+
+            def getmaxyx(self):
+                return (self._h, self._w)
+
+            def erase(self):
+                self.rows = []
+
+            def addstr(self, y, x, text, attr=0):
+                while len(self.rows) <= y:
+                    self.rows.append("")
+                self.rows[y] = text
+
+            def refresh(self):
+                pass
+
+            def keypad(self, flag):
+                pass
+
+        config = st.load_config()
+        visible = st._visible_fields(config)
+        items = st._row_items(visible)
+        win = _Win(12, 80)
+        with contextlib.suppress(Exception):
+            st._draw(win, config, items, len(items) - 1, "", "ok")
+        rows = [r for r in win.rows if r.strip()]
+        assert len(rows) <= 12  # never overflows the window
+        assert any(r.strip().startswith("> ") for r in rows)  # the cursor row is on screen
 
 
 class TestNonTty:

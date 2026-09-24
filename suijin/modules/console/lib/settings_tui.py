@@ -31,7 +31,6 @@ from collections import OrderedDict
 from pathlib import Path
 
 from rich.console import Console
-from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
@@ -379,43 +378,6 @@ def fetch_model_ids(provider: str, config: dict | None = None) -> tuple[list[str
 # ── the Rich editor ─────────────────────────────────────────────────────
 
 
-def _key_stream(console: Console):
-    """A single-key reader over the TTY (j/k + arrows). Falls back to line
-    mode off-POSIX / when cbreak is unavailable. The terminal is always
-    restored — a crash here must never leave the shell without echo."""
-    try:
-        import termios
-        import tty
-    except ImportError:  # pragma: no cover — Windows
-        return None
-    try:
-        fd = sys.stdin.fileno()
-        if not os.isatty(fd):
-            return None
-    except Exception:  # noqa: BLE001
-        return None
-
-    def _read() -> str:
-        try:
-            old = termios.tcgetattr(fd)
-        except Exception:  # noqa: BLE001
-            return ""
-        try:
-            tty.setcbreak(fd)  # ISIG stays ON: Ctrl+C still signals
-            ch = sys.stdin.read(1)
-            if ch == "\x1b":  # escape sequence: arrows
-                nxt = sys.stdin.read(2)
-                return {"[A": "up", "[B": "down", "[C": "right", "[D": "left"}.get(nxt, "esc")
-            return {"\r": "enter", "\n": "enter"}.get(ch, ch)
-        except Exception:  # noqa: BLE001
-            return ""
-        finally:
-            with contextlib.suppress(Exception):
-                termios.tcsetattr(fd, termios.TCSADRAIN, old)
-
-    return _read
-
-
 def _row_items(visible: "OrderedDict[str, tuple]"):
     """[(group, key)] in display order, honouring _GROUPS then leftovers.
     The Provider group also absorbs every model field (including the
@@ -437,7 +399,52 @@ def _row_items(visible: "OrderedDict[str, tuple]"):
     return items
 
 
+def screen_lines(
+    config: dict, visible, items, cursor: int, note: str = "", status: str = "ok"
+) -> list[tuple[str, str]]:
+    """The whole screen as [(text, role)] — a PURE function of state, so it
+    can be asserted without a terminal and drawn by any backend.
+
+    roles: title | head | cursor | row | group | status | legend | warn
+    """
+    lines: list[tuple[str, str]] = [("SUIJIN — Settings", "title")]
+    lines.append((f"config: {CONFIG_PATH}", "head"))
+    lines.append(("", "head"))
+    width = max((len(k) for _g, k in items), default=10)
+    for idx, (group, key) in enumerate(items):
+        if idx == 0 or group != items[idx - 1][0]:
+            lines.append((f"-- {group} --", "group"))
+        marker = "> " if idx == cursor else "  "
+        value = _fmt_plain(key, config.get(key, ""))
+        suffix = " *" if is_model_field(key) else ""
+        text = f"{marker}{key.ljust(width)}  {value}{suffix}"
+        lines.append((text, "cursor" if idx == cursor else "row"))
+    lines.append(("", "status"))
+    note_text = note or visible_provider_note(config)
+    lines.append((note_text[:200], "warn" if status == "warn" else "status"))
+    lines.append(
+        (
+            "UP/DOWN or j/k move | Enter edit | * = fetch live model ids (m) | s save | q quit | ^C cancels a prompt",
+            "legend",
+        )
+    )
+    return lines
+
+
+def _fmt_plain(key: str, value) -> str:
+    """Render one value for the curses screen (no markup)."""
+    fdef = ALL_FIELDS.get(key, ("string",))
+    if fdef[0] == "bool":
+        return "on" if value else "off"
+    if value is None or value == "":
+        return "(unset)"
+    return str(value)
+
+
 def _render(console: Console, config: dict, visible, items, cursor: int, note: str = "") -> None:
+    """Non-curses renderer (CI, piped output, and the `--dump` style paths).
+    The interactive editor uses the curses screen instead — reprinting a
+    table per keystroke scrolls the terminal away."""
     table = Table(
         title="SUIJIN — Settings",
         title_style="bold white",
@@ -479,57 +486,199 @@ def visible_provider_note(config: dict) -> str:
     return f"{provider} — model source unknown"
 
 
-def _edit_field(console: Console, config: dict, key: str) -> tuple[str, bool]:
-    """Prompt for one field, validating + clamping. Returns (note, apply?)."""
+# ── the curses editor ───────────────────────────────────────────────────
+#
+# The screen is redrawn IN PLACE (no scroll spam), a status line carries
+# every outcome, and all editing happens on one input line at the bottom.
+# The screen model above is pure, so the drawing here is thin and the
+# whole thing is testable without a terminal.
+
+_ROLE_ATTRS = {
+    "title": ("bold",),
+    "head": ("reverse",),
+    "group": ("bold",),
+    "cursor": ("reverse",),
+    "row": (),
+    "status": ("reverse",),
+    "warn": ("bold",),
+    "legend": ("dim",),
+}
+
+
+def _init_colors() -> None:
+    import curses
+
+    if not sys.stdout.isatty():
+        return
+    with contextlib.suppress(Exception):
+        curses.start_color()
+        curses.use_default_colors()
+        for i, _role in enumerate(("title", "head", "group", "cursor", "row", "status", "warn", "legend"), start=1):
+            curses.init_pair(i, -1, -1)
+
+
+def _put(stdscr, y: int, x: int, text: str, role: str) -> None:
+    import curses
+
+    with contextlib.suppress(curses.error):  # bottom-right cell — harmless
+        stdscr.addstr(y, x, text, _curses_attr(role))
+
+
+def _curses_attr(role: str) -> int:
+    import curses
+
+    attr = 0
+    for name in _ROLE_ATTRS.get(role, ()):
+        attr |= getattr(curses, f"A_{name.upper()}", 0)
+    return attr
+
+
+def _draw(stdscr, config: dict, items, cursor: int, note: str, status: str) -> None:
+    """One full repaint, in place."""
+    stdscr.erase()
+    h, w = stdscr.getmaxyx()
+    lines = screen_lines(config, _visible_fields(config), items, cursor, note, status)
+    # keep the tail visible when the field list is taller than the screen
+    body = [ln for ln in lines if ln[1] not in ("legend", "status", "warn")]
+    footer = [ln for ln in lines if ln[1] in ("legend", "status", "warn")]
+    room = max(1, h - len(footer) - 1)
+    if len(body) > room:
+        # scroll so the cursor stays on screen
+        cursor_line = next((i for i, (_t, role) in enumerate(body) if role == "cursor"), 0)
+        top = max(0, min(cursor_line - room // 2, len(body) - room))
+        body = body[top : top + room]
+    for y, (text, role) in enumerate(body):
+        _put(stdscr, y, 0, text[: w - 1], role)
+    for i, (text, role) in enumerate(footer):
+        _put(stdscr, min(h - len(footer) + i, h - 1), 0, text[: w - 1], role)
+    stdscr.refresh()
+
+
+def _prompt(stdscr, label: str, default: str = "", choices: list[str] | None = None) -> str | None:
+    """A one-line editor at the bottom. Returns None when cancelled.
+
+    With `choices` it is a scrolling picker (UP/DOWN + Enter, or type to
+    filter by first letters); without, free text. Both are the same
+    screen — the operator's eyes never leave the terminal."""
+    import curses
+
+    buf = list(default or "")
+    picked = 0
+    h, w = stdscr.getmaxyx()
+    row = h - 2
+    stdscr.keypad(True)
+    while True:
+        opts = choices or []
+        if opts:
+            view = opts[max(0, picked - 1) : max(0, picked - 1) + max(1, h - 5)]
+            lines = [f"  {('>' if opts[picked] == o and opts.index(o) == picked else ' ')} {o}" for o in view]
+            y = row - len(lines) - 1
+            for line in lines:
+                _put(stdscr, max(0, y), 0, line[: w - 1], "row")
+                y += 1
+            text = f"{label}: {''.join(buf)}"
+        else:
+            text = f"{label}: {''.join(buf)}"
+        _put(stdscr, row, 0, text[: w - 1], "head")
+        stdscr.refresh()
+        ch = stdscr.getch()
+        if ch in (curses.KEY_ENTER, 10, 13):
+            value = "".join(buf).strip()
+            if choices and not value:
+                return opts[picked]
+            return value or None
+        if ch in (27, curses.KEY_F1):  # Esc cancels
+            return None
+        if ch in (curses.KEY_BACKSPACE, 127, 8):
+            if buf:
+                buf.pop()
+        elif choices and ch in (curses.KEY_UP, ord("k")):
+            picked = max(0, picked - 1)
+        elif choices and ch in (curses.KEY_DOWN, ord("j")):
+            picked = min(len(choices) - 1, picked + 1)
+        elif 32 <= ch < 127:
+            if choices:
+                # typing jumps to the first option starting with those letters
+                typed = "".join(buf)
+                match = next((i for i, o in enumerate(choices) if o.lower().startswith(typed.lower())), None)
+                if match is not None:
+                    picked = match
+            buf.append(chr(ch))
+
+
+def edit_field_curses(stdscr, config: dict, key: str) -> tuple[str, bool]:
+    """Edit one field on the curses screen. Returns (note, changed)."""
     fdef = ALL_FIELDS.get(key, ("string",))
     kind = fdef[0]
-    current = config.get(key, "")
+    current = str(config.get(key, "") or "")
     try:
         if kind == "bool":
-            raw = Prompt.ask(
-                f"{key} (on/off)", console=console, default="on" if current else "off", choices=["on", "off"]
-            )
-            return (f"{key} = {raw}", True) if raw else ("", False)
+            raw = _prompt(stdscr, f"{key} (on/off)", default="off" if current in ("", "False") else "on")
+            if raw is None:
+                return "", False
+            return _commit(config, key, raw, f"{key} = {raw}")
         if kind == "provider":
-            # dynamic: registry (50 sources) + bespoke + custom:<name>
             choices = provider_choices(config)
-            if current not in (None, "") and str(current) not in choices:
-                choices = [str(current)] + choices
-            raw = Prompt.ask(
-                f"{key} ({len(choices)} available)", console=console, default=str(current or ""), choices=choices
-            )
-            return (f"{key} = {raw}", True) if raw else ("", False)
+            if current and current not in choices:
+                choices = [current] + choices
+            raw = _prompt(stdscr, f"provider ({len(choices)})", default=current, choices=choices)
+            if raw is None:
+                return "", False
+            return _commit(config, key, raw, f"{key} = {raw}")
         if kind == "choice":
             choices = list(fdef[1] or [])
-            # a value OUTSIDE the static list is kept and offered first
-            if current not in (None, "") and str(current) not in choices:
-                choices = [str(current)] + choices
-            raw = Prompt.ask(key, console=console, default=str(current or ""), choices=choices)
-            return (f"{key} = {raw}", True) if raw else ("", False)
+            if current and current not in choices:
+                choices = [current] + choices
+            raw = _prompt(stdscr, key, default=current, choices=choices)
+            if raw is None:
+                return "", False
+            return _commit(config, key, raw, f"{key} = {raw}")
         if kind == "model":
-            # freeform — the live list is one keypress away (m)
             hint = _default_model_hint(str(config.get("provider") or ""))
-            label = f"{key} [dim](m = fetch live ids{f'; default {hint}' if hint else ''})[/dim]"
-            raw = Prompt.ask(label, console=console, default=str(current or hint or ""))
-            return (f"{key} = {raw}", True) if raw else ("", False)
-        raw = Prompt.ask(f"{key} [{_fmt(key, current)}]", console=console, default=str(current or ""))
-        if raw == "" or raw is None:
-            return ("", False)
-        if kind == "int":
-            lo, hi = fdef[1]
-            return f"{key} = {max(lo, min(hi, int(raw)))}", True
-        if kind == "float":
-            lo, hi = fdef[1]
-            return f"{key} = {max(lo, min(hi, float(raw)))}", True
-        return f"{key} = {raw}", True
+            label = f"{key} (m=fetch live ids{'; default ' + hint if hint else ''})"
+            raw = _prompt(stdscr, label, default=current or hint)
+            if raw is None:
+                return "", False
+            return _commit(config, key, raw, f"{key} = {raw}")
+        raw = _prompt(stdscr, f"{key} [{_fmt_plain(key, current)}]", default=current)
+        if raw is None:
+            return "", False
+        return _commit(config, key, raw, f"{key} = {raw}")
     except (ValueError, TypeError):
         return f"{key}: value rejected — keeping the current one", False
-    except (EOFError, KeyboardInterrupt):
-        return "", False
 
 
-def _apply(console: Console, config: dict, key: str, raw: str) -> bool:
-    """Parse+clamp one raw value into config. True when it changed."""
+def _commit(config: dict, key: str, raw: str, note: str) -> tuple[str, bool]:
+    changed = _apply(config, key, raw)
+    return note + ("  (changed)" if changed else "  (unchanged)"), changed
+
+
+def pick_model_curses(stdscr, config: dict, key: str) -> str:
+    """Fetch the provider's LIVE model ids and pick one, on-screen."""
+    if not is_model_field(key):
+        return f"{key} is not a model field (Enter to type an id)"
+    provider = str(config.get("provider") or "")
+    if not provider:
+        return "no provider selected — set `provider` first"
+    ids, note = fetch_model_ids(provider, config)
+    if not ids:
+        return note
+    shown = ids[:MODEL_LIST_CAP]
+    current = str(config.get(key, "") or "")
+    if current and current not in shown:
+        shown = [current] + shown
+    raw = _prompt(stdscr, f"{provider} models ({len(ids)}) — Enter picks, Esc cancels", default="", choices=shown)
+    if raw is None:
+        return note
+    changed = _apply(config, key, raw)
+    return f"{key} = {raw}" + ("  (changed)" if changed else "  (unchanged)") + f" — {note}"
+
+
+def _apply(config: dict, key: str, raw: str) -> bool:
+    """Parse+clamp one raw value into config. True when it changed.
+
+    The ONLY writer in the editor: a value changes here or not at all, so
+    navigation can never touch config."""
     fdef = ALL_FIELDS.get(key, ("string",))
     kind = fdef[0]
     raw = str(raw).strip()
@@ -548,107 +697,116 @@ def _apply(console: Console, config: dict, key: str, raw: str) -> bool:
     return changed
 
 
-def _pick_model(console: Console, config: dict, key: str) -> str:
-    """Fetch the provider's LIVE model ids and pick one. Returns a note.
+def _curses_loop(stdscr) -> int:
+    import curses
 
-    The provider comes from the current config (not a hardcoded map), so a
-    registry provider added tomorrow is fetchable today."""
-    if not is_model_field(key):
-        return f"{key} is not a model field (press Enter to type an id)"
-    provider = str(config.get("provider") or "")
-    if not provider:
-        return "no provider selected — set `provider` first"
-    ids, note = fetch_model_ids(provider, config)
-    if not ids:
-        return note
-    shown = ids[:MODEL_LIST_CAP]
+    config, status = load_state()
+    if status == "corrupt":
+        _put(stdscr, 0, 0, f"config.json is CORRUPT — refusing to overwrite. Fix it by hand: {CONFIG_PATH}", "warn")
+        stdscr.refresh()
+        stdscr.getch()  # any key dismisses
+        return 1
+    _init_colors()
+    stdscr.keypad(True)
+    cursor = 0
+    note = ""
+    stdscr_status = "ok"
+    while True:
+        items = _row_items(_visible_fields(config))
+        if not items:
+            return 0
+        cursor = max(0, min(cursor, len(items) - 1))
+        _draw(stdscr, config, items, cursor, note, stdscr_status)
+        note, stdscr_status = "", "ok"
+        ch = stdscr.getch()
+        if ch in (ord("q"), ord("Q"), 27):  # q / Esc quit
+            return 0
+        if ch in (curses.KEY_UP, ord("k")):
+            cursor = (cursor - 1) % len(items)
+        elif ch in (curses.KEY_DOWN, ord("j")):
+            cursor = (cursor + 1) % len(items)
+        elif ch in (ord("s"), ord("S")):
+            _save_line(stdscr, config, status)
+            note, stdscr_status = "saved", "ok"
+        elif ch in (10, 13, curses.KEY_ENTER):  # Enter edits
+            note, _ = edit_field_curses(stdscr, config, items[cursor][1])
+        elif ch in (ord("m"), ord("M")):
+            note = pick_model_curses(stdscr, config, items[cursor][1])
+
+
+def _save_line(stdscr, config: dict, status: str) -> int:
+    """Save from the curses screen; the note line carries the outcome."""
+    if status == "corrupt":
+        return 1
     try:
-        raw = Prompt.ask(
-            f"{provider} model ids ({len(ids)}) — pick one, or type an id",
-            console=console,
-            default=str(config.get(key, "")),
-            choices=shown + ([str(config.get(key))] if config.get(key) not in shown else []),
-        )
-    except (EOFError, KeyboardInterrupt):
-        return note
-    if not raw:
-        return note
-    changed = _apply(console, config, key, raw)
-    return f"{key} = {raw}" + ("  [dim](changed)[/dim]" if changed else "  [dim](unchanged)[/dim]") + f" — {note}"
+        save_config(config)
+    except Exception:  # noqa: BLE001
+        return 1
+    return 0
 
 
 def run_editor(console: Console) -> int:
-    """The interactive loop. Owns stdin while it runs; always returns."""
+    """Launch the curses editor. Falls back to the Rich print path when
+    curses cannot start (a dumb terminal, a CI pty) — Settings always
+    opens, never tracebacks."""
+    import curses
+
+    try:
+        return int(curses.wrapper(_curses_loop) or 0)
+    except Exception:  # noqa: BLE001 — no TERM, no terminfo, a broken pty
+        # line-mode fallback (also the off-TTY test path)
+        return _run_line_mode(console)
+
+
+def _run_line_mode(console: Console) -> int:
+    """The no-curses fallback: a printed table + a command line. Used by CI
+    and by terminals curses can't drive."""
     config, status = load_state()
-    if status == "corrupt":
-        console.print(
-            Panel.fit(
-                f"config.json is CORRUPT — {CONFIG_PATH}\n"
-                "fix the JSON by hand (or move the file aside); Settings will not overwrite it.",
-                title=" SETTINGS ",
-                border_style="red",
-            )
-        )
-    console.print(Panel.fit(f"[bold white]{CONFIG_PATH}[/]", title=" SETTINGS ", border_style="#30363d"))
-    read_key = _key_stream(console)
-    items = _row_items(_visible_fields(config))
     cursor = 0
     note = ""
-    try:
-        while True:
-            visible = _visible_fields(config)
-            items = _row_items(visible)
-            cursor = max(0, min(cursor, len(items) - 1))
-            _render(console, config, visible, items, cursor, note)
-            note = ""
-            if not items:
-                return 0
-            if read_key is None:
-                # line mode: "n" next, "e <key> <value>" edit, "m <key>" models,
-                # "s" save, "q" quit
+    while True:
+        visible = _visible_fields(config)
+        items = _row_items(visible)
+        cursor = max(0, min(cursor, len(items) - 1))
+        _render(console, config, visible, items, cursor, note)
+        note = ""
+        try:
+            line = console.input("[dim]n next · e <field> <value> · m <field> · s save · q quit[/] ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return 0
+        low = line.lower()
+        if low in ("q", "quit", ""):
+            return 0
+        if low == "s":
+            return _save(console, config, status)
+        if low.startswith("e "):
+            parts = (line.split(" ", 2) + ["", ""])[:3]
+            try:
+                _apply(config, parts[1].strip(), parts[2])
+            except Exception as e:  # noqa: BLE001
+                note = f"{parts[1]}: {e}"
+        elif low.startswith("m "):
+            key = line.split(" ", 1)[1].strip()
+            ids, fetch_note = fetch_model_ids(str(config.get("provider") or ""), config)
+            if not ids:
+                note = fetch_note
+            else:
                 try:
-                    line = console.input("[dim]n / e <field> <value> / m <field> / s / q[/] ").strip()
+                    raw = Prompt.ask(
+                        f"{config.get('provider')} models ({len(ids)})", console=console, choices=ids[:MODEL_LIST_CAP]
+                    )
                 except (EOFError, KeyboardInterrupt):
-                    console.print("\n[dim]exit without saving[/dim]")
-                    return 0
-                low = line.lower()
-                if low in ("q", "quit", ""):
-                    console.print("[dim]exit without saving[/dim]")
-                    return 0
-                if low == "s":
-                    return _save(console, config, status)
-                if low.startswith("e "):
-                    _, key, raw = (line.split(" ", 2) + [""])[:3]
-                    try:
-                        _apply(console, config, key.strip(), raw)
-                    except Exception as e:  # noqa: BLE001
-                        note = f"{key}: {e}"
-                elif low.startswith("m "):
-                    note = _pick_model(console, config, line.split(" ", 1)[1].strip())
-                elif low == "n":
-                    cursor += 1
-                continue
-            key = read_key()
-            if key in ("q", "Q", "\x03"):
-                console.print("\n[dim]exit without saving[/dim]")
-                return 0
-            if key == "up" or key == "k":
-                cursor = (cursor - 1) % len(items)
-            elif key == "down" or key == "j":
-                cursor = (cursor + 1) % len(items)
-            elif key in ("s", "S"):
-                return _save(console, config, status)
-            elif key in ("enter", "e"):
-                field = items[cursor][1]
-                note, _ = _edit_field(console, config, field)
-            elif key in ("m", "M"):
-                note = _pick_model(console, config, items[cursor][1])
-    finally:
-        # the terminal is restored by the key stream itself; this is the
-        # last-resort guarantee for a crash inside the loop
-        with contextlib.suppress(Exception):
-            sys.stdout.write("\n")
-            sys.stdout.flush()
+                    raw = None
+                if raw:
+                    _apply(config, key, raw)
+                    note = f"{key} = {raw}  (changed) — {fetch_note}"
+        elif low == "n":
+            cursor += 1
+        else:
+            note = "unknown command — n / e <field> <value> / m <field> / s / q"
+        if low == "n" and items:
+            pass
+    return 0
 
 
 def _save(console: Console, config: dict, status: str) -> int:
