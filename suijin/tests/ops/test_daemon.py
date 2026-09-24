@@ -1023,3 +1023,314 @@ class TestConcurrencyAndRecovery:
         assert daemon.resolve_id("d_20260924") in (None, rid)
         assert all(r.get("id") for r in daemon._records())
         assert len(daemon._records()) == 1
+
+
+class TestFastChildKeepsItsVerdict:
+    """A run that FINISHES inside the --wait window is a success, not a
+    boot failure: the boot confirmation must never relabel it 'dead'
+    (it cost a real run its completion record)."""
+
+    def test_fast_completion_survives_boot_confirmation(self, home, monkeypatch):
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home))
+        stub = home / "stub"
+        stub.mkdir()
+        (stub / "sitecustomize.py").write_text(
+            "import sys\n"
+            f"sys.path.insert(0, {str(REPO)!r})\n"
+            "import suijin.modules.ops.lib.daemon as d\n"
+            "def _fake(config, objective, resume_ref=''):\n"
+            "    from suijin.modules.platform.lib.workspace import set_engagement\n"
+            "    set_engagement(objective)\n"
+            "    return {'completion_reason': 'objective_complete', 'current_iteration': 1}\n"
+            "d.run_engagement = _fake\n"
+        )
+        rec = daemon.start_daemon(
+            "fast finish",
+            environ={"SUIJIN_WORKSPACE": str(home), "PYTHONPATH": str(stub)},
+            confirm_seconds=10.0,
+        )
+        final = daemon._read_record(rec["id"]) or {}
+        assert final["status"] == "completed", final
+        assert final["exit_reason"] == "objective_complete"
+        assert final["iterations"] == 1
+
+    def test_dead_on_arrival_is_still_marked_dead(self, home, monkeypatch):
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home))
+        rec = daemon.start_daemon(
+            "dies at once",
+            environ={"SUIJIN_WORKSPACE": str(home)},
+            child_argv=[sys.executable, "-c", "raise SystemExit(2)"],
+            confirm_seconds=5.0,
+        )
+        assert rec["status"] == "dead"  # never a ghost 'running'
+
+
+class TestNoAdminRequired:
+    """The daemon must run as an ordinary user: no privilege changes, no
+    privileged ports, no writes outside the user's own workspace."""
+
+    _FORBIDDEN = {
+        "setuid",
+        "setgid",
+        "seteuid",
+        "setegid",
+        "setreuid",
+        "setregid",
+        "chown",
+        "chroot",
+        "mount",
+        "umount",
+        "pivot_root",
+        "unshare",
+    }
+
+    def test_no_privilege_calls_in_daemon(self):
+        import ast
+
+        tree = ast.parse((REPO / "suijin" / "server" / "ops" / "lib" / "daemon.py").read_text())
+        called = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                fn = node.func
+                name = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", "")
+                called.add(name)
+        assert not (called & self._FORBIDDEN), f"privileged calls: {called & self._FORBIDDEN}"
+
+    def test_no_sudo_in_launchers(self):
+        installer = (REPO / "install.sh").read_text()
+        assert "suijind" in installer
+        daemon_block = installer[installer.find("DAEMON_LAUNCHER") : installer.find('ok "daemon launcher')]
+        assert "sudo" not in daemon_block and "doas" not in daemon_block
+        # the launcher runs the SAME interpreter as suijin — no root, no service
+        assert "$VENV/bin/python" in daemon_block
+        assert "cli.py" in daemon_block
+
+    def test_spawn_is_a_plain_detached_child(self, home, monkeypatch):
+        """Detachment is start_new_session (a session, not a privilege)."""
+        seen = {}
+
+        class _P:
+            pid = 4321
+
+            def __init__(self, argv, **kw):
+                seen.update(argv=argv, kw=kw)
+
+        monkeypatch.setattr(daemon.subprocess, "Popen", _P)
+        monkeypatch.setattr(daemon, "actor_alive", lambda pid: True)
+        rec = daemon.start_daemon("no privilege", child_argv=[sys.executable, "-c", "pass"])
+        assert seen["kw"]["start_new_session"] is True
+        assert seen["kw"].get("user") is None and seen["kw"].get("group") is None
+        assert seen["kw"].get("env") is not None  # plain env inheritance
+        assert rec["pid"] == 4321
+
+    def test_ports_stay_closed(self):
+        """The daemon never binds a socket (attach is a journal reader)."""
+        source = (REPO / "suijin" / "server" / "ops" / "lib" / "daemon.py").read_text()
+        assert "socket" not in source
+        assert "bind(" not in source
+
+
+class TestSuijindVerb:
+    """`suijind` — the daemon by another name (a bare CLI verb, no root)."""
+
+    def test_verb_registered(self):
+        from suijin.modules.console.lib.cli import _KNOWN_VERBS, is_known_verb
+
+        assert "suijind" in _KNOWN_VERBS and is_known_verb("suijind")
+        assert "tui" in _KNOWN_VERBS and is_known_verb("tui")
+
+    def test_run_starts_and_attaches(self, home, monkeypatch, capsys):
+        from suijin.modules.console.lib import cli
+
+        seen = {}
+
+        def _fake_launch(objective, overrides=None, resume_ref="", attach=True, wait=0.0):
+            seen.update(objective=objective, overrides=overrides, resume_ref=resume_ref, attach=attach, wait=wait)
+            return 0
+
+        monkeypatch.setattr(cli._daemon_mod(), "launch_and_attach", _fake_launch)
+        args = type(
+            "A",
+            (),
+            {"objective": "suijind target", "set": ["provider=zai"], "resume": "ref", "attach": True, "wait": 2.0},
+        )()
+        assert cli.run_suijind_run(args) == 0
+        assert seen["objective"] == "suijind target"
+        assert seen["overrides"] == {"provider": "zai"}
+        assert seen["attach"] is True and seen["wait"] == 2.0
+
+    def test_run_no_attach_flag(self, home, monkeypatch):
+        from suijin.modules.console.lib import cli
+
+        seen = {}
+        monkeypatch.setattr(
+            cli._daemon_mod(),
+            "launch_and_attach",
+            lambda objective, **kw: seen.update(kw) or 0,
+        )
+        args = type("A", (), {"objective": "fire and forget", "set": [], "resume": "", "attach": False, "wait": 0.0})()
+        assert cli.run_suijind_run(args) == 0
+        assert seen["attach"] is False
+
+    def test_bare_suijind_non_tty_prints_usage(self, home, monkeypatch, capsys):
+        """No objective and no TTY (a script) → a clean usage line, not a hang."""
+        from suijin.modules.console.lib import cli
+
+        monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: False, raising=False)
+        assert cli.run_suijind(type("A", (), {})()) == 2
+        out = capsys.readouterr().out
+        assert "usage: suijind" in out
+
+    def test_ps_and_stop_route_to_daemon(self, home, monkeypatch, capsys):
+        from suijin.modules.console.lib import cli
+
+        monkeypatch.setattr(cli._daemon_mod(), "list_daemons", lambda: 0)
+        assert cli.run_ps_cmd(None) == 0
+        monkeypatch.setattr(cli._daemon_mod(), "stop_daemon", lambda ref, **kw: print(f"stopped {ref}") or 0)
+        assert cli.run_stop_cmd(type("A", (), {"id": "abc"})()) == 0
+        assert "stopped abc" in capsys.readouterr().out
+
+    def test_tui_verb_runs_in_process(self, home, monkeypatch):
+        """`suijin tui` = the classic in-process run (the opt-out)."""
+        from suijin.modules.console.lib import cli
+        from suijin.modules.redteam.lib import redteamer
+
+        seen = {}
+        monkeypatch.setattr(redteamer, "run_red_team", lambda config, obj: seen.update(obj=obj))
+        monkeypatch.setattr("suijin.modules.platform.lib.config_loader.load_config", lambda: {"provider": "zai"})
+        assert cli.run_tui_cmd(type("A", (), {"objective": "foreground obj"})()) == 0
+        assert seen["obj"] == "foreground obj"
+
+    def test_tui_non_tty_without_objective_is_usage(self, monkeypatch, capsys):
+        from suijin.modules.console.lib import cli
+
+        monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: False, raising=False)
+        assert cli.run_tui_cmd(type("A", (), {"objective": ""})()) == 2
+        assert "usage: suijin tui" in capsys.readouterr().out
+
+
+class TestLaunchModeDefault:
+    """The console default: an engagement runs in the DAEMON so it
+    outlives the console. launch_mode: tui keeps the in-process TUI."""
+
+    def test_config_default_is_daemon(self):
+        from suijin.modules.platform.lib.config_loader import _default_config
+
+        assert _default_config()["launch_mode"] == "daemon"
+
+    def test_tui_menu_choice_runs_in_process(self, monkeypatch):
+        """Menu option 3/4 = 'this console' — the classic run, no daemon."""
+        from suijin.modules.redteam.lib import redteamer
+
+        seen = {}
+        answers = iter(["3", "foreground target"])  # menu choice, then objective
+        monkeypatch.setattr("builtins.input", lambda *a, **k: next(answers))
+        monkeypatch.setattr(redteamer, "load_config", lambda: {"launch_mode": "daemon"})
+        monkeypatch.setattr(redteamer, "load_env", lambda: None)
+        monkeypatch.setattr(redteamer, "discover_modules", lambda *a, **k: None)
+        monkeypatch.setattr("suijin.modules.loader.set_verbose", lambda *a, **k: None)
+        monkeypatch.setattr(redteamer, "run_red_team", lambda config, obj: seen.update(obj=obj))
+        monkeypatch.setattr(redteamer.console, "print", lambda *a, **k: None)
+        redteamer.main()
+        assert seen["obj"] == "foreground target"
+
+    def test_menu_choice_one_starts_daemon(self, monkeypatch):
+        """The DEFAULT path: detached. The in-process runner is never called."""
+        from suijin.modules.ops.lib import daemon as dmod
+        from suijin.modules.redteam.lib import redteamer
+
+        started = {}
+        in_process = {}
+        answers = iter(["1", "detached target"])
+        monkeypatch.setattr("builtins.input", lambda *a, **k: next(answers))
+        monkeypatch.setattr(redteamer, "load_config", lambda: {"launch_mode": "daemon"})
+        monkeypatch.setattr(redteamer, "load_env", lambda: None)
+        monkeypatch.setattr(redteamer, "discover_modules", lambda *a, **k: None)
+        monkeypatch.setattr("suijin.modules.loader.set_verbose", lambda *a, **k: None)
+        monkeypatch.setattr(redteamer, "run_red_team", lambda config, obj: in_process.setdefault("called", obj))
+        monkeypatch.setattr(redteamer.console, "print", lambda *a, **k: None)
+        monkeypatch.setattr(dmod, "launch_and_attach", lambda obj, **kw: started.update(obj=obj) or 0)
+        redteamer.main()
+        assert started["obj"] == "detached target"
+        assert "called" not in in_process  # detached is the default
+
+    def test_launch_mode_tui_config_forces_in_process(self, monkeypatch):
+        """launch_mode: tui in config = old behavior, even from option 1."""
+        from suijin.modules.ops.lib import daemon as dmod
+        from suijin.modules.redteam.lib import redteamer
+
+        in_process = {}
+        answers = iter(["1", "tui configured"])
+        monkeypatch.setattr("builtins.input", lambda *a, **k: next(answers))
+        monkeypatch.setattr(redteamer, "load_config", lambda: {"launch_mode": "tui"})
+        monkeypatch.setattr(redteamer, "load_env", lambda: None)
+        monkeypatch.setattr(redteamer, "discover_modules", lambda *a, **k: None)
+        monkeypatch.setattr("suijin.modules.loader.set_verbose", lambda *a, **k: None)
+        monkeypatch.setattr(redteamer, "run_red_team", lambda config, obj: in_process.update(obj=obj))
+        monkeypatch.setattr(redteamer.console, "print", lambda *a, **k: None)
+        monkeypatch.setattr(dmod, "launch_and_attach", lambda obj, **kw: pytest.fail("must not daemon"))
+        redteamer.main()
+        assert in_process["obj"] == "tui configured"
+
+
+class TestAttachConsoleCommands:
+    """The attached console reads the journal — no in-process graph needed."""
+
+    def _rec(self, home):
+        ev = home / "eng" / "events.jsonl"
+        ev.parent.mkdir(parents=True, exist_ok=True)
+        ev.write_text(
+            "\n".join(
+                json.dumps(r)
+                for r in (
+                    {"kind": "session.start", "objective": "obj"},
+                    {"kind": "usage", "input_tokens": 5000, "output_tokens": 1200, "cost_usd": 0.42},
+                    {
+                        "kind": "state.snapshot",
+                        "current_phase": "post_exploit",
+                        "current_iteration": 7,
+                        "todo_list": [{"task": "verify IDOR"}],
+                        "findings": [{"title": "IDOR", "severity": "high"}],
+                        "pending_questions": [{"question": "authorized for DoS?"}],
+                    },
+                )
+            )
+            + "\n"
+        )
+        return {"events": str(ev), "engagement": str(home / "eng"), "state_dir": str(home / "eng" / "state")}
+
+    def test_state_command(self, home, capsys):
+        daemon._cmd_state(self._rec(home))
+        out = capsys.readouterr().out
+        assert "post_exploit" in out and "iteration: 7" in out
+        assert "verify IDOR" in out and "authorized for DoS?" in out
+
+    def test_findings_command(self, home, capsys):
+        daemon._cmd_findings(self._rec(home))
+        assert "[high] IDOR" in capsys.readouterr().out
+
+    def test_cost_command_sums_usage(self, home, capsys):
+        daemon._cmd_cost(self._rec(home))
+        out = capsys.readouterr().out
+        assert "5000" in out and "1200" in out and "$0.4200" in out
+
+    def test_note_command_writes_into_the_engagement(self, home, capsys):
+        rec = self._rec(home)
+        daemon._cmd_note(rec, "client confirmed the finding")
+        notes = list((home / "eng" / ".notes").glob("operator_*.md"))
+        assert len(notes) == 1 and "client confirmed" in notes[0].read_text()
+
+    def test_commands_without_engagement_are_honest(self, home, capsys):
+        daemon._cmd_state({"events": ""})
+        daemon._cmd_findings({"events": ""})
+        daemon._cmd_cost({"events": ""})
+        daemon._cmd_note({}, "x")
+        out = capsys.readouterr().out
+        assert "no state snapshot yet" in out and "no findings" in out
+        assert "no note written" in out
+
+    def test_help_names_the_foreground_limitations(self):
+        assert "suijin tui" in daemon.ATTACH_HELP
+        assert "/compact" in daemon.ATTACH_HELP
+        for verb in ("/state", "/findings", "/cost", "/note", "/stop", "/detach"):
+            assert verb in daemon.ATTACH_HELP

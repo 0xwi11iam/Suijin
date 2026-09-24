@@ -1688,6 +1688,81 @@ def run_ps_cmd(args) -> int:
     return _daemon_mod().list_daemons()
 
 
+def run_tui_cmd(args) -> int:
+    """`suijin tui "<objective>"` — the classic IN-PROCESS engagement: the
+    live graph in this terminal (in-process commands work, and closing the
+    console kills the run). The daemon is the default; this is the opt-out.
+    """
+    from suijin.modules.platform.lib.config_loader import load_config
+    from suijin.modules.redteam.lib.redteamer import run_red_team
+
+    config = load_config()
+    objective = str(getattr(args, "objective", "") or "").strip()
+    if not objective:
+        if not sys.stdin.isatty():
+            print('usage: suijin tui "<objective>"')
+            return 2
+        try:
+            objective = input("\nTarget / Objective  ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("cancelled")
+            return 130
+        if not objective:
+            return 2
+    run_red_team(config, objective)
+    return 0
+
+
+def run_suijind_run(args) -> int:
+    """`suijind run "<objective>"` — start a detached engagement and follow
+    it. The daemon is a plain child process: no root, no service, no ports."""
+    _d = _daemon_mod()
+    objective = str(getattr(args, "objective", "") or "").strip()
+    if not objective:
+        # bare `suijind` (no verb): ask for the objective, then run it
+        if not sys.stdin.isatty():
+            print('usage: suijind "<objective>"   (or: suijind run "<objective>")')
+            print("       suijind ps | attach <id> | stop <id>")
+            return 2
+        print()
+        try:
+            objective = input("Target / Objective  ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("cancelled")
+            return 130
+        if not objective:
+            return 2
+        return _d.launch_and_attach(objective, resume_ref="", overrides={}, attach=True)
+    overrides = {}
+    for kv in getattr(args, "set", []) or []:
+        if "=" in str(kv):
+            k, v = str(kv).split("=", 1)
+            if k.strip():
+                overrides[k.strip()] = _daemon_mod().coerce_setting(v)
+    return _d.launch_and_attach(
+        objective,
+        resume_ref=str(getattr(args, "resume", "") or "").strip(),
+        overrides=overrides,
+        attach=bool(getattr(args, "attach", True)),
+        wait=float(getattr(args, "wait", 0.0) or 0.0),
+    )
+
+
+def run_suijind(args) -> int:
+    """`suijind` with no verb — the same as `suijind run` (asks for the
+    objective). Kept separate so the group always has a working default."""
+    args = _Namespace_with(**{"objective": "", "attach": True, "set": [], "resume": "", "wait": 0.0})
+    return run_suijind_run(args)
+
+
+class _Namespace_with:
+    """Tiny arg shim: the bare `suijind` path builds the same namespace the
+    `suijind run` parser would, so one code path serves both."""
+
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
 def run_daemon_child_cmd(args) -> int:
     """Internal: the DETACHED child entry (spawned by suijin daemon start)."""
     return _daemon_mod().run_daemon_child(getattr(args, "id", "") or "")
@@ -1955,9 +2030,11 @@ _KNOWN_VERBS = frozenset(
         "config",
         "daemon",
         "daemon-run",
+        "suijind",
         "ps",
         "attach",
         "stop",
+        "tui",
     }
 )
 
@@ -2076,8 +2153,40 @@ def main(argv=None):
     daemon_start.set_defaults(func=run_daemon_start)
     daemon_sub.add_parser("list", help="same as `suijin ps`").set_defaults(func=run_ps_cmd)
 
+    # suijind — the daemon by another name. `suijind "<objective>"` starts a
+    # detached run and follows it; control verbs mirror `suijin ps/attach/stop`.
+    # No root, no service, no ports: a child process in your own session.
+    suijind = sub.add_parser("suijind", help="the daemon: run an engagement detached (no admin needed)")
+    suijind.prog = "suijind"  # the standalone launcher, not "suijin suijind"
+    suijind_sub = suijind.add_subparsers(dest="suijind_action")
+    suijind_run = suijind_sub.add_parser("run", help="start a detached engagement and follow it")
+    suijind_run.add_argument("objective", nargs="?", default="", help="the engagement objective")
+    suijind_run.add_argument("--resume", default="", help="resume a .sje bundle or journal (engagement slug/path)")
+    suijind_run.add_argument("--set", action="append", default=[], help="config override (k=v; repeatable)")
+    suijind_run.add_argument("--wait", type=float, default=0.0, help="seconds to wait for the child to boot")
+    suijind_run.add_argument(
+        "--no-attach", dest="attach", action="store_false", help="start it and return (do not follow)"
+    )
+    suijind_run.add_argument("--attach", dest="attach", action="store_true", help="follow the run (default)")
+    suijind_run.set_defaults(func=run_suijind_run, attach=True)
+    suijind_ps = suijind_sub.add_parser("ps", help="list daemon engagements, newest first")
+    suijind_ps.set_defaults(func=run_ps_cmd)
+    suijind_attach = suijind_sub.add_parser("attach", help="follow a running daemon engagement")
+    suijind_attach.add_argument("id", help="daemon id (or unique prefix / objective substring)")
+    suijind_attach.set_defaults(func=run_attach_cmd)
+    suijind_stop = suijind_sub.add_parser("stop", help="graceful stop of a daemon engagement (full save)")
+    suijind_stop.add_argument("id", help="daemon id (or unique prefix / objective substring)")
+    suijind_stop.set_defaults(func=run_stop_cmd)
+    suijind.set_defaults(func=run_suijind)
+
     ps_p = sub.add_parser("ps", help="list daemon (background) engagements, newest first")
     ps_p.set_defaults(func=run_ps_cmd)
+
+    tui_p = sub.add_parser(
+        "tui", help="run an engagement IN THIS CONSOLE (classic live TUI — the daemon is the default)"
+    )
+    tui_p.add_argument("objective", nargs="?", default="", help="the engagement objective (prompted when omitted)")
+    tui_p.set_defaults(func=run_tui_cmd)
 
     attach_p = sub.add_parser("attach", help="live-follow a daemon engagement (guidance + /stop)")
     attach_p.add_argument("id", help="daemon id (or unique prefix / objective substring)")
