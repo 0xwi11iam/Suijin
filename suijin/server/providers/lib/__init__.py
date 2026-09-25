@@ -679,6 +679,13 @@ def set_provider_key(provider, value: str) -> tuple[bool, str]:
     if not env_name:
         return False, f"{provider} has no API key (local/custom — nothing to store)"
     value = str(value or "").strip()
+    # A pasted key often carries the shell quoting that wrapped it in a
+    # terminal or a docs page. load_env() strips a matching pair of quotes
+    # when it reads, so normalize here too — otherwise what sits in .env is
+    # not what the provider will actually be handed, and the mismatch only
+    # shows up later as an inexplicable 401.
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        value = value[1:-1]
     if not value:
         return False, "no key given"
     with contextlib.suppress(Exception):

@@ -109,7 +109,7 @@ def pump(seconds):
             out.extend(chunk)
 
 
-def wait(probe, seconds=60):
+def wait(probe, seconds=90):
     end = time.time() + seconds
     while time.time() < end:
         if probe in ANSI.sub("", out.decode("utf-8", "replace")):
@@ -123,6 +123,9 @@ for label, probe, keys in (
     ("menu", "Select Operational", b"1\r"),
     ("objective menu", "Type manually", b"1\r"),
     ("objective prompt", "Objective", b"a stub target\r"),
+    # the TUI boots the whole module registry before the first token, which
+    # is far slower on a cold CI runner than on a dev machine — be generous
+    # rather than flaky
     ("model reply", "The Rich TUI is live", None),
 ):
     if not wait(probe):
@@ -168,7 +171,7 @@ def driven(tmp_path_factory):
         [sys.executable, str(driver), REPO, str(tmp), str(port), str(screen)],
         capture_output=True,
         text=True,
-        timeout=420,
+        timeout=900,
     )
     text = screen.read_text(encoding="utf-8") if screen.exists() else ""
     return text, tmp / "ws", proc.stdout.strip(), proc.stderr[-800:]

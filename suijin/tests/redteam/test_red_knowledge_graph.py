@@ -4,13 +4,20 @@ route to. All file I/O monkeypatched into tmp_path.
 """
 
 import json
-import os
 
 import pytest
 
 from suijin.modules.redteam.lib.intel import knowledge_graph as kg
 
-os.environ["SUIJIN_KG_BACKEND"] = "json"  # these tests pin JSON-backend semantics
+
+@pytest.fixture(autouse=True)
+def _json_kg_backend(monkeypatch):
+    """These tests pin JSON-backend semantics.
+
+    This was a module-scope os.environ assignment, i.e. collection-time
+    mutation that leaked into every later test in the session.
+    """
+    monkeypatch.setenv("SUIJIN_KG_BACKEND", "json")
 
 
 @pytest.fixture(autouse=True)
