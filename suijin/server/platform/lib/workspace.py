@@ -232,6 +232,12 @@ def profiles_root() -> Path:
     return _ensure(WORKSPACE_DIR / "profiles")
 
 
+def logs_dir() -> Path:
+    """Run-level logs: engagement.log, engage_crash.log. Not per-engagement
+    — these follow the workspace, not a run."""
+    return _ensure(WORKSPACE_DIR / "outputs" / "logs")
+
+
 def archive_engagement(reason: str = "ended") -> Path | None:
     """Move the engagement folder into archive/ (timestamped, immutable) —
     the .sje bundle inside state/ remains the resume artifact."""

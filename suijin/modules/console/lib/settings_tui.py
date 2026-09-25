@@ -147,8 +147,6 @@ ALL_FIELDS = OrderedDict(
         ("mode_deploy_subagent", ("bool",)),
         ("mode_audit_trail", ("bool",)),
         ("subagent_count", ("int", (1, 5))),
-        # ---- Launch mode ----
-        ("launch_mode", ("choice", ["daemon", "tui"])),
         # ---- Workspace & integrations ----
         ("metasploit_rpc_host", ("string",)),
         ("metasploit_rpc_port", ("int", (1, 65535))),
@@ -178,7 +176,6 @@ _GROUPS = [
             "context_window",
             "max_iterations",
             "librarian_interval",
-            "launch_mode",
         ],
     ),
     ("Cost guardrails", ["cost_alert_usd", "cost_budget_usd", "cost_hard_cap_usd"]),
@@ -463,7 +460,6 @@ FIELD_INFO = {
     "librarian_interval": ("Memory digest every", "how often observations are distilled", "limits"),
     "temperature": ("Creativity", "0 = strict and literal, 2 = loose", "limits"),
     "posture": ("Posture", "recon watches; assertive acts", "limits"),
-    "launch_mode": ("Launch", "daemon keeps running if this console closes; tui stays here", "limits"),
     # -- what it may do --
     "mode_hitl": ("Check with me first", "ask before irreversible actions", "conduct"),
     "mode_deploy_subagent": ("Hire subagents", "let the agent delegate in parallel", "conduct"),
@@ -541,8 +537,6 @@ def human_value(key: str, config: dict) -> str:
             return f"{float(raw):.2f}"
         except (TypeError, ValueError):
             return str(raw)
-    if key == "launch_mode":
-        return "daemon (survives this console)" if str(raw) == "daemon" else "this console only"
     if key == "posture":
         return "act on its own" if str(raw) == "assertive" else "watch and report"
     if key == "zai_endpoint":

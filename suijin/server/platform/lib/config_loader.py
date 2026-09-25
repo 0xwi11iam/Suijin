@@ -53,7 +53,6 @@ def _default_config() -> dict:
     return {
         "stealth": True,  # v5.1: quiet by default
         "executor_sandbox": True,  # v2 executor jail: OS write-deny for shells
-        "launch_mode": "daemon",  # "daemon" (detached; outlives the console) | "tui" (in-process)
         "provider": "deepseek",
         "expert_models": EXPERT_MODELS,
         "final_model_id": "deepseek-ai/DeepSeek-V4-Flash",
@@ -110,7 +109,6 @@ def load_config() -> dict:
         "zai_endpoint": ZAI_ENDPOINT,
         "max_iterations": MAX_ITERATIONS,
         "executor_sandbox": True,
-        "launch_mode": "daemon",
     }.items():
         config.setdefault(k, v)
     # Validate with Pydantic — catch typos at startup
