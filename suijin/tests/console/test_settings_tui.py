@@ -142,7 +142,7 @@ class TestFieldModel:
             assert st.ALL_FIELDS[key][0] == "model"
 
     def test_new_memory_fields_present(self):
-        for k in ("context_window", "librarian_interval", "launch_mode"):
+        for k in ("context_window", "librarian_interval"):
             assert k in st.ALL_FIELDS
 
     def test_no_external_tui_framework(self):

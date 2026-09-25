@@ -102,16 +102,10 @@ def main():
     except Exception:
         pass
     print("\n")
-    console.print(" [dim]Press [bold #58a6ff]Enter[/] to continue...", end="")
-    try:
-        input()
-    except KeyboardInterrupt:
-        # Ctrl+C at the welcome prompt: leave quietly, no traceback
-        console.print("\n[dim]cancelled[/dim]")
-        return
-    except EOFError:
-        return
 
+    # No keypress gate: the menu is right there. The banner and the
+    # availability notice are information, not a screen to dismiss —
+    # making someone press Enter before every launch was pure friction.
     while True:
         print(chr(27) + "[2J\033[H", end="")
         with contextlib.suppress(Exception):  # the dragon, every redraw of the selector
@@ -141,7 +135,11 @@ def main():
             else:
                 sys.exit(0)
         except (KeyboardInterrupt, EOFError):
-            sys.exit(0)
+            # Ctrl+C / Ctrl+D at the menu: leave quietly. Return, don't
+            # sys.exit — the console owns this frame and has nothing left
+            # to unwind.
+            console.print("\n[dim]cancelled[/dim]")
+            return
         except Exception as e:  # noqa: BLE001 — the selector is the primary
             # entrypoint: any mode crash gets ONE red panel, never a
             # traceback wall (Ctrl+D covered; corrupt state covered)
@@ -152,9 +150,9 @@ def main():
                 )
             )
             try:
-                from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+                from suijin.modules.platform.lib.workspace import logs_dir
 
-                d = WORKSPACE_DIR / "logs"
+                d = logs_dir()
                 d.mkdir(parents=True, exist_ok=True)
                 with (d / "selector_crash.log").open("a") as f:
                     import traceback as _tb

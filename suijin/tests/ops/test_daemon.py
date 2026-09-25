@@ -1209,62 +1209,58 @@ class TestSuijindVerb:
         assert "usage: suijin tui" in capsys.readouterr().out
 
 
-class TestLaunchModeDefault:
-    """The console default: an engagement runs in the DAEMON so it
-    outlives the console. launch_mode: tui keeps the in-process TUI."""
+class TestDefaultIsTheRichTUI:
+    """Bare `suijin` runs the FULL in-process Rich TUI — always.
 
-    def test_config_default_is_daemon(self):
+    There is no launch_mode, no menu row, and no default daemon: the
+    TUI is the thing that works, and it works by default. Detaching is
+    an explicit act (`suijind` / `suijin daemon start`), not a mode the
+    operator has to choose up front.
+    """
+
+    def test_no_launch_mode_setting_exists(self):
         from suijin.modules.platform.lib.config_loader import _default_config
 
-        assert _default_config()["launch_mode"] == "daemon"
+        assert "launch_mode" not in _default_config()
+        import suijin.modules.console.lib.settings_tui as st
 
-    def test_menu_is_unchanged_three_options(self):
-        """The objective menu stays EXACTLY as it was (1 type / 2 upload /
-        3 back) — the daemon default never rewrites the operator's menu."""
+        assert "launch_mode" not in st.ALL_FIELDS
+
+    def test_objective_menu_is_the_original_three(self):
+        """No mode rows in the menu — it is exactly what it always was."""
+        from pathlib import Path as _P
+
         from suijin.modules.redteam.lib import redteamer
 
-        source = Path(redteamer.__file__).read_text()
-        assert "Type manually" in source and "Upload file (.txt / .md / .rtf)" in source
-        assert "[bold white]3.[/] [dim]Back[/]" in source
-        assert "classic live TUI" not in source  # no extra menu rows added
+        src = _P(redteamer.__file__).read_text()
+        assert "Type manually" in src and "Upload file (.txt / .md / .rtf)" in src
+        assert "[bold white]3.[/] [dim]Back[/]" in src
+        assert "classic live TUI" not in src  # no extra rows
 
-    def test_menu_choice_one_starts_daemon(self, monkeypatch):
-        """The DEFAULT path: detached. The in-process runner is never called."""
+    def test_bare_launch_runs_in_process(self, monkeypatch):
+        """Typing an objective runs the TUI — the daemon is never started."""
         from suijin.modules.ops.lib import daemon as dmod
         from suijin.modules.redteam.lib import redteamer
 
-        started = {}
-        in_process = {}
-        answers = iter(["1", "detached target"])
+        ran = {}
+        answers = iter(["1", "a real target"])
         monkeypatch.setattr("builtins.input", lambda *a, **k: next(answers))
-        monkeypatch.setattr(redteamer, "load_config", lambda: {"launch_mode": "daemon"})
+        monkeypatch.setattr(redteamer, "load_config", lambda: {"provider": "zai"})
         monkeypatch.setattr(redteamer, "load_env", lambda: None)
         monkeypatch.setattr(redteamer, "discover_modules", lambda *a, **k: None)
         monkeypatch.setattr("suijin.modules.loader.set_verbose", lambda *a, **k: None)
-        monkeypatch.setattr(redteamer, "run_red_team", lambda config, obj: in_process.setdefault("called", obj))
-        monkeypatch.setattr(redteamer.console, "print", lambda *a, **k: None)
-        monkeypatch.setattr(dmod, "launch_and_attach", lambda obj, **kw: started.update(obj=obj) or 0)
-        redteamer.main()
-        assert started["obj"] == "detached target"
-        assert "called" not in in_process  # detached is the default
-
-    def test_launch_mode_tui_config_forces_in_process(self, monkeypatch):
-        """launch_mode: tui in config = old behavior, even from option 1."""
-        from suijin.modules.ops.lib import daemon as dmod
-        from suijin.modules.redteam.lib import redteamer
-
-        in_process = {}
-        answers = iter(["1", "tui configured"])
-        monkeypatch.setattr("builtins.input", lambda *a, **k: next(answers))
-        monkeypatch.setattr(redteamer, "load_config", lambda: {"launch_mode": "tui"})
-        monkeypatch.setattr(redteamer, "load_env", lambda: None)
-        monkeypatch.setattr(redteamer, "discover_modules", lambda *a, **k: None)
-        monkeypatch.setattr("suijin.modules.loader.set_verbose", lambda *a, **k: None)
-        monkeypatch.setattr(redteamer, "run_red_team", lambda config, obj: in_process.update(obj=obj))
+        monkeypatch.setattr(redteamer, "run_red_team", lambda config, obj: ran.update(obj=obj))
         monkeypatch.setattr(redteamer.console, "print", lambda *a, **k: None)
         monkeypatch.setattr(dmod, "launch_and_attach", lambda obj, **kw: pytest.fail("must not daemon"))
         redteamer.main()
-        assert in_process["obj"] == "tui configured"
+        assert ran["obj"] == "a real target"
+
+    def test_daemon_is_still_one_command_away(self):
+        """Detaching exists — it is just not the default."""
+        from suijin.modules.console.lib.cli import _KNOWN_VERBS
+
+        for verb in ("daemon", "suijind", "attach", "ps", "stop", "tui"):
+            assert verb in _KNOWN_VERBS, verb
 
 
 class TestAttachConsoleCommands:

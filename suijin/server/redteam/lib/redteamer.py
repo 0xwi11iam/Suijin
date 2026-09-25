@@ -1563,9 +1563,9 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                 with contextlib.suppress(Exception):
                     input()
             try:  # field crashes must be diagnosable after the fact
-                from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+                from suijin.modules.platform.lib.workspace import logs_dir
 
-                _d = WORKSPACE_DIR / "logs"
+                _d = logs_dir()
                 _d.mkdir(parents=True, exist_ok=True)
                 (_d / "engage_crash.log").open("a").write(
                     f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {objective[:80]}\n"
@@ -1887,18 +1887,29 @@ def run_red_team(config, objective, api_key=None, resume_state=None):
     except Exception as e:  # noqa: BLE001 — the TUI must show, not swallow
         import traceback
 
+        # A crash is still an engagement: save the bundle so `suijin load`
+        # resumes it. Never raises, and once-flagged — if the normal end
+        # path already saved, save() is a no-op and last_path still points
+        # at that bundle, so the resume line below still appears.
+        _resume = ""
+        with contextlib.suppress(Exception):
+            from suijin.modules.tools.lib.engagement_bundle import CRASH_SAVER
+
+            CRASH_SAVER.save("crash")
+            if CRASH_SAVER.last_path is not None:
+                _resume = f"\nsaved — resume: [bold]suijin load {CRASH_SAVER.last_path.name}[/bold]"
         console.print(
             _Panel(
-                f"{e}\n\n[dim]{traceback.format_exc()[-1500:]}[/dim]\nlogged: logs/engage_crash.log",
+                f"{e}{_resume}\n\n[dim]{traceback.format_exc()[-1500:]}[/dim]\nlogged: outputs/logs/engage_crash.log",
                 title=" engagement crashed ",
                 title_align="left",
                 border_style="red",
             )
         )
         try:
-            from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+            from suijin.modules.platform.lib.workspace import logs_dir
 
-            _d = WORKSPACE_DIR / "logs"
+            _d = logs_dir()
             _d.mkdir(parents=True, exist_ok=True)
             (_d / "engage_crash.log").open("a").write(
                 f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {str(objective)[:80]}\n"
@@ -1991,7 +2002,6 @@ over claims, reports over trophies.
     except (KeyboardInterrupt, EOFError):
         return
 
-    foreground = False
     if choice == "2":
         console.print("\n[dim]Drag file here or type path:[/]")
         try:
@@ -2027,17 +2037,6 @@ over claims, reports over trophies.
         except Exception:  # noqa: BLE001 — the hook must never block a launch
             pass
 
-        # THE SPLIT IS THE DEFAULT (2026-09-24): an engagement runs in the
-        # DAEMON — detached, so closing this console (or the SSH dying)
-        # never kills the run. This console follows the journal and queues
-        # guidance. `launch_mode: tui` (config), menu option 3/4, or
-        # `suijin tui "<obj>"` keeps the classic in-process TUI.
-        if not foreground and str(config.get("launch_mode") or "daemon").strip().lower() != "tui":
-            from suijin.modules.ops.lib.daemon import launch_and_attach
-
-            console.print("[dim]starting detached — follow it here, or leave and `suijin ps`[/dim]\n")
-            launch_and_attach(obj)
-            return
         run_red_team(config, obj)
 
 
