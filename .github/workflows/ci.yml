@@ -32,7 +32,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r suijin/requirements.txt
-          pip install pytest pytest-asyncio pytest-cov
+          # test toolchain from the ONE declared file — a hand-written list
+          # here is what let CI drift from the local venv (missing
+          # pytest-timeout killed the whole suite at collection)
+          pip install -r suijin/requirements-dev.txt
 
       - name: Deploy scripts sanity
         run: |

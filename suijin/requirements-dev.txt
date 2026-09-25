@@ -1,0 +1,20 @@
+# Test toolchain — the ONE place these are declared.
+#
+# It existed only as a hand-written `pip install pytest pytest-asyncio
+# pytest-cov` line inside the CI workflow, which quietly drifted from the
+# local venv: test_daemon.py uses @pytest.mark.timeout, pytest-timeout was
+# never installed in CI, and with --strict-markers the whole suite died at
+# COLLECTION ('timeout' not found in `markers`) on all three Python
+# versions. Nothing ran. Local was green because the local venv had the
+# plugin.
+#
+# CI installs this file, so the two cannot diverge again.
+#
+# pytest-timeout  — enforces @pytest.mark.timeout (see test_daemon.py)
+# pytest-asyncio  — asyncio marker / auto mode
+# pytest-cov      — the --cov gate in CI
+# pytest          — the runner
+pytest
+pytest-asyncio
+pytest-cov
+pytest-timeout
