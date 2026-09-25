@@ -118,6 +118,23 @@ class TestInstallHints:
 
 
 class TestWriteTool:
+    @pytest.fixture(autouse=True)
+    def _pack_root(self, tmp_path, monkeypatch):
+        """write_tool() targets ~/.suijin/modules/<name>/ — the ONE root
+        the loader picks up. Point BOTH that write path and the loader's
+        scan roots at a tmp dir, so the test never creates a pack in the
+        operator's live pack root (a crash mid-test would leave a stray
+        pack that real runs would then load)."""
+        from pathlib import Path as _P
+
+        from suijin.modules import loader
+
+        home = tmp_path / "home"
+        (home / ".suijin" / "modules").mkdir(parents=True)
+        monkeypatch.setattr(_P, "home", classmethod(lambda cls: home))
+        monkeypatch.setattr(loader, "PACK_ROOTS", [home / ".suijin" / "modules"])
+        yield home / ".suijin" / "modules"
+
     def test_registers_immediately(self):
         from suijin.modules.tools.lib.self_improve import write_tool
 

@@ -295,13 +295,17 @@ class TestWorkspacePathResolution:
         assert "/var/tmp" in str(result) or "/private/var/tmp" in str(result)
 
     def test_relative_path_inside_workspace(self):
-        from suijin.modules.platform.lib.workspace import resolve_workspace_path
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR, resolve_workspace_path
 
         result = resolve_workspace_path("outputs/scan.json")
         assert result.is_absolute()
-        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
-
-        assert str(result).startswith(str(WORKSPACE_DIR))  # v5.3: resolved workspace (durable or repo-local)
+        # Compare RESOLVED paths: on macOS the temp dir lives under /var,
+        # which is a symlink to /private/var, so resolve_workspace_path
+        # returns the /private form while WORKSPACE_DIR keeps the /var
+        # one. String prefixes only match by luck of where the workspace
+        # happens to live — this passed for years only because the real
+        # ~/.suijin/workspace has no such symlink.
+        assert result.resolve().is_relative_to(WORKSPACE_DIR.resolve())
 
     def test_dot_dot_traversal_rejected(self):
         """../../../etc/passwd must not escape workspace"""

@@ -107,8 +107,23 @@ def load_ledger() -> list[dict]:
         return []
 
 
+def _write_json_atomic(path, payload: str) -> None:
+    """Write JSON via a temp file + os.replace.
+
+    A plain write_text truncates first, so a crash (or a second process
+    reading mid-write) leaves a half-written file. load_ledger() treats
+    an unparseable ledger as EMPTY — so a torn write would silently
+    discard every authorization on file, which is the worst possible
+    outcome for the one file that records what the operator is allowed
+    to touch.
+    """
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(payload, encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def save_ledger(rows: list[dict]) -> None:
-    ledger_path().write_text(json.dumps(rows, indent=2))
+    _write_json_atomic(ledger_path(), json.dumps(rows, indent=2))
 
 
 def _host_of(target: str) -> str:
@@ -224,7 +239,7 @@ def load_scope_bindings() -> list[dict]:
 def save_scope_binding(binding: dict) -> None:
     rows = [r for r in load_scope_bindings() if r.get("key") != binding.get("key")]
     rows.append(binding)
-    scope_bindings_path().write_text(json.dumps(rows, indent=2))
+    _write_json_atomic(scope_bindings_path(), json.dumps(rows, indent=2))
 
 
 def bind_program_scope(platform: str, handle: str, token: str) -> dict:

@@ -177,26 +177,37 @@ class TestGuards:
 
 
 # ── live: Citadel proof ──────────────────────────────────────────────
-def _kill_port(port):
-    try:
-        out = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True).stdout.strip()
-        for pid in out.splitlines():
-            subprocess.run(["kill", "-9", pid], capture_output=True)
-    except Exception:
-        pass
+def _free_port() -> int:
+    """An ephemeral port owned by this process.
+
+    This fixture used to hardcode 5982 and `kill -9` every PID lsof
+    reported on it — which could kill an unrelated service the developer
+    happened to be running. The app binds whatever port we hand it, so
+    there is no reason to share one.
+    """
+    import socket
+
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
 
 
 @pytest.fixture(scope="module")
-def citadel():
-    _kill_port(PUB)
+def citadel(tmp_path_factory):
+    global PUB, BASE
+    port = _free_port()
+    PUB, BASE = port, f"http://127.0.0.1:{port}"
+    state = tmp_path_factory.mktemp("citadel")
     app_py = str(Path(__file__).resolve().parents[2] / "lab" / "citadel" / "app.py")
     proc = subprocess.Popen(
         [sys.executable, app_py],
         env={
             **os.environ,
-            "PORT": str(PUB),
-            "CITADEL_DB": "/tmp/suijin_replay_test.db",
-            "CITADEL_TRAFFIC": "/tmp/replay_test_traffic.jsonl",
+            "PORT": str(port),
+            "CITADEL_DB": str(state / "citadel.db"),
+            "CITADEL_TRAFFIC": str(state / "traffic.jsonl"),
             "CITADEL_RATE_LIMIT": "100000",
             "CITADEL_NO_INTERNAL": "1",
         },
@@ -213,10 +224,15 @@ def citadel():
         proc.terminate()
         pytest.fail("citadel did not boot")
     _BUDGET["remaining"] = 5000
-    yield proc
+    # BASE/PUB are rebound above so the test bodies can keep using them;
+    # the app only ever listens on the port this fixture chose.
+    yield proc, BASE
+    # only ever our own child, by handle
     proc.send_signal(signal.SIGTERM)
-    time.sleep(0.5)
-    _kill_port(PUB)
+    try:
+        proc.wait(timeout=5)
+    except Exception:
+        proc.kill()
 
 
 def _login_as(user, pw):

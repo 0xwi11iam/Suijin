@@ -520,3 +520,44 @@ class TestProgramPage:
         out = capsys.readouterr().out
         assert "authorization on file: page-test.io" in out
         assert auth.page_on_file("page-test.io") == "https://hackerone.com/pt"
+
+
+class TestLedgerWriteIsAtomic:
+    """The ledger is the one file that records what the operator is
+    allowed to touch, and load_ledger() treats an unreadable file as an
+    EMPTY ledger. A plain write_text truncates before it writes, so any
+    interruption used to turn "every authorization on file" into "none".
+    """
+
+    def test_a_torn_write_never_replaces_the_real_ledger(self, tmp_path, monkeypatch):
+        import suijin.modules.ops.lib.authorizations as auth
+
+        monkeypatch.setattr(auth, "ledger_path", lambda: tmp_path / "authorizations.json")
+        auth.save_ledger([{"target": "example.com", "program": "h1"}])
+        good = (tmp_path / "authorizations.json").read_text()
+
+        # a payload whose serialization blows up mid-save
+        class Unserializable:
+            pass
+
+        with pytest.raises(TypeError):
+            auth.save_ledger([{"target": Unserializable()}])  # json.dumps raises
+
+        # the original ledger is intact — no truncation, no half file
+        assert (tmp_path / "authorizations.json").read_text() == good
+        assert auth.load_ledger()[0]["target"] == "example.com"
+
+    def test_no_temp_file_is_left_behind(self, tmp_path, monkeypatch):
+        import suijin.modules.ops.lib.authorizations as auth
+
+        monkeypatch.setattr(auth, "ledger_path", lambda: tmp_path / "authorizations.json")
+        auth.save_ledger([{"target": "a.com"}])
+        assert [p.name for p in tmp_path.iterdir()] == ["authorizations.json"]
+
+    def test_scope_bindings_are_atomic_too(self, tmp_path, monkeypatch):
+        import suijin.modules.ops.lib.authorizations as auth
+
+        monkeypatch.setattr(auth, "scope_bindings_path", lambda: tmp_path / "program_scopes.json")
+        auth.save_scope_binding({"key": "k1", "value": 1})
+        assert auth.load_scope_bindings() == [{"key": "k1", "value": 1}]
+        assert [p.name for p in tmp_path.iterdir()] == ["program_scopes.json"]

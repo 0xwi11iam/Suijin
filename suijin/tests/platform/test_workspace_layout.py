@@ -68,14 +68,21 @@ class TestEnsureWorkspaceLayout:
 
 
 class TestCanonicalLayout:
-    def test_repo_layout_is_canonical(self, monkeypatch):
-        # v5.3: WORKSPACE_DIR resolves durable (~/.suijin/workspace) when
-        # present — force the repo-local resolution for layout mechanics.
-        monkeypatch.setattr(ws, "WORKSPACE_DIR", ws.PROJECT_DIR / "suijin_agent")
+    def test_repo_layout_is_canonical(self, tmp_path, monkeypatch):
+        """The canonical <base>/suijin_agent + <base>/suijin/suijin_agent
+        symlink contract, proven on a throwaway tree.
+
+        This used to point WORKSPACE_DIR at the real repo and call the
+        migration helper there, so running the suite created or repaired
+        paths inside the working tree — which is exactly the kind of
+        stray an operator then has to notice before committing.
+        """
+        base, root = _make(tmp_path)
+        monkeypatch.setattr(ws, "WORKSPACE_DIR", root)
         # Repair first so the assertion holds regardless of import order.
-        ws.ensure_workspace_layout()
-        inner = ws.PROJECT_DIR / "suijin" / "suijin_agent"
-        assert ws.WORKSPACE_DIR == ws.PROJECT_DIR / "suijin_agent"
+        assert ws.ensure_workspace_layout(base_dir=base, workspace_dir=root) in (True, False)
+        inner = base / "suijin_agent"
+        assert root == ws.WORKSPACE_DIR
         assert inner.is_symlink() or not inner.exists()
 
     def test_workspace_resolution_order(self, monkeypatch, tmp_path):

@@ -38,7 +38,10 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-RUN_DIR = Path("/tmp/suijin_drive")
+# Overridable so parallel runs (and a developer's own manual drive) never
+# share one control dir. SUIJIN_DRIVE_DIR is read at call time, not import
+# time, so the env var works for a child process.
+RUN_DIR = Path(os.environ.get("SUIJIN_DRIVE_DIR") or "/tmp/suijin_drive")
 
 
 # ── helpers ────────────────────────────────────────────────────────────

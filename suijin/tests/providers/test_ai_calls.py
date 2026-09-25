@@ -180,17 +180,25 @@ def test_config_loading():
 
 
 def test_env_loading():
-    """Test that .env vars are loaded (skips if no .env file — CI-safe)."""
-    from suijin.modules.redteam.lib.redteamer import ENV_PATH, load_env
+    """Report which provider keys the environment has, WITHOUT mutating
+    this process.
 
-    # On CI / without .env, just verify ENV_PATH is a valid Path object
+    The old version called load_env() on the operator's real .env, which
+    injected live secrets into os.environ for every later test in the
+    session, and it checked a hand-kept key list that had already fallen
+    behind the registry (it missed OPENCODE_API_KEY). The list is derived
+    now, and the parse is a local read that never touches os.environ.
+    """
+    from suijin.modules.providers.lib.registry import PROVIDER_REGISTRY
+    from suijin.modules.redteam.lib.redteamer import ENV_PATH
+
     if not ENV_PATH.exists():
         print("  ⏭  No .env file — skipped")
         return
-    load_env()
-    keys = ["DEEPSEEK_API_KEY", "HF_TOKEN", "GEMINI_API_KEY", "ANTHROPIC_API_KEY"]
-    found = [k for k in keys if os.environ.get(k)]
-    print(f"  [done] Env: {len(found)}/{len(keys)} keys found: {found}")
+    text = ENV_PATH.read_text(errors="replace")
+    keys = sorted({e for spec in PROVIDER_REGISTRY.values() for e in spec.key_envs})
+    found = [k for k in keys if any(line.strip().startswith(f"{k}=") for line in text.splitlines())]
+    print(f"  [done] Env: {len(found)}/{len(keys)} provider keys present: {found}")
 
 
 def run_all():
