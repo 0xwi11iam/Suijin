@@ -181,3 +181,170 @@ class TestAsAHuman:
             "models",
         )
         assert out["zai_model"] == target
+
+
+class TestApiKeyRow:
+    """The API key row: masked, stored in .env, never in config.json.
+
+    A secret must not land in config.json — that file is snapshotted into
+    .sje bundles and read by other tools. The env var name comes from the
+    provider layer (registry spec or the bespoke path), so a new provider
+    needs no edit here.
+    """
+
+    def _drive_with_env(self, tmp_path, keys, provider="opencode", tag="key"):
+        """The pty driver plus a redirected .env (so the test never touches
+        the operator's real key file)."""
+
+        env_path = tmp_path / f"{tag}.env"
+        env_path.write_text("", encoding="utf-8")
+        old_drive = _drive
+
+        def _patched(workspace, config, k, name, rows=30, cols=100):
+            # the child re-points config_loader.ENV_PATH at our temp file
+            old_drive(workspace, config, k, name, rows, cols)
+
+        return _patched, env_path
+
+    def test_api_key_env_is_resolved_by_the_provider_layer(self):
+        """Nothing is hardcoded: registry providers answer from their spec,
+        bespoke ones from the layer's own env lookups."""
+        from suijin.modules.providers.lib import provider_key_env
+
+        assert provider_key_env("opencode") == "OPENCODE_API_KEY"  # a registry row
+        assert provider_key_env("openrouter") == "OPENROUTER_API_KEY"
+        assert provider_key_env("zai") == "ZAI_API_KEY"  # a bespoke path
+        assert provider_key_env("ollama") == ""  # local needs none
+        assert provider_key_env("") == ""
+
+    def test_key_row_appears_under_the_model_and_is_masked(self, monkeypatch, tmp_path):
+        import suijin.modules.console.lib.settings_tui as st
+        from suijin.modules.providers.lib import registry  # noqa: F401
+
+        monkeypatch.setattr(st, "CONFIG_PATH", str(tmp_path / "config.json"))
+        (tmp_path / "config.json").write_text(json.dumps({"provider": "opencode", "opencode_model": "glm-5.3"}))
+        monkeypatch.setenv("OPENCODE_API_KEY", "sk-live-secret-value")
+        monkeypatch.setattr("suijin.modules.platform.lib.config_loader.load_env", lambda: None, raising=False)
+        config = st.load_config()
+        lines = [t for t, _r in st.screen_lines(config, cursor=0)]
+        key_rows = [t for t in lines if "api_key" in t]
+        assert key_rows, "no api_key row under the model"
+        # the VALUE is never on screen — only that a key is on file
+        assert "sk-live-secret-value" not in "\n".join(lines)
+        assert "••••" in key_rows[0]
+        # and the row is reachable by the cursor, right under the model
+        items = [k for _g, k in st._row_items(st._visible_fields(config))]
+        assert items[items.index("opencode_model") + 1] == st.API_KEY_ROW
+
+    def test_set_provider_key_writes_env_not_config(self, monkeypatch, tmp_path):
+
+        from suijin.modules.platform.lib import config_loader as cl
+        from suijin.modules.providers.lib import get_provider_key, set_provider_key
+
+        env_path = tmp_path / ".env"
+        env_path.write_text("EXISTING=1\nOPENCODE_API_KEY=old-key\n", encoding="utf-8")
+        monkeypatch.setattr(cl, "ENV_PATH", env_path)
+        # set_provider_key DOES set os.environ (that is the point: the live
+        # process sees the key) — so the test must hand the env back or it
+        # leaks an OPENCODE key into every later test (a keyless auto-chain
+        # test started failing because of it).
+        monkeypatch.delenv("OPENCODE_API_KEY", raising=False)
+        monkeypatch.setenv("OPENCODE_API_KEY", "sk-new-secret")
+        ok, message = set_provider_key("opencode", "sk-new-secret")
+        assert ok, message
+        text = env_path.read_text()
+        assert "OPENCODE_API_KEY=sk-new-secret" in text  # replaced in place
+        assert "old-key" not in text
+        assert "EXISTING=1" in text  # other keys untouched
+        # readable live, and never returned for display
+        assert get_provider_key("opencode") == "sk-new-secret"
+
+    def test_set_key_refuses_when_there_is_no_env_to_hold_it(self):
+        from suijin.modules.providers.lib import set_provider_key
+
+        ok, message = set_provider_key("ollama", "x")
+        assert not ok and "no API key" in message
+
+    def test_secret_is_never_echoed(self):
+        """The prompt masks as you type — the secret never hits the screen."""
+        import inspect
+
+        from suijin.modules.console.lib.settings_tui import _prompt
+
+        src = inspect.getsource(_prompt)
+        assert "secret" in src
+        assert '"*" * len(typed)' in src  # masked per character
+        assert "*" in src and "typed" in src
+
+
+def test_human_enters_an_api_key_hidden(tmp_path, monkeypatch):
+    """The full human path: arrow to the key row, Enter, type (hidden),
+    Enter, quit — the secret ends up in .env and NEVER in config.json."""
+    import os
+    import pty as _pty
+    import select as _select
+    import sys as _sys
+    import time as _time
+
+    secret = "sk-test-SECRET-abc123"
+    cfg_path = tmp_path / "keyrun.json"
+    env_path = tmp_path / "keyrun.env"
+    cfg_path.write_text(json.dumps({"provider": "opencode", "opencode_model": "glm-5.3"}), encoding="utf-8")
+    env_path.write_text("", encoding="utf-8")
+    child = f"""
+import os, sys, json, traceback
+from pathlib import Path
+sys.path.insert(0, {str(REPO)!r})
+import curses
+import suijin.modules.console.lib.settings_tui as st
+st.CONFIG_PATH = {str(cfg_path)!r}
+from suijin.modules.platform.lib import config_loader as cl
+cl.ENV_PATH = Path({str(env_path)!r})
+# down to the model, down to the key row, Enter, type, Enter, quit
+SCRIPT = [curses.KEY_DOWN, curses.KEY_DOWN, 13] + [ord(c) for c in {secret!r}] + [13, ord("q")]
+n = [0]
+class Proxy:
+    def __init__(self, s): object.__setattr__(self, "_s", s)
+    def __getattr__(self, k): return getattr(object.__getattribute__(self, "_s"), k)
+    def getch(self):
+        n[0] += 1
+        if n[0] > 90: os._exit(3)
+        return SCRIPT.pop(0) if SCRIPT else 27
+def loop(scr):
+    st._init_colors(scr)
+    return st._curses_loop(Proxy(scr))
+try:
+    curses.wrapper(loop)
+    open(os.environ["OUT"], "w").write("ok")
+except Exception:
+    open(os.environ["OUT"], "w").write(traceback.format_exc()[-300:])
+"""
+    out = tmp_path / "keyrun.out"
+    env = dict(os.environ, OUT=str(out), TERM="xterm-256color")
+    pid, fd = _pty.fork()
+    if pid == 0:
+        import fcntl
+        import struct
+        import termios
+
+        fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 100, 0, 0))
+        os.execve(_sys.executable, [_sys.executable, "-c", child], env)
+    deadline = _time.time() + 60
+    while _time.time() < deadline:
+        ready, _, _ = _select.select([fd], [], [], 0.3)
+        if ready:
+            try:
+                if not os.read(fd, 65536):
+                    break
+            except OSError:
+                break
+        if out.exists():
+            break
+    os.waitpid(pid, 0)
+    assert out.exists() and out.read_text() == "ok", (
+        f"editor failed: {out.read_text()[:300] if out.exists() else 'hung'}"
+    )
+    env_text = env_path.read_text()
+    cfg_text = cfg_path.read_text()
+    assert f"OPENCODE_API_KEY={secret}" in env_text, "the key did not reach .env"
+    assert secret not in cfg_text, "the secret leaked into config.json"

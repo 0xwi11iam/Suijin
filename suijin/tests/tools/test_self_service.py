@@ -76,46 +76,26 @@ class TestAutoChain:
         assert len(chain) <= 2  # bounded: dead-night cost is seconds, not minutes
 
     def test_keyless_when_no_cloud_keys(self, monkeypatch):
+        from suijin.modules.providers.lib.registry import PROVIDER_REGISTRY
         from suijin.modules.redteam.lib.red import llm_client as lc
 
-        for env in (
-            "OPENAI_API_KEY",
-            "XAI_API_KEY",
-            "MISTRAL_API_KEY",
-            "GROQ_API_KEY",
-            "TOGETHER_API_KEY",
-            "FIREWORKS_API_KEY",
-            "DEEPINFRA_API_KEY",
-            "CEREBRAS_API_KEY",
-            "SAMBANOVA_API_KEY",
-            "PERPLEXITY_API_KEY",
-            "COHERE_API_KEY",
-            "LAMBDA_API_KEY",
-            "OPENROUTER_API_KEY",
-        ):
-            monkeypatch.delenv(env, raising=False)
+        # The list is DERIVED from the registry, never hand-kept: a
+        # hardcoded list missed OPENCODE_API_KEY when OpenCode Zen was
+        # added, and a redteam test that loads .env then left a real key
+        # in the environment — the "keyless" chain picked it up.
+        for spec in PROVIDER_REGISTRY.values():
+            for env in spec.key_envs:
+                monkeypatch.delenv(env, raising=False)
         chain = lc._auto_chain({"provider": "zai"})
         assert chain == ["ollama"]
 
     def test_registry_cloud_key_pickup(self, monkeypatch):
+        from suijin.modules.providers.lib.registry import PROVIDER_REGISTRY
         from suijin.modules.redteam.lib.red import llm_client as lc
 
-        for env in (
-            "OPENAI_API_KEY",
-            "XAI_API_KEY",
-            "MISTRAL_API_KEY",
-            "GROQ_API_KEY",
-            "TOGETHER_API_KEY",
-            "FIREWORKS_API_KEY",
-            "DEEPINFRA_API_KEY",
-            "CEREBRAS_API_KEY",
-            "SAMBANOVA_API_KEY",
-            "PERPLEXITY_API_KEY",
-            "COHERE_API_KEY",
-            "LAMBDA_API_KEY",
-            "OPENROUTER_API_KEY",
-        ):
-            monkeypatch.delenv(env, raising=False)
+        for spec in PROVIDER_REGISTRY.values():  # derived, never hand-kept
+            for env in spec.key_envs:
+                monkeypatch.delenv(env, raising=False)
         monkeypatch.setenv("GROQ_API_KEY", "gsk_test")
         chain = lc._auto_chain({"provider": "zai"})
         assert chain[0] == "groq" and chain[-1] == "ollama"
