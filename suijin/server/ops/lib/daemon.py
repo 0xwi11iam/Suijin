@@ -789,7 +789,7 @@ def _print_final(rec: dict) -> None:
             print(f"saved: {rec['bundle']} — resume: suijin load {Path(str(rec['bundle'])).name}")
 
 
-def attach_daemon(ref: str, poll: float = 0.7, heartbeat: float = 15.0) -> int:
+def attach_daemon(ref: str, poll: float = 0.2, heartbeat: float = 8.0) -> int:
     """Live-follow a daemon engagement: tail events.jsonl, forward
     operator guidance, /stop for a graceful save. Detaching never stops
     the run (the daemon is the point)."""
@@ -880,7 +880,9 @@ def _attach_loop(rid, stdin_fd, poll, heartbeat) -> int:
             _print_final(_read_record(rid) or rec)
             return 0
         if heartbeat > 0 and time.time() - last_line >= heartbeat:
-            print(f"  … alive · iter {last_iter} · {rec.get('events') or 'journal pending'}")
+            # never let the follower look hung: the agent is usually just
+            # waiting on a model, which is slow by nature
+            print(f"  … working (iter {last_iter}) · last event {int(time.time() - last_line)}s ago")
             last_line = time.time()
         time.sleep(poll)
 
@@ -916,6 +918,7 @@ def launch_and_attach(
         return 1
     print(f"started {rid} (pid {rec.get('pid')}) — detached; this console can exit safely")
     print(f"  follow: suijin attach {rid}   ·   list: suijin ps   ·   stop: suijin stop {rid}")
+    print('  (want the live Rich TUI with the graph in this console? suijin tui "<objective>")')
     if not attach:
         return 0
     print()
