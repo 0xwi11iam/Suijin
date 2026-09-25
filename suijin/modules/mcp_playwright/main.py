@@ -16,6 +16,7 @@ Field-hardened (spa-target.example run):
   scanner-tell string
 """
 
+import contextlib
 import json, os, re, tempfile, threading, queue, time
 from pathlib import Path
 
@@ -24,50 +25,71 @@ _result_queue = queue.Queue()
 _browser_ready = threading.Event()
 _browser_thread = None
 _generation = 0  # bumped on every (re)start; stale results are discarded
+#: why the last startup failed, so the caller gets the REAL error instead
+#: of a generic timeout (a missing chromium binary says so itself)
+_browser_error = ""
 PLAYWRIGHT_MISSING = (
     "playwright is not installed. Install it, then fetch the browser:\n"
     "  pip install playwright\n"
     "  playwright install chromium\n"
     "Then retry this tool."
 )
+BROWSER_MISSING = "The chromium browser is not downloaded. Fetch it once, then retry:\n  playwright install chromium\n"
 
 
 def _browser_loop():
+    """Boot the browser. MUST always set _browser_ready, even on failure:
+    a caller blocked on that event otherwise waits out its whole timeout
+    on every call, because the dead thread is restarted each time."""
+    global _browser_error
+    pw = None
+    browser = ctx = None
     try:
-        from playwright.sync_api import sync_playwright
-    except ImportError:
-        _browser_ready.set()
-        return
-    pw = sync_playwright().start()
-    browser = pw.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"])
-    from suijin.modules.platform.lib.stealth import browser_identity
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            _browser_error = PLAYWRIGHT_MISSING
+            return
+        try:
+            pw = sync_playwright().start()
+            browser = pw.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"])
+        except Exception as e:  # noqa: BLE001 — a missing binary is the common case
+            # playwright IS importable but its browser was never downloaded.
+            # Before this, launch() raised out of the thread, _browser_ready
+            # never fired, and every browser call paid a 30s timeout.
+            msg = str(e)
+            _browser_error = f"{BROWSER_MISSING}\nplaywright said: {msg[:300]}"
+            return
+        from suijin.modules.platform.lib.stealth import browser_identity
 
-    ident = browser_identity()
-    ctx = browser.new_context(
-        viewport={"width": 1280, "height": 800}, user_agent=ident.get("User-Agent", "Mozilla/5.0")
-    )
-    page = ctx.new_page()
-    _browser_ready.set()
-    try:
-        while True:
-            item = _cmd_queue.get()
-            if item is None:
-                break
-            gen, cmd, kwargs = item
-            try:
-                result = _dispatch(page, cmd, kwargs)
-                _result_queue.put((gen, "ok", result))
-            except Exception as e:
-                _result_queue.put((gen, "err", str(e)))
+        ident = browser_identity()
+        ctx = browser.new_context(
+            viewport={"width": 1280, "height": 800}, user_agent=ident.get("User-Agent", "Mozilla/5.0")
+        )
+        page = ctx.new_page()
+        _browser_error = ""
+        try:
+            while True:
+                item = _cmd_queue.get()
+                if item is None:
+                    break
+                gen, cmd, kwargs = item
+                try:
+                    result = _dispatch(page, cmd, kwargs)
+                    _result_queue.put((gen, "ok", result))
+                except Exception as e:
+                    _result_queue.put((gen, "err", str(e)))
+        finally:
+            with contextlib.suppress(Exception):
+                ctx.close()
+            with contextlib.suppress(Exception):
+                browser.close()
     finally:
-        try:
-            ctx.close()
-        except:
-            pass
-        try:
-            browser.close()
-        except:
-            pass
+        with contextlib.suppress(Exception):
+            if pw is not None:
+                pw.stop()
+        # ALWAYS release the waiters, whatever happened above
+        _browser_ready.set()
         try:
             pw.stop()
         except:
@@ -77,7 +99,7 @@ def _browser_loop():
 def _start():
     """Ensure the browser thread is alive and the dependency is present.
     Returns an error string immediately when playwright is missing."""
-    global _browser_thread, _generation
+    global _browser_thread, _generation, _browser_error
     try:
         import playwright  # noqa: F401
     except ImportError:
@@ -91,10 +113,16 @@ def _start():
         with q.mutex:
             q.queue.clear()
     _browser_ready.clear()
+    _browser_error = ""
     _browser_thread = threading.Thread(target=_browser_loop, daemon=True)
     _browser_thread.start()
     if not _browser_ready.wait(timeout=30):
         return "Browser startup timed out (chromium may need `playwright install chromium`)"
+    if _browser_error:
+        # startup FAILED — report it now. Retrying on the next call would
+        # just pay the same wait again for a dependency that is still
+        # missing, which is what made this burn 30s per tool call.
+        return _browser_error
     return None
 
 

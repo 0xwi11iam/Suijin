@@ -8,6 +8,9 @@ Same tolerance for corrupt JSON, non-object JSON, and read-only mounts.
 """
 
 import json
+import os
+import subprocess
+import sys
 
 import pytest
 
@@ -64,6 +67,66 @@ class TestBadConfigPathBoots:
     def test_env_path_as_directory_does_not_crash(self):
         cl.ENV_PATH.mkdir()
         cl.load_env()  # parses nothing, raises nothing
+
+
+class TestPathOverrides:
+    """SUIJIN_CONFIG / SUIJIN_ENV redirect the settings and secrets files.
+
+    Resolved at import, so each case runs in a fresh interpreter — which
+    is also the honest test: this is exactly how a caller uses it.
+    """
+
+    def _paths(self, tmp_path, **env):
+        code = "import suijin.modules.platform.lib.config_loader as cl;print(cl.CONFIG_PATH);print(cl.ENV_PATH)"
+        out = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            env={**os.environ, **env},
+            timeout=120,
+        )
+        assert out.returncode == 0, out.stderr[-500:]
+        cfg, dotenv = out.stdout.strip().splitlines()[-2:]
+        return cfg, dotenv
+
+    def test_overrides_are_honored(self, tmp_path):
+        cfg, dotenv = self._paths(
+            tmp_path,
+            SUIJIN_CONFIG=str(tmp_path / "alt.json"),
+            SUIJIN_ENV=str(tmp_path / "alt.env"),
+        )
+        assert cfg == str(tmp_path / "alt.json")
+        assert dotenv == str(tmp_path / "alt.env")
+
+    def test_absent_overrides_keep_the_in_tree_defaults(self, tmp_path):
+        """No env ⇒ the operator's own config.json/.env, unchanged."""
+        env = {k: v for k, v in os.environ.items() if k not in ("SUIJIN_CONFIG", "SUIJIN_ENV")}
+        code = "import suijin.modules.platform.lib.config_loader as cl;print(cl.CONFIG_PATH);print(cl.ENV_PATH)"
+        out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, timeout=120)
+        assert out.returncode == 0, out.stderr[-500:]
+        cfg, dotenv = out.stdout.strip().splitlines()[-2:]
+        assert cfg.endswith("config.json") and "suijin/" in cfg
+        assert dotenv.endswith(".env") and "suijin/" in dotenv
+
+    def test_one_override_leaves_the_other_alone(self, tmp_path):
+        cfg, dotenv = self._paths(tmp_path, SUIJIN_CONFIG=str(tmp_path / "only.json"))
+        assert cfg == str(tmp_path / "only.json")
+        assert dotenv.endswith(".env")
+
+    def test_the_override_is_what_load_config_reads(self, tmp_path):
+        """It is not just a constant: the loader follows it end to end."""
+        target = tmp_path / "profile.json"
+        target.write_text(json.dumps({"provider": "qwen_cn"}), encoding="utf-8")
+        code = "import suijin.modules.platform.lib.config_loader as cl;print(cl.load_config().get('provider'))"
+        out = subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "SUIJIN_CONFIG": str(target)},
+            timeout=120,
+        )
+        assert out.returncode == 0, out.stderr[-500:]
+        assert "qwen_cn" in out.stdout
 
 
 class TestReadOnlyMountWrites:

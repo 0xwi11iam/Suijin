@@ -1,13 +1,24 @@
 """Wave 6: F41-F43 marketplace, G47-G50 learning finishers + exfil."""
 
 import json
-import os
 import zipfile
 from unittest import mock
 
+import pytest
+
 from suijin.modules.blueteam.lib.blue import exfil
 
-os.environ["SUIJIN_KG_BACKEND"] = "json"  # these tests pin JSON-backend semantics
+
+@pytest.fixture(autouse=True)
+def _json_kg_backend(monkeypatch):
+    """These tests pin JSON-backend semantics.
+
+    This used to be a module-scope os.environ assignment, which pytest
+    runs at COLLECTION time — so the override stayed set for every later
+    test and every child process in the whole session, silently pinning
+    the knowledge-graph backend for the entire run.
+    """
+    monkeypatch.setenv("SUIJIN_KG_BACKEND", "json")
 
 
 class TestMarketplace:

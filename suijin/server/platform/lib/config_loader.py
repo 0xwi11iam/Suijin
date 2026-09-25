@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -28,7 +29,21 @@ from suijin.modules.platform.lib.constants import (
 
 console = Console()
 BASE_DIR = Path(__file__).resolve().parents[3]  # suijin/ package (was 3 parents pre-move)
-ENV_PATH = BASE_DIR / ".env"
+
+
+def _env_path(var: str, default_name: str) -> Path:
+    """SUIJIN_CONFIG / SUIJIN_ENV override the in-tree config.json / .env.
+
+    Resolved at import, so the variable must be set BEFORE suijin is
+    imported. That is what lets the test suite run against a sandbox
+    instead of the operator's live secrets and settings, and it gives
+    alternate profiles a way in without touching the tree.
+    """
+    override = os.environ.get(var)
+    return Path(override).expanduser() if override else BASE_DIR / default_name
+
+
+ENV_PATH = _env_path("SUIJIN_ENV", ".env")
 
 
 def active_model(config: dict | None) -> str:
@@ -46,7 +61,7 @@ def active_model(config: dict | None) -> str:
     return cfg.get(f"{provider}_model") or "auto"
 
 
-CONFIG_PATH = BASE_DIR / "config.json"
+CONFIG_PATH = _env_path("SUIJIN_CONFIG", "config.json")
 
 
 def _default_config() -> dict:
@@ -243,6 +258,28 @@ def load_env():
     else:
         if ENV_PATH.is_file():  # a bind-mount could make this a directory too
             for line in ENV_PATH.read_text().splitlines():
-                if "=" in line:
-                    k, v = line.split("=", 1)
-                    os.environ[k.strip()] = v.strip()
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.strip()
+                # `export FOO=bar` is universal in shell dotfiles; without
+                # this the key lands in the environment literally named
+                # "export FOO", so the provider never sees it.
+                if k.startswith("export "):
+                    k = k[7:].strip()
+                elif k == "export":
+                    continue
+                # Quotes are shell quoting, not part of the value. Left in
+                # place they make a real key wrong, which surfaces as an
+                # inexplicable 401 rather than "no key configured".
+                if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+                    v = v[1:-1]
+                if not k or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", k):
+                    continue  # not a name the environment can hold
+                try:
+                    os.environ[k] = v.strip()
+                except (OSError, ValueError):
+                    # A bad .env must NEVER take down boot — that is what
+                    # killed the app on a stray "=novalue" line.
+                    continue
