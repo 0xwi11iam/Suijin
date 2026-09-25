@@ -581,10 +581,9 @@ def provider_models_endpoint(provider, config=None):
     config = dict(config or {})
     if not provider:
         return None, "no provider selected"
-    with contextlib.suppress(Exception):
-        from suijin.modules.platform.lib.config_loader import load_env
-
-        load_env()
+    # NOTE: no load_env() here — a resolver must not mutate the process
+    # environment. The runner (and the Settings editor) load .env once at
+    # boot; everything below reads the environment it finds.
     # --- registry ---
     with contextlib.suppress(Exception):
         from suijin.modules.providers.lib.registry import PROVIDER_REGISTRY
@@ -625,6 +624,86 @@ def provider_models_endpoint(provider, config=None):
         key = os.environ.get("AMD_API_KEY", "") or ""
         return base, ({"Authorization": f"Bearer {key}"} if key else {})
     return None, (f"{provider} talks through its own SDK — the layer does not expose a model list; type the model id")
+
+
+def provider_key_env(provider) -> str:
+    """The env var that carries THIS provider's API key — the name the
+    provider layer itself reads, resolved dynamically.
+
+    Registry providers answer from their spec (one declaration, used
+    everywhere). The bespoke code-path providers have hand-written env
+    lookups above, so their names are named here beside them. Nothing is
+    hardcoded in the UI: a new registry provider needs no entry.
+    """
+    provider = str(provider or "").strip()
+    if not provider:
+        return ""
+    with contextlib.suppress(Exception):
+        from suijin.modules.providers.lib.registry import PROVIDER_REGISTRY
+
+        spec = PROVIDER_REGISTRY.get(provider)
+        if spec is not None:
+            return str(spec.key_envs[0]) if spec.key_envs else ""
+    return {
+        "zai": "ZAI_API_KEY",
+        "deepseek": "DEEPSEEK_API_KEY",
+        "gemini": "GEMINI_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
+        "huggingface": "HF_TOKEN",
+        "amd": "AMD_API_KEY",
+    }.get(provider, "")
+
+
+def get_provider_key(provider) -> str:
+    """The provider's key, read live from the environment (never from
+    config.json — a key is a secret, and the config is snapshotted into
+    bundles). Empty when unset.
+
+    Deliberately does NOT call load_env(): a read must not mutate the
+    process environment. Callers that need the .env on disk loaded (the
+    runner at boot, the Settings editor when it opens) call it once."""
+    env_name = provider_key_env(provider)
+    if not env_name:
+        return ""
+    return str(os.environ.get(env_name, "") or "")
+
+
+def set_provider_key(provider, value: str) -> tuple[bool, str]:
+    """Write the key into the .env file and the live environment.
+
+    Returns (ok, message). The value never touches config.json and is
+    never printed back. Refuses silently-named providers: a key with no
+    env var to live in would be written nowhere.
+    """
+    env_name = provider_key_env(provider)
+    if not env_name:
+        return False, f"{provider} has no API key (local/custom — nothing to store)"
+    value = str(value or "").strip()
+    if not value:
+        return False, "no key given"
+    with contextlib.suppress(Exception):
+        from suijin.modules.platform.lib.config_loader import ENV_PATH
+
+        lines = []
+        replaced = False
+        if ENV_PATH.exists():
+            for line in ENV_PATH.read_text(encoding="utf-8", errors="ignore").splitlines():
+                if line.split("=", 1)[0].strip() == env_name:
+                    lines.append(f"{env_name}={value}")
+                    replaced = True
+                else:
+                    lines.append(line)
+        if not replaced:
+            lines.append(f"{env_name}={value}")
+        try:
+            ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
+            ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            with contextlib.suppress(OSError):
+                ENV_PATH.chmod(0o600)  # a secret file stays a secret file
+        except OSError as e:
+            return False, f"cannot write {ENV_PATH.name} ({e.strerror or e}) — export {env_name} by hand"
+    os.environ[env_name] = value  # the live process sees it now
+    return True, f"{env_name} saved to .env"
 
 
 # ----------------------------------------------------------------------

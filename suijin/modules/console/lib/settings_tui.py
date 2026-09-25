@@ -191,6 +191,38 @@ _GROUPS = [
 ]
 
 
+#: the synthetic row that shows/edits the provider's API key. It is not a
+#: config key: a secret never goes in config.json (that file is snapshotted
+#: into bundles). It is written to the .env file by the provider layer.
+API_KEY_ROW = "api_key"
+
+
+def provider_api_key_env(provider: str) -> str:
+    """Which env var holds this provider's key (resolved by the provider
+    layer — never named in this file)."""
+    with contextlib.suppress(Exception):
+        from suijin.modules.providers.lib import provider_key_env
+
+        return str(provider_key_env(provider) or "")
+    return ""
+
+
+def api_key_state(config: dict) -> str:
+    """What the row shows: NEVER the key, only whether one is on file."""
+    env_name = provider_api_key_env(str(config.get("provider") or ""))
+    if not env_name:
+        return "n/a — this provider needs no key"
+    with contextlib.suppress(Exception):
+        from suijin.modules.providers.lib import get_provider_key
+
+        return (
+            f"set in {env_name}  (••••••••)"
+            if get_provider_key(config.get("provider"))
+            else f"not set — add {env_name}"
+        )
+    return f"not set — add {env_name}"
+
+
 def is_model_field(key: str) -> bool:
     """True when the field holds a model id: a declared `model` field, or
     the `<provider>_model` field synthesized for a registry/local/custom
@@ -393,6 +425,10 @@ def _row_items(visible: "OrderedDict[str, tuple]"):
             if key in visible and key not in seen:
                 items.append((group, key))
                 seen.add(key)
+                # the provider's key sits right under its model row
+                if is_model_field(key) and visible:
+                    items.append((group, API_KEY_ROW))
+                    seen.add(API_KEY_ROW)
     for key, fdef in visible.items():
         if key not in seen:
             items.append(("Provider" if fdef[0] in ("model", "provider") else "Other", key))
@@ -581,7 +617,9 @@ def screen_lines(
         if idx == 0 or group != items[idx - 1][0]:
             lines.append((group, "group"))
         marker = "› " if idx == cursor else "  "
-        value = _fmt_plain(key, config.get(key, ""))
+        # the key row is masked and lives in .env; everything else is a
+        # plain config value
+        value = api_key_state(config) if key == API_KEY_ROW else _fmt_plain(key, config.get(key, ""))
         suffix = "  · m: live ids" if is_model_field(key) else ""
         lines.append((f"{marker}{key.ljust(width)}  {value}{suffix}", "cursor" if idx == cursor else "row"))
     lines.append(("", "blank"))
@@ -693,21 +731,24 @@ def _init_colors(stdscr=None) -> bool:
         curses.start_color()
         with contextlib.suppress(Exception):
             curses.use_default_colors()  # -1 = the terminal's own bg/fg
+        # A QUIET palette: the terminal's own foreground everywhere, two
+        # accents (dim for chrome, red for trouble). The old mix (magenta
+        # hints, green status, blue legend, colored title bar) was noise.
         # pair id → (fg, bg, attr)
         _COLOR_PAIRS.update(
             {
-                1: (curses.COLOR_CYAN, -1, 0),  # labels / keys
-                2: (curses.COLOR_YELLOW, -1, curses.A_BOLD),  # group headers
-                3: (curses.COLOR_GREEN, -1, curses.A_BOLD),  # status ok
-                4: (curses.COLOR_RED, -1, curses.A_BOLD),  # status warn/error
-                5: (-1, curses.COLOR_CYAN, curses.A_BOLD),  # input line
-                6: (curses.COLOR_BLUE, -1, 0),  # legend
-                7: (curses.COLOR_BLACK, curses.COLOR_CYAN, 0),  # picker cursor
-                8: (curses.COLOR_WHITE, curses.COLOR_BLUE, curses.A_BOLD),  # title bar
-                9: (curses.COLOR_MAGENTA, -1, curses.A_BOLD),  # live-ids hint
-                10: (curses.COLOR_CYAN, -1, curses.A_DIM),  # config path
-                12: (curses.COLOR_GREEN, -1, curses.A_NORMAL),  # the summary line
-                13: (curses.COLOR_YELLOW, -1, curses.A_BOLD),  # the live model
+                1: (-1, -1, curses.A_BOLD),  # the field names
+                2: (-1, -1, curses.A_BOLD),  # group headers
+                3: (-1, -1, curses.A_DIM),  # status / rules
+                4: (curses.COLOR_RED, -1, curses.A_BOLD),  # trouble
+                5: (-1, -1, curses.A_BOLD),  # the input line (no fill — it sat ON the typing area)
+                6: (-1, -1, curses.A_DIM),  # legend + hints
+                7: (-1, curses.COLOR_CYAN, curses.A_BOLD),  # picker highlight
+                8: (-1, -1, curses.A_BOLD),  # title
+                9: (-1, -1, curses.A_DIM),  # live-ids hint
+                10: (-1, -1, curses.A_DIM),  # the config path
+                12: (-1, -1, curses.A_BOLD),  # the summary
+                13: (-1, -1, curses.A_BOLD),  # the live model
             }
         )
         for pid, (fg, bg, attr) in list(_COLOR_PAIRS.items()):
@@ -877,7 +918,9 @@ def _draw_popup(stdscr, title: str, options: list[str], picked: int, height_cap:
         _put(stdscr, top + rows - 1, left + width - 9, f" {first + 1}-{first + inner}/{len(options)} ", "legend", width)
 
 
-def _prompt(stdscr, label: str, default: str = "", choices: list[str] | None = None) -> str | None:
+def _prompt(
+    stdscr, label: str, default: str = "", choices: list[str] | None = None, secret: bool = False
+) -> str | None:
     """One input line at the bottom, with a filtering picker above it.
 
     A human facing 55 providers does NOT arrow through them — they type.
@@ -916,15 +959,18 @@ def _prompt(stdscr, label: str, default: str = "", choices: list[str] | None = N
         if opts_all:
             hint = f"matching {len(rows)} of {len(opts_all)}" if typed else f"{len(opts_all)} options · type to filter"
             _draw_popup(stdscr, f"{label} — {hint}", rows, picked, max(5, h - 8))
-        # the input line: what you typed, or the current value as a hint
+        # ONE quiet input line: the label, then what you typed, on the
+        # terminal's own background. (It used to be a full-width cyan BAR
+        # across the bottom row — the "blue strip" over the typing area.)
+        # The caret sits exactly where the text ends.
         _put(stdscr, h - 1, 0, " " * max(1, w - 1), "input", w)
-        shown = typed or (default or "")
-        _put(stdscr, h - 1, 1, _fit(f"{label}: {shown}", w - 2), "input", w)
-        if not typed and default:
-            _put(stdscr, h - 1, 2 + len(label) + 2, _fit(" (current — type to change)", w - 4), "legend", w)
+        # a secret is NEVER echoed — only a dot per character
+        shown = ("*" * len(typed)) if secret else typed
+        text = f"{label}: {shown}"
+        _put(stdscr, h - 1, 1, _fit(text, w - 2), "input", w)
         stdscr.refresh()
         with contextlib.suppress(curses.error):
-            stdscr.move(h - 1, min(w - 2, 2 + len(label) + 2 + len(shown)))
+            stdscr.move(h - 1, min(w - 2, 1 + len(text)))
 
         ch = stdscr.getch()
         if ch in (curses.KEY_ENTER, 10, 13):
@@ -958,8 +1004,24 @@ def _prompt(stdscr, label: str, default: str = "", choices: list[str] | None = N
             repaint()
 
 
+def edit_api_key_curses(stdscr, config: dict) -> tuple[str, bool]:
+    """Enter a provider API key. MASKED while typing, written to the .env
+    file by the provider layer, and never displayed again — the row only
+    ever says whether a key is on file."""
+    from suijin.modules.providers.lib import set_provider_key
+
+    provider = str(config.get("provider") or "")
+    raw = _prompt(stdscr, f"{provider} API key (hidden)", default="", secret=True)
+    if raw is None:
+        return "", False
+    ok, message = set_provider_key(provider, raw)
+    return (message if ok else f"key not saved — {message}"), ok
+
+
 def edit_field_curses(stdscr, config: dict, key: str) -> tuple[str, bool]:
     """Edit one field on the curses screen. Returns (note, changed)."""
+    if key == API_KEY_ROW:
+        return edit_api_key_curses(stdscr, config)
     fdef = ALL_FIELDS.get(key, ("string",))
     kind = fdef[0]
     current = str(config.get(key, "") or "")
@@ -1065,6 +1127,12 @@ def _curses_loop(stdscr) -> int:
         stdscr.refresh()
         stdscr.getch()  # any key dismisses
         return 1
+    with contextlib.suppress(Exception):
+        # the .env is loaded ONCE here, so the key row shows the real
+        # state and a key just written is visible
+        from suijin.modules.platform.lib.config_loader import load_env
+
+        load_env()
     _init_colors(stdscr)
     stdscr.keypad(True)
     cursor = 0
@@ -1103,26 +1171,25 @@ def _curses_loop(stdscr) -> int:
             note, loop_status = ("saved — " + CONFIG_PATH, "ok") if ok else (f"save failed — {CONFIG_PATH}", "warn")
 
 
-def _save_line_quiet(config: dict, status: str) -> int:
+def _save_line_quiet(config: dict, status: str) -> bool:
     """q saves and quits (the operator never loses an edit they made)."""
-    if status == "corrupt":
-        return 1
-    try:
-        save_config(config)
-    except Exception:  # noqa: BLE001
-        return 1
-    return 0
+    return _save_line(None, config, status)
 
 
-def _save_line(stdscr, config: dict, status: str) -> int:
-    """Save from the curses screen; the note line carries the outcome."""
+def _save_line(stdscr, config: dict, status: str) -> bool:
+    """Save from the curses screen. True = saved.
+
+    This used to return an exit CODE (0 = ok) while the caller read it as
+    a truthy "ok", so every single save reported "save failed" even though
+    the file was written. It returns a bool now."""
     if status == "corrupt":
-        return 1
+        return False
     try:
         save_config(config)
-    except Exception:  # noqa: BLE001
-        return 1
-    return 0
+    except Exception as e:  # noqa: BLE001
+        print(f"save error: {e}", file=sys.stderr)
+        return False
+    return True
 
 
 def run_editor(console: Console) -> int:
