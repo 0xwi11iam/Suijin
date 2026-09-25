@@ -69,6 +69,10 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "ai: marks tests that need live API keys (deselect with '-m \"not ai\"')",
     "integration: marks integration tests",
+    # Registered so --strict-markers never fails collection. It is only
+    # ENFORCED when pytest-timeout is installed; see requirements-dev.txt
+    # (CI installs it, so the timeout is real there).
+    "timeout(seconds): per-test timeout, enforced by pytest-timeout",
 ]
 asyncio_mode = "auto"
 

@@ -275,7 +275,13 @@ def _stub_argv(lifetime: float = 30.0) -> list[str]:
     return [sys.executable, "-u", "-c", code, "d_stub"]
 
 
-@pytest.mark.timeout(60) if hasattr(pytest.mark, "timeout") else (lambda f: f)
+# The marker is registered in pyproject.toml, so --strict-markers is happy
+# whether or not pytest-timeout is installed. The old guard here was
+# `hasattr(pytest.mark, "timeout")`, which is ALWAYS True — pytest.mark is a
+# MarkGenerator that fabricates any attribute on demand, so the guard never
+# fired and the unregistered marker reached pytest anyway. That is what
+# aborted collection on CI.
+@pytest.mark.timeout(60)
 class TestDetachedSpawn:
     def test_spawn_detaches_child_that_records_itself(self, home, monkeypatch):
         """The child survives the console (new session) and completes the
