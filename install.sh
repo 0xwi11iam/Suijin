@@ -52,7 +52,14 @@ done
 # Running from inside a checkout? (script dir has pyproject.toml + suijin/)
 # Then dev mode — installing from THIS local copy — becomes the default,
 # and the source path defaults to the script's dir (not $PWD).
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)"
+#
+# BASH_SOURCE[0] is UNSET when this script is run the way its own header
+# documents: `curl -fsSL … | bash`. Under `set -u` that is a hard
+# "BASH_SOURCE[0]: unbound variable" on the documented install path.
+# $0 is the correct fallback there (and equals the script path when it is
+# run as a file).
+_SELF="${BASH_SOURCE[0]:-$0}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "$_SELF")" 2>/dev/null && pwd -P)" || SCRIPT_DIR="$PWD"
 RUNS_FROM_CHECKOUT=0
 if [ -f "$SCRIPT_DIR/pyproject.toml" ] && [ -d "$SCRIPT_DIR/suijin" ]; then
   RUNS_FROM_CHECKOUT=1
@@ -256,6 +263,43 @@ have python3 || fail "python3 could not be resolved automatically — install Py
 PYV=$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')
 ok "python3 ${PYV}"
 
+# Enforce the floor HERE, not four steps later. A stock macOS ships
+# python3 3.9, which is below langgraph 1.x's own requirement — without
+# this the install sailed through every prerequisite and then died in the
+# dependency step with pip's "requires a different Python version",
+# which reads like a resolver bug rather than "your interpreter is old".
+PY_MAJOR=${PYV%%.*}
+PY_MINOR=${PYV##*.}
+# If the default python3 is too old, adopt the newest usable interpreter
+# already on PATH before giving up. People routinely have a good Python
+# installed under its minor-versioned name (Homebrew's python@3.12 ships
+# `python3.12`, not `python3`) while `python3` still points at the system
+# 3.9 — exactly the report we got. Using what is already installed beats
+# making them fix their PATH first.
+if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]; }; then
+  PYTHON_BIN=""
+  for _cand in python3.14 python3.13 python3.12 python3.11 python3.10; do
+    if have "$_cand" && "$_cand" -c 'import sys; raise SystemExit(0 if sys.version_info[:2] >= (3,10) else 1)' 2>/dev/null; then
+      PYTHON_BIN="$_cand"
+      PYV=$("$_cand" -c 'import sys; print("%d.%d" % sys.version_info[:2])')
+      ok "python3 is too old — using $_cand ${PYV} from PATH instead"
+      break
+    fi
+  done
+  # every python3 call below must use the interpreter we settled on
+  if [ -n "$PYTHON_BIN" ]; then
+    python3() { command "$PYTHON_BIN" "$@"; }
+  fi
+  PY_MAJOR=${PYV%%.*}
+  PY_MINOR=${PYV##*.}
+fi
+if [ "$PY_MAJOR" -lt 3 ] || { [ "$PY_MAJOR" -eq 3 ] && [ "$PY_MINOR" -lt 10 ]; }; then
+  fail "python3 is ${PYV}, but Suijin needs 3.10 or newer (langgraph 1.x requires it).
+       On macOS:  brew install python@3.12   then re-run this installer
+       On Debian: sudo apt install python3.11 python3.11-venv
+       ...or point PATH at a newer interpreter first."
+fi
+
 # venv capability: Debian/Ubuntu ships python3-venv separately — resolve it
 if ! python3 -c "import venv" >/dev/null 2>&1; then
   warn "python3 venv module missing — installing"
@@ -335,15 +379,27 @@ ok "workspace ready at $DURABLE_WS (reinstall-safe)"
 # ── 5/8 python deps (venv health check + build-header retry) ───────────
 step "creating virtualenv + installing python deps"
 VENV="$INSTALL_DIR/venv"
-# a venv inherited from a migration (or an OS python upgrade) can carry a
-# stale interpreter shebang — detect and rebuild instead of failing on it
-if [ -x "$VENV/bin/python" ] && ! "$VENV/bin/python" --version >/dev/null 2>&1; then
-  warn "existing venv is broken (stale interpreter) — rebuilding it"
-  rm -rf "$VENV"
+# A venv belongs to the interpreter that created it. The old check only
+# rebuilt when $VENV/bin/python was UNRUNNABLE, so a perfectly working
+# venv from an older interpreter was reused forever: the installer would
+# report "python3 3.12", then run pip inside a 3.9 venv and fail on
+# langgraph 1.x with a message about "a different Python version" —
+# which is exactly the confusing report we got. Compare VERSIONS, not
+# just "does it run", and rebuild on any mismatch.
+if [ -x "$VENV/bin/python" ]; then
+  VENV_PYV=$("$VENV/bin/python" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null || echo "broken")
+  if [ "$VENV_PYV" != "$PYV" ]; then
+    warn "existing venv is python ${VENV_PYV}, system python3 is ${PYV} — rebuilding"
+    rm -rf "$VENV"
+  fi
 fi
 if [ ! -x "$VENV/bin/python" ]; then
   python3 -m venv "$VENV" || fail "venv creation failed"
 fi
+# Prove the venv is the interpreter we think it is, before blaming pip.
+VENV_PYV=$("$VENV/bin/python" -c 'import sys; print("%d.%d" % sys.version_info[:2])')
+[ "$VENV_PYV" = "$PYV" ] || fail "venv is python ${VENV_PYV} but python3 is ${PYV} — remove $VENV and re-run"
+ok "venv interpreter python ${VENV_PYV}"
 "$VENV/bin/pip" install --quiet --upgrade pip
 if ! "$VENV/bin/pip" install --quiet -r "$REPO_DIR/suijin/requirements.txt"; then
   warn "dependency install failed — resolving build headers and retrying"
