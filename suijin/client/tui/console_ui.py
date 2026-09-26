@@ -1273,8 +1273,14 @@ class EngagementUI:
         color = {"recon": "cyan", "exploit": "red", "report": "green"}.get(mode, "cyan")
         model = str(UI_STATE.get("model_label", "") or "")
         intel = str(UI_STATE.get("intelligence", "max"))
-        cursor = "▌" if UI_STATE.get("cursor_on", True) else " "
         buf = UI_STATE.get("input_buf")
+        # The cursor BLINKS only when idle (it draws the eye to the box).
+        # While the operator is typing it stays SOLID: an input echo whose
+        # caret vanishes half the time reads as stuttered input — and any
+        # render taken at the wrong blink phase showed no caret at all
+        # (this was the long-lived order-dependent test flake: the blink
+        # phase leaked across tests via this global).
+        cursor = "▌" if (buf is not None or UI_STATE.get("cursor_on", True)) else " "
 
         left = Text.assemble((mode, f"bold {color}"))
         left.append(f" · {intel}", style=f"bold {'green' if intel == 'max' else 'cyan'}")
