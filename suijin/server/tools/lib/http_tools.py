@@ -87,10 +87,17 @@ def http_request(method, url, headers=None, body=""):
         session.update_from_response(dict(resp.headers), resp.text)
         session.touch()
 
+        # Render cookies by ITERATION, never dict(jar): after a redirect a
+        # CDN can set the same name on two domains (Akamai's ak_bmsc on
+        # nvidia.com AND www.nvidia.com), and dict() indexes the jar by
+        # name, which raises CookieConflictError — discarding a response
+        # that had already succeeded.
+        _cookies = "; ".join(f"{c.name}={c.value}" for c in _session().cookies)
+
         out = [
             f"Status: {resp.status_code}",
             f"Headers: {dict(resp.headers)}",
-            f"Cookies: {dict(_session().cookies)}",
+            f"Cookies: {_cookies}",
             f"Body:\n{resp.text}",
         ]
         if resp.status_code == 403:

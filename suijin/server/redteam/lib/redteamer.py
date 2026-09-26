@@ -70,6 +70,14 @@ _SCOPE_DOUBT_RE = __import__("re").compile(
 )
 
 _URL_IN_ANSWER_RE = __import__("re").compile(r"https?://[^\s\"')<>]+")
+#: an answer naming a host or IP is the operator DESIGNATING the target —
+#: the agent asked exactly because the order contained no asset, so this
+#: must register as a decision, not as noise
+_ANSWER_TARGET_RE = __import__("re").compile(
+    r"\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:com|net|org|io|ai|dev|cn|co|gov|edu|app|cloud)\b"
+    r"|\b(?:\d{1,3}\.){3}\d{1,3}\b",
+    __import__("re").IGNORECASE,
+)
 
 
 def _looks_like_scope_confirmation(answer: str) -> bool:
@@ -1128,6 +1136,13 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                         # tell the agent it can fetch it (with the CF-exists
                         # doctrine) instead of stalling on verification
                         _page_url = _URL_IN_ANSWER_RE.search(answer)
+                        # A hostname/IP/URL in the answer is the operator
+                        # DESIGNATING a target. Say so explicitly: the agent
+                        # asked precisely because the order named no asset,
+                        # and an ambiguous echo reads as "no answer" — which
+                        # is what made it conclude the operator had just
+                        # repeated the engagement order and re-deliberate.
+                        _names_target = _page_url is not None or bool(_ANSWER_TARGET_RE.search(answer))
                         if _page_url:
                             try:
                                 from suijin.modules.ops.lib.authorizations import set_page
@@ -1138,10 +1153,17 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                             except Exception:  # noqa: BLE001
                                 pass
                             _final = (
-                                f"OPERATOR ANSWER: {answer}\n"
-                                "That URL is now the program page on file. You may verify it yourself "
-                                "with fetch_authorization_page — note: a Cloudflare/WAF block on fetch "
-                                "means the page EXISTS (nonexistent pages 404); that is ample. Continue."
+                                f"OPERATOR ANSWER (FINAL — do not ask again): {answer}\n"
+                                "That URL is now the program page on file, and the host it names is your "
+                                "approved target. You may verify it yourself with fetch_authorization_page "
+                                "— note: a Cloudflare/WAF block on fetch means the page EXISTS "
+                                "(nonexistent pages 404); that is ample. Proceed."
+                            )
+                        elif _names_target:
+                            _final = (
+                                f"OPERATOR ANSWER (FINAL — do not ask again): {answer}\n"
+                                "The operator has designated this as the approved target for this "
+                                "engagement. Adopt it and proceed."
                             )
                         elif _looks_like_scope_confirmation(answer):
                             try:
@@ -1150,13 +1172,17 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                                 _mem.note(objective, f"operator confirmed scope/authorization: {answer[:200]}")
                             except Exception:  # noqa: BLE001 — memory is best-effort
                                 pass
-                            _final = f"OPERATOR: confirmed — {answer}. Continuing."
+                            _final = f"OPERATOR ANSWER (FINAL — do not ask again): confirmed — {answer}. Proceeding."
                         else:
-                            _final = f"OPERATOR ANSWER: {answer}"
-                        if _page_url or _looks_like_scope_confirmation(answer):
-                            # persist into the objective so the engagement order
-                            # (rendered every turn) carries it forever
-                            _confirmed_obj = f"{objective} [OPERATOR-CONFIRMED in engagement: {answer[:160]}]"
+                            _final = f"OPERATOR ANSWER (FINAL — do not ask again): {answer}"
+                        if _page_url or _names_target or _looks_like_scope_confirmation(answer):
+                            # Persist into the objective so the engagement order
+                            # (rendered every turn) carries it forever — PREPENDED,
+                            # not appended: a suffix at the end of a multi-thousand-
+                            # character order is never seen, and the agent reads the
+                            # unchanged wall of text as "the operator just repeated
+                            # the order" (the exact confusion observed in the field).
+                            _confirmed_obj = f"[OPERATOR-CONFIRMED: {answer[:160]}]\n{objective}"
                             agent._graph.update_state(
                                 langgraph_config,
                                 {
