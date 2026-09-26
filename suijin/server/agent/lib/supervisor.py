@@ -50,12 +50,20 @@ logger = logging.getLogger(__name__)
 
 
 def _detect_repeating_tool(trace: list, threshold: int = 3) -> Optional[str]:
-    """Detect if the same tool+args has been used 3+ times in a row."""
+    """Detect if the same tool+args has been used 3+ times in a row.
+
+    Only SUCCESSFUL calls count. A tool that keeps ERRORING is not the agent
+    being stuck in a rut — it is usually working around a harness/target
+    failure, and that case already has its own channel (the DEAD END
+    detector). Nagging "try a DIFFERENT approach" while the agent correctly
+    retries a broken call with different endpoints just adds noise on top
+    of the failure.
+    """
     if len(trace) < threshold:
         return None
-    recent = trace[-threshold:]
+    recent = [s for s in trace[-threshold:] if s.get("success", True)]
     tools = [s.get("tool_name", "") for s in recent]
-    if len(set(tools)) == 1 and tools[0]:
+    if len(tools) >= threshold and len(set(tools)) == 1 and tools[0]:
         return (
             f"You've called '{tools[0]}' {threshold} times in a row. "
             f"If it's not producing new results, STOP and try a DIFFERENT approach. "

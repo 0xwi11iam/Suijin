@@ -491,8 +491,17 @@ def _stream_chat(url, headers, payload, on_delta=None):
                 daemon=True,
             )
             _wt.start()
+            # Decode lines OURSELVES, as UTF-8, on raw bytes.
+            # iter_lines(decode_unicode=True) decodes each HTTP chunk with
+            # resp.encoding — which an SSE response never declares, so
+            # requests falls back to latin-1, and any multi-byte character
+            # split across a chunk boundary arrives as mojibake ('’' → 'â').
+            # A complete line can never split a codepoint (UTF-8 continuation
+            # bytes never contain \n), so line-at-a-time UTF-8 decode is exact.
+            resp.encoding = "utf-8"
             _first_token_deadline = time.monotonic() + 60.0  # provider sends NOTHING in 60s → kill
-            for line in resp.iter_lines(decode_unicode=True):
+            for raw_line in resp.iter_lines(decode_unicode=False):
+                line = raw_line.decode("utf-8", "replace") if isinstance(raw_line, bytes) else (raw_line or "")
                 _idle["last"] = time.monotonic()
                 if time.monotonic() > _first_token_deadline and not content and not reasoning:
                     return 0, "", "", None, "first-token timeout: provider sent no data in 60s"
