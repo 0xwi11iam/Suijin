@@ -88,6 +88,7 @@
 
 ## Immediate next steps
 
-1. Operator: re-run the arbonia engagement (config now: zai/glm-5.3, infinite, no caps). DeepSeek top-up optional (fallback only).
+1. Operator: re-run the pending engagement (config now: zai/glm-5.3, infinite, no caps). DeepSeek top-up optional (fallback only).
 2. B1 (source audit — `modules/treeaudit/main.py` orphaned start), BF4+ waves per plan.md.
-3. Before ANY commit: full gates (`pytest -m "not ai and not slow"` ~1898, ruff check, ruff format) + never commit the operator strays.
+3. Before ANY commit: full gates (`pytest -m "not ai and not slow"` ~2895, ruff check, ruff format) + never commit the operator strays.
+4. **Engagement confidentiality is a PERMANENT operator ruling — see AGENTS.md.** Never name a target, program, vendor, or tested host in any committed artifact (commit messages, comments, test payloads, docs). Refer to engagements generically; tests use example.com. One commit (f547d32) predates this rule and still names a target — scrub on the next commit that touches it, history rewrite only on explicit request.
