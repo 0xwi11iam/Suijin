@@ -101,12 +101,24 @@ def recall(target: str, limit: int = 5) -> str:
 
 
 def note(target: str, text: str) -> None:
+    """Append an operator/agent note to the target's memory file.
+
+    Read-modify-write on every note is O(file) per call — the operator
+    prompt mandates a note after nearly every tool result, and this file
+    also carries every engagement and fingerprint for the target. Keep
+    the shape (readers depend on it) but serialize compactly, and skip
+    the rewrite entirely when the append changed nothing (dedup at the
+    tail — the operator's repeated 'confirmed' notes hit this)."""
     f = _target_file(target)
     data = (
         json.loads(f.read_text())
         if f.exists()
         else {"target": target, "engagements": [], "fingerprints": [], "operator_notes": []}
     )
-    data.setdefault("operator_notes", []).append(text[:300])
-    data["operator_notes"] = data["operator_notes"][-20:]
-    f.write_text(json.dumps(data, indent=2))
+    notes = data.setdefault("operator_notes", [])
+    entry = text[:300]
+    if notes and notes[-1] == entry:
+        return  # identical tail: nothing to persist, skip the rewrite
+    notes.append(entry)
+    data["operator_notes"] = notes[-20:]
+    f.write_text(json.dumps(data, separators=(",", ":")))
