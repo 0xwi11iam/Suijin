@@ -2,8 +2,19 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 from pathlib import Path
+
+# verify=False is deliberate in a security tool (TLS-mismatch probing),
+# but the warning it prints per request goes to stderr, which no live
+# display owns — it tears the strip and floods the daemon run log. Boot
+# suppresses this via init_runtime; this module ALSO suppresses it so
+# any import path (tests, tools, verbs) stays quiet.
+with contextlib.suppress(Exception):  # noqa: BLE001 — never break import
+    import urllib3
+
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 def _base_dir():

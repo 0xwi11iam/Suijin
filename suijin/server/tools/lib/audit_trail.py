@@ -1,12 +1,28 @@
 """
 Suijin Audit Trail — complete, zero-truncation JSON/MD logging.
 Records: what the AI saw (tool outputs), thought (reasoning), did (actions).
+
+Write cadence (2026-09-26, the long-run lag fix): the trail used to be
+rewritten IN FULL on every log_iteration/log_finding call. Observations
+are stored untruncated by design, so on a long engagement the file grows
+into megabytes and every tool call then paid a GIL-held json.dumps of the
+whole history — the TUI's typewriter and input threads starved and the
+console became unusable to type in. _save() is now throttled: dirty-flag
+plus a forced flush at end/iteration boundaries. The events.jsonl journal
+remains the durable per-event record, so a crash at most loses the tail
+of a report copy — never the run itself.
 """
 
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timezone
+
+#: minimum seconds between disk writes for throttled saves
+FLUSH_INTERVAL_S = 10.0
+_last_flush = 0.0
+_dirty = False
 
 
 def _audit_dir():
@@ -49,6 +65,20 @@ def start_audit(engagement_name: str):
         "failed_actions": 0,
         "cost_usd": 0.0,
     }
+    _save(force=True)
+
+
+def flush():
+    """Persist the trail if it is stale (interval-guarded, cheap no-op).
+
+    Called at iteration boundaries so a mid-run reader (dossier, report)
+    never sees data older than FLUSH_INTERVAL_S. The end of the run forces
+    a final write in end_audit; the events.jsonl journal remains the
+    durable per-event record, so a crash loses at most the tail of this
+    REPORT copy — never the run itself."""
+    global _dirty
+    if _current_trail is None:
+        return
     _save()
 
 
@@ -114,19 +144,35 @@ def end_audit(cost_usd: float = 0.0):
         return
     _current_trail["ended"] = datetime.now(timezone.utc).isoformat()
     _current_trail["cost_usd"] = cost_usd
-    _save()
+    _save(force=True)  # the end MUST land — this is the report of record
     path = _export_markdown()
     _current_trail = None
     return path
 
 
-def _save():
+def _save(force: bool = False):
+    """Persist the trail — throttled unless forced.
+
+    `force=True` at engagement end, iteration boundaries and pause/ask
+    points; ordinary tool-call logging only marks dirty and writes at
+    most once per FLUSH_INTERVAL_S. See the module docstring for why.
+    """
+    global _last_flush, _dirty
     if _current_trail is None:
+        return
+    now = time.monotonic()
+    if not force and now - _last_flush < FLUSH_INTERVAL_S:
+        _dirty = True  # write it on the next forced/eligible flush
         return
     fname = _current_engagement.replace("/", "_").replace(" ", "_").replace(":", "_")[:60]
     _ensure_dir()
     path = _audit_dir() / f"{fname}.json"
-    path.write_text(json.dumps(_current_trail, indent=2, default=str))
+    # compact JSON: ~30% smaller and several times faster to serialize
+    # than indent=2 — the indent was pure formatting cost on a file only
+    # tools read
+    path.write_text(json.dumps(_current_trail, separators=(",", ":"), default=str))
+    _last_flush = now
+    _dirty = False
 
 
 def _export_markdown() -> str:

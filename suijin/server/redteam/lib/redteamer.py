@@ -1208,6 +1208,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                     # old think-side log raced ahead of execution and logged
                     # every observation empty.
                     try:
+                        from suijin.modules.tools.lib.audit_trail import flush as _trail_flush
                         from suijin.modules.tools.lib.audit_trail import log_iteration
 
                         log_iteration(
@@ -1221,6 +1222,9 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                             phase=step.get("phase", ""),
                             completion_reason=node_output.get("completion_reason", ""),
                         )
+                        # iteration boundary: keep the trail fresh for
+                        # mid-run readers (interval-guarded inside)
+                        _trail_flush()
                     except Exception:
                         pass
 

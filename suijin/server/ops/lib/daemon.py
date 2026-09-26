@@ -478,6 +478,15 @@ def run_engagement(config: dict, objective: str, resume_ref: str) -> dict:
 def run_daemon_child(rid: str) -> int:
     """The detached child's main. Boots the record, runs the engagement,
     and ALWAYS lands a final record (status, bundle, exit code)."""
+    # The TUI boots through init_runtime; this detached path never did,
+    # so every boot-time semantic was silently missing here — most
+    # visibly urllib3's InsecureRequestWarning suppression, which meant
+    # every verify=False request printed a warning straight into the run
+    # log the operator was following (and tore any live display).
+    with contextlib.suppress(Exception):  # noqa: BLE001 — init must never block a run
+        from suijin.modules.platform.lib.runtime import init_runtime
+
+        init_runtime()
     rec = dict(_read_record(rid) or {})
     objective = str(rec.get("objective") or "")
     if not objective:
