@@ -142,3 +142,7 @@ loot/
 
 # agent memory vault (local-only; see AGENTS.md confidentiality rule)
 agent-vault/
+
+# macOS noise
+.DS_Store
+**/.DS_Store

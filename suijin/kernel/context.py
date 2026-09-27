@@ -8,6 +8,7 @@ through nothing else. Stdlib only.
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Any, Callable
 
@@ -25,7 +26,18 @@ class Context:
         self, config: dict | None = None, workspace: str | Path | None = None, events: EventBus | None = None
     ) -> None:
         self.config: dict = config or {}
-        self.workspace: Path = Path(workspace) if workspace else Path.cwd()
+        # Workspace resolution (kernel-pure: stdlib only, NO workspace.py
+        # import): explicit arg > SUIJIN_WORKSPACE env > CWD last resort.
+        # The bare-CWD default was the repo-pollution bug: any boot without
+        # an explicit workspace wrote logs/journal.log (and friends) into
+        # whatever directory the process happened to start in — a month of
+        # journal.log at the repo root before anyone noticed.
+        if workspace is not None:
+            self.workspace: Path = Path(workspace)
+        elif os.environ.get("SUIJIN_WORKSPACE"):
+            self.workspace = Path(os.environ["SUIJIN_WORKSPACE"])
+        else:
+            self.workspace = Path.cwd()
         self.events: EventBus = events or EventBus()
         self._services: dict[str, Callable[[], Any]] = {}
         self._service_cache: dict[str, Any] = {}

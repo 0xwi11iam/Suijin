@@ -228,6 +228,26 @@ def _detect_missed_flag(trace: list) -> Optional[str]:
     return None
 
 
+def deep_analysis_corroborated(trace: list) -> bool:
+    """Trust gate for the LLM deep-analysis pass.
+
+    A 150-token glance at ten thought-lines hallucinates 'you're stuck,
+    do X' on perfectly healthy runs, and injecting that as gospel derailed
+    real engagements (the operator's verdict: the supervisor bullshits).
+    The deep pass may only SPEAK when the cheap signals agree something
+    deserves attention: real failures, a rut, or a fresh finding (chaining
+    hints near findings are the one place deep insight genuinely pays).
+    """
+    recent = list(trace[-10:])
+    if not recent:
+        return False
+    fails = sum(1 for s in recent if s.get("success", True) is False)
+    tools = [str(s.get("tool_name") or "") for s in recent]
+    rut = bool(tools) and max(tools.count(t) for t in set(tools)) >= 3
+    finding_recent = any(t in ("record_finding", "catalog_exploit") for t in tools)
+    return fails >= 2 or rut or finding_recent
+
+
 def _detect_phase_stall(trace: list, threshold: int = 20) -> Optional[str]:
     """Detect if agent is stuck in recon too long without exploiting."""
     if len(trace) < threshold:
@@ -247,8 +267,6 @@ def _detect_phase_stall(trace: list, threshold: int = 20) -> Optional[str]:
         "shodan",
         "crtsh",
         "google_dork",
-        "read_file",
-        "web_search",
         "curl",
     }
     exploit_tools = {
@@ -262,6 +280,12 @@ def _detect_phase_stall(trace: list, threshold: int = 20) -> Optional[str]:
     }
     recon_count = sum(1 for s in recent if s.get("tool_name", "") in recon_tools)
     exploit_count = sum(1 for s in recent if s.get("tool_name", "") in exploit_tools)
+    # Intel consults are NOT recon: reading notes/dossiers while deciding
+    # the next test counted toward the recon total, and cataloging a
+    # finding is exploitation WORK — both used to trigger FORCE
+    # EXPLOITATION exactly when the agent was doing post-finding work.
+    if any(s.get("tool_name") in ("record_finding", "catalog_exploit", "write_note") for s in recent):
+        return None
     if recon_count > 15 and exploit_count < 3:
         return (
             "FORCE EXPLOITATION: 15+ recon turns, <3 exploit attempts. "

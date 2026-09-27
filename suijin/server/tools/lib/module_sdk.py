@@ -370,12 +370,18 @@ def test_pack(name: str, root: Path | None = None) -> tuple[bool, list[str]]:
     # 3. boot + tool registration + catalog
     try:
         import json as _json
+        import tempfile
 
         from suijin.kernel import controller
 
+        # SELF-CONTAINED boot: the test workspace used to live at
+        # base.parent/.moduletest_ws — i.e. INSIDE the source tree, next to
+        # the pack being tested. A verification run littered the repo with
+        # a workspace (journal.log et al). Temp dir, always cleaned.
+        _ws = tempfile.TemporaryDirectory(prefix="moduletest-")
         ctx, report = controller.boot(
             module_roots=None if root is None else [base],
-            workspace=base.parent / ".moduletest_ws",
+            workspace=_ws.name,
             quiet=True,
         )
         try:
@@ -422,6 +428,7 @@ def test_pack(name: str, root: Path | None = None) -> tuple[bool, list[str]]:
                         lines.append(f"[--] {t} smoke needs args ({type(e).__name__})")
         finally:
             ctx.shutdown()
+            _ws.cleanup()
     except Exception as e:  # noqa: BLE001
         lines.append(f"[XX] boot failed: {e}")
 
