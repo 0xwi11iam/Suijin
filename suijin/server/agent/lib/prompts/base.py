@@ -250,6 +250,16 @@ def engagement_order(objective: str) -> str:
         "unexploited is work unfinished. Every valuable find is proven: catalog_exploit with "
         "sequential shell commands + expected_result — the verifier runs your POC and pauses you "
         "until it passes.\n"
+        "CHAIN, DON'T COLLECT (field rule): a finding is the START of the hunt, not the trophy. "
+        "Within two turns of any CONFIRMED finding you must (1) catalog the POC and (2) name out "
+        "loud what the finding UNLOCKS — the credentials it exposes, the surface it reaches, the "
+        "trust boundary it crosses — and TEST the strongest unlock. Info-disclosure that reveals "
+        "internal names becomes an endpoint map; a leaked key becomes an authenticated session; "
+        "an injection becomes data access. A finding you don't chain is reported at half its "
+        "value, and you will be nudged back to it.\n"
+        "BIAS TO ACTION: you are authorized to test aggressively WITHIN scope. Volume discipline "
+        "is about rate, not courage — one dossier read at the start, then hunt. Do not ask the "
+        "operator to decide anything inside scope; bring findings, not questions.\n"
         "Next action."
     )
 
@@ -433,11 +443,15 @@ document.
 
     parts.append("""## DECISION FORMAT — SIMPLE
 
-Every turn: respond with EXACTLY ONE JSON object. Four required fields:
+Output per turn: ONE JSON object —
 
 {"action": "use_tool", "tool_name": "...", "tool_args": {...}, "thought": "one line"}
 
-That is ALL you must produce. Like a coding agent emitting one tool call.
+This contract is automatic for you. You never need to think about it, check
+it, or mention it: no restating format rules, no counting required fields,
+no 'we must comply', no mention of JSON in your reasoning. Emit the object
+as the final line and nothing else — like a coding agent emitting one tool
+call.
 
 ### THINK CONCISELY (token discipline — the operator pays per token)
 Your visible thinking is EXPENSIVE and SLOW when long. Per turn: at most

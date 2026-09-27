@@ -1128,43 +1128,69 @@ class EngagementUI:
         tiers = {"low": 0, "med": 0, "high": 0, "crit": 0}
         for t in ex.values():
             tiers[t] = tiers.get(t, 0) + 1
-        sev_seg = []
+
+        # ── fit-to-width ladder ─────────────────────────────────────────
+        # The tail-crop used to eat exactly the segments that matter most:
+        # the moment a fireteam went live its ~20-char label pushed CRED,
+        # Fireteam and MEM past the column count and the crop deleted them
+        # — the operator watches MEM/CRED, not four zero counters. Under
+        # width pressure we DROP by priority, never by position:
+        #   1. zero-count severity tiers (LOW 0 | MED 0 | … = noise)
+        #   2. the transient t/s gauge
+        #   3. compress "Fireteam 3/3 live" -> "FT 3/3"
+        #   4. nonzero severity tiers (EXP count stays)
+        #   5. only then crop — and in practice never
+        segs: list[list] = []  # [text, style, tier] — tier 0 = never drop
+        tps = 0.0
+        if not self._paused:
+            with contextlib.suppress(Exception):
+                tps = self._tw.live_tokens_per_s()
+        if tps >= 1.0:
+            segs.append([f"{tps:.0f} t/s", "cyan", 2])
         for label, key, color in (
             ("LOW", "low", "bright_blue"),
             ("MED", "med", "bright_yellow"),
             ("HIGH", "high", "bright_magenta"),
             ("CRIT", "crit", "bright_red"),
         ):
-            sev_seg += [(" | ", "dim"), (f"{label} {tiers[key]}", f"bold {color}")]
-        sev_seg += [(" | ", "dim"), (f"EXP {len(ex)}", "bold green")]
-        # LIVE GENERATION SPEED — real, from the arrival stream (the
-        # same measurement that paces playback); hidden when idle AND
-        # when paused (the agent still finishes its turn in the background
-        # but showing t/s during pause reads as a UI pause bug)
-        tps = 0.0
-        if not self._paused:
-            with contextlib.suppress(Exception):
-                tps = self._tw.live_tokens_per_s()
-        tps_seg = [(f"{tps:.0f} t/s", "cyan")] if tps >= 1.0 else []
-        right = Text.assemble(
-            *tps_seg,
-            *sev_seg,
-            (" | ", "dim"),
-            (f"\u03a3 {_fmt_tok(tok)} tok", "cyan"),
-            (" | ", "dim"),
-            (f"{approx}${cost:.4f}", "cyan"),
-            *(ctx_seg or []),
-            (" | ", "dim"),
-            (f"CRED {len(UI_STATE['creds'])}", "bold green"),
-            *(ft_seg or []),
-            *lb_seg,
-        )
+            segs.append([f"{label} {tiers[key]}", f"bold {color}", 1 if tiers[key] == 0 else 4])
+        segs.append([f"EXP {len(ex)}", "bold green", 0])
+        segs.append([f"\u03a3 {_fmt_tok(tok)} tok", "cyan", 0])
+        segs.append([f"{approx}${cost:.4f}", "cyan", 0])
+        if ctx_seg:
+            segs.append([ctx_seg[-1][0], ctx_seg[-1][1], 0])
+        segs.append([f"CRED {len(UI_STATE['creds'])}", "bold green", 0])
+        if ft_seg:
+            segs.append([ft_seg[-1][0], ft_seg[-1][1], 0])  # long label; tier-3 compress form below
+        if lb_seg:
+            segs.append([lb_seg[-1][0], lb_seg[-1][1], 0])
+
+        def _fit(segments: list[list], avail: int) -> list[list]:
+            def total(lst):
+                return sum(len(s[0]) for s in lst) + 3 * max(0, len(lst) - 1)
+
+            out = [list(s) for s in segments]
+            for drop_tier in (1, 2):  # zero-sev, then t/s
+                while total(out) > avail and any(s[2] == drop_tier for s in out):
+                    out.pop(max(i for i, s in enumerate(out) if s[2] == drop_tier))
+            if total(out) > avail:  # compress the fireteam label
+                for s in out:
+                    if s[0].startswith("Fireteam "):
+                        s[0] = "FT " + s[0].split(" ", 1)[1].replace(" live", "")
+            while total(out) > avail and any(s[2] == 4 for s in out):  # live tiers, highest first
+                out.pop(max(i for i, s in enumerate(out) if s[2] == 4))
+            return out
+
+        avail = max(40, self.console.width - (left.cell_len if hasattr(left, "cell_len") else 12) - 4)
+        segs = _fit(segs, avail)
+        parts: list = []
+        for i, (txt, style, _tier) in enumerate(segs):
+            if i:
+                parts.append((" | ", "dim"))
+            parts.append((txt, style))
+        right = Text.assemble(*parts)
         t = Table.grid(expand=True, padding=(0, 1))
-        # ONE terminal row, ALWAYS: at 120 cols the segments exceeded the
-        # width, the strip wrapped to a second row ('| CRED' / ' 0'), and
-        # every later re-render at a different length left ghost fragments
-        # below the region (Rich Live cannot erase rows below a shorter
-        # one). Crop instead of wrap — losing the tail beats tearing.
+        # ONE terminal row, ALWAYS (see the ladder above for what gives way)
         right.no_wrap = True
         right.overflow = "crop"
         t.add_row(left, Text(), right)
@@ -1707,7 +1733,9 @@ class EngagementUI:
                 "low": "low",
                 "informational": "low",
             }.get(sev_word, "med")
-            UI_STATE["exploits"].setdefault(eid, tier)
+            # latest verdict wins (setdefault froze the first severity —
+            # a re-validated MEDIUM→LOW stayed MEDIUM forever)
+            UI_STATE["exploits"][eid] = tier
         sev_m = _re.match(r"([A-Z-]+)\s+CVSS\s+([0-9.]+)\s*:\s*(.+)", rest)
         title = rest
         sev_line = ""
@@ -1748,12 +1776,21 @@ class EngagementUI:
     def _track_exploit(self, out: str) -> None:
         """EXP severity ledger for the strip. Parses the catalog's ACTUAL
         output format (classed_title): 'EXP-001 CONFIRMED — CRITICAL CVSS
-        8.9 : title' or 'EXP-001 CONFIRMED — HIGH : title'. The severity
-        word comes FIRST in the tail, then optional CVSS. Best-effort."""
+        8.9 : title' or 'EXP-001 CONFIRMED — HIGH : title'.
+
+        Counting rules (the field bugs): a CONFIRMED with NO severity word
+        still counts (med floor) — the old regex required a '— word' tail
+        and unlabeled confirmations vanished from the EXP count entirely;
+        and the LATEST verdict wins, not the first (a re-validated
+        MEDIUM→LOW used to stay MEDIUM forever via setdefault)."""
         with contextlib.suppress(Exception):
-            for m in re.finditer(r"(EXP-\d+)\s+CONFIRMED[^\n]*?[—-]\s*(\w+)", out):
+            for m in re.finditer(r"(EXP-\d+)\s+CONFIRMED", out):
                 eid = m.group(1)
-                sev_word = m.group(2).lower()
+                tail = out[m.end() : m.end() + 120]
+                wm = re.match(r"\s*[—-]?\s*([A-Za-z]+)", tail)
+                sev_word = (wm.group(1).lower() if wm else "").strip("—-")
+                if sev_word == "cvss":  # 'CONFIRMED — CVSS 7.1 : …' — no word, score only
+                    sev_word = ""
                 tier = {
                     "critical": "crit",
                     "crit": "crit",
@@ -1767,15 +1804,14 @@ class EngagementUI:
                     "note": "low",
                 }.get(sev_word)
                 if tier is None:
-                    # fallback: look for CVSS in the full line
-                    line = out[m.start() : m.end() + 80]
-                    cv = re.search(r"CVSS\s*([0-9.]+)", line, re.I)
+                    # fallback: look for CVSS in the tail
+                    cv = re.search(r"CVSS\s*([0-9.]+)", tail, re.I)
                     if cv:
                         v = float(cv.group(1))
                         tier = "crit" if v >= 9 else "high" if v >= 7 else "med" if v >= 4 else "low"
                     else:
                         tier = "med"  # unlabeled confirmed = med floor
-                UI_STATE["exploits"].setdefault(eid, tier)
+                UI_STATE["exploits"][eid] = tier  # latest verdict wins
 
     def output(self, text: str, error_class: str = "") -> None:
         out = str(text or "")
@@ -1927,6 +1963,12 @@ class EngagementUI:
         s = str(text)
         if "deployed" in s.lower():
             UI_STATE["fireteams"] += 1
+        # subagents confirm exploits too — their result boxes carried
+        # 'EXP-nn CONFIRMED' lines that rendered in the UI but never
+        # entered the strip's count (field bug: two confirmed vulns,
+        # strip stayed flat). Count them exactly like primary output.
+        with contextlib.suppress(Exception):
+            self._track_exploit(s)
         self._note(Group(Text("fireteam", style="bold magenta"), _md(s)))
 
     def phase_transition(self, to_phase: str, reason: str = "") -> None:
@@ -1962,6 +2004,13 @@ class EngagementUI:
         self._close_open()  # the answer prompt must print outside the block
 
     def done(self, ok: int, total: int, phase: str, cost: float, reason: str) -> None:
+        # DRAIN BEFORE TEARDOWN: stream_done() fires at iteration
+        # boundaries, but the FINAL turn has no next boundary — the model's
+        # closing reasoning kept playing while the run loop finished and
+        # the menu redraw cut it mid-word (the truncated-final-report bug).
+        # Commit everything now, THEN render the summary.
+        with contextlib.suppress(Exception):
+            self.stream_done()
         self._flush()
         self.waiting(False)
         self.stop()
@@ -1983,6 +2032,8 @@ class EngagementUI:
     def failure(self, reason: str, detail: str = "") -> None:
         """Terminal failure (parse_failure / llm_error / provider_failure /
         budget_exhausted / node_crash) — NEVER let a run just vanish."""
+        with contextlib.suppress(Exception):
+            self.stream_done()  # same drain-before-teardown as done()
         self._flush()
         self.stop()
         body = [Text(reason, style="bold red")]
