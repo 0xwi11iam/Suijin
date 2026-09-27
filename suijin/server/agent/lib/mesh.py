@@ -151,6 +151,14 @@ def peers(refresh_now: bool = False) -> list[dict]:
                     rec = json.loads(f.read_text())
                     pid = int(rec.get("pid") or 0)
                     if pid and pid != os.getpid() and now - float(rec.get("beat") or 0) < STALE_S:
+                        # PROCESS LIVENESS: a SIGKILLed session leaves its
+                        # registry file behind; the beat filter alone showed
+                        # it as a ghost for up to STALE_S seconds. One
+                        # zero-signal probe settles it instantly.
+                        try:
+                            os.kill(pid, 0)
+                        except (ProcessLookupError, PermissionError):
+                            continue
                         live.append(rec)
         _peers["list"] = live
         _peers["at"] = now
