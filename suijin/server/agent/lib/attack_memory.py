@@ -35,10 +35,19 @@ def target_key(text: str) -> str:
     return t.strip().lower()[:60]
 
 
-def _catalog_root():
+def _catalog_roots() -> list:
     from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-    return WORKSPACE_DIR / "exploits"
+    # The 2026-09-16 restructure moved exploits into engagements/<slug>/ —
+    # reading only the legacy WORKSPACE_DIR/exploits root meant what_worked
+    # saw NOTHING on any post-restructure run (the positive-memory reader
+    # silently went blind). Both roots are read, engagements first.
+    roots = [WORKSPACE_DIR / "engagements", WORKSPACE_DIR / "exploits"]
+    out = []
+    for r in roots:
+        if r.is_dir():
+            out.append(r)
+    return out
 
 
 def what_worked(target: str, limit: int = 8) -> list[str]:
@@ -49,7 +58,16 @@ def what_worked(target: str, limit: int = 8) -> list[str]:
         key = target_key(target)
         same: list[str] = []
         class_hits: dict[str, int] = {}
-        for eng_dir in sorted(_catalog_root().glob("*"), reverse=True):
+        dirs: list = []
+        for root in _catalog_roots():
+            # engagements/<slug>/exploits/<name> — descend one level; the
+            # legacy root is exploits/<name> directly
+            if root.name == "engagements":
+                for eng in sorted(root.glob("*"), reverse=True):
+                    dirs += sorted((eng / "exploits").glob("*"), reverse=True)
+            else:
+                dirs += sorted(root.glob("*"), reverse=True)
+        for eng_dir in dirs:
             idx = eng_dir / "catalog.json"
             if not idx.exists():
                 continue

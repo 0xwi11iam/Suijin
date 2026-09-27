@@ -374,6 +374,18 @@ def record_finding(target, finding_type, rule, evidence="", config=None):
     kg.add_constraint(target, finding_type, rule, evidence=evidence or "", confidence=confidence)
     base = f"Recorded: {target} -> {finding_type} -> '{rule}'"
 
+    # The finding must also land in the AUDIT TRAIL (log_finding). A
+    # successful record_finding used to leave the trail's findings list
+    # EMPTY — so the trail (and every reader downstream of it: dossier
+    # engagement history, recipes, reviews) understated every run that
+    # actually found things. Best-effort: never blocks recording.
+    try:
+        from suijin.modules.tools.lib.audit_trail import log_finding
+
+        log_finding(finding_type, "info", target, rule, (evidence or "")[:500])
+    except Exception:  # noqa: BLE001
+        pass
+
     # claim-time verification — never blocks the recording, only grades it
     try:
         from suijin.modules.agent.lib.verify import verify_finding

@@ -88,17 +88,39 @@ def bypass_403(url: str) -> str:
 
         baseline = http_request("GET", url)
         base_status = _status_of(baseline)
+        # THE BASELINE GUARD: run this battery only on an actual 403. On a
+        # 200/404 baseline, ANY status difference used to count as a "win"
+        # — a live probe returned "13/24 variants changed the status" with
+        # 404s and 501s listed as bypasses. That verdict is worse than
+        # useless: it invites a false finding.
+        if base_status == 0:
+            return f"Error: baseline request failed (no status parsed) — last output:\n{str(baseline)[:300]}"
+        if base_status != 403:
+            return (
+                f"bypass_403 is for 403s — the baseline for this URL is {base_status}, nothing to bypass. "
+                "Re-check the path or use http_request directly."
+            )
+
         rows: list[str] = []
         wins: list[str] = []
+        inconclusive = 0
         for method, vurl, headers, desc in variants:
             res = http_request(method, vurl, headers=headers)
             st = _status_of(res)
             n = _len_of(res)
             mark = ""
-            if st not in (0, base_status):
-                mark = " ← CHANGED"
+            if st == 0:
+                # RATE LIMITED / transport error — the variant says NOTHING
+                # about enforcement. Counting these as "held" produced a
+                # confident "enforced" verdict on unanswered questions.
+                inconclusive += 1
+                mark = " ? inconclusive"
+            elif 200 <= st < 400:
+                mark = " ← BYPASSED"
                 wins.append(f"{desc} → {st}")
-            elif st == base_status and n and abs(n - _len_of(baseline)) > 400:
+            elif st != base_status:
+                mark = " ≠ changed"  # different, but NOT better access
+            elif n and abs(n - _len_of(baseline)) > 400:
                 mark = " ~ body diff"
             rows.append(f"  {st:>3}  {len(str(res)):>6}B  {desc}{mark}")
 
@@ -108,13 +130,20 @@ def bypass_403(url: str) -> str:
             "-" * 64,
         ]
         if wins:
-            verdict = f"\nVERDICT: {len(wins)}/{len(variants)} variant(s) changed the status code:"
+            verdict = f"\nVERDICT: {len(wins)}/{len(variants)} variant(s) reached a 2xx/3xx response:"
             verdict += "".join(f"\n  • {w}" for w in wins)
             verdict += (
                 "\nConfirm the changed response actually reaches the protected resource before recording a finding."
             )
+        elif inconclusive:
+            verdict = (
+                f"\nVERDICT: inconclusive — {inconclusive}/{len(variants)} variants returned no status "
+                "(rate-limited or transport error). Retry later; do NOT record this as enforced."
+            )
         else:
             verdict = "\nVERDICT: 0 bypasses — the 403 held across every variant. Record as enforced and move on."
+        if inconclusive and wins:
+            verdict += f"\n({inconclusive} variant(s) were inconclusive and are not counted either way.)"
         return "\n".join(header + rows + [verdict])
     except Exception as e:  # noqa: BLE001 — tools return strings, never raise
         return f"Error: bypass_403 failed: {e}"

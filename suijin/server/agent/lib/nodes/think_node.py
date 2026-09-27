@@ -908,12 +908,24 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
             try:
                 from suijin.modules.agent.lib.nodes.subagent_node import deploy_fireteam
 
+                # Compact doctrine for specialists: scope line + the
+                # standing rules that bind every actor in this engagement.
+                # Built from live state — NOT from the task text, which is
+                # the main agent's paraphrase and can silently drop the
+                # program's requirements (the required-header incident).
+                _obj = str(state.get("original_objective") or state.get("_objective") or "").strip()
+                _doctrine = (
+                    f"SCOPE — stay strictly within this engagement: {_obj[:400]}\n"
+                    "No third-party hosts. No personal data. Low volume: the HTTP engine's "
+                    "pacing and stealth identity apply to you automatically — never bypass them."
+                )
+
                 if route_tool_fn is not None:
                     _rt = route_tool_fn  # blue graph: responders route BLUE tools
                 else:
                     from suijin.modules.tools.lib.dispatch import route_tool as _rt
 
-                dep = deploy_fireteam(tasks, generate_fn=generate_fn, route_tool_fn=_rt)
+                dep = deploy_fireteam(tasks, generate_fn=generate_fn, route_tool_fn=_rt, doctrine=_doctrine)
                 if dep.get("team_id"):
                     updates["_current_step"]["tool_output"] = (
                         f"Fireteam {dep['team_id']}: {len(dep['spawned'])} deployed, "

@@ -55,6 +55,12 @@ USAGE = {
     "by_provider": {},  # provider -> {calls, input, output, cost_usd}
     # the real input size of the most recent request (the ctx gauge's truth)
     "last_request_input_tokens": 0,
+    # the REASONING STREAM of the most recent successful streaming call.
+    # Reasoning models put their deliberation in reasoning_content deltas —
+    # it never appears in the returned decision JSON, so callers that only
+    # see the return value (the audit trail's per-iteration reasoning, the
+    # TUI's post-stream reasoning block) had nothing to persist.
+    "last_reasoning": "",
 }
 
 #: the effort tier vocabulary, descending; callers gate by model support
@@ -303,6 +309,19 @@ def record_missing_usage(messages, response_text, provider, model) -> None:
 def get_usage():
     """Return a copy of the running token/cost tally."""
     return dict(USAGE)
+
+
+#: cap for the stashed reasoning — a sanity bound, not a display rule
+_LAST_REASONING_CAP = 60_000
+
+
+def _stash_reasoning(reasoning: str) -> None:
+    """Remember the most recent successful call's reasoning stream.
+
+    Paired with USAGE['last_reasoning']: the audit trail and the TUI read
+    it AFTER the call returns, when the live deltas are long gone."""
+    with contextlib.suppress(Exception):
+        USAGE["last_reasoning"] = str(reasoning or "")[:_LAST_REASONING_CAP]
 
 
 def reset_usage():
@@ -1032,6 +1051,7 @@ def generate(
                         return content
                 if status == 200:
                     text = content or reasoning or "(empty response)"
+                    _stash_reasoning(reasoning)
                     try:
                         if usage is None or usage.get("prompt_tokens") is None:
                             record_missing_usage(messages, text, "deepseek", ds_model)
@@ -1112,6 +1132,7 @@ def generate(
                 if status == 200:
                     text = content or reasoning or "(empty response)"
                     _diag_llm_done("zai", zai_model, True, time.monotonic() - _zai_t0)
+                    _stash_reasoning(reasoning)
                     try:
                         if usage is None or usage.get("prompt_tokens") is None:
                             # gateway omitted usage — estimate, never zero-count
@@ -1247,6 +1268,7 @@ def _compat_call(spec, messages, config, *, temperature, max_tokens, retries, on
             if status == 200:
                 text = content or reasoning or "(empty response)"
                 _diag_llm_done(spec.key, model, True, time.monotonic() - _t0)
+                _stash_reasoning(reasoning)
                 with contextlib.suppress(Exception):
                     if usage is None or usage.get("prompt_tokens") is None:
                         record_missing_usage(messages, text, spec.key, model)

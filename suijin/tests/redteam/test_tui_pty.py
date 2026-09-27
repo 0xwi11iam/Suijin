@@ -112,8 +112,10 @@ def test_pause_chord_commands_and_resume(rig):
     _send(fifo, b"/pause\r")
     time.sleep(5)  # timeout-poll is 2s; allow a full poll + processing
     out = _log_text(run_dir)
-    assert "Paused" in out, "no pause banner within 5s of the chord"
+    # ONE pause indication (2026-09-27): the strip's PAUSED badge owns
+    # the state; the banner carries only the how-to (no second "Paused").
     assert "PAUSED" in out, "strip did not flip to PAUSED"
+    assert "resume" in out.lower(), "the banner how-to must still render"
 
     # a command answers INSTANTLY during the stuck window
     _send(fifo, b"/cost\r")
