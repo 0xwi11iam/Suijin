@@ -1,5 +1,13 @@
 # AGENTS.md — standing rules for any agent working in this repo
 
+## Agent memory vault (local-only, gitignored)
+
+`agent-vault/` (gitignored, never committed) is the durable decision/session
+memory — read it FIRST on a fresh session, and record substantive decisions
+there as they're made. Its engagement notes are exempt from the rule below
+*only because* the folder never reaches git; the exemption dies with the
+gitignore entry.
+
 ## Engagement confidentiality (PERMANENT operator ruling, 2026-09-26)
 
 NEVER record an engagement's target, program name, vendor, or tested hosts
