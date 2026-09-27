@@ -356,6 +356,13 @@ def _state_result_message(tool_name, duration_ms, step_data, output, state) -> s
     cfg = (state or {}).get("_run_config") or {}
     cap = int(cfg.get("context_result_cap") or 0) or None
     body = distill_result(_wrap_untrusted(str(output), "TOOL_OUTPUT"), cap=cap)
+    # SECRETS SURVIVE DISTILLATION: a credential deep in a long response
+    # must stay in context (the bench's token chain was the canary).
+    from suijin.modules.agent.lib.context_distill import extract_secret_excerpts
+
+    secrets = extract_secret_excerpts(str(output or ""))
+    if secrets:
+        body += "\n[SECRET EXCERPTS — verbatim, never distilled]\n" + "\n".join(secrets)
     head = f"RESULT ({tool_name}, {duration_ms}ms, iteration {step_data.get('iteration', '?')}):"
     pin = ""
     out_l = str(output or "")

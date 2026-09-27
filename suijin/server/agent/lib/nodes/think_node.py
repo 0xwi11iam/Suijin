@@ -416,17 +416,27 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         "informational": [
             "CURRENT_STATE",
             "RECENT_ACTIONS",
+            "RECENT_MESSAGES",
             "TARGET_INTELLIGENCE",
             "TODO_LIST",
             "CHAIN_CONTEXT",
             "RULES",
         ],
-        "recon": ["CURRENT_STATE", "RECENT_ACTIONS", "TARGET_INTELLIGENCE", "TODO_LIST", "CHAIN_CONTEXT", "RULES"],
+        "recon": [
+            "CURRENT_STATE",
+            "RECENT_ACTIONS",
+            "RECENT_MESSAGES",
+            "TARGET_INTELLIGENCE",
+            "TODO_LIST",
+            "CHAIN_CONTEXT",
+            "RULES",
+        ],
         "exploitation": [
             "CURRENT_STATE",
             "YOU_HOLD",
             "CHAIN_CONTEXT",
             "RECENT_ACTIONS",
+            "RECENT_MESSAGES",
             "TARGET_INTELLIGENCE",
             "TODO_LIST",
             "RULES",
@@ -704,24 +714,18 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
                 break
     _new_footholds = []
     with contextlib.suppress(Exception):
-        from suijin.modules.agent.lib.footholds import arm_foothold, extract_footholds, merge_footholds
+        from suijin.modules.agent.lib.footholds import extract_footholds, merge_footholds
 
         _new_footholds = extract_footholds(_last_result, iteration)
         if _new_footholds:
-            _merged = merge_footholds(state, _new_footholds)
-            updates["_footholds"] = _merged
-            for _fh in _new_footholds:
-                await arm_foothold(_fh, _last_result[:600], generate_fn)
-            # auto-todos for named unlocks (the FOLLOW-UP rule, mechanical)
-            from suijin.modules.agent.lib.footholds import foothold_todos
-
-            _existing_ids = {t.get("id") for t in (state.get("todo_list") or [])}
-            _new_todos = list(state.get("todo_list") or [])
-            for _t in foothold_todos(updates["_footholds"]):
-                if _t["id"] not in _existing_ids:
-                    _existing_ids.add(_t["id"])
-                    _new_todos.append(_t)
-            updates["todo_list"] = _new_todos
+            # NO LLM call here (deliberate — v2 of this mechanism): an
+            # extra generate_fn call broke the bench's scripted call-count
+            # contract and derailed mock runs. The unlocks are named by
+            # the MODEL through the natural channels — YOU HOLD asks it
+            # to name unlocks as fh-<EXP> todos, the depth gate refuses
+            # completion until they are tested, and todo completion
+            # closes the foothold. Same pressure, zero extra calls.
+            updates["_footholds"] = merge_footholds(state, _new_footholds)
 
     # ── Chain findings ──────────────────────────────────────────────
     chain_findings = output_analysis.get("chain_findings") or []

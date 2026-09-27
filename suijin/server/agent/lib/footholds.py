@@ -124,7 +124,14 @@ def render_you_hold(footholds: list, iteration: int = 0) -> str:
         targets = f.get("unlock_targets") or []
         if status == "tested":
             continue
-        flag = " ⚠ UNNAMED UNLOCKS — name them" if status == "open" else ""
+        flag = (
+            (
+                " ⚠ name what this unlocks: add todos id fh-%s-1.. with task 'test unlock: …', complete them as tested"
+                % f.get("source", "?")
+            )
+            if status == "open"
+            else ""
+        )
         stale = f" · {age} turns old" if age >= 3 else ""
         rows.append(f"- HOLD: {cap}{stale}{flag}")
         for t in targets:
