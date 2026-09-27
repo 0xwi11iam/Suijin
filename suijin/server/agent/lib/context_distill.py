@@ -25,6 +25,37 @@ _KEEP_HEADER_RE = re.compile(
     re.IGNORECASE,
 )
 
+#: credential shapes that must NEVER be lost to distillation — a secret
+#: living deep in a long response is exactly the thing the agent must not
+#: forget (the bench's {{TOKEN}} flow was the canary: the token rode past
+#: the 8k head and the scripted chain went blind)
+_SECRET_RES = [
+    re.compile(r"access_token[\"']?\s*[:=]\s*[\"']?([A-Za-z0-9._\-]{16,})"),
+    re.compile(r"\b(AKIA[0-9A-Z]{16})\b"),
+    re.compile(r"\b(gh[pousr]_[A-Za-z0-9]{20,})\b"),
+    re.compile(r"\b(sk-[A-Za-z0-9_\-]{16,})\b"),
+    re.compile(r"\b(eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{5,})\b"),
+    re.compile(r"\b([A-Fa-f0-9]{32})\b"),
+]
+
+
+def extract_secret_excerpts(output: str, max_hits: int = 4) -> list[str]:
+    """Credential-shaped strings pulled from the FULL output, verbatim.
+
+    These ride below the distillate so a key 20k chars into a response
+    stays in context — distillation must shrink noise, never weapons."""
+    hits: list[str] = []
+    seen: set[str] = set()
+    for rx in _SECRET_RES:
+        for m in rx.finditer(str(output or "")):
+            v = m.group(1)
+            if v not in seen:
+                seen.add(v)
+                hits.append(v)
+                if len(hits) >= max_hits:
+                    return hits
+    return hits
+
 
 def distill_result(output: str, cap: int | None = None) -> str:
     """The state-bound copy of a tool result: head + key headers + body
