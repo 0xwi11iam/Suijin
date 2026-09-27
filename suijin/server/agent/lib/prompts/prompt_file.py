@@ -185,8 +185,10 @@ def overlay_prompt(core: str, user_zone: str) -> str:
     parts = []
     if pre_core.strip():
         parts.append(pre_core)
-    if pre_user.strip():
-        parts.append(pre_user)  # operator prose above all sections rides first
+    # the operator's preamble rides FIRST — but a copy of the core's own
+    # preamble (which `reset` writes into the file) must not double it
+    if pre_user.strip() and pre_user.strip() != pre_core.strip():
+        parts.append(pre_user)
     parts += [t for _k, t in out_secs]
     return "\n\n".join(p for p in parts if p.strip()) + "\n"
 
