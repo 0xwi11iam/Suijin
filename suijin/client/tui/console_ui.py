@@ -1160,6 +1160,13 @@ class EngagementUI:
             *lb_seg,
         )
         t = Table.grid(expand=True, padding=(0, 1))
+        # ONE terminal row, ALWAYS: at 120 cols the segments exceeded the
+        # width, the strip wrapped to a second row ('| CRED' / ' 0'), and
+        # every later re-render at a different length left ghost fragments
+        # below the region (Rich Live cannot erase rows below a shorter
+        # one). Crop instead of wrap — losing the tail beats tearing.
+        right.no_wrap = True
+        right.overflow = "crop"
         t.add_row(left, Text(), right)
         t.columns[1].ratio = 1
         rows = []
@@ -1897,13 +1904,22 @@ class EngagementUI:
         the field; the guard saved the run but the warning vanished)."""
         if not text:
             return
+        body_lines = []
         if isinstance(text, dict):
-            causes = ", ".join(str(c) for c in text.get("drift_causes", [])[:2]) or "unknown cause"
-            sugg = "; ".join(str(s) for s in text.get("suggestions", [])[:3])
-            body = causes + (f" — {sugg}" if sugg else "")
+            from suijin.modules.redteam.lib.intel.drift_analyser import format_cause
+
+            causes = list(text.get("drift_causes", []))[:3]
+            body_lines += [Text(f"  {format_cause(c)}", style="dim") for c in causes]
+            extra = len(text.get("drift_causes", [])) - len(causes)
+            if extra > 0:
+                body_lines.append(Text(f"  +{extra} more", style="dim"))
+            sugg = "; ".join(str(s) for s in text.get("suggestions", [])[:2])
+            if sugg:
+                body_lines.append(Text(f"  → {sugg}", style="italic dim"))
         else:
-            body = str(text)
-        self._note(Text.assemble(("Drift  ", "bold yellow"), (body, "dim")))
+            body_lines.append(Text(str(text), style="dim"))
+        parts = [Text("Drift", style="bold yellow")] + body_lines
+        self._note(Group(*parts))
 
     def fireteam(self, text: str) -> None:
         if not text:

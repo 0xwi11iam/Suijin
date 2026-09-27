@@ -324,12 +324,18 @@ def _tool_reference_text(route_tool_fn=None, task: str = "") -> str:
         return full
 
 
-def _build_system_prompt(task: str, max_steps: int, route_tool_fn=None) -> str:
+def _build_system_prompt(task: str, max_steps: int, route_tool_fn=None, doctrine: str = "") -> str:
+    # The doctrine block is the engagement's OPERATING CONSTRAINTS (scope,
+    # program headers, volume posture). Without it a specialist only knew
+    # its task text — on a live run the program's required request header
+    # reached subagents only when the main agent happened to embed it in
+    # the task, which is luck, not a guarantee.
+    _doctrine = f"\n## DOCTRINE — the engagement's rules, binding on you too\n{doctrine}\n" if doctrine else ""
     return f"""# ROLE: Specialist Subagent — ONE task, done well.
 
 ## TASK
 {task}
-
+{_doctrine}
 ## RULES
 1. Focus ONLY on this task. No scope creep, no unrelated recon.
 2. You have {max_steps} steps MAXIMUM. Be direct and evidence-driven.
@@ -354,6 +360,7 @@ async def run_subagent(
     tool_catalog_fn=None,  # retained for API compat; vision comes from the kernel
     max_steps: int | None = None,
     budget_s: float | None = None,
+    doctrine: str = "",
 ) -> SubagentResult:
     """Run one focused subagent: tight think->execute loop, tolerant parsing."""
     from suijin.modules.platform.lib.helpers.parsing import try_parse_llm_decision
@@ -365,7 +372,7 @@ async def run_subagent(
     logger.info("Subagent [%s] start: %s", subagent_id, task[:100])
 
     messages = [
-        {"role": "system", "content": _build_system_prompt(task, max_steps, route_tool_fn)},
+        {"role": "system", "content": _build_system_prompt(task, max_steps, route_tool_fn, doctrine)},
         {"role": "user", "content": f"Execute this task now: {task}"},
     ]
 
@@ -591,6 +598,7 @@ def deploy_fireteam(
     generate_fn,
     route_tool_fn,
     max_concurrent: int = 3,
+    doctrine: str = "",
 ) -> str:
     """Spawn specialists in the background; returns a team id immediately.
 
@@ -618,7 +626,7 @@ def deploy_fireteam(
     async def _run_one(task: str) -> SubagentResult:
         try:
             async with semaphore:
-                return await run_subagent(task, generate_fn=generate_fn, route_tool_fn=route_tool_fn)
+                return await run_subagent(task, generate_fn=generate_fn, route_tool_fn=route_tool_fn, doctrine=doctrine)
         except Exception as e:  # noqa: BLE001
             return SubagentResult(
                 subagent_id="crash", task=task, success=False, findings=f"Subagent crashed: {e}", steps=0

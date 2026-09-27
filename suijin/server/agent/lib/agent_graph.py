@@ -521,8 +521,16 @@ class SuijinAgentGraph:
                     ]
                     drift_result = analyse_drift(objective, recent_actions)
                     if drift_result.get("drift_detected"):
+                        from suijin.modules.redteam.lib.intel.drift_analyser import format_cause
+
                         suggestions = drift_result.get("suggestions", [])
-                        msg = f"DRIFT WARNING: {drift_result.get('drift_causes', ['Unknown'])[0]}. Suggestions: {'; '.join(suggestions[:3])}"
+                        # readable causes, not a raw dict repr — the model
+                        # acts on this message, and {'action_index': 3, ...}
+                        # is noise it has to parse around
+                        cause_text = "; ".join(format_cause(c) for c in drift_result.get("drift_causes", [])[:3])
+                        msg = (
+                            f"DRIFT WARNING: {cause_text or 'unknown cause'}. Suggestions: {'; '.join(suggestions[:3])}"
+                        )
                         result.setdefault("messages", []).append(
                             {
                                 "role": "user",
