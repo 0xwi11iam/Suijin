@@ -403,9 +403,9 @@ class TestChainDoctrine:
         assert "CHAIN, DON'T COLLECT" in order
         assert "BIAS TO ACTION" in order
         assert "UNLOCKS" in order
-        # and it actually reaches the agent each turn
+        # the tail no longer duplicates the order/board — each rides once
         tail = _dynamic_tail({"original_objective": "hunt example.com"}, "recon")
-        assert "CHAIN, DON'T COLLECT" in tail
+        assert tail == "", f"dynamic tail must stay empty, got {tail[:120]!r}"
 
 
 class TestVulnCounting:
@@ -616,3 +616,21 @@ class TestOverlayNoDoublePreamble:
         core = "# ROLE\n\nagent\n\n## RULES\nrules"
         out = overlay_prompt(core, "my custom preamble line\n\n## RULES\nmine")
         assert "my custom preamble line" in out  # custom prose still rides first
+
+
+class TestContextRidesOnce:
+    """The context audit: the order and the board each ride EXACTLY once
+    per turn — the tail used to duplicate both below the system base."""
+
+    def test_order_and_board_not_duplicated_in_assembly(self):
+        from suijin.modules.agent.lib.prompts.base import _dynamic_tail
+
+        assert _dynamic_tail({"original_objective": "example.com hunt"}, "recon") == ""
+
+    def test_assembled_prompt_has_single_order_marker(self):
+        from suijin.modules.agent.lib.prompts.base import build_agent_system_prompt
+
+        p = build_agent_system_prompt({"original_objective": "hunt example.com", "config": {}})
+        # the system side carries NO order at all now (the user turn owns it)
+        assert "[ENGAGEMENT ORDER]" not in p
+        assert "[ENGAGEMENT]" not in p

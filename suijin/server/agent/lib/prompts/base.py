@@ -308,18 +308,17 @@ def build_agent_system_prompt(state: dict) -> str:
 
 
 def _dynamic_tail(state: dict, phase: str) -> str:
-    """Per-turn context appended below ANY base (generated or user)."""
-    objective = state.get("original_objective", "")
-    parts = [engagement_order(objective)]
-    try:
-        from suijin.modules.agent.lib.nodes.think_node import _render_board
+    """Per-turn content appended below ANY base (generated or user).
 
-        board = _render_board(state)
-        if board:
-            parts.append("## TARGET BOARD\n" + board)
-    except Exception:  # noqa: BLE001 — the board is decoration, never a dependency
-        pass
-    return "\n".join(parts)
+    DELIBERATELY EMPTY (2026-09-27 context audit): the engagement order
+    and the target board each ride EXACTLY ONCE per turn — the order as
+    the USER turn (the attention anchor, full on turn 1 / compact after),
+    the board inside think's context block (TARGET INTELLIGENCE). This
+    tail used to duplicate BOTH below the system base, every turn —
+    pure token cost the model re-read twice."""
+    objective = state.get("original_objective", "")
+    del objective, phase
+    return ""
 
 
 def _assemble_prompt(state: dict, phase: str, core_only: bool) -> str:

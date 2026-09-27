@@ -86,7 +86,9 @@ class TestUserPriority:
         }
         out = build_agent_system_prompt(st)
         assert out.startswith("OPERATOR PROMPT.")
-        assert "ENGAGEMENT ORDER" in out  # live tail still appended
+        # (2026-09-27 context audit) the order rides the USER turn only —
+        # the dynamic tail no longer duplicates it below the system base
+        assert "ENGAGEMENT ORDER" not in out
 
     def test_completion_gate_override_directive(self):
         assert pf.collect_overrides("@suijin override completion-gate\nmore text") == ["completion-gate"]
