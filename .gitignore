@@ -139,3 +139,6 @@ suijin/lab/aegis_vault/aegis_defense.json
 # ── Runtime server-region data (generated, never commit) ───────
 suijin/server/redteam/lib/intel/knowledge_graph.json
 loot/
+
+# agent memory vault (local-only; see AGENTS.md confidentiality rule)
+agent-vault/

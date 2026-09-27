@@ -5,6 +5,7 @@
 
 ## Repo facts
 
+- **Agent memory vault: `agent-vault/` (gitignored) — read it FIRST on a fresh session.** Decisions, session logs, engagement memory, roadmap state. Pointers from `AGENTS.md`.
 - Repo: `/Users/williamjiang/suijin`, GitHub: `https://github.com/0xwi11iam/Suijin`
 - venv: `.venv/bin/python` (Python 3.14); CI matrix py3.10/3.11/3.12
 - Gates: `.venv/bin/python -m pytest suijin/tests -q -m "not ai and not slow"` (~2870 passed) + `-m slow` + `ruff check` + `ruff format`. **The suite is HERMETIC**: `tests/conftest.py` redirects `HOME`, `SUIJIN_WORKSPACE`, `SUIJIN_CONFIG` and `SUIJIN_ENV` into a session sandbox AT IMPORT TIME (before any `suijin` import — `Path.home()` is baked into `PACK_ROOTS`/`WORKSPACE_DIR`/`CONFIG_PATH` on first import, so redirecting later does nothing). A test that needs the real home must opt in explicitly.
