@@ -141,6 +141,9 @@ class TestTacticalLibrary:
         assert h and "sqlmap" in h.lower()
 
     def test_tactical_via_analyze_trace_when_healthy(self):
+        # (R8) the intervention budget is module state — isolate it
+        sup._INTERVENTION_STATE.clear()
+        sup._last_fired.clear()
         tok = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.dozjgNryP4J3jVmNHl0w5N65IWDpmNfXPU4HuXqoj0k"
         trace = [
             {"tool_name": "http_request", "thought": "auth flow", "success": True, "tool_output": f"token {tok}"},

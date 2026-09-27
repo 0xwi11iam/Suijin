@@ -31,8 +31,12 @@ def needs_compaction(messages: list, trigger_chars: int = DEFAULT_TRIGGER_CHARS)
 
 def _summarize_older(messages: list) -> str:
     """Deterministic digest of the messages being compressed (no LLM —
-    compaction must work when the provider is the scarce resource)."""
-    tools_ok, tools_fail, notes = [], [], []
+    compaction must work when the provider is the scarce resource).
+
+    (2026-09-27 R2) assistant decisions are digested too — the agent's own
+    reasoning used to vanish from the deep past entirely, leaving a
+    transcript of results with no memory of what it decided."""
+    tools_ok, tools_fail, notes, decisions = [], [], [], []
     for m in messages:
         c = str(m.get("content", ""))
         role = m.get("role")
@@ -44,14 +48,21 @@ def _summarize_older(messages: list) -> str:
             (tools_ok if ok_step else tools_fail).append(first)
         elif role == "user" and "NOTE:" in c[:12]:
             notes.append(c[:120])
+        elif role == "assistant" and c.strip():
+            # the decision one-liner: first non-empty line, capped
+            first = next((ln for ln in c.splitlines() if ln.strip()), "")[:100]
+            if first:
+                decisions.append(first)
     lines = ["[CONTEXT COMPACTED — digest of earlier steps]"]
+    if decisions:
+        lines.append("your past decisions (" + str(len(decisions)) + "): " + "; ".join(decisions[-8:]))
     if tools_ok:
         lines.append(f"successful results ({len(tools_ok)}): " + "; ".join(tools_ok[-10:]))
     if tools_fail:
         lines.append(f"failed results ({len(tools_fail)}, do not repeat blindly): " + "; ".join(tools_fail[-6:]))
     if notes:
         lines.append("notes: " + "; ".join(notes[-5:]))
-    lines.append("If you need an older result's details, re-run that tool.")
+    lines.append("Pinned findings/credentials ride above this digest, verbatim.")
     return "\n".join(lines)
 
 
@@ -80,5 +91,20 @@ def compact(messages: list, trigger_chars: int = DEFAULT_TRIGGER_CHARS, keep_rec
         if len(convo) <= keep + 1:
             return messages
     older, recent = convo[:-keep], convo[-keep:]
+    # (R2) PINS: findings, credentials and operator rulings enter state
+    # tagged [PIN] — compaction carries them VERBATIM above the digest.
+    # The old digest compressed a confirmed exploit's evidence into an
+    # 80-char header line (or dropped it), which is how a run forgets
+    # what it spent real effort winning.
+    pins = [m for m in older if str(m.get("content", "")).lstrip().startswith("[PIN]")]
     summary = {"role": "user", "content": _summarize_older(older)}
-    return system + [summary] + recent
+    out = system + [summary] + recent
+    if pins:
+        pin_block = {
+            "role": "user",
+            "content": "[PINNED — findings, credentials, operator rulings — NEVER compressed]\n"
+            + "\n---\n".join(str(m.get("content", ""))[:4000] for m in pins[-6:]),
+        }
+        # pins ride DIRECTLY above the most-recent window (highest salvage)
+        return system + [summary, pin_block] + recent
+    return out

@@ -277,6 +277,10 @@ def new_agent_state(
         "target_info": {},
         # Chain memory
         "chain_findings_memory": [],
+        # (R7) THE FOOTHOLD GRAPH: capabilities the agent HOLDS, each with
+        # the concrete surfaces it unlocks. Chaining stops being doctrine
+        # prose the moment holdings ride every turn's context.
+        "_footholds": [],
         "chain_failures_memory": [],
         # Productivity tracking
         "tested_axes": {},
