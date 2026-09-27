@@ -8,6 +8,15 @@ there as they're made. Its engagement notes are exempt from the rule below
 *only because* the folder never reaches git; the exemption dies with the
 gitignore entry.
 
+## Docs and vault stay current (operator ruling, 2026-09-27)
+
+EVERY substantive round updates the committed docs (`context.md`) and the
+vault (`agent-vault/`) before the push: decision note when a decision
+outlived the session, Bugs Ledger entry for every fix, session log line,
+and `context.md` when repo facts changed (test counts, new modules,
+architecture shifts). Stale docs are how the next session re-derives
+wrong conclusions.
+
 ## Engagement confidentiality (PERMANENT operator ruling, 2026-09-26)
 
 NEVER record an engagement's target, program name, vendor, or tested hosts
