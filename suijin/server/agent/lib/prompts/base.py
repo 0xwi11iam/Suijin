@@ -220,11 +220,22 @@ def _ledger_lines(target_text: str) -> list[str]:
     return lines
 
 
-def engagement_order(objective: str) -> str:
-    """Reframe the objective as a CONTRACTED ENGAGEMENT order."""
+def engagement_order(objective: str, compact: bool = False) -> str:
+    """Reframe the objective as a CONTRACTED ENGAGEMENT order.
+
+    compact=True (turns 2+): the standing one-liner — target, the two
+    hunt rules, and a pointer back to turn 1's full contract. The full
+    order rode EVERY turn; after the first read it was pure token cost
+    the model re-parsed each time."""
     obj = " ".join(str(objective or "").split()).strip()
     if not obj:
         return "Proceed with your next action."
+    if compact:
+        target = obj[:120]
+        return (
+            f"[ENGAGEMENT] {target} — authorization on file, scope unchanged (full contract: turn 1). "
+            "CHAIN, DON'T COLLECT · BIAS TO ACTION."
+        )
     sentences = re.split(r"(?<=[.!?])\s+", obj)
     claims = [s.strip(" .,") for s in sentences if _AUTH_CLAIM_RE.search(s)]
     target = obj
@@ -260,6 +271,9 @@ def engagement_order(objective: str) -> str:
         "BIAS TO ACTION: you are authorized to test aggressively WITHIN scope. Volume discipline "
         "is about rate, not courage — one dossier read at the start, then hunt. Do not ask the "
         "operator to decide anything inside scope; bring findings, not questions.\n"
+        "COMPLETE CLEANLY: the report belongs in the FILE, not your reasoning stream. On the final "
+        "turn call generate_report (via auto_actions), then complete with a completion_reason of at "
+        "most three sentences — draft prose in your head, never in the visible stream.\n"
         "Next action."
     )
 
