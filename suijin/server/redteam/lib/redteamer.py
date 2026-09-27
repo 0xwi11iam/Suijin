@@ -1115,7 +1115,13 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                         if _input_reader is not None or run_box.alive:
                             # the keystroke reader (or RunBox) owns stdin —
                             # console.input fought it and typing DIED
-                            answer = _operator_input("Answer", 600.0)
+                            # the QUESTION is the panel's body — the old
+                            # literal "Answer" label rendered a box that
+                            # said just "Answer" over "type below", with
+                            # the actual question floating far above as a
+                            # bare section (the operator had no idea what
+                            # they were answering)
+                            answer = _operator_input(str(out) or "Answer", 600.0)
                         elif sys.stdin is not None and sys.stdin.isatty():
                             try:
                                 answer = console.input("[bold cyan]Answer:[/bold cyan] ").strip()
@@ -1208,13 +1214,17 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                     # old think-side log raced ahead of execution and logged
                     # every observation empty.
                     try:
+                        from suijin.modules.providers.lib import get_usage as _gu
                         from suijin.modules.tools.lib.audit_trail import flush as _trail_flush
                         from suijin.modules.tools.lib.audit_trail import log_iteration
 
                         log_iteration(
                             iteration=step.get("iteration", 0),
                             thought=step.get("thought", ""),
-                            reasoning=step.get("reasoning", ""),
+                            # reasoning models put deliberation in the STREAM,
+                            # never in the decision JSON — fall back to the
+                            # provider's stashed copy of this turn's stream
+                            reasoning=step.get("reasoning", "") or _gu().get("last_reasoning", ""),
                             tool_name=step.get("tool_name", ""),
                             tool_args=dict(step.get("tool_args") or {}),
                             tool_output=out,
@@ -1261,12 +1271,13 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                         # reach execute_tool, so they log here.
                         if not tool_name:
                             try:
+                                from suijin.modules.providers.lib import get_usage as _gu
                                 from suijin.modules.tools.lib.audit_trail import log_iteration
 
                                 log_iteration(
                                     iteration=iteration,
                                     thought=thought,
-                                    reasoning=reasoning,
+                                    reasoning=reasoning or _gu().get("last_reasoning", ""),
                                     tool_name=tool_name,
                                     tool_args=dict(tool_args),
                                     tool_output="",

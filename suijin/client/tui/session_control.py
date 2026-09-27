@@ -425,7 +425,10 @@ def build_pause_handlers(ctx: PauseContext) -> dict:
     }
 
 
-PAUSE_BANNER = "\n[bold yellow]  Paused[/bold yellow] [dim]— type guidance, or /help for commands · Enter to resume · /quit saves[/dim]"
+# ONE pause indication: the strip's PAUSED badge owns the state, so the
+# banner carries only the how-to. The old banner led with "Paused" too —
+# two pause announcements stacked, which read as the UI stuttering.
+PAUSE_BANNER = "\n[dim]  type guidance, or /help for commands · Enter to resume · /quit saves[/dim]"
 
 
 def pause_console(ctx: PauseContext, input_fn) -> str:

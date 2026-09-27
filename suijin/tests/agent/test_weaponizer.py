@@ -132,7 +132,7 @@ class TestPositiveMemory:
                 }
             )
         )
-        monkeypatch.setattr(am, "_catalog_root", lambda: tmp_path / "exploits")
+        monkeypatch.setattr(am, "_catalog_roots", lambda: [tmp_path / "exploits"])
         lines = am.what_worked("http://citadel.local/login")
         assert any("sqli" in line for line in lines)
         assert not any("FAILED" in line or "xss" in line for line in lines[:3])
@@ -141,7 +141,7 @@ class TestPositiveMemory:
     def test_what_worked_empty_is_empty(self, tmp_path, monkeypatch):
         from suijin.modules.agent.lib import attack_memory as am
 
-        monkeypatch.setattr(am, "_catalog_root", lambda: tmp_path)
+        monkeypatch.setattr(am, "_catalog_roots", lambda: [tmp_path])
         assert am.what_worked("nothing") == []
 
 
@@ -213,7 +213,7 @@ class TestDeadPathsRevived:
                 }
             )
         )
-        monkeypatch.setattr(am, "_catalog_root", lambda: tmp_path / "exploits")
+        monkeypatch.setattr(am, "_catalog_roots", lambda: [tmp_path / "exploits"])
         lines = am.what_worked("http://t")
         assert any("rce" in ln for ln in lines)
 
