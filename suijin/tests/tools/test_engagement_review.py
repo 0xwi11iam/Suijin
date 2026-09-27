@@ -531,3 +531,66 @@ class TestRepoCleanliness:
         done_src = inspect.getsource(EngagementUI.done)
         fail_src = inspect.getsource(EngagementUI.failure)
         assert "stream_done()" in done_src and "stream_done()" in fail_src
+
+
+class TestPromptRedesign:
+    """The layered prompt contract + slim tail + injection TTL
+    (2026-09-27 redesign, operator-approved A+B+C+D)."""
+
+    def test_overlay_replaces_appends_and_notes(self):
+        from suijin.modules.agent.lib.prompts.prompt_file import overlay_prompt
+
+        core = "# ROLE\n\nagent\n\n## RULES\ncore rules\n\n## WORKFLOW\ncore flow"
+        user = "## RULES\nmy rules\n\n## BONUS DOCTRINE\nextra section"
+        out = overlay_prompt(core, user)
+        assert "my rules" in out and "core rules" not in out  # replace by name
+        assert "BONUS DOCTRINE" in out and "extra section" in out  # append
+        assert "core flow" in out  # untouched sections stay canonical
+        blob = overlay_prompt(core, "just prose, no headers")
+        assert "just prose" in blob and "core flow" in blob  # prose rides, core stays
+        assert "OPERATOR NOTES" in blob
+
+    def test_compact_order_after_turn_one(self):
+        from suijin.modules.agent.lib.prompts.base import engagement_order
+
+        full = engagement_order("hunt example.com thoroughly")
+        slim = engagement_order("hunt example.com thoroughly", compact=True)
+        assert "CHAIN" in slim and "BIAS TO ACTION" in slim and "turn 1" in slim
+        assert len(slim) < len(full) / 4  # a one-liner, not a re-render
+
+    def test_injections_have_a_ttl(self):
+        import inspect
+
+        from suijin.modules.agent.lib.nodes import think_node
+
+        src = inspect.getsource(think_node)
+        assert "superseded guidance pruned" in src, "no pruning seam"
+        # and the behavior: simulate the prune loop
+        msgs = [
+            {"role": "user", "content": "SUPERVISOR: old nag"},
+            {"role": "user", "content": "DRIFT WARNING: older"},
+            {"role": "user", "content": "ORACLE: newest hint"},
+            {"role": "user", "content": "Result: normal"},
+        ]
+        idx = [
+            i
+            for i, m in enumerate(msgs)
+            if str(m.get("content", "")).lstrip().upper().startswith(("SUPERVISOR", "DRIFT WARNING", "ORACLE"))
+        ]
+        for i in idx[:-2]:
+            msgs[i] = {"role": "user", "content": "(superseded guidance pruned)"}
+        assert msgs[0]["content"] == "(superseded guidance pruned)"
+        assert msgs[2]["content"] == "ORACLE: newest hint"  # newest two kept
+
+    def test_order_demands_clean_completion(self):
+        from suijin.modules.agent.lib.prompts.base import engagement_order
+
+        order = engagement_order("hunt example.com")
+        assert "COMPLETE CLEANLY" in order
+        assert "generate_report" in order
+
+    def test_tool_catalog_is_phase_scoped(self):
+        from suijin.modules.agent.lib.prompts.tool_registry import build_tool_catalog_prompt
+
+        recon = build_tool_catalog_prompt("recon")
+        assert "phase: recon" in recon

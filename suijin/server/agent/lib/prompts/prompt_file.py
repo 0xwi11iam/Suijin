@@ -131,6 +131,66 @@ def _write_initial(prompt_md: Path, core: str, dynamic: str) -> None:
     prompt_md.write_text(core.rstrip() + "\n\n" + DYNAMIC_MARK + "\n\n" + dynamic, encoding="utf-8")
 
 
+def _split_sections(text: str) -> tuple[str, list[tuple[str, str]]]:
+    """(preamble, [(header_key, section_text)]) — sections cut at '## '
+    headers (the core's own structure). header_key is normalized."""
+    lines = text.splitlines()
+    pre: list[str] = []
+    sections: list[tuple[str, str]] = []
+    cur_key: str = ""
+    cur: list[str] = []
+    for ln in lines:
+        if ln.startswith("## "):
+            if cur_key:
+                sections.append((cur_key, "\n".join(cur).strip()))
+            cur_key = re.sub(r"[^a-z0-9]+", "-", ln[3:].strip().lower()).strip("-")
+            cur = [ln]
+        elif cur_key:
+            cur.append(ln)
+        else:
+            pre.append(ln)
+    if cur_key:
+        sections.append((cur_key, "\n".join(cur).strip()))
+    return "\n".join(pre).strip(), sections
+
+
+def overlay_prompt(core: str, user_zone: str) -> str:
+    """The LAYERED prompt contract (2026-09-27 redesign).
+
+    The user zone used to REPLACE the generated core wholesale — every
+    doctrine fix had to land in two places or the operator's frozen copy
+    silently diverged (it had). Now the core stays canonical and the
+    operator's file is a set of named-section OVERRIDES:
+      - a user '## header' matching a core section header REPLACES it
+      - a user '## header' with no core counterpart APPENDS (new doctrine)
+      - prose with no '## ' headers at all appends as OPERATOR NOTES
+    Their words still outrank the core where they choose to speak; the
+    rest of the core updates with the code."""
+    if not str(user_zone or "").strip():
+        return core
+    pre_core, core_secs = _split_sections(core)
+    pre_user, user_secs = _split_sections(user_zone)
+    if not user_secs:
+        notes = user_zone.strip()
+        return core.rstrip() + "\n\n## OPERATOR NOTES\n" + notes + "\n"
+    core_map = {k: t for k, t in core_secs}
+    order = [k for k, _ in core_secs]
+    out_secs = list(core_secs)
+    for k, t in user_secs:
+        if k in core_map:
+            out_secs = [(k, t) if kk == k else (kk, tt) for kk, tt in out_secs]
+        else:
+            order.append(k)
+            out_secs.append((k, t))
+    parts = []
+    if pre_core.strip():
+        parts.append(pre_core)
+    if pre_user.strip():
+        parts.append(pre_user)  # operator prose above all sections rides first
+    parts += [t for _k, t in out_secs]
+    return "\n\n".join(p for p in parts if p.strip()) + "\n"
+
+
 def boot(config: dict | None = None) -> str:
     """Engagement-boot entry: ensure the editable file exists, refresh the
     DYNAMIC zone in place (user zone untouched), snapshot backups, and
@@ -145,7 +205,7 @@ def boot(config: dict | None = None) -> str:
     try:
         if not p.is_file():
             _write_initial(p, core, dynamic)
-            return p.read_text(encoding="utf-8", errors="replace")
+            return core + "\n\n" + DYNAMIC_MARK + "\n\n" + dynamic
         text = p.read_text(encoding="utf-8", errors="replace")
         if DYNAMIC_MARK not in text:
             if len(text.strip()) < 40:
@@ -153,25 +213,31 @@ def boot(config: dict | None = None) -> str:
                 # text, if any, is in the backups)
                 _snapshot(p, "pre_fallback")
                 _write_initial(p, core, dynamic)
-                return p.read_text(encoding="utf-8", errors="replace")
+                return core + "\n\n" + DYNAMIC_MARK + "\n\n" + dynamic
             # user file predates the marker (or was hand-stripped): append
             # the marker + fresh dynamic WITHOUT touching their text
             _snapshot(p, "pre_mark")
             p.write_text(text.rstrip() + "\n\n" + DYNAMIC_MARK + "\n\n" + dynamic, encoding="utf-8")
-            return p.read_text(encoding="utf-8", errors="replace")
-        # normal path: replace ONLY the zone below the marker
-        user_zone = text.split(DYNAMIC_MARK, 1)[0]
-        if not user_zone.strip() or len(user_zone.strip()) < 40:
-            # a gutted user zone falls back to the generated core (a prompt
-            # this short breaks the agent; the operator's own text is in
-            # the backups if this was an accident)
-            _snapshot(p, "pre_fallback")
-            _write_initial(p, core, dynamic)
-            return p.read_text(encoding="utf-8", errors="replace")
-        refreshed = user_zone.rstrip() + "\n\n" + DYNAMIC_MARK + "\n\n" + dynamic
-        if refreshed != text:
-            p.write_text(refreshed, encoding="utf-8")
-        return refreshed
+            user_zone_text = text
+        else:
+            user_zone_text = text.split(DYNAMIC_MARK, 1)[0]
+            if not user_zone_text.strip() or len(user_zone_text.strip()) < 40:
+                # a gutted user zone falls back to the generated core (a prompt
+                # this short breaks the agent; the operator's own text is in
+                # the backups if this was an accident)
+                _snapshot(p, "pre_fallback")
+                _write_initial(p, core, dynamic)
+                return core + "\n\n" + DYNAMIC_MARK + "\n\n" + dynamic
+            # refresh ONLY the dynamic zone on disk; the operator's sections
+            # stay exactly as they edited them
+            refreshed = user_zone_text.rstrip() + "\n\n" + DYNAMIC_MARK + "\n\n" + dynamic
+            if refreshed != text:
+                p.write_text(refreshed, encoding="utf-8")
+        # LAYERED RESOLUTION: the operator's sections overlay the canonical
+        # core (replace-by-name / append / OPERATOR NOTES) — the file never
+        # freezes the core again. See overlay_prompt.
+        resolved = overlay_prompt(core, user_zone_text)
+        return resolved + "\n\n" + DYNAMIC_MARK + "\n\n" + dynamic
     except Exception:  # noqa: BLE001 — the prompt file can never kill a run
         with contextlib.suppress(Exception):
             _write_initial(p, core, dynamic)
@@ -180,10 +246,21 @@ def boot(config: dict | None = None) -> str:
 
 def reset() -> str:
     """Regenerate prompt.md from the current code-generated core (the old
-    file is backed up first)."""
+    file is backed up first). Ships with the EDITING GUIDE so the layered
+    contract is visible where the operator edits."""
     p = prompt_path()
     _snapshot(p, "pre_reset")
-    _write_initial(p, generated_core(), render_dynamic(None))
+    guide = (
+        "## OPERATOR EDITING GUIDE\n"
+        "This file OVERLAYS the generated core — it no longer replaces it.\n"
+        "- Re-write any '## section' below with the SAME header: your text replaces that section.\n"
+        "- Add a NEW '## section' header: it appends as additional doctrine.\n"
+        "- Plain prose without a '## ' header rides at the top as OPERATOR preamble.\n"
+        "- Sections you delete simply fall back to the generated canonical version.\n"
+        "- The zone below the dynamic marker is regenerated every engagement — never edit it.\n"
+        "- `suijin prompt diff` shows your sections against the current generated core."
+    )
+    _write_initial(p, generated_core() + "\n\n" + guide, render_dynamic(None))
     return str(p)
 
 

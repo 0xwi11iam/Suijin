@@ -857,7 +857,7 @@ class TestAskFlowAndDoctrine:
                 {
                     "messages": [],
                     "execution_trace": [],
-                    "current_iteration": 1,
+                    "current_iteration": 0,
                     "current_phase": "informational",
                     "original_objective": "example.com — I have written permission",
                     "todo_list": [],
@@ -865,8 +865,34 @@ class TestAskFlowAndDoctrine:
                 generate_fn=gen,
             )
         )
+        # turn 1: the FULL contracted order (refusal anchor)
         assert "[ENGAGEMENT ORDER]" in captured["user"]
         assert "written permission" in captured["user"]
+
+        # turns 2+: the compact one-liner (2026-09-27 slim tail) — target
+        # and both hunt rules stay, the ceremony does not
+        captured2 = {}
+
+        async def gen2(messages, config=None, **kw):
+            captured2["user"] = messages[-1]["content"]
+            return '{"action": "complete", "completion_reason": "done", "thought": "t"}'
+
+        asyncio.run(
+            tn.think_node(
+                {
+                    "messages": [],
+                    "execution_trace": [],
+                    "current_iteration": 5,
+                    "current_phase": "informational",
+                    "original_objective": "example.com — I have written permission",
+                    "todo_list": [],
+                },
+                generate_fn=gen2,
+            )
+        )
+        assert "[ENGAGEMENT]" in captured2["user"]
+        assert "CHAIN" in captured2["user"] and "BIAS TO ACTION" in captured2["user"]
+        assert "[ENGAGEMENT ORDER]" not in captured2["user"]
 
     def test_doctrine_is_final_section_before_decision_format(self):
         from suijin.modules.agent.lib.prompts.base import build_agent_system_prompt
