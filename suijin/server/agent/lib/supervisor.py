@@ -65,9 +65,8 @@ def _detect_repeating_tool(trace: list, threshold: int = 3) -> Optional[str]:
     tools = [s.get("tool_name", "") for s in recent]
     if len(tools) >= threshold and len(set(tools)) == 1 and tools[0]:
         return (
-            f"You've called '{tools[0]}' {threshold} times in a row. "
-            f"If it's not producing new results, STOP and try a DIFFERENT approach. "
-            f"Switch to a different tool, different endpoint, or different attack vector entirely."
+            f"OPPORTUNITY: '{tools[0]}' has answered {threshold} times with the same shape — "
+            "the next win is a different tool, endpoint, or vector, not another identical call."
         )
     return None
 
@@ -181,7 +180,7 @@ def _detect_no_progress(trace: list, threshold: int = 5) -> Optional[str]:
     )
     if no_progress:
         return (
-            f"No progress in {threshold} iterations. You may be stuck in a loop. "
+            f"No new ground in {threshold} iterations — the loop wants a different angle. "
             f"RADICALLY change your approach: try a completely different attack vector, "
             f"a different port, a different tool. If the target has no more surface area, "
             f"generate your report and complete."
@@ -288,9 +287,8 @@ def _detect_phase_stall(trace: list, threshold: int = 20) -> Optional[str]:
         return None
     if recon_count > 15 and exploit_count < 3:
         return (
-            "FORCE EXPLOITATION: 15+ recon turns, <3 exploit attempts. "
-            "You have enough data. TEST vulnerabilities NOW with http_request, "
-            "mcp_browser_goto, or deploy_subagent with exploit tasks."
+            "OPPORTUNITY: the recon is done —15+ turns of map, <3 shots fired. "
+            "http_request, mcp_browser_goto, or an exploit-task fireteam is the play now."
         )
     return None
 
@@ -759,6 +757,19 @@ def analyze_trace(trace: list, iteration: float | None = None, **extra_kw) -> Op
     if not trace:
         return None
 
+    # (R8) THE INTERVENTION BUDGET: at most ONE supervisor message every
+    # 3 iterations, whatever the source. Guidance only works as signal —
+    # stacked nags are noise the model either obeys blindly (derailment)
+    # or learns to ignore (useless). The field verdict was 'the supervisor
+    # bullshits'; most of the bullshit was VOLUME.
+    if iteration is not None:
+        try:
+            _last = _INTERVENTION_STATE.get("last_turn")
+            if _last is not None and (float(iteration) - float(_last)) < 3:
+                return None
+        except Exception:  # noqa: BLE001 — the budget is advisory, never fatal
+            pass
+
     detectors = [
         _detect_missed_flag,
         _detect_phase_stall,
@@ -782,6 +793,8 @@ def analyze_trace(trace: list, iteration: float | None = None, **extra_kw) -> Op
         if guidance:
             if iteration is not None:
                 _last_fired[name] = iteration
+            if iteration is not None:
+                _INTERVENTION_STATE["last_turn"] = float(iteration)
             logger.info(f"Supervisor intervention: {name}")
             return guidance
 
@@ -794,6 +807,9 @@ def analyze_trace(trace: list, iteration: float | None = None, **extra_kw) -> Op
 
 
 # ── LLM-Powered Deep Analysis ────────────────────────────────────────────────
+
+#: (R8) the global intervention budget state — one message per 3 turns
+_INTERVENTION_STATE: dict = {"last_turn": None}
 
 _llm_supervisor_prompt = """You are a supervisor monitoring an autonomous security agent.
 Review the last 10 execution steps and the current state. Identify:

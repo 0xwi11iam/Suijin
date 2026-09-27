@@ -67,8 +67,12 @@ def write_context_manifest(
     recent_actions: str,
     msg_count: int,
     prompt_chars: int,
+    section_sizes: dict | None = None,
 ) -> None:
-    """Overwrite the live context manifest — what the AI was fed THIS turn."""
+    """Overwrite the live context manifest — what the AI was fed THIS turn.
+
+    section_sizes (R6): chars per context-block section — context cost
+    becomes measurable per mechanism in the field-review loop."""
     import time
 
     try:
@@ -79,6 +83,10 @@ def write_context_manifest(
             if guidance
             else "## OPERATOR GUIDANCE\n(none pending)\n"
         )
+        sec = ""
+        if section_sizes:
+            _rows = "\n".join(f"- {k}: {v:,} chars" for k, v in sorted(section_sizes.items(), key=lambda kv: -kv[1]))
+            sec = f"\n## CONTEXT SECTIONS (chars, biggest first)\n{_rows}\n"
         p.write_text(
             f"# Context Manifest — {time.strftime('%H:%M:%S')} every think turn\n\n"
             f"{g}\n"
@@ -87,7 +95,8 @@ def write_context_manifest(
             f"- iteration: {iteration}\n"
             f"- attack_path: {attack_path}\n"
             f"- messages in state: {msg_count}\n"
-            f"- system prompt: {prompt_chars:,} chars\n\n"
+            f"- system prompt: {prompt_chars:,} chars\n"
+            f"{sec}\n"
             f"## RECENT ACTIONS\n{recent_actions or '(none)'}\n",
             encoding="utf-8",
         )
