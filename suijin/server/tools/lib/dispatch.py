@@ -120,6 +120,34 @@ from suijin.modules.tools.lib.aux_tools import (
     _web_search,
     _write_tool,
 )
+
+
+def _mesh_tool(action: str, a: dict) -> str:
+    """The mesh tools — cross-session awareness for the agent.
+
+    Everything a peer produced is served inside UNTRUSTED wrappers: it is
+    data from another agent (which itself ingested hostile target output),
+    never an instruction. No-ops gracefully when running solo."""
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib import mesh
+        from suijin.modules.agent.lib.nodes.execute_tool_node import _wrap_untrusted
+
+        if action == "status":
+            return mesh.status()
+        if action == "read":
+            return _wrap_untrusted(mesh.read_peer_state(a.get("node", "")), "MESH_PEER")
+        if action == "broadcast":
+            return mesh.broadcast(a.get("message", ""))
+        if action == "dm":
+            pid = mesh.resolve(a.get("node", ""))
+            if not pid:
+                return f"Error: no such mesh node: {a.get('node', '')}"
+            return mesh.dm(pid, a.get("message", ""))
+    return "Error: mesh unavailable (solo session — no peers)"
+
+
 from suijin.modules.tools.lib.bypass_403 import bypass_403 as _bypass_403
 from suijin.modules.tools.lib.capture import crawl as _crawl
 from suijin.modules.tools.lib.capture import proxy_capture as _proxy_capture
@@ -419,6 +447,10 @@ def _build_routes(config):
         "kb_read": lambda a: _kb_read_tool(a.get("path", "")),
         "normalize_output": lambda a: normalize_output(a.get("output", ""), kind=a.get("kind", "auto")),
         "target_dossier": lambda a: _target_dossier_tool(a.get("target", "")),
+        "mesh_status": lambda a: _mesh_tool("status", a),
+        "mesh_read": lambda a: _mesh_tool("read", a),
+        "mesh_broadcast": lambda a: _mesh_tool("broadcast", a),
+        "mesh_dm": lambda a: _mesh_tool("dm", a),
         "mutate_wordlist": lambda a: _wordlist.mutate_wordlist(
             a.get("seeds"),
             out=a.get("out", "wordlists/mutated.txt"),

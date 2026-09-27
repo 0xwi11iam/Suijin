@@ -29,38 +29,50 @@ def _target_file(target: str) -> Path:
 
 def record_engagement(target: str, objective: str, outcome: dict | None = None) -> None:
     """Append an engagement record to the target's memory."""
+
+    def _mut(data):
+        data["engagements"].append(
+            {
+                "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "objective": objective[:200],
+                "outcome": outcome or {},
+            }
+        )
+        data["engagements"] = data["engagements"][-20:]  # bounded
+
+    _locked_update(target, _mut)
+
+
+def _locked_update(target: str, mutate) -> None:
+    """Cross-process safe read-modify-write of a target's memory file
+    (two terminal windows share this store; unlocked writes dropped
+    each other's records)."""
+    from suijin.modules.platform.lib.filelock import atomic_write, locked
+
     f = _target_file(target)
-    data = (
-        json.loads(f.read_text())
-        if f.exists()
-        else {"target": target, "engagements": [], "fingerprints": [], "operator_notes": []}
-    )
-    data["engagements"].append(
-        {
-            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "objective": objective[:200],
-            "outcome": outcome or {},
-        }
-    )
-    data["engagements"] = data["engagements"][-20:]  # bounded
-    f.write_text(json.dumps(data, indent=2))
+    with locked(f):
+        data = (
+            json.loads(f.read_text())
+            if f.exists()
+            else {"target": target, "engagements": [], "fingerprints": [], "operator_notes": []}
+        )
+        mutate(data)
+        atomic_write(f, json.dumps(data, separators=(",", ":")))
 
 
 def record_fingerprint(target: str, fingerprint: dict) -> bool:
     """Store a target fingerprint; returns True when it CHANGED vs the
     last stored one (B16 delta / B17 drift share this)."""
-    f = _target_file(target)
-    data = (
-        json.loads(f.read_text())
-        if f.exists()
-        else {"target": target, "engagements": [], "fingerprints": [], "operator_notes": []}
-    )
-    fp = {"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "data": fingerprint}
-    changed = bool(data["fingerprints"]) and data["fingerprints"][-1].get("data") != fingerprint
-    data["fingerprints"].append(fp)
-    data["fingerprints"] = data["fingerprints"][-10:]
-    f.write_text(json.dumps(data, indent=2))
-    return changed
+    state = {"changed": False}
+
+    def _mut(data):
+        fp = {"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "data": fingerprint}
+        state["changed"] = bool(data["fingerprints"]) and data["fingerprints"][-1].get("data") != fingerprint
+        data["fingerprints"].append(fp)
+        data["fingerprints"] = data["fingerprints"][-10:]
+
+    _locked_update(target, _mut)
+    return state["changed"]
 
 
 def delta(target: str, fingerprint: dict) -> str:
@@ -109,16 +121,13 @@ def note(target: str, text: str) -> None:
     the shape (readers depend on it) but serialize compactly, and skip
     the rewrite entirely when the append changed nothing (dedup at the
     tail — the operator's repeated 'confirmed' notes hit this)."""
-    f = _target_file(target)
-    data = (
-        json.loads(f.read_text())
-        if f.exists()
-        else {"target": target, "engagements": [], "fingerprints": [], "operator_notes": []}
-    )
-    notes = data.setdefault("operator_notes", [])
     entry = text[:300]
-    if notes and notes[-1] == entry:
-        return  # identical tail: nothing to persist, skip the rewrite
-    notes.append(entry)
-    data["operator_notes"] = notes[-20:]
-    f.write_text(json.dumps(data, separators=(",", ":")))
+
+    def _mut(data):
+        notes = data.setdefault("operator_notes", [])
+        if notes and notes[-1] == entry:
+            return  # identical tail: nothing to persist
+        notes.append(entry)
+        data["operator_notes"] = notes[-20:]
+
+    _locked_update(target, _mut)

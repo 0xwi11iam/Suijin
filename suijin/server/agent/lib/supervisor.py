@@ -1031,6 +1031,12 @@ def facts_brief(state: dict, trace: list) -> dict:
         brief["recent_same_tool"] = max((tools.count(x) for x in set(tools)), default=0)
     with contextlib.suppress(Exception):
         brief["findings_count"] = len((state or {}).get("findings") or [])
+    with contextlib.suppress(Exception):
+        from suijin.client.tui.console_ui import UI_STATE
+
+        _n = int(UI_STATE.get("mesh_count") or 0)
+        if _n > 1:
+            brief["mesh_peers"] = _n - 1
     return brief
 
 

@@ -69,31 +69,41 @@ class JsonKG:
             return {}
 
     def _save(self, data: dict) -> None:
-        self._path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
+        from suijin.modules.platform.lib.filelock import atomic_write
+
+        atomic_write(self._path, json.dumps(data, indent=2, default=str))
 
     # ── contract methods ──────────────────────────────────────────────
 
     def add_constraint(self, target, ctype, rule, evidence="", confidence=1.0) -> None:
-        data = self._load()
-        entry = data.setdefault(target, {})
-        category = entry.setdefault(ctype, [])
-        existing = [c for c in category if c.get("rule") == rule]
-        if existing:
-            existing[0]["evidence"] = evidence
-            existing[0]["confidence"] = max(existing[0].get("confidence", 0), confidence)
-            existing[0]["last_seen"] = _now()
-        else:
-            category.append(
-                {
-                    "rule": rule,
-                    "evidence": evidence,
-                    "confidence": confidence,
-                    "verified_at": _now(),
-                    "last_seen": _now(),
-                }
-            )
-        entry["_updated"] = _now()
-        self._save(data)
+        # CROSS-PROCESS SAFE: concurrent sessions (two terminal windows)
+        # read-modify-write this one file — the lock serializes the
+        # critical section so a finding one session records cannot be
+        # clobbered by the other's save. Without it, last-writer-wins
+        # silently dropped findings (the multi-window bug).
+        from suijin.modules.platform.lib.filelock import locked
+
+        with locked(self._path):
+            data = self._load()
+            entry = data.setdefault(target, {})
+            category = entry.setdefault(ctype, [])
+            existing = [c for c in category if c.get("rule") == rule]
+            if existing:
+                existing[0]["evidence"] = evidence
+                existing[0]["confidence"] = max(existing[0].get("confidence", 0), confidence)
+                existing[0]["last_seen"] = _now()
+            else:
+                category.append(
+                    {
+                        "rule": rule,
+                        "evidence": evidence,
+                        "confidence": confidence,
+                        "verified_at": _now(),
+                        "last_seen": _now(),
+                    }
+                )
+            entry["_updated"] = _now()
+            self._save(data)
 
     def get_constraints(self, target) -> dict:
         return self._load().get(target, {})
