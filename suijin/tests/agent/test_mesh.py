@@ -17,6 +17,20 @@ import pytest
 
 
 @pytest.fixture()
+def live_peer():
+    """A REAL foreign process (a sleeping child) — the registry now probes
+    pid liveness, so fixtures must use live pids, not invented ones."""
+    import subprocess
+    import sys as _sys
+
+    proc = subprocess.Popen([_sys.executable, "-c", "import time; time.sleep(30)"])
+    yield proc.pid
+    proc.terminate()
+    with __import__("contextlib").suppress(Exception):
+        proc.wait(timeout=5)
+
+
+@pytest.fixture()
 def mesh_dir(tmp_path, monkeypatch):
     import suijin.modules.agent.lib.mesh as mesh
 
@@ -101,18 +115,19 @@ class TestFileLockConcurrency:
 
 
 class TestMeshRegistry:
-    def test_start_registers_and_peers_exclude_self(self, mesh_dir):
+    def test_start_registers_and_peers_exclude_self(self, mesh_dir, live_peer):
+        peer_pid = live_peer
         import suijin.modules.agent.lib.mesh as mesh
 
         mesh.start(summary="hunt example.com", phase="recon")
         me = json.loads((mesh_dir / f"{__import__('os').getpid()}.json").read_text())
         assert me["summary"] == "hunt example.com"
-        # a foreign node appears; self does not
-        (mesh_dir / "999999.json").write_text(
-            json.dumps({"pid": 999999, "summary": "peer", "beat": __import__("time").time()})
+        # a foreign LIVE node appears; self does not
+        (mesh_dir / f"{peer_pid}.json").write_text(
+            json.dumps({"pid": peer_pid, "summary": "peer", "beat": __import__("time").time()})
         )
         ps = mesh.peers(refresh_now=True)
-        assert [p["pid"] for p in ps] == [999999]
+        assert [p["pid"] for p in ps] == [peer_pid]
         mesh.stop()
 
     def test_stale_nodes_are_gc(self, mesh_dir):
@@ -150,20 +165,23 @@ class TestMeshChat:
         assert "message 4" in block and "message 13" in block
         mesh.stop()
 
-    def test_dm_is_pairwise(self, mesh_dir):
+    def test_dm_is_pairwise(self, mesh_dir, live_peer):
         import os
         import time
 
         import suijin.modules.agent.lib.mesh as mesh
 
         me = os.getpid()
-        (mesh_dir / f"{me + 1}.json").write_text(json.dumps({"pid": me + 1, "summary": "peer", "beat": time.time()}))
+        peer_pid = live_peer
+        (mesh_dir / f"{peer_pid}.json").write_text(
+            json.dumps({"pid": peer_pid, "summary": "peer", "beat": time.time()})
+        )
         mesh.start(summary="a")
-        assert "DM sent" in mesh.dm(me + 1, "pairwise secret")
-        # the pair file exists; a THIRD pid's dm file does not
-        a, b = sorted((me, me + 1))
+        assert "DM sent" in mesh.dm(peer_pid, "pairwise secret")
+        # exactly ONE pair file exists — the pair's; no third-party file
+        a, b = sorted((me, peer_pid))
         assert (mesh_dir / f"dm-{a}-{b}.log").exists()
-        assert not list(mesh_dir.glob(f"dm-{me}-*.log")) or len(list(mesh_dir.glob("dm-*.log"))) == 1
+        assert len(list(mesh_dir.glob("dm-*.log"))) == 1
         mesh.stop()
 
     def test_chat_is_ephemeral_by_ruling(self, mesh_dir):
@@ -177,27 +195,29 @@ class TestMeshChat:
         mesh.stop()
         assert not (mesh_dir / "gc.log").exists()
 
-    def test_read_peer_digest(self, mesh_dir):
+    def test_read_peer_digest(self, mesh_dir, live_peer):
         import time
 
         import suijin.modules.agent.lib.mesh as mesh
 
-        (mesh_dir / "777.json").write_text(json.dumps({"pid": 777, "summary": "peer", "beat": time.time()}))
-        (mesh_dir / "777-state.json").write_text(
-            json.dumps({"pid": 777, "phase": "exploitation", "findings": ["header leak"], "footholds": ["EXP-1: sess"]})
+        pid = live_peer
+        (mesh_dir / f"{pid}.json").write_text(json.dumps({"pid": pid, "summary": "peer", "beat": time.time()}))
+        (mesh_dir / f"{pid}-state.json").write_text(
+            json.dumps({"pid": pid, "phase": "exploitation", "findings": ["header leak"], "footholds": ["EXP-1: sess"]})
         )
-        out = mesh.read_peer_state("777")
+        out = mesh.read_peer_state(str(pid))
         assert "header leak" in out and "EXP-1" in out
 
-    def test_status_lists_nodes(self, mesh_dir):
+    def test_status_lists_nodes(self, mesh_dir, live_peer):
         import time
 
         import suijin.modules.agent.lib.mesh as mesh
 
-        (mesh_dir / "42.json").write_text(json.dumps({"pid": 42, "summary": "peer", "beat": time.time()}))
+        pid = live_peer
+        (mesh_dir / f"{pid}.json").write_text(json.dumps({"pid": pid, "summary": "peer", "beat": time.time()}))
         mesh.start(summary="me")
         out = mesh.status()
-        assert "node-42" in out and "2 session(s) connected" in out
+        assert f"node-{pid}" in out and "2 session(s) connected" in out
         mesh.stop()
 
 
@@ -255,3 +275,27 @@ class TestMeshInContext:
             assert brief.get("mesh_peers") == 2
         finally:
             UI_STATE["mesh_count"] = 0
+
+
+class TestGhostNodes:
+    def test_dead_pids_do_not_linger(self, mesh_dir):
+        """A session killed without stop() (SIGKILL) leaves its registry
+        file with a fresh beat — the mtime filter alone showed it as a
+        ghost peer for up to 30s. The zero-signal probe settles it now."""
+        import time
+
+        import suijin.modules.agent.lib.mesh as mesh
+
+        # pid 99999999 does not exist; beat is fresh
+        (mesh_dir / "99999999.json").write_text(json.dumps({"pid": 99999999, "summary": "ghost", "beat": time.time()}))
+        assert mesh.peers(refresh_now=True) == []
+
+    def test_live_foreign_pid_is_visible(self, mesh_dir, live_peer):
+        import time
+
+        import suijin.modules.agent.lib.mesh as mesh
+
+        pid = live_peer
+        (mesh_dir / f"{pid}.json").write_text(json.dumps({"pid": pid, "summary": "live", "beat": time.time()}))
+        ps = mesh.peers(refresh_now=True)
+        assert any(p["pid"] == pid for p in ps)
