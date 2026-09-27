@@ -206,7 +206,10 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
             with contextlib.suppress(Exception):
                 state["_prompt_user_base"] = (state.get("_run_config") or {}).get("_prompt_user_base")
         system_prompt = build_agent_system_prompt(state)
-        user_turn = engagement_order(state.get("original_objective", ""))
+        # COMPACT ORDER (turns 2+): the full contract rode every turn as
+        # pure re-parse cost; the standing one-liner keeps the pressure
+        # (target + both hunt rules) without the ceremony
+        user_turn = engagement_order(state.get("original_objective", ""), compact=iteration > 1)
         # FULL-AUTO (unattended CI): the strongest-position correction — the
         # static doctrine encourages asking; this override sits on the order
         # itself (last-user-message attention slot)
@@ -266,6 +269,18 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         logger.warning(f"compaction skipped (check compact.py): {e}")
 
     raw_msgs = state.get("messages", [])
+
+    # ── injection TTL ────────────────────────────────────────────────
+    # Supervisor/drift/oracle guidance lands as user messages and used to
+    # ACCUMULATE forever — a stale nag from turn 7 kept shaping behavior
+    # at turn 40. Keep the newest two injections; older ones drop out of
+    # history (their lesson, if durable, belongs in scratchpad/memory).
+    with contextlib.suppress(Exception):
+        _INJ = ("SUPERVISOR", "DRIFT WARNING", "ORACLE")
+        idx = [i for i, m in enumerate(raw_msgs) if str(m.get("content", "")).lstrip().upper().startswith(_INJ)]
+        for i in idx[:-2]:
+            raw_msgs[i] = {"role": "user", "content": "(superseded guidance pruned)"}
+        state["messages"] = raw_msgs
     recent_msgs = ""
     # Token-budgeted embed: the newest messages verbatim, older ones
     # truncated — the compaction digest covers the deep past. Unbounded
