@@ -225,3 +225,137 @@ class TestR8SupervisorHelpfulNotBullshit:
         assert msg is not None and msg.startswith("OPPORTUNITY:")
         assert "STOP" not in msg
         sup._INTERVENTION_STATE.clear()
+
+
+class TestCoachRedesign:
+    """The three-layer supervisor: facts (never wrong) + coach (cite-a-fact
+    or silent) + feedback (heeded/escalate/drop). Silent by default."""
+
+    def test_facts_brief_is_state_derived(self):
+        from suijin.modules.agent.lib.supervisor import facts_brief
+
+        brief = facts_brief(
+            {
+                "_attack_queue": [{"surface": "example.com/login"}, {"surface": "example.com/api"}],
+                "_footholds": [
+                    {
+                        "capability": "EXP-1: session",
+                        "source": "EXP-1",
+                        "unlock_targets": ["admin"],
+                        "born_iter": 1,
+                        "status": "armed",
+                    }
+                ],
+                "findings": [{"x": 1}],
+            },
+            [{"tool_name": "record_finding", "success": True}, {"tool_name": "http_request", "success": False}],
+        )
+        assert brief["untried_count"] == 2
+        assert brief["unexploited_footholds"][0]["capability"].startswith("EXP-1")
+        assert brief["findings_count"] == 1
+        assert brief["recent_failures"] >= 1
+
+    def test_coach_is_silent_without_speakworthy_facts(self):
+        import asyncio
+
+        from suijin.modules.agent.lib.supervisor import coach_turn
+
+        async def gen(messages=None, config=None, **kw):
+            raise AssertionError("the coach must not call the LLM when silent")
+
+        out = asyncio.run(coach_turn({}, [{"tool_name": "x", "success": True}], gen))
+        assert out is None
+
+    def test_coach_speaks_when_fact_cited(self):
+        import asyncio
+
+        from suijin.modules.agent.lib.supervisor import coach_turn
+
+        state = {
+            "_footholds": [
+                {
+                    "capability": "EXP-1: session token",
+                    "source": "EXP-1",
+                    "unlock_targets": ["admin panel"],
+                    "born_iter": 1,
+                    "status": "armed",
+                }
+            ]
+        }
+
+        async def gen(messages=None, config=None, **kw):
+            return "OFFER: you hold EXP-1's session token — admin panel is the bigger lever next."
+
+        out = asyncio.run(coach_turn(state, [], gen))
+        assert out is not None and "session token" in out
+
+    def test_coach_suppresses_uncited_offers(self):
+        import asyncio
+
+        from suijin.modules.agent.lib.supervisor import coach_turn
+
+        state = {
+            "_footholds": [
+                {
+                    "capability": "EXP-1: session token",
+                    "source": "EXP-1",
+                    "unlock_targets": ["admin panel"],
+                    "born_iter": 1,
+                    "status": "armed",
+                }
+            ]
+        }
+
+        async def gen(messages=None, config=None, **kw):
+            return "OFFER: try harder and be creative today."  # cites nothing
+
+        assert asyncio.run(coach_turn(state, [], gen)) is None
+
+    def test_coach_honors_no_comment(self):
+        import asyncio
+
+        from suijin.modules.agent.lib.supervisor import coach_turn
+
+        state = {
+            "_footholds": [
+                {
+                    "capability": "EXP-1: x",
+                    "source": "EXP-1",
+                    "unlock_targets": ["y"],
+                    "born_iter": 1,
+                    "status": "armed",
+                }
+            ]
+        }
+
+        async def gen(messages=None, config=None, **kw):
+            return "NO_COMMENT"
+
+        assert asyncio.run(coach_turn(state, [], gen)) is None
+
+    def test_heed_detection(self):
+        from suijin.modules.agent.lib.supervisor import check_heeded
+
+        steps = [{"tool_name": "http_request", "thought": "hit admin panel now", "tool_args": {}}]
+        assert check_heeded("admin panel is the lever", steps) is True
+        assert check_heeded("try sqlmap on search", steps) is False
+
+    def test_escalation_ladder(self):
+        from suijin.modules.agent.lib.supervisor import escalation_state
+
+        assert escalation_state([]) == "fresh"
+        two = [{"heeded": False}, {"heeded": False}]
+        assert escalation_state(two) == "escalate"
+        three = [{"heeded": False}] * 3
+        assert escalation_state(three) == "drop"
+        heeded_log = [{"heeded": True}, {"heeded": False}]
+        assert escalation_state(heeded_log) == "fresh"
+
+    def test_the_graph_wires_the_log(self):
+        import inspect
+
+        from suijin.modules.agent.lib import agent_graph
+
+        src = inspect.getsource(agent_graph)
+        assert "_supervisor_log" in src and "coach_turn" in src
+        assert "escalation_state" in src and "check_heeded" in src
