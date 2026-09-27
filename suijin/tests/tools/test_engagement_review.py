@@ -594,3 +594,25 @@ class TestPromptRedesign:
 
         recon = build_tool_catalog_prompt("recon")
         assert "phase: recon" in recon
+
+
+class TestOverlayNoDoublePreamble:
+    """Printing the live resolved prompt exposed it: `reset` writes the
+    core (preamble included) into prompt.md, and the overlay then rendered
+    BOTH preambles — the ROLE block twice at the top of every turn."""
+
+    def test_reset_core_does_not_double_the_preamble(self):
+        from suijin.modules.agent.lib.prompts.prompt_file import generated_core, overlay_prompt
+
+        core = generated_core()
+        # a file that is exactly the reset output (core copy): sections
+        # overlay onto themselves, preamble must appear ONCE
+        out = overlay_prompt(core, core)
+        assert out.count("# ROLE: Autonomous Offensive Security Agent") == 1, "preamble doubled"
+
+    def test_custom_operator_preamble_still_rides(self):
+        from suijin.modules.agent.lib.prompts.prompt_file import overlay_prompt
+
+        core = "# ROLE\n\nagent\n\n## RULES\nrules"
+        out = overlay_prompt(core, "my custom preamble line\n\n## RULES\nmine")
+        assert "my custom preamble line" in out  # custom prose still rides first
