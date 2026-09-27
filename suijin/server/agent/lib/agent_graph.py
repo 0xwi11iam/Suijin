@@ -394,18 +394,39 @@ class SuijinAgentGraph:
                     elif _deep_iv > 0 and iteration % _deep_iv == 0:
                         # LLM deep analysis — RARELY (was: every silent check,
                         # i.e. every 5th iteration — constant chatter that
-                        # derailed exploitation runs). Every 15th, max.
+                        # derailed exploitation runs). Every 15th, max. And
+                        # CORROBORATED only: an uncorroborated deep verdict
+                        # is the supervisor bullshitting a healthy run (it
+                        # reads ten thought-lines and invents a problem);
+                        # log it, never inject it.
                         try:
+                            from suijin.modules.agent.lib.supervisor import (
+                                analyze_trace_with_llm,
+                                deep_analysis_corroborated,
+                            )
+
                             llm_guidance = await analyze_trace_with_llm(trace, state, self.generate_fn)
-                            if llm_guidance:
+                            if llm_guidance and deep_analysis_corroborated(trace):
                                 logger.info(f"Supervisor LLM insight at iteration {iteration}")
                                 result.setdefault("messages", []).append(
                                     {
                                         "role": "user",
-                                        "content": f"SUPERVISOR (deep analysis): {llm_guidance}",
+                                        # ADVISORY framing: the agent may check
+                                        # a deep hint against its own trace and
+                                        # discard nonsense — gospel framing
+                                        # made it obey hallucinations
+                                        "content": (
+                                            "SUPERVISOR (deep analysis — advisory; if it contradicts "
+                                            f"what your trace shows, ignore it): {llm_guidance}"
+                                        ),
                                     }
                                 )
                                 result["_supervisor_guidance"] = llm_guidance
+                            elif llm_guidance:
+                                logger.info(
+                                    "Supervisor LLM insight suppressed (uncorroborated): %s",
+                                    llm_guidance[:120],
+                                )
                         except Exception as llm_err:
                             logger.debug(f"LLM supervisor skipped: {llm_err}")
 

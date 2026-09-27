@@ -301,3 +301,233 @@ class TestBypass403Verdicts:
         monkeypatch.setattr(ht, "http_request", fake_throttled_variants)
         out = bypass_403("https://example.com/admin")
         assert "inconclusive" in out and "do NOT record" in out
+
+
+class TestStripFitLadder:
+    """Field complaint: MEM vanished the moment fireteams went live — the
+    tail-crop deleted exactly the segments that matter. Under width
+    pressure the strip drops by priority (zero tiers -> t/s -> compress
+    Fireteam -> live tiers), never the tail."""
+
+    def test_fireteam_live_keeps_mem_and_cred(self, monkeypatch):
+        import io
+        import re
+
+        from rich.console import Console
+
+        import suijin.client.tui.console_ui as cu
+
+        monkeypatch.setattr(cu, "_fireteam_live_count", lambda: 3)
+        monkeypatch.setattr(cu, "_fireteam_total", lambda: 3)
+        cu.UI_STATE["librarian"] = 7
+        try:
+            for width in (120, 100, 80):
+                ui = cu.EngagementUI(Console(record=True, width=width, force_terminal=True), objective="t")
+                sink = Console(file=io.StringIO(), width=width, force_terminal=True)
+                sink.print(ui._strip())
+                plain = re.sub(r"\x1b\[[0-9;]*m", "", sink.file.getvalue()).replace("\n", " ")
+                assert "MEM 7" in plain, f"MEM dropped at width {width}"
+                assert "CRED" in plain, f"CRED dropped at width {width}"
+                assert "Fireteam" in plain or "FT 3" in plain, f"fireteam dropped at width {width}"
+        finally:
+            cu.UI_STATE["librarian"] = 0
+
+
+class TestSupervisorTrust:
+    """Field verdict: 'the supervisor likes to bullshit and confuse the
+    agent.' The deep LLM pass reads ten thought-lines and invents
+    problems; injecting that as gospel derailed healthy runs."""
+
+    def test_healthy_run_is_left_alone(self):
+        from suijin.modules.agent.lib.supervisor import deep_analysis_corroborated
+
+        healthy = [
+            {"tool_name": t, "success": True} for t in ("http_request", "nmap_scan", "read_file", "check_knowledge")
+        ]
+        assert deep_analysis_corroborated(healthy) is False
+
+    def test_failures_corroborate(self):
+        from suijin.modules.agent.lib.supervisor import deep_analysis_corroborated
+
+        rough = [{"tool_name": "http_request", "success": False}, {"tool_name": "sqlmap", "success": False}] + [
+            {"tool_name": "http_request", "success": True}
+        ]
+        assert deep_analysis_corroborated(rough) is True
+
+    def test_rut_and_fresh_findings_corroborate(self):
+        from suijin.modules.agent.lib.supervisor import deep_analysis_corroborated
+
+        rut = [{"tool_name": "ffuf", "success": True}] * 3
+        assert deep_analysis_corroborated(rut) is True
+        fresh = [
+            {"tool_name": "record_finding", "success": True},
+            {"tool_name": "http_request", "success": True},
+        ]
+        assert deep_analysis_corroborated(fresh) is True  # chaining hints welcome here
+
+    def test_deep_injection_is_advisory_not_gospel(self):
+        import inspect
+
+        from suijin.modules.agent.lib import agent_graph
+
+        src = inspect.getsource(agent_graph)
+        assert "advisory; if it contradicts" in src, "the deep hint must be refusable"
+        assert "deep_analysis_corroborated" in src, "the corroboration gate must be wired"
+
+    def test_phase_stall_ignores_finding_work(self):
+        """Cataloging a finding is exploitation WORK — FORCE EXPLOITATION
+        fired exactly when the agent was doing post-finding bookkeeping."""
+        from suijin.modules.agent.lib.supervisor import _detect_phase_stall
+
+        pure_recon = [
+            {"tool_name": "nmap", "success": True},
+            {"tool_name": "gobuster", "success": True},
+        ] * 10
+        assert _detect_phase_stall(pure_recon) is not None  # genuine stall still fires
+        # findings are the LATEST work in reality — recon then record
+        with_finding = pure_recon + [
+            {"tool_name": "record_finding", "success": True},
+            {"tool_name": "catalog_exploit", "success": True},
+        ]
+        assert _detect_phase_stall(with_finding) is None
+
+
+class TestChainDoctrine:
+    def test_generated_order_demands_chaining(self):
+        """The hunt rule rides the per-turn engagement order (the dynamic
+        tail below any prompt base): chain findings, bias to action — the
+        field complaint was one-and-done timidity."""
+        from suijin.modules.agent.lib.prompts.base import _dynamic_tail, engagement_order
+
+        order = engagement_order("hunt example.com thoroughly")
+        assert "CHAIN, DON'T COLLECT" in order
+        assert "BIAS TO ACTION" in order
+        assert "UNLOCKS" in order
+        # and it actually reaches the agent each turn
+        tail = _dynamic_tail({"original_objective": "hunt example.com"}, "recon")
+        assert "CHAIN, DON'T COLLECT" in tail
+
+
+class TestVulnCounting:
+    """Field ask: 'make sure vuln counting works fine'. Two real bugs
+    found by replaying the catalog's actual CONFIRMED lines: unlabeled
+    confirmations vanished from the count (regex demanded a '— word'
+    tail), and setdefault froze the FIRST severity forever."""
+
+    def _ui(self):
+        from rich.console import Console
+
+        import suijin.client.tui.console_ui as cu
+
+        cu.reset_gauges()
+        return cu, cu.EngagementUI(Console(record=True, width=120, force_terminal=True), objective="t")
+
+    def test_every_confirmed_counts_even_unlabeled(self):
+        cu, ui = self._ui()
+        ui.output("EXP-001 CONFIRMED — MEDIUM CVSS 5.3 : leak. The VERIFIER ran exploit.yaml.")
+        ui.output("EXP-002 CONFIRMED — LOW : minor")
+        ui.output("EXP-003 CONFIRMED — CRITICAL CVSS 9.8 : rce")
+        ui.output("EXP-004 CONFIRMED : no severity word at all")
+        assert len(cu.UI_STATE["exploits"]) == 4, cu.UI_STATE["exploits"]
+        assert cu.UI_STATE["exploits"]["EXP-004"] == "med"  # floor
+        assert cu.UI_STATE["exploits"]["EXP-003"] == "crit"
+        assert cu.UI_STATE["exploits"]["EXP-002"] == "low"
+
+    def test_revalidation_updates_the_tier(self):
+        cu, ui = self._ui()
+        ui.output("EXP-001 CONFIRMED — MEDIUM CVSS 5.3 : first verdict")
+        ui.output("EXP-001 CONFIRMED — LOW CVSS 3.7 : re-validated down")
+        assert cu.UI_STATE["exploits"] == {"EXP-001": "low"}, cu.UI_STATE["exploits"]
+
+    def test_cvss_only_lines_map_by_score(self):
+        cu, ui = self._ui()
+        ui.output("EXP-009 CONFIRMED — CVSS 7.2 : score only, no word")
+        assert cu.UI_STATE["exploits"]["EXP-009"] == "high"
+
+    def test_strip_renders_the_counts(self):
+        import io
+        import re as _re
+
+        cu, ui = self._ui()
+        ui.output("EXP-001 CONFIRMED — CRITICAL CVSS 9.8 : rce")
+        ui.output("EXP-002 CONFIRMED — LOW : minor")
+        from rich.console import Console
+
+        sink = Console(file=io.StringIO(), width=120, force_terminal=True)
+        sink.print(ui._strip())
+        plain = _re.sub(r"\x1b\[[0-9;]*m", "", sink.file.getvalue()).replace("\n", " ")
+        assert "CRIT 1" in plain and "LOW 1" in plain and "EXP 2" in plain, plain[:160]
+
+
+class TestFireteamExploitCounting:
+    """Field bug: two vulns confirmed in fireteam result boxes rendered in
+    the UI but the strip never counted them — ui.fireteam() never fed the
+    exploit ledger."""
+
+    def test_fireteam_confirmations_count(self):
+        from rich.console import Console
+
+        import suijin.client.tui.console_ui as cu
+
+        cu.reset_gauges()
+        ui = cu.EngagementUI(Console(record=True, width=120, force_terminal=True), objective="t")
+        ui.fireteam("Fireteam team-abc: 3 deployed, 0 skipped")
+        ui.fireteam(
+            "[COMPLETE] agent 2: EXP-002 CONFIRMED — HIGH CVSS 7.5 : auth bypass "
+            "verified by the subagent. The VERIFIER ran exploit.yaml."
+        )
+        assert cu.UI_STATE["exploits"].get("EXP-002") == "high", cu.UI_STATE["exploits"]
+        assert cu.UI_STATE["fireteams"] == 1
+
+
+class TestFormatContractFraming:
+    """Field complaint: 'We need respond exactly one JSON object per
+    developer. says this every time'. Warning-framed format rules made the
+    model re-acknowledge the contract in its reasoning EVERY turn."""
+
+    def test_core_states_the_contract_without_warning_framing(self):
+        from suijin.modules.agent.lib.prompts.base import _static_prompt_core
+
+        core = _static_prompt_core("recon")
+        assert "This contract is automatic for you" in core
+        assert "never need to think about it" in core
+        assert "EXACTLY ONE JSON" not in core, "warning framing invites per-turn compliance checks"
+        assert "Four required fields" not in core
+
+
+class TestRepoCleanliness:
+    """Field report: 'files are writing to random places'. Two writers
+    found: the kernel Context defaulted its workspace to CWD (a month of
+    journal.log at the repo root), and the module-SDK self-test dropped a
+    whole workspace next to the pack it verified."""
+
+    def test_context_workspace_honors_env_before_cwd(self, tmp_path, monkeypatch):
+        from suijin.kernel.context import Context
+
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(tmp_path / "from-env"))
+        assert Context().workspace == tmp_path / "from-env"
+        c = Context(workspace=tmp_path / "explicit")
+        assert c.workspace == tmp_path / "explicit"  # arg still wins
+        monkeypatch.delenv("SUIJIN_WORKSPACE")
+        assert Context().workspace.is_absolute()  # cwd fallback, last resort
+
+    def test_module_selftest_boots_in_a_temp_workspace(self):
+        import inspect
+
+        from suijin.modules.tools.lib import module_sdk
+
+        src = inspect.getsource(module_sdk)
+        assert "workspace=base.parent" not in src, "the self-test still litters the source tree"
+        assert "TemporaryDirectory" in src
+
+    def test_termination_drains_the_typewriter_first(self):
+        """The final turn has no next iteration boundary, so the model's
+        closing reasoning kept playing while the menu redraw cut it
+        mid-word — done() and failure() drain before teardown."""
+        import inspect
+
+        from suijin.client.tui.console_ui import EngagementUI
+
+        done_src = inspect.getsource(EngagementUI.done)
+        fail_src = inspect.getsource(EngagementUI.failure)
+        assert "stream_done()" in done_src and "stream_done()" in fail_src
