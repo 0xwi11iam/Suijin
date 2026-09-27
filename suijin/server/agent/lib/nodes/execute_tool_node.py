@@ -178,10 +178,7 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
             "messages": [
                 {
                     "role": "user",
-                    "content": (
-                        f"RESULT ({tool_name}, {duration_ms}ms, iteration {step_data.get('iteration', '?')}):\n"
-                        f"{_wrap_untrusted(output, 'TOOL_OUTPUT')}"
-                    ),
+                    "content": _state_result_message(tool_name, duration_ms, step_data, output, state),
                 }
             ],
         }
@@ -338,13 +335,33 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
         "messages": [
             {
                 "role": "user",
-                "content": (
-                    f"RESULT ({tool_name}, {duration_ms}ms, iteration {step_data.get('iteration', '?')}):\n"
-                    f"{_wrap_untrusted(output, 'TOOL_OUTPUT')}"
-                ),
+                "content": _state_result_message(tool_name, duration_ms, step_data, output, state),
             }
         ],
     }
+
+
+def _state_result_message(tool_name, duration_ms, step_data, output, state) -> str:
+    """The STATE-bound copy of a tool result — the context-cost contract:
+
+    - DISTILLED (R1): raw results rode every turn's embed until compaction
+      ate them; the full copy already lives in the trail/toollogs. Cap
+      configurable via context_result_cap.
+    - PIN-TAGGED (R2): findings/credentials enter with [PIN] so compaction
+      carries them verbatim instead of compressing the crown jewels into
+      an 80-char header line.
+    """
+    from suijin.modules.agent.lib.context_distill import distill_result
+
+    cfg = (state or {}).get("_run_config") or {}
+    cap = int(cfg.get("context_result_cap") or 0) or None
+    body = distill_result(_wrap_untrusted(str(output), "TOOL_OUTPUT"), cap=cap)
+    head = f"RESULT ({tool_name}, {duration_ms}ms, iteration {step_data.get('iteration', '?')}):"
+    pin = ""
+    out_l = str(output or "")
+    if tool_name in ("catalog_exploit", "record_finding", "creds_add") or "CONFIRMED" in out_l[:200]:
+        pin = "[PIN] "
+    return f"{pin}{head}\n{body}"
 
 
 def _audit_step(state, tool_name, tool_args, success, duration_ms):

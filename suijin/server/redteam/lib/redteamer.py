@@ -1159,7 +1159,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                             except Exception:  # noqa: BLE001
                                 pass
                             _final = (
-                                f"OPERATOR ANSWER (FINAL — do not ask again): {answer}\n"
+                                f"[PIN] OPERATOR ANSWER (FINAL — do not ask again): {answer}\n"
                                 "That URL is now the program page on file, and the host it names is your "
                                 "approved target. You may verify it yourself with fetch_authorization_page "
                                 "— note: a Cloudflare/WAF block on fetch means the page EXISTS "
@@ -1167,7 +1167,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                             )
                         elif _names_target:
                             _final = (
-                                f"OPERATOR ANSWER (FINAL — do not ask again): {answer}\n"
+                                f"[PIN] OPERATOR ANSWER (FINAL — do not ask again): {answer}\n"
                                 "The operator has designated this as the approved target for this "
                                 "engagement. Adopt it and proceed."
                             )
@@ -1178,9 +1178,11 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                                 _mem.note(objective, f"operator confirmed scope/authorization: {answer[:200]}")
                             except Exception:  # noqa: BLE001 — memory is best-effort
                                 pass
-                            _final = f"OPERATOR ANSWER (FINAL — do not ask again): confirmed — {answer}. Proceeding."
+                            _final = (
+                                f"[PIN] OPERATOR ANSWER (FINAL — do not ask again): confirmed — {answer}. Proceeding."
+                            )
                         else:
-                            _final = f"OPERATOR ANSWER (FINAL — do not ask again): {answer}"
+                            _final = f"[PIN] OPERATOR ANSWER (FINAL — do not ask again): {answer}"
                         if _page_url or _names_target or _looks_like_scope_confirmation(answer):
                             # Persist into the objective so the engagement order
                             # (rendered every turn) carries it forever — PREPENDED,

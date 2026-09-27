@@ -276,7 +276,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     # at turn 40. Keep the newest two injections; older ones drop out of
     # history (their lesson, if durable, belongs in scratchpad/memory).
     with contextlib.suppress(Exception):
-        _INJ = ("SUPERVISOR", "DRIFT WARNING", "ORACLE")
+        _INJ = ("SUPERVISOR", "DRIFT WARNING", "ORACLE", "OPERATOR GUIDANCE")
         idx = [i for i, m in enumerate(raw_msgs) if str(m.get("content", "")).lstrip().upper().startswith(_INJ)]
         for i in idx[:-2]:
             raw_msgs[i] = {"role": "user", "content": "(superseded guidance pruned)"}
@@ -288,7 +288,14 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     # budget SCALES with the window: ≤24k chars for big-context models
     # (cost discipline — bigger windows don't buy bigger bills), shrunk
     # for small-context models so the prompt actually fits.
+    # (R3) SALIENCE: [PIN] messages (findings/creds/operator rulings)
+    # ride FIRST regardless of age — pure recency used to drop a held
+    # credential before a routine tool result.
     embed_budget = max(8_000, min(24_000, (_win_tokens * 4) // 8))
+    _pinned = [m for m in raw_msgs if str(m.get("content", "")).lstrip().startswith("[PIN]")]
+    _pinned_text = "\n".join(str(m.get("content", ""))[:600] for m in _pinned[-4:])
+    if _pinned_text:
+        _pinned_text = "[PINNED — always in context]\n" + _pinned_text + "\n---\n"
     for m in reversed(raw_msgs[-15:]):
         role = m.get("role", "?")
         content = str(m.get("content", ""))
@@ -298,6 +305,9 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
                 recent_msgs = f"[{role}]: {content[:room]}...(truncated)\n" + recent_msgs
             break
         recent_msgs = f"[{role}]: {content}\n" + recent_msgs
+
+    # (R3) pins ride the embed FIRST — salience beats recency
+    recent_msgs = _pinned_text + recent_msgs
 
     # Build a summary of the last 8 tool actions (anti-repeat)
     trace = state.get("execution_trace", [])
@@ -369,37 +379,90 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
                     + "\n→ memory_recall(query=…) for the full ledger\n"
                 )
 
-    context_block = f"""
-## CURRENT STATE
-- **Phase**: {phase}
-- **Iteration**: {iteration}/{state.get("max_iterations", 100)}
-- **Attack Path**: {state.get("attack_path_type", "recon")}
-{_governor_lines}{_queued_plan_block(state)}
-## RECENT ACTIONS (last 8 tool calls — DO NOT REPEAT FAILURES)
-{action_log or "(none)"}
+    # ── THE CONTEXT BLOCK as ordered SECTIONS (R5/R6) ───────────────
+    # Phase weighting (R5): identical content, phase-ordered emphasis —
+    # recon leads with the board, exploitation with the chain, post-
+    # exploitation with what it HOLDS. Per-section sizes feed the
+    # manifest (R6) so context cost is measurable in the field.
+    from suijin.modules.agent.lib.footholds import render_you_hold
 
-## RECENT MESSAGES (last 15 system/tool messages)
-{recent_msgs or "(none)"}
+    _sections: dict[str, str] = {
+        "CURRENT_STATE": (
+            f"- **Phase**: {phase}\n"
+            f"- **Iteration**: {iteration}/{state.get('max_iterations', 100)}\n"
+            f"- **Attack Path**: {state.get('attack_path_type', 'recon')}\n"
+            + _governor_lines
+            + _queued_plan_block(state)
+        ),
+        "YOU_HOLD": render_you_hold(state.get("_footholds") or [], iteration),
+        "RECENT_ACTIONS": (action_log or "(none)"),
+        "RECENT_MESSAGES": (recent_msgs or "(none)"),
+        "TARGET_INTELLIGENCE": _render_board(state),
+        "TODO_LIST": todo_context,
+        "CHAIN_CONTEXT": (chain_context or "(no chain context yet)"),
+        "RULES": (
+            "- NEVER repeat an IDENTICAL failed call (same tool, same args). A failed payload has taught you one context — vary the class/encoding/position and fire again on a surface that's still unproven.\n"
+            "- NEVER install tools you already tried to install. Use what's available.\n"
+            "- NEVER check job_status/job_list twice in a row without acting on results.\n"
+            "- If nmap/job has no output after 90s, it's probably blocked. Move on.\n"
+            "- READ the output of completed jobs BEFORE spawning new ones.\n"
+            "- Exploitation is iterative by nature: probe → adjust → fire again is the workflow, not a stall. Switch attack CLASS only when a surface is confirmed dead.\n"
+            "- FILTERED ≠ SAFE: a filter rejecting your payload is a SIGNAL, not a dead end. You have not tested a class until you neutralized 4-5 DISTINCT variations, one axis at a time (inject_probe → payload_mutate → http_replay codec=tab/url-double). A filter message naming the blocked token tells you what to avoid — reroute around it.\n"
+            "- EVIDENCE OR IT DIDN'T HAPPEN: findings need the baseline/exploit DIFF (http_replay compare mode). Both-200 or same-error = NOT a vulnerability. 403/401 means enforcement WORKS. XSS execution claims need the browser (mcp_browser_goto), not raw reflection.\n"
+            "- CHAIN: a CONFIRMED finding is a weapon — check YOU HOLD and test its unlocks before hunting new surface.\n"
+        ),
+    }
+    _ORDER = {
+        "informational": [
+            "CURRENT_STATE",
+            "RECENT_ACTIONS",
+            "TARGET_INTELLIGENCE",
+            "TODO_LIST",
+            "CHAIN_CONTEXT",
+            "RULES",
+        ],
+        "recon": ["CURRENT_STATE", "RECENT_ACTIONS", "TARGET_INTELLIGENCE", "TODO_LIST", "CHAIN_CONTEXT", "RULES"],
+        "exploitation": [
+            "CURRENT_STATE",
+            "YOU_HOLD",
+            "CHAIN_CONTEXT",
+            "RECENT_ACTIONS",
+            "TARGET_INTELLIGENCE",
+            "TODO_LIST",
+            "RULES",
+        ],
+        "post_exploitation": [
+            "YOU_HOLD",
+            "CHAIN_CONTEXT",
+            "TODO_LIST",
+            "TARGET_INTELLIGENCE",
+            "RECENT_ACTIONS",
+            "RULES",
+        ],
+    }.get(
+        str(phase or "").lower(),
+        ["CURRENT_STATE", "YOU_HOLD", "RECENT_ACTIONS", "TARGET_INTELLIGENCE", "TODO_LIST", "CHAIN_CONTEXT", "RULES"],
+    )
 
-## TARGET INTELLIGENCE (your working board — accumulated, trust it)
-{_render_board(state)}
-
-## TODO LIST
-{todo_context}
-
-## CHAIN CONTEXT (recent findings, failures)
-{chain_context or "(no chain context yet)"}
-
-## RULES
-- NEVER repeat an IDENTICAL failed call (same tool, same args). A failed payload has taught you one context — vary the class/encoding/position and fire again on a surface that's still unproven.
-- NEVER install tools you already tried to install. Use what's available.
-- NEVER check job_status/job_list twice in a row without acting on results.
-- If nmap/job has no output after 90s, it's probably blocked. Move on.
-- READ the output of completed jobs BEFORE spawning new ones.
-- Exploitation is iterative by nature: probe → adjust → fire again is the workflow, not a stall. Switch attack CLASS only when a surface is confirmed dead.
-- FILTERED ≠ SAFE: a filter rejecting your payload is a SIGNAL, not a dead end. You have not tested a class until you neutralized 4-5 DISTINCT variations, one axis at a time (inject_probe → payload_mutate → http_replay codec=tab/url-double). A filter message naming the blocked token tells you what to avoid — reroute around it.
-- EVIDENCE OR IT DIDN'T HAPPEN: findings need the baseline/exploit DIFF (http_replay compare mode). Both-200 or same-error = NOT a vulnerability. 403/401 means enforcement WORKS. XSS execution claims need the browser (mcp_browser_goto), not raw reflection.
-"""
+    _pretty = {
+        "CURRENT_STATE": "CURRENT STATE",
+        "YOU_HOLD": "YOU HOLD (capabilities won — use them before hunting more)",
+        "RECENT_ACTIONS": "RECENT ACTIONS (last 8 tool calls — DO NOT REPEAT FAILURES)",
+        "RECENT_MESSAGES": "RECENT MESSAGES (last 15 system/tool messages)",
+        "TARGET_INTELLIGENCE": "TARGET INTELLIGENCE (your working board — accumulated, trust it)",
+        "TODO_LIST": "TODO LIST",
+        "CHAIN_CONTEXT": "CHAIN CONTEXT (recent findings, failures)",
+        "RULES": "RULES",
+    }
+    _section_sizes: dict[str, int] = {}
+    _block_parts: list[str] = []
+    for _name in _ORDER:
+        _txt = _sections.get(_name) or ""
+        _section_sizes[_name] = len(_txt)
+        if not _txt.strip() and _name == "YOU_HOLD":
+            continue  # nothing held — the section stays out entirely
+        _block_parts.append(f"## {_pretty[_name]}\n{_txt}")
+    context_block = "\n\n" + "\n".join(_block_parts) + "\n"
     full_prompt = system_prompt + context_block
 
     # Live context manifest — the operator sees exactly what the AI was
@@ -410,6 +473,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         guidance=_live_guidance or "",
         phase=phase,
         iteration=iteration,
+        section_sizes=_section_sizes,
         attack_path=str(state.get("attack_path_type", "recon")),
         recent_actions=action_log,
         msg_count=len(raw_msgs),
@@ -627,6 +691,38 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     output_analysis = decision.get("output_analysis") or {}
     productivity = output_analysis.get("productivity") or {}
 
+    # ── Foothold extraction (R7) — chaining as a state machine ─────
+    # A CONFIRMED result this turn becomes a held capability; one bounded
+    # call names its unlocks. Chain memory used to be model-volunteered —
+    # now the machinery feeds itself.
+    _last_result = ""
+    with contextlib.suppress(Exception):
+        _last_msgs = state.get("messages") or []
+        for _m in reversed(_last_msgs):
+            if str(_m.get("content", "")).startswith(("[PIN] RESULT", "RESULT")):
+                _last_result = str(_m.get("content", ""))
+                break
+    _new_footholds = []
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.footholds import arm_foothold, extract_footholds, merge_footholds
+
+        _new_footholds = extract_footholds(_last_result, iteration)
+        if _new_footholds:
+            _merged = merge_footholds(state, _new_footholds)
+            updates["_footholds"] = _merged
+            for _fh in _new_footholds:
+                await arm_foothold(_fh, _last_result[:600], generate_fn)
+            # auto-todos for named unlocks (the FOLLOW-UP rule, mechanical)
+            from suijin.modules.agent.lib.footholds import foothold_todos
+
+            _existing_ids = {t.get("id") for t in (state.get("todo_list") or [])}
+            _new_todos = list(state.get("todo_list") or [])
+            for _t in foothold_todos(updates["_footholds"]):
+                if _t["id"] not in _existing_ids:
+                    _existing_ids.add(_t["id"])
+                    _new_todos.append(_t)
+            updates["todo_list"] = _new_todos
+
     # ── Chain findings ──────────────────────────────────────────────
     chain_findings = output_analysis.get("chain_findings") or []
     prev_findings = state.get("chain_findings_memory", [])
@@ -643,6 +739,15 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
             todo_map[uid] = update
         current_todos = list(todo_map.values())
         updates["todo_list"] = current_todos
+        # (R7) a completed fh-* todo closes its foothold — the model marks
+        # the unlock tested through the normal todo channel
+        if any(str(t.get("id", "")).startswith("fh-") for t in todo_updates):
+            from suijin.modules.agent.lib.footholds import close_from_todo
+
+            updates["_footholds"] = list(state.get("_footholds") or [])
+            for t in todo_updates:
+                if str(t.get("status", "")).lower() in ("done", "complete") and str(t.get("id", "")).startswith("fh-"):
+                    updates["_footholds"] = close_from_todo(updates["_footholds"], str(t.get("id")))
 
     # ── Build execution step ────────────────────────────────────────
     step = ExecutionStep(
@@ -863,6 +968,29 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
                         f"COMPLETION REFUSED (surface gate): {len(_open)} attack surfaces remain UNTRIED "
                         f"(top: {', '.join(str(s['surface'])[:40] for s in _open[:3])}). Test them, clear them "
                         "with surface_verdict (naming the concrete defense), then complete."
+                    )
+        # (R7) DEPTH GATE: unexploited footholds block completion exactly
+        # as untried surfaces do — leaving with weapons on the table is
+        # the scavenger's exit, not the finisher's. Findings DON'T bypass
+        # this one: the finding IS the weapon being wasted.
+        if _refusal is None:
+            with contextlib.suppress(Exception):
+                from suijin.modules.agent.lib.footholds import unexploited
+
+                _unex = unexploited(state.get("_footholds") or [])
+                _named = [f for f in _unex if f.get("unlock_targets")]
+                if len(_named) >= 1:
+                    _t = "; ".join(str(t)[:60] for f in _named[:2] for t in f["unlock_targets"][:2])
+                    _refusal = (
+                        f"COMPLETION REFUSED (depth gate): you HOLD confirmed capabilities whose "
+                        f"unlocks are untested ({_t}). Chain them — test the unlock, record what it "
+                        "reaches, then complete. Mark unlocks tested via their fh-* todos."
+                    )
+                elif len(_unex) >= 1:
+                    _refusal = (
+                        "COMPLETION REFUSED (depth gate): you hold a confirmed capability whose "
+                        "unlocks were never named. Say what it unlocks (todo: 'name unlocks'), test "
+                        "the strongest, or mark it not_applicable — then complete."
                     )
         if _refusal is None and not _has_findings:
             with contextlib.suppress(Exception):

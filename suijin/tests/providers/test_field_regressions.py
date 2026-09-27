@@ -162,7 +162,7 @@ def test_repeat_nag_still_fires_on_real_repetition():
         {"tool_name": "http_request", "success": True},
     ]
     msg = _detect_repeating_tool(trace)
-    assert msg and "3 times in a row" in msg
+    assert msg and msg.startswith("OPPORTUNITY:") and "3 times" in msg
 
 
 def test_repeat_nag_counts_only_the_recent_window():
