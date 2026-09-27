@@ -151,7 +151,10 @@ class TestSpeedDials:
         src = Path(suijin.modules.agent.lib.agent_graph.__file__).read_text(encoding="utf-8")
         assert 'get("oracle_interval", 4)' in src
         assert 'get("drift_interval", 7)' in src
-        assert 'get("supervisor_deep_interval", 15)' in src
+        # (coach redesign) the dual deep pass is retired — the LLM coach
+        # cadence is speakworthy-facts-driven; supervisor_interval remains
+        # the heartbeat key
+        assert 'get("supervisor_interval", 5)' in src
 
     def test_context_cap_configurable(self):
         from suijin.modules.agent.lib.agent_graph import _merge_state

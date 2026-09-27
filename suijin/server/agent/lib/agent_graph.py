@@ -348,87 +348,62 @@ class SuijinAgentGraph:
             # ── Supervisor check (runs every N iterations) ──────────
             with contextlib.suppress(Exception):
                 supervisor_interval = int((state.get("_run_config") or self.run_config).get("supervisor_interval", 5))
-                # deep-analysis cadence configurable (2026-09-12): 0 = off
-                _deep_iv = int((state.get("_run_config") or self.run_config).get("supervisor_deep_interval", 15) or 0)
+                # deep-analysis cadence is now the coach's own (supervisor_deep_interval
+                # still honored by coach cadence tooling; the old dual path is gone)
             iteration = result.get("current_iteration", state.get("current_iteration", 0))
             if iteration > 0 and iteration % supervisor_interval == 0:
+                # ── THE COACH REDESIGN (2026-09-27) ────────────────
+                # Facts + coach + feedback, silent by default. The
+                # deterministic detectors stay as the FACT layer's voice
+                # for the loudest cases; the LLM deep pass is absorbed
+                # into coach_turn (cite-a-fact enforced structurally);
+                # the log tracks heeded/escalate/drop so the coach
+                # never repeats into the void.
                 try:
-                    from suijin.modules.agent.lib.supervisor import analyze_trace, analyze_trace_with_llm
+                    from suijin.modules.agent.lib.supervisor import (
+                        analyze_trace,
+                        check_heeded,
+                        coach_turn,
+                        escalation_state,
+                    )
 
                     trace = result.get("execution_trace", state.get("execution_trace", []))
+                    _log = list(state.get("_supervisor_log") or [])
 
-                    # Pattern-based check (zero cost, always runs; iteration
-                    # enables per-detector cooldowns so nothing nags twice)
-                    guidance = analyze_trace(trace[-15:], iteration=iteration)
+                    # feedback bookkeeping: mark the last intervention heeded?
+                    if _log and _log[-1].get("heeded") is None:
+                        _log[-1]["heeded"] = check_heeded(_log[-1].get("text", ""), trace[-3:])
+                    _esc = escalation_state(_log)
+                    if _esc == "drop":
+                        # ignored three times: the model has decided.
+                        # Tell the OPERATOR once, stop telling the model.
+                        logger.warning("Supervisor: intervention ignored 3x — surfacing to operator")
+                        with contextlib.suppress(Exception):
+                            print("  [yellow]supervisor: guidance repeatedly ignored — see _supervisor_log[/yellow]")
+                        _log = [e for e in _log if e.get("heeded")]  # reset the unheeded streak
+
+                    guidance = None
+                    kind = "deterministic"
+                    if _esc != "drop":
+                        guidance = analyze_trace(trace[-15:], iteration=iteration)
                     if guidance:
-                        # Wrap-up gate: "generate your report and complete"
-                        # is forbidden while untried attack surfaces remain
-                        # — quitting with attack debt is the timidity bug.
-                        try:
-                            from suijin.modules.agent.lib import mode_governor as _mg
-
-                            _open = _mg.untried(state.get("_attack_queue") or result.get("_attack_queue") or [])
-                        except Exception:  # noqa: BLE001
-                            _open = []
-                        # findings bypass (2026-09-15): a run with confirmed
-                        # findings completes — "1 vuln = done" outranks the
-                        # wrap-up gate, same as the think-node completion gate
-                        if (
-                            "generate your report" in guidance
-                            and _open
-                            and not (state.get("findings") or result.get("findings"))
-                        ):
-                            guidance = (
-                                f"Recon yield is exhausted but {len(_open)} attack surfaces remain UNTRIED — "
-                                "switch to exploitation and work the queue before any report. "
-                                f"Top: {', '.join(str(s['surface'])[:50] for s in _open[:3])}"
-                            )
-                        logger.info(f"Supervisor pattern intervention at iteration {iteration}: {guidance[:80]}")
-                        result.setdefault("messages", []).append(
-                            {
-                                "role": "user",
-                                "content": f"SUPERVISOR: {guidance}",
-                            }
+                        kind = "deterministic"
+                    else:
+                        guidance = await coach_turn(state, trace, self.generate_fn, iteration)
+                        kind = "coach"
+                    if guidance:
+                        if _esc == "escalate" and kind == "coach":
+                            guidance = f"DIRECT: {guidance} (repeated because it matters)"
+                        prefix = (
+                            "SUPERVISOR: "
+                            if kind == "deterministic"
+                            else "SUPERVISOR (coach — advisory; verify against your trace): "
                         )
+                        result.setdefault("messages", []).append({"role": "user", "content": prefix + guidance})
                         result["_supervisor_guidance"] = guidance
-                    elif _deep_iv > 0 and iteration % _deep_iv == 0:
-                        # LLM deep analysis — RARELY (was: every silent check,
-                        # i.e. every 5th iteration — constant chatter that
-                        # derailed exploitation runs). Every 15th, max. And
-                        # CORROBORATED only: an uncorroborated deep verdict
-                        # is the supervisor bullshitting a healthy run (it
-                        # reads ten thought-lines and invents a problem);
-                        # log it, never inject it.
-                        try:
-                            from suijin.modules.agent.lib.supervisor import (
-                                analyze_trace_with_llm,
-                                deep_analysis_corroborated,
-                            )
-
-                            llm_guidance = await analyze_trace_with_llm(trace, state, self.generate_fn)
-                            if llm_guidance and deep_analysis_corroborated(trace):
-                                logger.info(f"Supervisor LLM insight at iteration {iteration}")
-                                result.setdefault("messages", []).append(
-                                    {
-                                        "role": "user",
-                                        # ADVISORY framing: the agent may check
-                                        # a deep hint against its own trace and
-                                        # discard nonsense — gospel framing
-                                        # made it obey hallucinations
-                                        "content": (
-                                            "SUPERVISOR (deep analysis — advisory; if it contradicts "
-                                            f"what your trace shows, ignore it): {llm_guidance}"
-                                        ),
-                                    }
-                                )
-                                result["_supervisor_guidance"] = llm_guidance
-                            elif llm_guidance:
-                                logger.info(
-                                    "Supervisor LLM insight suppressed (uncorroborated): %s",
-                                    llm_guidance[:120],
-                                )
-                        except Exception as llm_err:
-                            logger.debug(f"LLM supervisor skipped: {llm_err}")
+                        _log.append({"turn": iteration, "kind": kind, "text": guidance[:200], "heeded": None})
+                        logger.info("Supervisor %s intervention at %s: %s", kind, iteration, guidance[:80])
+                    result["_supervisor_log"] = _log[-20:]
 
                 except Exception as e:
                     logger.warning(f"Supervisor check failed: {e}")

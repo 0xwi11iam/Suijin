@@ -9,9 +9,12 @@ Pattern-based (no LLM calls) — zero cost, instant execution.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re as _re_mod
 from typing import Optional
+
+re = _re_mod  # the coach layer uses plain `re`; the module historically aliased it
 
 # Phase transition config — defined inline
 PHASE_TRANSITIONS = {
@@ -965,3 +968,184 @@ def _confidence_from_decision(decision: dict) -> str:
     if raw in ("suspected", "possible", "low", "maybe"):
         return "suspected"
     return "probable"  # default when unclaimed — findings are never 'verified' without proof
+
+
+# ══════════════════════════════════════════════════════════════════════
+# THE COACH REDESIGN (2026-09-27) — from nag engine to coaching loop.
+#
+# Three layers, one contract: SILENT BY DEFAULT, cite-a-fact to speak.
+#
+#   FACTS    facts_brief(state, trace) — deterministic, state-derived,
+#            never wrong. The whole board the old supervisor never saw:
+#            untried surfaces, unexploited footholds, uncataloged finds,
+#            dead ends, repetition, cost.
+#   COACH    coach_turn(...) — ONE LLM path (absorbing the deep pass),
+#            fed facts + its own last intervention + heed status. Picks
+#            one highest-leverage move as an OFFER citing ONE fact, or
+#            stays silent (NO_COMMENT). Output without a fact citation
+#            is suppressed — corroboration is structural, not heuristic.
+#   FEEDBACK _supervisor_log in state — {turn, kind, fact, text, heeded}.
+#            Heeded → reinforce once. Ignored twice → escalate ONE level.
+#            Still ignored → tell the OPERATOR (console), stop telling
+#            the model. Never repeat into the void. The log is also the
+#            supervisor's post-run report card (heeded rate).
+# ══════════════════════════════════════════════════════════════════════
+
+
+def facts_brief(state: dict, trace: list) -> dict:
+    """The deterministic fact layer: everything the coach may cite.
+
+    State-derived (not vibe-derived): every number here is true by
+    construction, which is the never-bullshit guarantee."""
+    brief: dict = {}
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.mode_governor import untried as _untried
+
+        open_surfaces = _untried((state or {}).get("_attack_queue") or [])
+        brief["untried_surfaces"] = [str(s.get("surface", ""))[:60] for s in open_surfaces[:5]]
+        brief["untried_count"] = len(open_surfaces)
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.footholds import unexploited as _unex
+
+        holds = _unex((state or {}).get("_footholds") or [])
+        brief["unexploited_footholds"] = [
+            {"capability": str(f.get("capability", ""))[:80], "unlocks": (f.get("unlock_targets") or [])[:2]}
+            for f in holds[:4]
+        ]
+    with contextlib.suppress(Exception):
+        # uncataloged: a record_finding in the recent trace with no
+        # catalog_exploit after it
+        t = list(trace or [])[-12:]
+        idx = -1
+        for i in range(len(t) - 1, -1, -1):
+            if t[i].get("tool_name") == "catalog_exploit":
+                break
+            if t[i].get("tool_name") == "record_finding":
+                idx = i
+                break
+        brief["uncataloged_finding"] = idx >= 0
+    with contextlib.suppress(Exception):
+        t = list(trace or [])[-6:]
+        brief["recent_failures"] = sum(1 for s in t if s.get("success", True) is False)
+        tools = [str(s.get("tool_name") or "") for s in t if s.get("tool_name")]
+        brief["recent_same_tool"] = max((tools.count(x) for x in set(tools)), default=0)
+    with contextlib.suppress(Exception):
+        brief["findings_count"] = len((state or {}).get("findings") or [])
+    return brief
+
+
+def _facts_speakworthy(brief: dict) -> bool:
+    """Silence by default: the coach only wakes when a fact crosses a
+    threshold worth one sentence of the agent's attention."""
+    if not isinstance(brief, dict):
+        return False
+    if brief.get("unexploited_footholds"):
+        return True
+    if brief.get("uncataloged_finding"):
+        return True
+    if int(brief.get("recent_failures") or 0) >= 2:
+        return True
+    return int(brief.get("recent_same_tool") or 0) >= 3
+
+
+_COACH_PROMPT = """You are a quiet coach for an autonomous security agent mid-engagement.
+Silence is the default. Speak ONLY if one fact below clearly deserves the
+agent's next move, and then: ONE sentence, an OFFER (not an order), naming
+the fact and ONE concrete action. No lectures, no restating doctrine.
+
+FACTS (all true, state-derived):
+{facts}
+
+YOUR LAST INTERVENTION: {last}
+AGENT'S RESPONSE SINCE: {heeded}
+
+Respond with EXACTLY one of:
+NO_COMMENT
+OFFER: <one sentence citing one fact and one concrete action>
+"""
+
+
+async def coach_turn(state: dict, trace: list, generate_fn, iteration: int = 0) -> str | None:
+    """The coach layer. Returns guidance to inject, or None (silence).
+
+    Contract enforced structurally: no speakworthy fact → no LLM call at
+    all; an LLM answer that fails the OFFER/cite-a-fact shape → suppressed
+    and logged. The budget and heed-escalation live in the caller
+    (agent_graph), which owns the log."""
+    brief = facts_brief(state, trace)
+    if not _facts_speakworthy(brief):
+        return None
+    log = list((state or {}).get("_supervisor_log") or [])
+    last = log[-1] if log else None
+    last_txt = (last or {}).get("text", "(none)")[:120]
+    heeded = "heeded" if (last or {}).get("heeded") else ("unheeded" if last else "(first turn)")
+    facts_txt = "\n".join(f"- {k}: {v}" for k, v in brief.items())
+    prompt = _COACH_PROMPT.format(facts=facts_txt, last=last_txt, heeded=heeded)
+    try:
+        kw = {}
+        try:
+            import inspect
+
+            params = inspect.signature(generate_fn).parameters
+            if "on_delta" in params or any(p.kind == p.VAR_KEYWORD for p in params.values()):
+                kw["on_delta"] = False
+        except (TypeError, ValueError):
+            pass
+        resp = await generate_fn([{"role": "user", "content": prompt}], max_tokens=120, temperature=0.1, **kw)
+    except Exception:  # noqa: BLE001 — the coach may never break the loop
+        return None
+    line = str(resp or "").strip()
+    if not line or line.upper().startswith("NO_COMMENT"):
+        return None
+    # cite-a-fact: the OFFER must genuinely reference fact content —
+    # either a fact string appears in the offer, or at least two
+    # distinctive words from one fact string do (handles paraphrase)
+    leaves: list[str] = []
+    for v in brief.values():
+        if isinstance(v, list):
+            for x in v:
+                if isinstance(x, dict):
+                    leaves += [str(x.get("capability", ""))] + [str(u) for u in (x.get("unlocks") or [])]
+                elif x:
+                    leaves.append(str(x))
+        elif v:
+            leaves.append(str(v))
+    low = line.lower()
+    cited = False
+    for leaf in leaves:
+        lf = leaf.strip().lower()
+        if len(lf) >= 8 and lf in low:
+            cited = True
+            break
+        words = [w for w in re.findall(r"[a-z0-9-]{5,}", lf) if w not in ("false", "true")]
+        if len(words) >= 2 and sum(w in low for w in words) >= 2:
+            cited = True
+            break
+    if not (line.startswith("OFFER:") and cited):
+        logger.info("Coach suppressed (no fact citation): %s", line[:120])
+        return None
+    return line[len("OFFER:") :].strip()[:250]
+
+
+def check_heeded(message: str, recent_steps: list) -> bool:
+    """Did the agent engage with the coached fact? The cited tool/surface
+    appearing in the next steps' tool names, args or thoughts counts."""
+    m = str(message or "").lower()
+    for s in list(recent_steps or [])[-3:]:
+        blob = " ".join(str(s.get(k) or "") for k in ("tool_name", "thought", "tool_args")).lower()
+        for word in re.findall(r"[a-z_]{5,}", m):
+            if word in blob:
+                return True
+    return False
+
+
+def escalation_state(log: list, fact_hint: str = "") -> str:
+    """From the log: 'fresh' (first mention), 'escalate' (ignored twice —
+    say it once, harder), or 'drop' (ignored thrice — stop telling the
+    model, tell the operator)."""
+    recent = [e for e in list(log or [])[-4:] if not e.get("heeded")]
+    if len(recent) >= 3:
+        return "drop"
+    if len(recent) >= 2:
+        return "escalate"
+    return "fresh"

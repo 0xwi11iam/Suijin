@@ -371,8 +371,8 @@ class TestSupervisorTrust:
         from suijin.modules.agent.lib import agent_graph
 
         src = inspect.getsource(agent_graph)
-        assert "advisory; if it contradicts" in src, "the deep hint must be refusable"
-        assert "deep_analysis_corroborated" in src, "the corroboration gate must be wired"
+        assert "advisory; verify against your trace" in src, "the coach hint must be refusable"
+        assert "coach_turn" in src, "the cite-a-fact coach must be wired"
 
     def test_phase_stall_ignores_finding_work(self):
         """Cataloging a finding is exploitation WORK — FORCE EXPLOITATION
