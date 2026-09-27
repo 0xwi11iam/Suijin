@@ -1055,7 +1055,20 @@ class TestFastChildKeepsItsVerdict:
             environ={"SUIJIN_WORKSPACE": str(home), "PYTHONPATH": str(stub)},
             confirm_seconds=10.0,
         )
-        final = daemon._read_record(rec["id"]) or {}
+        # the child completes ASYNCHRONOUSLY: boot-confirmation fires at
+        # "running", and on a loaded runner the parent can reach this read
+        # before the child's final record lands (the child also runs full
+        # init_runtime pack discovery first). POLL for the verdict — the
+        # race is the test's, not the daemon's.
+        import time as _t
+
+        final = {}
+        deadline = _t.monotonic() + 30.0
+        while _t.monotonic() < deadline:
+            final = daemon._read_record(rec["id"]) or {}
+            if final.get("status") not in ("", "spawning", "running"):
+                break
+            _t.sleep(0.2)
         assert final["status"] == "completed", final
         assert final["exit_reason"] == "objective_complete"
         assert final["iterations"] == 1
