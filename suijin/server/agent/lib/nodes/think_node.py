@@ -441,7 +441,20 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     # manifest (R6) so context cost is measurable in the field.
     from suijin.modules.agent.lib.footholds import render_you_hold
 
+    _drive_block = ""
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib import drive as _drive
+        from suijin.modules.agent.lib import epistemic as _epi
+
+        _drive_block = _drive.render(
+            updates.get("_drive") or _drive.ensure(state),
+            updates.get("_epistemic") or _epi.ensure(state),
+            iteration,
+            state,
+        )
+
     _sections: dict[str, str] = {
+        "DRIVE": _drive_block,
         "CURRENT_STATE": (
             f"- **Phase**: {phase}\n"
             f"- **Iteration**: {iteration}/{state.get('max_iterations', 100)}\n"
@@ -470,6 +483,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     _ORDER = {
         "informational": [
             "CURRENT_STATE",
+            "DRIVE",
             "RECENT_ACTIONS",
             "RECENT_MESSAGES",
             "TARGET_INTELLIGENCE",
@@ -479,6 +493,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         ],
         "recon": [
             "CURRENT_STATE",
+            "DRIVE",
             "RECENT_ACTIONS",
             "RECENT_MESSAGES",
             "TARGET_INTELLIGENCE",
@@ -489,6 +504,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         "exploitation": [
             "CURRENT_STATE",
             "YOU_HOLD",
+            "DRIVE",
             "CHAIN_CONTEXT",
             "RECENT_ACTIONS",
             "RECENT_MESSAGES",
@@ -498,6 +514,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         ],
         "post_exploitation": [
             "YOU_HOLD",
+            "DRIVE",
             "CHAIN_CONTEXT",
             "TODO_LIST",
             "TARGET_INTELLIGENCE",
@@ -506,11 +523,21 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         ],
     }.get(
         str(phase or "").lower(),
-        ["CURRENT_STATE", "YOU_HOLD", "RECENT_ACTIONS", "TARGET_INTELLIGENCE", "TODO_LIST", "CHAIN_CONTEXT", "RULES"],
+        [
+            "CURRENT_STATE",
+            "YOU_HOLD",
+            "DRIVE",
+            "RECENT_ACTIONS",
+            "TARGET_INTELLIGENCE",
+            "TODO_LIST",
+            "CHAIN_CONTEXT",
+            "RULES",
+        ],
     )
 
     _pretty = {
         "CURRENT_STATE": "CURRENT STATE",
+        "DRIVE": "DRIVE — your own state (what pulls at you)",
         "YOU_HOLD": "YOU HOLD (capabilities won — use them before hunting more)",
         "RECENT_ACTIONS": "RECENT ACTIONS (last 8 tool calls — DO NOT REPEAT FAILURES)",
         "RECENT_MESSAGES": "RECENT MESSAGES (last 15 system/tool messages)",
@@ -524,8 +551,8 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     for _name in _ORDER:
         _txt = _sections.get(_name) or ""
         _section_sizes[_name] = len(_txt)
-        if not _txt.strip() and _name == "YOU_HOLD":
-            continue  # nothing held — the section stays out entirely
+        if not _txt.strip() and _name in ("YOU_HOLD", "DRIVE"):
+            continue  # nothing held / no drive — the section stays out entirely
         _block_parts.append(f"## {_pretty[_name]}\n{_txt}")
     if _mesh_block:
         _block_parts.insert(0, _mesh_block)
@@ -761,6 +788,34 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     # ── Output analysis & productivity ──────────────────────────────
     output_analysis = decision.get("output_analysis") or {}
     productivity = output_analysis.get("productivity") or {}
+
+    # ── The EPISTEMIC UPDATE (drive Stage 1) — every observation folds
+    # into the belief state; surprise spawns questions; leaks and held
+    # capabilities spawn the generative chaining leaps. Zero LLM calls.
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib import epistemic as _epi
+
+        _last_obs = ""
+        _lm = state.get("messages") or []
+        for _m in reversed(_lm):
+            c = str(_m.get("content", ""))
+            if c.startswith(("[PIN] RESULT", "RESULT")):
+                _last_obs = c
+                break
+        _tool_last = (state.get("_current_step") or {}).get("tool_name", "")
+        if _last_obs:
+            updates["_epistemic"] = _epi.observe(state, _tool_last, _last_obs, iteration)
+            _epi.capability_questions(state, updates["_epistemic"], iteration)
+            if "surface_verdict" in _last_obs or "DEAD END" in _last_obs:
+                _epi.mark_dead(updates["_epistemic"], _epi._surface_of(_last_obs), iteration)
+
+    # ── The DRIVE TICK (drive Stage 1) — the four dimensions update
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib import drive as _drive
+        from suijin.modules.agent.lib import epistemic as _epi
+
+        _epi_state = updates.get("_epistemic") or _epi.ensure(state)
+        updates["_drive"] = _drive.update(state, _epi_state, iteration)
 
     # ── Foothold extraction (R7) — chaining as a state machine ─────
     # A CONFIRMED result this turn becomes a held capability; one bounded
