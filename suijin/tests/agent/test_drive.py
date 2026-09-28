@@ -232,8 +232,8 @@ class TestDriveSectionFunctional:
         system prompt the LLM received."""
         import asyncio
 
-        from suijin.modules.agent.lib import epistemic as _epi
         from suijin.modules.agent.lib import drive as _drive
+        from suijin.modules.agent.lib import epistemic as _epi
         from suijin.modules.agent.lib.nodes import think_node as tn
 
         captured = {}
