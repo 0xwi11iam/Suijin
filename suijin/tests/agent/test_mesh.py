@@ -299,3 +299,61 @@ class TestGhostNodes:
         (mesh_dir / f"{pid}.json").write_text(json.dumps({"pid": pid, "summary": "live", "beat": time.time()}))
         ps = mesh.peers(refresh_now=True)
         assert any(p["pid"] == pid for p in ps)
+
+
+class TestMeshEncouragement:
+    """Operator ask: 'make sure agent knows how to communicate with the
+    other one and it is encouraged to.' Four surfaces: turn-1 doctrine
+    (the HOW), compact-order nudge (every turn), the GC header's reply
+    how-to, and the coach's unshared-finding fact."""
+
+    def test_full_order_teaches_the_how(self):
+        from suijin.modules.agent.lib.prompts.base import engagement_order
+
+        order = engagement_order("hunt example.com")
+        assert "mesh_status" in order and "mesh_broadcast" in order and "mesh_dm" in order and "mesh_read" in order
+        assert "Communicating is part of the work" in order
+
+    def test_compact_order_keeps_the_nudge(self):
+        from suijin.modules.agent.lib.prompts.base import engagement_order
+
+        slim = engagement_order("hunt example.com", compact=True)
+        assert "MESH" in slim and "mesh_broadcast" in slim
+
+    def test_gc_header_explains_replying(self):
+        import inspect
+
+        from suijin.modules.agent.lib.nodes import think_node
+
+        src = inspect.getsource(think_node)
+        assert "You can reply: mesh_broadcast" in src
+
+    def test_join_notice_fires_once(self):
+        import inspect
+
+        from suijin.modules.agent.lib.nodes import think_node
+
+        src = inspect.getsource(think_node)
+        assert "_mesh_join_announced" in src, "no one-time join notice"
+        assert "you are now a team" in src
+
+    def test_unshared_finding_is_speakworthy(self):
+        from suijin.client.tui.console_ui import UI_STATE
+        from suijin.modules.agent.lib import supervisor as sup
+
+        UI_STATE["mesh_count"] = 2
+        try:
+            trace = [
+                {"tool_name": "http_request", "success": True},
+                {"tool_name": "catalog_exploit", "success": True, "tool_output": "EXP-1 CONFIRMED — HIGH : leak"},
+                {"tool_name": "http_request", "success": True},
+            ]
+            brief = sup.facts_brief({}, trace)
+            assert brief.get("unshared_finding") is True
+            assert sup._facts_speakworthy(brief) is True
+            # shared → not speakworthy on this fact
+            trace2 = trace + [{"tool_name": "mesh_broadcast", "success": True}]
+            brief2 = sup.facts_brief({}, trace2)
+            assert not brief2.get("unshared_finding")
+        finally:
+            UI_STATE["mesh_count"] = 0
