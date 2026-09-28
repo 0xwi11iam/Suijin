@@ -1037,6 +1037,20 @@ def facts_brief(state: dict, trace: list) -> dict:
         _n = int(UI_STATE.get("mesh_count") or 0)
         if _n > 1:
             brief["mesh_peers"] = _n - 1
+            # UNSHARED FINDING: peers exist and a CONFIRMED landed in the
+            # recent trace with no mesh_broadcast after it — the exact
+            # moment the encouragement should become a nudge
+            t = list(trace or [])[-8:]
+            conf_at = -1
+            shared = False
+            for i, st in enumerate(t):
+                tn = str(st.get("tool_name") or "")
+                if tn == "mesh_broadcast":
+                    shared = True
+                if tn in ("catalog_exploit", "record_finding") and "CONFIRMED" in str(st.get("tool_output", ""))[:200]:
+                    conf_at = i
+            if conf_at >= 0 and not shared:
+                brief["unshared_finding"] = True
     return brief
 
 
@@ -1051,7 +1065,9 @@ def _facts_speakworthy(brief: dict) -> bool:
         return True
     if int(brief.get("recent_failures") or 0) >= 2:
         return True
-    return int(brief.get("recent_same_tool") or 0) >= 3
+    if int(brief.get("recent_same_tool") or 0) >= 3:
+        return True
+    return bool(brief.get("unshared_finding"))
 
 
 _COACH_PROMPT = """You are a quiet coach for an autonomous security agent mid-engagement.
