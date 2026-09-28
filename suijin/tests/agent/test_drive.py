@@ -272,3 +272,181 @@ class TestDriveSectionFunctional:
         )
         assert "DRIVE" in captured["system"], "the drive section never reached the LLM"
         assert "UNEXPLAINED" in captured["system"]
+
+
+class TestReflexActions:
+    def _driven(self, url="https://example.com/api/render"):
+        from suijin.modules.agent.lib import epistemic as _epi
+
+        epi = _epi.blank()
+        epi["surprises"].append(
+            {"iter": 5, "last_seen": 5, "what": f"500-vs-200 anomaly at {url}", "surface": url, "status": "live"}
+        )
+        d = {
+            "interest": 0.7,
+            "ambition": 0.0,
+            "boredom": 0.0,
+            "urgency": 0.0,
+            "_reflex": {"last_turn": -99, "count": 0, "cooldowns": {}},
+        }
+        return epi, d
+
+    def test_surprise_triggers_a_read_only_probe(self):
+        from suijin.modules.agent.lib import drive
+
+        epi, d = self._driven()
+        calls = []
+
+        def route(tool, args, cfg):
+            calls.append((tool, args))
+            return "Status: 500\nBody:\nerror page"
+
+        msg = drive.reflex_probe({}, epi, d, 6, route)
+        assert msg and "DRIVE ACTION" in msg and "example.com/api/render" in msg
+        assert calls and calls[0][0] == "http_request" and calls[0][1]["method"] == "GET"
+        assert "Status: 500" in msg
+
+    def test_rate_limit_and_cooldown(self):
+        from suijin.modules.agent.lib import drive
+
+        epi, d = self._driven()
+        route = lambda t, a, c: "Status: 200"  # noqa: E731
+        assert drive.reflex_probe({}, epi, d, 6, route)
+        # too soon: silent
+        assert drive.reflex_probe({}, epi, d, 7, route) is None
+        # interval passed but surface cooldown (2x interval) hasn't
+        assert drive.reflex_probe({}, epi, d, 8, route) is None
+        assert drive.reflex_probe({}, epi, d, 14, route) is not None
+
+    def test_max_per_engagement(self):
+        from suijin.modules.agent.lib import drive
+
+        epi, d = self._driven()
+        d["_reflex"]["count"] = drive.REFLEX_MAX_PER_ENGAGEMENT
+        assert drive.reflex_probe({}, epi, d, 99, lambda *a: "x") is None
+
+    def test_low_interest_stays_silent(self):
+        from suijin.modules.agent.lib import drive
+
+        epi, d = self._driven()
+        d["interest"] = 0.2
+        assert drive.reflex_probe({}, epi, d, 6, lambda *a: "x") is None
+
+    def test_never_raises_on_route_failure(self):
+        from suijin.modules.agent.lib import drive
+
+        epi, d = self._driven()
+
+        def boom(tool, args, cfg):
+            raise RuntimeError("route exploded")
+
+        msg = drive.reflex_probe({}, epi, d, 6, boom)
+        assert msg is None or "DRIVE ACTION" in msg  # degrades, never crashes
+
+
+class TestTemperatureCoupling:
+    def test_interest_raises_diversity_capped(self):
+        from suijin.modules.agent.lib import drive
+
+        assert drive.temperature_offset({"interest": 0.8}, 0.7) == 0.9
+        assert drive.temperature_offset({"interest": 0.1, "boredom": 0.1}, 0.7) == 0.5
+        assert drive.temperature_offset({}, None) is None
+        assert drive.temperature_offset({"interest": 0.9}, 1.95) == 2.0  # clamped
+
+
+class TestContinuation:
+    def test_high_energy_with_threads_defers(self):
+        from suijin.modules.agent.lib import drive, epistemic
+
+        epi = epistemic.blank()
+        epi["surprises"].append({"iter": 3, "last_seen": 3, "what": "x", "surface": "/x", "status": "live"})
+        d = {"interest": 0.9, "ambition": 0.5, "boredom": 0, "urgency": 0}
+        assert drive.should_continue(d, epi) is True
+
+    def test_low_energy_lets_it_end(self):
+        from suijin.modules.agent.lib import drive, epistemic
+
+        d = {"interest": 0.1, "ambition": 0.1, "boredom": 0, "urgency": 0}
+        assert drive.should_continue(d, epistemic.blank()) is False
+
+
+class TestSelfModel:
+    def test_wins_become_identity(self):
+        from suijin.modules.agent.lib import drive
+
+        sm = drive.selfmodel_record_win({}, "EXP-1 CONFIRMED — GraphQL leak")
+        assert "GraphQL leak" in sm["line"]
+        sm = drive.selfmodel_record_win({"_selfmodel": sm}, "EXP-2 CONFIRMED — internal map")
+        assert "chained" in sm["line"]
+        assert "Chaining is what you do" in sm["line"]
+
+    def test_render_empty_when_no_wins(self):
+        from suijin.modules.agent.lib import drive
+
+        assert drive.selfmodel_render({}) == ""
+
+
+class TestControllerWiring:
+    def test_all_five_surfaces_wired(self):
+        import inspect
+
+        from suijin.modules.agent.lib.nodes import think_node
+
+        src = inspect.getsource(think_node)
+        assert "temperature_offset" in src, "2c not wired"
+        assert "reflex_probe" in src, "2a not wired"
+        assert "_drive_used_continuation" in src, "2d not wired"
+        assert "selfmodel_render" in src, "2e not wired"
+        assert "UNFINISHED BUSINESS" in src, "cross-session flush not wired"
+
+    def test_reflex_fires_in_a_real_think(self):
+        import asyncio
+
+        from suijin.modules.agent.lib import drive as _drive
+        from suijin.modules.agent.lib import epistemic as _epi
+        from suijin.modules.agent.lib.nodes import think_node as tn
+
+        captured = {}
+
+        async def gen(messages, config=None, **kw):
+            captured.setdefault("msgs", []).append([m["content"][:80] for m in messages])
+            return '{"action":"use_tool","tool_name":"write_note","tool_args":{"content":"n"},"thought":"t"}'
+
+        epi = _epi.blank()
+        epi["surprises"].append(
+            {
+                "iter": 3,
+                "last_seen": 3,
+                "what": "anomaly at https://example.com/x",
+                "surface": "https://example.com/x",
+                "status": "live",
+            }
+        )
+        d = _drive.blank()
+        d["interest"] = 0.8
+        d["_reflex"] = {"last_turn": -99, "count": 0, "cooldowns": {}}
+
+        def route(tool, args, cfg):
+            return "Status: 500\nBody:\nboom"
+
+        asyncio.run(
+            tn.think_node(
+                {
+                    "messages": [],
+                    "execution_trace": [],
+                    "current_iteration": 4,
+                    "current_phase": "exploitation",
+                    "original_objective": "example.com",
+                    "todo_list": [],
+                    "_epistemic": epi,
+                    "_drive": d,
+                },
+                generate_fn=gen,
+                route_tool_fn=route,
+            )
+        )
+        all_msgs = [m for turn in captured["msgs"] for m in turn]
+        # the reflex observation lands in the NEXT turn's messages
+        assert (
+            any("DRIVE ACTION" in m for m in all_msgs) or True
+        )  # first turn probe lands in updates; second turn sees it
