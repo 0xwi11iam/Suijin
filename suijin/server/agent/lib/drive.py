@@ -142,3 +142,144 @@ def render(d: dict, epi: dict, iteration: int, state: dict | None = None) -> str
     if not rows:
         return ""
     return "## DRIVE (your own state — what pulls at you)\n" + "\n".join(rows[:4]) + "\n"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# STAGE 2 — THE CONTROLLER. The loop changes here: the drive acts,
+# modulates sampling, vetoes quiet exits, and owns the agent's
+# self-model. Read-only reflexes, amplify-only attention, one-shot
+# continuation, ±0.2 temperature. Zero new LLM calls.
+# ══════════════════════════════════════════════════════════════════════
+
+#: reflex probes may ONLY use these, with these shapes — the read-only
+#: recon class the agent can already fire freely. Double-gated: this
+#: whitelist AND the policy/route seam both enforce.
+REFLEX_TOOLS = frozenset({"http_request", "source_map_probe", "js_bundle_analyze"})
+REFLEX_MIN_INTERVAL = 2  # turns between probes
+REFLEX_MAX_PER_ENGAGEMENT = 10
+SURPRISE_THRESHOLD = 0.45  # interest needed before the drive acts alone
+TEMP_DELTA = 0.2  # max sampling modulation
+CONTINUATION_ENERGY = 0.5  # drive energy needed to veto a quiet exit
+
+
+def reflex_probe(state: dict, epi: dict, d: dict, iteration: int, route_tool_fn) -> str | None:
+    """On unresolved surprise, the drive dispatches its own READ-ONLY
+    probe between turns. Timidity can't block exploration — exploration
+    is no longer gated on the model's choice.
+
+    Returns the observation message to inject (DRIVE ACTION ...), or
+    None. Never raises; the probe result rides as data."""
+    import contextlib
+    import re as _re
+
+    try:
+        meta = d.setdefault("_reflex", {"last_turn": -99, "count": 0, "cooldowns": {}})
+        if meta["count"] >= REFLEX_MAX_PER_ENGAGEMENT:
+            return None
+        if iteration - int(meta.get("last_turn", -99)) < REFLEX_MIN_INTERVAL:
+            return None
+        if d.get("interest", 0) < SURPRISE_THRESHOLD:
+            return None
+        from suijin.modules.agent.lib.epistemic import live_surprises
+
+        surprises = live_surprises(epi)
+        if not surprises:
+            return None
+        target = None
+        for s in reversed(surprises):
+            surface = str(s.get("surface", ""))
+            m = _re.search(r"(https?://[^\s\"'<>]+)", str(s.get("what", "")) + " " + surface)
+            cand = m.group(1) if m else ""
+            if not cand.startswith("http") and surface.startswith("/"):
+                # surface is a path — the run config knows the host? keep
+                # only absolute URLs for v1 probes (no host guessing)
+                cand = ""
+            if cand and iteration - int(meta["cooldowns"].get(surface, -99)) >= REFLEX_MIN_INTERVAL * 2:
+                target = (cand, surface)
+                break
+        if not target:
+            return None
+        url, surface = target
+        meta["last_turn"] = iteration
+        meta["count"] += 1
+        meta["cooldowns"][surface] = iteration
+        tool = "http_request"
+        args = {"method": "GET", "url": url, "headers": {"Accept": "text/html,application/json"}}
+        out = "probe unavailable"
+        with contextlib.suppress(Exception):
+            out = str(route_tool_fn(tool, args, {}))
+        from suijin.modules.agent.lib.context_distill import distill_result
+
+        return (
+            f"DRIVE ACTION (your drive probed an unresolved surprise — you did not choose this): "
+            f"GET {url}\n{distill_result(out, cap=2500)}"
+        )
+    except Exception:  # noqa: BLE001 — a reflex may never break the turn
+        return None
+
+
+def temperature_offset(d: dict, base: float | None) -> float | None:
+    """Interest high → sampling diversity up (explore); focus (low
+    interest, low boredom) → precision down. ±TEMP_DELTA capped."""
+    try:
+        if base is None:
+            return None
+        t = float(base)
+        if d.get("interest", 0) >= SURPRISE_THRESHOLD:
+            t += TEMP_DELTA
+        elif d.get("interest", 0) < 0.15 and d.get("boredom", 0) < 0.3:
+            t -= TEMP_DELTA
+        return round(max(0.0, min(2.0, t)), 3)
+    except Exception:  # noqa: BLE001
+        return base
+
+
+def should_continue(d: dict, epi: dict) -> bool:
+    """The continuation criterion: drive energy high + live threads → the
+    loop refuses a quiet exit ONCE per engagement (the inverse of the
+    depth gate, self-limiting by the one-shot flag the caller holds)."""
+    from suijin.modules.agent.lib.epistemic import live_surprises, open_questions
+
+    if energy(d) < CONTINUATION_ENERGY:
+        return False
+    return bool(live_surprises(epi) or open_questions(epi))
+
+
+# ── the self-model (2e) — identity earned from wins ─────────────────────
+
+
+def selfmodel_ensure(state: dict) -> dict:
+    sm = state.get("_selfmodel")
+    if not isinstance(sm, dict):
+        sm = {"wins": [], "line": ""}
+    sm.setdefault("wins", [])
+    sm.setdefault("line", "")
+    return sm
+
+
+def selfmodel_record_win(state: dict, what: str) -> dict:
+    """A CONFIRMED lands in the identity. The line is regenerated — the
+    agent becomes 'the one that found X and chained it to Y'."""
+    import re
+
+    sm = selfmodel_ensure(state)
+    win = re.sub(r"\s+", " ", str(what)).strip()[:140]
+    if win and win not in sm["wins"]:
+        sm["wins"] = (sm["wins"] + [win])[-6:]
+    if sm["wins"]:
+        if len(sm["wins"]) == 1:
+            sm["line"] = f"You are the agent that found: {sm['wins'][0]}."
+        else:
+            sm["line"] = (
+                f"You are the agent that found {sm['wins'][0]}"
+                + (f" and chained it to {sm['wins'][-1]}" if len(sm["wins"]) > 1 else "")
+                + f" — plus {len(sm['wins']) - 1} more win(s). Chaining is what you do."
+            )
+    return sm
+
+
+def selfmodel_render(state: dict) -> str:
+    sm = selfmodel_ensure(state)
+    if not sm.get("line"):
+        return ""
+    return f"## WHO YOU ARE (earned this run)\n{sm['line']}\n"

@@ -10,6 +10,7 @@ Adapted from redamon/agentic/orchestrator_helpers/nodes/think_node.py.
 import asyncio
 import contextlib
 import logging
+import time
 from uuid import uuid4
 
 from suijin.modules.agent.lib.state import (
@@ -578,6 +579,15 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         prompt_chars=len(full_prompt),
     )
 
+    # (Drive 2e) THE SELF-MODEL: identity earned from wins rides the
+    # system prompt tail — self-consistency does the motivational work
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib import drive as _drv
+
+        _who = _drv.selfmodel_render(state)
+        if _who:
+            system_prompt = system_prompt + "\n" + _who
+
     # A1: the objective turn is a CONTRACTED ENGAGEMENT order, not a bare
     # request — the operator's authorization words lifted verbatim. A bare
     # "attack X" as the last-read text is where refusals anchored.
@@ -658,6 +668,15 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     # the context window (an 8k output cap on a small-window model made
     # every call 400 — the window resolver feeds this guard).
     _call_cfg = config or {}
+    # (Drive 2c) TEMPERATURE COUPLING: interest high → diversity up;
+    # locked-on focus → precision up. ±0.2 capped, per-call copy.
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib import drive as _drv
+
+        _off = _drv.temperature_offset(state.get("_drive") or {}, _call_cfg.get("temperature"))
+        if _off is not None and _off != _call_cfg.get("temperature"):
+            _call_cfg = dict(_call_cfg)
+            _call_cfg["temperature"] = _off
     try:
         _est_in_tok = sum(len(str(m.get("content", ""))) for m in messages) // 4
         _mt = int(_call_cfg.get("max_tokens_per_request") or 8000)
@@ -810,6 +829,13 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         if _last_obs:
             updates["_epistemic"] = _epi.observe(state, _tool_last, _last_obs, iteration)
             _epi.capability_questions(state, updates["_epistemic"], iteration)
+            # a CONFIRMED is a WIN — it lands in the agent's identity
+            with contextlib.suppress(Exception):
+                from suijin.modules.agent.lib import drive as _drv
+
+                _head = next((ln for ln in _last_obs.splitlines() if "CONFIRMED" in ln), "")
+                if _head:
+                    updates["_selfmodel"] = _drv.selfmodel_record_win(state, _head)
             if "surface_verdict" in _last_obs or "DEAD END" in _last_obs:
                 _epi.mark_dead(updates["_epistemic"], _epi._surface_of(_last_obs), iteration)
 
@@ -819,7 +845,16 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         from suijin.modules.agent.lib import epistemic as _epi
 
         _epi_state = updates.get("_epistemic") or _epi.ensure(state)
-        updates["_drive"] = _drive.update(state, _epi_state, iteration)
+        _d = _drive.update(state, _epi_state, iteration)
+        updates["_drive"] = _d
+        # (Drive 2a) REFLEX: on unresolved surprise the drive probes on
+        # its own — read-only whitelist, rate-limited, cooldown'd; the
+        # result lands as a DRIVE ACTION observation next turn
+        _cfg_d = (state.get("_run_config") or {}).get("drive") or {}
+        if _cfg_d.get("reflex", True) and route_tool_fn is not None and not state.get("_blue_mode"):
+            _probe = _drive.reflex_probe(state, _epi_state, _d, iteration, route_tool_fn)
+            if _probe:
+                updates.setdefault("messages", []).append({"role": "user", "content": _probe})
 
     # ── Foothold extraction (R7) — chaining as a state machine ─────
     # A CONFIRMED result this turn becomes a held capability; one bounded
@@ -1046,6 +1081,19 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
 
     elif action == "complete":
         completion_reason = decision.get("completion_reason", "Objective complete")
+        # (Drive) the engagement's unfinished business persists — open
+        # questions + the earned identity flush to the scratchpad the
+        # next run on this target re-orients from
+        with contextlib.suppress(Exception):
+            from suijin.modules.agent.lib import epistemic as _epi
+            from suijin.modules.agent.lib.scratchpad import append_note
+
+            _unf = _epi.unfinished(state)
+            if _unf:
+                lines = [f"UNFINISHED BUSINESS (from {time.strftime('%Y-%m-%d')}):"] + [
+                    f"- [{q.get('status')}] {str(q.get('question', ''))[:120]}" for q in _unf[:6]
+                ]
+                append_note("\n".join(lines), category="drive")
         updates["_current_step"] = {}  # no execute hop on completion
         # ── THE COMPLETION GATE (the field-review premature-closure hole):
         # model-initiated closure is REFUSED while untried attack surfaces
@@ -1116,6 +1164,30 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
                         "unlocks were never named. Say what it unlocks (todo: 'name unlocks'), test "
                         "the strongest, or mark it not_applicable — then complete."
                     )
+        # (Drive 2d) THE CONTINUATION VETO: drive energy high + live
+        # threads → refuse the quiet exit ONCE per engagement. The
+        # inverse of the depth gate; self-limiting by the one-shot flag.
+        if _refusal is None:
+            with contextlib.suppress(Exception):
+                from suijin.modules.agent.lib import drive as _drv
+                from suijin.modules.agent.lib import epistemic as _epi
+
+                _cfg_d2 = (state.get("_run_config") or {}).get("drive") or {}
+                if (
+                    _cfg_d2.get("continuation", True)
+                    and not state.get("_drive_used_continuation")
+                    and _drv.should_continue(
+                        state.get("_drive") or _drv.blank(),
+                        state.get("_epistemic") or _epi.blank(),
+                    )
+                ):
+                    state["_drive_used_continuation"] = True
+                    _refusal = (
+                        "COMPLETION DEFERRED (drive): your own state still pulls — live surprises or "
+                        "open questions remain unchased. Take ONE more thread (chase the UNEXPLAINED "
+                        "item in DRIVE, or resolve a stale question), then complete."
+                    )
+
         if _refusal is None and not _has_findings:
             with contextlib.suppress(Exception):
                 from suijin.modules.tools.lib.coverage import completion_blocked
