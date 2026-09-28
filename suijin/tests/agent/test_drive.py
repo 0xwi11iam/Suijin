@@ -221,3 +221,54 @@ class TestWiring:
         src = inspect.getsource(think_node)
         exp = src[src.index('"exploitation":') : src.index("}", src.index('"exploitation":'))]
         assert exp.index("YOU_HOLD") < exp.index("DRIVE") < exp.index("RECENT_ACTIONS")
+
+
+class TestDriveSectionFunctional:
+    def test_drive_actually_renders_in_a_real_think(self):
+        """The wiring bug ruff caught: the render referenced `updates`
+        before it existed and the suppress swallowed the NameError — the
+        section silently never rendered. This drives a REAL think turn
+        with drive state pre-seeded and asserts the section is in the
+        system prompt the LLM received."""
+        import asyncio
+
+        from suijin.modules.agent.lib import epistemic as _epi
+        from suijin.modules.agent.lib import drive as _drive
+        from suijin.modules.agent.lib.nodes import think_node as tn
+
+        captured = {}
+
+        async def gen(messages, config=None, **kw):
+            captured["system"] = messages[0]["content"]
+            return '{"action":"complete","completion_reason":"done","thought":"t"}'
+
+        epi = _epi.blank()
+        epi["surprises"].append(
+            {
+                "iter": 3,
+                "last_seen": 3,
+                "what": "the /api/render 500-vs-200 anomaly",
+                "surface": "/api/render",
+                "status": "live",
+            }
+        )
+        d = _drive.blank()
+        d["interest"] = 0.7
+
+        asyncio.run(
+            tn.think_node(
+                {
+                    "messages": [],
+                    "execution_trace": [],
+                    "current_iteration": 4,
+                    "current_phase": "exploitation",
+                    "original_objective": "example.com hunt",
+                    "todo_list": [],
+                    "_epistemic": epi,
+                    "_drive": d,
+                },
+                generate_fn=gen,
+            )
+        )
+        assert "DRIVE" in captured["system"], "the drive section never reached the LLM"
+        assert "UNEXPLAINED" in captured["system"]
