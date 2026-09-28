@@ -446,9 +446,13 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         from suijin.modules.agent.lib import drive as _drive
         from suijin.modules.agent.lib import epistemic as _epi
 
+        # NOTE: `updates` does not exist yet at this point in the turn —
+        # render from the CURRENT state (last tick's values); the
+        # post-decision block refreshes both for the next turn. The
+        # first turn renders nothing (no drive yet), which is correct.
         _drive_block = _drive.render(
-            updates.get("_drive") or _drive.ensure(state),
-            updates.get("_epistemic") or _epi.ensure(state),
+            state.get("_drive") or _drive.ensure(state),
+            state.get("_epistemic") or _epi.ensure(state),
             iteration,
             state,
         )
