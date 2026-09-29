@@ -836,6 +836,16 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
                 _head = next((ln for ln in _last_obs.splitlines() if "CONFIRMED" in ln), "")
                 if _head:
                     updates["_selfmodel"] = _drv.selfmodel_record_win(state, _head)
+                    # (Drive 3) the bandit learns: credit arms with a
+                    # plausible recent contribution to this CONFIRMED
+                    with contextlib.suppress(Exception):
+                        from suijin.modules.agent.lib import drive_bandit as _db
+
+                        _pol = _db.load()
+                        _db.on_confirmed(state, _pol, _head)
+                        updates["_drive_policy_hint"] = _db.order(
+                            _pol, _db.target_class(state.get("original_objective") or "")
+                        )
             if "surface_verdict" in _last_obs or "DEAD END" in _last_obs:
                 _epi.mark_dead(updates["_epistemic"], _epi._surface_of(_last_obs), iteration)
 
