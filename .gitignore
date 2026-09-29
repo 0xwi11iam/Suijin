@@ -146,3 +146,6 @@ agent-vault/
 # macOS noise
 .DS_Store
 **/.DS_Store
+
+# private operator vault (never shared, never committed)
+private-vault/
