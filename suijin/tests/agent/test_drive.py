@@ -450,3 +450,83 @@ class TestControllerWiring:
         assert (
             any("DRIVE ACTION" in m for m in all_msgs) or True
         )  # first turn probe lands in updates; second turn sees it
+
+
+class TestBandit:
+    def test_persistence_roundtrip(self, tmp_path, monkeypatch):
+        from suijin.modules.agent.lib import drive_bandit as db
+
+        monkeypatch.setattr(db, "_policy_path", lambda: tmp_path / "p.json")
+        p = db.load()
+        db.record(p, "surprise_probe", "api", paid=True)
+        db.save(p)
+        p2 = db.load()
+        assert p2["arms"]["surprise_probe:api"]["wins"] >= 1.0
+
+    def test_winner_floats_up_given_trials(self, tmp_path, monkeypatch):
+        from suijin.modules.agent.lib import drive_bandit as db
+
+        monkeypatch.setattr(db, "_policy_path", lambda: tmp_path / "p.json")
+        p = db.load()
+        # give every arm trials so exploration bonuses equalize; the
+        # winner's mean dominates
+        for _ in range(8):
+            db.record(p, "surprise_probe", "api", paid=True)
+        for arm in ("leak_question", "capability_push", "amplify"):
+            for _ in range(8):
+                db.record(p, arm, "api", paid=False)
+        assert db.order(p, "api")[0] == "surprise_probe"
+
+    def test_only_confirmed_pays(self):
+        from suijin.modules.agent.lib import drive_bandit as db
+
+        p = db.load()
+        a = db.record(p, "amplify", "web", paid=False)
+        assert a["arms"]["amplify:web"]["wins"] == 0.0
+
+    def test_target_class(self):
+        from suijin.modules.agent.lib import drive_bandit as db
+
+        assert db.target_class("hack the graphql API") == "api"
+        assert db.target_class("a wordpress blog") == "cms"
+        assert db.target_class("some site") == "web"
+
+    def test_attribution_conservative(self):
+        from suijin.modules.agent.lib import drive_bandit as db
+
+        trace = [
+            {"tool_name": "http_request", "thought": "DRIVE ACTION probe", "tool_args": "", "tool_output": ""},
+            {"tool_name": "catalog_exploit", "thought": "", "tool_args": "", "tool_output": "CONFIRMED"},
+        ]
+        assert db.attribution("surprise_probe", trace, confirmed_at=2) is True
+        # no drive action anywhere → no credit
+        assert db.attribution("surprise_probe", [trace[-1]], confirmed_at=2) is False
+
+    def test_on_confirmed_credits_and_persists(self, tmp_path, monkeypatch):
+        from suijin.modules.agent.lib import drive_bandit as db
+
+        monkeypatch.setattr(db, "_policy_path", lambda: tmp_path / "p.json")
+        state = {
+            "original_objective": "graphql api target",
+            "execution_trace": [
+                {"tool_name": "http_request", "thought": "DRIVE ACTION probe", "tool_args": "", "tool_output": ""},
+                {"tool_name": "catalog_exploit", "thought": "", "tool_args": "", "tool_output": "EXP-1 CONFIRMED"},
+            ],
+        }
+        p = db.load()
+        db.on_confirmed(state, p, "/x")
+        p2 = db.load()
+        assert any(v["wins"] > 0 for v in p2["arms"].values())
+
+    def test_bandit_never_blocks_unseen_arms(self):
+        from suijin.modules.agent.lib import drive_bandit as db
+
+        p = db.load()
+        assert db.score(p, "surprise_probe", "never-seen") > 0  # ordering only
+
+    def test_wired_into_think(self):
+        import inspect
+
+        from suijin.modules.agent.lib.nodes import think_node
+
+        assert "drive_bandit" in inspect.getsource(think_node)
