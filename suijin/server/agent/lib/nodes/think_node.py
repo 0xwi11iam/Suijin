@@ -584,7 +584,8 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     with contextlib.suppress(Exception):
         from suijin.modules.agent.lib import drive as _drv
 
-        _who = _drv.selfmodel_render(state)
+        _drive_on_early = bool(((state.get("_run_config") or {}).get("drive") or {}).get("enabled", True))
+        _who = _drv.selfmodel_render(state) if _drive_on_early else ""
         if _who:
             system_prompt = system_prompt + "\n" + _who
 
@@ -815,56 +816,55 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     # ── The EPISTEMIC UPDATE (drive Stage 1) — every observation folds
     # into the belief state; surprise spawns questions; leaks and held
     # capabilities spawn the generative chaining leaps. Zero LLM calls.
-    with contextlib.suppress(Exception):
-        from suijin.modules.agent.lib import epistemic as _epi
+    _drive_on = bool(((state.get("_run_config") or {}).get("drive") or {}).get("enabled", True))
+    if _drive_on:
+        with contextlib.suppress(Exception):
+            from suijin.modules.agent.lib import epistemic as _epi
 
-        _last_obs = ""
-        _lm = state.get("messages") or []
-        for _m in reversed(_lm):
-            c = str(_m.get("content", ""))
-            if c.startswith(("[PIN] RESULT", "RESULT")):
-                _last_obs = c
-                break
-        _tool_last = (state.get("_current_step") or {}).get("tool_name", "")
-        if _last_obs:
-            updates["_epistemic"] = _epi.observe(state, _tool_last, _last_obs, iteration)
-            _epi.capability_questions(state, updates["_epistemic"], iteration)
-            # a CONFIRMED is a WIN — it lands in the agent's identity
-            with contextlib.suppress(Exception):
-                from suijin.modules.agent.lib import drive as _drv
-
+            _last_obs = ""
+            _lm = state.get("messages") or []
+            for _m in reversed(_lm):
+                c = str(_m.get("content", ""))
+                if c.startswith(("[PIN] RESULT", "RESULT")):
+                    _last_obs = c
+                    break
+            _tool_last = (state.get("_current_step") or {}).get("tool_name", "")
+            if _last_obs:
+                updates["_epistemic"] = _epi.observe(state, _tool_last, _last_obs, iteration)
+                _epi.capability_questions(state, updates["_epistemic"], iteration)
+                # a CONFIRMED is a WIN — it lands in the identity and the
+                # bandit credits its contributors
                 _head = next((ln for ln in _last_obs.splitlines() if "CONFIRMED" in ln), "")
                 if _head:
-                    updates["_selfmodel"] = _drv.selfmodel_record_win(state, _head)
-                    # (Drive 3) the bandit learns: credit arms with a
-                    # plausible recent contribution to this CONFIRMED
-                    with contextlib.suppress(Exception):
-                        from suijin.modules.agent.lib import drive_bandit as _db
+                    from suijin.modules.agent.lib import drive as _drv
+                    from suijin.modules.agent.lib import drive_bandit as _db
 
-                        _pol = _db.load()
-                        _db.on_confirmed(state, _pol, _head)
-                        updates["_drive_policy_hint"] = _db.order(
-                            _pol, _db.target_class(state.get("original_objective") or "")
-                        )
-            if "surface_verdict" in _last_obs or "DEAD END" in _last_obs:
-                _epi.mark_dead(updates["_epistemic"], _epi._surface_of(_last_obs), iteration)
+                    updates["_selfmodel"] = _drv.selfmodel_record_win(state, _head)
+                    _pol = _db.load()
+                    _db.on_confirmed(state, _pol, _head)
+                    updates["_drive_policy_hint"] = _db.order(
+                        _pol, _db.target_class(state.get("original_objective") or "")
+                    )
+                if "surface_verdict" in _last_obs or "DEAD END" in _last_obs:
+                    _epi.mark_dead(updates["_epistemic"], _epi._surface_of(_last_obs), iteration)
 
     # ── The DRIVE TICK (drive Stage 1) — the four dimensions update
-    with contextlib.suppress(Exception):
-        from suijin.modules.agent.lib import drive as _drive
-        from suijin.modules.agent.lib import epistemic as _epi
+    if _drive_on:
+        with contextlib.suppress(Exception):
+            from suijin.modules.agent.lib import drive as _drive
+            from suijin.modules.agent.lib import epistemic as _epi
 
-        _epi_state = updates.get("_epistemic") or _epi.ensure(state)
-        _d = _drive.update(state, _epi_state, iteration)
-        updates["_drive"] = _d
-        # (Drive 2a) REFLEX: on unresolved surprise the drive probes on
-        # its own — read-only whitelist, rate-limited, cooldown'd; the
-        # result lands as a DRIVE ACTION observation next turn
-        _cfg_d = (state.get("_run_config") or {}).get("drive") or {}
-        if _cfg_d.get("reflex", True) and route_tool_fn is not None and not state.get("_blue_mode"):
-            _probe = _drive.reflex_probe(state, _epi_state, _d, iteration, route_tool_fn)
-            if _probe:
-                updates.setdefault("messages", []).append({"role": "user", "content": _probe})
+            _epi_state = updates.get("_epistemic") or _epi.ensure(state)
+            _d = _drive.update(state, _epi_state, iteration)
+            updates["_drive"] = _d
+            # (Drive 2a) REFLEX: on unresolved surprise the drive probes on
+            # its own — read-only whitelist, rate-limited, cooldown'd; the
+            # result lands as a DRIVE ACTION observation next turn
+            _cfg_d = (state.get("_run_config") or {}).get("drive") or {}
+            if _cfg_d.get("reflex", True) and route_tool_fn is not None and not state.get("_blue_mode"):
+                _probe = _drive.reflex_probe(state, _epi_state, _d, iteration, route_tool_fn)
+                if _probe:
+                    updates.setdefault("messages", []).append({"role": "user", "content": _probe})
 
     # ── Foothold extraction (R7) — chaining as a state machine ─────
     # A CONFIRMED result this turn becomes a held capability; one bounded

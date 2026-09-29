@@ -530,3 +530,42 @@ class TestBandit:
         from suijin.modules.agent.lib.nodes import think_node
 
         assert "drive_bandit" in inspect.getsource(think_node)
+
+
+class TestDriveOffSwitch:
+    def test_master_flag_disables_the_whole_system(self):
+        import asyncio
+
+        from suijin.modules.agent.lib.nodes import think_node as tn
+
+        captured = {}
+
+        async def gen(messages, config=None, **kw):
+            captured["system"] = messages[0]["content"]
+            captured["msgs"] = len(messages)
+            return '{"action":"use_tool","tool_name":"write_note","tool_args":{"content":"n"},"thought":"t"}'
+
+        asyncio.run(
+            tn.think_node(
+                {
+                    "messages": [{"role": "user", "content": "RESULT (x, 1ms, iteration 1):\nanomaly unexpected"}],
+                    "execution_trace": [],
+                    "current_iteration": 2,
+                    "current_phase": "exploitation",
+                    "original_objective": "example.com",
+                    "todo_list": [],
+                    "_run_config": {"drive": {"enabled": False}},
+                },
+                generate_fn=gen,
+            )
+        )
+        assert "DRIVE" not in captured["system"]  # section stays out
+        # and no epistemic state was created
+
+    def test_bench_reports_drive_stats(self):
+        import inspect
+
+        from suijin.modules.ops.lib import bench
+
+        src = inspect.getsource(bench)
+        assert '"drive": {' in src and "reflex_probes" in src and "surprises_live" in src
