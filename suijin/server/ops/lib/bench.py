@@ -419,6 +419,30 @@ def run_bench(lab: str = "", mock: bool = True) -> dict:
             "completion": final_state.get("completion_reason", "?"),
             "cost_usd": round(float(usage.get("est_cost_usd", 0)), 4),
             "tokens": int(usage.get("input_tokens", 0)) + int(usage.get("output_tokens", 0)),
+            # (drive instruments) the controller's own scoreboard — the
+            # A/B surface: run with drive.enabled=false to compare
+            "drive": {
+                "enabled": bool(((final_state.get("_run_config") or {}).get("drive") or {}).get("enabled", True)),
+                "surprises_live": len(
+                    [s for s in (final_state.get("_epistemic") or {}).get("surprises", []) if s.get("status") == "live"]
+                ),
+                "questions_open": len(
+                    [
+                        q
+                        for q in (final_state.get("_epistemic") or {}).get("open_questions", [])
+                        if q.get("status") == "open"
+                    ]
+                ),
+                "questions_resolved": len(
+                    [
+                        q
+                        for q in (final_state.get("_epistemic") or {}).get("open_questions", [])
+                        if q.get("status") == "resolved"
+                    ]
+                ),
+                "reflex_probes": int(((final_state.get("_drive") or {}).get("_reflex") or {}).get("count", 0)),
+                "wins": len((final_state.get("_selfmodel") or {}).get("wins", [])),
+            },
         }
         _append_history(score)
         _append_learnings(score, known, captured)
