@@ -84,10 +84,13 @@ def sshd(tmp_path_factory):
         subprocess.run(["sudo", "-n", "true"], capture_output=True, timeout=10, check=True)
     except Exception:
         pytest.skip("no passwordless sudo for the test sshd")
+    # CI runners (and minimal boxes) lack the privilege-separation dir —
+    # sshd exits instantly without it, the listener never binds
+    subprocess.run(["sudo", "-n", "mkdir", "-p", "/run/sshd"], capture_output=True, timeout=10)
     proc = subprocess.Popen(
         ["sudo", "-n", sshd_bin, "-D", "-e", "-f", str(cfg)],
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
     )
     # wait for the listener
     for _ in range(50):
@@ -97,7 +100,8 @@ def sshd(tmp_path_factory):
         time.sleep(0.2)
     else:
         proc.terminate()
-        pytest.fail("test sshd never came up")
+        err = proc.communicate(timeout=5)[1].decode(errors="replace")
+        pytest.fail(f"test sshd never came up: {err[:300]}")
     subprocess.run(["ssh-keygen", "-R", "[localhost]:2222"], capture_output=True, timeout=10)
     yield {"port": SSHD_PORT, "client_key": str(tmp / "client_key"), "kh": str(tmp / "known_hosts")}
     subprocess.run(["sudo", "-n", "kill", str(proc.pid)], capture_output=True, timeout=10)
