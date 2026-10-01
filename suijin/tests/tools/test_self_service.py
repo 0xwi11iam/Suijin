@@ -70,8 +70,8 @@ class TestAutoChain:
     def test_chain_bounded_and_excludes_primary(self):
         from suijin.modules.redteam.lib.red.llm_client import _auto_chain
 
-        chain = _auto_chain({"provider": "zai"})
-        assert "ollama" in chain  # local free tier always last
+        chain = _auto_chain({"provider": "zai", "ollama_model": "qwen3-coder:14b"})
+        assert "ollama" in chain  # configured local tier last
         assert "zai" not in chain
         assert len(chain) <= 2  # bounded: dead-night cost is seconds, not minutes
 
@@ -86,8 +86,21 @@ class TestAutoChain:
         for spec in PROVIDER_REGISTRY.values():
             for env in spec.key_envs:
                 monkeypatch.delenv(env, raising=False)
-        chain = lc._auto_chain({"provider": "zai"})
+        chain = lc._auto_chain({"provider": "zai", "ollama_model": "qwen3-coder:14b"})
         assert chain == ["ollama"]
+
+    def test_unconfigured_ollama_never_chained(self, monkeypatch):
+        """Operator rule (2026-09-30 incident): a keyless local box nobody
+        configured must not ride the auto-chain — [ollama] alone burned a
+        resumed engagement in 6s-connection-timeout walls while masking the
+        real error (primary key missing from a stale process env)."""
+        from suijin.modules.providers.lib.registry import PROVIDER_REGISTRY
+        from suijin.modules.redteam.lib.red import llm_client as lc
+
+        for spec in PROVIDER_REGISTRY.values():
+            for env in spec.key_envs:
+                monkeypatch.delenv(env, raising=False)
+        assert lc._auto_chain({"provider": "zai"}) == []
 
     def test_registry_cloud_key_pickup(self, monkeypatch):
         from suijin.modules.providers.lib.registry import PROVIDER_REGISTRY
@@ -97,7 +110,7 @@ class TestAutoChain:
             for env in spec.key_envs:
                 monkeypatch.delenv(env, raising=False)
         monkeypatch.setenv("GROQ_API_KEY", "gsk_test")
-        chain = lc._auto_chain({"provider": "zai"})
+        chain = lc._auto_chain({"provider": "zai", "ollama_model": "qwen3-coder:14b"})
         assert chain[0] == "groq" and chain[-1] == "ollama"
 
 

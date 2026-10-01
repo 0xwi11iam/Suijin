@@ -193,3 +193,48 @@ class TestSettingsKeyRoundTrip:
             assert _os.environ["OPENCODE_API_KEY"] == expected
         finally:
             _os.environ.pop("OPENCODE_API_KEY", None)
+
+
+class TestEnvKeyDotenvFallback:
+    """env_key() reads the .env file when os.environ lacks the name.
+
+    The 2026-09-30 resume incident: a key written to .env AFTER the TUI
+    process started never reaches that process's os.environ, so a resumed
+    engagement saw 'key not set', auto-chained to ollama alone and died in
+    connection-timeout walls. A non-mutating file read closes it."""
+
+    def test_env_var_wins(self, monkeypatch):
+        from suijin.modules.providers.lib import env_key
+
+        monkeypatch.setenv("ZAI_API_KEY", "from-env")
+        assert env_key("ZAI_API_KEY") == "from-env"
+
+    def test_dotenv_found_when_env_missing(self, env_file, monkeypatch):
+        from suijin.modules.providers.lib import env_key
+
+        monkeypatch.delenv("ZAI_API_KEY", raising=False)
+        env_file.write_text('ZAI_API_KEY="sk-from-file"\n', encoding="utf-8")
+        assert env_key("ZAI_API_KEY") == "sk-from-file"
+
+    def test_dotenv_read_does_not_mutate_process_env(self, env_file, monkeypatch):
+        import os as _os
+
+        from suijin.modules.providers.lib import env_key
+
+        monkeypatch.delenv("ZAI_API_KEY", raising=False)
+        env_file.write_text("ZAI_API_KEY=sk-not-exported\n", encoding="utf-8")
+        assert env_key("ZAI_API_KEY") == "sk-not-exported"
+        assert "ZAI_API_KEY" not in _os.environ  # read, never exported
+
+    def test_missing_everywhere_is_empty(self, env_file, monkeypatch):
+        from suijin.modules.providers.lib import env_key
+
+        monkeypatch.delenv("ZAI_API_KEY", raising=False)
+        assert env_key("ZAI_API_KEY") == ""
+
+    def test_get_provider_key_sees_dotenv(self, env_file, monkeypatch):
+        from suijin.modules.providers.lib import get_provider_key
+
+        monkeypatch.delenv("ZAI_API_KEY", raising=False)
+        env_file.write_text("ZAI_API_KEY=sk-via-provider\n", encoding="utf-8")
+        assert get_provider_key("zai") == "sk-via-provider"
