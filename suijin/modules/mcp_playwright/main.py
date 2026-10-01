@@ -50,9 +50,30 @@ def _browser_loop():
         except ImportError:
             _browser_error = PLAYWRIGHT_MISSING
             return
+        # ONE browser cache for the whole machine: the module and the
+        # agent's own `playwright install` self-heals (executor children)
+        # must resolve the SAME binaries, or every fresh engagement home
+        # pays a 550MB re-download into itself (2026-09-30). executor_env
+        # sets this for children; this setdefault covers the in-process
+        # path and never overrides an operator override.
+        with contextlib.suppress(Exception):
+            import os as _os
+
+            from suijin.modules.platform.lib.workspace import WORKSPACE_DIR as _WS
+
+            _os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(_WS / "caches" / "ms-playwright"))
         try:
             pw = sync_playwright().start()
-            browser = pw.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"])
+            # --no-proxy-server: chromium silently inherits macOS system
+            # proxies (PAC included). On 2026-09-30 the operator's PAC relay
+            # mangled the TLS handshake — net::ERR_SSL_PROTOCOL_ERROR on
+            # every goto while curl (which ignores system proxies) worked,
+            # and the browser looked "broken". A recon browser connects
+            # DIRECT: deterministic routing, and no middlebox rewriting the
+            # TLS fingerprint the stealth context is presenting.
+            browser = pw.chromium.launch(
+                headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--no-proxy-server"]
+            )
         except Exception as e:  # noqa: BLE001 — a missing binary is the common case
             # playwright IS importable but its browser was never downloaded.
             # Before this, launch() raised out of the thread, _browser_ready
@@ -68,6 +89,14 @@ def _browser_loop():
         )
         page = ctx.new_page()
         _browser_error = ""
+        # RELEASE THE WAITERS THE MOMENT THE BOOT SUCCEEDS. This used to be
+        # set only in the outer finally — which runs when the command loop
+        # EXITS. A successful boot entered `while True: _cmd_queue.get()`
+        # and never set the event, so EVERY first call paid the full 30s
+        # wait and returned a false "Browser startup timed out (chromium
+        # may need playwright install)" while a healthy browser idled in
+        # the thread (2026-09-30: an engagement burned three calls on it).
+        _browser_ready.set()
         try:
             while True:
                 item = _cmd_queue.get()
@@ -88,12 +117,9 @@ def _browser_loop():
         with contextlib.suppress(Exception):
             if pw is not None:
                 pw.stop()
-        # ALWAYS release the waiters, whatever happened above
+        # ALWAYS release the waiters, whatever happened above (the success
+        # path already set it — idempotent; this covers every failure)
         _browser_ready.set()
-        try:
-            pw.stop()
-        except:
-            pass
 
 
 def _start():
