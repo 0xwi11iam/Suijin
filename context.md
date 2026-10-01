@@ -97,3 +97,30 @@
 2. B1 (source audit — `modules/treeaudit/main.py` orphaned start), BF4+ waves per plan.md.
 3. Before ANY commit: full gates (`pytest -m "not ai and not slow"` ~2895, ruff check, ruff format) + never commit the operator strays.
 4. **Engagement confidentiality is a PERMANENT operator ruling — see AGENTS.md.** Never name a target, program, vendor, or tested host in any committed artifact (commit messages, comments, test payloads, docs). Refer to engagements generically; tests use example.com. One commit (f547d32) predates this rule and still names a target — scrub on the next commit that touches it, history rewrite only on explicit request.
+
+## Session mesh v2 — remote nodes over SSH (2026-10-02)
+
+v1 (filesystem, same machine) extended: each node hosts a LOOPBACK-ONLY
+JSON-lines wire server (`agent/lib/mesh_wire.py`, port in the registry);
+`/connect user@host` joins a remote through ONE ssh carrying twin
+forwards (`-L` to their server, `-R` back to ours). Discovery is
+`suijin mesh-port` over ssh (registry scan, freshest live node). The
+tunnel is the TLS; the per-host mesh key (default `root`,
+`~/.suijin/keys/`, fingerprints in known_hosts.json with SSH-style
+change warnings) is the auth. The key is prompted IN THE INPUT BOX and
+consumed by the command — it never becomes guidance, never reaches the
+model, journal, or .sje (PTY-tested). New tools: `mesh_ask` (one queued
+question per remote peer, TTL-budgeted) and `mesh_reply` (by qid).
+Remote peers show as `REMOTE user@host` in mesh_status and count in the
+strip's ⚡N. Everything wire-delivered lands in the same runtime files
+v1 reads — ephemerality and the untrusted-injection boundary inherited.
+
+## Field fixes (2026-09-30 report, ported 2026-10-02)
+
+Local-model support: ollama gets a 4096-token default window (no more
+1M fallback silencing compaction), compaction fires at 70% with a 6-message
+keep-floor for windows ≤8k, `llm_timeout` is configurable (180s default,
+300s local), reasoning_effort is stripped for ollama unless the model name
+declares thinking (r1/think), and fetch_authorization_page is idempotent
+per target (the second call directs the agent to recon instead).
+
