@@ -24,6 +24,9 @@ import time
 
 # the fallback when nothing resolves: assume 1M tokens
 DEFAULT_CONTEXT_WINDOW = 1_000_000
+#: Local boxes (ollama) that miss the catalog are small by default —
+#: the 1M cloud fallback silenced compaction and looped small models.
+LOCAL_DEFAULT_WINDOW = 4096
 
 # chars-per-token estimate for budget math (the codebase's ÷4 convention)
 CHARS_PER_TOKEN = 4
@@ -149,7 +152,11 @@ def _lookup_in_catalog(catalog: dict, provider: str, model: str) -> int:
 
 def resolve_context_window(provider: str, model: str, config: dict | None = None) -> int:
     """Context window in TOKENS for the active provider/model. Never raises;
-    every unknown -> 1M (the fallback contract)."""
+    every unknown -> 1M (the fallback contract) — EXCEPT local boxes:
+    a local model that missed the catalog is small, and the 1M fallback
+    with the 160k-char compaction floor meant compaction NEVER fired —
+    history bloated past the real 4k window and choked the laptop CPU
+    (field report 2026-09-30: an Ollama 7B loop + 180s timeouts)."""
     cfg = config or {}
     # 1. explicit operator override (config.json) — wins over everything
     with contextlib.suppress(Exception):
@@ -165,7 +172,10 @@ def resolve_context_window(provider: str, model: str, config: dict | None = None
                 w = _lookup_in_catalog(catalog, provider, model_id)
                 if w > 0:
                     return w
-    # 3. the fallback — assume 1M
+    # 3. local-model default — small, honest, compaction-firing
+    if str(provider or "").strip().lower() == "ollama":
+        return LOCAL_DEFAULT_WINDOW
+    # 4. the fallback — assume 1M
     return DEFAULT_CONTEXT_WINDOW
 
 

@@ -145,6 +145,10 @@ def _mesh_tool(action: str, a: dict) -> str:
             if not pid:
                 return f"Error: no such mesh node: {a.get('node', '')}"
             return mesh.dm(pid, a.get("message", ""))
+        if action == "ask":  # v2: one queued question to a REMOTE peer
+            return mesh.ask_peer(a.get("node", ""), a.get("question", ""))
+        if action == "reply":  # v2: answer an ask we received (by qid)
+            return mesh.reply_to_ask(a.get("qid", ""), a.get("answer", ""))
     return "Error: mesh unavailable (solo session — no peers)"
 
 
@@ -451,6 +455,8 @@ def _build_routes(config):
         "mesh_read": lambda a: _mesh_tool("read", a),
         "mesh_broadcast": lambda a: _mesh_tool("broadcast", a),
         "mesh_dm": lambda a: _mesh_tool("dm", a),
+        "mesh_ask": lambda a: _mesh_tool("ask", a),
+        "mesh_reply": lambda a: _mesh_tool("reply", a),
         "mutate_wordlist": lambda a: _wordlist.mutate_wordlist(
             a.get("seeds"),
             out=a.get("out", "wordlists/mutated.txt"),
@@ -774,10 +780,35 @@ def _execute_with_healing(fn, args: dict, tool_name: str):
     return f"Tool Error ({tool_name}): unreachable"
 
 
+# ── fetch_authorization_page idempotency (field report 2026-09-30) ──────
+# The anti-repeat law below only counts FAILING calls. This tool returns
+# HTTP 200 even when the page says nothing new, so a small model re-called
+# it 8 times in a row, each a "success". One fetch per target is the whole
+# point of the tool — the second call gets a DIRECTIVE, not another fetch.
+_FETCHED_AUTH_TARGETS: set[str] = set()
+
+
 def _fetch_auth_page(target, url):
     from suijin.modules.ops.lib.authorizations import fetch_page
 
-    return fetch_page(target, url)
+    _key = str(target or url or "").strip().lower()
+    if _key and _key in _FETCHED_AUTH_TARGETS:
+        return (
+            "ALREADY FETCHED — the authorization page for this target was retrieved "
+            "earlier in this engagement and its content is already in your context "
+            "(search your own history before asking again). Do NOT call this tool "
+            "again for this target. Begin recon now: http_request against the "
+            "target's root and robots.txt, then js_bundle_analyze on JS-heavy pages."
+        )
+    out = fetch_page(target, url)
+    if _key and not str(out).startswith(("Error", "Tool Error")):
+        _FETCHED_AUTH_TARGETS.add(_key)
+    return out
+
+
+def reset_fetched_auth_pages() -> None:
+    """Engagement scope: a new engagement re-fetches legitimately."""
+    _FETCHED_AUTH_TARGETS.clear()
 
 
 # ── H3: dispatch-layer anti-repeat ─────────────────────────────────────
