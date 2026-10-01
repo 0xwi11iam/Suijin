@@ -234,6 +234,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     # into the prompt (recent message slices + summaries below read the
     # compacted list). The trigger scales with the model's context window
     # (models.dev / config override / 1M fallback — see model_meta).
+    LOCAL_WINDOW_MAX = 8192  # ≤ this = local/small model: compact early, keep 6
     _win_tokens = 1_000_000
     try:
         from suijin.modules.providers.lib.model_meta import resolve_context_window
@@ -248,16 +249,30 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         # 90% crossing. Window size is the model's REAL limit (models.dev),
         # measured in CHARS = tokens×4. 90% leaves room for the output
         # turn + the compaction summary itself.
-        _win_trigger = int(_win_tokens * 4 * 0.90)
-        _win_trigger = max(160_000, _win_trigger)  # floor: 160k chars (≈40k tok)
+        if _win_tokens <= LOCAL_WINDOW_MAX:
+            # LOCAL MODELS (field report 2026-09-30): a small window with
+            # the big-model floor never compacted — prefill crawled past
+            # the real limit into 180s timeouts. 70% of the window fires
+            # EARLY (output + summary headroom is a bigger fraction of a
+            # 4k window), and the keep-floor shrinks to 6 messages.
+            _win_trigger = int(_win_tokens * 4 * 0.70)
+            _keep_recent = 6
+        else:
+            _win_trigger = int(_win_tokens * 4 * 0.90)
+            _win_trigger = max(160_000, _win_trigger)  # floor: 160k chars (≈40k tok)
+            _keep_recent = None  # compact() default (16)
     except Exception:  # noqa: BLE001 — window metadata never breaks thinking
         _win_trigger = 120_000
+        _keep_recent = None
     try:
         from suijin.modules.agent.lib.compact import compact as _compact_messages
         from suijin.modules.agent.lib.compact import history_chars as _hc
 
         _msgs = state.get("messages") or []
-        _compacted = _compact_messages(_msgs, trigger_chars=_win_trigger)
+        _kw = {"trigger_chars": _win_trigger}
+        if _keep_recent is not None:
+            _kw["keep_recent"] = _keep_recent
+        _compacted = _compact_messages(_msgs, **_kw)
         if _compacted is not _msgs:
             state["messages"] = _compacted
             # compaction notice: printed ONCE above the strip — the gauge
@@ -434,6 +449,12 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
                 "just confirmed and what failed — coordination is part of the work.\n"
                 + _wrap_untrusted(_chat, "MESH_GC")
             )
+        # v2: remote asks land here — a peer's queued question. Answer it
+        # via mesh_reply BEFORE new work: a hanging peer question wastes a
+        # remote session the same way an unanswered operator ask does.
+        _asks = _mesh.drain_asks()
+        if _asks:
+            _mesh_block = (_mesh_block + "\n\n" if _mesh_block else "") + _wrap_untrusted("\n".join(_asks), "MESH_ASK")
 
     # ── THE CONTEXT BLOCK as ordered SECTIONS (R5/R6) ───────────────
     # Phase weighting (R5): identical content, phase-ordered emphasis —
