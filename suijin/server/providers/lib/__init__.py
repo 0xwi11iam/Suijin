@@ -105,7 +105,13 @@ def _apply_effort(
         convention — the tier name emitted directly.
     When models.dev knows the model, the tier snaps to its supported
     vocabulary; when it doesn't, the alias-resolved name passes through
-    (generic endpoints). Never raises."""
+    (generic endpoints). Never raises.
+
+    OLLAMA EXEMPTION (field report 2026-09-30): local OpenAI-compatible
+    servers 400 on reasoning_effort for standard models (qwen2.5-coder et
+    al). The field is stripped unless the model NAME declares a thinking
+    model ("r1"/"think" substring) — those are the ones that accept it.
+    """
     with contextlib.suppress(Exception):
         intel = str((config or {}).get("intelligence", "") or "").lower()
         if not intel:
@@ -114,12 +120,21 @@ def _apply_effort(
         if not tier:
             return
         if openai_style:
+            if str(provider or "").lower() == "ollama" and not _model_declares_thinking(model):
+                return  # standard local models 400 on this field
             payload["reasoning_effort"] = tier
         else:
             payload["thinking"] = {"type": "disabled" if tier == "low" else "enabled"}
             budget_frac = {"low": 0.0, "med": 0.5, "high": 0.75, "xhigh": 0.9, "max": 1.0}.get(tier, 1.0)
             if budget_frac < 1.0:
                 payload["max_tokens"] = max(1000, int(int(mtokens) * budget_frac))
+
+
+def _model_declares_thinking(model: str) -> bool:
+    """True when the model id itself says it's a reasoning model — the
+    only local models that accept reasoning_effort without a 400."""
+    name = str(model or "").lower()
+    return "r1" in name or "think" in name
 
 
 # Rough public list prices in USD per 1,000,000 tokens (input, output).
@@ -642,7 +657,7 @@ def provider_models_endpoint(provider, config=None):
         base = (
             ZAI_PAAS_BASE_URL if str(config.get("zai_endpoint") or "coding").lower() == "paas" else ZAI_CODING_BASE_URL
         )
-        key = os.environ.get("ZAI_API_KEY", "") or ""
+        key = env_key("ZAI_API_KEY")
         return base, ({"Authorization": f"Bearer {key}"} if key else {})
     if provider == "deepseek":
         key = os.environ.get("DEEPSEEK_API_KEY", "") or ""
@@ -682,18 +697,42 @@ def provider_key_env(provider) -> str:
     }.get(provider, "")
 
 
-def get_provider_key(provider) -> str:
-    """The provider's key, read live from the environment (never from
-    config.json — a key is a secret, and the config is snapshotted into
-    bundles). Empty when unset.
+def env_key(name: str) -> str:
+    """One key by env var name: os.environ first, then the .env file —
+    READ, never exported. A key written to .env after the process started
+    (Settings in another terminal, a manual edit) stays invisible to
+    os.environ forever in a long-lived TUI; on 2026-09-30 that staleness
+    sent a resumed engagement into an ollama-only failover wall while the
+    operator's key sat unused in .env. Non-mutating by design."""
+    val = str(os.environ.get(name, "") or "").strip()
+    if val:
+        return val
+    with contextlib.suppress(Exception):
+        from pathlib import Path as _Path
 
-    Deliberately does NOT call load_env(): a read must not mutate the
-    process environment. Callers that need the .env on disk loaded (the
-    runner at boot, the Settings editor when it opens) call it once."""
+        from suijin.modules.platform.lib.config_loader import ENV_PATH as _ENV_PATH
+
+        for line in _Path(_ENV_PATH).read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            if k.strip() == name:
+                return v.strip().strip("'\"")
+    return ""
+
+
+def get_provider_key(provider) -> str:
+    """The provider's key, read live (never from config.json — a key is a
+    secret, and the config is snapshotted into bundles). Empty when unset.
+
+    os.environ first, then the .env on disk — the file read does NOT
+    mutate the process environment (no load_env() here); boot and the
+    Settings editor still own the one-time export."""
     env_name = provider_key_env(provider)
     if not env_name:
         return ""
-    return str(os.environ.get(env_name, "") or "")
+    return env_key(env_name)
 
 
 def set_provider_key(provider, value: str) -> tuple[bool, str]:
@@ -1083,7 +1122,7 @@ def generate(
 
     # ---------- Z.ai (GLM) ----------
     if provider == "zai":
-        api_key = os.environ.get("ZAI_API_KEY", "")
+        api_key = env_key("ZAI_API_KEY")
         if not api_key:
             return "Error: Z.ai API key not set. Use Settings to add your key, or export ZAI_API_KEY."
         # Z.ai serves glm-* model ids; HF-style ids like "zai-org/GLM-5.3" map to "glm-5.3".
@@ -1206,13 +1245,11 @@ def _compat_call(spec, messages, config, *, temperature, max_tokens, retries, on
     first, ONE non-stream fallback on transport death, usage recorded
     (local = unpriced so the cost governor can never stop on free models),
     errors as 'Error:' strings per the failover protocol."""
-    import os as _os
-
     cfg = config or {}
     api_key = ""
     for env in spec.key_envs:
-        if _os.environ.get(env, "").strip():
-            api_key = _os.environ[env].strip()
+        api_key = env_key(env)
+        if api_key:
             break
     if not api_key:
         api_key = spec.inline_key
@@ -1245,7 +1282,7 @@ def _compat_call(spec, messages, config, *, temperature, max_tokens, retries, on
         "max_tokens": max_tokens,
         "temperature": temperature,
     }
-    _apply_effort(payload, model, config, max_tokens, openai_style=True)
+    _apply_effort(payload, model, config, max_tokens, openai_style=True, provider=spec.key)
     url = f"{spec.base_url.rstrip('/')}/chat/completions"
     _diag_llm_start(spec.key, model, len(messages))
     _t0 = time.monotonic()

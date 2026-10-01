@@ -18,13 +18,28 @@ import asyncio
 from suijin.modules.redteam.lib.red.config_loader import load_config
 
 
+def _resolve_timeout(config: dict) -> float:
+    """The hard call timeout: `llm_timeout` (seconds) from config wins;
+    default 180s, 300s for local providers — laptop-CPU prompt prefill
+    on larger contexts takes >3 minutes and the old hardcoded cutoff
+    killed the call before generation started (field report 2026-09-30:
+    Ollama loops + 180s timeouts)."""
+    prov = str((config or {}).get("provider") or "").lower()
+    default_to = 300.0 if prov == "ollama" else 180.0
+    try:
+        return float((config or {}).get("llm_timeout") or 0) or default_to
+    except (TypeError, ValueError):
+        return default_to
+
+
 async def generate_async(messages, config=None, on_delta=None):
     """Async LLM call. Silent — the engagement strip in red/console_ui.py
     owns all live display; `on_delta(kind, text)` streams tokens to it.
 
-    Hard timeout is 180s: 600s was an invisible 10-minute stall when
-    the provider hung (the operator saw "it stopped"); 180s covers the
-    biggest legitimate completions with retries."""
+    Hard timeout via _resolve_timeout (config `llm_timeout`; 180s default,
+    300s local). 600s was an invisible 10-minute stall when the provider
+    hung (the operator saw "it stopped"); the defaults stay well under
+    that."""
     if not config:
         config = load_config()
     elif not (config.get("provider") or "").strip():
@@ -36,14 +51,16 @@ async def generate_async(messages, config=None, on_delta=None):
         merged.update(config)
         config = merged
 
+    _to = _resolve_timeout(config)
+
     try:
         return await asyncio.wait_for(
             asyncio.to_thread(_generate, messages, config, on_delta),
-            timeout=180.0,
+            timeout=_to,
         )
     except asyncio.TimeoutError:
         return (
-            "Error: LLM request timed out after 180s (no transport progress). "
+            f"Error: LLM request timed out after {int(_to)}s (no transport progress). "
             "The provider may be stuck — retry or switch providers."
         )
 
@@ -69,11 +86,18 @@ def _generate(messages, config, on_delta=None):
 
 
 def _auto_chain(config) -> list[str]:
-    """[first key-bearing registry cloud provider, 'ollama'] — bounded to
-    two so a fully-dead night costs seconds, not minutes, of backoff."""
-    import os as _os
+    """[first key-bearing registry cloud provider, local] — bounded to
+    two so a fully-dead night costs seconds, not minutes, of backoff.
 
+    ollama is appended ONLY when the operator actually configured it
+    (an `ollama_model` in config). The unconditional "keyless local,
+    always free" append cost a whole engagement on 2026-09-30: the
+    primary's key was missing from a stale process env, no cloud key
+    was visible either, so the chain was [ollama] alone — three 6s
+    connection timeouts per call and a wall of "Ollama unreachable"
+    masking the real error ("Z.ai key not set")."""
     try:
+        from suijin.modules.providers.lib import env_key
         from suijin.modules.providers.lib.registry import CLOUD_KEYS, PROVIDER_REGISTRY
 
         primary = str((config or {}).get("provider") or "").lower()
@@ -82,10 +106,11 @@ def _auto_chain(config) -> list[str]:
             if key == primary:
                 continue
             spec = PROVIDER_REGISTRY.get(key)
-            if spec and spec.key_envs and any(_os.environ.get(e, "").strip() for e in spec.key_envs):
+            if spec and spec.key_envs and any(env_key(e) for e in spec.key_envs):
                 chain.append(key)
                 break
-        chain.append("ollama")  # keyless local — always last, always free
+        if (config or {}).get("ollama_model"):
+            chain.append("ollama")  # configured local — the operator asked for it
         return [p for p in chain if p != primary]
     except Exception:  # noqa: BLE001 — self-healing must never break a call
         return []
