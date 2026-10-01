@@ -1928,6 +1928,48 @@ def run_watch(args) -> int:
     return 0
 
 
+def run_mesh_port() -> int:
+    """One JSON line: a live mesh node on THIS machine (id + wire port).
+
+    `ssh <host> suijin mesh-port` is how a remote /connect discovers the
+    port — it reads the REGISTRY (any process can; the node itself may be
+    a TUI, a daemon, anything), picking the freshest-beat node that is
+    alive and serving."""
+    import contextlib as _cl
+    import json as _json
+    import os as _os
+    import time as _time
+    from pathlib import Path as _P
+
+    from suijin.modules.agent.lib import mesh
+
+    live = []
+    with _cl.suppress(OSError):
+        for f in _P(mesh.mesh_dir()).glob("*.json"):
+            if f.name.endswith("-state.json") or f.name == "remote-peers.json":
+                continue
+            try:
+                rec = _json.loads(f.read_text())
+                pid = int(rec.get("pid") or 0)
+                port = int(rec.get("port") or 0)
+                beat = float(rec.get("beat") or 0)
+            except Exception:  # noqa: BLE001 — foreign/broken files skipped
+                continue
+            if not pid or not port or _time.time() - beat > mesh.STALE_S:
+                continue
+            try:
+                _os.kill(pid, 0)
+            except (ProcessLookupError, PermissionError):
+                continue
+            live.append({"id": f"node-{pid}", "pid": pid, "port": port, "beat": beat})
+    if not live:
+        print(_json.dumps({"error": "no live mesh node on this machine"}))
+        return 1
+    live.sort(key=lambda r: -r["beat"])  # freshest first
+    print(_json.dumps({"nodes": live}))
+    return 0
+
+
 def run_clean(args) -> int:
     from suijin.modules.ops.lib.housekeeping import clean_workspace
 
@@ -2035,6 +2077,7 @@ _KNOWN_VERBS = frozenset(
         "attach",
         "stop",
         "tui",
+        "mesh-port",
     }
 )
 
@@ -2078,6 +2121,9 @@ def main(argv=None):
     for name, (help_text, fn) in SIMPLE_COMMANDS.items():
         p = sub.add_parser(name, help=help_text)
         p.set_defaults(func=lambda _a, _fn=fn: _fn())
+
+    mp = sub.add_parser("mesh-port", help="print this session's mesh wire port (used by remote /connect)")
+    mp.set_defaults(func=lambda _a: run_mesh_port())
 
     clean = sub.add_parser("clean", help="workspace cleaner — dry-run by default")
     clean.add_argument("--apply", action="store_true", help="archive stale files then delete")

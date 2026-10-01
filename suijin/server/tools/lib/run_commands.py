@@ -18,6 +18,8 @@ Standalone by design: no imports from redteamer/blueteamer (modular-ready).
 
 from __future__ import annotations
 
+import contextlib
+import os
 import threading
 
 from rich.console import Console
@@ -40,8 +42,10 @@ class RunBox:
         self._reader: threading.Thread | None = None
         self._stop = threading.Event()
         self._ask_mode = False  # a pending ask_operator: plain lines are answers
+        self._pending_connect: str | None = None  # a pending /connect key prompt
         for name, fn in _default_handlers(self).items():
             self.register(name, fn)
+        self.register("connect", self._cmd_connect)
 
     # ── ask mode ────────────────────────────────────────────────────
 
@@ -91,6 +95,14 @@ class RunBox:
         if not line:
             return
         if not line.startswith("/"):
+            # /connect's key prompt: the NEXT plain line is the KEY —
+            # consumed HERE, before guidance, so the key never becomes
+            # operator guidance (never reaches the model, journal, .sje)
+            pend = self._pending_connect
+            if pend is not None:
+                self._pending_connect = None
+                self._finish_connect(pend, line)
+                return
             with self._lock:
                 self._guidance.append(line)
                 pending = len(self._guidance)
@@ -111,6 +123,82 @@ class RunBox:
             handler(rest.strip())
         except Exception as e:  # a broken command must never break the run
             self._out.print(f"[red]  ▸ /{cmd} failed: {e}[/red]")
+
+    # ── /connect: join a remote mesh node (two-step key) ────────────
+
+    def _cmd_connect(self, rest: str) -> None:
+        """`/connect user@host [key]` — key on the line OR the next plain
+        line (never guidance). Runs the join in a worker thread: ssh can
+        take seconds and the reader must keep serving."""
+        import threading as _th
+
+        parts = rest.split()
+        if not parts:
+            known = self._known_mesh_hosts()
+            self._out.print(
+                "[bold cyan]mesh connect[/bold cyan] — join a remote session: /connect user@host"
+                + (f"\n  known hosts: {', '.join(known)}" if known else "")
+            )
+            return
+        spec = parts[0]
+
+        # SUIJIN_WORKSPACE set (profiles, multi-install, test sandboxes) →
+        # the FAR side's discovery must read the registry we actually wrote
+        _rws = os.environ.get("SUIJIN_WORKSPACE") or None
+
+        def _join(key: str):
+            try:
+                from suijin.modules.agent.lib import mesh
+
+                out = mesh.connect_remote(spec, key, remote_workspace=_rws)
+                color = "red" if str(out).startswith("Error") else "green"
+                self._out.print(f"  ▸ [bold {color}]{out}[/bold {color}]")
+            except Exception as e:  # noqa: BLE001 — surfaced, never fatal
+                self._out.print(f"  ▸ [bold red]connect failed: {e}[/bold red]")
+
+        if len(parts) > 1:  # inline key (visible in scrollback — operator's choice)
+            _th.Thread(target=_join, args=(parts[1],), daemon=True).start()
+            return
+        from suijin.modules.agent.lib import mesh
+
+        stored = mesh.host_key(spec)
+        if stored:
+            _th.Thread(target=_join, args=(stored,), daemon=True).start()
+            return
+        self._pending_connect = spec
+        self._out.print(
+            f"[bold cyan]mesh key for {spec}?[/bold cyan] type it as the next line "
+            "(it is consumed here — it never reaches the agent) — Esc-line cancels"
+        )
+
+    def _finish_connect(self, spec: str, key: str) -> None:
+        import threading as _th
+
+        if not key.strip():
+            self._out.print("  ▸ [yellow]connect cancelled[/yellow]")
+            return
+
+        _rws = os.environ.get("SUIJIN_WORKSPACE") or None
+
+        def _join():
+            try:
+                from suijin.modules.agent.lib import mesh
+
+                out = mesh.connect_remote(spec.strip(), key.strip(), remote_workspace=_rws)
+                color = "red" if str(out).startswith("Error") else "green"
+                self._out.print(f"  ▸ [bold {color}]{out}[/bold {color}]")
+            except Exception as e:  # noqa: BLE001
+                self._out.print(f"  ▸ [bold red]connect failed: {e}[/bold red]")
+
+        _th.Thread(target=_join, daemon=True).start()
+
+    @staticmethod
+    def _known_mesh_hosts() -> list[str]:
+        with contextlib.suppress(Exception):
+            from suijin.modules.agent.lib import mesh
+
+            return list({p.get("peer_id") for p in mesh.peers(refresh_now=True) if p.get("remote")})
+        return []
 
     # ── reader thread ───────────────────────────────────────────────
 
