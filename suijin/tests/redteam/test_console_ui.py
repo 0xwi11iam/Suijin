@@ -385,6 +385,69 @@ class TestTranscript:
         box.stop()
         assert answer == ""
 
+    def test_ask_waits_indefinitely_until_typed(self):
+        """Operator rule (2026-09-30): an ask IS a pause — the engagement
+        re-begins only when something is TYPED. No timer may auto-answer.
+        The wait must outlive any deadline while the reader lives, and the
+        typed line is what resumes it."""
+        import threading
+        import time
+
+        from suijin.client.tui.console_ui import ask_operator_answer
+        from suijin.modules.tools.lib.run_commands import RunBox
+
+        box = RunBox().start()
+        box.take_guidance()
+
+        def slow_operator():
+            time.sleep(1.2)  # far past the OLD 0.4s-style deadlines
+            box.dispatch("go for recon")
+
+        threading.Thread(target=slow_operator, daemon=True).start()
+        t0 = time.monotonic()
+        answer = ask_operator_answer(box, Console(record=True, width=90), "authorized?")  # NO timeout
+        elapsed = time.monotonic() - t0
+        box.stop()
+        assert answer == "go for recon"
+        assert elapsed >= 1.0  # waited for the typing, never timed out
+
+    def test_ask_dead_reader_falls_back_to_direct_prompt(self, monkeypatch):
+        """A reader that dies mid-ask must NOT auto-continue: the fallback
+        is a direct prompt, and only typed input resumes the run."""
+        import sys as _sys
+
+        from suijin.client.tui.console_ui import ask_operator_answer
+        from suijin.modules.tools.lib.run_commands import RunBox
+
+        class _TtyStdin:
+            def isatty(self):
+                return True
+
+        monkeypatch.setattr(_sys, "stdin", _TtyStdin())
+
+        box = RunBox().start()
+        box.take_guidance()
+        box.stop()  # the reader dies mid-ask
+
+        captured = {}
+
+        class _FakeConsole:
+            file = None
+
+            def print(self, *a, **k):
+                pass
+
+            def flush(self):
+                pass
+
+            def input(self, prompt=""):
+                captured["prompt"] = prompt
+                return "typed at the direct prompt"
+
+        answer = ask_operator_answer(box, _FakeConsole(), "authorized?")
+        assert answer == "typed at the direct prompt"
+        assert "Answer" in captured["prompt"]
+
     def test_cost_cap_warning_is_clean(self):
         """The pydantic wall of text is silenced; a custom category exists."""
         import warnings

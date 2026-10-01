@@ -171,24 +171,44 @@ def _fireteam_agent_rows() -> list:
 
 
 def ask_operator_answer(
-    run_box, console: Console, question: str, timeout_s: float = 600.0, label: str = "Answer"
+    run_box, console: Console, question: str, timeout_s: float | None = None, label: str = "Answer"
 ) -> str:
     """Get the operator's answer through the RunBox reader — the ONE thread
     that owns stdin (a main-thread input() raced the reader and hung the
     agent). Prompt is exactly `Answer:` on its own line; the first plain
-    line typed is the answer (slash commands still dispatch normally)."""
+    line typed is the answer (slash commands still dispatch normally).
+
+    The wait is UNLIMITED by default (operator rule, 2026-09-30: an ask is
+    a pause — the engagement re-begins only when something is TYPED, never
+    on a timer). A reader that dies mid-ask drops to a direct prompt on a
+    real terminal rather than auto-continuing; `timeout_s` remains honored
+    when a caller explicitly passes one (the detached/unattended surfaces)."""
+    import sys as _sys
     import time as _time
 
     console.print(f"[bold cyan]{label}:[/bold cyan] ", end="")
-    console.file.flush()
+    if getattr(console, "file", None) is not None:
+        console.file.flush()
     run_box.ask_mode(True)  # plain lines are the answer — no guidance echo
-    deadline = _time.monotonic() + timeout_s
+    deadline = (_time.monotonic() + timeout_s) if timeout_s else None
     run_box.take_guidance()  # drain stale lines queued before the question
-    while _time.monotonic() < deadline:
+    while True:
         lines = run_box.take_guidance()
         if lines:
             run_box.ask_mode(False)
             return lines[0].strip()
+        if deadline is not None and _time.monotonic() >= deadline:
+            break
+        if not run_box.alive and _sys.stdin.isatty():
+            # reader died mid-ask (a REAL terminal is typeable): DIRECT
+            # prompt, never an auto-continue — the resume condition stays
+            # "the operator typed". Non-TTY (harness, detached surfaces)
+            # keeps polling the queue: the caller owns that policy.
+            run_box.ask_mode(False)
+            try:
+                return console.input("[bold cyan]Answer:[/bold cyan] ").strip()
+            except (KeyboardInterrupt, EOFError):
+                return ""
         _time.sleep(0.15)
     run_box.ask_mode(False)
     return ""
