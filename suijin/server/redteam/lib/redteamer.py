@@ -672,6 +672,10 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
 
         _rrs()
     with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.dispatch import reset_fetched_auth_pages as _raf
+
+        _raf()
+    with contextlib.suppress(Exception):
         from suijin.modules.agent.lib.supervisor import reset_cooldowns as _sc_reset
 
         _sc_reset()
@@ -836,17 +840,24 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
         an ask into 10 minutes of dead air or a pause into a forever-wait."""
         return _input_reader is not None and _input_reader._thread is not None and _input_reader._thread.is_alive()
 
-    def _operator_input(label: str, timeout_s: float = 600.0) -> str:
+    def _operator_input(label: str, timeout_s: float | None = None) -> str:
         """Operator text through the ONE stdin owner. TTY: the keystroke
         reader routes raw lines to an ask queue (console.input fought the
         cbreak reader and typing DIED — the field bug). Non-TTY: the old
-        RunBox/line-reader path."""
+        RunBox/line-reader path. The wait is UNLIMITED by default (an ask
+        IS a pause — only typing re-begins the run, 2026-09-30); callers
+        pass an explicit timeout only on the unattended surfaces."""
         import queue as _qmod
 
         if _input_reader is not None:
-            if not _reader_alive():
-                console.print("[yellow]  input reader is gone — no answer possible, continuing autonomously[/yellow]")
-                return ""
+            if not _reader_alive() and sys.stdin.isatty():
+                # DEAD READER ≠ auto-continue (operator rule: only typing
+                # re-begins the run). Drop to the direct prompt.
+                console.print("[yellow]  input reader is gone — answer at the direct prompt[/yellow]")
+                try:
+                    return console.input("[bold cyan]Answer:[/bold cyan] ").strip()
+                except (KeyboardInterrupt, EOFError):
+                    return ""
             q = _qmod.Queue()
             # the question renders as a Rich Panel (2026-09-17): fixed at the
             # bottom, the input box stays live right below it — the
@@ -877,9 +888,24 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                 ui.start()
             _input_reader.begin_ask(q)
             try:
-                return q.get(timeout=timeout_s)
-            except _qmod.Empty:
-                return ""
+                # UNLIMITED WAIT (operator rule, 2026-09-30): an ask IS a
+                # pause — the engagement re-begins only when the operator
+                # TYPES. The old 600s ceiling auto-answered "continue as
+                # you see fit" and the run resumed unattended — the exact
+                # behavior the operator keeps hitting. 5s slices keep the
+                # reader-liveness check live; a reader that dies mid-ask
+                # drops to a DIRECT prompt (still resume-on-typing) instead
+                # of an auto-continue.
+                while True:
+                    try:
+                        return q.get(timeout=5.0)
+                    except _qmod.Empty:
+                        if not _reader_alive() and sys.stdin.isatty():
+                            console.print("[yellow]  input reader died — answer at the direct prompt[/yellow]")
+                            try:
+                                return console.input("[bold cyan]Answer:[/bold cyan] ").strip()
+                            except (KeyboardInterrupt, EOFError):
+                                return ""
             finally:
                 _input_reader.end_ask()
                 with contextlib.suppress(Exception):
@@ -1121,7 +1147,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                             # the actual question floating far above as a
                             # bare section (the operator had no idea what
                             # they were answering)
-                            answer = _operator_input(str(out) or "Answer", 600.0)
+                            answer = _operator_input(str(out) or "Answer")
                         elif sys.stdin is not None and sys.stdin.isatty():
                             try:
                                 answer = console.input("[bold cyan]Answer:[/bold cyan] ").strip()
@@ -1517,9 +1543,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                 # non-TTY: no box exists — the legacy prompt path
                 ui.stop()
                 try:
-                    guidance = sc.pause_console(
-                        _pause_ctx, lambda label, timeout=600.0: _operator_input(label, timeout)
-                    )
+                    guidance = sc.pause_console(_pause_ctx, lambda label, timeout=None: _operator_input(label, timeout))
                     _pause_session["guidance"] = guidance
                 except (KeyboardInterrupt, EOFError):
                     guidance = None
