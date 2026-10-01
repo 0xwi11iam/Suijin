@@ -135,8 +135,16 @@ def _strict() -> bool:
 def executor_env(root: Path | None = None) -> dict:
     """Confined process environment: HOME + TMPDIR point INTO the
     engagement home so shells, ssh, compilers and caches never touch the
-    real user dirs. Always applied (sandbox or not)."""
-    from suijin.modules.platform.lib.workspace import home_dir
+    real user dirs. Always applied (sandbox or not).
+
+    PLAYWRIGHT_BROWSERS_PATH is the exception that proves the confinement:
+    browsers are a ~550MB MACHINE-level asset. Left on the default (HOME-
+    relative), the agent's own `playwright install` self-heal downloaded a
+    fresh chromium INTO the engagement home mid-run (2026-09-30) — disk
+    churn so heavy the operator couldn't type, and the tree stays behind
+    as garbage. One shared cache inside the workspace serves every
+    engagement; the sandbox profile already allows writes there."""
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR, home_dir
 
     env = os.environ.copy()
     home = Path(home_dir()) if root is None else Path(root) / "home"
@@ -145,6 +153,10 @@ def executor_env(root: Path | None = None) -> dict:
         tmp.mkdir(parents=True, exist_ok=True)
     env["HOME"] = str(home)
     env["TMPDIR"] = str(tmp)
+    with contextlib.suppress(OSError):
+        browsers = Path(WORKSPACE_DIR) / "caches" / "ms-playwright"
+        browsers.mkdir(parents=True, exist_ok=True)
+        env.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(browsers))
     return env
 
 
