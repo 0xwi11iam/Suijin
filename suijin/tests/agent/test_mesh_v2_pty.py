@@ -76,6 +76,9 @@ def sshd(tmp_path_factory):
         subprocess.run(["sudo", "-n", "true"], capture_output=True, timeout=10, check=True)
     except Exception:
         pytest.skip("no passwordless sudo for the test sshd")
+    # CI runners (and minimal boxes) lack the privilege-separation dir —
+    # sshd exits instantly without it, the listener never binds
+    subprocess.run(["sudo", "-n", "mkdir", "-p", "/run/sshd"], capture_output=True, timeout=10)
     proc = subprocess.Popen(
         ["sudo", "-n", shutil.which("sshd"), "-D", "-e", "-f", str(cfg)],
         stdout=subprocess.DEVNULL,
