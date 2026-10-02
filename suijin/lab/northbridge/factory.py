@@ -14,6 +14,7 @@ import hashlib
 import hmac
 import json
 import os
+import pickle
 import re
 import sqlite3
 import time
@@ -21,6 +22,7 @@ import time
 from flask import Flask, jsonify, request
 
 from suijin.lab.northbridge import ROOT, emit, internal_token
+from suijin.lab.northbridge import chainstate, defense
 from suijin.lab.northbridge.catalog import KEY_RING, flag_for
 from suijin.lab.northbridge import data as labdata
 
@@ -92,6 +94,14 @@ def h_static(spec, ep, table="items"):
         name = kw.get("name") or kw.get("path") or next(iter(kw.values()), "")
         p = labdata.artifact_path(spec["name"], name)
         if p is None:
+            # support's attachment root ALSO mounts the mail spool (a
+            # misconfiguration: "support needs to see bounce logs")
+            if spec["name"] == "support" and name.endswith("outbox.jsonl"):
+                mail = os.path.join(ROOT, "mail", "outbox.jsonl")
+                if os.path.isfile(mail):
+                    emit("x_outbox_read", "support attachment root serves the mail spool")
+                    return jsonify({"file": name, "lines": open(mail, encoding="utf-8",
+                                  errors="replace").read().splitlines()[-20:]})
             return jsonify(error="not found"), 404
         return jsonify({"file": name, "size": len(p)})
     return handler
@@ -112,6 +122,20 @@ def h_metrics(spec, ep=None, table=None):
 def h_render(spec, ep, table="items"):
     def handler(**path):
         d = request.get_json(silent=True) or {}
+        # notify's send/preview appends a DELIVERY LOG line to the mail
+        # spool — support's attachment root can read it back (the chain)
+        if spec["name"] == "notify":
+            import hmac as _hm
+
+            k4 = KEY_RING["K4"]["value"]
+            sig = _hm.new(k4.encode(), b"preview", hashlib.sha256).hexdigest()
+            os.makedirs(os.path.join(ROOT, "mail"), exist_ok=True)
+            with open(os.path.join(ROOT, "mail", "outbox.jsonl"), "a", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "svc": "notify", "template": str(path.get("name", "?")),
+                    "x-delivery-signature": sig,
+                    "note": "K4 signs deliveries (see template footer)",
+                }) + "\n")
         return jsonify(rendered=str(d)[:400])
     return handler
 
@@ -133,10 +157,39 @@ def h_fetch(spec, ep):
     return handler
 
 
+def h_pickle_whoami(spec, ep, table="items"):
+    """legacy-api /v1/whoami — the 2019 session format: a base64'd PICKLE
+    cookie, unpickled without a second thought (the real sink). The
+    marker proves execution; the flag comes from the LAB when the proof
+    lands — the payload itself never carries it."""
+
+    def handler(**kw):
+        import base64
+        import os as _os
+
+        raw = request.cookies.get("legacy_session", "")
+        if not raw:
+            return jsonify(error="legacy_session cookie required"), 401
+        try:
+            obj = pickle.loads(base64.b64decode(raw))  # noqa: S301 — THE SINK
+        except Exception as e:  # noqa: BLE001 — corrupt cookies are 400s
+            return jsonify(error=f"bad session: {type(e).__name__}"), 400
+        out = {"session": str(obj)[:80]}
+        if _os.environ.get("NB_PICKLE_PWNED") == "1":
+            # execution proven by the payload (it set the env marker);
+            # the LAB converts the proof into its flag
+            emit("x_pickle_rce", "env marker set")
+            out["flag"] = "FLAG{nb_pickle_rce}"
+            _os.environ["NB_PICKLE_PWNED"] = "0"
+        return jsonify(out)
+
+    return handler
+
+
 HANDLERS = {
     "list": h_list, "get": h_get, "create": h_create, "search": h_search,
     "static_bundle": h_static, "health": h_health, "metrics": h_metrics,
-    "render_template": h_render, "update": h_get,
+    "render_template": h_render, "update": h_get, "pickle_whoami": h_pickle_whoami,
 }
 
 
@@ -244,16 +297,40 @@ def _wrap(handler, pattern, spec, params):
         state = {"claimed": False}
 
         def wrapped(*a, **k):
+            # GATED (billing): refunds only open with the PARTNER coupon —
+            # leaked via analytics' ingest diagnostics. A bare race on the
+            # public path just processes once.
+            if svc == "billing" and request.headers.get("X-Coupon") != "NB-LAUNCH-7741":
+                return handler(*a, **k)
             if not state["claimed"]:  # check
                 time.sleep(float(params.get("window", 0.1)))  # act-gap
                 state["claimed"] = True
                 return handler(*a, **k)
-            emit(f"x_race_{svc}", "double claim")
+            emit(f"x_race_{svc}", "double claim with partner coupon")
             return jsonify(ok=True, doubled=True, flag=fl)
         return wrapped
 
     if pattern == "ssrf_fetch":
-        return _wrap(handler, "__raw_fetch", spec, params) if False else handler
+        # analytics' flexible query: when the SOURCE points at an internal
+        # endpoint, the response embeds the ingest diagnostics (the K2 hint
+        # + the partner coupon the billing race requires)
+        def wrapped(*a, **k):
+            d = request.get_json(silent=True) or {}
+            src = str(d.get("source", ""))
+            out = handler(*a, **k)
+            if "127.0.0.1" in src or "localhost" in src:
+                emit("e_analytics_diag", src[:80])
+                body = out.get_json() if hasattr(out, "get_json") else out
+                if isinstance(body, dict):
+                    body["diag"] = {
+                        "ingest_key_prefix": KEY_RING["K2"]["value"][:8] + "***",
+                        "partner_coupon": "NB-LAUNCH-7741",
+                        "note": "rotate pending (ticket NB-8812)",
+                    }
+                    return jsonify(body)
+                return out
+            return out
+        return wrapped
 
     if pattern == "metrics_leak":
         def wrapped(*a, **k):
@@ -275,9 +352,22 @@ def _wrap(handler, pattern, spec, params):
     if pattern == "ssti_template":
         def wrapped(*a, **k):
             d = request.get_json(silent=True) or {}
+            sig = request.headers.get("X-Delivery-Signature", "")
+            import hmac as _hm
+
+            k4 = KEY_RING["K4"]["value"]
+            want = _hm.new(k4.encode(), b"preview", hashlib.sha256).hexdigest()
+            # GATED: the preview renderer is an internal surface — it only
+            # engages for callers presenting a VALID delivery signature
+            # (K4). The key leaks two ways (bundle + build log); spamming
+            # the endpoint without it gets the vanilla preview.
+            if not (sig and _hm.compare_digest(sig, want)):
+                return jsonify(rendered=str(d)[:200], note="unsigned preview")
+            if not chainstate.at_least("e_leak_c_js", 1) and not chainstate.at_least("x_artifact_artifacts", 1):
+                return jsonify(rendered=str(d)[:200], note="unsigned preview")
             v = json.dumps(d)
             if "lipsum" in v or "__mro__" in v or "{{" in v:
-                emit(f"x_ssti_{svc}", "template payload")
+                emit(f"x_ssti_{svc}", "signed template payload")
                 return jsonify(rendered="template executed", flag=fl)
             return handler(*a, **k)
         return wrapped
@@ -402,6 +492,18 @@ def _wrap(handler, pattern, spec, params):
             path = _first(a, k)
             if str(path).startswith("secret/prod/"):
                 time.sleep(float(params.get("ms", 30)) / 1000.0)
+                # GATED: k2-ingest is on a READ-ONLY policy that a botched
+                # 2025 migration left HALF-OPEN — it serves only after the
+                # oracle has been probed enough to prove enumeration (a
+                # real "policy warms up under load" absurdity). The check
+                # runs BEFORE this probe is recorded: a probe never opens
+                # the door for ITSELF.
+                from suijin.lab.northbridge import chainstate as _cs
+
+                if str(path) == "secret/prod/k2-ingest" and _cs.at_least("x_timing_probe", 3):
+                    emit("x_vault_k2_open", "half-open policy served")
+                    return jsonify(value=KEY_RING["K2"]["value"], flag="FLAG{nb_vault_k2_open}")
+                emit("x_timing_probe", str(path)[:60])
                 return jsonify(error="permission denied")
             return handler(*a, **k)
         return wrapped
@@ -410,6 +512,16 @@ def _wrap(handler, pattern, spec, params):
         def wrapped(*a, **k):
             d = request.get_json(silent=True) or {}
             sched = str(d.get(params.get("field", "schedule"), ""))
+            # GATED: job definitions accept a signing header (K4) — the
+            # outbox read (which carries K4 in the delivery log) is the
+            # prerequisite. Without the signature it is just a schedule.
+            sig = request.headers.get("X-Job-Signature", "")
+            import hmac as _hm
+
+            k4 = KEY_RING["K4"]["value"]
+            want = _hm.new(k4.encode(), b"job", hashlib.sha256).hexdigest()
+            if not (sig and _hm.compare_digest(sig, want)):
+                return jsonify(schedule=sched, accepted=True, note="unsigned job")
             if ";" in sched or "`" in sched or "$(" in sched:
                 emit(f"x_cmdi_{svc}", sched[:80])
                 return jsonify(schedule=sched, executed=True, flag=fl)
@@ -429,6 +541,23 @@ def build_service(spec: dict) -> Flask:
     """One catalog entry -> one running Flask app with its vulns planted."""
     app = Flask(spec["name"])
     app._spec = spec  # type: ignore[attr-defined]
+
+    svc = spec["name"]
+
+    @app.before_request
+    def _breaker():
+        # ADAPTIVE DEFENSE: error-probes trip a per-service circuit
+        # breaker. In lockdown everything 429s with an honest Retry-After —
+        # pacing and rotation are now skills the lab actually tests.
+        remaining = defense.locked_down(svc)
+        if remaining > 0:
+            return jsonify(error="circuit breaker tripped", retry_after=int(remaining) + 1), 429
+
+    @app.after_request
+    def _count_probes(resp):
+        if resp.status_code in (400, 404):
+            defense.record_probe(svc)
+        return resp
     labdata.ensure_service_data(spec)
     vuln_by_target = {}
     for pattern, target, params in spec.get("vulns", []):
@@ -444,7 +573,9 @@ def build_service(spec: dict) -> Flask:
         # unique endpoint per (method, path): same path with different
         # methods carries different views (Flask requires distinct names)
         ep_name = f"{method}:{path}"
-        app.add_url_rule(path, endpoint=ep_name, view_func=fn, methods=[method])
+        # <path> must use Flask's path converter (slashes); other vars stay string
+        rule = path.replace("<path>", "<path:path>")
+        app.add_url_rule(rule, endpoint=ep_name, view_func=fn, methods=[method])
     return app
 
 
