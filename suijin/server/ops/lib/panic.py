@@ -19,6 +19,10 @@ _PATTERNS = [
     "suijin/main.py",
     "suijin/cli.py ui",
     "suijin/lab/",
+    # the lab boots as MODULES (`python -m suijin.lab.northbridge.*`) —
+    # the path form above never matched them and panic reported "none
+    # running" with all twenty-one services up (operator report 2026-10-02)
+    "suijin.lab.northbridge",
     "vulnerable_app.py",
     "suijin.main daemon-run",  # detached daemon engagements (see _stop_daemons)
 ]
