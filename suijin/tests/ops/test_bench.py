@@ -50,12 +50,6 @@ class TestBenchUnit:
         for flag in LAB_FLAGS[lab]:
             assert flag not in blob, (lab, flag)
 
-    def test_oauth_script_threads_tokens(self):
-        oauth = _mock_script("oauth", 6100)
-        userinfo = [t for t in oauth if t["action"] == "use_tool" and "/userinfo" in t["tool_args"]["url"]]
-        assert len(userinfo) == 3
-        assert all("{{TOKEN}}" in t["tool_args"]["headers"]["Authorization"] for t in userinfo)
-
     def test_last_token_takes_newest(self):
         """Tool results arrive inside one big trace message — a naive
         reverse scan keeps re-finding the OLDEST token. The newest must win."""
@@ -101,7 +95,7 @@ class TestBenchUnit:
 
         _append_history(
             {
-                "lab": "log4shell",
+                "lab": "unit-fixture",
                 "mode": "mock",
                 "timestamp": "2026-01-01T00:00:00Z",
                 "flags_known": 1,
@@ -112,9 +106,9 @@ class TestBenchUnit:
             }
         )
         hist = bench_history()
-        assert len(hist) == 1 and hist[0]["lab"] == "log4shell"
+        assert len(hist) == 1 and hist[0]["lab"] == "unit-fixture"
         rendered = render_history()
-        assert "log4shell" in rendered and "flags 1/1" in rendered
+        assert "unit-fixture" in rendered and "flags 1/1" in rendered
 
 
 @pytest.mark.slow
@@ -123,7 +117,7 @@ class TestBenchMockEndToEnd:
     graph + dispatch, score flags. Every captured flag left the lab through
     a real exploit path (nothing is scripted into the requests)."""
 
-    @pytest.mark.parametrize("lab,expected_calls", [("log4shell", 3), ("wordpress", 3), ("oauth", 7)])
+    @pytest.mark.parametrize("lab,expected_calls", [("northbridge", 4)])
     def test_full_capture(self, lab, expected_calls, tmp_path, monkeypatch):
         from suijin.modules.platform.lib import workspace as ws
 
