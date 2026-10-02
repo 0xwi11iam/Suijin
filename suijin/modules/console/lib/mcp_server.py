@@ -357,21 +357,7 @@ def tool_execute_terminal(args):
     return execute_terminal(args.get("cmd", ""), timeout=int(args.get("timeout", 30)))
 
 
-def tool_suijin_detect(args):
-    from suijin.modules.blueteam.lib.blue.tui.feed import _detect_obvious_attack
-
-    result = _detect_obvious_attack(args.get("request") or {})
-    return json.dumps(result, indent=2)
-
-
-def tool_suijin_kg_attacker(args):
-    from suijin.modules.blueteam.lib.blue.knowledge_graph import get_kg
-
-    return json.dumps(get_kg().get_attacker_history(args.get("ip", "")), indent=2, default=str)
-
-
 def tool_suijin_status(args):
-    from suijin.modules.platform.lib.constants import BLUE_LAB_PORT, PROXY_DEFAULT_PORT
     from suijin.modules.tools.lib.dispatch import list_route_tools
 
     tools = list_route_tools()
@@ -380,8 +366,6 @@ def tool_suijin_status(args):
             "server": SERVER_NAME,
             "version": _server_version(),
             "protocol": PROTOCOL_VERSION,
-            "blue_lab_port": BLUE_LAB_PORT,
-            "proxy_default_port": PROXY_DEFAULT_PORT,
             "tool_count": len(tools),
             "tools_sample": tools[:10],
         },
@@ -392,8 +376,6 @@ def tool_suijin_status(args):
 TOOL_HANDLERS = {
     "suijin_tool": tool_suijin_tool,
     "execute_terminal": tool_execute_terminal,
-    "suijin_detect": tool_suijin_detect,
-    "suijin_kg_attacker": tool_suijin_kg_attacker,
     "suijin_status": tool_suijin_status,
 }
 # Backend-tool handlers register lazily alongside _full_tools() so pack

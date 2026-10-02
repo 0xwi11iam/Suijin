@@ -109,6 +109,10 @@ def watch_lines(lines: list[str], enrich=None) -> list[str]:
     from suijin.modules.tools.lib.services import get as _service
 
     score_request = _service("traffic_scorer")
+    if score_request is None:
+        # blue team is discontinued — returns at a later time; unscored
+        # lines still flow through (labeled [dim]) so the watcher works
+        return [ln[:200] for ln in lines]
 
     out = []
     for line in lines:

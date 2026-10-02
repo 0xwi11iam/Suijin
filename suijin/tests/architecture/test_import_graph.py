@@ -6,8 +6,6 @@ a file that exists. Prevents 'deleted a module, broke an import' regressions
 import ast
 from pathlib import Path
 
-import pytest
-
 REPO = Path(__file__).resolve().parents[3]
 PKG = REPO / "suijin"
 EXCLUDE = {"tests", "lab", "__pycache__", "kb_cache", "ui"}
@@ -85,37 +83,3 @@ def test_entry_points_importable():
         "suijin.modules.addons.entry",
     ):
         importlib.import_module(mod)
-
-
-def test_blue_tree_only_contains_live_modules():
-    """The packages pruned in v2.11.2 stay pruned."""
-    gone = [
-        "counter_intel",
-        "endpoints",
-        "forensics",
-        "hotfix",
-        "intel",
-        "response",
-        "orchestrator.py",
-    ]
-    for g in gone:
-        assert not (PKG / "core" / "blue" / g).exists(), g
-
-
-@pytest.mark.parametrize(
-    "module",
-    [
-        "suijin.modules.blueteam.lib.blue.traffic.anomaly_detector",
-        "suijin.modules.blueteam.lib.blue.traffic.scorer",
-        "suijin.modules.blueteam.lib.blue.traffic.replay_harness",
-        "suijin.modules.blueteam.lib.blue.defense.firewall",
-        "suijin.modules.blueteam.lib.blue.ai_engine",
-        "suijin.modules.blueteam.lib.blue.knowledge_graph",
-        "suijin.modules.blueteam.lib.blue.subagent_manager",
-        "suijin.modules.agent.lib.prompts.blue_system",
-    ],
-)
-def test_kept_blue_modules_importable(module):
-    import importlib
-
-    importlib.import_module(module)

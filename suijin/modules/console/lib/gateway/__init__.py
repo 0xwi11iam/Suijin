@@ -257,12 +257,6 @@ def create_app(token: str | None = None) -> FastAPI:
             out[t] = kg.get_constraints(t)
         return out
 
-    @app.get("/api/spar")
-    def spar(_: None = Depends(require_token)) -> dict:
-        from suijin.modules.ops.lib.sparring import _score_volley
-
-        return _score_volley()
-
     @app.get("/api/fireteam")
     def fireteam(_: None = Depends(require_token)) -> dict:
         """Live fireteam registry (file mirror written by the agent process)."""

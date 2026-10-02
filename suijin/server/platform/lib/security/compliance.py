@@ -88,7 +88,6 @@ def analyse_log(entries: list) -> dict:
         e for e in entries if "DENIED" in e.get("result", "").upper() or "ACCESS DENIED" in e.get("action", "").upper()
     ]
     red_ops = [e for e in entries if e.get("mode") == "red"]
-    blue_ops = [e for e in entries if e.get("mode") == "blue"]
 
     users = defaultdict(int)
     targets = defaultdict(int)
@@ -109,7 +108,6 @@ def analyse_log(entries: list) -> dict:
         "low_risk_count": len(low_risk),
         "denied_access": len(denied),
         "red_team_ops": len(red_ops),
-        "blue_team_ops": len(blue_ops),
         "unique_users": len(users),
         "unique_targets": len(targets),
         "avg_risk_score": round(avg_risk, 3),
@@ -229,16 +227,6 @@ def _evaluate_controls(stats: dict, framework: str) -> list:
     )
 
     # Incident response
-    controls.append(
-        {
-            "id": "IR-1",
-            "name": "Incident Response",
-            "status": "PASS" if stats["blue_team_ops"] > 0 else "WARN",
-            "detail": f"{stats['blue_team_ops']} blue-team defensive operations logged.",
-            "framework": framework,
-        }
-    )
-
     # Penetration testing (red team)
     controls.append(
         {
@@ -280,13 +268,6 @@ def _recommendations(stats: dict, controls: list) -> list:
         recs.append(f"Review {stats['high_risk_count']} HIGH-risk actions and verify they were authorised.")
     if stats["denied_access"] > 0:
         recs.append(f"{stats['denied_access']} access-denied events detected — investigate for intrusion attempts.")
-    if stats["blue_team_ops"] == 0:
-        recs.append("No blue-team operations recorded — enable active defence monitoring.")
-    if stats["avg_risk_score"] >= RISK_HIGH:
-        recs.append("Average risk score is HIGH — tighten guardrail policies in LobsterTrap.")
-    if not recs:
-        recs.append("No immediate actions required. Continue regular monitoring.")
-    return recs
 
 
 # ── text export ───────────────────────────────────────────────────────────────
@@ -314,7 +295,6 @@ def _write_txt_report(report: dict, path: Path):
         f"  Low-risk           : {s['low_risk_count']}",
         f"  Access denied      : {s['denied_access']}",
         f"  Red-team ops       : {s['red_team_ops']}",
-        f"  Blue-team ops      : {s['blue_team_ops']}",
         f"  Avg risk score     : {s['avg_risk_score']}",
         f"  Unique users       : {s['unique_users']}",
         f"  Unique targets     : {s['unique_targets']}",
@@ -379,7 +359,6 @@ def print_compliance_report(report: dict):
         ("Low-risk", f"[green]{s['low_risk_count']}[/green]"),
         ("Access denied", str(s["denied_access"])),
         ("Red-team ops", str(s["red_team_ops"])),
-        ("Blue-team ops", str(s["blue_team_ops"])),
         ("Avg risk score", str(s["avg_risk_score"])),
     ]
     for k, v in rows:

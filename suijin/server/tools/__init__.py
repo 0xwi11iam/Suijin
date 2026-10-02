@@ -29,7 +29,7 @@ def _booted_pack_ids(ctx) -> set[str]:
         i
         for i in booted
         if "." not in i
-        and i not in {"platform", "tools", "agent", "console", "providers", "redteam", "blueteam", "knowledge", "ops"}
+        and i not in {"platform", "tools", "agent", "console", "providers", "redteam", "knowledge", "ops"}
     }
 
 

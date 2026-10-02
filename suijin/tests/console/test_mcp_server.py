@@ -131,48 +131,6 @@ class TestMCPTools:
         assert data["server"] == "suijin"
         assert data["version"]
 
-    def test_suijin_detect_sqli(self):
-        responses = _call_server(
-            [
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "suijin_detect",
-                        "arguments": {
-                            "request": {
-                                "method": "POST",
-                                "path": "/auth/login",
-                                "body": "admin' OR '1'='1",
-                                "ip": "127.0.0.1",
-                            }
-                        },
-                    },
-                },
-            ]
-        )
-        data = json.loads(responses[0]["result"]["content"][0]["text"])
-        assert data["score"] >= 5
-        assert any("SQL" in p[0] for p in data["patterns"])
-
-    def test_suijin_detect_clean(self):
-        responses = _call_server(
-            [
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/call",
-                    "params": {
-                        "name": "suijin_detect",
-                        "arguments": {"request": {"method": "GET", "path": "/health", "body": "", "ip": "10.0.0.1"}},
-                    },
-                },
-            ]
-        )
-        data = json.loads(responses[0]["result"]["content"][0]["text"])
-        assert data["score"] < 5
-
     def test_execute_terminal(self):
         responses = _call_server(
             [
@@ -201,20 +159,6 @@ class TestMCPTools:
         )
         text = responses[0]["result"]["content"][0]["text"]
         assert "denied" in text.lower()
-
-    def test_kg_attacker_empty(self):
-        responses = _call_server(
-            [
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "tools/call",
-                    "params": {"name": "suijin_kg_attacker", "arguments": {"ip": "1.2.3.4"}},
-                },
-            ]
-        )
-        data = json.loads(responses[0]["result"]["content"][0]["text"])
-        assert data["total_flags"] == 0
 
     def test_unknown_tool_error(self):
         responses = _call_server(
