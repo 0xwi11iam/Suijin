@@ -68,18 +68,20 @@ def _wait_up(port: int, timeout: float = 15.0) -> bool:
 
 def boot_lab(name: str) -> tuple[subprocess.Popen | None, int | None]:
     """lab:NAME -> (proc, port); the app gets a free PORT env."""
-    apps = {
-        "blue_target": REPO / "suijin" / "lab" / "blue_target" / "vulnerable_app.py",
-        "hill_ctf": REPO / "suijin" / "lab" / "hill_ctf" / "app.py",
-    }
-    app = apps.get(name)
-    if app is None or not app.is_file():
-        print(f"unknown lab {name!r} (have: {', '.join(apps)})")
-        return None, None
+    # the drive rig needs any live HTTP target; the old blue/hill labs are
+    # gone (blue team discontinued; the small labs replaced by northbridge
+    # — both too heavy for a TUI pty rig). The inline tool target is
+    # deterministic and dependency-free.
+    # the inline target is a module (boot(port, db)), not a runnable script
     port = _free_port()
-    env = dict(os.environ, PORT=str(port))
+    env = dict(os.environ, PORT=str(port), TOOL_TARGET_PORT=str(port))
+    db = os.path.join(os.environ.get("SUIJIN_DRIVE_DIR", "/tmp"), "target.db")
+    runner = (
+        "import sys; sys.path.insert(0, %r); "
+        "from _tool_target import boot; boot(%d, %r)"
+    ) % (str(REPO / "suijin" / "tests" / "tools"), port, db)
     proc = subprocess.Popen(
-        [sys.executable, str(app)],
+        [sys.executable, "-c", runner],
         env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -300,7 +302,7 @@ def show_screen(lines: int) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--target", default="lab:blue_target", help="lab:blue_target | lab:hill_ctf | http://host:port")
+    ap.add_argument("--target", default="lab:blue_target", help="lab:tool_target | http://host:port")
     ap.add_argument("--provider", choices=["real", "fake"], default="real")
     ap.add_argument("--max-iters", type=int, default=8, help="iteration cap (real-LLM cost guard)")
     ap.add_argument("--objective", default="")
