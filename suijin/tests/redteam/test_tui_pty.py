@@ -110,8 +110,16 @@ def test_pause_chord_commands_and_resume(rig):
     # /pause mid-think: instant PAUSED + banner — the LLM is STILL stuck
     # (ESC ESC was removed 2026-09-23: the chord was a landmine)
     _send(fifo, b"/pause\r")
-    time.sleep(5)  # timeout-poll is 2s; allow a full poll + processing
-    out = _log_text(run_dir)
+    # pause lands BETWEEN turns: the badge flips only when the in-flight
+    # turn ends (the fake provider holds ~6s; a busy CI runner holds
+    # longer). Deadline-wait the badge instead of assuming 5s.
+    deadline = time.time() + 30
+    out = ""
+    while time.time() < deadline:
+        out = _log_text(run_dir)
+        if "PAUSED" in out:
+            break
+        time.sleep(1)
     # ONE pause indication (2026-09-27): the strip's PAUSED badge owns
     # the state; the banner carries only the how-to (no second "Paused").
     assert "PAUSED" in out, "strip did not flip to PAUSED"
