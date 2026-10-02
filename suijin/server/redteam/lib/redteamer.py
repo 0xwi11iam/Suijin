@@ -1693,7 +1693,30 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
         except Exception as e:
             import logging
 
-            logging.getLogger("suijin").warning(f".sje save failed: {e}")
+            logging.getLogger("suijin").warning(f"Bundle save failed: {e}")
+
+        # THE CHEATSHEET DISTILLATION (Dynamic Cheatsheet): one guarded LLM
+        # call over the trace tail — dead batteries and proven techniques
+        # become cross-engagement memory. This is the catch-all for the
+        # "22 failed tokens, moved on" case: the run may never have called
+        # cheatsheet_note itself; the conclusion always distills.
+        with contextlib.suppress(Exception):
+            from suijin.modules.agent.lib import cheatsheet as _cs
+
+            _tail = "\n".join(
+                str(t.get("tool", "")) + " " + str(t.get("result", ""))[:120]
+                for t in (final_state.get("execution_trace") or [])[-60:]
+                if isinstance(t, dict)
+            )
+
+            def _distill_llm(msgs, cfg):
+                from suijin.modules.providers.lib import generate as _gen
+
+                return _gen(msgs, config, max_tokens=800)
+
+            _stored = _cs.distill_from_trace(_tail, _distill_llm)
+            if _stored:
+                console.print(f"[dim]cheatsheet: {_stored} lesson(s) distilled for future engagements[/dim]")
 
         # The engagement folder STAYS at engagements/<name> after the run —
         # the operator works out of it (reports, audit trails, memory) and
