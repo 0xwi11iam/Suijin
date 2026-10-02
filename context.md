@@ -98,6 +98,33 @@
 3. Before ANY commit: full gates (`pytest -m "not ai and not slow"` ~2895, ruff check, ruff format) + never commit the operator strays.
 4. **Engagement confidentiality is a PERMANENT operator ruling — see AGENTS.md.** Never name a target, program, vendor, or tested host in any committed artifact (commit messages, comments, test payloads, docs). Refer to engagements generically; tests use example.com. One commit (f547d32) predates this rule and still names a target — scrub on the next commit that touches it, history rewrite only on explicit request.
 
+## Suijin Lab — the sophistication pass (2026-10-02, round 2)
+
+The lab grew teeth in four directions (no scoring mechanics — the lab is
+just a better target):
+
+- CHAIN GATING (`lab/northbridge/chainstate.py`): prerequisites are now
+  ENFORCED. The notify SSTI only renders for callers presenting a valid
+  K4 delivery signature AND having walked a key leak; scheduler RCE
+  needs the signature the notify outbox carries; the vault's k2 secret
+  sits behind a half-open policy that serves only after the timing
+  oracle is genuinely probed; the billing double-refund requires the
+  partner coupon leaked via analytics' internal-source diagnostics.
+  Spam does not fire these — reconnaissance does.
+- ADAPTIVE DEFENSE (`lab/northbridge/defense.py`): per-service circuit
+  breakers trip on probe spam (lockdown: everything 429s with honest
+  Retry-After) and the gateway's canary family learns — repeated canary
+  hits close a 404-everything tarpit on the client. Pacing and rotation
+  are now tested skills.
+- NEW DEEP MECHANICS, all real math/no string-matching: RS256 tokens
+  with a published certificate and the classic HS256-signed-with-the-
+  public-PEM confusion (l7 — textbook RSA in keys.py); a real pickle
+  deserialization sink on the 2019 session cookie (legacy-api whoami);
+  a GraphQL-shaped beta surface (introspection, a cross-tenant resolver
+  gap, a working depth-bomb defense); and edge cache poisoning — the
+  page cache keys on path while the body reflects X-Forwarded-Host, so
+  one hostile header poisons the variant everyone receives.
+
 ## Suijin Lab — Northbridge (2026-10-02)
 
 ONE lab replaced the twelve small ones (citadel, hill_ctf, aegis_vault,

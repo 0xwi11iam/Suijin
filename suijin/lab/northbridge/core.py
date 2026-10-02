@@ -54,6 +54,13 @@ def _db() -> sqlite3.Connection:
 
 
 def _verify_jwt(token: str):
+    """The verifier's bug museum, by kid:
+    - primary:    HS256 with K (the Tier-3 reused key)
+    - legacy:     HS256 with sha256(tenant) for ONE tenant (l6)
+    - rsa-2026:   SHOULD be RS256 — but accepts HS256 signed with the
+                  PUBLIC PEM (l7, the classic confusion). The RS256 path
+                  verifies properly; the HS256 fallback is the hole.
+    """
     import base64
 
     parts = token.split(".")
@@ -65,17 +72,34 @@ def _verify_jwt(token: str):
     except Exception:  # noqa: BLE001 — malformed tokens are just invalid
         return None
     kid = str(header.get("kid", "primary"))
+    alg = str(header.get("alg", "HS256"))
     tenant = str(payload.get("tenant", ""))
+    ok = False
     if kid == "legacy":
-        key = hashlib.sha256(tenant.encode()).hexdigest() if tenant == DEMO_TENANT else None
+        if tenant == DEMO_TENANT:
+            want = hmac.new(hashlib.sha256(tenant.encode()).hexdigest().encode(),
+                            (parts[0] + "." + parts[1]).encode(), hashlib.sha256).hexdigest()
+            ok = hmac.compare_digest(want, parts[2])
+    elif kid == "rsa-2026":
+        if alg == "RS256":
+            from suijin.lab.northbridge.keys import rs256_verify
+
+            ok = rs256_verify((parts[0] + "." + parts[1]).encode(), parts[2])
+        else:
+            # THE CONFUSION (l7): the verifier falls back to HMAC and
+            # keys it with... the public certificate
+            from suijin.lab.northbridge.keys import PUBLIC_PEM
+
+            want = hmac.new(PUBLIC_PEM.encode(), (parts[0] + "." + parts[1]).encode(),
+                            hashlib.sha256).hexdigest()
+            ok = hmac.compare_digest(want, parts[2])
+            if ok:
+                emit("l7_alg_confusion", payload.get("sub", "?"))
+                payload["_confused_alg"] = True
     else:
-        key = K
-    if key is None:
-        return None
-    want = hmac.new(key.encode(), (parts[0] + "." + parts[1]).encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(want, parts[2]):
-        return None
-    if int(payload.get("exp", 0)) < time.time():
+        want = hmac.new(K.encode(), (parts[0] + "." + parts[1]).encode(), hashlib.sha256).hexdigest()
+        ok = hmac.compare_digest(want, parts[2])
+    if not ok or int(payload.get("exp", 0)) < time.time():
         return None
     if kid == "legacy":
         payload["_forged_legacy"] = True  # served by /v1/me as the l6 proof
@@ -103,6 +127,65 @@ async def cors_ping(request: Request, call_next):
     if request.url.path == "/v1/ping":  # m4: the trap
         resp.headers["Access-Control-Allow-Origin"] = "*"
     return resp
+
+
+# ── the GraphQL-ish surface (v2 beta) ────────────────────────────────────
+
+
+@app.post("/v1/graphql")
+async def graphql(request: Request):
+    """A minimal GraphQL-shaped API — the beta surface real products ship.
+    Mechanics planted here:
+    - introspection: __schema dumps the graph (recon, no flag)
+    - cross-tenant read: tenant(id:) resolves ANY tenant's projects —
+      the authz gap GraphQL resolvers famously carry
+    - depth bomb: nesting past 5 levels 400s (a defense that works)
+    """
+    d = await request.json()
+    q = str(d.get("query", ""))
+    if len(q) > 4000:
+        return JSONResponse({"errors": ["query too large"]}, status_code=400)
+    depth, cur = 0, 0
+    for ch in q:
+        if ch == "{":
+            cur += 1
+            depth = max(depth, cur)
+        elif ch == "}":
+            cur = max(0, cur - 1)
+    if q.count("(") > 6 or depth > 5:
+        return JSONResponse({"errors": ["query complexity exceeded"]}, status_code=400)
+    if "__schema" in q or "__type" in q:
+        return {
+            "data": {
+                "__schema": {
+                    "types": [
+                        {"name": "Query", "fields": ["me", "tenant(id: ID!)", "project(id: ID!)", "invoice(id: ID!)"]},
+                        {"name": "Tenant", "fields": ["id", "name", "projects", "balance"]},
+                        {"name": "Project", "fields": ["id", "name", "owner"]},
+                    ]
+                }
+            }
+        }
+    conn = _db()
+    import re as _re
+
+    m = _re.search("tenant\\s*\\(\\s*id:\\s*\\\"?([A-Za-z0-9-]+)\\\"?", q)
+    if m:
+        tid = m.group(1)
+        row = conn.execute("SELECT id, name, balance FROM tenants WHERE id=?", (tid,)).fetchone()
+        if row is None:
+            return {"data": {"tenant": None}}
+        emit("x_graphql_tenant", tid)
+        out = {"data": {"tenant": {"id": row["id"], "name": row["name"], "balance": row["balance"]}}}
+        # the authz gap: ANY authenticated caller reads ANY tenant — flag
+        # on reading a tenant that is not your own
+        if request.state.claims.get("tenant") != tid:
+            out["data"]["tenant"]["flag"] = "FLAG{nb_graphql_cross_tenant}"
+        return out
+    m = _re.search("project\\s*\\(\\s*id:\\s*\\\"?([A-Za-z0-9-]+)\\\"?", q)
+    if m:
+        return {"data": {"project": {"id": m.group(1), "name": "legacy-import", "owner": "northbridge"}}}
+    return {"data": {"me": {"sub": request.state.claims.get("sub"), "role": request.state.claims.get("role")}}}
 
 
 # ── public surface ──────────────────────────────────────────────────────
@@ -166,6 +249,9 @@ def me(request: Request):
     out = {"sub": c["sub"], "tenant": c["tenant"], "role": c["role"]}
     if request.headers.get("X-Auth-Kid") == "legacy" or c.get("_forged_legacy"):
         out["flag"] = "FLAG{nb_tier_weak_kid_jwt}"
+    if c.get("_confused_alg"):
+        out["flag"] = "FLAG{nb_alg_confusion}"  # a forged RS256-account token walked in
+        out["forged_via"] = "alg-confusion (HS256 keyed with the public PEM)"
     return out
 
 

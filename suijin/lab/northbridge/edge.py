@@ -27,6 +27,7 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from suijin.lab.northbridge import PORT_ADMIN, PORT_AUTH, PORT_CORE, PORT_EDGE, PORT_OBJECTS, emit
+from suijin.lab.northbridge import defense
 
 ROUTES = {
     "/auth": ("127.0.0.1", PORT_AUTH),
@@ -56,6 +57,18 @@ PROBE_404S = re.compile(r"/(etc/passwd|c:/windows|boot\.ini|web\.config)$")
 
 #: honest content: the decoy admin (citadel inheritance)
 DECOY_PAGE = json.dumps({"admin": True, "token": "FLAG{northbridge_decoy_admin_bypass}", "note": "access granted"})
+
+#: the page cache — keyed on PATH ONLY (the poisoning bug): the rendered
+#: body reflects X-Forwarded-Host, so one request with a hostile header
+#: poisons the variant EVERYONE else receives
+_PAGE_CACHE: dict[str, bytes] = {}
+
+
+def _marketing(host: str) -> bytes:
+    return MARKETING.replace(
+        "<title>Northbridge — tenant analytics</title>",
+        f'<title>Northbridge — tenant analytics</title>\n<link rel="canonical" href="https://{host}/">',
+    ).encode()
 
 
 def _rate_ok(key: str) -> bool:
@@ -89,6 +102,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _guard(self) -> bool:
         """Defense stack. Returns False when the request was answered."""
+        if defense.tar_pitted(self.client_address[0]):
+            self._send(404, b'{"error":"not found"}')
+            return False
         ua = self.headers.get("User-Agent", "")
         if SCANNER_UA.search(ua):
             emit("canary_scanner_ua", ua[:80])
@@ -96,6 +112,7 @@ class Handler(BaseHTTPRequestHandler):
             return False
         if self.path in CANARY_PATHS:
             emit("canary_scanner_path", self.path)
+            defense.record_canary(self.client_address[0])
             self._send(404, b'{"error":"not found"}')
             return False
         if PROBE_404S.search(self.path):
@@ -140,7 +157,18 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/health":
             return self._send(200, b'{"ok":true,"service":"edge"}')
         if self.path == "/" or self.path.startswith("/index"):
-            return self._send(200, MARKETING.encode(), "text/html")
+            # CACHE POISONING: the cache key is the path; the body embeds
+            # X-Forwarded-Host. First request with a hostile header wins
+            # the slot; the NEXT innocent client receives it.
+            xfwd = self.headers.get("X-Forwarded-Host", "northbridge.test")
+            cached = _PAGE_CACHE.get(self.path)
+            if cached is None:  # cache miss: the FIRST header to ask wins
+                cached = _marketing(xfwd)
+                _PAGE_CACHE[self.path] = cached
+            if xfwd == "northbridge.test" and b"evil.example" in cached:
+                # an innocent client just received the poisoned variant
+                emit("e_cache_poison_served", self.path)
+            return self._send(200, cached, "text/html")
         if self.path == "/admin":  # the DECOY (validates false, grades zero)
             emit("decoy_admin_hit", "")
             return self._send(200, DECOY_PAGE.encode())

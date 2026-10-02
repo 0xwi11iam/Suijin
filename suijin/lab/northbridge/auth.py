@@ -26,6 +26,7 @@ from functools import wraps
 from flask import Flask, jsonify, request
 
 from suijin.lab.northbridge import K, DEMO_PASS, DEMO_TENANT, DEMO_USER, PORT_AUTH, ROOT, emit, internal_token
+from suijin.lab.northbridge.keys import PUBLIC_PEM
 
 app = Flask(__name__)
 DB = os.path.join(ROOT, "auth.db")
@@ -119,8 +120,11 @@ def login():
     row = _db().execute("SELECT * FROM users WHERE email=?", (email,)).fetchone()
     if row is None or not hmac.compare_digest(row["pw"], _pw(pw)):
         return jsonify(error="invalid credentials"), 401
+    from suijin.lab.northbridge import keys as _keys
+
     return jsonify(
-        token=_jwt(row["email"], row["tenant"], row["role"]),
+        # staff accounts get REAL RS256 tokens (the modern path)
+        token=_keys.issue_rs256(row["email"], row["tenant"], row["role"]),
         mfa_required=bool(row["mfa_secret"]),
         tenant=row["tenant"],
         kid_hint="jwks at /auth/jwks" if row["tenant"] == DEMO_TENANT else None,
@@ -153,6 +157,13 @@ def mfa_verify():
     if not ok:
         return jsonify(error="mfa validation failed"), 401
     return jsonify(token=_jwt(row["email"], row["tenant"], row["role"]))
+
+
+@app.get("/certs")
+def certs():
+    """The IdP's public key, exactly as a real one publishes it. That it
+    exists is CORRECT — the bug is downstream (core's confused verifier)."""
+    return jsonify(keys=PUBLIC_PEM, alg="RS256", kid="rsa-2026")
 
 
 @app.get("/jwks")
