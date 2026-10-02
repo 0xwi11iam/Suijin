@@ -36,7 +36,16 @@ def _cred_of(req: dict) -> str:
     for key in ("x-session", "authorization", "cookie", "x-auth-token", "x-api-key"):
         v = headers.get(key)
         if v:
-            return f"{key}:{str(v)[:24]}"  # stable short label
+            import hashlib as _hl
+
+            sv = str(v)
+            # opaque short tokens stay readable (operators and tests match
+            # them); LONG values (JWTs) hash — a 24-char prefix collided
+            # for same-alg tokens (identical base64 headers) and fused two
+            # credentials into one, blinding the cross-credential worklist
+            if len(sv) <= 32:
+                return f"{key}:{sv}"
+            return f"{key}:{_hl.sha256(sv.encode()).hexdigest()[:12]}"
     return "anon"
 
 

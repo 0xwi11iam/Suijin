@@ -98,6 +98,41 @@
 3. Before ANY commit: full gates (`pytest -m "not ai and not slow"` ~2895, ruff check, ruff format) + never commit the operator strays.
 4. **Engagement confidentiality is a PERMANENT operator ruling — see AGENTS.md.** Never name a target, program, vendor, or tested host in any committed artifact (commit messages, comments, test payloads, docs). Refer to engagements generically; tests use example.com. One commit (f547d32) predates this rule and still names a target — scrub on the next commit that touches it, history rewrite only on explicit request.
 
+## Suijin Lab — Northbridge (2026-10-02)
+
+ONE lab replaced the twelve small ones (citadel, hill_ctf, aegis_vault,
+oauth, wordpress, log4shell, devops_dashboard + stubs; blue_target kept
+for the blue side). Northbridge is a fictional B2B SaaS built as TWENTY-ONE
+real services — separate processes, ports, SQLite DBs, trust zones:
+
+- backbone (hand-written, the three crown chains): edge gateway (rate
+  limits, WAF-cloak, canaries, the internal wall), auth (JWT kids,
+  minute-window resets), core-api (tenants/invoices/webhooks/exports),
+  objects (buckets, presign, publish-preview), worker (queue, the SSTI
+  sink), internal admin (the impersonate/payout/jobs surface)
+- fifteen catalog-generated services (billing, support, wiki, analytics,
+  notify, mobile-bff, status, integrations, featureflags, legacy-api,
+  repo, artifacts, vault, scheduler, decoy-admin) — ~170 endpoints,
+  ~26 vuln pattern classes, 40+ planted flags
+- the vulnerability ladder: misconfigs → logic bugs → TOCTOU races →
+  ONE key reused across four trust zones (K..K4, each leaked 2-3 ways)
+  → chained SSRF/RCE/race crowns reachable ONLY through prerequisites
+- volume content: 60 users, 240 articles, 300 tickets, 24 JS bundles
+  (3 bury secrets) — enumeration alone is hours of honest work
+- defenses ON: rate limits, validation, scanner-cloak 404s, canary
+  telemetry, chain-edge events (the bench's coverage score), decoy
+  flags that validate false
+
+`suijin lab up|down|reset|status|telemetry`; `suijin bench --lab
+northbridge` grades flags + chain-edge coverage (mock baseline: 2 tier-0
+flags, 1 edge, decoy refused — the crowns are out of mock reach by
+design). Tool suites (http_replay, inject_probe, web_session, wave4,
+blue arsenal) now run against an inline deterministic target
+(tests/tools/_tool_target.py) instead of any lab. Two real tool bugs the
+migration exposed and fixed: compare-mode baselines ignored `credential=`
+(send unauthenticated), and credential labels collided for same-alg
+JWTs (24-char prefix) blinding the cross-credential worklist.
+
 ## Session mesh v2 — remote nodes over SSH (2026-10-02)
 
 v1 (filesystem, same machine) extended: each node hosts a LOOPBACK-ONLY
