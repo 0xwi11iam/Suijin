@@ -36,13 +36,8 @@ class PlatformModule(Module):
         ctx.register_service("workspace", lambda: Path(ctx.workspace))
         ctx.register_service("llm", lambda: __import__("suijin.modules.providers.lib", fromlist=["generate"]).generate)
 
-        # traffic services (blue scorer etc.) — the Phase 0 seam, reborn
-        def _scorer():
-            from suijin.modules.blueteam.lib.blue.traffic.scorer import score_request
-
-            return score_request
-
-        ctx.register_service("traffic_scorer", _scorer)
+        # (blue traffic scorer service lived here; blue team is
+        # discontinued — returns at a later time)
 
     def start(self, ctx) -> None:
         """One-time process init: module packs, workspace layout, dirs."""

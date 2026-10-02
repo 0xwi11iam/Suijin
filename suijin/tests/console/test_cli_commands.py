@@ -117,15 +117,10 @@ class TestConfigCommands:
 
     def test_validate_ok(self, monkeypatch, tmp_path):
         (tmp_path / "config.json").write_text(json.dumps({"provider": "zai", "zai_endpoint": "coding"}))
-        (tmp_path / "blue_config.json").write_text("{}")
         monkeypatch.setattr(cli, "_PKG_DIR", str(tmp_path))
-        from suijin.modules.blueteam.lib.blue import config as _blue_cfg
-
-        monkeypatch.setattr(_blue_cfg, "CONFIG_PATH", tmp_path / "blue_config.json")  # v4.1: workspace home
         code, out = run_cli(["config", "validate"])
         assert code == 0
         assert "[ok] config.json: valid" in out
-        assert "[ok] blue_config.json: valid" in out
 
     def test_validate_rejects_bad_zai_endpoint(self, monkeypatch, tmp_path):
         (tmp_path / "config.json").write_text(json.dumps({"zai_endpoint": "free-tier"}))

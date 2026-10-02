@@ -27,7 +27,7 @@ def client(tmp_path, monkeypatch):
 class TestAuth:
     def test_no_token_401(self, client):
         c, _ = client
-        for path in ("/api/status", "/api/tools", "/api/usage", "/api/findings", "/api/spar", "/api/approvals"):
+        for path in ("/api/status", "/api/tools", "/api/usage", "/api/findings", "/api/approvals"):
             assert c.get(path).status_code == 401, path
 
     def test_wrong_token_401(self, client):
@@ -54,14 +54,12 @@ class TestReadOnlyRoutes:
         sample = tools[0]
         assert set(sample) >= {"name", "owner", "description", "params"}
 
-    def test_usage_and_findings_and_spar(self, client):
+    def test_usage_and_findings(self, client):
         c, h = client
         u = c.get("/api/usage", headers=h).json()
         assert "calls" in u and "est_cost_usd" in u
         f = c.get("/api/findings", headers=h).json()
         assert isinstance(f, dict)
-        s = c.get("/api/spar", headers=h).json()
-        assert "recall" in s
 
 
 class TestHitlRoundTrip:
@@ -120,7 +118,6 @@ class TestOpenAPI:
             "/api/tools",
             "/api/usage",
             "/api/findings",
-            "/api/spar",
             "/api/approvals",
             "/api/questions",
             "/api/engage",

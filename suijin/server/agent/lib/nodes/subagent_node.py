@@ -292,16 +292,8 @@ def _tool_reference_text(route_tool_fn=None, task: str = "") -> str:
     probe does not need msf_*/blue_*/report tools — 22k chars of tool list
     per subagent step was the single biggest fireteam cost). When the
     spawn came from a BLUE graph (route_tool_fn is the blue router), the
-    prompt must advertise the BLUE arsenal — a red registry with a blue
-    router is the prompt/router mismatch the BF2 audit flagged."""
-    try:
-        mod = getattr(route_tool_fn, "__module__", "")
-        if "blueteam" in mod:
-            from suijin.modules.blueteam.lib.blue.tools import render_blue_tools
-
-            return render_blue_tools()
-    except Exception:  # noqa: BLE001 — never block a spawn on rendering
-        pass
+    prompt must advertise the real arsenal. (The BF2 blue branch lived
+    here; blue team is discontinued — returns at a later time.)"""
     full = ""
     try:
         from suijin.kernel.controller import last_context

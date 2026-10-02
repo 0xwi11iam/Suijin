@@ -44,69 +44,6 @@ class TestOutputOffload:
         assert len(preview) < 1_700  # the middle is dropped, digest bounded
 
 
-class TestFirewall:
-    def test_validate_ip_accepts_valid(self):
-        from suijin.modules.blueteam.lib.blue.defense import firewall as fw
-
-        assert fw._validate_ip(" 10.0.0.7 ") == "10.0.0.7"
-        assert fw._validate_ip("::1") == "::1"
-
-    def test_validate_ip_rejects_garbage(self):
-        from suijin.modules.blueteam.lib.blue.defense import firewall as fw
-
-        with pytest.raises(ValueError, match="Invalid IP"):
-            fw._validate_ip("not-an-ip; rm -rf")
-
-    def test_block_ip_invalid_returns_error(self, monkeypatch):
-        from suijin.modules.blueteam.lib.blue.defense import firewall as fw
-
-        calls = []
-        monkeypatch.setattr(fw.subprocess, "run", lambda *a, **k: calls.append(a) or None)
-        out = fw.block_ip("999.999.999.999")
-        assert out.startswith("Invalid IP")
-        assert calls == []  # validation happens BEFORE any subprocess call
-
-    def test_block_ip_success_and_failure(self, monkeypatch):
-        from suijin.modules.blueteam.lib.blue.defense import firewall as fw
-
-        calls = []
-
-        def fake_run(cmd, **kw):
-            calls.append(cmd)
-            if "10.0.0.9" in cmd:
-
-                class R:
-                    returncode = 0
-
-                return R()
-            raise OSError("no iptables")
-
-        monkeypatch.setattr(fw.subprocess, "run", fake_run)
-        assert fw.block_ip("10.0.0.9") == "Blocked 10.0.0.9"
-        assert "DROP" in calls[0] and "10.0.0.9" in calls[0]
-        out = fw.block_ip("10.0.0.8")  # OSError path
-        assert out.startswith("Failed to block")
-
-    def test_unblock_uses_delete_rule(self, monkeypatch):
-        from suijin.modules.blueteam.lib.blue.defense import firewall as fw
-
-        calls = []
-        monkeypatch.setattr(fw.subprocess, "run", lambda cmd, **kw: calls.append(cmd))
-        fw.unblock_ip("172.16.0.4")
-        # ["sudo", "iptables", "-D", "INPUT", ...] — index 2 is the rule op
-        assert calls[0][2] == "-D" and "172.16.0.4" in calls[0]
-
-    def test_list_blocks_filters_drop_lines(self, monkeypatch):
-        from suijin.modules.blueteam.lib.blue.defense import firewall as fw
-
-        class R:
-            stdout = "Chain INPUT\nDROP       all -- 10.0.0.1\nACCEPT     all -- 0.0.0.0\nDROP       all -- 10.0.0.2\n"
-
-        monkeypatch.setattr(fw.subprocess, "run", lambda *a, **k: R())
-        lines = fw.list_blocks()
-        assert len(lines) == 2 and all("DROP" in ln for ln in lines)
-
-
 class TestTailFile:
     def test_yields_appended_lines(self, tmp_path):
         from suijin.modules.ops.lib.housekeeping import tail_file

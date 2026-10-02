@@ -208,3 +208,15 @@ twice.
 The laya/System One plan (decision models for supervisor/oracle/coach —
 10ms classifications replacing generation-priced judgment calls) is
 NOTED for later; not built.
+
+## Blue team discontinued (2026-10-02)
+
+The entire blue-side — `server/blueteam`, `modules/blueteam`, the
+blue_target lab, the treeaudit module, sparring + battle modes, the
+`spar`/`eval`/`watch` CLI verbs, the blue MCP tools, blue traffic
+scoring services, and the IR-1 compliance control — is REMOVED.
+Blue teaming is DISCONTINUED and will RETURN AT A LATER TIME, rebuilt
+on what the red side has learned since (drive controller, cheatsheet,
+mesh). When it returns it should return as a peer of the red path, not
+a parallel universe: same provider layer, same engagement workspace
+conventions, same test discipline.
