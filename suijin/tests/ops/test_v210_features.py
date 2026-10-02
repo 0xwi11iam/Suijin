@@ -388,28 +388,6 @@ class TestCampaign:
         assert result["labs"]["down"]["reachable"] is False
 
 
-class TestWatchLines:
-    def test_scoring_lines(self):
-        from suijin.modules.ops.lib.housekeeping import watch_lines
-
-        lines = [
-            json.dumps({"timestamp": "2026-08-18T10:00:00", "method": "GET", "path": "/"}),
-            json.dumps(
-                {
-                    "timestamp": "2026-08-18T10:00:01",
-                    "method": "POST",
-                    "path": "/login",
-                    "body": "{\"u\":\"admin' OR '1'='1\"}",
-                }
-            ),
-            "not-json",
-        ]
-        out = watch_lines(lines)
-        assert len(out) == 2
-        assert "INVESTIGATED" in out[1] or "ANOMALOUS" in out[1]
-        assert "normal" in out[0]
-
-
 class TestTimeline:
     def test_merges_artifacts(self, tmp_path):
         from suijin.modules.ops.lib.housekeeping import build_timeline

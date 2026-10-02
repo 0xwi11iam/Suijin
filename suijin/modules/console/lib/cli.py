@@ -629,22 +629,19 @@ def run_config_show() -> int:
 
 
 def run_config_validate() -> int:
-    """Pydantic-validate config.json and blue_config.json. Exit 1 on failure."""
+    """Pydantic-validate config.json. Exit 1 on failure."""
     import json
 
-    from suijin.modules.platform.lib.config_models import BlueConfig, RedConfig
+    from suijin.modules.platform.lib.config_models import RedConfig
 
     ok = True
-    checks = (
-        ("config.json", RedConfig),
-        ("blue_config.json", BlueConfig),
-    )
+    checks = (("config.json", RedConfig),)
     # config.json = package-level operator config (API keys; the compose
-    # mount point). blue_config.json = workspace operator tuning (v4.1).
-    from suijin.modules.blueteam.lib.blue import config as _blue_cfg
+    # mount point). (blue_config.json validated here once; blue team is
+    # discontinued — returns at a later time.)
 
     for fname, model in checks:
-        path = str(_blue_cfg._config_path()) if fname == "blue_config.json" else os.path.join(_PKG_DIR, fname)
+        path = os.path.join(_PKG_DIR, fname)
         if not os.path.exists(path):
             print(f"[--] {fname}: not present (defaults apply)")
             continue
@@ -833,42 +830,6 @@ def run_replay(args) -> int:
         return 0
 
     rp.run_replay(trail)
-    return 0
-
-
-def run_eval(args) -> int:
-    """`suijin eval` — replay recorded traffic through the blue detector."""
-    from suijin.modules.blueteam.lib.blue.traffic.replay_harness import (
-        label_entries,
-        render_eval,
-        replay_scores,
-    )
-    from suijin.modules.platform.lib.constants import BLUE_TRAFFIC_LOG
-
-    log = Path(getattr(args, "traffic", None) or BLUE_TRAFFIC_LOG)
-    if not log.exists():
-        print(f"no traffic log at {log} — run the blue lab or point --traffic at a .jsonl file")
-        return 1
-    entries = []
-    for line in log.read_text(errors="ignore").splitlines():
-        try:
-            entries.append(json.loads(line))
-        except ValueError:
-            continue
-    if len(entries) < 5:
-        print(f"only {len(entries)} entries in {log} — need at least 5 (baseline + eval)")
-        return 1
-    labels_path = Path(args.labels) if getattr(args, "labels", None) else None
-    labels = label_entries(entries, labels_path)
-    scores = replay_scores(entries)
-    print(
-        render_eval(
-            labels,
-            scores,
-            default_threshold=int(getattr(args, "threshold", 5)),
-            do_sweep=not getattr(args, "no_sweep", False),
-        )
-    )
     return 0
 
 
@@ -1507,27 +1468,6 @@ def run_skills(args) -> int:
     return 1
 
 
-def _enrich_traffic(entries: list) -> list:
-    """Score raw lab log entries with the blue team's real anomaly detector
-    (moved from the retired web UI; the watch verb tiers on it)."""
-    try:
-        from suijin.modules.blueteam.lib.blue.traffic.anomaly_detector import detect_anomalies
-
-        for e in entries:
-            try:
-                signals = detect_anomalies(e, {"methods": {e.get("method", "GET"): 1}})
-                e["ui_score"] = sum(sig[1] for sig in signals)
-                e["ui_signals"] = [sig[0] for sig in signals]
-            except Exception:
-                e.setdefault("ui_score", 0)
-                e.setdefault("ui_signals", [])
-    except Exception:
-        for e in entries:
-            e.setdefault("ui_score", 0)
-            e.setdefault("ui_signals", [])
-    return entries
-
-
 def run_gateway_cmd(args) -> int:
     """`suijin gateway` — serve the desktop API. Prints the session token ONCE."""
     from suijin.modules.console.lib.gateway import serve
@@ -1891,43 +1831,6 @@ def run_profile_cmd(args) -> int:
     return 0
 
 
-def run_spar_cmd(args) -> int:
-    """`suijin spar` — detector practice volley, scored against a baseline."""
-    from suijin.modules.ops.lib.sparring import render_spar, run_spar
-
-    result, line = run_spar(
-        name=getattr(args, "name", "default") or "default",
-        save_baseline=bool(getattr(args, "save_baseline", False)),
-        fail_on_regression=bool(getattr(args, "fail_on_regression", False)),
-        threshold=int(getattr(args, "threshold", 5) or 5),
-    )
-    print(render_spar(result, line))
-    return 1 if result.get("fail") else 0
-
-
-def run_watch(args) -> int:
-    import signal
-
-    from suijin.modules.ops.lib.housekeeping import tail_file, watch_lines
-    from suijin.modules.platform.lib.constants import BLUE_TRAFFIC_LOG
-
-    path = Path(getattr(args, "traffic", None) or BLUE_TRAFFIC_LOG)
-    if not path.exists():
-        print(f"No traffic log at {path} — run the blue lab or pass --traffic <file>")
-        return 1
-    print(f"watching {path} (Ctrl+C to stop)")
-    signal.signal(signal.SIGINT, signal.default_int_handler)
-    try:
-        # _enrich_traffic is list-based; watch_lines wants a per-entry fn
-        per_entry = lambda e: _enrich_traffic([e])[0]  # noqa: E731
-        for line in tail_file(path):
-            for out in watch_lines([line], enrich=per_entry):
-                print(out)
-    except KeyboardInterrupt:
-        print("\nstopped")
-    return 0
-
-
 def run_lab(mode: str) -> int:
     """Suijin Lab — the one target. up/down/reset/status/telemetry."""
     import json as _json
@@ -2076,12 +1979,9 @@ _KNOWN_VERBS = frozenset(
         "plan",
         "recipes",
         "profile",
-        "spar",
-        "watch",
         "skills",
         "export",
         "replay",
-        "eval",
         "bench",
         "pack",
         "install",
@@ -2302,17 +2202,6 @@ def main(argv=None):
     profile = sub.add_parser("profile", help="prompt budget profile of the latest session (token breakdown + growth)")
     profile.set_defaults(func=run_profile_cmd)
 
-    spar = sub.add_parser("spar", help="sparring mode: detector practice volley vs stored baseline")
-    spar.add_argument("--name", default="default", help="baseline name (default 'default')")
-    spar.add_argument("--save-baseline", action="store_true", help="store this run as the new baseline")
-    spar.add_argument("--fail-on-regression", action="store_true", help="exit 1 if F1 drops below baseline")
-    spar.add_argument("--threshold", type=int, default=5, help="detector threshold (default 5)")
-    spar.set_defaults(func=run_spar_cmd)
-
-    watch = sub.add_parser("watch", help="live-score a traffic log as it grows (Ctrl+C to stop)")
-    watch.add_argument("--traffic", help="traffic .jsonl (default: the live blue log)")
-    watch.set_defaults(func=run_watch)
-
     # skills: list (default) + history/diff/rollback
     skills = sub.add_parser("skills", help="agent-editable skills: list/history/diff/rollback")
     skills_sub = skills.add_subparsers(dest="skills_action")
@@ -2348,13 +2237,6 @@ def main(argv=None):
     replay.add_argument("--file", help="audit trail file (interactive picker when omitted)")
     replay.add_argument("--export-md", metavar="OUT", help="write the full transcript to a markdown file")
     replay.set_defaults(func=run_replay)
-
-    ev = sub.add_parser("eval", help="replay recorded traffic through the blue detector (offline)")
-    ev.add_argument("--traffic", help="traffic .jsonl (default: the live blue log)")
-    ev.add_argument("--labels", help='labels.jsonl with {"label":..., "any":[...]} rules')
-    ev.add_argument("--threshold", type=int, default=5, help="score threshold to evaluate (default 5)")
-    ev.add_argument("--no-sweep", action="store_true", help="skip the threshold sweep")
-    ev.set_defaults(func=run_eval)
 
     # bench: graded lab benchmark (flags/tools/cost) with persisted history
     bench_p = sub.add_parser("bench", help="graded lab benchmark: agent vs lab, flags/tools/cost score")

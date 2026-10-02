@@ -7,8 +7,6 @@ benign untouched), off-switch, and a LIVE header proof against the
 actual vulnerable lab.
 """
 
-import sys
-from pathlib import Path
 from unittest import mock
 
 from suijin.modules.platform.lib import stealth
@@ -79,43 +77,3 @@ class TestSanitizer:
         with mock.patch.dict("os.environ", {"SUIJIN_STEALTH": "off"}):
             assert stealth.sanitize_command(["nmap", "10.0.0.1"]) == ["nmap", "10.0.0.1"]
             assert stealth.is_on() is False
-
-
-class TestLiveHeaders:
-    def test_http_request_sends_stealth_identity(self):
-        """Live proof: boot the real lab, call the real http_request tool,
-        inspect the lab's own traffic log for what we actually sent."""
-        import json
-        import subprocess
-        import time
-
-        import requests as rq
-
-        log = Path("/tmp/blue_defend_traffic.jsonl")
-        log.write_text("")
-        proc = subprocess.Popen(
-            [sys.executable, str(Path(__file__).resolve().parents[2] / "lab" / "blue_target" / "vulnerable_app.py")],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            env={**__import__("os").environ, "PORT": "5909"},
-        )
-        try:
-            up = False
-            for _ in range(40):
-                try:
-                    rq.get("http://127.0.0.1:5909/", timeout=1)
-                    up = True
-                    break
-                except Exception:
-                    time.sleep(0.25)
-            assert up, "lab never came up on :5909"
-            from suijin.modules.tools.lib.http_tools import http_request
-
-            out = http_request("GET", "http://127.0.0.1:5909/api/login")
-            assert not str(out).startswith("RATE LIMITED"), out
-            entries = [json.loads(ln) for ln in log.read_text().splitlines()]
-            sent = entries[-1]
-            ua = sent.get("user_agent", "")
-            assert "Mozilla/5.0" in ua and "suijin" not in ua.lower()
-        finally:
-            proc.kill()

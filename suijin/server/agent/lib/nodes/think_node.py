@@ -192,15 +192,9 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
 
         _lg.getLogger("suijin").info(f"GUIDANCE DELIVERED: {_live_guidance[:200]}")
 
-    # Build system prompt using the new skill-based builder — with the
-    # BF2 blue seam: state["_blue_mode"] swaps in the blue prompt builder
-    # (doctrine, blue tools, blue skills) and the defensive task order
-    if state.get("_blue_mode"):
-        from suijin.modules.blueteam.lib.blue.agent import blue_system_prompt, defensive_order
-
-        system_prompt = blue_system_prompt(state)
-        user_turn = defensive_order(state.get("original_objective", ""))
-    else:
+    # Build system prompt using the skill-based builder. (The BF2 blue
+    # seam lived here; blue team is discontinued — returns at a later time.)
+    if True:
         from suijin.modules.agent.lib.prompts.base import build_agent_system_prompt, engagement_order
 
         if not state.get("_prompt_user_base"):

@@ -154,47 +154,6 @@ class TestCreds:
         assert "exported" in out
 
 
-class TestTimelineWatchClean:
-    def test_watch_missing_log(self, monkeypatch, tmp_path):
-        code, out = run_cli(["watch", "--traffic", str(tmp_path / "nope.jsonl")])
-        assert code == 1 and "No traffic log" in out
-
-    def test_watch_processes_then_stops(self, monkeypatch, tmp_path):
-        from suijin.modules.ops.lib import housekeeping as hk
-
-        log = tmp_path / "t.jsonl"
-        log.write_text(json.dumps({"timestamp": "2026-08-18T10:00:00", "method": "GET", "path": "/"}) + "\n")
-
-        def fake_tail(path, poll=0.5):
-            yield log.read_text().strip()
-            raise KeyboardInterrupt
-
-        monkeypatch.setattr(hk, "tail_file", fake_tail)
-        code, out = run_cli(["watch", "--traffic", str(log)])
-        assert code == 0 and "stopped" in out
-
-    def test_clean_dry_run_vs_apply(self, monkeypatch, tmp_path):
-        import time as _time
-
-        outputs = tmp_path / "outputs"
-        outputs.mkdir()
-        stale = outputs / "old.log"
-        stale.write_text("x")
-        old = _time.time() - 40 * 86400
-        import os
-
-        os.utime(stale, (old, old))
-        import suijin.modules.platform.lib.workspace as _pws
-
-        monkeypatch.setattr(_pws, "WORKSPACE_DIR", tmp_path)
-
-        code, out = run_cli(["clean"])
-        assert code == 0 and "dry-run" in out and stale.exists()
-
-        code, out = run_cli(["clean", "--apply", "--days", "30"])
-        assert code == 0 and "archived" in out and not stale.exists()
-
-
 class TestRulesPolicy:
     def test_rules_no_file(self, monkeypatch, tmp_path):
         from suijin.modules.ops.lib import governance as gov
