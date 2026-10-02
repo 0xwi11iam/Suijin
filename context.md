@@ -186,3 +186,25 @@ keep-floor for windows ≤8k, `llm_timeout` is configurable (180s default,
 declares thinking (r1/think), and fetch_authorization_page is idempotent
 per target (the second call directs the agent to recon instead).
 
+
+## The Dynamic Cheatsheet — cross-engagement memory (2026-10-02)
+
+The problem (operator analysis, from the research): every memory layer
+was EPISODE-scoped — the run that burned 22 JWT candidates taught
+nothing to the next one. The fix is scaffolding-only persistent memory:
+`agent/lib/cheatsheet.py`, a workspace-level store (capped 40, deduped,
+pruned) of one-line TRANSFERABLE snippets — proven techniques and
+confirmed dead batteries WITH their conditions. Two write paths: the
+`cheatsheet_note` tool (agent, mid-run) and a conclusion-time
+distillation (one guarded LLM call over the trace tail — catches the
+"moved on" case the agent never self-reported). One read path: a
+CHEATSHEET section in every think context (12 freshest, untrusted-
+wrapped — snippets derive from hostile output, and memory poisoning is
+a real attack). Verified LIVE: a snippet stored before a think_node run
+appears inside the system message's untrusted boundary; empty store =
+zero context cost. The killer demo target: the JWT battery never runs
+twice.
+
+The laya/System One plan (decision models for supervisor/oracle/coach —
+10ms classifications replacing generation-priced judgment calls) is
+NOTED for later; not built.
