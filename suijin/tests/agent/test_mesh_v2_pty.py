@@ -56,6 +56,45 @@ time.sleep(2)
 """
 
 
+def _wait_b_is_freshest(b_pid: int, timeout_s: float = 40.0) -> None:
+    """Discovery picks the FRESHEST live registry node. Earlier suites in
+    the same pytest process registered THEMSELVES as mesh nodes; their
+    wire servers are stopped but the beat entries stay fresh for STALE_S
+    — long enough on a slow CI box for this test's discovery to reach a
+    dead-key server instead of B. Wait until B is the freshest live node."""
+    import time as _t
+
+    from suijin.modules.agent.lib import mesh
+
+    deadline = _t.time() + timeout_s
+    while _t.time() < deadline:
+        freshest_pid = None
+        freshest_beat = -1.0
+        try:
+            entries = list(mesh.mesh_dir().glob("*.json"))
+        except OSError:
+            return
+        for f in entries:
+            if f.name.endswith("-state.json") or f.name == "remote-peers.json":
+                continue
+            try:
+                rec = json.loads(f.read_text())
+                fp, beat, fport = int(rec.get("pid") or 0), float(rec.get("beat") or 0), int(rec.get("port") or 0)
+            except (ValueError, OSError):
+                continue
+            if not fp or not fport or _t.time() - beat > mesh.STALE_S:
+                continue
+            try:
+                os.kill(fp, 0)
+            except (ProcessLookupError, PermissionError):
+                continue
+            if beat > freshest_beat:
+                freshest_beat, freshest_pid = beat, fp
+        if freshest_pid in (None, b_pid):
+            return
+        _t.sleep(2.0)
+
+
 @pytest.fixture(scope="module")
 def sshd(tmp_path_factory):
     if shutil.which("sshd") is None:
@@ -131,7 +170,9 @@ def test_connect_key_typed_in_the_input_box(tmp_path, sshd):
         stdout=subprocess.PIPE,
         text=True,
     )
-    assert json.loads(b_proc.stdout.readline())["port"] > 0
+    b_info = json.loads(b_proc.stdout.readline())
+    assert b_info["port"] > 0
+    _wait_b_is_freshest(b_info["pid"])
 
     os.environ["SSH_AUTH_SOCK"] = sshd["sock"]  # the rig key, like a default key
     pid, fd = pty.fork()
