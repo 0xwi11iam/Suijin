@@ -70,6 +70,7 @@ jobs:
             -v --tb=short \
             --cov=suijin --cov-report=term-missing --cov-report=xml \
             -m "not ai" \
+            --timeout=300 --timeout-method=thread \
             -p no:warnings
 
       - name: Capability audit (no-orphan-code gate)
