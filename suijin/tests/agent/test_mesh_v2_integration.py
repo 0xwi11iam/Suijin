@@ -70,7 +70,10 @@ def sshd(tmp_path_factory):
         f"Port {SSHD_PORT}\n"
         "ListenAddress 127.0.0.1\n"
         f"HostKey {tmp / 'host_key'}\n"
-        "UsePAM no\n"
+        # PAM: macOS must disable it (passwordless accounts refuse otherwise);
+        # UBUNTU RUNNERS need it ON — the runner user's password is locked
+        # and a no-PAM sshd refuses pubkey logins for locked accounts.
+        f"UsePAM {'no' if sys.platform == 'darwin' else 'yes'}\n"
         "StrictModes no\n"  # CI tmp dirs are world-writable parents — sshd rejects the key otherwise
         "PasswordAuthentication no\n"
         "PubkeyAuthentication yes\n"

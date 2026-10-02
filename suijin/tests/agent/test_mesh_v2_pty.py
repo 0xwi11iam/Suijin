@@ -68,7 +68,10 @@ def sshd(tmp_path_factory):
     ak.chmod(0o600)
     cfg = tmp / "cfg"
     cfg.write_text(
-        f"Port {SSHD_PORT}\nListenAddress 127.0.0.1\nHostKey {tmp / 'hk'}\nUsePAM no\n"
+        # PAM platform-aware: macOS passwordless accounts need it OFF; Ubuntu
+        # runners' locked-password runner user needs it ON for pubkey logins
+        f"Port {SSHD_PORT}\nListenAddress 127.0.0.1\nHostKey {tmp / 'hk'}\nUsePAM {'no' if sys.platform == 'darwin' else 'yes'}\n"
+        "StrictModes no\n"  # CI tmp dirs are world-writable parents
         f"PasswordAuthentication no\nPubkeyAuthentication yes\nAuthorizedKeysFile {ak}\n"
         f"AllowUsers {os.environ.get('USER', 'williamjiang')}\nPidFile none\n"
     )
