@@ -1928,6 +1928,34 @@ def run_watch(args) -> int:
     return 0
 
 
+def run_lab(mode: str) -> int:
+    """Suijin Lab — the one target. up/down/reset/status/telemetry."""
+    import json as _json
+
+    from suijin.lab.northbridge import supervisor
+
+    if mode == "up":
+        print(_json.dumps(supervisor.up(reset=True)))
+    elif mode == "down":
+        supervisor.down()
+        print("lab down")
+    elif mode == "reset":
+        supervisor.down()
+        print(_json.dumps(supervisor.up(reset=True)))
+    elif mode == "telemetry":
+        for rec in supervisor.telemetry():
+            print(f"  {rec['t']}  {rec['edge']:22} {rec['detail']}")
+    else:
+        st = supervisor.status()
+        print("Suijin Lab — northbridge")
+        for r in st["running"]:
+            print(f"  running: {r}")
+        for d in st["down"]:
+            print(f"  down:    {d}")
+        print(f"  telemetry edges: {st['telemetry_edges']}")
+    return 0
+
+
 def run_mesh_port() -> int:
     """One JSON line: a live mesh node on THIS machine (id + wire port).
 
@@ -2078,6 +2106,7 @@ _KNOWN_VERBS = frozenset(
         "stop",
         "tui",
         "mesh-port",
+        "lab",
     }
 )
 
@@ -2121,6 +2150,10 @@ def main(argv=None):
     for name, (help_text, fn) in SIMPLE_COMMANDS.items():
         p = sub.add_parser(name, help=help_text)
         p.set_defaults(func=lambda _a, _fn=fn: _fn())
+
+    labp = sub.add_parser("lab", help="Suijin Lab (northbridge): up/down/reset/status/telemetry")
+    labp.add_argument("mode", nargs="?", default="status", choices=["up", "down", "reset", "status", "telemetry"])
+    labp.set_defaults(func=lambda a: run_lab(a.mode))
 
     mp = sub.add_parser("mesh-port", help="print this session's mesh wire port (used by remote /connect)")
     mp.set_defaults(func=lambda _a: run_mesh_port())

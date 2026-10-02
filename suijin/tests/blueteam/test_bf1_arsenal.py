@@ -5,8 +5,6 @@ the real Hill lab (block blocks, honeypot serves, canary trips).
 """
 
 import os
-import subprocess
-import sys
 import time
 import urllib.error
 import urllib.request
@@ -22,16 +20,14 @@ def plane(tmp_path_factory):
     """Real Hill lab on :5987 + real proxy on :5988, isolated state files."""
     tmp = tmp_path_factory.mktemp("bf1")
     os.environ["BLUE_ENFORCEMENT_FILE"] = str(tmp / "enf.json")
-    env = {
-        **os.environ,
-        "PORT": "5987",
-        "HILL_NO_INTERNAL": "1",
-        "HILL_EVENTS_LOG": str(tmp / "ev.jsonl"),
-        "HILL_TRAFFIC_LOG": str(tmp / "tr.jsonl"),
-    }
-    lab = subprocess.Popen(
-        [sys.executable, str(LAB / "app.py")], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+    import importlib.util as _iu
+
+    _spec = _iu.spec_from_file_location(
+        "_tool_target", Path(__file__).resolve().parents[1] / "tools" / "_tool_target.py"
     )
+    _tt = _iu.module_from_spec(_spec)
+    _spec.loader.exec_module(_tt)
+    lab, _base = _tt.boot(5987, str(tmp / "tt.db"))
     for _ in range(30):
         try:
             urllib.request.urlopen("http://127.0.0.1:5987/health", timeout=1)
@@ -63,7 +59,7 @@ def _get(port, path, timeout=5):
 class TestEnforcementPlane:
     def test_passthrough_unaffected(self, plane):
         code, body = _get(plane["proxy_port"], "/health")
-        assert code == 200 and "the-hill" in body
+        assert code == 200 and "tool-target" in body
 
     def test_block_arms_and_returns_403(self, plane):
         from suijin.modules.blueteam.lib.blue.tools import route_blue_tool

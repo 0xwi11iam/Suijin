@@ -5,19 +5,14 @@ via codec, sibling sweep)."""
 
 import json
 import os
-import signal
-import subprocess
 import sys
 import time
-from pathlib import Path
 
 import pytest
-import requests
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from suijin.modules.tools.lib.http_replay import (  # noqa: E402
-    _BUDGET,
     _diff,
     apply_codec,
     apply_credential,
@@ -194,45 +189,34 @@ def _free_port() -> int:
     return port
 
 
+import sys as _sys
+from pathlib import Path as _P
+
+_sys.path.insert(0, str(_P(__file__).resolve().parent))
+from _tool_target import boot as _boot_target
+
+
+def _kill_port(port):
+    import subprocess as _sp
+
+    try:
+        pid = _sp.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True, timeout=3).stdout.strip()
+        if pid:
+            _sp.run(["kill", pid], timeout=3)
+    except Exception:
+        pass
+
+
 @pytest.fixture(scope="module")
 def citadel(tmp_path_factory):
     global PUB, BASE
-    port = _free_port()
-    PUB, BASE = port, f"http://127.0.0.1:{port}"
-    state = tmp_path_factory.mktemp("citadel")
-    app_py = str(Path(__file__).resolve().parents[2] / "lab" / "citadel" / "app.py")
-    proc = subprocess.Popen(
-        [sys.executable, app_py],
-        env={
-            **os.environ,
-            "PORT": str(port),
-            "CITADEL_DB": str(state / "citadel.db"),
-            "CITADEL_TRAFFIC": str(state / "traffic.jsonl"),
-            "CITADEL_RATE_LIMIT": "100000",
-            "CITADEL_NO_INTERNAL": "1",
-        },
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    for _ in range(40):
-        try:
-            if requests.get(f"{BASE}/health", timeout=1).status_code == 200:
-                break
-        except Exception:
-            time.sleep(0.25)
-    else:
-        proc.terminate()
-        pytest.fail("citadel did not boot")
-    _BUDGET["remaining"] = 5000
-    # BASE/PUB are rebound above so the test bodies can keep using them;
-    # the app only ever listens on the port this fixture chose.
-    yield proc, BASE
-    # only ever our own child, by handle
-    proc.send_signal(signal.SIGTERM)
-    try:
-        proc.wait(timeout=5)
-    except Exception:
-        proc.kill()
+    PUB = _free_port()
+    BASE = f"http://127.0.0.1:{PUB}"
+    proc, BASE = _boot_target(PUB, str(tmp_path_factory.mktemp("tt") / "tt.db"))
+    yield proc
+    proc.terminate()
+    time.sleep(0.3)
+    _kill_port(PUB)
 
 
 def _login_as(user, pw):
