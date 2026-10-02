@@ -503,6 +503,12 @@ def _ping_remotes() -> None:
 # ── the join: /connect user@host ────────────────────────────────────────
 
 
+def _shlex_quote(s: str) -> str:
+    import shlex as _sh
+
+    return _sh.quote(s)
+
+
 def _ssh_mesh_port(
     spec: str,
     timeout_s: float = 15.0,
@@ -521,8 +527,22 @@ def _ssh_mesh_port(
     # the launcher); the fallback covers non-login setups.
     # remote_workspace (rare: hermetic tests, multi-install machines)
     # points the far-side launcher at the registry we actually wrote.
-    ws_prefix = f"SUIJIN_WORKSPACE={remote_workspace} " if remote_workspace else ""
-    remote_cmd = f"sh -lc '{ws_prefix}suijin mesh-port 2>/dev/null || {ws_prefix}~/.local/bin/suijin mesh-port'"
+    # three fallbacks, each with the workspace prefix, stopping at the
+    # first one that prints JSON: PATH launcher, the installer's
+    # location, and the repo checkout with its python (CI runners have
+    # no launcher installed at all)
+    import sys as _sys
+
+    repo = str(Path(__file__).resolve().parents[3])
+    py = _sys.executable
+    ws = remote_workspace or "$HOME/.suijin/workspace"
+    inner = (
+        f"export SUIJIN_WORKSPACE={ws}; "
+        f"suijin mesh-port 2>/dev/null && exit 0; "
+        f"~/.local/bin/suijin mesh-port 2>/dev/null && exit 0; "
+        f"cd {repo} && {py} -c 'from suijin.modules.console.lib.cli import run_mesh_port; run_mesh_port()'"
+    )
+    remote_cmd = "sh -lc " + _shlex_quote(inner)
     cmd = [
         "ssh",
         "-o",
