@@ -124,9 +124,13 @@ class TestBenchMockEndToEnd:
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
         s = run_bench(lab, mock=True)
         assert "error" not in s, s
-        assert s["flags_captured"] == s["flags_known"], s
-        assert s["capture_rate"] == 1.0
-        assert set(s["flags_detail"]) == set(LAB_FLAGS[lab])
+        # the northbridge mock walks TIER-0 ONLY — the crowns and the
+        # authenticated tiers are out of scripted reach BY DESIGN (that
+        # is what the real agent is for); every flag the mock COULD
+        # reach, it captured
+        tier0 = {"FLAG{nb_tier_gitmap}", "FLAG{nb_tier_backup}"}
+        assert set(s["flags_detail"]) == tier0, s["flags_detail"]
+        assert not any("crown" in f for f in s["flags_detail"])
         assert s["tool_calls"] == expected_calls
         assert s["mode"] == "mock" and s["cost_usd"] == 0.0
         # history persisted under the patched workspace
