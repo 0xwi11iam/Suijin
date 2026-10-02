@@ -71,6 +71,7 @@ def sshd(tmp_path_factory):
         "ListenAddress 127.0.0.1\n"
         f"HostKey {tmp / 'host_key'}\n"
         "UsePAM no\n"
+        "StrictModes no\n"  # CI tmp dirs are world-writable parents — sshd rejects the key otherwise
         "PasswordAuthentication no\n"
         "PubkeyAuthentication yes\n"
         f"AuthorizedKeysFile {ak}\n"
