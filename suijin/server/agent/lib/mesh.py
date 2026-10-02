@@ -533,7 +533,7 @@ def _ssh_mesh_port(
     # no launcher installed at all)
     import sys as _sys
 
-    repo = str(Path(__file__).resolve().parents[3])
+    repo = str(Path(__file__).resolve().parents[4])  # the PARENT of the suijin package (importable root)
     py = _sys.executable
     ws = remote_workspace or "$HOME/.suijin/workspace"
     inner = (
