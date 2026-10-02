@@ -33,6 +33,9 @@ STALE_S = 30.0
 _node: dict = {"me": None, "threads": []}
 #: overridable for tests (module attr, checked at call time)
 MESH_DIR_OVERRIDE: Path | None = None
+#: pids that answered a HELLO with the wrong key — excluded from further
+#: discovery in THIS process (stale self-registrations from earlier runs)
+_BAD_HELLO_PIDS: set[int] = set()
 
 
 def mesh_dir() -> Path:
@@ -563,12 +566,15 @@ def _ssh_mesh_port(
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
         if r.returncode == 0 and r.stdout.strip():
             found = json.loads([ln for ln in r.stdout.splitlines() if ln.strip().startswith("{")][-1])
-            # the roster may include the JOINER itself (same-machine sandboxes,
-            # shared registry): pick the freshest node that is not us
+            # the roster may include the JOINER itself (same-machine
+            # sandboxes, shared registry): pick the FRESHEST node that is
+            # not us and not a known bad-key offender (stale live
+            # self-registrations from earlier suites — CI flake 2026-10-02)
             nodes = found.get("nodes") or ([found] if found.get("port") else [])
             mine = os.getpid()
-            for n in nodes:
-                if int(n.get("pid") or 0) != mine:
+            for n in sorted(nodes, key=lambda x: -float(x.get("beat") or 0)):
+                npid = int(n.get("pid") or 0)
+                if npid != mine and npid not in _BAD_HELLO_PIDS:
                     return n
             raise RuntimeError(f"the only mesh node at {spec} is this process")
         raise RuntimeError(
@@ -667,7 +673,33 @@ def connect_remote(
     try:
         reply = mesh_wire.request("127.0.0.1", lp, key, "HELLO", me=mine, timeout_s=8.0)
     except Exception as e:  # noqa: BLE001
-        return f"Error: HELLO refused ({e}) — key mismatch? The remote's mesh key must match yours"
+        if "bad key" in str(e) and int(theirs.get("pid") or 0):
+            # discovery reached a STALE live node (another suite's
+            # self-registration, still beat-fresh, wrong key). Mark it,
+            # re-discover past it, retry the join ONCE.
+            _BAD_HELLO_PIDS.add(int(theirs["pid"]))
+            proc.terminate()
+            try:
+                theirs = _ssh_mesh_port(
+                    spec, port=port, identity=identity, kh_file=kh_file, remote_workspace=remote_workspace
+                )
+                lp, rp = _free_port(), _free_port()
+                cmd[-2] = f"127.0.0.1:{lp}:127.0.0.1:{int(theirs['port'])}"
+                cmd[-4] = f"127.0.0.1:{rp}:127.0.0.1:{srv.port}"
+                proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                _node["tunnels"].append(proc)
+                for _ in range(40):
+                    if proc.poll() is not None:
+                        break
+                    with contextlib.suppress(OSError), _s.create_connection(("127.0.0.1", lp), timeout=0.5):
+                        break
+                    time.sleep(0.2)
+                mine["rp"] = rp
+                reply = mesh_wire.request("127.0.0.1", lp, key, "HELLO", me=mine, timeout_s=8.0)
+            except Exception as e2:  # noqa: BLE001
+                return f"Error: HELLO refused ({e2}) — key mismatch? The remote's mesh key must match yours"
+        else:
+            return f"Error: HELLO refused ({e}) — key mismatch? The remote's mesh key must match yours"
     their_me = reply.get("me") or {}
     _register_remote(spec, {**their_me, "lp": lp})
     return (
