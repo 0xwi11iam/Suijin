@@ -3,18 +3,15 @@ worklist, hidden-params correlation, UI-field capture from the browser."""
 
 import json
 import os
-import signal
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 import pytest
-import requests
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from suijin.modules.tools.lib.http_replay import _BUDGET, http_replay, register_credential  # noqa: E402
+from suijin.modules.tools.lib.http_replay import http_replay, register_credential  # noqa: E402
 from suijin.modules.tools.lib.web_session import (  # noqa: E402
     _endpoint_key,
     cross_credential_shortlist,
@@ -27,6 +24,14 @@ PUB = 5984
 BASE = f"http://127.0.0.1:{PUB}"
 
 
+def _free_port():
+    import socket as _sk
+
+    with _sk.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
 def _kill_port(port):
     try:
         out = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True).stdout.strip()
@@ -36,39 +41,22 @@ def _kill_port(port):
         pass
 
 
+import sys as _sys
+from pathlib import Path as _P
+
+_sys.path.insert(0, str(_P(__file__).resolve().parent))
+from _tool_target import boot as _boot_target
+
+
 @pytest.fixture(scope="module")
 def citadel(tmp_path_factory):
-    # isolate the session store: run with a scratch workspace via env
-    store_dir = tmp_path_factory.mktemp("ws3")
-    _kill_port(PUB)
-    app_py = str(Path(__file__).resolve().parents[2] / "lab" / "citadel" / "app.py")
-    proc = subprocess.Popen(
-        [sys.executable, app_py],
-        env={
-            **os.environ,
-            "PORT": str(PUB),
-            "CITADEL_DB": "/tmp/suijin_ws_test.db",
-            "CITADEL_TRAFFIC": "/tmp/ws_test_traffic.jsonl",
-            "CITADEL_RATE_LIMIT": "100000",
-            "CITADEL_NO_INTERNAL": "1",
-            "SUIJIN_WORKSPACE": str(store_dir),
-        },
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    for _ in range(40):
-        try:
-            if requests.get(f"{BASE}/health", timeout=1).status_code == 200:
-                break
-        except Exception:
-            time.sleep(0.25)
-    else:
-        proc.terminate()
-        pytest.fail("citadel did not boot")
-    _BUDGET["remaining"] = 5000
+    global PUB, BASE
+    PUB = _free_port()
+    BASE = f"http://127.0.0.1:{PUB}"
+    proc, BASE = _boot_target(PUB, str(tmp_path_factory.mktemp("tt") / "tt.db"))
     yield proc
-    proc.send_signal(signal.SIGTERM)
-    time.sleep(0.5)
+    proc.terminate()
+    time.sleep(0.3)
     _kill_port(PUB)
 
 

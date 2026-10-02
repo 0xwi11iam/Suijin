@@ -4,14 +4,11 @@ WAF'd SQLi, traversal)."""
 
 import json
 import os
-import signal
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 import pytest
-import requests
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -31,36 +28,22 @@ def _kill_port(port):
         pass
 
 
+import sys as _sys
+from pathlib import Path as _P
+
+_sys.path.insert(0, str(_P(__file__).resolve().parent))
+from _tool_target import boot as _boot_target
+
+
 @pytest.fixture(scope="module")
 def citadel():
+    global BASE
     _kill_port(PUB)
-    app_py = str(Path(__file__).resolve().parents[2] / "lab" / "citadel" / "app.py")
-    proc = subprocess.Popen(
-        [sys.executable, app_py],
-        env={
-            **os.environ,
-            "PORT": str(PUB),
-            "CITADEL_DB": "/tmp/suijin_probe_test.db",
-            "CITADEL_TRAFFIC": "/tmp/probe_test_traffic.jsonl",
-            "CITADEL_RATE_LIMIT": "100000",
-            "CITADEL_NO_INTERNAL": "1",
-        },
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    for _ in range(40):
-        try:
-            if requests.get(f"{BASE}/health", timeout=1).status_code == 200:
-                break
-        except Exception:
-            time.sleep(0.25)
-    else:
-        proc.terminate()
-        pytest.fail("citadel did not boot")
+    proc, BASE = _boot_target(PUB, "/tmp/suijin_probe_test.db")
     _BUDGET["remaining"] = 5000
     yield proc
-    proc.send_signal(signal.SIGTERM)
-    time.sleep(0.5)
+    proc.terminate()
+    time.sleep(0.3)
     _kill_port(PUB)
 
 

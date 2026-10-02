@@ -427,6 +427,12 @@ def http_replay(
                 return f"Error: {guard}"
 
         if compare is not None:
+            # the BASELINE honors `credential` too: compare semantics are
+            # "this cred as-is vs the compare's cred". The old flow sent
+            # the baseline UNAUTHENTICATED (the param silently ignored) —
+            # a 403-by-default target masked it entirely.
+            if credential or unauthenticated:
+                base = apply_credential(dict(base), credential or None)
             exploit_req = dict(base)
             for m in compare.get("mutations") or []:
                 exploit_req = apply_mutation(exploit_req, m.get("op", ""), m.get("field", ""), m.get("value"))

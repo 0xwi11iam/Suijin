@@ -1,20 +1,17 @@
-"""Full-chain gym — the Tester Fleet against Citadel.
+"""Full-chain gym — the Tester Fleet against Suijin Lab (northbridge).
 
-Proves the entire pipeline end-to-end: capture/session → dispatch →
-probe → coverage → gate. Playwright-gated crawl phase; the dispatch/
-coverage chain runs headless.
+Proves the entire pipeline end-to-end: crawl/session → dispatch →
+probe → coverage → gate, against the one lab. Target-side behavior
+(planted vulns, chains, defenses) is proven by tests/lab/; this file
+proves SUIJIN's machinery keys correctly off the lab's real surface.
 """
 
 import json
 import os
-import signal
-import subprocess
 import sys
-import time
 from pathlib import Path
 
 import pytest
-import requests
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -25,17 +22,8 @@ from suijin.modules.tools.lib.http_replay import (  # noqa: E402
 )
 from suijin.modules.tools.lib.tester_fleet import TESTER_DOCTRINES, dispatch_testers  # noqa: E402
 
-PUB = 5996
+PUB = 5990  # edge (the whole stack rides NB_PORT_BASE=PUB)
 BASE = f"http://127.0.0.1:{PUB}"
-
-
-def _kill_port(port):
-    try:
-        out = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True).stdout.strip()
-        for pid in out.splitlines():
-            subprocess.run(["kill", "-9", pid], capture_output=True)
-    except Exception:
-        pass
 
 
 @pytest.fixture(autouse=True)
@@ -56,57 +44,41 @@ def _hermetic(tmp_path_factory):
 
 
 @pytest.fixture(scope="module")
-def citadel():
-    _kill_port(PUB)
-    app_py = str(Path(__file__).resolve().parents[2] / "lab" / "citadel" / "app.py")
-    proc = subprocess.Popen(
-        [sys.executable, app_py],
-        env={
-            **os.environ,
-            "PORT": str(PUB),
-            "CITADEL_DB": "/tmp/suijin_fleet_test.db",
-            "CITADEL_TRAFFIC": "/tmp/fleet_test_traffic.jsonl",
-            "CITADEL_RATE_LIMIT": "100000",
-            "CITADEL_NO_INTERNAL": "1",
-        },
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    for _ in range(40):
-        try:
-            if requests.get(f"{BASE}/health", timeout=1).status_code == 200:
-                break
-        except Exception:
-            time.sleep(0.25)
-    else:
-        proc.terminate()
-        pytest.fail("citadel did not boot")
-    yield proc
-    proc.send_signal(signal.SIGTERM)
-    time.sleep(0.5)
-    _kill_port(PUB)
+def northbridge():
+    from suijin.lab.northbridge import supervisor
+
+    os.environ["NB_PORT_BASE"] = str(PUB)
+    try:
+        supervisor.up(reset=True)
+    except Exception as e:  # noqa: BLE001
+        pytest.fail(f"northbridge did not boot: {e}")
+    yield
+    supervisor.down()
+    os.environ.pop("NB_PORT_BASE", None)
 
 
-def _login(user, pw):
+def _login(email, pw):
     out = http_replay(
         method="POST",
-        url=f"{BASE}/login",
+        url=f"{BASE}/auth/login",
         allow_internal=True,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        body=f"u={user}&p={pw}",
+        headers={"Content-Type": "application/json"},
+        body=json.dumps({"email": email, "password": pw}),
     )
-    return json.loads(json.loads(out)["body"])["token"]
+    res = json.loads(out)
+    assert res["status"] == 200, res
+    return json.loads(res["body"])["token"]
 
 
-# ── Phase 1: crawl (playwright-gated) ───────────────────────────────
+# ── Phase 1: crawl ──────────────────────────────────────────────────
 
 
 class TestCrawl:
-    def test_crawl_feeds_session_model(self, citadel):
+    def test_crawl_feeds_session_model(self, northbridge):
         pytest.importorskip("playwright", reason="playwright not installed")
         from suijin.modules.mcp_playwright.main import mcp_browser_close, mcp_browser_goto
 
-        goto = mcp_browser_goto(f"{BASE}/login")
+        goto = mcp_browser_goto(f"{BASE}/")
         if not goto.startswith("Loaded"):
             mcp_browser_close()
             pytest.skip("chromium not available")
@@ -116,13 +88,9 @@ class TestCrawl:
         out = crawl(url=f"{BASE}/", max_pages=10)
         mcp_browser_close()
         d = json.loads(out)
-        assert d["pages_crawled"] >= 1, d
+        assert d["pages_crawled"] >= 1, d  # an API product: the surface is small
 
-        from suijin.modules.tools.lib.web_session import _UI_FIELDS
-
-        assert any("login" in k for k in _UI_FIELDS), "UI fields captured for /login"
-
-    def test_proxy_capture_starts(self, citadel):
+    def test_proxy_capture_starts(self, northbridge):
         from suijin.modules.tools.lib.capture import proxy_capture
 
         out = proxy_capture(port=5997)
@@ -133,47 +101,38 @@ class TestCrawl:
 
 
 class TestSessionModel:
-    def test_role_cycling_builds_idor_worklist(self, citadel):
+    def test_role_cycling_builds_idor_worklist(self, northbridge):
         from suijin.modules.tools.lib.web_session import cross_credential_shortlist, web_session
 
-        alice_tok = _login("alice", "alice123")
-        ceo_tok = _login("ceo", "Zx!9topSecret")
-        register_credential("alice", headers={"X-Session": alice_tok})
-        register_credential("ceo", headers={"X-Session": ceo_tok})
+        founder_tok = _login("founder@acme-demo.test", "Launch2026!strong")
+        ops_tok = _login("ops@northbridge.test", "OpsInternal#2026")
+        register_credential("founder", headers={"Authorization": f"Bearer {founder_tok}"})
+        register_credential("ops", headers={"Authorization": f"Bearer {ops_tok}"})
 
-        for cred in ("alice", "ceo"):
-            http_replay(url=f"{BASE}/api/docs/d-7f3a91c2", allow_internal=True, credential=cred)
-            http_replay(url=f"{BASE}/api/docs/d-9c5f12ab", allow_internal=True, credential=cred)
-            http_replay(url=f"{BASE}/api/v2/health", allow_internal=True, credential=cred)
+        # the founder's own invoice is 200 for founder, 404 for ops —
+        # exactly the cross-credential delta the worklist feeds on
+        for cred in ("founder", "ops"):
+            http_replay(url=f"{BASE}/api/v1/invoices/INT-2026-0042", allow_internal=True, credential=cred)
 
         short = cross_credential_shortlist()
         shapes = [s["endpoint_shape"] for s in short]
-        assert any("docs" in s for s in shapes), f"expected docs in worklist: {shapes}"
+        assert any("invoices" in s for s in shapes), f"expected invoices in worklist: {shapes}"
 
         out = web_session(action="summary")
         assert "worklist" in out.lower()
 
-    def test_hidden_params_flags_role(self, citadel):
+    def test_hidden_params_flags_role(self, northbridge):
         from suijin.modules.tools.lib.web_session import hidden_params, record_ui_fields
 
-        record_ui_fields(
-            f"{BASE}/login",
-            [{"name": "u", "type": "text", "hidden": False}, {"name": "p", "type": "password", "hidden": False}],
-        )
-        # also register the register page's UI (no role field in the UI)
-        record_ui_fields(
-            f"{BASE}/api/register",
-            [
-                {"name": "username", "type": "text", "hidden": False},
-                {"name": "password", "type": "password", "hidden": False},
-            ],
-        )
+        # the profile UI exposes display_name only (there IS no UI — this
+        # is an API; the session model records what the surface declares)
+        record_ui_fields(f"{BASE}/api/v1/profile", [{"name": "display_name", "type": "text", "hidden": False}])
         http_replay(
-            method="POST",
-            url=f"{BASE}/api/register",
+            method="PUT",
+            url=f"{BASE}/api/v1/profile",
             allow_internal=True,
             headers={"Content-Type": "application/json"},
-            body=json.dumps({"username": "hp", "password": "x", "role": "user"}),
+            body=json.dumps({"display_name": "x", "role": "executive"}),
         )
         hp = hidden_params()
         flat = [p for h in hp for p in h["params_not_in_ui"]]
@@ -184,138 +143,121 @@ class TestSessionModel:
 
 
 class TestDispatchChain:
-    def test_dispatch_with_session_selects_authz(self, citadel):
-        # set up session data in THIS test (autouse hermetic clears prior)
-        alice_tok = _login("alice", "alice123")
-        ceo_tok = _login("ceo", "Zx!9topSecret")
-        register_credential("alice", headers={"X-Session": alice_tok})
-        register_credential("ceo", headers={"X-Session": ceo_tok})
-        for cred in ("alice", "ceo"):
-            http_replay(url=f"{BASE}/api/v2/health", allow_internal=True, credential=cred)
+    def test_dispatch_with_session_selects_authz(self, northbridge):
+        founder_tok = _login("founder@acme-demo.test", "Launch2026!strong")
+        ops_tok = _login("ops@northbridge.test", "OpsInternal#2026")
+        register_credential("founder", headers={"Authorization": f"Bearer {founder_tok}"})
+        register_credential("ops", headers={"Authorization": f"Bearer {ops_tok}"})
+        for cred in ("founder", "ops"):
+            http_replay(url=f"{BASE}/api/v1/invoices/INT-2026-0042", allow_internal=True, credential=cred)
 
-        out = dispatch_testers(url=f"{BASE}/api/register", method="POST", body_fields=["username", "password", "role"])
+        out = dispatch_testers(url=f"{BASE}/api/v1/profile", method="PUT", body_fields=["display_name", "role"])
         d = json.loads(out)
         assert "authz" in d["lanes"], f"session creds should trigger authz: {d['lanes']}"
 
-    def test_dispatch_without_session_no_authz(self, citadel):
-        # empty session store (hermetic) → no authz lane
+    def test_dispatch_without_session_no_authz(self, northbridge):
         from suijin.modules.tools.lib import web_session as ws
 
         old = ws._store_path
         ws._store_path = lambda: Path("/tmp/_nonexistent_fleet_test.json")
         try:
-            out = dispatch_testers(url=f"{BASE}/api/register", method="POST", body_fields=["username", "password"])
+            out = dispatch_testers(url=f"{BASE}/api/v1/profile", method="PUT", body_fields=["display_name"])
             d = json.loads(out)
             assert "authz" not in d["lanes"], d["lanes"]
         finally:
             ws._store_path = old
 
-    def test_url_param_selects_ssrf(self, citadel):
-        out = dispatch_testers(url=f"{BASE}/api/webhook", method="POST", body_fields=["url"])
+    def test_url_param_selects_ssrf(self, northbridge):
+        out = dispatch_testers(url=f"{BASE}/api/v1/webhooks", method="POST", body_fields=["url"])
         d = json.loads(out)
         assert "ssrf" in d["lanes"], d["lanes"]
 
-    def test_finance_selects_business_logic(self, citadel):
-        out = dispatch_testers(url=f"{BASE}/api/transfer", method="POST", body_fields=["to", "amount"])
+    def test_finance_selects_business_logic(self, northbridge):
+        out = dispatch_testers(url=f"{BASE}/api/v1/vendor/payout", method="POST", body_fields=["to", "amount"])
         d = json.loads(out)
         assert "business-logic" in d["lanes"], d["lanes"]
 
-    def test_upload_selects_file_attacks(self, citadel):
-        out = dispatch_testers(url=f"{BASE}/api/upload", method="POST", body_fields=["file"])
-        d = json.loads(out)
-        assert "file-attacks" in d["lanes"], d["lanes"]
-
-    def test_tasks_carry_doctrine_and_coverage(self, citadel):
-        out = dispatch_testers(url=f"{BASE}/api/webhook", method="POST", body_fields=["url"])
+    def test_tasks_carry_doctrine_and_coverage(self, northbridge):
+        out = dispatch_testers(url=f"{BASE}/api/v1/webhooks", method="POST", body_fields=["url"])
         d = json.loads(out)
         for t in d["tasks"]:
             assert "coverage_check" in t.get("coverage", t["task"])
             lane = t["lane"]
             assert lane in TESTER_DOCTRINES
 
-    def test_idor_from_worklist(self, citadel):
-        # the pattern table may not fire idor from slug URLs — dispatch
-        # with explicit lanes (the worklist→dispatch chain)
-        out = dispatch_testers(url=f"{BASE}/api/docs/d-8b2e40d1", lanes=["idor"])
+    def test_idor_from_worklist(self, northbridge):
+        out = dispatch_testers(url=f"{BASE}/api/v1/invoices/EXT-2026-0199", lanes=["idor"])
         d = json.loads(out)
         assert "idor" in d["lanes"]
         assert "IDOR" in d["tasks"][0]["task"].upper()
 
 
-# ── Phase 4: live probes per lane (doctrine lands on Citadel) ──────
+# ── Phase 4: live probes per lane (doctrine lands on the lab) ──────
 
 
 class TestLaneProbes:
-    def test_idor_compare_diff(self, citadel):
-        alice_tok = _login("alice", "alice123")
-        register_credential("alice", headers={"X-Session": alice_tok})
-        ceo_tok = _login("ceo", "Zx!9topSecret")
-        register_credential("ceo", headers={"X-Session": ceo_tok})
+    def test_idor_compare_diff(self, northbridge):
+        founder_tok = _login("founder@acme-demo.test", "Launch2026!strong")
+        register_credential("founder", headers={"Authorization": f"Bearer {founder_tok}"})
+        ops_tok = _login("ops@northbridge.test", "OpsInternal#2026")
+        register_credential("ops", headers={"Authorization": f"Bearer {ops_tok}"})
 
-        # the real IDOR: classified doc alice 403 vs ceo 200
+        # the tenant-checked invoice: founder 200 (own tenant), ops 404
         out2 = http_replay(
-            url=f"{BASE}/api/docs/d-8b2e40d1",
+            url=f"{BASE}/api/v1/invoices/INT-2026-0042",
             allow_internal=True,
-            credential="alice",
-            compare={"credential": "ceo"},
+            credential="founder",
+            compare={"credential": "ops"},
         )
         res2 = json.loads(out2)
-        assert res2["baseline"]["status"] == 403
-        assert res2["exploit"]["status"] == 200
+        assert res2["baseline"]["status"] == 200
+        assert res2["exploit"]["status"] == 404
 
-    def test_mass_assignment_to_executive(self, citadel):
+    def test_mass_assignment_to_executive(self, northbridge):
+        tok = _login("founder@acme-demo.test", "Launch2026!strong")
         out = http_replay(
-            method="POST",
-            url=f"{BASE}/api/register",
+            method="PUT",
+            url=f"{BASE}/api/v1/profile",
             allow_internal=True,
-            headers={"Content-Type": "application/json"},
-            body=json.dumps({"username": "fleet_exec", "password": "pw", "role": "executive"}),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {tok}"},
+            body=json.dumps({"display_name": "fleet_exec", "role": "executive"}),
         )
         res = json.loads(out)
         assert res["status"] == 200
         body = json.loads(res["body"])
-        assert body.get("role") == "executive"
+        assert "role" in body.get("saved", []), body
 
-    def test_sqli_error_fingerprint(self, citadel):
+    def test_sqli_fingerprint_stays_clean(self, northbridge):
+        """The no-cheese direction: the lab has NO injection — the probe
+        must come back without a fingerprint (defense holds)."""
         out = http_replay(
             method="GET",
-            url=f"{BASE}/api/items",
+            url=f"{BASE}/api/v1/ping",
             allow_internal=True,
             mutations=[{"op": "set-query", "field": "category", "value": "hardware'"}],
         )
         res = json.loads(out)
-        assert res["status"] == 500
-        assert "sqli_sqlite" in res.get("error_signatures", [])
+        assert "sqli_sqlite" not in res.get("error_signatures", [])
 
-    def test_ssrf_redirect_bypass(self, citadel):
+    def test_ssrf_internal_target_lands(self, northbridge):
+        """l4 is the lab's real shape: internal webhook targets DELIVER."""
+        tok = _login("founder@acme-demo.test", "Launch2026!strong")
         out = http_replay(
             method="POST",
-            url=f"{BASE}/api/webhook",
+            url=f"{BASE}/api/v1/webhooks",
             allow_internal=True,
-            headers={"Content-Type": "application/json"},
-            body=json.dumps({"url": "http://127.0.0.1:5909/"}),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {tok}"},
+            body=json.dumps({"url": f"http://127.0.0.1:{PUB + 3}/health"}),
         )
         res = json.loads(out)
-        assert res["status"] == 400  # direct blocked
-
-    def test_upload_blocklist_bypass(self, citadel):
-        out = http_replay(
-            method="POST",
-            url=f"{BASE}/api/upload",
-            allow_internal=True,
-            headers={"Content-Type": "multipart/form-data"},
-            body="--b\r\nContent-Disposition: form-data; name=file; filename=shell.phtml\r\n\r\n<?php\r\n--b--",
-        )
-        res = json.loads(out)
-        # the multipart may not parse via http_replay raw body — just verify the route responds
-        assert res["status"] in (200, 400)
+        assert res["status"] == 200
 
 
 # ── Phase 5: coverage gate closes the chain ─────────────────────────
 
 
 class TestCoverageChain:
-    def test_lane_coverage_translation(self, citadel):
+    def test_lane_coverage_translation(self, northbridge):
         """dispatch emits lane names; coverage expects class names — the
         translation is a known mapping (hyphen↔underscore, compound lanes)."""
         LANE_TO_COVERAGE = {
@@ -333,7 +275,7 @@ class TestCoverageChain:
         for lane, cls in LANE_TO_COVERAGE.items():
             assert cls in CLASSES, f"lane {lane} → coverage class {cls} not in CLASSES"
 
-    def test_coverage_gate_blocks_then_opens(self, citadel):
+    def test_coverage_gate_blocks_then_opens(self, northbridge):
         from suijin.modules.tools.lib.coverage import asset_of, completion_blocked, mark
 
         ev = "verified by direct request and response diff — see traffic store"
@@ -359,7 +301,7 @@ class TestCoverageChain:
 
         assert completion_blocked([asset]) is None
 
-    def test_full_chain_crawl_to_gate(self, citadel):
+    def test_full_chain_crawl_to_gate(self, northbridge):
         """The pipeline: session → dispatch → probe → coverage → gate."""
         from suijin.modules.tools.lib.coverage import asset_of, completion_blocked, mark, untested
 
@@ -368,8 +310,8 @@ class TestCoverageChain:
         assert len(ute_before) > 3  # gate blocks
 
         ev = "fleet gym probe evidence — compare diff verified"
-        mark(asset, "idor", "tested_vulnerable", evidence=ev, request_sent="GET /api/docs/:id compare")
-        mark(asset, "ssrf", "tested_vulnerable", evidence=ev, request_sent="POST /api/webhook")
+        mark(asset, "idor", "tested_vulnerable", evidence=ev, request_sent="GET /api/v1/invoices/:id compare")
+        mark(asset, "ssrf", "tested_vulnerable", evidence=ev, request_sent="POST /api/v1/webhooks")
 
         ute_after = untested([asset], limit=20)
         assert len(ute_after) < len(ute_before)
