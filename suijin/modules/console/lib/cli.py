@@ -2120,8 +2120,16 @@ def is_known_verb(word: str) -> bool:
 def main(argv=None):
     import warnings
 
+    from suijin.modules.platform.lib import runtime as _runtime
     from suijin.modules.platform.lib.config_models import CostCapWarning
 
+    # THE BOOT CONTRACT: the launcher execs this file as a SCRIPT, so the
+    # service registry, workspace layout, and module boot semantics never
+    # happen unless main() does it (the live-TUI gap: /sessions, /report,
+    # /audit all answered 'NoneType is not callable' because nothing
+    # registered their services). Idempotent — doctor's own call is a no-op
+    # after this.
+    _runtime.init_runtime()
     warnings.filterwarnings("ignore", category=CostCapWarning)  # one red line in engagements instead
     warnings.filterwarnings("ignore", message=".*allowed_objects.*")  # any category — langchain uses its own base class
     parser = argparse.ArgumentParser(
