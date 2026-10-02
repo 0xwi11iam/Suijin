@@ -122,6 +122,21 @@ from suijin.modules.tools.lib.aux_tools import (
 )
 
 
+def _cheatsheet_tool(a: dict) -> str:
+    """cheatsheet_note — the agent writes its own cross-engagement memory.
+
+    Doctrine: when a technique is PROVEN here or a dead battery is
+    CONFIRMED (ruled out for a structural reason), record it. The note
+    rides into every future engagement's context."""
+    from suijin.modules.agent.lib import cheatsheet
+
+    note = str(a.get("note", "")).strip()
+    if not note:
+        return "Error: note required (one transferable line: what/why)"
+    out = cheatsheet.add(note, tag=str(a.get("tag", "general")), source="agent")
+    return f"cheatsheet: {out}"
+
+
 def _mesh_tool(action: str, a: dict) -> str:
     """The mesh tools — cross-session awareness for the agent.
 
@@ -457,6 +472,7 @@ def _build_routes(config):
         "mesh_dm": lambda a: _mesh_tool("dm", a),
         "mesh_ask": lambda a: _mesh_tool("ask", a),
         "mesh_reply": lambda a: _mesh_tool("reply", a),
+        "cheatsheet_note": lambda a: _cheatsheet_tool(a),
         "mutate_wordlist": lambda a: _wordlist.mutate_wordlist(
             a.get("seeds"),
             out=a.get("out", "wordlists/mutated.txt"),

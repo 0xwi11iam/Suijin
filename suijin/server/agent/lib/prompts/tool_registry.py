@@ -405,7 +405,7 @@ TOOL_REGISTRY = {
     },
     "normalize_output": {
         "purpose": "Clean/normalize large raw tool output",
-        "when_to_use": "When a tool dumped thousands of noisy lines — normalize before diffing or feeding into another tool.",
+        "when_to_use": "A tool dumped thousands of noisy lines — normalize before diffing.",
         "args_format": '"mode": "clean"',
         "description": "**normalize_output** — trims ANSI, sorts, dedupes raw text.",
     },
@@ -415,7 +415,7 @@ TOOL_REGISTRY = {
     "catalog_exploit": {
         "purpose": "MANDATORY on every valuable find — writes the exploit folder (finding.md + exploit.yaml) and the verifier RUNS your POC before you continue; verdict + three options on miss",
         "when_to_use": "The moment something is exploitable.",
-        "args_format": '"engagement": "...", "target": "...", "vuln_class": "sqli", "title": "...", "description": "one paragraph", "severity": "high", "cvss": 8.9, "commands": ["cmd1", "cmd2"], "expected_result": "the DESIRED OUTCOME — what string must appear in the output when the exploit works (a flag value, a specific error message, a data fragment only the payload produces)", "control_commands": ["same request(s) WITHOUT the payload"]',
+        "args_format": '"engagement": "...", "target": "...", "vuln_class": "sqli", "title": "...", "description": "one paragraph", "severity": "high", "cvss": 8.9, "commands": ["cmd1"], "expected_result": "the marker ONLY the payload produces (flag, error, data fragment)", "control_commands": ["same request(s) WITHOUT the payload"]',
         "description": "**catalog_exploit** — the verifier runs your POC. Injection classes (sqli/ssti/xss/rce/lfi/ssrf/deserialization) REQUIRE control_commands: the same request minus the payload. CONFIRMED needs the marker WITH the payload and NOT without it — a word the endpoint prints on every response proves nothing (e.g. a key from its normal JSON). Pick a marker only the payload can produce: {{7*7}}→49, an attacker-chosen UNION literal, an echoed id.",
     },
     "memory_recall": {
@@ -457,8 +457,9 @@ TOOL_REGISTRY = {
     "mesh_read": {"purpose": "peer state digest", "args_format": '"node": "1234"'},
     "mesh_broadcast": {"purpose": "groupchat — share a find", "args_format": '"message": "..."'},
     "mesh_dm": {"purpose": "DM one session", "args_format": '"node": "1234", "message": "..."'},
-    "mesh_ask": {"purpose": "ask remote peer", "args_format": '"node","question"'},
+    "mesh_ask": {"purpose": "ask a remote peer", "args_format": '"node","q"'},
     "mesh_reply": {"purpose": "answer a MESH_ASK", "args_format": '"qid","answer"'},
+    "cheatsheet_note": {"purpose": "save a lesson for future runs", "args_format": '"note","tag"'},
     "bypass_403": {
         "purpose": "~24 known 403-bypass variants through http_request pacing — verdict table, confirm before recording",
         "when_to_use": "Any 403 on an interesting path.",
@@ -499,6 +500,7 @@ _ALL_TOOLS = {
     "mesh_dm",
     "mesh_ask",
     "mesh_reply",
+    "cheatsheet_note",
     "code_harness",
     "cve_advise_tools",
     "kb_stats",
