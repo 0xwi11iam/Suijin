@@ -12,6 +12,7 @@ import json
 import os
 import secrets as _secrets
 import signal
+from pathlib import Path
 import subprocess
 import sys
 import time
@@ -140,7 +141,12 @@ def up(reset: bool = True, timeout_s: float = 30.0) -> dict:
     all_services = _all_services()
     procs = {}
     for name, (mod, _port) in all_services.items():
+        # PYTHONPATH carries the repo root: the launcher runs cli.py as a
+        # SCRIPT (sys.path[0] = its own dir), so `python -m suijin.lab...`
+        # children cannot import the package from any cwd except the repo
         env = dict(os.environ, PYTHONUNBUFFERED="1")
+        _repo = str(Path(__file__).resolve().parents[3])
+        env["PYTHONPATH"] = _repo + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
         err_path = os.path.join(ROOT, f"boot-{name}.err")
         errf = open(err_path, "wb")  # owned by the child after spawn; swept at reset
         procs[name] = subprocess.Popen(

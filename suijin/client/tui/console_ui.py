@@ -1492,7 +1492,14 @@ class EngagementUI:
     def paused_visual(self, on: bool) -> None:
         """ESC ESC instant visual: PAUSED in the strip, spinner stopped,
         thought stream frozen, still-thinking lines suppressed. Resume
-        restores the live state."""
+        restores the live state.
+
+        THE PAUSE GAP (operator report 2026-10-02): pausing freezes the
+        typewriter and drops the suggestion panel; their blank-held slots
+        left empty rows between the transcript and the strip — a gap that
+        sat there the whole pause. A stop()/start() bounce re-anchors the
+        Live at the fresh cursor with the pads ZEROED: the region renders
+        exactly as tall as it is, tight on every transition."""
         self._paused = bool(on)
         if on:
             self._tw.pause_playback()
@@ -1500,6 +1507,16 @@ class EngagementUI:
             self._tw.resume_playback()
             self._waiting_since = time.monotonic()  # restart the clock on resume
             self._next_report_s = float(self._LLM_WAIT_REPORT_S)
+        # collapse the blank-held rows and re-anchor: stop() drops the
+        # stale region, start() re-anchors at the fresh cursor — the
+        # strip renders exactly as tall as it is. No gap, ever.
+        self._pad_sug = 0
+        self._pad_tw = 0
+        with contextlib.suppress(Exception):
+            if self._live is not None:
+                self._live.stop()
+                self._live = None
+            self.start()  # idempotent: restarts the Live tight
         self._tick(refresh=True)  # the PAUSED flip is operator-visible: paint NOW
 
     def guidance_delivered(self, text: str) -> None:

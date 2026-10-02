@@ -421,7 +421,8 @@ def _default_handlers(box: RunBox) -> dict:
 
     def findings(_args):
         """Triage-grouped, severity-colored — the CyberStrike-parity panel."""
-        from suijin.modules.tools.lib.exploit_catalog import _expits_dir, _load_index
+        from suijin.modules.platform.lib.workspace import exploits_dir as _expits_dir
+        from suijin.modules.tools.lib.exploit_catalog import _load_index
 
         root = _expits_dir()
         if not root.is_dir():
@@ -456,7 +457,8 @@ def _default_handlers(box: RunBox) -> dict:
     def h1(args):
         """`/h1 EXP-001` — copy a HackerOne-formatted report for the finding
         to the clipboard (or print it when no clipboard exists)."""
-        from suijin.modules.tools.lib.exploit_catalog import _expits_dir, _load_index
+        from suijin.modules.platform.lib.workspace import exploits_dir as _expits_dir
+        from suijin.modules.tools.lib.exploit_catalog import _load_index
 
         eid = args.strip().upper()
         if not eid:
