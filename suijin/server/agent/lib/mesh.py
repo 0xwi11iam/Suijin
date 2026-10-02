@@ -540,7 +540,7 @@ def _ssh_mesh_port(
         f"export SUIJIN_WORKSPACE={ws}; "
         f"suijin mesh-port 2>/dev/null && exit 0; "
         f"~/.local/bin/suijin mesh-port 2>/dev/null && exit 0; "
-        f"cd {repo} && {py} -c 'from suijin.modules.console.lib.cli import run_mesh_port; run_mesh_port()'"
+        f"PYTHONPATH={repo} {py} -c 'from suijin.modules.console.lib.cli import run_mesh_port; run_mesh_port()'"
     )
     remote_cmd = "sh -lc " + _shlex_quote(inner)
     cmd = [
