@@ -191,7 +191,7 @@ SERVICES: list[dict] = [
             ("GET", "/v1/users/<id>", "get", "one user"),
             ("POST", "/v1/auth", "create", "legacy token mint"),
             ("GET", "/v1/documents/<name>", "static_bundle", "document store"),
-            ("GET", "/v1/whoami", "get", "token introspect"),
+            ("GET", "/v1/whoami", "pickle_whoami", "2019 session introspect (the pickle cookie)"),
             ("GET", "/health", "health", ""),
         ],
         "vulns": [

@@ -84,12 +84,16 @@ def reset_state() -> None:
     import shutil
 
     os.makedirs(ROOT, exist_ok=True)
-    for sub in ("core.db", "auth.db", "buckets", "queue", "exports", "claimed", "telemetry", "mail", "worker-env.txt"):
+    for sub in ("core.db", "auth.db", "buckets", "queue", "exports", "claimed", "telemetry", "mail", "worker-env.txt", "defense.json", "content"):
         p = os.path.join(ROOT, sub)
         if os.path.isdir(p):
             shutil.rmtree(p)
         elif os.path.exists(p):
             os.unlink(p)
+    import glob as _glob
+
+    for f in _glob.glob(os.path.join(ROOT, "svc-*.db")):
+        os.unlink(f)
     # import seeders lazily so the module graph stays cheap for callers
     from suijin.lab.northbridge import auth as _auth
     from suijin.lab.northbridge import objects as _objects
