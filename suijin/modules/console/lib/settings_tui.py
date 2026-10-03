@@ -150,8 +150,50 @@ ALL_FIELDS = OrderedDict(
         # ---- Workspace & integrations ----
         ("metasploit_rpc_host", ("string",)),
         ("metasploit_rpc_port", ("int", (1, 65535))),
+        # ---- System One decisions (flat keys bridged to the nested
+        # `decision` block by _decision_pack/_decision_unpack below) ----
+        ("decision_enabled", ("bool",)),
+        ("decision_engine", ("choice", ["laya-mlx", "http", "local"])),
+        ("decision_model_path", ("string",)),
+        ("decision_endpoint", ("string",)),
+        ("decision_on_fail", ("choice", ["local", "legacy"])),
     ]
 )
+
+
+# ── the decision bridge: flat editor keys ↔ the nested config block ────
+
+_DECISION_KEYS = {
+    "decision_enabled": "enabled",
+    "decision_engine": "engine",
+    "decision_model_path": "model_path",
+    "decision_endpoint": "endpoint",
+    "decision_on_fail": "on_fail",
+}
+
+
+def _decision_unpack(config: dict) -> None:
+    """Nested block → flat keys, so the editor sees ordinary fields."""
+    d = config.get("decision") or {}
+    for flat, inner in _DECISION_KEYS.items():
+        if inner in d:
+            config[flat] = d[inner]
+
+
+def _decision_pack(config: dict) -> None:
+    """Flat keys → the nested block (drop the flats; defaults fill gaps)."""
+    block = dict(config.get("decision") or {})
+    for flat, inner in _DECISION_KEYS.items():
+        if flat in config:
+            block[inner] = config.pop(flat)
+    if block:
+        block.setdefault("engine", "laya-mlx")
+        block.setdefault("model_path", "~/laya-mlx")
+        block.setdefault("on_fail", "local")
+        if block.get("engine") == "laya-mlx":
+            block.pop("endpoint", None)  # http-only setting stays out of the way
+        config["decision"] = block
+
 
 _GROUPS = [
     (
@@ -183,6 +225,10 @@ _GROUPS = [
     (
         "Operational modes",
         ["mode_hitl", "mode_deploy_subagent", "mode_audit_trail", "subagent_count"],
+    ),
+    (
+        "Decisions — System One",
+        ["decision_enabled", "decision_engine", "decision_model_path", "decision_endpoint", "decision_on_fail"],
     ),
     ("Integrations", ["metasploit_rpc_host", "metasploit_rpc_port"]),
 ]
@@ -269,12 +315,14 @@ def load_state() -> tuple[dict, str]:
         cfg = json.loads(Path(CONFIG_PATH).read_text())
         if not isinstance(cfg, dict):
             raise ValueError("top level is not an object")
+        _decision_unpack(cfg)
         return cfg, "ok"
     except Exception:  # noqa: BLE001
         return {}, "corrupt"
 
 
 def save_config(config: dict) -> None:
+    _decision_pack(config)
     Path(CONFIG_PATH).write_text(json.dumps(config, indent=4))
 
 
@@ -470,6 +518,16 @@ FIELD_INFO = {
     "cost_alert_usd": ("Warn me at", "off means it never warns you", "spend"),
     "cost_budget_usd": ("Soft cap", "off means the agent is told, not stopped", "spend"),
     "cost_hard_cap_usd": ("Hard cap", "off means nothing can stop a runaway", "spend"),
+    # -- System One decisions (the reflex layer) --
+    "decision_enabled": (
+        "System One decisions",
+        "classify supervisor/oracle/drift in ms instead of LLM prose",
+        "decisions",
+    ),
+    "decision_engine": ("Decision engine", "laya-mlx (local model) · http (server) · local (rules)", "decisions"),
+    "decision_model_path": ("Model location", "the laya-mlx checkpoint folder on disk", "decisions"),
+    "decision_endpoint": ("Decision endpoint", "the http engine's server URL", "decisions"),
+    "decision_on_fail": ("On engine failure", "local (deterministic rules) or legacy (LLM path)", "decisions"),
     # -- plumbing --
     "metasploit_rpc_host": ("Metasploit host", "where the Metasploit RPC server listens", "advanced"),
     "metasploit_rpc_port": ("Metasploit port", "its TCP port", "advanced"),
@@ -481,6 +539,7 @@ SECTIONS = [
     ("limits", "Limits", "how far and how long a run may go"),
     ("conduct", "Conduct", "what the agent may do on its own"),
     ("spend", "Spending", "what the run may cost"),
+    ("decisions", "Decisions", "the System One engine for supervisor/oracle/drift"),
     ("advanced", "Advanced", "plumbing you rarely touch"),
 ]
 
@@ -497,6 +556,16 @@ def human_value(key: str, config: dict) -> str:
     """The value, said the way a person says it. The zero-means cases are
     the whole point: '0.0' reads as free, it actually means unlimited."""
     raw = config.get(key)
+    if key == "decision_engine":
+        # the engine row doubles as the live model-status line
+        eng = str(raw or "laya-mlx")
+        try:
+            from suijin.modules.agent.lib.reflex.core.client import laya_status
+
+            st = laya_status(config.get("decision_model_path") or "~/laya-mlx")
+            return f"{eng}  [{st}]"
+        except Exception:  # noqa: BLE001 — status is cosmetic, never fatal
+            return eng
     fdef = ALL_FIELDS.get(key, ("string",))
     kind = fdef[0]
     if kind == "bool":

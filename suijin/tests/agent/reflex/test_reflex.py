@@ -133,7 +133,7 @@ class TestSupervisorVerdict:
 
         from suijin.modules.agent.lib.reflex.core.client import DecisionClient
 
-        cfg = {"decision": {"enabled": True}}
+        cfg = {"decision": {"enabled": True, "engine": "http"}}  # inject via the http transport
         state2 = {"current_iteration": 20, "findings": [], "_verdict_timeline": []}
         trace2 = [{"tool_name": "http_request", "args": "a", "success": True}]
         # monkey the client used by verdict()
@@ -250,3 +250,64 @@ class TestShadow:
         shadow.shadow_log("supervisor.verdict", {"iteration": 5}, None, legacy=None, acted=False, turn=5)
         shadow.record_outcome(8, improved=False)
         assert shadow.intervention_precision() is None  # only ACTED records measure precision
+
+
+class TestEngines:
+    def test_default_engine_is_laya_mlx(self):
+        from suijin.modules.agent.lib.reflex.core.client import DEFAULTS, decision_config
+
+        assert DEFAULTS["engine"] == "laya-mlx"  # the operator's System One model
+        assert decision_config({"decision": {"enabled": True}})["engine"] == "laya-mlx"
+
+    def test_laya_engine_routes_in_process(self):
+        # model_path → the real Agent (this machine has the checkpoint)
+        from pathlib import Path
+
+        from suijin.modules.agent.lib.reflex.core.client import DecisionClient, laya_status
+
+        if not Path("~/laya-mlx").expanduser().is_dir():
+            pytest.skip("no local laya checkpoint")
+        assert laya_status("~/laya-mlx") == "loaded"
+        c = DecisionClient({"decision": {"enabled": True, "engine": "laya-mlx", "model_path": "~/laya-mlx"}})
+        f = {
+            "phase": "recon",
+            "iteration": 5,
+            "iterations_since_finding": 1,
+            "repeat_pressure": 0.05,
+            "tool_fail_cluster": 0,
+            "phase_tool_mismatch": 0,
+            "chain_candidates": 0,
+            "drift_score": 0.0,
+            "unheeded_count": 0,
+        }
+        out = c.decide("supervisor.verdict", f)
+        assert out and out["engine"] == "laya-mlx"  # the real model answered
+        assert out["ms"] < 1000  # ms-class, not generation-class
+
+    def test_missing_model_falls_to_local(self):
+        from suijin.modules.agent.lib.reflex.core.client import DecisionClient
+
+        c = DecisionClient({"decision": {"enabled": True, "engine": "laya-mlx", "model_path": "/nonexistent/model"}})
+        out = c.decide("supervisor.verdict", {"repeat_pressure": 0.8})
+        assert out["engine"] == "local"  # ladder held: never a crash, never a guess
+
+    def test_question_laya_format(self):
+        from suijin.modules.agent.lib.reflex.core.questions import get_question
+
+        laya_q = get_question("supervisor.verdict").laya()
+        assert laya_q["type"] == "choice"
+        assert set(laya_q["criteria"]) == {"none", "drift", "stall", "repeat", "miss_chain"}
+        assert all(isinstance(v, str) and v for v in laya_q["criteria"].values())  # definitions, not bare labels
+
+    def test_settings_bridge_roundtrip(self):
+        from suijin.modules.console.lib.settings_tui import _decision_pack, _decision_unpack
+
+        cfg = {"decision": {"enabled": True, "engine": "laya-mlx"}}
+        _decision_unpack(cfg)
+        assert cfg["decision_enabled"] is True
+        cfg["decision_model_path"] = "~/laya-mlx"
+        _decision_pack(cfg)
+        d = cfg["decision"]
+        assert d["enabled"] is True and d["model_path"] == "~/laya-mlx"
+        assert d["on_fail"] == "local"  # pack fills sane defaults
+        assert "decision_enabled" not in cfg
