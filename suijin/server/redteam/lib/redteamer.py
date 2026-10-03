@@ -345,6 +345,37 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
         _chain = f" · fallback: {', '.join(_fb)}" if _fb else " · no fallback"
         console.print(f"[bold]provider: {_p} / {_m}{_e}{_chain}[/bold]")
 
+    # SYSTEM ONE BOOT (reflex layer): when decisions are enabled, the
+    # decision engine (laya-mlx by default — an in-process MLX Agent)
+    # loads NOW, before the first think turn, so supervisor/oracle/drift
+    # classification is warm from turn 1. A failed load DEGRADES LOUDLY
+    # to the deterministic local classifier — never blocks the run.
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.reflex.core.client import DEFAULTS as _RD
+        from suijin.modules.agent.lib.reflex.core.client import decision_config as _rdcfg
+
+        _d = _rdcfg(config)
+        if _d.get("enabled"):
+            _eng = str(_d.get("engine") or "laya-mlx")
+            if _eng == "laya-mlx":
+                from suijin.modules.agent.lib.reflex.core.client import _laya, laya_status
+
+                t0 = time.time()
+                _agent = _laya(str(_d.get("model_path") or _RD["model_path"]))
+                _ms = (time.time() - t0) * 1000
+                if _agent is not None:
+                    console.print(
+                        f"[bold]system one: laya-mlx loaded in {_ms:.0f}ms · "
+                        "supervisor/oracle/drift classify in-pass[/bold]"
+                    )
+                else:
+                    console.print(
+                        f"[yellow]system one: {laya_status(_d.get('model_path'))} — "
+                        "decisions fall to the deterministic local classifier[/yellow]"
+                    )
+            elif _eng == "http":
+                console.print(f"[bold]system one: http engine · {_d.get('endpoint')}[/bold]")
+
     # Apply proxy setting from config
     proxy_url = config.get("proxy_url", "")
     if proxy_url:
