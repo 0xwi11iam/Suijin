@@ -764,19 +764,40 @@ def _render(console: Console, config: dict, visible, items, cursor: int, note: s
 
 def visible_provider_note(config: dict) -> str:
     """A one-line hint about the current provider: where its model ids come
-    from, and whether a key is on file (asked of the provider layer)."""
+    from, and whether a key is on file (asked of the provider layer).
+    System One state rides ALONGSIDE — the operator must see at a glance
+    whether the decision engine is armed, without scrolling anywhere."""
     provider = str(config.get("provider") or "")
+    sysone = ""
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.reflex.core.client import decision_config as _dc
+        from suijin.modules.agent.lib.reflex.core.client import laya_status
+
+        _d = _dc(config)
+        # in the editor, the block is UNPACKED to flat keys — the flat
+        # decision_enabled is the live toggle the operator just flipped
+        if "decision_enabled" in config:
+            _d["enabled"] = bool(config.get("decision_enabled"))
+        if _d.get("enabled"):
+            _eng = str(_d.get("engine") or "laya-mlx")
+            _st = laya_status(_d.get("model_path")) if _eng == "laya-mlx" else "remote"
+            sysone = f"  ·  system one: {_eng} [{_st}]"
+        else:
+            sysone = "  ·  system one: off"
     if not provider:
-        return "no provider selected"
+        return (f"no provider selected{sysone}").strip(" ·")
     with contextlib.suppress(Exception):
         from suijin.modules.providers.lib import provider_models_endpoint
 
         base, headers = provider_models_endpoint(provider, config)
         if not base:
-            return f"{provider} — {headers}"
+            return f"{provider} — {headers}{sysone}"
         keyed = bool((headers or {}).get("Authorization"))
-        return f"{provider} — live ids at {str(base).rstrip('/')}/models ({'key on file' if keyed else 'no key sent'})"
-    return f"{provider} — model source unknown"
+        return (
+            f"{provider} — live ids at {str(base).rstrip('/')}/models "
+            f"({'key on file' if keyed else 'no key sent'}){sysone}"
+        )
+    return f"{provider} — model source unknown{sysone}"
 
 
 # ── the curses editor ───────────────────────────────────────────────────
