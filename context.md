@@ -220,3 +220,43 @@ on what the red side has learned since (drive controller, cheatsheet,
 mesh). When it returns it should return as a peer of the red path, not
 a parallel universe: same provider layer, same engagement workspace
 conventions, same test discipline.
+
+## The reflex layer — System One decisions (2026-10-02, skeleton live)
+
+`agent/lib/reflex/` — judgment as classification, prose as the only
+generation left. The operator's diagnosis drove the design: the
+supervisor "mostly bullshitted" because a GENERATOR was asked to find
+problems — RLHF helpfulness means it always has an opinion, so healthy
+traces got invented problems at 100% apparent certainty and nothing
+measured whether nudges helped.
+
+Structure (concepts as packages, not files):
+- `core/` — the spine: DecisionClient (transport-agnostic: a System One
+  HTTP adapter + a deterministic abstain-biased local classifier so the
+  pipeline is honest before laya-mlx lands; qset-versioned — a stale
+  model DISABLES, never misfires), the question registry (6 questions,
+  each with ABSTAIN dominant; this file is the labeling contract),
+  pure feature builders, and shadow mode (the outcome-labeled corpus:
+  features + classifier answer + legacy answer + did-the-next-N-turns-
+  improve — the label set for training AND intervention-precision, the
+  number that proves the supervisor stopped bullshitting)
+- `supervisor/` — tier-0 rules (kept), tier-1 verdict classifier with
+  borderline readings needing next-interval timeline confirmation,
+  tier-2 GROUNDED phrasing: one LLM call that receives the confirmed
+  verdict + the features that fired and must answer OFFER-shaped — a
+  generator handed the decision cannot invent the problem
+- `drifter/` — objective alignment as a per-turn TIMELINE (3-of-4
+  sustained gate kills single-turn false positives); feeds the
+  supervisor digest as _drift_score, no separate voice
+- `oracle/` — ms-priced triage (anomaly CLASS gating the LLM hypothesis
+  call — most outputs are none, so most calls die before they exist)
+  and adjudication (confirm/deny/need_more; a high-confidence deny
+  auto-distills into the cheatsheet as a dead battery — the systems
+  close the loop on each other)
+
+All behind `decision` config (default OFF = exactly yesterday). The
+agent_graph seams are wired config-gated. 20 tests pin: abstain
+dominance on healthy traces, qset-mismatch disable, invented-choice
+rejection, timeline confirmation, grounded phrasing refusal-as-silence,
+deny-distillation, and precision measurement (0.0 after a bad nudge —
+honest None until outcomes close).
