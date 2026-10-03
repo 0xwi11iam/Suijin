@@ -54,9 +54,15 @@ def _laya(model_path: str):
     if _LAYA_AGENT["agent"] is not None and _LAYA_AGENT["path"] == path:
         return _LAYA_AGENT["agent"]
     try:
+        import warnings
+
         from laya_mlx import Agent
 
-        _LAYA_AGENT.update(agent=Agent(path), path=path, error="")
+        with warnings.catch_warnings():
+            # the checkpoint's temperature clamps are a known, benign
+            # calibration note — it spammed every load (UI garbage)
+            warnings.filterwarnings("ignore", message=".*temperatures outside.*")
+            _LAYA_AGENT.update(agent=Agent(path), path=path, error="")
         return _LAYA_AGENT["agent"]
     except Exception as e:  # noqa: BLE001 — a missing model is a fallback
         _LAYA_AGENT.update(agent=None, error=f"{type(e).__name__}: {e}")
