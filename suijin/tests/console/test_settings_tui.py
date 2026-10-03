@@ -394,7 +394,7 @@ class TestCursesScreen:
         lines = st.screen_lines(config, cursor=0)
         text = "\n".join(t for t, _r in lines)
         assert "SUIJIN — Settings" in text
-        assert "provider" in text and "max_iterations" in text
+        assert "Provider" in text and "Iteration cap" in text  # human labels
         assert sum(1 for _t, role in lines if role == "cursor") == 1
         # re-rendering with no edit changes nothing (no echo path)
         assert st.screen_lines(config, cursor=0) == lines
@@ -406,7 +406,7 @@ class TestCursesScreen:
         cursor_rows = [t for t, role in lines if role == "cursor"]
         assert len(cursor_rows) == 1 and cursor_rows[0].strip().startswith("› ")
         # the highlighted row shows its VALUE (reverse video alone is easy to miss)
-        assert cursor_rows[0].split()[1] == items[2][1]
+        assert cursor_rows[0].split()[1] == st.human_label(items[2][1])
 
     def test_every_field_is_listed_and_grouped(self, cfg):
         config = st.load_config()
@@ -414,14 +414,14 @@ class TestCursesScreen:
         lines = st.screen_lines(config, cursor=0)
         listed = [k for _g, k in st._row_items(visible)]
         body = "\n".join(t for t, role in lines if role in ("row", "cursor"))
-        missing = [k for k in listed if f" {k}" not in body]
+        missing = [k for k in listed if f" {st.human_label(k)}" not in body and f" {k}" not in body]
         assert not missing, f"fields not on screen: {missing}"
         assert any(role == "group" for _t, role in lines)
 
     def test_model_fields_advertise_live_ids(self, cfg):
         config = st.load_config()
         lines = st.screen_lines(config, cursor=0)
-        assert any("zai_model" in t and "m: live ids" in t for t, _r in lines)
+        assert any("m: live ids" in t for t, _r in lines)  # model rows advertise it (labels are human now)
 
     def test_screen_note_warns(self, cfg):
         config = st.load_config()

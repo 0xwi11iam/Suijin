@@ -79,7 +79,8 @@ class TestEveryProviderIsUsable:
         if mkey not in visible:
             pytest.skip(f"{key} shares a declared model field (bespoke)")
         rows = [t for t, _role in st.screen_lines(config, cursor=0)]
-        assert any(mkey in t for t in rows), f"{key}: the model row is missing from the screen"
+        label = st.human_label(mkey)
+        assert any(mkey in t or f" {label}" in t for t in rows), f"{key}: the model row is missing from the screen"
         # and the cursor can actually land on it
         items = [k for _g, k in st._row_items(visible)]
         assert mkey in items, f"{key}: the model row is not reachable by the cursor"

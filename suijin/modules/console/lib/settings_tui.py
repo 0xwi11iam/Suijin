@@ -220,15 +220,15 @@ _GROUPS = [
             "librarian_interval",
         ],
     ),
+    (
+        "Decisions — System One",
+        ["decision_enabled", "decision_engine", "decision_model_path", "decision_endpoint", "decision_on_fail"],
+    ),
     ("Cost guardrails", ["cost_alert_usd", "cost_budget_usd", "cost_hard_cap_usd"]),
     ("Proxy", ["proxy_url"]),
     (
         "Operational modes",
         ["mode_hitl", "mode_deploy_subagent", "mode_audit_trail", "subagent_count"],
-    ),
-    (
-        "Decisions — System One",
-        ["decision_enabled", "decision_engine", "decision_model_path", "decision_endpoint", "decision_on_fail"],
     ),
     ("Integrations", ["metasploit_rpc_host", "metasploit_rpc_port"]),
 ]
@@ -681,10 +681,13 @@ def screen_lines(
             lines.append((group, "group"))
         marker = "› " if idx == cursor else "  "
         # the key row is masked and lives in .env; everything else is a
-        # plain config value
+        # plain config value. Rows carry their HUMAN label (the operator
+        # reads "System One decisions", not "decision_enabled"); the raw
+        # key stays in the width alignment so muscle-memory still works.
+        label = key if key == API_KEY_ROW else human_label(key)
         value = api_key_state(config) if key == API_KEY_ROW else _fmt_plain(key, config.get(key, ""))
         suffix = "  · m: live ids" if is_model_field(key) else ""
-        lines.append((f"{marker}{key.ljust(width)}  {value}{suffix}", "cursor" if idx == cursor else "row"))
+        lines.append((f"{marker}{label.ljust(width)}  {value}{suffix}", "cursor" if idx == cursor else "row"))
     lines.append(("", "blank"))
     lines.append((note or visible_provider_note(config), "warn" if status == "warn" else "status"))
     return lines
@@ -705,6 +708,18 @@ def _legend(section: str | None = None) -> str:
 def _fmt_plain(key: str, value) -> str:
     """Render one value for the curses screen — plain text, no Rich markup
     (markup tags printed literally on a terminal)."""
+    if key == "decision_engine":
+        # the engine row doubles as the live model-status line (the model
+        # path from the config being edited, when present)
+        eng = str(value or "laya-mlx")
+        try:
+            from suijin.modules.agent.lib.reflex.core.client import laya_status
+
+            cfg = load_config()
+            st = laya_status((cfg.get("decision") or {}).get("model_path") or "~/laya-mlx")
+            return f"{eng}  [{st}]"
+        except Exception:  # noqa: BLE001 — status is cosmetic
+            return eng
     fdef = ALL_FIELDS.get(key, ("string",))
     if fdef[0] == "bool":
         return "on" if value else "off"
