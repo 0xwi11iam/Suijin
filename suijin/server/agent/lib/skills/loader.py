@@ -3,13 +3,6 @@ Skill loader — injects attack-skill-specific workflows into the system prompt.
 """
 
 from suijin.modules.agent.lib.skills.access_control import ACCESS_CONTROL_SKILL_PROMPT
-from suijin.modules.agent.lib.skills.blue_forensics import BLUE_FORENSICS_PROMPT
-from suijin.modules.agent.lib.skills.blue_incident import BLUE_INCIDENT_PROMPT
-from suijin.modules.agent.lib.skills.blue_monitoring import BLUE_MONITORING_PROMPT
-from suijin.modules.agent.lib.skills.blue_patching import BLUE_PATCHING_PROMPT
-
-# ── Blue Team skills ──────────────────────────────────────────────────
-from suijin.modules.agent.lib.skills.blue_recon import BLUE_RECON_PROMPT
 from suijin.modules.agent.lib.skills.cache_poisoning import CACHE_POISONING_SKILL_PROMPT
 from suijin.modules.agent.lib.skills.clickjacking import CLICKJACKING_SKILL_PROMPT
 from suijin.modules.agent.lib.skills.container_escape import CONTAINER_ESCAPE_SKILL_PROMPT
@@ -162,17 +155,6 @@ SKILL_MAP = {
     "svelte": SOUL_SKILL_PROMPT,
     "js_heavy": SOUL_SKILL_PROMPT,
     "javascript": SOUL_SKILL_PROMPT,
-    # ── Blue Team ──
-    "blue_recon": BLUE_RECON_PROMPT,
-    "blue_reconnaissance": BLUE_RECON_PROMPT,
-    "blue_monitoring": BLUE_MONITORING_PROMPT,
-    "blue_traffic": BLUE_MONITORING_PROMPT,
-    "blue_incident": BLUE_INCIDENT_PROMPT,
-    "blue_response": BLUE_INCIDENT_PROMPT,
-    "blue_patching": BLUE_PATCHING_PROMPT,
-    "blue_hotfix": BLUE_PATCHING_PROMPT,
-    "blue_forensics": BLUE_FORENSICS_PROMPT,
-    "blue_investigation": BLUE_FORENSICS_PROMPT,
 }
 
 # Default posture prompt — used when no specific attack path is set.

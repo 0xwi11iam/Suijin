@@ -44,7 +44,7 @@ def build_target_query(target_name: str) -> str:
     """DEPRECATED: Neo4j not connected. Use knowledge_graph.py instead.
 
     Returns a Cypher query string for reference only.
-    The blue team knowledge graph (core/blue/knowledge_graph.py) and
+    The knowledge graph (retired with blue team — returns at a later time) and
     red team knowledge graph (intel/knowledge_graph.py) are the active stores.
     """
     import warnings

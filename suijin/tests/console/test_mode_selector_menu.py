@@ -7,7 +7,7 @@ the exact menu — a row that disappears (or reappears) is a FAILURE, not
 a quiet feature reduction nobody notices until they go looking for it.
 
 The operator's menu (2026-09-24): Red Team / Settings / Operator Tools /
-Exit. Blue Team is NOT launched from the selector (the blue modules stay
+Exit. (Blue team is discontinued; returns at a later time.)
 in the tree — the gateway, defenders and blue tools still use them).
 """
 
