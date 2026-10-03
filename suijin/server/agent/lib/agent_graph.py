@@ -345,6 +345,18 @@ class SuijinAgentGraph:
             except Exception as _mg_err:  # noqa: BLE001 — never break the loop
                 logger.debug(f"mode governor skipped: {_mg_err}")
 
+            # ── DRIFTER (per-turn, System One class): objective alignment
+            # as a timeline; config-gated, writes _drift/_drift_score for
+            # the supervisor's digest. Never raises, never speaks.
+            with contextlib.suppress(Exception):
+                _rcfg = state.get("_run_config") or self.run_config or {}
+                from suijin.modules.agent.lib.reflex.core.client import decision_config as _dc
+
+                if _dc(_rcfg).get("enabled"):
+                    from suijin.modules.agent.lib.reflex.drifter import align as _align
+
+                    _align(result, result.get("execution_trace") or [], _rcfg)
+
             # ── Supervisor check (runs every N iterations) ──────────
             with contextlib.suppress(Exception):
                 supervisor_interval = int((state.get("_run_config") or self.run_config).get("supervisor_interval", 5))
@@ -384,11 +396,44 @@ class SuijinAgentGraph:
 
                     guidance = None
                     kind = "deterministic"
-                    if _esc != "drop":
+
+                    # ── REFLEX SUPERVISOR (System One decisions; config-gated) ──
+                    # tier-1 classifier verdict with ABSTAIN dominant, tier-2
+                    # grounded phrasing as the only generation. Miss/off =
+                    # the legacy rules+coach ladder below, unchanged.
+                    _reflex_cfg = state.get("_run_config") or self.run_config or {}
+                    _did_reflex = False
+                    try:
+                        from suijin.modules.agent.lib.reflex.supervisor import (
+                            phrase as _reflex_phrase,
+                        )
+                        from suijin.modules.agent.lib.reflex.supervisor import (
+                            reflex_enabled as _reflex_on,
+                        )
+                        from suijin.modules.agent.lib.reflex.supervisor import (
+                            shadow_supervisor as _reflex_shadow,
+                        )
+                        from suijin.modules.agent.lib.reflex.supervisor import (
+                            verdict as _reflex_verdict,
+                        )
+
+                        if _reflex_on(_reflex_cfg):
+                            _rv = _reflex_verdict(state, trace, _reflex_cfg)
+                            if _rv["act"]:
+                                guidance = await _reflex_phrase(_rv, self.generate_fn, state)
+                                kind = "reflex"
+                                if not guidance:
+                                    _rv = {**_rv, "act": False}  # phrasing refused: silence
+                            _reflex_shadow(state, trace, _reflex_cfg, _rv, legacy=None, acted=bool(guidance))
+                            _did_reflex = _rv["act"] and bool(guidance)
+                    except Exception as _rerr:  # noqa: BLE001 — reflex never breaks supervision
+                        logger.debug(f"reflex supervisor skipped: {_rerr}")
+
+                    if _esc != "drop" and not _did_reflex:
                         guidance = analyze_trace(trace[-15:], iteration=iteration)
                     if guidance:
-                        kind = "deterministic"
-                    else:
+                        kind = kind if _did_reflex else "deterministic"
+                    elif not _did_reflex:
                         guidance = await coach_turn(state, trace, self.generate_fn, iteration)
                         kind = "coach"
                     if guidance:
@@ -427,7 +472,26 @@ class SuijinAgentGraph:
                         # terminal dumps and JS bundles (field run: a 518KB
                         # bundle 'anomaly' produced an irrelevant SQLi
                         # hypothesis mid-recon) is pure interference.
-                        if last_step.get("tool_name") == "http_request" and detect_anomaly(tool_output):
+                        # ── REFLEX TRIAGE (System One class; config-gated) ──
+                        # ms-priced anomaly CLASS gates the LLM hypothesis
+                        # call: most outputs are `none`, so most calls die
+                        # before they exist. Off/miss = the regex ladder.
+                        _fire_oracle = last_step.get("tool_name") == "http_request" and detect_anomaly(tool_output)
+                        _orc_cfg = state.get("_run_config") or self.run_config or {}
+                        with contextlib.suppress(Exception):
+                            from suijin.modules.agent.lib.reflex.core.client import decision_config as _odc
+
+                            if _odc(_orc_cfg).get("enabled"):
+                                from suijin.modules.agent.lib.reflex.oracle import triage as _otriage
+
+                                _tr = _otriage(
+                                    tool_output,
+                                    status_code=int(last_step.get("status_code") or 200),
+                                    elapsed_ms=float(last_step.get("elapsed_ms") or 0.0),
+                                    config=_orc_cfg,
+                                )
+                                _fire_oracle = _tr["class"] != "none"
+                        if _fire_oracle:
                             hypotheses = await generate_hypotheses_async(tool_output, state, self.generate_fn)
                             if hypotheses:
                                 # ACTUATION (not homework): the top hypothesis
