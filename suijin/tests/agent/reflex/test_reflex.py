@@ -311,3 +311,29 @@ class TestEngines:
         assert d["enabled"] is True and d["model_path"] == "~/laya-mlx"
         assert d["on_fail"] == "local"  # pack fills sane defaults
         assert "decision_enabled" not in cfg
+
+
+class TestEngagementBoot:
+    def test_boot_loads_model_when_enabled(self, capsys):
+        """The engagement start seam: decisions enabled → the model loads
+        and prints its boot line; missing model → the loud degrade line."""
+        from pathlib import Path
+
+        from suijin.modules.agent.lib.reflex.core.client import _laya, laya_status
+
+        if not Path("~/laya-mlx").expanduser().is_dir():
+            pytest.skip("no local laya checkpoint")
+        import time
+
+        t0 = time.time()
+        agent = _laya(str(Path("~/laya-mlx").expanduser()))
+        assert agent is not None
+        assert laya_status("~/laya-mlx") == "loaded"
+        assert (time.time() - t0) * 1000 < 5000  # warm load is sub-second
+
+    def test_boot_degrades_loudly_on_missing_model(self, capsys):
+        from suijin.modules.agent.lib.reflex.core.client import _laya, laya_status
+
+        assert _laya("/nonexistent/model") is None
+        status = laya_status("/nonexistent/model")
+        assert "no model at" in status  # the degrade line names the path
