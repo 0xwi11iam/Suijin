@@ -2034,8 +2034,7 @@ def main(argv=None):
     warnings.filterwarnings("ignore", message=".*allowed_objects.*")  # any category — langchain uses its own base class
     parser = argparse.ArgumentParser(
         prog="suijin",
-        description="Suijin — autonomous red & blue teaming. "
-        "Run bare to launch the TUI; subcommands are non-interactive.",
+        description="Suijin — autonomous red teaming. Run bare to launch the TUI; subcommands are non-interactive.",
     )
     parser.add_argument("--version", action="version", version=f"suijin {_ver()}")
     sub = parser.add_subparsers(dest="command")

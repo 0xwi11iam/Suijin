@@ -13,7 +13,7 @@ Failure rules (non-negotiable):
 - stdin may be a pipe (CI, tests) — the thread exits silently when it EOFs
 - stop() is idempotent and thread-safe
 
-Standalone by design: no imports from redteamer/blueteamer (modular-ready).
+Standalone by design: no imports from the runner (modular-ready).
 """
 
 from __future__ import annotations

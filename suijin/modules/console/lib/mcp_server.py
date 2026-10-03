@@ -8,8 +8,6 @@ headless bridge; the primary interface is the classic Rich TUI (main.py).
 Tools exposed:
   suijin_tool       — generic dispatch: all 85 tools via route_tool()
   execute_terminal  — shell execution with guardrails (dispatch layer)
-  suijin_detect     — blue team pattern detector on a request dict
-  suijin_kg_attacker — blue team knowledge graph: attacker history
   suijin_status     — engine version, tool count, mode info
 
 No third-party MCP package required — the protocol surface used here
@@ -275,33 +273,6 @@ TOOLS = [
                 "timeout": {"type": "integer", "description": "Timeout seconds (default 30)"},
             },
             "required": ["cmd"],
-        },
-    },
-    {
-        "name": "suijin_detect",
-        "description": "Run the blue team pre-AI attack pattern detector on a request. "
-        "Returns score + matched patterns (SQLi, XSS, SSRF, ...).",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "request": {
-                    "type": "object",
-                    "description": "Request dict: method, path, body, ip, user_agent, query, headers",
-                },
-            },
-            "required": ["request"],
-        },
-    },
-    {
-        "name": "suijin_kg_attacker",
-        "description": "Query the blue team knowledge graph for an attacker's history "
-        "(flags, attacks, defenses deployed against them).",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "ip": {"type": "string", "description": "Attacker IP address"},
-            },
-            "required": ["ip"],
         },
     },
     {

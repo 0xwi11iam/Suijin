@@ -47,7 +47,8 @@ class TestMCPProtocol:
         )
         tools = responses[0]["result"]["tools"]
         names = {t["name"] for t in tools}
-        assert {"suijin_tool", "execute_terminal", "suijin_detect", "suijin_kg_attacker", "suijin_status"} <= names
+        assert {"suijin_tool", "execute_terminal", "suijin_status"} <= names
+        assert "suijin_detect" not in names and "suijin_kg_attacker" not in names  # blue team discontinued
 
     def test_per_tool_registry(self):
         """Every backend tool is exposed under its own name with a schema."""

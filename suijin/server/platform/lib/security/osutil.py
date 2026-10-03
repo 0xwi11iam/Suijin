@@ -5,7 +5,7 @@ Cross-platform process / file helpers.
 
 Why this exists
 ---------------
-The Blue Team loop and the viewer launcher were written for macOS/Linux and
+The engagement loop and the viewer launcher were written for macOS/Linux and
 shell out to Unix-only tools — ``lsof``, ``kill -9``, ``nohup ... &``,
 ``tail``, ``rm -f`` — and hardcode the ``python3`` interpreter name. None of
 those exist on Windows, so the tool could not run there at all.
