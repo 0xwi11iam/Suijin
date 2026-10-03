@@ -1,7 +1,7 @@
 """Panic button — `suijin panic`. Stop everything Suijin started, now.
 
 Kills Suijin-owned processes (TUI, web console, labs, spawned scanners),
-clears blue-team live state in /tmp, and reports what it did. Every step
+clears legacy live state in /tmp, and reports what it did. Every step
 is best-effort: a panic command must never itself fail.
 """
 
@@ -27,7 +27,7 @@ _PATTERNS = [
     "suijin.main daemon-run",  # detached daemon engagements (see _stop_daemons)
 ]
 
-# Live blue-team state in /tmp (constants are session-scoped by design).
+# Legacy live state in /tmp (blue team retired; globs stay for old machines).
 _STATE_GLOBS = [
     "blue_kg.json",
     "blue_tarpit.json",

@@ -1,4 +1,4 @@
-"""Phase 3 — recommended tier: providers, redteam, blueteam, knowledge, ops.
+"""Phase 3 — recommended tier: providers, redteam, knowledge, ops.
 
 The full OS boot: 7 core + 5 recommended modules in one DAG, console
 hooks populated by mode modules, disable-means-disappear at tier level.

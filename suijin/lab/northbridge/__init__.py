@@ -104,7 +104,7 @@ def telemetry_dir() -> str:
 
 def emit(edge: str, detail: str = "") -> None:
     """Record one chain-edge event — the bench's coverage signal and the
-    blue-team view of the engagement."""
+    defender view of the engagement."""
     import json
     import time
 
