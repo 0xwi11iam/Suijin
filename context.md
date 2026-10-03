@@ -260,3 +260,31 @@ dominance on healthy traces, qset-mismatch disable, invented-choice
 rejection, timeline confirmation, grounded phrasing refusal-as-silence,
 deny-distillation, and precision measurement (0.0 after a bad nudge —
 honest None until outcomes close).
+
+## laya-mlx hooked up (2026-10-02)
+
+The System One engine is wired end-to-end and configurable from Settings:
+
+- `decision.engine` DEFAULTS TO `laya-mlx`: an in-process Agent over the
+  local checkpoint (`~/laya-mlx`; laya-mlx+mlx installed in the venv;
+  the model loads once, ~0.1s, then answers in ~25-120ms). `http` exists
+  for remote decision servers; `local` is the deterministic fallback.
+- Questions now carry their System One phrasings IN the registry —
+  instructions reference state FIELDS and criteria carry per-label
+  DEFINITIONS (laya's trained format): the same file is the fine-tuning
+  contract (labels = the criteria keys).
+- SETTINGS ("Decisions — System One" section): System One on/off, the
+  engine (the row doubles as a live model-status line — "[loaded]" /
+  "no model at <path>"), the model folder, the http endpoint, and the
+  on-failure policy. Flat editor keys bridge the nested `decision`
+  block; pack fills sane defaults (engine=laya-mlx, ~/laya-mlx, local
+  fallback) and drops the http endpoint when unused.
+- Engine misses (no model, bad path, invented choice) fall to the
+  deterministic classifier — never a crash, never a guess.
+
+Base-model honesty: laya answers structured and fast, but its
+discrimination on OUR questions is weak until fine-tuned (expected —
+out-of-distribution). The confidence thresholds + abstain gates keep it
+safe in the meantime: low-p answers simply don't act, and shadow mode
+logs everything for the training corpus. Live proof: healthy trace →
+p=0.31 below threshold → no intervention; model answered in 82-231ms.

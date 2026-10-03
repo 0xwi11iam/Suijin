@@ -33,6 +33,20 @@ class Question:
     threshold: float = 0.55  # min p() for a non-abstain choice to act
     confirm_next_turn: bool = True  # borderline → timeline mark, act on repeat
     note: str = ""
+    #: the System One phrasings — instructions reference state FIELDS and
+    #: criteria carry per-label DEFINITIONS (laya's trained format). These
+    #: are the fine-tuning contract too: the labels below are the classes.
+    instructions: str = ""
+    criteria: tuple[tuple[str, str], ...] = ()
+
+    def laya(self) -> dict:
+        """The question in laya-mlx's trained dict format."""
+        crit = dict(self.criteria) or {c: c for c in self.choices}
+        return {
+            "type": "choice",
+            "instructions": self.instructions or f"Answer from state fields: {', '.join(self.features)}.",
+            "criteria": crit,
+        }
 
 
 _QUESTIONS: dict[str, Question] = {}
@@ -62,6 +76,22 @@ _q(
         ),
         threshold=0.62,
         note="the per-interval intervention verdict; abstain dominates on healthy traces",
+        instructions=(
+            "A security engagement agent runs think-act cycles. From `phase`, "
+            "`iterations_since_finding`, `repeat_pressure`, `tool_fail_cluster`, "
+            "`phase_tool_mismatch`, `chain_candidates` and `drift_score` in the state: "
+            "is the agent degraded?"
+        ),
+        criteria=(
+            ("none", "healthy progress: recent steps advance the objective"),
+            ("drift", "actions no longer serve the objective: high drift_score, recon-shaped tools in late phases"),
+            ("stall", "no forward motion: many iterations since the last finding, or clustered failures"),
+            ("repeat", "the same tool call with near-identical arguments repeats: high repeat_pressure"),
+            (
+                "miss_chain",
+                "a confirmed finding sits unexploited: chain_candidates above zero while work continues elsewhere",
+            ),
+        ),
     )
 )
 
@@ -95,6 +125,17 @@ _q(
         ),
         threshold=0.6,
         note="per-turn (10ms-class); abstain = not enough signal yet",
+        instructions=(
+            "An autonomous security agent works toward an objective. From `phase`, "
+            "`phase_tool_mismatch`, `iterations_since_finding`, `objective_digest` and "
+            "`recent_actions_digest`: is the recent action mix aligned with the objective?"
+        ),
+        criteria=(
+            ("none", "not enough signal yet to judge alignment"),
+            ("on_course", "the action mix matches the current phase and objective"),
+            ("drifting", "actions are only loosely connected to the objective"),
+            ("off_course", "actions clearly serve something other than the objective"),
+        ),
     )
 )
 
@@ -113,6 +154,18 @@ _q(
         threshold=0.55,
         confirm_next_turn=False,  # triage gates the LLM, doesn't inject text
         note="ms-priced per-request anomaly CLASS; replaces regex-only triage as tier-1",
+        instructions=(
+            "An HTTP response from a security test. From `status_code`, `body_len_delta`, "
+            "`elapsed_ms`, `error_markers` and `reflect_indicators`: does the response "
+            "look anomalous in a security-relevant way?"
+        ),
+        criteria=(
+            ("none", "an ordinary response for this endpoint"),
+            ("anomaly_auth", "authentication or authorization behaves unexpectedly: unusual 401/403/redirect"),
+            ("anomaly_inject", "injection evidence: reflected input, SQL or template markers in the body"),
+            ("anomaly_info", "information disclosure: errors, stack traces, internal details"),
+            ("anomaly_logic", "a business-logic anomaly: unexpected success, wrong data, odd timing"),
+        ),
     )
 )
 
