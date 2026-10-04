@@ -426,12 +426,27 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         _ps = _mesh.peers()
         if _ps and not state.get("_mesh_join_announced"):
             state["_mesh_join_announced"] = True
-            _join = (
-                f"MESH: {len(_ps)} peer session(s) just connected — you are now a team. "
-                "Introduce yourself with mesh_broadcast (one line: your target and current phase), "
-                "mesh_read a peer's digest before re-testing anything, and share every confirmed "
-                "finding and dead end as it happens."
-            )
+            # TARGET-SCOPE the narrative: peers on the SAME target are a
+            # team; peers on DIFFERENT targets are labeled background — a
+            # lab run burned reasoning sorting unrelated-target chatter out
+            # of its objective (2026-10-02). "Team" on unrelated peers
+            # invites cross-target coordination that helps nobody.
+            _my_t = str(state.get("original_objective") or "").lower()[:80]
+            _same = [p for p in _ps if str(p.get("summary", "")).lower()[:80] == _my_t]
+            if _same:
+                _join = (
+                    f"MESH: {len(_same)} peer session(s) on YOUR target just connected — a team. "
+                    "Introduce yourself with mesh_broadcast (one line: target and phase), "
+                    "mesh_read a peer's digest before re-testing anything, and share every "
+                    "confirmed finding and dead end as it happens."
+                )
+            else:
+                _join = (
+                    f"MESH: {len(_ps)} other session(s) running on this machine — "
+                    "DIFFERENT targets (not your engagement). Their chat below is "
+                    "background context only. Do NOT coordinate with them or test "
+                    "their targets; YOUR objective is the work."
+                )
             _mesh_notes.append(_join)
         from suijin.modules.agent.lib.nodes.execute_tool_node import _wrap_untrusted
 

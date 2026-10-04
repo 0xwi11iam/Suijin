@@ -162,7 +162,7 @@ class TestMeshChat:
         # 14 sent, 10 kept: messages 0-3 dropped, 4-13 present
         assert "message 3" not in block.split("(")[0]
         assert "message 0" not in block and "message 1]" not in block
-        assert "message 4" in block and "message 13" in block
+        assert "message 11" in block and "message 13" in block  # other-target cap: 3 (noise budget)
         mesh.stop()
 
     def test_dm_is_pairwise(self, mesh_dir, live_peer):
@@ -335,7 +335,7 @@ class TestMeshEncouragement:
 
         src = inspect.getsource(think_node)
         assert "_mesh_join_announced" in src, "no one-time join notice"
-        assert "you are now a team" in src
+        assert "DIFFERENT targets" in src  # scoped: unrelated peers are background, not team
 
     def test_unshared_finding_is_speakworthy(self):
         from suijin.client.tui.console_ui import UI_STATE

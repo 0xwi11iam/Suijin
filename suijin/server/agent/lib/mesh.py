@@ -301,19 +301,41 @@ def render_chat_block() -> str:
     """The GROUPCHAT context section: last GC_KEEP messages + new DMs.
 
     Content served RAW here — the caller wraps it untrusted before it
-    reaches the model."""
+    reaches the model. Each line carries the sender's target scope
+    ([team] = same target as us, [other:<summary>] = different
+    engagement) — the agent can self-filter relevance without burning
+    a reasoning turn on it (2026-10-02: lab-target chatter from an
+    unrelated agoda.com session confused the run's opening turn)."""
     gc_lines, _ = _tail(_gc_log(), 0.0)
     if not gc_lines and not _tail_state["dm_lines"]:
         return ""
+    _peer_summaries = {int(p.get("pid") or 0): str(p.get("summary", ""))[:50] for p in peers()}
+    _mine = str((_node.get("me") or {}).get("summary", ""))[:80].lower()
     rows = []
+
+    def _scope(pid: int) -> str:
+        their = _peer_summaries.get(pid, "").lower()
+        if their and _mine and (their in _mine or _mine in their):
+            return "team"
+        if their:
+            return f"other:{_peer_summaries.get(pid, '?')[:24]}"
+        return "peer"
+
+    # same-target lines: full GC_KEEP budget; different-target: capped at
+    # 3 (they're background — unlimited cross-target chatter is noise the
+    # agent pays tokens to ignore)
+    _team_lines, _other_lines = [], []
     for ln in gc_lines[-GC_KEEP:]:
         with contextlib.suppress(Exception):
             _ts, pid, name, msg = ln.split("|", 3)
-            rows.append(f"[node-{pid} {name} {_ts}] {msg}")
+            _tagged = f"[{_scope(int(pid))} node-{pid} {name} {_ts}] {msg}"
+            (_team_lines if _scope(int(pid)) == "team" else _other_lines).append(_tagged)
+    rows.extend(_team_lines[-GC_KEEP:])
+    rows.extend(_other_lines[-3:])
     for ln in _tail_state["dm_lines"][-5:]:
         with contextlib.suppress(Exception):
             _ts, pid, name, msg = ln.split("|", 3)
-            rows.append(f"[DM node-{pid} {name} {_ts}] {msg}")
+            rows.append(f"[DM {_scope(int(pid))} node-{pid} {name} {_ts}] {msg}")
     if not rows:
         return ""
     return "\n".join(rows)
