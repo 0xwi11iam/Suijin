@@ -2,7 +2,7 @@
 and talk.
 
 Operator's use case: open N terminal windows of hacking AI; they discover
-each other, show '| ⚡N sessions' in the strip, and the agents coordinate
+each other, show '| N connected' in the strip, and the agents coordinate
 through a group chat (first context section, last 10 messages) and
 pairwise DMs. Transport is FILES in a runtime dir — same machine, same
 user, no servers, no ports, no auth (remote nodes are v2 and get real
