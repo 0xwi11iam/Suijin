@@ -85,8 +85,14 @@ class TestInitRuntime:
         for name in ("profiles", "skills", "logs"):  # v3: exports/archive retired — bundles live in engagements
             assert (tmp_path / name).is_dir(), f"{name}"
         eng = ws.set_engagement("phase0 probe")
-        for sub in ("home", ".notes", "exploits", "audit_trails", "reports", "state", "memory", "sessions"):
-            assert (eng / sub).is_dir(), f"engagement/{sub}"
+        # 2026-10-05 LAZY SUBDIRS (operator: 'minimal and self-contained'):
+        # only log/ + state/ are created upfront; everything else creates
+        # on first write via its accessor's _ensure()
+        assert (eng / "log").is_dir(), "engagement/log"
+        assert (eng / "state").is_dir(), "engagement/state"
+        # the accessors still auto-create
+        assert ws.exploits_dir().is_dir()
+        assert ws.notes_dir().is_dir()
 
     def test_lazy_session_auto_initializes(self):
         from suijin.modules.platform.lib import runtime as rt
