@@ -22,12 +22,12 @@ import pytest
 def trail(tmp_path, monkeypatch):
     import suijin.modules.tools.lib.audit_trail as at
 
-    monkeypatch.setattr(at, "AUDIT_DIR", tmp_path)
-    monkeypatch.setattr(at, "_last_flush", 0.0)
-    monkeypatch.setattr(at, "_dirty", False)
+    at.set_audit_dir(tmp_path, key="test")
+    at.reset_all()
     at.start_audit("example-engagement")
     yield at, tmp_path
-    at._current_trail = None
+    at.reset_all()
+    at.set_audit_dir(None)
 
 
 class TestTrailTruth:
