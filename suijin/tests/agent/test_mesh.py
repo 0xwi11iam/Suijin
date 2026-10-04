@@ -2,7 +2,7 @@
 fix it rode in on.
 
 Use case: the operator opens several terminal windows of hacking AI; the
-sessions discover each other, the strip shows | ⚡N sessions, agents
+sessions discover each other, the strip shows | N connected, agents
 coordinate through an ephemeral groupchat (first context section, last 10
 messages) and pairwise DMs, and peers read each other's curated state
 digests. All hosts example.com (AGENTS.md).
@@ -255,7 +255,7 @@ class TestMeshInContext:
             sink = Console(file=io.StringIO(), width=120, force_terminal=True)
             sink.print(ui._strip())
             plain = re.sub(r"\x1b\[[0-9;]*m", "", sink.file.getvalue()).replace("\n", " ")
-            assert "3 sessions" in plain
+            assert "3 connected" in plain
         finally:
             cu.UI_STATE["mesh_count"] = 0
 
