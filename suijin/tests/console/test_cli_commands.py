@@ -4,7 +4,10 @@ modules, skills, config show/validate, workspace, reports, sessions, labs.
 Every command must be offline, scriptable, and exit 0 on success.
 """
 
+import contextlib
+import io
 import json
+import os
 
 import pytest
 
@@ -234,3 +237,58 @@ class TestHelpers:
 
     def test_redact_keeps_empty_values(self):
         assert cli._redact({"api_key": ""})["api_key"] == ""
+
+
+class TestDoctorInstallCheck:
+    """The 2026-10-02 incident, pinned: three stale pip copies outranked the
+    launcher in PATH; every fix 'verified' against the live tree while the
+    operator ran a months-old snapshot. Doctor must answer WHICH suijin
+    actually wins and whether it runs THIS tree."""
+
+    def test_honest_probe_passes_on_real_launcher(self):
+        import shutil
+
+        winner = shutil.which("suijin")
+        if not winner:
+            pytest.skip("no suijin on PATH")
+
+        from suijin.modules.console.lib.cli import run_doctor
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            run_doctor()
+        line = next(
+            (
+                row
+                for row in out.getvalue().splitlines()
+                if row.strip().startswith(("[ok]", "[XX]", "[!!]")) and "install" in row
+            ),
+            "",
+        )
+        assert "[XX] install" not in line, f"doctor claims the winner is stale: {line}"
+
+    def test_honest_probe_flags_fake_winner(self, tmp_path, monkeypatch):
+        fake = tmp_path / "bin"
+        fake.mkdir()
+        # the incident's shape: a console script whose interpreter imports suijin
+        # from ELSEWHERE — a stub package dir on its own sys.path
+        stale = tmp_path / "stalepkg" / "suijin"
+        stale.mkdir(parents=True)
+        (stale / "__init__.py").write_text("")
+        (fake / "suijin").write_text(
+            "#!/usr/bin/env python3\n"
+            "import sys\n"
+            f"sys.path.insert(0, {str(tmp_path / 'stalepkg')!r})\n"
+            "import suijin\n"
+            "sys.exit(0)\n"
+        )
+        (fake / "suijin").chmod(0o755)
+        monkeypatch.setenv("PATH", f"{fake}:{os.environ['PATH']}")
+        from suijin.modules.console.lib.cli import run_doctor
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            run_doctor()
+        text = out.getvalue()
+        assert "does NOT run this tree" in text, "doctor missed a stale winner"
+        assert "shadowing" in text  # and it names the runner-up problem
