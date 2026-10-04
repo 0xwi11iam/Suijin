@@ -94,6 +94,88 @@ def run_doctor() -> int:
         rows.append(_fail("python", f"{py} (need 3.10+)"))
         critical += 1
 
+    # INSTALL SHADOWING — the 2026-10-02 incident: three stale `pip install
+    # --user` copies outranked the real launcher in PATH, so the operator
+    # ran a months-old snapshot while every fix "verified" against the
+    # live tree. Doctor now answers the question that burned a whole day:
+    # WHICH suijin actually runs, and is it this one?
+    try:
+        import shutil as _sh
+        import subprocess as _sp
+
+        _here = str(Path(__file__).resolve().parents[4])  # <repo> root (cli.py is 4 deep)
+        _winner = _sh.which("suijin") or ""
+        with contextlib.suppress(Exception):
+            _ap = _sp.run(["bash", "-lc", "type -ap suijin"], capture_output=True, text=True, timeout=5)
+        _all = list(dict.fromkeys((_ap.stdout if "_ap" in dir() else "").split()))
+        _ap = None
+        if not _winner:
+            rows.append(_warn("install", "no `suijin` on PATH"))
+        else:
+            # THE ONLY HONEST CHECK — reproduce the winner's runtime shape:
+            # (a) a launcher that EXECs a cli.py path: resolve that path and
+            #     ask if it lives in this tree (no execution needed);
+            # (b) a pip console script (from suijin... import): probe its
+            #     interpreter with the script's own bin dir on sys.path,
+            #     from a NEUTRAL cwd — exactly the world it runs in.
+            _winner_pts_to_us = False
+            _py = None
+            with contextlib.suppress(Exception):
+                _txt = Path(_winner).read_text()[:500]
+                # (a) bash launcher: exec "<python>" "<...>/cli.py"
+                for _ln in _txt.splitlines():
+                    if "/cli.py" in _ln and "exec" in _ln:
+                        _script = _ln.split('"')[-2] if _ln.count('"') >= 2 else ""
+                        if _script:
+                            _winner_pts_to_us = _here in str(Path(_script).resolve())
+                            break
+                # (b) pip console script: shebang python + its bin dir on sys.path
+                if not _winner_pts_to_us and _txt.startswith("#!"):
+                    _py = _txt.splitlines()[0][2:].strip()
+                    if _py:
+                        import subprocess as _sp
+                        import tempfile as _tf
+
+                        _sc = Path(_tf.gettempdir()) / f"suijin_probe_{os.getpid()}.py"
+                        _sc.write_text("import sys, suijin\nsys.stdout.write(suijin.__file__)\n")
+                        _probe = _sp.run(
+                            [_py, str(_sc)],
+                            capture_output=True,
+                            text=True,
+                            timeout=30,
+                            cwd=str(_tf.gettempdir()),
+                            env=dict(os.environ, PYTHONPATH=str(Path(_winner).parent)),
+                        )
+                        with contextlib.suppress(OSError):
+                            _sc.unlink(missing_ok=True)
+                        _got = _probe.stdout.strip()
+                        _winner_pts_to_us = bool(_got) and _here in str(Path(_got).resolve())
+            _shadowed = [x for x in _all if x != _winner]
+            if _py is None and not _winner_pts_to_us:
+                pass  # a stub/non-python winner (tests, containers): no verdict
+            elif _winner_pts_to_us:
+                rows.append(_ok("install", f"{_winner}"))
+            else:
+                rows.append(
+                    _fail(
+                        "install",
+                        f"{_winner} does NOT run this tree ({_here}) — a stale "
+                        "pip copy is shadowing the launcher. Fix: pip uninstall suijin "
+                        "from the python that owns it, or reorder PATH.",
+                    )
+                )
+                critical += 1
+            if len(_shadowed) >= 1:
+                rows.append(
+                    _warn(
+                        "install shadowing",
+                        f"{len(_shadowed)} other suijin binary(ies) on PATH (stale installs "
+                        "can outrank the launcher after PATH changes)",
+                    )
+                )
+    except Exception:  # noqa: BLE001 — doctor never crashes on its own checks
+        pass
+
     # Core dependencies
     missing_deps = [m for m in CORE_IMPORTS if not _importable(m)]
     if not missing_deps:
