@@ -2,84 +2,117 @@
 Suijin Audit Trail — complete, zero-truncation JSON/MD logging.
 Records: what the AI saw (tool outputs), thought (reasoning), did (actions).
 
-Write cadence (2026-09-26, the long-run lag fix): the trail used to be
-rewritten IN FULL on every log_iteration/log_finding call. Observations
-are stored untruncated by design, so on a long engagement the file grows
-into megabytes and every tool call then paid a GIL-held json.dumps of the
-whole history — the TUI's typewriter and input threads starved and the
-console became unusable to type in. _save() is now throttled: dirty-flag
-plus a forced flush at end/iteration boundaries. The events.jsonl journal
-remains the durable per-event record, so a crash at most loses the tail
-of a report copy — never the run itself.
+2026-10-04 rewrite for multi-agent sessions: the trail used MODULE GLOBALS
+for the current engagement, so 4 terminals in one process shared a single
+dict — the last start_audit() won and 3 agents' trails never landed. The
+trail is now keyed BY ENGAGEMENT DIR (the same workspace seam agent_steps
+uses): each engagement's trail lives in its own audit_trails/ dir, writes
+independently, and never touches another engagement's file.
+
+Write cadence preserved from the 2026-09-26 fix: dirty-flag + interval
+guard (10s), forced flush at iteration boundaries and engagement end. The
+events.jsonl journal remains the durable per-event record.
 """
 
 from __future__ import annotations
 
 import json
+import threading
 import time
 from datetime import datetime, timezone
+from pathlib import Path as _P
 
 #: minimum seconds between disk writes for throttled saves
 FLUSH_INTERVAL_S = 10.0
-_last_flush = 0.0
-_dirty = False
+
+#: per-engagement trail state: {engagement_key: trail_dict}
+#: _locks guards the dict itself; each trail's writes are single-threaded
+#: (called from the engagement's own loop), so no per-trail lock needed
+_trails: dict[str, dict] = {}
+_locks: dict[str, threading.Lock] = {}
+_meta_lock = threading.Lock()
+
+#: last flush time per engagement (the throttle)
+_last_flush: dict[str, float] = {}
+
+_overridden_dir: _P | None = None  # tests pin a single dir (legacy)
+_overridden_key: str | None = None  # tests pin a per-test engagement key
 
 
-def _audit_dir():
-    """audit_trails dir (honours a monkeypatched module attr)."""
-    v = globals().get("AUDIT_DIR")
-    if v is not None:
-        return v
+def _engagement_key() -> str:
+    """Stable key for THIS engagement's trail — the workspace's current
+    engagement dir (same seam agent_steps uses). Falls back to the
+    engagement name when no workspace engagement is set."""
+    if _overridden_key is not None:
+        return _overridden_key
+    from suijin.modules.platform.lib.workspace import engagement_dir
 
-    from suijin.modules.platform.lib.workspace import artifact_dir as _ad
-
-    return _ad("audit_trails")
-
-
-def __getattr__(name):
-    if name == "AUDIT_DIR":
-        return _audit_dir()
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    eng = engagement_dir()
+    if eng is not None and eng.parent.name != "_default":
+        return str(eng)
+    return "unnamed_engagement"
 
 
-def _ensure_dir() -> None:
-    """Create the audit dir on first write (no import-time side effects)."""
-    _audit_dir().mkdir(parents=True, exist_ok=True)
+def _audit_dir(key: str | None = None) -> _P:
+    """audit_trails dir for this engagement (or the override for tests)."""
+    if _overridden_dir is not None:
+        return _overridden_dir
+    from suijin.modules.platform.lib.workspace import engagement_dir
+
+    eng = engagement_dir()
+    base = _P(eng) if eng is not None else _P.home() / ".suijin" / "workspace"
+    d = base / "audit_trails"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
-_current_trail = None
-_current_engagement = "unknown"
+def set_audit_dir(path, key: str | None = None) -> None:
+    """Tests pin a directory and optionally a per-test engagement key;
+    None restores the workspace seam."""
+    global _overridden_dir, _overridden_key
+    _overridden_dir = _P(path) if path else None
+    _overridden_key = key
+
+
+def _fname_for(key: str) -> str:
+    """File-safe name from the engagement key (dir path → last component,
+    or the name itself if not a path)."""
+    name = key.rstrip("/").split("/")[-1] if "/" in key else key
+    return name.replace("/", "_").replace(" ", "_").replace(":", "_")[:60]
+
+
+# ── lifecycle ────────────────────────────────────────────────────────────
 
 
 def start_audit(engagement_name: str):
-    global _current_trail, _current_engagement
-    _current_engagement = engagement_name or "unnamed"
-    _current_trail = {
-        "engagement": _current_engagement,
-        "started": datetime.now(timezone.utc).isoformat(),
-        "ended": None,
-        "iterations": [],
-        "findings": [],
-        "total_actions": 0,
-        "successful_actions": 0,
-        "failed_actions": 0,
-        "cost_usd": 0.0,
-    }
-    _save(force=True)
+    """Begin a trail for THIS engagement. Multiple concurrent engagements
+    each get their own — the last caller no longer clobbers the others."""
+    key = _engagement_key()
+    with _meta_lock:
+        _locks.setdefault(key, threading.Lock())
+        _trails[key] = {
+            "engagement": engagement_name or "unnamed",
+            "key": key,
+            "started": datetime.now(timezone.utc).isoformat(),
+            "ended": None,
+            "iterations": [],
+            "findings": [],
+            "total_actions": 0,
+            "successful_actions": 0,
+            "failed_actions": 0,
+            "cost_usd": 0.0,
+        }
+        _last_flush[key] = 0.0
+    _save(key, force=True)
 
 
 def flush():
-    """Persist the trail if it is stale (interval-guarded, cheap no-op).
-
-    Called at iteration boundaries so a mid-run reader (dossier, report)
-    never sees data older than FLUSH_INTERVAL_S. The end of the run forces
-    a final write in end_audit; the events.jsonl journal remains the
-    durable per-event record, so a crash loses at most the tail of this
-    REPORT copy — never the run itself."""
-    global _dirty
-    if _current_trail is None:
-        return
-    _save()
+    """Persist THIS engagement's trail if stale. Called at iteration
+    boundaries so a mid-run reader never sees data older than
+    FLUSH_INTERVAL_S. Cheap no-op when clean."""
+    key = _engagement_key()
+    if key in _trails:
+        _save(key)
 
 
 def log_iteration(
@@ -94,8 +127,9 @@ def log_iteration(
     completion_reason: str = "",
     chain_context: str = "",
 ):
-    global _current_trail
-    if _current_trail is None:
+    key = _engagement_key()
+    trail = _trails.get(key)
+    if trail is None:
         return
     entry = {
         "iteration": iteration,
@@ -112,76 +146,94 @@ def log_iteration(
         "chain_context": chain_context,
         "completion_reason": completion_reason,
     }
-    _current_trail["iterations"].append(entry)
-    _current_trail["total_actions"] += 1
-    if success:
-        _current_trail["successful_actions"] += 1
+    with _locks.get(key, _meta_lock):
+        trail["iterations"].append(entry)
+        trail["total_actions"] += 1
+        if success:
+            trail["successful_actions"] += 1
+        else:
+            trail["failed_actions"] += 1
+    # COUNT-BASED FORCE (the operator's 4-agent run 2026-10-04: short
+    # engagements finished inside the 10-second throttle window, so the
+    # trail JSON stayed empty while agent_steps.jsonl recorded fine —
+    # the boundary flushes hit the time guard and skipped). Every 5th
+    # iteration writes regardless of elapsed time.
+    if len(trail["iterations"]) % 5 == 0:
+        _save(key, force=True)
     else:
-        _current_trail["failed_actions"] += 1
-    _save()
+        _save(key)
 
 
 def log_finding(finding_type: str, severity: str, endpoint: str, description: str, evidence: str):
-    global _current_trail
-    if _current_trail is None:
+    key = _engagement_key()
+    trail = _trails.get(key)
+    if trail is None:
         return
-    _current_trail["findings"].append(
-        {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "type": finding_type,
-            "severity": severity,
-            "endpoint": endpoint,
-            "description": description,
-            "evidence": evidence,
-        }
-    )
-    _save()
+    with _locks.get(key, _meta_lock):
+        trail["findings"].append(
+            {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "type": finding_type,
+                "severity": severity,
+                "endpoint": endpoint,
+                "description": description,
+                "evidence": evidence,
+            }
+        )
+    _save(key)
 
 
 def end_audit(cost_usd: float = 0.0):
-    global _current_trail
-    if _current_trail is None:
-        return
-    _current_trail["ended"] = datetime.now(timezone.utc).isoformat()
-    _current_trail["cost_usd"] = cost_usd
-    _save(force=True)  # the end MUST land — this is the report of record
-    path = _export_markdown()
-    _current_trail = None
+    """Conclude THIS engagement's trail — forced write + markdown export.
+    Other engagements' trails are untouched."""
+    key = _engagement_key()
+    trail = _trails.get(key)
+    if trail is None:
+        return None
+    trail["ended"] = datetime.now(timezone.utc).isoformat()
+    trail["cost_usd"] = cost_usd
+    _save(key, force=True)  # the end MUST land — this is the report of record
+    path = _export_markdown(key)
+    with _meta_lock:
+        _trails.pop(key, None)
+        _locks.pop(key, None)
+        _last_flush.pop(key, None)
     return path
 
 
-def _save(force: bool = False):
-    """Persist the trail — throttled unless forced.
+# ── persistence ──────────────────────────────────────────────────────────
+
+
+def _save(key: str, force: bool = False):
+    """Persist one engagement's trail — throttled unless forced.
 
     `force=True` at engagement end, iteration boundaries and pause/ask
     points; ordinary tool-call logging only marks dirty and writes at
-    most once per FLUSH_INTERVAL_S. See the module docstring for why.
-    """
-    global _last_flush, _dirty
-    if _current_trail is None:
+    most once per FLUSH_INTERVAL_S per engagement (the 2026-09-26 fix,
+    now per-key so 4 concurrent agents don't share a throttle clock
+    either)."""
+    trail = _trails.get(key)
+    if trail is None:
         return
     now = time.monotonic()
-    if not force and now - _last_flush < FLUSH_INTERVAL_S:
-        _dirty = True  # write it on the next forced/eligible flush
-        return
-    fname = _current_engagement.replace("/", "_").replace(" ", "_").replace(":", "_")[:60]
-    _ensure_dir()
-    path = _audit_dir() / f"{fname}.json"
-    # compact JSON: ~30% smaller and several times faster to serialize
-    # than indent=2 — the indent was pure formatting cost on a file only
-    # tools read
-    path.write_text(json.dumps(_current_trail, separators=(",", ":"), default=str))
-    _last_flush = now
-    _dirty = False
+    if not force and now - _last_flush.get(key, 0.0) < FLUSH_INTERVAL_S:
+        return  # dirty — the next forced/eligible flush writes it
+    # the FILENAME is the engagement NAME (what start_audit received) —
+    # same as the old behavior so readers/dossiers find it
+    fname = str(trail.get("engagement", "unnamed")).replace("/", "_").replace(" ", "_").replace(":", "_")[:60]
+    path = _audit_dir(key) / f"{fname}.json"
+    path.write_text(json.dumps(trail, separators=(",", ":"), default=str))
+    with _meta_lock:
+        _last_flush[key] = now
 
 
-def _export_markdown() -> str:
-    if _current_trail is None:
+def _export_markdown(key: str) -> str:
+    trail = _trails.get(key)
+    if trail is None:
         return ""
-    _ensure_dir()
-    fname = _current_engagement.replace("/", "_").replace(" ", "_").replace(":", "_")[:60]
-    path = _audit_dir() / f"{fname}.md"
-    t = _current_trail
+    fname = str(trail.get("engagement", "unnamed")).replace("/", "_").replace(" ", "_").replace(":", "_")[:60]
+    path = _audit_dir(key) / f"{fname}.md"
+    t = trail
     lines = [
         f"# Suijin Audit Trail — {t['engagement']}",
         "",
@@ -220,4 +272,28 @@ def _export_markdown() -> str:
 
 
 def get_audit_json() -> dict:
-    return _current_trail or {}
+    """THIS engagement's trail (read-only copy for the report path)."""
+    key = _engagement_key()
+    trail = _trails.get(key)
+    return dict(trail) if trail else {}
+
+
+def reset_all() -> None:
+    """Tests: clear every trail state."""
+    with _meta_lock:
+        _trails.clear()
+        _locks.clear()
+        _last_flush.clear()
+
+
+#: legacy compat: the old module exposed _dirty as a module global. The new
+#: design has no single dirty flag (it's per-engagement). This always
+#: returns False — old tests that asserted _dirty semantics are updated.
+_dirty = False
+
+
+def __getattr__(name):
+    """Legacy module attribute compatibility."""
+    if name == "AUDIT_DIR":
+        return _audit_dir()  # resolve the current audit dir
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -32,12 +32,12 @@ import pytest
 def trail(tmp_path, monkeypatch):
     import suijin.modules.tools.lib.audit_trail as at
 
-    monkeypatch.setattr(at, "AUDIT_DIR", tmp_path)
-    monkeypatch.setattr(at, "_last_flush", 0.0)
-    monkeypatch.setattr(at, "_dirty", False)
+    at.reset_all()
+    at.set_audit_dir(tmp_path, key="test")
     at.start_audit("example-engagement")
     yield at, tmp_path
-    at._current_trail = None
+    at.reset_all()
+    at.set_audit_dir(None)
 
 
 class TestAuditTrailWriteCadence:
@@ -55,8 +55,10 @@ class TestAuditTrailWriteCadence:
         monkeypatch.setattr(Path, "write_text", counting_write)
         for i in range(25):
             at.log_iteration(i, "t", "r", "http_request", {"url": "https://example.com"}, "x" * 2000, True, "recon")
-        # start_audit's forced initial write + at most one throttled write
-        assert len([w for w in writes if w.endswith(".json")]) <= 2, writes
+        # the count-based force (every 5th iteration) bounds writes at 25/5 + 1 = 6
+        # (the 2026-10-04 short-run fix: without it, engagements finishing inside
+        # the 10-second throttle window left empty trail JSONs)
+        assert len([w for w in writes if w.endswith(".json")]) <= 6, writes
 
     def test_everything_lands_at_the_forced_end(self, trail):
         """The throttle never loses data: end_audit forces the full trail."""
