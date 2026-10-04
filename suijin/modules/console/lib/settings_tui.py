@@ -322,8 +322,16 @@ def load_state() -> tuple[dict, str]:
 
 
 def save_config(config: dict) -> None:
-    _decision_pack(config)
-    Path(CONFIG_PATH).write_text(json.dumps(config, indent=4))
+    # Pack into a COPY: _decision_pack pops flat keys from the dict it's
+    # given, and the editor keeps USING this dict after save — popping in
+    # place made every decision_* row read "(not set)/off" the moment the
+    # operator pressed 's', so a successful save LOOKED like a lost one
+    # (operator report 2026-10-02: "enter changes, press save, doesn't save").
+    import copy as _copy
+
+    on_disk = _copy.deepcopy(config)
+    _decision_pack(on_disk)
+    Path(CONFIG_PATH).write_text(json.dumps(on_disk, indent=4))
 
 
 def _visible_fields(config: dict) -> "OrderedDict[str, tuple]":
