@@ -1184,11 +1184,11 @@ class EngagementUI:
             segs.append([ft_seg[-1][0], ft_seg[-1][1], 0])  # long label; tier-3 compress form below
         if lb_seg:
             segs.append([lb_seg[-1][0], lb_seg[-1][1], 0])
-        # THE MESH: '| ⚡N sessions' — green, tier 0 (never dropped; the
+        # THE MESH: '| N connected' — green, tier 0 (never dropped; the
         # fit ladder compresses it to SES N under width pressure)
         _mesh_n = int(UI_STATE.get("mesh_count") or 0)
         if _mesh_n > 1:
-            segs.append([f"⚡{_mesh_n} sessions", "bold green", 0])
+            segs.append([f"{_mesh_n} connected", "bold green", 0])
 
         def _fit(segments: list[list], avail: int) -> list[list]:
             def total(lst):
