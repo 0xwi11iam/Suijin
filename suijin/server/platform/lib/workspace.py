@@ -182,8 +182,17 @@ def set_engagement(objective: str = "") -> Path:
     ensure_global_layout()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     d = WORKSPACE_DIR / "engagements" / f"{stamp}_{_slugify(objective[:60])}"
-    for sub in ENGAGEMENT_SUBDIRS:
-        (d / sub).mkdir(parents=True, exist_ok=True)
+    d.mkdir(parents=True, exist_ok=True)
+    # LAZY SUBDIRS (operator ruling 2026-10-05): the old layout created 11+
+    # empty dirs per engagement before the agent did anything — a workspace
+    # of 10 parallel agents was 130 empty directories of noise. Every
+    # accessor (notes_dir, exploits_dir, state_dir, ...) already calls
+    # _ensure() and creates on first WRITE; set_engagement creates only
+    # the two that always receive files immediately (log/ for the
+    # engagement logger, state/ for the guidance/scratchpad the first
+    # turn reads).
+    (d / "log").mkdir(exist_ok=True)
+    (d / "state").mkdir(exist_ok=True)
     _CURRENT_ENGAGEMENT = d
     return d
 
