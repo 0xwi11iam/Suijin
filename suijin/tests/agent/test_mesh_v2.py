@@ -70,8 +70,12 @@ class TestWireProtocol:
             for _ in range(4):  # past the 3-strike limit
                 wf.write(json.dumps({"key": "wrong", "op": "PING"}).encode() + b"\n")
                 wf.flush()
-                if not rf.readline():
-                    dropped = True  # the server closed on us
+                try:
+                    if not rf.readline():
+                        dropped = True  # the server closed on us
+                        break
+                except ConnectionResetError:
+                    dropped = True  # 3.12: close manifests as a reset, not EOF
                     break
             assert dropped, "server should drop a key-guessing peer"
 
