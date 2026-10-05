@@ -1913,6 +1913,13 @@ def run_profile_cmd(args) -> int:
     return 0
 
 
+def run_operator(demo: bool = False) -> int:
+    """The multi-agent command center TUI."""
+    from suijin.modules.console.lib.operator_tui import main as _op_main
+
+    return _op_main(demo=demo)
+
+
 def run_lab(mode: str) -> int:
     """Suijin Lab — the one target. up/down/reset/status/telemetry."""
     import json as _json
@@ -2088,6 +2095,7 @@ _KNOWN_VERBS = frozenset(
         "stop",
         "tui",
         "mesh-port",
+        "operator",
         "lab",
     }
 )
@@ -2139,6 +2147,10 @@ def main(argv=None):
     for name, (help_text, fn) in SIMPLE_COMMANDS.items():
         p = sub.add_parser(name, help=help_text)
         p.set_defaults(func=lambda _a, _fn=fn: _fn())
+
+    opp = sub.add_parser("operator", help="multi-agent command center: live dashboard for all running engagements")
+    opp.add_argument("--demo", action="store_true", help="render with mock data (no live agents needed)")
+    opp.set_defaults(func=lambda a: run_operator(a.demo))
 
     labp = sub.add_parser("lab", help="Suijin Lab (northbridge): up/down/reset/status/telemetry")
     labp.add_argument("mode", nargs="?", default="status", choices=["up", "down", "reset", "status", "telemetry"])
