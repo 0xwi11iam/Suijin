@@ -1,6 +1,6 @@
 # Contributing to Suijin
 
-Thank you for your interest in contributing! Suijin is a dual-mode (Red Team + Blue Team) autonomous security platform. This guide covers everything you need to start contributing.
+Thank you for your interest in contributing! Suijin is an autonomous red-team security platform. This guide covers everything you need to start contributing.
 
 ## Developer Setup
 
@@ -29,13 +29,12 @@ python3 -m pytest suijin/tests/ -q
 
 ```
 suijin/
-├── core/           # State machine, red/blue teamers, config, constants
-│   └── blue/       # Blue team SOC modules (ai_engine, feed, proxy, defense, soc)
+├── core/           # State machine, red teamer, config, constants
 ├── tools/          # 85-tool dispatch, guardrails, workspace, providers
 ├── tests/          # pytest suite (7 files, 134 tests)
 ├── lab/            # Deliberately vulnerable labs (25-endpoint Flask app, CloudBoard Next)
 ├── skills/         # Attack skill definitions (SQLi, XSS, SSRF, SSTI, etc.)
-├── prompts/        # LLM system prompts (red_team, blue_team)
+├── prompts/        # LLM system prompts (red team)
 └── main.py         # TUI entry point (Rich console)
 Modules/            # Tool wrappers (nmap, sqlmap, hydra, metasploit, etc.)
 suijin_agent/       # Agent workspace (outputs, payloads, scripts)
@@ -89,16 +88,6 @@ main.py -> redteamer.py -> LangGraph State Machine
   ├── think          # LLM ReAct loop with 7 action types
   ├── execute_tool   # Dispatch to 85 tools
   └── generate_response  # Format output, update audit trail
-```
-
-### Blue Team Pipeline
-
-```
-main.py -> blueteamer.py -> Traffic Interception
-  ├── proxy.py       # HTTP forward proxy (port 8080 -> port 5906)
-  ├── tui/feed.py    # LiveFeed tier router (18 pattern detectors -> AI engine)
-  ├── ai_engine.py   # LLM decision maker (FLAGGED/NOT_FLAGGED -> DECEIVE/BLOCK/PATCH)
-  └── defense/       # Tarpit, firewall, WAF, deception engine
 ```
 
 ### Key Design Decisions

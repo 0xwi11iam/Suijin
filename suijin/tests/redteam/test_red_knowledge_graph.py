@@ -4,6 +4,7 @@ route to. All file I/O monkeypatched into tmp_path.
 """
 
 import json
+import os
 
 import pytest
 
@@ -18,6 +19,12 @@ def _json_kg_backend(monkeypatch):
     mutation that leaked into every later test in the session.
     """
     monkeypatch.setenv("SUIJIN_KG_BACKEND", "json")
+    # env alone is not enough: get_backend memoizes per process — a test
+    # that ran first could have pinned the live neo4j backend for the
+    # whole session (order-dependent writes into the real graph)
+    from suijin.modules.redteam.lib.intel.kg_backend import _invalidate_backend_cache
+
+    _invalidate_backend_cache()
 
 
 @pytest.fixture(autouse=True)
@@ -147,3 +154,75 @@ class TestResilience:
 
         out = record_finding("t", "nonsense_type", "x", config={})
         assert "Invalid finding_type" in out
+
+
+# ── Neo4j backend (live; runs only when the local container answers) ──────
+
+
+def _neo4j_reachable() -> bool:
+    import socket
+
+    try:
+        with socket.create_connection(("127.0.0.1", 7687), timeout=1):
+            return True
+    except OSError:
+        return False
+
+
+NEO4J_LIVE = pytest.mark.skipif(
+    not _neo4j_reachable() or os.environ.get("SUIJIN_KG_SKIP_NEO4J"),
+    reason="no local neo4j on :7687 (docker start suijn-kg)",
+)
+
+
+@NEO4J_LIVE
+class TestNeo4jBackend:
+    """The same contract, against the real server. The suite stays green
+    without a container (CI) and verifies everything when one exists."""
+
+    def _kg(self):
+        from suijin.modules.redteam.lib.intel.kg_backend import Neo4jKG
+
+        return Neo4jKG(
+            "bolt://127.0.0.1:7687",
+            "neo4j",
+            os.environ.get("SUIJIN_NEO4J_PASSWORD", "suijn-kg-local"),
+        )
+
+    def test_add_get_roundtrip(self):
+        kg = self._kg()
+        kg.add_constraint("kgtest.example", "waf", "rule-a", evidence="e", confidence=0.9)
+        got = kg.get_constraints("kgtest.example")
+        assert got["waf"][0]["rule"] == "rule-a"
+        assert got["waf"][0]["confidence"] == 0.9
+        kg.clear_target("kgtest.example")
+        kg.close()
+
+    def test_merge_dedup_and_ratchet(self):
+        kg = self._kg()
+        kg.add_constraint("kgtest.example", "waf", "rule-a", confidence=0.5)
+        kg.add_constraint("kgtest.example", "waf", "rule-a", confidence=0.95)
+        kg.add_constraint("kgtest.example", "waf", "rule-a", confidence=0.3)
+        entries = kg.get_constraints("kgtest.example")["waf"]
+        assert len(entries) == 1
+        assert entries[0]["confidence"] == 0.95  # ratchets up, never down
+        kg.clear_target("kgtest.example")
+        kg.close()
+
+    def test_target_isolation(self):
+        kg = self._kg()
+        kg.add_constraint("kgtest-a.example", "waf", "rule-x", confidence=1.0)
+        kg.add_constraint("kgtest-b.example", "blocks", "rule-y", confidence=1.0)
+        assert "waf" not in kg.get_constraints("kgtest-b.example")
+        kg.clear_target("kgtest-a.example")
+        kg.clear_target("kgtest-b.example")
+        kg.close()
+
+    def test_clear_sweeps_orphans(self):
+        kg = self._kg()
+        kg.add_constraint("kgtest-c.example", "waf", "rule-z", confidence=1.0)
+        kg.clear_target("kgtest-c.example")
+        assert kg.get_constraints("kgtest-c.example") == {}
+        orphaned = kg._run("MATCH (c:Constraint) WHERE NOT ()-[:HAS]->(c) RETURN count(c) AS n")[0]["n"]
+        assert orphaned == 0
+        kg.close()

@@ -50,6 +50,15 @@ def _catalog_roots() -> list:
     return out
 
 
+_LAB_TARGET_RX = re.compile(r"^(127\.[\d.]+|localhost|::1|[^/]*\.local)(:\d+)?$", re.I)
+
+
+def is_lab_target(text: str) -> bool:
+    """Loopback / *.local — the lab family. Lab runs must never whisper
+    into real engagements (the decoy-flag contamination, 2026-10-07)."""
+    return bool(_LAB_TARGET_RX.match(target_key(str(text or "")) or ""))
+
+
 def what_worked(target: str, limit: int = 8) -> list[str]:
     """Lines of prior CONFIRMED exploits for this target, then class-level
     transfer (classes that paid on other targets). Never raises."""
@@ -87,9 +96,12 @@ def what_worked(target: str, limit: int = 8) -> list[str]:
                 if str(e.get("status", "")).upper() != "CONFIRMED":
                     continue
                 cls = str(e.get("class") or e.get("vuln_class") or "?")
-                if target_key(str(e.get("target") or "")) == key:
+                _et = str(e.get("target") or "")
+                if target_key(_et) == key:
                     same.append(f"{cls}: {str(e.get('title', ''))[:70]} ({e.get('id', '?')})")
-                else:
+                elif not is_lab_target(_et):
+                    # class transfer from REAL targets only — lab runs
+                    # (their flags, their decoys) stay out of real advice
                     class_hits[cls] = class_hits.get(cls, 0) + 1
         if same:
             out.append("PRIOR CONFIRMED on this target:")

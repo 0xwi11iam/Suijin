@@ -6,6 +6,22 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## Unreleased — knowledge hardening round
+
+- **Neo4j knowledge graph live**: the KG backend switch is real — local
+  Docker (`suijn-kg`), persistent volume, migration from the JSON store
+  with parity checks, loud JSON fallback when the server is down.
+- **Enforced graph read**: every think context carries the target's KG
+  summary — verified constraints are impossible to skip.
+- **Machine-driven comms**: phase transitions and CONFIRMED exploits
+  broadcast `[system]` mesh lines automatically; confirmed exploits also
+  land in the graph and the engagement notes without model choice.
+- **Lab/real isolation**: class-transfer advice ignores lab catalogs;
+  `FLAG{...}` markers on real targets are rejected as contamination;
+  cheatsheet entries carry origin provenance.
+- Docs de-blued (living docs scrubbed; release notes kept as history);
+  README rewritten product-first.
+
 ## v6.9.0 — The Focus Release
 
 The surface shrinks to what an operator uses; the .sje bundle is the
@@ -13,7 +29,7 @@ one durability story.
 
 ### Removed
 - Settings knobs: supervisor model/interval, guardrail mode
-- Pickers: Blue Team + Settings unlisted (code kept); Operator Tools
+- Pickers: Settings unlisted (code kept); Operator Tools
   = resume / replay / cleaner only
 - CLI verbs: dossier, scope, approvals, labs, timeline, battle,
   debrief (+ CLI-only libs)
@@ -320,20 +336,14 @@ now a build failure instead of a user's error report.
 - **Image healthcheck fixed**: doctor's required binaries included
   `feroxbuster` and `john`, absent from the curated apt list — the
   shipped image marked itself unhealthy on first boot. Both installed.
-- **Blue console polish**: heartbeat strip thread (uptime ticks,
-  spinner never freezes between requests), always-visible input
-  affordance row (`» /block <ip> · /state · /shell <cmd>`), one-line
-  baseline training progress (no more banner spam, duplicate verdict
-  removed).
 - **Publishing hardened**: the wheel is built, installed into a clean
   venv, and the CLI run — on every push and PR — and `pypi-publish`
   waits on that proof; the 5.6.0 metadata bug class is now caught
   before upload.
 
-## v5.6.0 — The Hill CTF and Blue Freedom
+## v5.6.0 — The Hill CTF
 
-The blue team stops being a classifier and becomes a defender; a new CTF
-lab gives both sides a proving ground; first registry publishing.
+A new CTF lab gives the agent a proving ground; first registry publishing.
 
 - **The Hill CTF** (lab/hill_ctf, 7 files): four guarded perimeters —
   decoy perimeter (admin-panel/git/robots bait, decoy token), JWT
@@ -345,30 +355,6 @@ lab gives both sides a proving ground; first registry publishing.
   hill_defense.json levers (login rate limit, SSRF blocklist, decoy
   sensitivity, force-rotate). 24 tests incl. both JWT forgery paths,
   canary trips, the full chain walk, rotation invalidation.
-- **BF0 honesty**: zero-defense verdicts impossible (REVIEW/LOG/unknown
-  -> fallback tarpit), honest detected/tarpitted/blocked/deceived
-  counters, prefix-boundary fix, per-instance state. 10 tests.
-- **BF1 arsenal + enforcement plane**: defenses serve AT THE PROXY —
-  blocks (403), honeypots (crafted content instead of forwarding),
-  fake responses, per-IP redirects, canary tripwire with recorded
-  hits. Namespaced blue tool registry (11 tools; gated blue_shell with
-  red's guardrails) deliberately NOT kernel-registered — no red/blue
-  prompt leakage in one-process deathmatches (tested gate). The Hill
-  boots behind the proxy from the blueteamer menu. 18 tests, all with
-  observable proxy effects against the live lab.
-- **BF2 org chart**: the long blue prompt (doctrine, escalation policy
-  per attack class, 8 defensive playbooks, creative-scripting
-  freedom), defensive orders, the _blue_mode seam in think_node, zero-
-  LLM per-endpoint watchers (auto fast-path: tarpit+block instantly on
-  critical hits, analysis finally seeds them), blue-routed incident
-  responders via the fireteam mechanics (prompt advertises the BLUE
-  arsenal — the audit's coupling fixed). 12 tests to the proof
-  standard (no red leakage; scripted episodes land real enforcement).
-- **BF3 live console**: event blocks (request -> verdict -> action,
-  syntax-highlighted commands), pinned strip (req/threats/blocked/
-  deceived/uptime, spinner), always-active input box (/block /unblock
-  /state /tarpits /canaries /report /rotate /quit + free-form shell).
-  15 tests.
 - **Publishing**: publish.yml — GHCR multi-arch image (GITHUB_TOKEN,
   zero new credentials) + PyPI wheel (PYPI_API_TOKEN secret) on v*
   tags, PR-side build-only proof jobs, GitHub Release with the
@@ -597,23 +583,6 @@ hit (the field-target/prior-target notes) and what offline measurement proved.
   double-kill observed in field notes. Deploy confirmations and
   FIRETEAM results now render in the console.
 
-### Blue foundations (wave A — SOC-in-a-box groundwork)
-- Tarpit file protocol unified: the battle watchdog wrote `set_at`
-  while every reader reads `since` — scripted-battle tarpits moved
-  the scoreboard but never delayed red. One protocol module now
-  serves battle, TUI feed, and proxy.
-- 9 attack classes that only existed in the TUI fast path ported to
-  the core detector (command injection, JWT, deserialization, LDAP,
-  NoSQL, mass assignment, file inclusion, GraphQL, brute-force UA)
-  plus blind SQLi — offline metrics no longer overstate stealth.
-- Custom detector rules (`suijin rules`) wired into the production
-  scorer + TUI tier (validated-and-ignored before).
-- Scorer weights + thresholds driven by `blue_config.json` (was
-  hardcoded theater); latent DEFAULT-poisoning bug in
-  `load_blue_config` fixed (shallow copy).
-- Blueteamer built-in lab launch fixed (BASE_DIR pointed into
-  modules/blueteam where nothing exists).
-
 ### Graded lab benchmark (wave 5)
 - **`suijin bench`**: boots each lab (log4shell/wordpress/oauth), runs
   the agent through real dispatch, scores flag capture / tool calls /
@@ -690,7 +659,7 @@ since v5.0.0 is hardening + capability, zero churn.
   ~6.4k tokens, was 28k); zero-invisible parity enforced in both
   booted and pre-boot modes; 10k prompt budget gate.
 - **REAL battle** — the actual agent graph attacks the live vulnerable
-  lab; blue recall scored against ground truth derived from red's own
+  lab; recall scored against ground truth derived from the agent's own
   requests; verdict persisted. `suijin battle --real|--mock`.
 - **Genuine token counter** — APIs omitting usage counted ZERO before;
   now client-estimated (word/CJK-aware) and attributed;
@@ -698,7 +667,7 @@ since v5.0.0 is hardening + capability, zero churn.
 - **bugscope** — 5-platform bug-bounty scope scraper (bbscope method,
   SSL-verified, adapters cross-checked against the reference source).
 - **Neo4j-ready KG** — same API, one config switch, fail-safe to
-  JSON; blue bridge/dossier/export routed through the public API (the
+  JSON; bridge/dossier/export routed through the public API (the
   bridge was dead code even on JSON — fixed).
 - **Local == CI** — scripts/verify-ci.sh replays GitHub's exact steps
   on a fresh worktree + clean venv; three incident classes
@@ -726,19 +695,6 @@ ecosystem:
   periodicity.
 
 1,160 tests.
-
-## v4.8.0 — Wave 5: blue team depth
-
-- **Attack replay into blue**: red traces score against the real
-  detector — training/eval without a live lab.
-- **Deception effectiveness** metrics per battle.
-- **SOC playbooks**: detections fire registered response actions.
-- **FP feedback loop** + allowlist manager.
-- **Incident timeline** generation.
-- **nginx/Apache log adapters**.
-- **Canary tripwires**: credential generation + reuse watch.
-
-1,151 tests.
 
 ## v4.7.0 — Wave 4: reporting & workflow
 
@@ -843,11 +799,6 @@ wasted calls, missed leads, tactics to remember — report saved to
 outputs/reports/critique_*.md and tactics recorded to the knowledge
 graph for future engagements. Config-gated, never fatal.
 
-### Sparring mode
-`suijin spar`: fixed practice volley through the REAL blue detector,
-scored against stored baselines with regression detection and CI-gate
-exit codes. Detector drift becomes visible the moment it happens.
-
 ### Deploy: four turnkey paths
 - macOS/Linux native: install.sh — interactive start (OS + pip
   preference with detected defaults), FULL dependency resolution
@@ -875,12 +826,12 @@ Every tool invocation on every surface is recorded append-only under
 `outputs/audit_trails/` (tool_calls / agent_steps / cli_calls JSONL).
 Arg VALUES are never stored — key names + sha256 digest only, so
 secrets can never leak into the audit log. The kernel choke point
-(Context.call_tool) covers red, blue, MCP, and all packs; the agent
+(Context.call_tool) covers every mode, MCP, and all packs; the agent
 loop and CLI verbs log their own streams.
 
 ### Outputs consolidation
 ALL engagement artifacts nest under `suijin_agent/outputs/` (reports,
-dossiers, exports, sessions, audit_trails, blue_state,
+dossiers, exports, sessions, audit_trails,
 compliance_reports, wordlists, payloads, sandbox). One-time idempotent
 migration moves existing dirs; state/config stays at the workspace
 root. In Docker the workspace is a named volume — a rebuilt container
@@ -901,7 +852,7 @@ an addon into a full pack.
 ### Web UI removed
 The local web dashboard (React source + node_modules + dist + Flask
 server + `suijin ui`) is gone per operator decision. `_enrich_traffic`
-(blue scoring used by `suijin watch`) was preserved in the CLI. Flask
+(traffic scoring used by `suijin watch`) was preserved in the CLI. Flask
 remains a dependency for the lab targets.
 
 ### Docker & installer overhaul
@@ -950,10 +901,10 @@ install / wheel verified against the final tree.
   was byte-identical and resolves 96 units in milliseconds. Kernel
   suite (180 tests) pins it directly.
 - Runtime/operator JSONs out of the package: engagement state,
-  blue_config, notify.json live in the workspace (the Docker volume);
+  notify.json live in the workspace (the Docker volume);
   the package ships only version.json + config.json.
 - Tests organized per-module (tests/{kernel,architecture,platform,
-  agent,tools,knowledge,providers,ops,blueteam,redteam,console}).
+  agent,tools,knowledge,providers,ops,redteam,console}).
 
 ## v4.0.0 — The Modularisation (everything is a module)
 
@@ -987,7 +938,7 @@ internals compose like an OS:
   asserts canonical equality (fixtures + 600-case fuzz).
 - **Three tiers**: core (platform, tools, agent — nested graph/nodes/
   memory, console; boot-required), recommended (providers, redteam,
-  blueteam, knowledge, ops + all 49 packs — bundled, disableable),
+  knowledge, ops + all 49 packs — bundled, disableable),
   installed (community, `~/.suijin/modules/`). 61-module full boot.
 - **Module Manager**: Textual TUI + CLI verbs (list/info/enable/
   disable/install/uninstall) over one management API; install refuses
@@ -1060,8 +1011,8 @@ excludes every booted pack's declared tools regardless of boot order.
   the existing SDK init/validate under the same command).
 - **Boot honors enable/disable**: disabled recommended modules are
   dropped before materialization — tools, services, AND menu entries
-  never exist that boot (verified end-to-end: disabling redteam +
-  blueteam leaves exactly [ops] in the menu). Disabling CORE aborts
+  never exist that boot (verified end-to-end: disabling redteam
+  leaves exactly [ops] in the menu). Disabling CORE aborts
   with a readable reason. State is ~/.suijin/modules.json.
 
 ## [3.11.0] — 2026-08-18 — PACKS ASCEND (PHASE 3 COMPLETE)
@@ -1091,8 +1042,8 @@ All 49 Modules/ packs are kernel plugins:
 - **providers**: LLM abstraction on the Context — llm.generate,
   llm.failover, llm.usage; supersedes platform's migration-era llm
   service (later registration wins; one module object, one accumulator).
-- **redteam / blueteam**: the mode modules register their console
-  surface via hooks — menu entries (order 10/20) and launch verbs owned
+- **redteam**: the mode module registers its console
+  surface via hooks — menu entry and launch verbs owned
   by module id.
 - **knowledge**: kb.status/compile + kev.status services; journals
   whether the KB is built.
@@ -1104,7 +1055,7 @@ All 49 Modules/ packs are kernel plugins:
   real, not cosmetic.
 - Full boot: 12 modules topological (agent.graph, agent.memory,
   agent.nodes, platform, knowledge, ops, providers, tools, agent,
-  blueteam, console, redteam), menu = [redteam, blueteam, ops],
+  console, redteam), menu = [redteam, ops],
   124 tools + 31 services, quiet when healthy.
 
 ## [3.9.0] — 2026-08-18 — CORE TIER COMPLETE (PHASE 2)
@@ -1244,7 +1195,7 @@ Behavior identical throughout; 865 tests green.
   uuid reference exposed that path was still hand-rolling entries).
 - **All 8 tools->core inversions eliminated** via `tools/services.py` — a
   stdlib service seam (proto-Context): core registers lazy producers at
-  runtime-init; battle/housekeeping (blue scorer), providers (config
+  runtime-init; battle/housekeeping (scorer), providers (config
   loader, active model), and run_commands (audit/report/sessions) now
   import only the seam. Enforced by `test_no_core_inversions.py`, which
   AST-fails on any future tools->core import beyond core.constants.
@@ -1307,8 +1258,7 @@ First structural commit of the Suijin OS refactor — behavior identical,
   guard caught it; both synced through 3.2.0.
 
 ### Verified stable (this release's gate)
-836 tests green · ruff clean · doctor/selftest pass · battle E2E (red 375,
-blue 135, live block) · WebUI boot + API responses · approvals
+836 tests green · ruff clean · doctor/selftest pass · battle E2E (red 375, live block) · WebUI boot + API responses · approvals
 approve->deny->clear roundtrip · packaging guard suite.
 
 ## [3.1.0] — 2026-08-18 — RUN BOX
@@ -1333,7 +1283,7 @@ approve->deny->clear roundtrip · packaging guard suite.
   sensitive-path scoring), batch analysis with crash isolation (one
   exploding subagent can't kill the batch), anomaly/block counters,
   notes rendering, risk-ordered summaries, and the exact
-  deploy->analyze->route sequence blueteamer drives.
+  deploy->analyze->route sequence the agent drives.
 
 ### Fixed
 - **HITL approvals gap**: `execute_terminal` calls blocked by the recon
@@ -1368,7 +1318,7 @@ approve->deny->clear roundtrip · packaging guard suite.
   hard-blocks it with an explicit message; latest decision wins; the
   request log survives `clear`. File-based, no daemons, no TTL races.
 - **Panic button** (`suijin panic`): kills Suijin-owned processes
-  (TUI/web/labs/scanners via narrow pkill patterns) and clears blue-team
+  (TUI/web/labs/scanners via narrow pkill patterns) and clears
   live state in /tmp. Best-effort by design — a panic command must never
   itself fail. `--dry-run` previews.
 - **DNS-pinned scope enforcement**: a hostname in the allowed scopes must
@@ -1444,24 +1394,9 @@ approve->deny->clear roundtrip · packaging guard suite.
 Deleted only what an AST import-graph proved unreachable from every entry
 point (main, cli, mcp_server, kb, ui/server) AND every test. Dynamic
 string references audited separately (module-loader scans Modules/ only;
-`blue_hotfix` in skills/loader is a dict key bound to the live
-skills/blue_patching prompt; tutorials .md files are read by path).
+tutorials .md files are read by path).
 
-- **6 whole blue packages** (all modules dead):
-  `core/blue/counter_intel/` (5), `endpoints/` (3), `forensics/` (5),
-  `hotfix/` (3, after 2.11.1's two), `intel/` (6), `response/` (5) —
-  marketing-tree stubs never wired into the pipeline.
-- **Dead files in live blue packages**: deception (breadcrumb_layer,
-  misinformation, phantom_endpoint), defense (misinformation,
-  rate_limiter, session_revoker, waf_rules), soc/shift_manager, traffic
-  (capture, classifier, rate_tracker), tui (alert_panel, dashboard,
-  metrics), watchers (health_monitor, load_balancer, result_collector,
-  watcher_protocol, watcher_roles), core/blue/orchestrator.py.
-- **4 stub blueteam nodes** (nodes/blueteam_*.py — 200-byte no-ops;
-  the blue graph never registered them).
-- **4 dead blue prompts** (blue_base, blue_hotfix, blue_tool_registry,
-  blue_watcher; blue_system is the live one).
-- **9 orphaned tools**: blue_utils, confidence, cvss_scorer,
+- **9 orphaned tools**: confidence, cvss_scorer,
   evidence_chain, failure_learner (never dispatched — failure_db.json had
   no writer), goal_decomposer, har_replay, hotreload_skills,
   timeline_viz.
@@ -1512,8 +1447,7 @@ smoke-verified post-sweep.
   silent_patch.py had zero importers and emitted syntactically invalid
   patches (`escape(render(x)` — unbalanced parens; the "sqli fix" also
   stripped every `f"` in the file). Deleted rather than blessed with
-  tests. (~70 other 0%-coverage blue modules audited: also orphaned,
-  noted for a future sweep — none are on live paths.)
+  tests.
 
 ## [2.11.0] — 2026-08-18 — TRUST BUT VERIFY
 
@@ -1635,10 +1569,9 @@ smoke-verified post-sweep.
 - **Detector grid never lit up** — labels ("SQL Injection") were matched
   against KG attack types ("sql_injection"): space vs underscore, always
   false. Detectors now declare explicit signal keys and count real hits
-  from a new `signal_counts` snapshot field (live traffic signals) merged
-  with `blue_kg.attack_type_counts`.
+  from a new `signal_counts` snapshot field (live traffic signals).
 - **Radar was placeholder data** — axes now derive from actual detector
-  signal counts + blue-KG attack types.
+  signal counts.
 - **Mobile nav was unreachable** — sidebar was display:none under 768px
   with no way to open it. Hamburger button + slide-in drawer with
   backdrop; nav links close it on tap.
@@ -1663,9 +1596,8 @@ smoke-verified post-sweep.
   "lean safe" default was dead); B007/B904 lint batch across 9 files.
 
 ### Added
-- `signal_counts` + `blue_kg.attack_type_counts` in the UI snapshot
-  (aggregated detector signals across the traffic window — works with or
-  without an active blue session). 2 new backend tests; 565 total.
+- `signal_counts` in the UI snapshot (aggregated detector signals
+  across the traffic window). 2 new backend tests; 565 total.
 
 ## [2.9.1] — 2026-08-18 — PROVIDER-AWARE MODEL DISPLAY
 
@@ -1676,7 +1608,7 @@ smoke-verified post-sweep.
   as the cross-provider fallback, so it always won over `<provider>_model`.
   New `active_model()` helper (core/red/config_loader.py) resolves the
   model per provider; wired into redteamer's launcher line, llm_client's
-  spinner, the blue AI engine's `result.llm_model` record, the LobsterTrap
+  spinner, the AI engine's `result.llm_model` record, the LobsterTrap
   forwarder, and the AMD branch (which now also honors an `amd_model` key).
   HuggingFace keeps `final_model_id` — that's the only provider it means
   anything for. The actual API calls were always correct; only display and
@@ -1686,8 +1618,8 @@ smoke-verified post-sweep.
 
 ### Added
 - **`suijin export`** — chain-of-custody evidence bundles
-  (`tools/export_bundle.py`): zip of reports, audit trails, sessions, blue
-  state, dossiers, both knowledge graphs + redacted config. Every file
+  (`tools/export_bundle.py`): zip of reports, audit trails, sessions,
+  dossiers, both knowledge graphs + redacted config. Every file
   SHA-256-hashed in `manifest.json`; `custody.json` records when/host/
   commit. `--verify <zip>` re-hashes and flags mismatches, missing, or
   unlisted files (tamper + smuggling detection). Credentials excluded
@@ -1700,33 +1632,7 @@ smoke-verified post-sweep.
   Rich Live panes (thought / action+args / observation), space play-pause,
   arrows scrub, +/- speed, up/down 10-step jumps. `--list`, `--file`,
   `--export-md` full transcript; non-TTY prints the transcript directly.
-- **`suijin eval`** — detector tuning harness
-  (`core/blue/traffic/replay_harness.py`): replays recorded traffic
-  through the REAL production scorer, labels entries via strong heuristic
-  rules or `labels.jsonl` overrides, reports precision/recall/F1 at the
-  production threshold + full sweep + best operating point. Unlabeled
-  entries are excluded, never silently benign.
-- **`suijin battle`** — purple-team mode (`tools/battle.py`): boots the
-  blue_target lab fresh, runs a scripted red campaign (recon -> auth ->
-  access -> injection chain -> sweep; 12 attack classes, flag capture) while
-  a BlueWatchdog tails the live traffic log, scores with the production
-  scorer, and deploys real defenses — tarpits written to the file the LAB
-  enforces (measurable latency), blocks that deny later red requests.
-  Live scoreboard, markdown battle report in suijin_agent/reports/.
-  Scoring: red 100/flag + 25/class; blue 10/detect + 25/tarpit + 50/block.
-- 28 new tests across `test_export_debrief_replay.py` and
-  `test_eval_battle.py`.
-
-### Fixed — real detector gaps found by the new harness
-- `anomaly_detector.detect_anomalies` scanned ONLY the request body:
-  query-string attacks (`?data={{...}}`, `?path=../../`, GraphQL recon)
-  were invisible. Now scans body + query + path. Production recall on
-  battle traffic: 0.14 -> 0.57 at threshold 5 (0.86 at threshold 2),
-  precision held ≥ 0.80.
-- XXE bodies (`<!ENTITY`) and privilege-spoofing headers (`X-Admin: true`,
-  `X-Role: admin`) were never inspected — both now signal at weight 5.
-- Battle-time effect: blue score vs the same scripted campaign went
-  35 -> 135 with an actual network block landing mid-campaign.
+- New tests in `test_export_debrief_replay.py`.
 
 ## [2.8.0] — 2026-08-17 — ABYSS CONSOLE (WEB DASHBOARD)
 
@@ -1742,9 +1648,8 @@ smoke-verified post-sweep.
     vectors spawned by suspect traffic, attack-pattern radar, live activity
     feed, lab fleet liveness), Red Team (stage-derived pipeline flow,
     engagement log/findings, tool arsenal with availability, stat cards),
-    Blue Team (three-tier traffic monitor, 18-detector grid, tarpit
-    controls + tarpitted-IP table, KG summary), Knowledge Graph (hand-rolled
-    force-directed physics, blue/red sources, node inspector), Labs (live
+    Knowledge Graph (hand-rolled
+    force-directed physics, node inspector), Labs (live
     port probes + copy-to-clipboard attack commands), Reports (audit
     summaries + file browser), Settings (redacted config, KB inventory,
     design tokens).
@@ -1823,7 +1728,7 @@ smoke-verified post-sweep.
 - **README rewritten documentation-first** — 1,429 marketing-heavy lines ->
   ~600 lines of reference: full CLI table, configuration key reference,
   provider docs (incl. the Z.ai coding/paas explainer), KB / workspace /
-  architecture / red / blue reference sections, real labs table (the old
+  architecture / red reference sections, real labs table (the old
   README documented a `cloudboard_next` lab that does not exist in the
   repo — replaced with the 8 actual labs and their real ports), trimmed
   troubleshooting/glossary, credits reduced to one line each.
@@ -1874,8 +1779,8 @@ smoke-verified post-sweep.
   the inner path with a symlink `-> ../suijin_agent`. All 16 hard-coded
   path sites (session_replay, evidence_chain, report_exporter, audit_trail,
   goal_decomposer, failure_learner, burp_export, html_report,
-  infra/workspace_fs, infra/job_runner, infra/output_offload, blue-team
-  session/dossier/evidence modules, redteamer SOUL, credential_store) now
+  infra/workspace_fs, infra/job_runner, infra/output_offload,
+  redteamer SOUL, credential_store) now
   import `WORKSPACE_DIR` from one place. Sandbox moved from
   `~/suijin_agent/sandbox` ($HOME!) to `suijin_agent/sandbox`.
   KB artifacts stay strictly in `suijin/` — never inside the workspace.
@@ -1927,7 +1832,7 @@ smoke-verified post-sweep.
 - ruff: 883 -> 0 errors; CI lint is now blocking; coverage floor 35 -> 40%.
 - Test deps removed from runtime `requirements.txt`;
   `duckduckgo-search` added (google_dork module dep).
-- `blue_config.json` untracked (auto-generated; defaults live in code);
+- Auto-generated config files untracked;
   `.dockerignore` no longer bakes `suijin/.env` / `config.json` into images.
 - `suijin/kb.sqlite3` + `suijin/kb_cache/` are gitignored (KB never prepackaged).
 - Tests: 360 -> 427 passing.
@@ -1961,8 +1866,8 @@ smoke-verified post-sweep.
   its own name (115 tools) with signature-derived input schemas; each call
   reports the tool and args used. Module packs are discovered at startup
   (`discover_modules()`).
-- **`suijin-red` / `suijin-blue` agents** (`.suijin/agents/`) — primary modes
-  with the ported redteamer/blueteamer doctrine; `suijin-red` is the default
+- Named agent presets (`.suijin/agents/`) — primary modes
+  with the ported engagement doctrine; a red-team preset is the default
   agent for new sessions (`default_agent` in `suijin.json`).
 - **Shell commands** — `/classic-tui` launches the classic Rich TUI in the
   shell's terminal; `/lab` starts the vulnerable lab on :5906.
@@ -2004,23 +1909,14 @@ smoke-verified post-sweep.
 ## [2.0.1] — 2026-08-12
 
 ### Added
-- **`suijin/tests/test_blueteamer.py`** — 19 tests for the Blue Team entry point (was 0% covered, now 73%): port finding, middleware snippet, firewall init (Darwin/Linux/failure paths), `_run_async` choice branches (back, invalid path, zero port, full proxy flow, full lab flow), env loading, main entry
-- **`suijin/core/red/` package** — red team support modules extracted from redteamer.py:
-  - `config_loader.py` (100 lines) — config.json/.env management, Pydantic validation, CI-safe env wizard
-  - `llm_client.py` (46 lines) — async LLM wrapper with 90s timeout + status spinner
-  - `session_control.py` (218 lines) — runtime commands (/report, /audit, /state, /sessions, /template), attack chains, objective file loading
-- **Backwards-compatible re-exports** — `load_config`, `load_env`, `ENV_PATH`, `CONFIG_PATH`, `generate_async`, `_force_report`, etc. still importable from `suijin.core.redteamer`
-- **`CONTRIBUTING.md`** — developer setup guide, test/lint/type-check commands, architecture overview, code style rules, commit conventions
-- **`docs/adr/001-langgraph-over-asyncio.md`** — ADR: why LangGraph state machine instead of raw asyncio loop
-- **`docs/adr/002-json-kg-over-neo4j.md`** — ADR: why JSON knowledge graph instead of Neo4j
-- **`suijin/core/constants.py`** — centralized magic strings: model IDs, default ports (5906/8080/55553), scoring thresholds (5/6/7/8/9), timeouts, limits, deception params, blue team file paths, configurable TMP_DIR
+- **`suijin/core/constants.py`** — centralized magic strings: model IDs, default ports (5906/8080/55553), scoring thresholds (5/6/7/8/9), timeouts, limits, configurable TMP_DIR
 - **`suijin/tools/guardrails.py`** — extracted from dispatch.py: 14 blocked command patterns, `is_dangerous()`, `confirm_global_action()`
 - **`suijin/tools/workspace.py`** — extracted from dispatch.py: `resolve_workspace_path()` with symlink resolution, allowlist boundary checks
 - **`suijin/tests/test_tools.py`** — 43 behavioral tests: all 14 blocked patterns, edge cases (case insensitivity, whitespace), workspace security (symlink bypass, allowlist, traversal), constants validation (threshold ordering, TMP_DIR env var)
 - **macOS path handling** — `/private/var/tmp` added to workspace allowlist for macOS symlink resolution
 
 ### Changed
-- **Constants wired into 12 files**: proxy.py, blueteamer.py, ai_engine.py, deception_engine.py, tier1_analyst.py, escalation_policy.py, subagent_manager.py, redteamer.py, knowledge_graph.py, feed.py, capture.py, dispatch.py
+- **Constants wired across the core files**: redteamer.py, knowledge_graph.py, dispatch.py and nine more
 - **Test suite: 83 -> 134 tests** (7 test files)
 - README updated: accurate test counts, new file structure, pytest command, links to CONTRIBUTING.md and ADRs
 - README table of contents: added Contributing + ADRs links
@@ -2028,24 +1924,16 @@ smoke-verified post-sweep.
 ## [2.0.0] — 2026-08-12
 
 ### Added
-- **Blue Team SOC** — autonomous defensive security agent
-- **HTTP Forward Proxy** — transparent traffic interception for any app
-- **18 Attack Pattern Detectors** — SQLi, XSS, SSRF, SSTI, XXE, CMDi, LFI, JWT, deserialization, LDAP, NoSQL, mass assignment, auth bypass, brute force, file inclusion, GraphQL, scanner UA
 - **Per-Endpoint AI Subagents** — one per discovered endpoint, full codebase ingestion
 - **Live Tarpit** — real request delays (0.018s -> 5.8s) via shared state file
 - **Deception Arsenal** — honeypot endpoints, canary tokens, breadcrumb trails, shadow redirect
 - **25-Endpoint Vulnerable Lab** — JWT auth, SQLi, XSS, SSTI, XXE, CMDi, IDOR, SSRF, race condition
 - **Session Knowledge Graph** — attackers, attacks, defenses, intelligence nodes with typed edges
-- **SOC Hierarchy** — SOCLead, Tier1Analyst, Tier2Analyst, ThreatHunter, IncidentCommander
-- **Structured Error Types** — BlueError, FirewallError, DeceptionError, AIEngineError, ProxyError, PatchError
-- **Pydantic Config Validation** — BlueConfig (8 sub-models), RedConfig, startup validation
+- **Pydantic Config Validation** — RedConfig, startup validation
 - **Centralized Logging** — `logging_config.py` with console + file handlers
 - **pytest Framework** — `pyproject.toml`, `conftest.py`, fixtures, markers
 
 ### Changed
-- Dual-mode platform: Red Team + Blue Team from single entry point
-- Architecture: SOC wired into attack detection pipeline (no longer theater)
-- Traffic source configurable: proxy mode, log file mode, built-in lab mode
 - IP blocking disabled by default, toggle with `/block` command
 
 ### Fixed
@@ -2056,7 +1944,6 @@ smoke-verified post-sweep.
 - **Workspace path allowlist** — added `/private/tmp` for macOS compatibility
 - **5 deprecated escape sequences** — all converted to raw strings
 - **Duplicated `metasploit_rpc_port`** in config defaults
-- **Blue team skills orphaned** — 5 skills wired into `loader.py`
 - **Knowledge graphs bridged** — `bridge_from_red_team()` imports CVEs/WAF patterns
 - **`apply_patch()` regex fallback** — catches f-string SQL patterns when exact match fails
 - **`search_kb()` broken reference** — gracefully degrades instead of demanding nonexistent script
@@ -2077,8 +1964,8 @@ smoke-verified post-sweep.
 - Prompt injection defense with cryptographic nonce wrapping
 
 ### Testing
-- **74 tests** (up from 20): `test_agent_helpers.py`, `test_ai_calls.py`, `test_blue_team.py`, `test_core.py`, `test_graph.py`
-- Coverage: attack patterns, knowledge graph, normalizer, dispatch guardrails, secret patterns, error types, config validation, deception engine, state machine, prompt safety
+- **74 tests** (up from 20): `test_agent_helpers.py`, `test_ai_calls.py`, `test_core.py`, `test_graph.py`
+- Coverage: knowledge graph, normalizer, dispatch guardrails, secret patterns, error types, config validation, state machine, prompt safety
 
 ## [1.0.0] — 2026-07-26
 

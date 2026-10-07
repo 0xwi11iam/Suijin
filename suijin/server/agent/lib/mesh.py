@@ -134,8 +134,25 @@ def _write_me(me: dict) -> None:
 
 def set_phase(phase: str) -> None:
     if _node["me"] is not None:
-        _node["me"]["phase"] = str(phase)[:40]
+        new = str(phase)[:40]
+        old = _node["me"].get("phase")
+        _node["me"]["phase"] = new
         _write_me(_node["me"])
+        # machine-driven comms (2026-10-07): every peer sees the phase
+        # transition instantly — no model choice involved
+        if old and old != new:
+            with contextlib.suppress(OSError):
+                _announce_system(f"node-{os.getpid()} phase \u2192 {new}")
+
+
+def _announce_system(message: str) -> None:
+    """A [system]-attributed line in the group chat — machine events
+    (phase changes, confirmed exploits), not model speech."""
+    with contextlib.suppress(OSError):
+        mesh_dir().mkdir(parents=True, exist_ok=True)
+        with _gc_log().open("a", encoding="utf-8") as f:
+            f.write(f"{_stamp()}|{os.getpid()}|system|{str(message)[:400]}\n")
+        _tail_reset()
 
 
 def publish_state(digest: dict) -> None:

@@ -181,8 +181,15 @@ def set_engagement(objective: str = "") -> Path:
 
     ensure_global_layout()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    d = WORKSPACE_DIR / "engagements" / f"{stamp}_{_slugify(objective[:60])}"
-    d.mkdir(parents=True, exist_ok=True)
+    base = WORKSPACE_DIR / "engagements" / f"{stamp}_{_slugify(objective[:60])}"
+    # concurrent same-second starts (parallel agent launches) would silently
+    # MERGE into one engagement — one audit trail, mixed findings. Uniquify.
+    d = base
+    n = 2
+    while d.exists():
+        d = base.with_name(f"{base.name}~{n}")
+        n += 1
+    d.mkdir(parents=True)
     # LAZY SUBDIRS (operator ruling 2026-10-05): the old layout created 11+
     # empty dirs per engagement before the agent did anything — a workspace
     # of 10 parallel agents was 130 empty directories of noise. Every

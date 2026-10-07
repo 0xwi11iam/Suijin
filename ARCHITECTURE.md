@@ -15,7 +15,7 @@ commands, same look throughout.
                  ┌─────────────────────────────────────────┐
                  │  console (TUI · CLI · WebUI · MCP)      │  <- surfaces, feature-blind
                  ├─────────────────────────────────────────┤
-   recommended ──┤  redteam · blueteam · knowledge · ops   │
+   recommended ──┤  redteam · knowledge · ops   │
    + 49 packs    │  providers · nmap · sqlmap · ...        │  <- disableable, bundled
                  ├─────────────────────────────────────────┤
    core          │  platform · tools · agent (graph/       │  <- boot-required
@@ -154,7 +154,7 @@ core-tier imposters, reports python deps with exact pip commands;
 | Tier | Ships | Disable | Examples |
 |:-----|:-------|:---------|:---------|
 | core | wheel | refused (boot aborts, readable reason) | platform, tools, agent, console |
-| recommended | wheel | yes — vanishes from every surface | redteam, blueteam, knowledge, ops, providers, 49 packs |
+| recommended | wheel | yes — vanishes from every surface | redteam, knowledge, ops, providers, 49 packs |
 | installed | `~/.suijin/modules/` | yes / uninstall | community modules |
 
 ## Enforcement (what keeps it an OS)
@@ -180,7 +180,6 @@ suijin/
 │   ├── providers/   #   LLM layer
 │   ├── knowledge/   #   offline KB + KEV
 │   ├── ops/         #   engagement lifecycle verbs
-│   ├── blueteam/    #   defense stack
 │   ├── redteam/     #   offense stack + intel/KG
 │   ├── console/     #   CLI router, TUIs, MCP, gateway (desktop API)
 │   └── <123 snap-in tool packs>    # nmap, sqlmap, encodesk, sslprobe ... (manifest.json bricks)
