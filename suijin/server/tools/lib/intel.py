@@ -363,6 +363,20 @@ def record_finding(target, finding_type, rule, evidence="", config=None):
     if finding_type not in valid_types:
         return f"Invalid finding_type. Use one of: {', '.join(valid_types)}"
 
+    # LAB-MARKER GUARD (2026-10-07): FLAG{...}/HTB{...} strings are lab/CTF
+    # artifacts — a real target surfacing one means memory contamination,
+    # not a vulnerability. Recording it would poison the graph.
+    import re as _re
+
+    from suijin.modules.agent.lib.attack_memory import is_lab_target as _is_lab
+
+    if _re.search(r"(?:FLAG|HTB)\{", f"{rule} {evidence}", _re.I) and not _is_lab(target):
+        return (
+            "REJECTED: FLAG{...}/HTB{...} markers are lab/CTF artifacts, not findings on a "
+            "real target. If this string genuinely appears in target output, quote the "
+            "surrounding evidence and record the underlying vulnerability class instead."
+        )
+
     # ── v2 anti-hallucination gate for CVE claims ──
     if finding_type == "verified_cve":
         cve_check = _verify_cve_claim(target, rule, evidence)

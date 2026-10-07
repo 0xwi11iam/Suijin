@@ -95,7 +95,7 @@ class TestDocsSync:
 
         version = json.loads((REPO / "suijin" / "version.json").read_text())["version"]
         readme = (REPO / "README.md").read_text()
-        badges = re.findall(r"badge/v([\d.]+)-suijin-green", readme)
+        badges = re.findall(r"badge/v([\d.]+)-suijin-\w+", readme)
         assert badges, "README has no version badge"
         assert all(b == version for b in badges), (
             f"README badge(s) {badges} != version.json {version} — update the badge in the same commit"

@@ -16,7 +16,6 @@ The knowledge graph is queried in the hot path — every LLM prompt includes att
 1. **Fast to query** — sub-millisecond lookups in the decision loop
 2. **Zero-setup** — no external services for a local security tool
 3. **Serializable** — persist and resume across sessions
-4. **Bridgeable** — red team findings must flow to blue team intelligence
 
 ## Options Considered
 
@@ -75,3 +74,16 @@ If Suijin evolves to need real graph queries (e.g., multi-session attacker corre
 - **SQLite with JSON columns**: Adds SQL dependency without graph traversal benefits
 - **NetworkX in-memory**: Good for graph algorithms but JSON serialization is awkward
 - **RedisGraph**: Requires Redis server, same operational burden as Neo4j
+
+---
+
+**STATUS 2026-10-07: SUPERSEDED IN PRACTICE.** The JSON store served its
+purpose through v6.x; the persistent cross-engagement memory build flipped
+`kg_backend` to `neo4j`. The contract held exactly as designed — the same
+API, the same result shapes, zero downstream changes — and the original
+decision's substance (a switchable backend, not a hard migration) is what
+made the flip a one-line change. Neo4j runs as a local Docker container
+(`suijn-kg`, persistent volume, creds in `suijin/.env`, never committed);
+`get_backend` reads env → `.env` → config and falls back to JSON loudly if
+the server is down. The JSON store remains the zero-dependency default for
+fresh installs.

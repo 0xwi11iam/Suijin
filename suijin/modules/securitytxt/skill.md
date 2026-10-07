@@ -1,3 +1,3 @@
 # securitytxt
 
-Blue-team hygiene check; red-team uses the Contact/Policy lines to understand disclosure posture.
+Hygiene check; the Contact/Policy lines reveal disclosure posture.

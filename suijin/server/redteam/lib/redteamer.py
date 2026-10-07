@@ -210,6 +210,10 @@ def _install_sigterm_save():
         raise KeyboardInterrupt
 
     _signal.signal(_signal.SIGTERM, _sigterm)
+    # closing the terminal window sends SIGHUP — a closed window must mean
+    # FULLY QUIT: same save-and-exit path, mesh node deregistered on the
+    # way out (the operator console drops + prunes any leftovers anyway)
+    _signal.signal(_signal.SIGHUP, _sigterm)
 
 
 def _unattended() -> bool:
@@ -958,6 +962,28 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
     _restart_stream = False  # provider restart / ask-hold: exit inner loop, re-stream
 
     while True:
+        # OPERATOR CONSOLE PAUSE — /pause in `suijn operator` drops a flag
+        # in the mesh dir; every agent holds HERE, between turns, with the
+        # same PAUSED strip badge as the in-window pause. Optional message
+        # from the operator rides the live-guidance file (read next turn).
+        # Interrupts (window close, SIGTERM) still break the wait — a
+        # paused engagement can never wedge the exit path.
+        with contextlib.suppress(Exception):
+            from suijin.modules.agent.lib.mesh import mesh_dir as _mesh_dir_fn
+
+            _op_pause = _mesh_dir_fn() / "pause-operator"
+            if _op_pause.exists():
+                import signal as _sig
+
+                _pv = getattr(ui, "paused_visual", None)
+                if _pv:
+                    _pv(True)
+                while _op_pause.exists():
+                    if getattr(_sig, "_suijin_interrupted", False) or getattr(_sig, "_suijin_sigterm", False):
+                        break
+                    time.sleep(0.5)
+                if _pv:
+                    _pv(False)
         try:
             _got_events = False
             _restart_stream = False

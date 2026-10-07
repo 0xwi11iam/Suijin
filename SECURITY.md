@@ -38,7 +38,6 @@ Suijin is a **dual-use offensive/defensive security tool**. It is intended for a
 | Risk | Rationale | Mitigation |
 |---|---|---|
 | AI can execute shell commands | Core feature — the agent drives `nmap`, `sqlmap`, etc. | `guardrails.py` blocks destructive patterns (`rm -rf /`, `mkfs`, fork bombs); self-kill protection refuses to kill its own PID |
-| Blue team AI can patch code | Core feature — autonomous hotfix | Patches logged to the knowledge graph + audit trail; hotfix is opt-in per config |
 | Workspace file writes | Agent needs a scratch area | `workspace.py` confines writes to `suijin_agent/` + `/tmp` allowlist; symlink-resolved boundary checks |
 | LLM prompt injection via target content | Tool output enters prompts | `prompt_safety.py` wraps untrusted content with unforgeable boundary markers |
 | Gov/mil/edu targets | Not allowed | `hard_guardrail.py` blocks these domains |

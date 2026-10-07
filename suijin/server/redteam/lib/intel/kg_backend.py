@@ -225,6 +225,41 @@ class Neo4jKG:
 
 # ── backend selection ─────────────────────────────────────────────────────
 
+_ENV_CACHE: dict = {"mtime": 0.0, "data": {}}
+
+
+def _env_var(name: str) -> str:
+    """os.environ first, then the .env on disk — the canonical secret
+    store. Boot exports it, but ad-hoc entry points (console, CLI one-offs)
+    never see the export; a secret that only exists at boot is a secret
+    that's missing half the time."""
+    import os
+
+    val = os.environ.get(name, "")
+    if val:
+        return val
+    try:
+        from suijin.modules.platform.lib.config_loader import ENV_PATH
+
+        if not ENV_PATH.is_file():
+            return ""
+        mtime = ENV_PATH.stat().st_mtime
+        if _ENV_CACHE["mtime"] != mtime:
+            data = {}
+            for ln in ENV_PATH.read_text(errors="replace").splitlines():
+                ln = ln.strip()
+                if not ln or ln.startswith("#") or "=" not in ln:
+                    continue
+                k, _, v = ln.partition("=")
+                v = v.strip()
+                if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+                    v = v[1:-1]
+                data[k.strip()] = v
+            _ENV_CACHE.update(mtime=mtime, data=data)
+        return _ENV_CACHE["data"].get(name, "")
+    except Exception:  # noqa: BLE001 — secret loading never breaks the KG
+        return ""
+
 
 _BACKEND_CACHE: dict = {}
 
@@ -260,17 +295,19 @@ def get_backend(json_path_fn):
         _BACKEND_CACHE["json"] = kg
         return kg
 
-    uri = os.environ.get("SUIJIN_NEO4J_URI", "")
-    user = os.environ.get("SUIJIN_NEO4J_USER", "neo4j")
-    password = os.environ.get("SUIJIN_NEO4J_PASSWORD", "")
+    # env > .env file > config.json (the password NEVER goes in config.json
+    # — that file is committed)
+    uri = _env_var("SUIJIN_NEO4J_URI")
+    user = _env_var("SUIJIN_NEO4J_USER") or "neo4j"
+    password = _env_var("SUIJIN_NEO4J_PASSWORD")
     if not uri:
         try:
             from suijin.modules.platform.lib.config_loader import load_config
 
             cfg = load_config()
-            uri = cfg.get("neo4j_uri", "")
-            user = cfg.get("neo4j_user", user)
-            password = cfg.get("neo4j_password", password)
+            uri = str(cfg.get("neo4j_uri", ""))
+            user = str(cfg.get("neo4j_user") or user)
+            password = str(cfg.get("neo4j_password") or password)
         except Exception:  # noqa: BLE001
             pass
     if not uri:

@@ -170,12 +170,19 @@ def log_finding(finding_type: str, severity: str, endpoint: str, description: st
     if trail is None:
         return
     with _locks.get(key, _meta_lock):
+        # dedup: the same (type, endpoint) is ONE finding — agents re-confirm
+        # surfaces they already reported; repeats only pad the count
+        if any(
+            str(f.get("type")) == str(finding_type) and str(f.get("endpoint")) == str(endpoint)
+            for f in trail["findings"]
+        ):
+            return
         trail["findings"].append(
             {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "type": finding_type,
-                "severity": severity,
                 "endpoint": endpoint,
+                "severity": severity,
                 "description": description,
                 "evidence": evidence,
             }

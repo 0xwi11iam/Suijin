@@ -9,7 +9,7 @@
 - Repo: `/Users/williamjiang/suijin`, GitHub: `https://github.com/0xwi11iam/Suijin`
 - venv: `.venv/bin/python` (Python 3.14); CI matrix py3.10/3.11/3.12
 - Gates: `.venv/bin/python -m pytest suijin/tests -q -m "not ai and not slow"` (~2870 passed) + `-m slow` + `ruff check` + `ruff format`. **The suite is HERMETIC**: `tests/conftest.py` redirects `HOME`, `SUIJIN_WORKSPACE`, `SUIJIN_CONFIG` and `SUIJIN_ENV` into a session sandbox AT IMPORT TIME (before any `suijin` import — `Path.home()` is baked into `PACK_ROOTS`/`WORKSPACE_DIR`/`CONFIG_PATH` on first import, so redirecting later does nothing). A test that needs the real home must opt in explicitly.
-- Version 5.7.0 published (PyPI/GHCR/Release). `plan.md` (GITIGNORED) = roadmap.
+- Version 5.7.0 published (PyPI/GHCR/Release).
 - Operator runs via `~/.local/bin/suijin` → `~/.suijin/venv/bin/python` + `~/.suijin/repo` (symlink to this tree). Their config: `suijin/config.json` IN THE TREE (provider: zai / glm-5.3, coding endpoint). `~/.local/bin/suijind` is the detached-daemon launcher.
 - System-Python stale processes squat lab ports (5906/5910/5911) — check `lsof -nP -i :PORT`.
 - Working-tree strays (operator's): deleted assets, 7 lab whitespace reformats, 6 trivial style diffs — do NOT commit without asking.
@@ -63,12 +63,6 @@
 31. Tool calls are data: `call_tool` returns `"Error: …"` strings, every call audited, tools namespaced.
 32. Resume precedence: **engagement STATE rides the .sje; operator SETTINGS ride live config.json (current wins)** — the deepseek-402 incident.
 
-### Blue (`modules/blueteam/lib/blue/` — still genuinely in modules)
-33. `feed.ui` present ⇒ NOTHING prints from feed/blueteamer (foreign prints tear the strip). `_say` is headless-only.
-34. Proxy hook order is load-bearing: log → enforce → tarpit → forward, each failure-isolated.
-35. BF0: a pattern-confirmed attack NEVER exits `_execute_ai_decision` without at least a fallback tarpit; AI-down/AI-off/AI-disagrees all defend; detected ≠ blocked (honest counters).
-36. BlueCommandBox handlers never raise; box `/block <ip>` (enforcement) ≠ pause `/block` (toggle). Live only on terminal/StringIO (CI).
-37. Watchers `check()` stays pure; enforcement only in `apply_fast_path`.
 
 ## Architecture in one paragraph
 
@@ -94,7 +88,7 @@
 ## Immediate next steps
 
 1. Operator: re-run the pending engagement (config now: zai/glm-5.3, infinite, no caps). DeepSeek top-up optional (fallback only).
-2. B1 (source audit — `modules/treeaudit/main.py` orphaned start), BF4+ waves per plan.md.
+2. B1 (source audit — `modules/treeaudit/main.py` orphaned start).
 3. Before ANY commit: full gates (`pytest -m "not ai and not slow"` ~2895, ruff check, ruff format) + never commit the operator strays.
 4. **Engagement confidentiality is a PERMANENT operator ruling — see AGENTS.md.** Never name a target, program, vendor, or tested host in any committed artifact (commit messages, comments, test payloads, docs). Refer to engagements generically; tests use example.com. One commit (f547d32) predates this rule and still names a target — scrub on the next commit that touches it, history rewrite only on explicit request.
 
@@ -288,3 +282,36 @@ out-of-distribution). The confidence thresholds + abstain gates keep it
 safe in the meantime: low-p answers simply don't act, and shadow mode
 logs everything for the training corpus. Live proof: healthy trace →
 p=0.31 below threshold → no intervention; model answered in 82-231ms.
+
+## Knowledge hardening + KG live (2026-10-07)
+
+1. **Neo4j KG is the live backend** (local config `kg_backend=neo4j`):
+   docker container `suijn-kg` (neo4j:5, volume `suijn-kg-data`, bolt
+   127.0.0.1:7687, creds in `suijin/.env` — NEVER config.json, that file
+   is committed). `get_backend` reads env → `.env` file → config and
+   falls back to JSON loudly on a dead server. Migration script:
+   `scripts/kg-migrate-to-neo4j.py` (idempotent). Fresh installs stay
+   JSON (the zero-dependency default); ADR-002 carries the supersession
+   note. Gated live tests: `test_red_knowledge_graph.py` (skip without
+   :7687; the autouse fixture also invalidates the backend cache — env
+   alone leaks a memoized neo4j into json tests).
+2. **Enforced KG read**: every think context injects
+   `knowledge_graph.summary(target)` as a `## KNOWLEDGE GRAPH` section
+   (untrusted-wrapped, 1600-char cap) — the agent can no longer skip
+   what the graph knows; `check_knowledge` stays for deeper queries.
+3. **CONFIRMED fan-out** (`_on_confirmed` in exploit_catalog): a
+   terminal-verified exploit auto-writes a `verified` KG constraint,
+   broadcasts a `[system]` mesh line, and writes an engagement note —
+   zero model choice.
+4. **Machine comms**: `mesh.set_phase` broadcasts `node-P phase → X`
+   on every transition (system attribution); the GROUPCHAT prompt
+   carries the hard cadence rule (≥1 broadcast / 5 iterations).
+5. **Lab/real isolation**: `attack_memory.is_lab_target`
+   (loopback/*.local) gates `what_worked` class-transfer (lab catalogs
+   never advise real runs) and `record_finding`'s new FLAG{} guard
+   (lab markers on real targets are REJECTED as contamination).
+   Cheatsheet entries carry `origin` provenance from the engagement dir.
+6. Console: header strip cost carries `$` again.
+7. Docs de-blued everywhere except release notes (frozen history) and
+   the discontinuation ruling note in this file; README rewritten
+   product-first (verified facts only, PyPI/pipx line is real).
