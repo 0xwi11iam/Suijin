@@ -6,8 +6,13 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
-## Unreleased — knowledge hardening round
+## v7.0.0 — The Command Center Release
 
+- **The operator console** (`suijn operator`): one screen over every
+  agent — cards, iteration history, confirmed-only counts, System One
+  status, mesh feed — plus a command line (`/say`, `/pause [msg]`,
+  `/su <hex>` with the engagement command set, `/exploits /tail
+  /sort /filter`), focus-ring navigation, and `--demo`
 - **Neo4j knowledge graph live**: the KG backend switch is real — local
   Docker (`suijn-kg`), persistent volume, migration from the JSON store
   with parity checks, loud JSON fallback when the server is down.
@@ -19,6 +24,10 @@ All notable changes to Suijin.
 - **Lab/real isolation**: class-transfer advice ignores lab catalogs;
   `FLAG{...}` markers on real targets are rejected as contamination;
   cheatsheet entries carry origin provenance.
+- Live-engagement fixes: same-second parallel engagements no longer
+  share one audit trail; closed windows fully quit (SIGHUP) and are
+  pruned; only POC-CONFIRMED exploits count; audit dedup; dated mesh
+  stamps
 - Docs de-blued (living docs scrubbed; release notes kept as history);
   README rewritten product-first.
 
