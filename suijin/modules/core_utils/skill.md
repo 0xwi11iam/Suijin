@@ -11,7 +11,7 @@ Search local knowledge base:
 
 ## apply_patch
 
-Patch vulnerability in lab app (Blue Team):
+
 ```json
 {"tool": "apply_patch", "args": {"vulnerability": "sqli"}}
 ```

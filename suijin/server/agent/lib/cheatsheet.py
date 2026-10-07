@@ -81,11 +81,21 @@ def add(note: str, tag: str = "", source: str = "") -> str:
     rows = _load()
     if any(r.get("note") == n for r in rows):
         return "already known (deduped)"
+    # provenance (2026-10-07): the origin target rides every snippet so
+    # lab-derived entries can be scrubbed/excluded later — content stays
+    # target-agnostic, origin never does
+    try:
+        from suijin.modules.platform.lib.workspace import engagement_dir as _ed
+
+        origin = _ed().name
+    except Exception:  # noqa: BLE001 — provenance is best-effort
+        origin = ""
     rows.append(
         {
             "note": n,
             "tag": str(tag or "general")[:40],
             "source": str(source or "")[:60],
+            "origin": origin[:80],
             "at": round(time.time(), 3),
         }
     )

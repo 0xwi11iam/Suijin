@@ -34,7 +34,6 @@ suijin/
 │   ├── providers/   LLM layer (generate, failover, usage)
 │   ├── knowledge/   offline KB + KEV mirror
 │   ├── ops/         engagement lifecycle (export/debrief/replay/...)
-│   ├── blueteam/    defense stack (proxy, deception, SOC, traffic)
 │   ├── redteam/     offense stack + intel knowledge graph
 │   ├── console/     CLI router, TUIs, MCP server
 │   ├── skills/      drop-in markdown skills loader

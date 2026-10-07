@@ -69,6 +69,33 @@ def _laya(model_path: str):
         return None
 
 
+# live decision counters — process-wide, read by UIs/digests
+STATS = {"decisions": 0, "engine_hits": 0, "fallbacks": 0, "ms_total": 0.0}
+
+
+def runtime_status(config: dict | None = None) -> dict:
+    """One glance at the decision layer: engine, model status, and the
+    live counters. Safe against any config shape — a UI must never
+    crash because a config was odd."""
+    d = decision_config(config)  # takes the FULL config (digs .decision)
+    eng = str(d.get("engine") or "laya-mlx")
+    if eng == "local":
+        status = "local classifier"
+    elif eng == "http":
+        status = f"http {d.get('endpoint')}"
+    else:
+        status = laya_status(d.get("model_path"))
+    s = dict(STATS)
+    avg = round(s["ms_total"] / s["decisions"], 1) if s["decisions"] else 0.0
+    return {
+        "engine": eng,
+        "status": status,
+        "decisions": s["decisions"],
+        "fallbacks": s["fallbacks"],
+        "ms_avg": avg,
+    }
+
+
 def laya_status(model_path: str | None = None) -> str:
     """For settings/doctor: 'loaded' | 'no model at <path>' | the error."""
     from pathlib import Path as _P
@@ -126,12 +153,19 @@ class DecisionClient:
         if answer is None or answer[0] not in q.choices:
             return None
         choice, p = answer
+        elapsed = round((time.monotonic() - started) * 1000, 2)
+        STATS["decisions"] += 1
+        STATS["ms_total"] += elapsed
+        if used == engine:
+            STATS["engine_hits"] += 1
+        else:
+            STATS["fallbacks"] += 1
         return {
             "qid": qid,
             "choice": choice,
             "p": p,
             "engine": used,
-            "ms": round((time.monotonic() - started) * 1000, 2),
+            "ms": elapsed,
         }
 
     # ── laya-mlx (in-process, the default engine) ────────────────────
