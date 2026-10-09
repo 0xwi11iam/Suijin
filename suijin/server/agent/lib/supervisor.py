@@ -52,6 +52,34 @@ logger = logging.getLogger(__name__)
 # Each pattern: (name, detector_fn, guidance_template)
 
 
+_DECISIVE_RX = _re_mod.compile(
+    r"\b(decisive|one[- ]shot|one pass|final(ly)?|settle|once and for all|last check|verdict)\b", re.I
+)
+
+
+def _detect_question_recycling(trace: list, threshold: int = 3, window: int = 8) -> Optional[str]:
+    """The SAME question surviving N declared-final attempts (a live
+    2026-10-08 run burned ~19% of its turns on nine consecutive
+    one-shot scripts for one question). Past threshold, the measurement
+    channel is wrong for the question, not the script: force an oracle
+    switch or park it."""
+    recent = trace[-window:]
+    hits = [s for s in recent if _DECISIVE_RX.search(str(s.get("thought") or ""))]
+    if len(hits) < threshold:
+        return None
+    words = [w for s in hits for w in re.findall(r"[a-z_/]{4,}", str(s.get("thought") or "").lower())]
+    from collections import Counter
+
+    common = [w for w, _ in Counter(words).most_common(4)]
+    subject = " ".join(common) if common else "the same question"
+    return (
+        f"ORACLE MISMATCH: this question has survived {len(hits)} 'decisive' attempts "
+        f"({subject}). The measurement channel is wrong for it, not the script. "
+        "Switch oracle — mcp_browser_goto or http_replay — or park it as a note and "
+        "take another lane; do NOT write another one-shot script for it."
+    )
+
+
 def _detect_repeating_tool(trace: list, threshold: int = 3) -> Optional[str]:
     """Detect if the same tool+args has been used 3+ times in a row.
 
@@ -775,6 +803,7 @@ def analyze_trace(trace: list, iteration: float | None = None, **extra_kw) -> Op
 
     detectors = [
         _detect_missed_flag,
+        _detect_question_recycling,
         _detect_phase_stall,
         _detect_repeating_tool,
         _detect_bookkeeping_loop,

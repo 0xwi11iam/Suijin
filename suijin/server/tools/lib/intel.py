@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sqlite3
@@ -362,6 +363,39 @@ def record_finding(target, finding_type, rule, evidence="", config=None):
     valid_types = ("blocks", "rate_limit", "waf", "verified_cve", "false_positive", "behavior", "bypass")
     if finding_type not in valid_types:
         return f"Invalid finding_type. Use one of: {', '.join(valid_types)}"
+
+    # CROSS-TARGET CREDENTIAL GUARD (2026-10-08, a three-target
+    # credential confusion): a credential literal verified under a DIFFERENT
+    # target cannot become this target's finding — one credential is not
+    # simultaneously three companies'. Reject
+    # loudly so the agent re-checks WHERE it actually saw the secret
+    # (shared /tmp scratch is the usual culprit).
+    import re as _re2
+
+    from suijin.modules.redteam.lib.intel import knowledge_graph as _kgx
+
+    _CRED_RX = _re2.compile(
+        r"(AIza[0-9A-Za-z_-]{30,40}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{30,}|xox[abpr]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9]{20,})"
+    )
+    _cred = _CRED_RX.search(f"{rule} {evidence}")
+    if _cred:
+        _lit = _cred.group(1)
+
+        def _norm_host(t: str) -> str:
+            t = str(t or "").lower().strip()
+            return t[4:] if t.startswith("www.") else t
+
+        for _t in _kgx.get_all_targets():
+            if _norm_host(_t) == _norm_host(target):
+                continue
+            _blob = json.dumps(_kgx.get_constraints(_t))
+            if _lit in _blob:
+                return (
+                    f"REJECTED: this credential was already recorded on {_t} — a key cannot "
+                    "belong to two targets. You likely read it from shared scratch (/tmp is "
+                    "machine-shared across engagements) or from memory of a different run. "
+                    "Re-verify it appears on THIS target's own pages before recording."
+                )
 
     # LAB-MARKER GUARD (2026-10-07): FLAG{...}/HTB{...} strings are lab/CTF
     # artifacts — a real target surfacing one means memory contamination,

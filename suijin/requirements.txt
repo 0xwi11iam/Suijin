@@ -15,8 +15,8 @@ PyJWT>=2.8,<3.0
 # Module packs (vendored: suijin/modules/google_dork)
 duckduckgo-search>=6.0
 
-# Optional: Neo4j knowledge-graph backend (config kg_backend=neo4j)
-# pip install neo4j  # uncomment with the switch when a server exists
+# Optional: Neo4j knowledge-graph backend — NOT a base dep (JSON is the
+# zero-dependency default). Install via the [kg] extra: pip install suijin[kg]
 
 # Desktop app gateway (localhost; Tauri client connects here)
 fastapi>=0.115

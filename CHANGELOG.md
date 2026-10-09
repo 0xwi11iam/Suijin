@@ -6,6 +6,16 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v7.1.0 — The Clean Memory Release
+
+Memory is only an advantage if it can be trusted: shared-scratch
+warnings and on-target verification, cross-target credential rejection,
+librarian target isolation, the three-strike oracle rule, stale-pause
+transparency. Live-run fixes (mesh append bug, per-iteration cost,
+flicker-free rendering, capped arg display, colored cards, "N in
+phase" counts). Neo4j polish ([kg] extra, doctor liveness). First
+console test suite.
+
 ## v7.0.0 — The Command Center Release
 
 - **The operator console** (`suijn operator`): one screen over every

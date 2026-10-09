@@ -226,3 +226,53 @@ class TestNeo4jBackend:
         orphaned = kg._run("MATCH (c:Constraint) WHERE NOT ()-[:HAS]->(c) RETURN count(c) AS n")[0]["n"]
         assert orphaned == 0
         kg.close()
+
+
+class TestBackendStatusLiveness:
+    """Doctor must report reality, not configuration: a selected-but-dead
+    neo4j reads DOWN with the fallback named."""
+
+    def test_down_server_reported(self, monkeypatch):
+        from suijin.modules.redteam.lib.intel import kg_backend as kb
+
+        monkeypatch.setenv("SUIJIN_KG_BACKEND", "neo4j")
+        monkeypatch.setattr(kb, "_config_backend", lambda: "neo4j")
+        monkeypatch.setattr(kb, "_config_uri", lambda: "bolt://127.0.0.1:1")
+        line = kb.backend_status()
+        assert "DOWN" in line and "json" in line
+
+    def test_up_server_reported(self, monkeypatch):
+        import socket
+
+        from suijin.modules.redteam.lib.intel import kg_backend as kb
+
+        # a port that is genuinely listening: this test process
+        srv = socket.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        port = srv.getsockname()[1]
+        try:
+            monkeypatch.setenv("SUIJIN_KG_BACKEND", "neo4j")
+            monkeypatch.setattr(kb, "_config_backend", lambda: "neo4j")
+            monkeypatch.setattr(kb, "_config_uri", lambda: f"bolt://127.0.0.1:{port}")
+            assert kb.backend_status().endswith("— UP")
+        finally:
+            srv.close()
+
+    def test_no_uri_flagged(self, monkeypatch):
+        from suijin.modules.redteam.lib.intel import kg_backend as kb
+
+        monkeypatch.setenv("SUIJIN_KG_BACKEND", "neo4j")
+        monkeypatch.setattr(kb, "_config_backend", lambda: "neo4j")
+        monkeypatch.setattr(kb, "_config_uri", lambda: "")
+        monkeypatch.setattr(kb, "_config_setting", lambda k: "")
+        assert "misconfigured" in kb.backend_status()
+
+    def test_json_default_mentions_configured_switch(self, monkeypatch):
+        from suijin.modules.redteam.lib.intel import kg_backend as kb
+
+        monkeypatch.setenv("SUIJIN_KG_BACKEND", "json")
+        monkeypatch.setattr(kb, "_config_backend", lambda: "json")
+        monkeypatch.setattr(kb, "_config_uri", lambda: "bolt://127.0.0.1:7687")
+        assert "json (default)" in kb.backend_status()
+        assert "flip kg_backend" in kb.backend_status()

@@ -137,18 +137,22 @@ def _dragon() -> Text:
     half; rows 7-8 EXTEND the screen down into the empty margin beside
     the dragon's body — every dragon character stays exactly where it
     is. Raw frames untouched; transform happens at render time."""
-    lines = DRAGON_FRAMES[int(time.time() * 4) % 2].split("\n")
-    out = []
-    for i, ln in enumerate(lines, start=1):
-        if i in DRAGON_SCREEN_LIT_ROWS:
-            ln = ln.replace("\x1b[38;5;16m████", "\x1b[38;5;16m██\x1b[38;5;15m██", 1)
-        elif i == 7:  # screen keeps growing beside the body (01 row)
-            ln = "\x1b[38;5;16m██\x1b[38;5;15m██\x1b[0m" + ln[4:]
-        elif i == 8:  # the black cap row of the extended screen (00)
-            ln = "\x1b[38;5;16m████\x1b[0m" + ln[4:]
-        out.append(ln)
-    t = Text.from_ansi("\n".join(out))
-    t.no_wrap = True
+    idx = int(time.time() * 4) % 2
+    t = _DRAGON_CACHE.get(idx)
+    if t is None:
+        lines = DRAGON_FRAMES[idx].split("\n")
+        out = []
+        for i, ln in enumerate(lines, start=1):
+            if i in DRAGON_SCREEN_LIT_ROWS:
+                ln = ln.replace("\x1b[38;5;16m████", "\x1b[38;5;16m██\x1b[38;5;15m██", 1)
+            elif i == 7:  # screen keeps growing beside the body (01 row)
+                ln = "\x1b[38;5;16m██\x1b[38;5;15m██\x1b[0m" + ln[4:]
+            elif i == 8:  # the black cap row of the extended screen (00)
+                ln = "\x1b[38;5;16m████\x1b[0m" + ln[4:]
+            out.append(ln)
+        t = Text.from_ansi("\n".join(out))
+        t.no_wrap = True
+        _DRAGON_CACHE[idx] = t
     return t
 
 
@@ -161,8 +165,12 @@ RACK_FRAMES = (
 
 def _rack() -> Text:
     """Rack LEDs, wall-clock frame at 0.25s — sits right of the dragon."""
-    t = Text.from_ansi(RACK_FRAMES[int(time.time() * 4) % 2])
-    t.no_wrap = True
+    idx = int(time.time() * 4) % 2
+    t = _RACK_CACHE.get(idx)
+    if t is None:
+        t = Text.from_ansi(RACK_FRAMES[idx])
+        t.no_wrap = True
+        _RACK_CACHE[idx] = t
     return t
 
 
@@ -860,6 +868,8 @@ def write_demo(mesh: Path, ws: Path) -> None:
 # ═══════════════════════════════════════════════════════════════════════
 
 _frame = {"i": 0}
+_DRAGON_CACHE: dict = {}
+_RACK_CACHE: dict = {}
 
 
 def _pulse() -> str:
@@ -928,21 +938,18 @@ def _card(a: Agent, selected: bool, height: int) -> Panel:
     body.append(f"\n {_phase_label(a.phase)}", style=f"bold {pc}")
 
     sc = _sev_counts(a.findings)
-    total = a.all_finds
-    dim_all = not total
 
-    def style_for(sev: str) -> str:
-        return DIM if dim_all else f"bold {SEV_COLOR[sev]}"
+    def seg(count: int, label: str, sev: str, tail: str = " ") -> None:
+        col = SEV_COLOR[sev]
+        body.append(f"{count} ", style=f"bold {col}")
+        body.append(label + tail, style=col)
 
-    label_style = DIM
-    body.append(f"\n {sc['low']} ", style=style_for("low"))
-    body.append("LOW ", style=label_style)
-    body.append(f"{sc['medium']} ", style=style_for("medium"))
-    body.append("MED ", style=label_style)
-    body.append(f"{sc['high']} ", style=style_for("high"))
-    body.append("HIGH", style=label_style)
-    body.append(f"\n {sc['critical']} ", style=style_for("critical"))
-    body.append("CRIT", style=label_style)
+    body.append("\n ")
+    seg(sc["low"], "LOW", "low")
+    seg(sc["medium"], "MED", "medium")
+    seg(sc["high"], "HIGH", "high", "")
+    body.append("\n ")
+    seg(sc["critical"], "CRIT", "critical", "")
 
     body.append(
         f"\n ${a.cost_usd:.3f}" if a.cost_usd else "\n —",
@@ -1012,7 +1019,14 @@ class OperatorTUI:
         chat, offset = read_chat(self.mesh_dir, skip_bytes=self._chat_offset)
         with self._lock:
             self.agents = agents
-            self.chat = chat
+            # incremental reads APPEND — the first read (offset 0) tails
+            # the log; later reads deliver only NEW lines, and replacing
+            # the list with them made the whole panel flash and vanish
+            # (the live field-run bug: "says something and disappears")
+            if self._chat_offset and chat:
+                self.chat = (self.chat + chat)[-60:]
+            elif chat:
+                self.chat = chat
             self._chat_offset = offset
             if self.selected >= len(agents):
                 self.selected = max(0, len(agents) - 1)
@@ -1080,8 +1094,12 @@ class OperatorTUI:
         left.append(" | ", style=DIM)
         left.append(self._sev_strip(all_finds))
         with contextlib.suppress(OSError):
-            if (self.mesh_dir / "pause-operator").exists():
-                left.append("  |  PAUSED", style=f"bold {C_MED}")
+            pf = self.mesh_dir / "pause-operator"
+            if pf.exists():
+                age = max(0.0, time.time() - pf.stat().st_mtime)
+                h = int(age // 3600)
+                age_s = f"{h}h" if h else f"{int(age // 60)}m"
+                left.append(f"  |  PAUSED {age_s}", style=f"bold {C_MED}")
 
         now = datetime.now().astimezone()
         off = now.strftime("%z")
@@ -1187,9 +1205,12 @@ class OperatorTUI:
         if args is None:
             args = a.last_args or {}
         if tool:
-            call = {"tool": tool, "args": args or {}}
+            # arg values capped for display — a python heredoc in `cmd`
+            # is not a spec; the full payload lives in the audit trail
+            shown_args = {k: (v if len(str(v)) <= 64 else str(v)[:61] + "…") for k, v in (args or {}).items()}
+            call = {"tool": tool, "args": shown_args}
             try:
-                call_json = json.dumps(call)
+                call_json = json.dumps(call, ensure_ascii=False)
             except Exception:
                 call_json = str(call)
             json_box = Panel(
@@ -1260,7 +1281,8 @@ class OperatorTUI:
         )
 
     def _overview_panel(self) -> Panel:
-        """Right column top — one continuous stats strip, band per line."""
+        """Right column top — one dense stats strip: every band one row,
+        no paragraph spacing, phases read as 'N in <phase>'."""
         n = len(self.agents)
         cost = sum(a.cost_usd or 0 for a in self.agents)
         iters = sum(a.iteration for a in self.agents)
@@ -1270,35 +1292,32 @@ class OperatorTUI:
         uptime = max((a.uptime for a in self.agents), default=0)
         phases: dict[str, int] = {}
         for a in self.agents:
-            phases[a.phase] = phases.get(a.phase, 0) + 1
+            ph = _phase_label(a.phase)
+            phases[ph] = phases.get(ph, 0) + 1
 
-        strip = Text()
-        strip.append("\n ")
+        strip = Text("\n ")
         strip.append(f"{n}", style=f"bold {WHITE}")
-        strip.append(" agents   ", style=GRAY)
-        strip.append(f"${cost:.3f}", style=_cost_color(cost))
-        strip.append("   ", style=DIM)
+        strip.append(" agents  ", style=GRAY)
+        strip.append(f"${cost:.2f}", style=_cost_color(cost))
+        strip.append("  ", style=GRAY)
         strip.append(f"{iters}", style=f"bold {WHITE}")
         strip.append(" iters\n ", style=GRAY)
 
         strip.append(f"{sc['low']} LOW", style=f"bold {C_LOW}")
-        strip.append("   ", style=DIM)
+        strip.append("  ", style=GRAY)
         strip.append(f"{sc['medium']} MED", style=f"bold {C_MED}")
-        strip.append("   ", style=DIM)
+        strip.append("  ", style=GRAY)
         strip.append(f"{sc['high']} HIGH", style=f"bold {C_HIGH}")
-        strip.append("   ", style=DIM)
+        strip.append("  ", style=GRAY)
         strip.append(f"{sc['critical']} CRIT", style=f"bold {C_CRIT}")
-        strip.append("\n ", style=DIM)
-
-        strip.append(f"{total}", style=f"bold {WHITE}")
-        strip.append(" findings   ", style=GRAY)
+        strip.append(f"   {total} findings\n ", style=GRAY)
         strip.append(_fmt_dur(uptime), style=f"italic {WHITE}")
         strip.append(" longest\n ", style=GRAY)
 
         for i, (ph, cnt) in enumerate(sorted(phases.items(), key=lambda x: -x[1])):
             if i:
-                strip.append("   ", style=DIM)
-            strip.append(f"{cnt} {_phase_label(ph)}", style=f"bold {PHASE_COLOR.get(ph, WHITE)}")
+                strip.append("  ", style=GRAY)
+            strip.append(f"{cnt} in {ph}", style=f"bold {PHASE_COLOR.get(ph, WHITE)}")
         strip.append("\n")
 
         return Panel(
@@ -1402,15 +1421,24 @@ class OperatorTUI:
         prompt.append(f" {who} » ", style=f"bold {GOLD}")
         prompt.append(self.input_buf, style=f"bold {WHITE}")
         prompt.append("█", style=f"bold {CYAN}")
-        prompt.append("    tab focus · j/k page cards · ←→ history · / cmds", style=DIM)
 
         box = Panel(prompt, border_style=f"bold {CYAN}" if self._focused("input") else WHITE, padding=(0, 0))
+        # the hint rides a FIXED column beside the box — typing grows the
+        # buffer, never pushes the hint off (the disappearing-hint bug)
+        hints = Text(
+            "\n tab focus · j/k page cards\n ←→ history · / cmds",
+            style=DIM,
+        )
+        g = Table.grid(expand=True, pad_edge=False)
+        g.add_column(ratio=1)
+        g.add_column(width=26)
+        g.add_row(box, hints)
         lead = list(rows)
         if self.note and time.time() - self.note_at < 5.0:
             lead.append(Text(f"  {self.note}", style=GRAY))
         if lead:
-            return Group(*lead, box)
-        return Group(Text(""), box)
+            return Group(*lead, g)
+        return Group(Text(""), g)
 
     # ── layout ───────────────────────────────────────────────────────
 
@@ -1465,7 +1493,7 @@ class OperatorTUI:
             tty.setcbreak(sys.stdin.fileno())
             self._boot_t0 = time.time()
             layout = self._build()
-            with Live(layout, console=self.console, refresh_per_second=20, screen=False):
+            with Live(layout, console=self.console, refresh_per_second=20, screen=True):
                 while self.running:
                     self._render(layout)
                     r, _, _ = select.select([sys.stdin], [], [], 0.05)
@@ -1634,6 +1662,8 @@ class OperatorTUI:
                 self._note("usage: /agent <hex>")
             elif not self._select_by_hex(argv[0]):
                 self._note(f"no agent matches {argv[0]}")
+            else:
+                self._note(f"agent {argv[0]}")
         elif cmd == "/focus":
             want = (argv[0].lower() if argv else "").replace("details", "detail")
             if want in self.AREAS:
