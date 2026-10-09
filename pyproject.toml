@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "suijin"
-version = "7.0.0"
-description = "Suijin — autonomous red & blue teaming (formerly Medusa)"
+version = "7.1.0"
+description = "Suijin — the autonomous red team (formerly Medusa)"
 readme = "README.md"
 license = { text = "AGPL-3.0-or-later" }
 requires-python = ">=3.10"
 authors = [{ name = "William Jiang" }]
-keywords = ["security", "pentesting", "red-team", "blue-team", "agent", "llm"]
+keywords = ["security", "pentesting", "red-team", "agent", "llm"]
 # Full toolset (module packs under Modules/) requires a repo checkout —
 # see README "Packaging". The wheel ships every core tool.
 dependencies = [
@@ -30,6 +30,11 @@ dependencies = [
     "uvicorn>=0.30",
     "websockets>=13",
 ]
+
+[project.optional-dependencies]
+# Neo4j knowledge-graph backend (kg_backend=neo4j + a local server).
+# JSON stays the zero-dependency default; the extra makes the switch turnkey.
+kg = ["neo4j>=5,<7"]
 
 [project.urls]
 Homepage = "https://github.com/0xwi11iam/Suijin"

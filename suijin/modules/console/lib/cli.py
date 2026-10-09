@@ -184,11 +184,16 @@ def run_doctor() -> int:
         rows.append(_fail("dependencies", "missing: " + ", ".join(missing_deps)))
         critical += 1
 
-    # KG backend status — which storage answers (json default / neo4j switch)
+    # KG backend status — which storage answers (json default / neo4j
+    # switch), and whether the selected backend is actually ALIVE
     try:
         from suijin.modules.redteam.lib.intel.kg_backend import backend_status
 
-        rows.append(_ok("knowledge graph", backend_status()))
+        line = backend_status()
+        if "DOWN" in line or "misconfigured" in line:
+            rows.append(_warn("knowledge graph", line))
+        else:
+            rows.append(_ok("knowledge graph", line))
     except Exception as e:
         rows.append(_warn("knowledge graph", str(e)[:60]))
 

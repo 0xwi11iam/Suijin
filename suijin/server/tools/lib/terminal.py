@@ -56,6 +56,22 @@ def execute_terminal(cmd, timeout=30):
             return f"Command denied by user (matched: {pattern}).\nCommand was: {cmd[:200]}"
         # Approved (or not dangerous) — proceed with execution
 
+        # SHARED-/tmp GUARD (2026-10-08, a three-target credential
+        # confusion): TMPDIR confinement redirects tempfile-style writes,
+        # but HARDCODED /tmp paths escape it — and /tmp is machine-shared
+        # by every concurrent engagement, so a peer's downloaded bundle
+        # reads as this engagement's finding. Warn in the observation the
+        # agent reads next turn; it self-corrects.
+        _tmp_warn = ""
+        if "/tmp" in cmd:
+            _tmp_warn = (
+                "\n[sandbox] WARNING: that command touches /tmp, which is SHARED by all "
+                "concurrent engagements on this machine — a file there may be another "
+                "engagement's artifact (cross-target key confusion has happened). Use "
+                "$TMPDIR / your workspace home for scratch, and verify any /tmp-sourced "
+                "secret actually appears on YOUR target before claiming it.\n"
+            )
+
         # Build environment with homebrew paths (macOS) on top of the
         # v2 executor confinement (HOME/TMPDIR always point INTO the
         # engagement home; sandbox-exec write-deny when enabled).
@@ -108,6 +124,9 @@ def execute_terminal(cmd, timeout=30):
         )
         from suijin.modules.platform.lib.runtime import truncate
 
-        return truncate(result.format())
+        out = result.format()
+        if _tmp_warn:
+            out = _tmp_warn + out
+        return truncate(out)
     except Exception as e:
         return f"Execution Fault: {str(e)}"
