@@ -254,6 +254,9 @@ def write_file(file_path, content):
         target.write_text(str(content), encoding="utf-8")
         rel = target.relative_to(_ws().WORKSPACE_DIR) if str(target).startswith(str(_ws().WORKSPACE_DIR)) else None
         loc = f"suijin_agent/{rel}" if rel else str(target)
-        return f"File written: {loc}"
+        # ABSOLUTE path first — the shell cwd is the engagement home and the
+        # workspace-relative label had to be hand-translated (a live field run
+        # mistranslated it twice and lost two iterations to path bugs)
+        return f"File written: {target}\nWorkspace label: {loc}"
     except Exception as e:
         return f"Error writing file: {e}"

@@ -123,6 +123,13 @@ def output(job_id: str) -> str:
         return f"Job {job_id} not found."
     if j.get("error"):
         return f"Job {job_id} FAILED: {j['error']}\n{j.get('output', '')}"
+    if j.get("status") == "running":
+        elapsed = max(0, time.time() - float(j.get("started_at") or 0))
+        return (
+            f"Job {job_id} STILL RUNNING ({elapsed:.0f}s) — partial output below; it taps "
+            "you on the shoulder automatically when it finishes, so work another lane "
+            "instead of re-polling (job_wait only if you have nothing else to do).\n" + str(j.get("output", "") or "")
+        )
     return str(j.get("output", ""))
 
 

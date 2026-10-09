@@ -326,14 +326,39 @@ def get_backend(json_path_fn):
         return kg
 
 
+def _bolt_reachable(uri: str, timeout: float = 1.5) -> bool:
+    """Cheap liveness probe: a TCP connect to the bolt port. No driver,
+    no auth — answers 'is anything listening', which is the question a
+    dead container fails."""
+    import socket
+    from urllib.parse import urlparse
+
+    try:
+        u = urlparse(uri if "://" in uri else f"bolt://{uri}")
+        host = u.hostname or "127.0.0.1"
+        port = u.port or 7687
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 def backend_status() -> str:
-    """Doctor line: which backend is live and whether Neo4j is configured."""
+    """Doctor line: which backend answers AND whether it's actually
+    alive — a configured-but-dead neo4j must read as DOWN with the
+    json fallback named, not as a green check."""
     import os
 
     sel = os.environ.get("SUIJIN_KG_BACKEND") or _config_backend()
-    uri = os.environ.get("SUIJIN_NEO4J_URI") or _config_uri()
+    uri = os.environ.get("SUIJIN_NEO4J_URI") or _config_uri() or _config_setting("neo4j_uri")
     if sel == "neo4j":
-        return f"neo4j ({uri or 'NO URI — misconfigured'})" + ("" if uri else " [falling back to json]")
+        if not uri:
+            return "neo4j (NO URI — misconfigured) [falling back to json]"
+        return (
+            f"neo4j ({uri}) — UP"
+            if _bolt_reachable(uri)
+            else f"neo4j ({uri}) — DOWN, running on json (start the server)"
+        )
     return "json (default)" + (f" [neo4j configured at {uri} — flip kg_backend to switch]" if uri else "")
 
 
@@ -347,9 +372,13 @@ def _config_backend() -> str:
 
 
 def _config_uri() -> str:
+    return _config_setting("neo4j_uri")
+
+
+def _config_setting(key: str) -> str:
     try:
         from suijin.modules.platform.lib.config_loader import load_config
 
-        return str(load_config().get("neo4j_uri", ""))
+        return str(load_config().get(key, "") or "")
     except Exception:  # noqa: BLE001
         return ""

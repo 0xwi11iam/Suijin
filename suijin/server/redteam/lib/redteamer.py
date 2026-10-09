@@ -961,6 +961,23 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
     _resume_retry = False  # one clean-restart allowed after a paused resume
     _restart_stream = False  # provider restart / ask-hold: exit inner loop, re-stream
 
+    # STALE-PAUSE WARNING (2026-10-08, the permanent-pause incident): a
+    # panic/pause flag from a dead session silently parks every NEW
+    # engagement at the gate forever. Name it at boot so the operator
+    # sees WHY the run is holding, the moment it starts holding.
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.mesh import mesh_dir as _md
+
+        _pf = _md() / "pause-operator"
+        if _pf.exists():
+            _age = max(0.0, time.time() - _pf.stat().st_mtime)
+            _ah = int(_age // 3600)
+            _age_s = f"{_ah}h" if _ah else f"{int(_age // 60)}m"
+            console.print(
+                f"[bold yellow]OPERATOR PAUSE FLAG ACTIVE ({_age_s} old, {_pf.read_text(errors='replace').strip()[:40]!r}) — "
+                f"this run HOLDS until /resume in suijn operator (or: rm {_pf})[/bold yellow]"
+            )
+
     while True:
         # OPERATOR CONSOLE PAUSE — /pause in `suijn operator` drops a flag
         # in the mesh dir; every agent holds HERE, between turns, with the

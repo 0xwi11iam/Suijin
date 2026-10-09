@@ -62,6 +62,12 @@ COPY suijin/requirements.txt /app/suijin-requirements.txt
 RUN python3 -m pip install --no-cache-dir -r /app/suijin-requirements.txt
 COPY . /app/
 
+# the [kg] extra's driver: the turnkey image carries the Neo4j backend
+# (JSON stays the runtime default — the driver only matters when
+# kg_backend=neo4j is switched on). The app runs from /app source, so the
+# driver alone is all the extra would add.
+RUN python3 -m pip install --no-cache-dir "neo4j>=5,<7"
+
 # ── workspace volume mount point ────────────────────────────────────────
 # Canonical workspace: /app/suijin_agent (volume), symlinked from
 # /app/suijin/suijin_agent for legacy path references. Everything the

@@ -7,7 +7,7 @@
 <p align="center"><i>Your team of fully autonomous web app pentesters and red teamers for any situation.</i></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/v7.0.0-suijin-brightgreen?style=flat-square" alt="version"/>
+  <img src="https://img.shields.io/badge/v7.1.0-suijin-brightgreen?style=flat-square" alt="version"/>
   <img src="https://img.shields.io/badge/license-AGPL%20v3-blue?style=flat-square" alt="license"/>
   <img src="https://img.shields.io/badge/python-3.10%2B-306998?style=flat-square&logo=python&logoColor=white" alt="python"/>
 </p>
@@ -181,6 +181,9 @@ suijin operator
 ```bash
 # pipx / uv (installable package)
 pipx install suijin
+
+# with the Neo4j knowledge-graph backend (json is the default)
+pipx install "suijin[kg]"
 
 # manual
 git clone https://github.com/0xwi11iam/Suijin

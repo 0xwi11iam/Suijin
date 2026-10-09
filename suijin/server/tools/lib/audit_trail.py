@@ -16,6 +16,7 @@ events.jsonl journal remains the durable per-event record.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import threading
 import time
@@ -153,6 +154,17 @@ def log_iteration(
             trail["successful_actions"] += 1
         else:
             trail["failed_actions"] += 1
+        # LIVE COST (2026-10-08): the provider accumulator is priced off
+        # models.dev; refreshing the trail EVERY iteration means the
+        # operator console's cost column moves per-turn, and a killed run
+        # (window close mid-engagement) still shows what it spent — the
+        # end_audit-only write left every unclean run at $0.000.
+        with contextlib.suppress(Exception):
+            from suijin.modules.providers.lib import USAGE
+
+            live = float(USAGE.get("est_cost_usd") or 0)
+            if live > float(trail.get("cost_usd") or 0):
+                trail["cost_usd"] = round(live, 6)
     # COUNT-BASED FORCE (the operator's 4-agent run 2026-10-04: short
     # engagements finished inside the 10-second throttle window, so the
     # trail JSON stayed empty while agent_steps.jsonl recorded fine —

@@ -156,3 +156,123 @@ def test_on_confirmed_writes_kg(tmp_path, monkeypatch):
     )
     cons = kg.get_constraints("example.com")
     assert cons.get("verified") and "ssti: template injection" in cons["verified"][0]["rule"]
+
+
+def test_audit_cost_updates_live_per_iteration(tmp_path, monkeypatch):
+    """Window-close mid-engagement must still show what it spent: the
+    trail cost refreshes EVERY iteration from the provider accumulator
+    (models.dev-priced), not only at end_audit — unclean exits died at $0.000."""
+
+    monkeypatch.setenv("SUIJIN_ENV", str(tmp_path / ".env"))
+    import suijin.modules.tools.lib.audit_trail as at
+
+    at.start_audit("costtest.example") if hasattr(at, "start_audit") else None
+    import suijin.modules.providers.lib as providers
+
+    monkeypatch.setitem(providers.USAGE, "est_cost_usd", 0.1234)
+    at.log_iteration(1, "t", "r", "http_request", {}, "ok", True, "recon")
+    trail = at._trails[at._engagement_key()]
+    assert trail["cost_usd"] == 0.1234
+    monkeypatch.setitem(providers.USAGE, "est_cost_usd", 0.25)
+    at.log_iteration(2, "t", "r", "http_request", {}, "ok", True, "recon")
+    assert trail["cost_usd"] == 0.25
+
+
+class TestCrossTargetCredentialGuard:
+    """One credential is not simultaneously three targets'
+    (shared-/tmp reads fooled three concurrent engagements into
+    claiming the same key, 2026-10-08)."""
+
+    KEY = "AIzaSy" + "Example0Example0Example0Example0Xy"
+
+    def _kg(self, tmp_path, monkeypatch):
+
+        monkeypatch.setenv("SUIJIN_KG_BACKEND", "json")
+        from suijin.modules.redteam.lib.intel import knowledge_graph as kg
+        from suijin.modules.redteam.lib.intel.kg_backend import _invalidate_backend_cache
+
+        _invalidate_backend_cache()
+        monkeypatch.setattr(kg, "GRAPH_PATH", tmp_path / "kg.json")
+        return kg
+
+    def test_credential_already_on_other_target_rejected(self, tmp_path, monkeypatch):
+        kg = self._kg(tmp_path, monkeypatch)
+        kg.add_constraint("maps.example", "verified", f"key {self.KEY} leaked", confidence=1.0)
+        from suijin.modules.tools.lib.intel import record_finding
+
+        out = record_finding("shop.example", "behavior", f"Google key {self.KEY}", "saw it")
+        assert out.startswith("REJECTED")
+        assert "maps.example" in out
+        assert not kg.get_constraints("shop.example")
+
+    def test_same_host_www_variant_not_rejected(self, tmp_path, monkeypatch):
+        kg = self._kg(tmp_path, monkeypatch)
+        kg.add_constraint("example.com", "verified", f"key {self.KEY}", confidence=1.0)
+        from suijin.modules.tools.lib.intel import record_finding
+
+        out = record_finding("www.example.com", "behavior", f"key {self.KEY}", "same site")
+        assert not str(out).startswith("REJECTED")
+
+    def test_fresh_credential_records_normally(self, tmp_path, monkeypatch):
+        self._kg(tmp_path, monkeypatch)
+        from suijin.modules.tools.lib.intel import record_finding
+
+        out = record_finding("example.com", "behavior", f"sk-{'a' * 30}", "fresh")
+        assert not str(out).startswith("REJECTED")
+
+
+def test_terminal_warns_on_literal_tmp():
+    """Hardcoded /tmp escapes TMPDIR confinement — the observation carries
+    the warning the agent reads next turn."""
+    from suijin.modules.tools.lib.terminal import execute_terminal
+
+    out = execute_terminal("ls /tmp", timeout=10)
+    assert "SHARED by all concurrent engagements" in out
+    out2 = execute_terminal("echo hi", timeout=10)
+    assert "SHARED" not in out2
+
+
+class TestPostmortemFixes:
+    """Field-run lessons (postmortem 2026-10-08), each pinned."""
+
+    def test_oracle_mismatch_detector(self):
+        from suijin.modules.agent.lib.supervisor import _detect_question_recycling
+
+        spiral = [{"thought": f"Decisive script #{i} to settle the /shop/goto chain"} for i in range(3)]
+        out = _detect_question_recycling(spiral)
+        assert out and "ORACLE MISMATCH" in out and "mcp_browser_goto" in out
+        assert _detect_question_recycling([{"thought": "map the surface"}] * 5) is None
+
+    def test_write_file_returns_absolute_path(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("SUIJIN_ENV", str(tmp_path / ".env"))
+        from suijin.modules.tools.lib.http_tools import write_file
+
+        r = write_file("sweep.py", "print(1)")
+        assert r.startswith("File written: /")
+        assert "Workspace label:" in r
+
+    def test_job_output_names_running_state(self):
+        import time
+
+        from suijin.modules.tools.lib import job_registry as jr
+
+        jid = jr.spawn("execute_terminal", {}, lambda *a, **k: time.sleep(30), label="sleeper")
+        try:
+            out = jr.output(jid)
+            assert "STILL RUNNING" in out and "taps" in out
+        finally:
+            jr.cancel(jid)
+
+    def test_librarian_hides_cross_target_entries(self, tmp_path):
+        from suijin.modules.agent.lib.librarian import Librarian
+
+        lib = Librarian(None, tmp_path, interval=10, target="shop.example")
+        lib._ledger["entries"] = [
+            {"kind": "cred", "value": "lab-cred", "where": "w", "iter": 1, "run": "r1", "target": "127.0.0.1:6000"},
+            {"kind": "cred", "value": "site-key", "where": "w", "iter": 2, "run": "r1", "target": "shop.example"},
+            {"kind": "note", "value": "legacy", "where": "w", "iter": 3, "run": "r1"},
+        ]
+        out = lib.render_ledger()
+        assert "lab-cred" not in out
+        assert "site-key" in out and "legacy" in out
+        assert "cross-target observations hidden" in out

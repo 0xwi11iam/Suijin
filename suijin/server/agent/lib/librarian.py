@@ -335,6 +335,7 @@ class Librarian:
                         "iter": iteration,
                         "ts": time.strftime("%H:%M:%S"),
                         "run": self.run_id,
+                        "target": self._target,
                     }
                 )
         # args themselves can carry the surface (a probe against /admin
@@ -356,6 +357,7 @@ class Librarian:
                                     "iter": iteration,
                                     "run": self.run_id,
                                     "ts": time.strftime("%H:%M:%S"),
+                                    "target": self._target,
                                 }
                             )
         self._last_kind_counts = kind_counts
@@ -439,16 +441,29 @@ class Librarian:
 
     def render_ledger(self, query: str = "", limit: int = 8) -> str:
         """The memory_recall tool body."""
+        # CROSS-TARGET ISOLATION (2026-10-08, a lab/production memory
+        # bleed): a resumed ledger can carry another engagement's (or the
+        # lab's) observations — an entry stamped for a different target
+        # never advises this one. Unstamped legacy entries pass.
+        _all = list(self._ledger["entries"])
+        entries = [
+            e
+            for e in _all
+            if not (e.get("target") and self._target and str(e["target"]).lower() != self._target.lower())
+        ]
+        _hidden = len(_all) - len(entries)
+
         digests = self._ledger.get("digests") or []
         _mine = sum(1 for e in (self._ledger.get("entries") or []) if e.get("run") == self.run_id)
         _carried = len(self._ledger.get("entries") or []) - _mine
         _scope = f"this run: {_mine}" + (f" (+{_carried} carried from resume)" if _carried else "")
-        head = [f"Engagement memory: {len(self._ledger['entries'])} observations ({_scope})"]
+        head = [f"Engagement memory: {len(entries)} observations ({_scope})"]
+        if _hidden:
+            head.append(f"({_hidden} cross-target observations hidden — not this engagement's)")
         for d in digests[-1:]:
             head.append("Latest condensed digest (" + str(d.get("ts", "")) + "):")
             head.extend("  - " + ln for ln in (d.get("lines") or [])[:10])
         q = query.strip().casefold()
-        entries = self._ledger["entries"]
         if q:
             entries = [
                 e for e in entries if q in f"{e.get('kind', '')} {e.get('value', '')} {e.get('where', '')}".casefold()

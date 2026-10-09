@@ -1,6 +1,6 @@
 {
-  "version": "7.0.0",
+  "version": "7.1.0",
   "codename": "Suijin OS",
-  "release_date": "2026-10-07",
-  "description": "Suijin OS v7.0.0 \u2014 The Command Center Release. `suijn operator`: one screen commanding every agent \u2014 live cards, per-agent iteration history, confirmed-exploits-only counts, System One status, and a command line that broadcasts (/say), holds the whole team between turns (/pause), or su's into a single engagement to steer it. The knowledge graph grows teeth: Neo4j backend (persistent, one switch, loud JSON fallback), enforced per-turn reads the agent cannot skip, and terminal-confirmed exploits that fan out to the graph, the mesh and the notes without model choice. Live-engagement fixes: same-second parallel engagements no longer share one audit trail, closed windows fully quit and vanish from the roster, and only POC-verifier-CONFIRMED exploits count as findings. Lab/real isolation: class-transfer ignores lab catalogs, FLAG{} markers are rejected on real targets. README rewritten product-first. 2,798+ tests green."
+  "release_date": "2026-10-08",
+  "description": "Suijin OS v7.1.0 \u2014 The Clean Memory Release. Every channel that feeds the agent's past into its present is hardened: shared-/tmp scratch warnings and on-target verification rules, cross-target credential rejection at record time, librarian target isolation on memory recall, a three-strike oracle rule that breaks 'one decisive script' spirals, and stale-pause transparency at boot. Live-run fixes: the mesh panel append bug, per-iteration cost accounting, cached mascots + alternate-screen rendering (no flicker), capped JSON arg display, colored card severities, unambiguous phase counts. Neo4j polish: [kg] extra, driver in the Docker image, doctor liveness (UP/DOWN with the JSON fallback named). First console test suite. 2,840+ tests green."
 }
