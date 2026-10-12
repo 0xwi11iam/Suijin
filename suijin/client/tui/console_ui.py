@@ -1352,10 +1352,13 @@ class EngagementUI:
             left.append(cursor, style=GOLD)  # idle: cursor sits LEFT of the hint
             left.append("type here", style="dim")
 
-        body = left
+        # SINGLE-ROW boxed input: minimal border (top + bottom only) so
+        # it reads as an input field without the old 3-row SQUARE box.
+        from rich import box as _box
+
         return Panel(
-            body,
-            box=box.SQUARE,
+            left,
+            box=_box.HORIZONTALS,
             border_style="bright_white",
             padding=(0, 1),
             expand=True,

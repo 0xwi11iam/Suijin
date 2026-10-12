@@ -6,6 +6,30 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## Unreleased
+
+- **System One assessor** — the heuristic detector stack is replaced by
+  one semantic assessment per interval (laya → LLM → loudest-detector
+  fallbacks, silence-dominant, shadow-logged for fine-tuning)
+- **The critical finder** — auto-populated application model (browser
+  network capture), impact-priced attack hypothesis queue with a
+  completion gate that refuses to end while CRITICAL hypotheses are
+  untested, and a chain composer that escalates unexplored CONFIRMEDs
+- **Adversarial depth tools** — `auth_forge`, `cred_matrix`,
+  `race_test`, `graphql_attack`, `mass_assign`, `param_pollute`,
+  `header_enforce`, `origin_confuse`: systematic depth testing for the
+  classes field runs found but never exploited
+- **Drive controller wiring** — epistemic updates per result, read-only
+  reflex probes on unresolved surprise, earned self-model, UCB1 bandit
+  credit on CONFIRMED, one-shot continuation veto
+- **Browser as a sensor** — network capture, cookies, storage,
+  interception, tabs, console, auth-state save/restore, shadow-DOM
+  queries in the Playwright module
+- **Operator TUI** — borderless header strip, engagement-shaped command
+  output panes, live token gauge, session-fetched token counts
+- **Reporting** — per-finding BBP submission generator (CWE/impact/
+  remediation) and agent userland (`state`/`tools`/`help`)
+
 ## v7.1.0 — The Clean Memory Release
 
 Memory is only an advantage if it can be trusted: shared-scratch

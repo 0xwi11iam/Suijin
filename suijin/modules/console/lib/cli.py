@@ -177,6 +177,48 @@ def run_doctor() -> int:
         pass
 
     # Core dependencies
+    # PLATFORM DETECTION (v7.2): report OS, container, and folder health
+    import platform as _plat
+    import sys as _sys
+
+    _os = _sys.platform
+    _plat_name = {"darwin": "macOS", "linux": "Linux", "win32": "Windows"}.get(_os, _os)
+    _in_docker = Path("/.dockerenv").exists()
+    _is_kali = (
+        Path("/etc/kali-release").exists() or "kali" in str(Path("/etc/os-release").read_text().lower())
+        if Path("/etc/os-release").exists()
+        else False
+    )
+    _plat_str = _plat_name
+    if _in_docker:
+        _plat_str += " (Docker"
+        if _is_kali:
+            _plat_str += "/Kali"
+        _plat_str += ")"
+    rows.append(_ok("platform", f"{_plat_str} ({_plat.machine()})"))
+
+    # FOLDER HEALTH: verify the two-folder layout
+    _cfg_dir = Path.home() / ".suijin" / "config"
+    _eng_dir = Path.home() / ".suijin" / "engagements"
+    _folder_issues = []
+    if _cfg_dir.is_dir():
+        _cfg_count = len(list(_cfg_dir.iterdir()))
+    else:
+        _folder_issues.append("config/ missing")
+        _cfg_count = 0
+    if _eng_dir.is_dir():
+        _eng_count = len([d for d in _eng_dir.iterdir() if d.is_dir()])
+    else:
+        _folder_issues.append("engagements/ missing")
+        _eng_count = 0
+    _old_ws = Path.home() / ".suijin" / "workspace"
+    if _old_ws.is_dir():
+        _folder_issues.append("old workspace/ exists (migrate: delete after confirming new layout)")
+    if _folder_issues:
+        rows.append(_warn("folders", "; ".join(_folder_issues)))
+    else:
+        rows.append(_ok("folders", f"config/ ({_cfg_count} items), engagements/ ({_eng_count} runs)"))
+
     missing_deps = [m for m in CORE_IMPORTS if not _importable(m)]
     if not missing_deps:
         rows.append(_ok("dependencies", f"{len(CORE_IMPORTS)} core packages"))

@@ -201,8 +201,157 @@ _q(
 )
 
 
+# v7.2: register the new binary questions
+for _q in [
+    Question(
+        qid="hypothesis.worth_testing",
+        choices=("yes", "no", "none"),
+        features=("hypothesis_text", "target_value", "iteration_budget", "phase"),
+        threshold=0.55,
+        confirm_next_turn=True,
+        note="Binary: is this hypothesis worth spending iterations on right now?",
+        instructions="Given the current engagement state and the hypothesis text, decide if testing this hypothesis is worth the iteration cost. 'yes' means the potential impact justifies the spend; 'no' means skip it.",
+        criteria=(
+            (
+                "yes",
+                "the hypothesis targets a high-value surface, has clear impact, and is feasible to test in the current phase",
+            ),
+            (
+                "no",
+                "the hypothesis is speculative, targets a low-value surface, or would take too many iterations for the expected impact",
+            ),
+        ),
+    ),
+    Question(
+        qid="chain.promising",
+        choices=("yes", "no", "none"),
+        features=("chain_source", "chain_target", "capabilities_held", "confirmed_count"),
+        threshold=0.55,
+        confirm_next_turn=True,
+        note="Binary: does this chain have real escalation potential?",
+        instructions="Given a confirmed finding and a proposed chain step, decide if the chain leads to meaningful escalation. 'yes' means the chain could reach data access, privilege escalation, or RCE; 'no' means it's a dead end.",
+        criteria=(
+            (
+                "yes",
+                "the chain step uses the finding to reach a new surface, gain access to data, or escalate privileges",
+            ),
+            ("no", "the chain step doesn't meaningfully advance impact or reaches a dead end"),
+        ),
+    ),
+    Question(
+        qid="surface.high_value",
+        choices=("yes", "no", "none"),
+        features=("surface_url", "auth_requirement", "data_sensitivity", "method"),
+        threshold=0.55,
+        confirm_next_turn=True,
+        note="Binary: is this endpoint worth going deep on?",
+        instructions="Given an endpoint's characteristics, decide if it's worth focused deep testing vs. moving on. 'yes' means the endpoint handles sensitive data, has complex logic, or is admin-facing; 'no' means it's a simple public endpoint.",
+        criteria=(
+            ("yes", "the endpoint handles payments, user data, admin functions, file operations, or authentication"),
+            ("no", "the endpoint serves static content, is a health check, or has no security-relevant logic"),
+        ),
+    ),
+    Question(
+        qid="finding.real",
+        choices=("real", "false_positive", "none"),
+        features=("finding_type", "evidence", "control_difference", "marker_match"),
+        threshold=0.60,
+        confirm_next_turn=True,
+        note="Binary: is this finding a real vulnerability or a false positive?",
+        instructions="Given the evidence for a potential finding, decide if it's real. 'real' means the evidence supports a genuine vulnerability; 'false_positive' means the observation has an innocent explanation.",
+        criteria=(
+            ("real", "the evidence shows a clear security impact that wouldn't occur in a properly configured system"),
+            (
+                "false_positive",
+                "the observation is expected behavior, a scanner artifact, or has an innocent explanation",
+            ),
+        ),
+    ),
+]:
+    _QUESTIONS[_q.qid] = _q
+
+
 def questions() -> dict[str, Question]:
     return dict(_QUESTIONS)
+
+    (
+        Question(
+            qid="hypothesis.worth_testing",
+            choices=("yes", "no", "none"),
+            features=("hypothesis_text", "target_value", "iteration_budget", "phase"),
+            threshold=0.55,
+            confirm_next_turn=True,
+            note="Binary: is this hypothesis worth spending iterations on right now?",
+            instructions="Given the current engagement state and the hypothesis text, decide if testing this hypothesis is worth the iteration cost. 'yes' means the potential impact justifies the spend; 'no' means skip it.",
+            criteria=(
+                (
+                    "yes",
+                    "the hypothesis targets a high-value surface, has clear impact, and is feasible to test in the current phase",
+                ),
+                (
+                    "no",
+                    "the hypothesis is speculative, targets a low-value surface, or would take too many iterations for the expected impact",
+                ),
+            ),
+        ),
+    )
+    (
+        Question(
+            qid="chain.promising",
+            choices=("yes", "no", "none"),
+            features=("chain_source", "chain_target", "capabilities_held", "confirmed_count"),
+            threshold=0.55,
+            confirm_next_turn=True,
+            note="Binary: does this chain have real escalation potential?",
+            instructions="Given a confirmed finding and a proposed chain step, decide if the chain leads to meaningful escalation. 'yes' means the chain could reach data access, privilege escalation, or RCE; 'no' means it's a dead end.",
+            criteria=(
+                (
+                    "yes",
+                    "the chain step uses the finding to reach a new surface, gain access to data, or escalate privileges",
+                ),
+                ("no", "the chain step doesn't meaningfully advance impact or reaches a dead end"),
+            ),
+        ),
+    )
+    (
+        Question(
+            qid="surface.high_value",
+            choices=("yes", "no", "none"),
+            features=("surface_url", "auth_requirement", "data_sensitivity", "method"),
+            threshold=0.55,
+            confirm_next_turn=True,
+            note="Binary: is this endpoint worth going deep on?",
+            instructions="Given an endpoint's characteristics, decide if it's worth focused deep testing vs. moving on. 'yes' means the endpoint handles sensitive data, has complex logic, or is admin-facing; 'no' means it's a simple public endpoint.",
+            criteria=(
+                (
+                    "yes",
+                    "the endpoint handles payments, user data, admin functions, file operations, or authentication",
+                ),
+                ("no", "the endpoint serves static content, is a health check, or has no security-relevant logic"),
+            ),
+        ),
+    )
+    (
+        Question(
+            qid="finding.real",
+            choices=("real", "false_positive", "none"),
+            features=("finding_type", "evidence", "control_difference", "marker_match"),
+            threshold=0.60,
+            confirm_next_turn=True,
+            note="Binary: is this finding a real vulnerability or a false positive?",
+            instructions="Given the evidence for a potential finding, decide if it's real. 'real' means the evidence supports a genuine vulnerability; 'false_positive' means the observation has an innocent explanation.",
+            criteria=(
+                (
+                    "real",
+                    "the evidence shows a clear security impact that wouldn't occur in a properly configured system",
+                ),
+                (
+                    "false_positive",
+                    "the observation is expected behavior, a scanner artifact, or has an innocent explanation",
+                ),
+            ),
+        ),
+    )
 
 
 def get_question(qid: str) -> Question | None:

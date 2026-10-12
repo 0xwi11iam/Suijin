@@ -1,7 +1,7 @@
 # Suijin — Project Context
 
 > The architecture grip. Read top to bottom before touching anything.
-> Last updated 2026-09-25 (hermetic test suite + no-gate boot + log-dir fix).
+> Last updated 2026-10-12 (System One assessor + critical finder + adversarial depth tools).
 
 ## Repo facts
 
@@ -315,3 +315,59 @@ p=0.31 below threshold → no intervention; model answered in 82-231ms.
 7. Docs de-blued everywhere except release notes (frozen history) and
    the discontinuation ruling note in this file; README rewritten
    product-first (verified facts only, PyPI/pipx line is real).
+
+## System One assessor + critical finder + adversarial depth tools (2026-10-12)
+
+1. **The heuristic detector stack is REPLACED by the System One
+   assessor** (`agent/lib/reflex/supervisor/assessor.py`, interval 5):
+   laya evaluates a semantic evidence brief (objective, last-10
+   actions, findings/footholds, untested hypotheses, pending chain,
+   high-value targets, cost) and returns a verdict — `deep_dive` /
+   `chain` / `hypothesis` / `drift` / `stall` / `radio_silence` — with
+   reason+action+priority. Fallback ladder: laya → local LLM (semantic,
+   silence-dominant) → the two loudest deterministic detectors. Silence
+   is the default; every assessment/abstention shadow-logs to the
+   fine-tuning corpus.
+2. **The critical finder**: `reflex/app_model.py` auto-populates an
+   endpoint/trust-boundary/high-value/state-machine model from browser
+   network capture (`mcp_browser_net_*`); at ≥8 endpoints + ≥1 trust
+   boundary, `reflex/hypotheses.py` generates 5 impact-priced attack
+   hypotheses (critical = data access / priv-esc / financial). The
+   HYPOTHESIS GATE (think_node) refuses completion while CRITICALs are
+   untested — the queue is a gate, not a suggestion. `reflex/
+   chain_composer.py`: a CONFIRMED sets `_chain_pending`; unexplored
+   for 2 turns → CHAIN REQUIRED escalation + auto chain hypotheses.
+3. **Adversarial depth battery** (`tools/lib/adversarial_tools.py`,
+   `race_test.py` — all routed in dispatch + catalog): `auth_forge`
+   (10 JWT forgery variants vs live target), `cred_matrix` (every
+   credential × every object — the systematic IDOR finder), `race_test`
+   (N concurrent, response divergence/status split/timing anomalies),
+   `graphql_attack`, `mass_assign`, `param_pollute`, `header_enforce`,
+   `origin_confuse`. Built from field-run evidence: surfaces found,
+   depth never tested.
+4. **Drive Stage 2/3 wiring live in think_node**: epistemic observe per
+   result, reflex probes on unresolved surprise, self-model identity
+   from CONFIRMEDs, bandit credit on CONFIRMED (conservative
+   attribution, `drive_policy.json`), one-shot continuation veto in the
+   completion gates.
+5. **mcp_playwright expansion**: network capture, cookies, storage,
+   request interception, tabs, console, smart wait, auth-state
+   save/restore, shadow-DOM-aware queries — the browser is now a
+   first-class sensor feeding the app model.
+6. **Operator TUI**: borderless header strip, engagement-TUI-shaped
+   command output panes (args capped, output verbatim-capped), token
+   gauge breathing in demo, session-fetched token counts.
+7. **bbp_report.py**: per-finding BBP submission files (CWE/impact/
+   remediation maps) + system-difficulties report. **ai_env.py**:
+   `state` (persistent agent variables), `tools` (categorized
+   reference), `help` (runtime man page).
+8. Suite at this commit: 2862 passed / 11 skipped; `test_migration_e2e`
+   can flake on port collision under the full run (passes isolated) —
+   known, benign.
+
+Restore note (2026-10-12): the working tree was rebuilt from the
+GitHub root layer + a pre-wipe tarball of the package dir after a
+destructive cleanup; the tarball's `suijin/suijin_agent` symlink
+stale residue was removed (runtime `ensure_workspace_layout` owns
+that path). Engagement data under the old workspace did not survive;
+code and config did.

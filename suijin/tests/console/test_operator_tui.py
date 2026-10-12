@@ -348,11 +348,20 @@ def test_header_and_overview_dedup_and_totals(demo):
 
 
 def test_system_one_aggregates(demo):
+    import io
+
+    from rich.console import Console
+
+    def render(ui):
+        c = Console(width=80, force_terminal=True, record=True, file=io.StringIO())
+        c.print(ui._system_one_block())
+        return c.export_text()
+
     ui, _, _ = demo
-    body = ui._system_one_text().plain
-    assert "laya-mlx" in body and "loaded" in body
+    txt = render(ui)
+    assert "laya-mlx" in txt and "loaded" in txt and "decisions" in txt
     ui.agents = []  # nothing running
-    assert "not running" in ui._system_one_text().plain
+    assert "not running" in render(ui)
 
 
 def test_header_strip_carries_dollar(demo):
@@ -362,3 +371,68 @@ def test_header_strip_carries_dollar(demo):
     c = Console(width=200, force_terminal=True, record=True, file=io.StringIO())
     c.print(ui._header())
     assert "$" in c.export_text()
+
+
+def test_runtime_gauge_renders(demo):
+    """model · t/s · tok — digest-fed (nothing hardcoded)."""
+    import io
+
+    from rich.console import Console
+
+    ui, mesh, ws = demo
+    ui.agents[0].runtime = {"model": "test-model-x", "provider": "zai", "effort": "max", "tps": 87.0, "tokens": 642000}
+    c = Console(width=80, force_terminal=True, record=True, file=io.StringIO())
+    c.print(ui._system_one_block())
+    txt = c.export_text()
+    # demo mode breathes the gauge — assert presence + plausibility, not exact
+    import re
+
+    assert "test-model-x" in txt and "Effort: max" in txt
+    assert re.search(r"\d+ t/s", txt)
+
+
+def test_severity_ladder_one_line(demo):
+    """LOW/MED | HIGH/CRIT split across columns — no paragraph wrap."""
+    ui, mesh, ws = demo
+    import io
+
+    from rich.console import Console
+
+    c = Console(width=58, force_terminal=True, record=True, file=io.StringIO())
+    c.print(ui._overview_panel())
+    txt = c.export_text()
+    assert "0 LOW   0 MED" in txt
+    assert "2 HIGH   2 CRIT" in txt
+
+
+def test_detail_shows_observation_truncated(demo):
+    ui, mesh, ws = demo
+    a = ui.agents[0]
+    a.iterations[-1]["observation"] = "Status: 404 " + "x" * 900
+    import io
+
+    from rich.console import Console
+
+    c = Console(width=100, force_terminal=True, record=True, file=io.StringIO())
+    c.print(ui._detail_panel())
+    txt = c.export_text()
+    # the engagement-TUI shape: ❯ tool, pretty args, full-width rule, output
+    assert "❯ http_request" in txt
+    assert '"method": "GET"' in txt  # pretty-printed (multi-line) args
+    assert "────" in txt  # the separator rule before the output
+    assert "chars" in txt  # truncation marker names what was cut
+
+
+def test_hint_inside_input_box(demo):
+    ui, mesh, ws = demo
+    import io
+
+    from rich.console import Console
+
+    ui.input_buf = "/say " + "x" * 60  # heavy typing
+    c = Console(width=100, force_terminal=True, record=True, file=io.StringIO())
+    c.print(ui._input_area())
+    for line in c.export_text().splitlines():
+        if "»" in line:
+            assert "tab focus" in line  # same bordered row, never pushed off
+            break

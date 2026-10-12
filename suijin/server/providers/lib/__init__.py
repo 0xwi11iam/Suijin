@@ -34,6 +34,7 @@ _TIMEOUT = (10, 120)
 _STREAM_IDLE_S = 90.0
 _STREAM_TOTAL_S = 600.0
 
+
 # ----------------------------------------------------------------------
 # Token / cost accounting
 # ----------------------------------------------------------------------
@@ -43,6 +44,22 @@ _STREAM_TOTAL_S = 600.0
 # generate() still returns a plain string, so no existing caller breaks.
 # Read the tally with get_usage(); zero it at the start of a run with
 # reset_usage().
+def live_tokens_per_s(window: float = 5.0) -> float:
+    """Rolling generation speed from recorded arrivals — 0.0 when idle.
+    Session-measured, never hardcoded."""
+    import time as _t
+
+    try:
+        now = _t.time()
+        arr = [(t, n) for (t, n) in (USAGE.get("_tok_arrivals") or []) if now - t <= window]
+        if not arr:
+            return 0.0
+        span = max(0.25, now - arr[0][0])
+        return sum(n for _, n in arr) / span
+    except Exception:  # noqa: BLE001
+        return 0.0
+
+
 USAGE = {
     "calls": 0,
     "input_tokens": 0,
@@ -283,6 +300,16 @@ def _record_usage(provider, model, in_tok, out_tok, estimated: bool = False):
         USAGE["calls"] += 1
         USAGE["input_tokens"] += in_tok
         USAGE["output_tokens"] += out_tok
+        # LIVE t/s (2026-10-09): (time, out_tok) arrivals feed a rolling
+        # gauge — the same convention the redteam strip uses, but at the
+        # accumulator so every surface (console digest included) reads it
+        try:
+            USAGE.setdefault("_tok_arrivals", []).append((time.time(), out_tok))
+            arr = USAGE["_tok_arrivals"]
+            if len(arr) > 400:
+                USAGE["_tok_arrivals"] = arr[-200:]
+        except Exception:  # noqa: BLE001 — gauge must never break accounting
+            pass
         # THE LIVE CTX GAUGE'S TRUTH (2026-09-17): the real input size of
         # the request JUST sent — the red-teamer reads this instead of
         # diffing cumulative counters (parallel background calls polluted

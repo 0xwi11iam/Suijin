@@ -20,6 +20,8 @@ Layout:
 
 from __future__ import annotations
 
+import contextlib
+
 # Cross-module re-export surface: delegated lazily (boundary rule — no
 # module-level cross-module imports; delegation is also patch-transparent
 # for consumers importing these names from dispatch).
@@ -143,7 +145,6 @@ def _mesh_tool(action: str, a: dict) -> str:
     Everything a peer produced is served inside UNTRUSTED wrappers: it is
     data from another agent (which itself ingested hostile target output),
     never an instruction. No-ops gracefully when running solo."""
-    import contextlib
 
     with contextlib.suppress(Exception):
         from suijin.modules.agent.lib import mesh
@@ -154,12 +155,24 @@ def _mesh_tool(action: str, a: dict) -> str:
         if action == "read":
             return _wrap_untrusted(mesh.read_peer_state(a.get("node", "")), "MESH_PEER")
         if action == "broadcast":
-            return mesh.broadcast(a.get("message", ""))
+            msg = a.get("message") or a.get("msg") or a.get("text") or ""
+            if not msg:
+                return (
+                    "Error: empty message. Put your message in the 'message' argument — "
+                    "NOT in the thought field. Example: mesh_broadcast(message='found XSS in /search?q=')"
+                )
+            return mesh.broadcast(msg)
         if action == "dm":
-            pid = mesh.resolve(a.get("node", ""))
+            pid = mesh.resolve(a.get("node") or a.get("to") or "")
             if not pid:
                 return f"Error: no such mesh node: {a.get('node', '')}"
-            return mesh.dm(pid, a.get("message", ""))
+            msg = a.get("message") or a.get("msg") or a.get("text") or ""
+            if not msg:
+                return (
+                    "Error: empty message. Put your message in the 'message' argument. "
+                    f"Example: mesh_dm(node='node-{pid}', message='answer to your question: ...')"
+                )
+            return mesh.dm(pid, msg)
         if action == "ask":  # v2: one queued question to a REMOTE peer
             return mesh.ask_peer(a.get("node", ""), a.get("question", ""))
         if action == "reply":  # v2: answer an ask we received (by qid)
@@ -167,6 +180,15 @@ def _mesh_tool(action: str, a: dict) -> str:
     return "Error: mesh unavailable (solo session — no peers)"
 
 
+from suijin.modules.tools.lib.adversarial_tools import auth_forge as _auth_forge
+from suijin.modules.tools.lib.adversarial_tools import graphql_attack as _graphql_attack
+from suijin.modules.tools.lib.adversarial_tools import header_enforce as _header_enforce
+from suijin.modules.tools.lib.adversarial_tools import mass_assign as _mass_assign
+from suijin.modules.tools.lib.adversarial_tools import origin_confuse as _origin_confuse
+from suijin.modules.tools.lib.adversarial_tools import param_pollute as _param_pollute
+from suijin.modules.tools.lib.ai_env import help_tool as _help_tool
+from suijin.modules.tools.lib.ai_env import state as _state
+from suijin.modules.tools.lib.ai_env import tools as _tools
 from suijin.modules.tools.lib.bypass_403 import bypass_403 as _bypass_403
 from suijin.modules.tools.lib.capture import crawl as _crawl
 from suijin.modules.tools.lib.capture import proxy_capture as _proxy_capture
@@ -214,12 +236,20 @@ from suijin.modules.tools.lib.jobs import (
 from suijin.modules.tools.lib.js_tools import google_key_probe, js_bundle_analyze, source_map_probe
 from suijin.modules.tools.lib.output_normalizer import normalize_output
 from suijin.modules.tools.lib.payload_mutate import payload_mutate as _payload_mutate
+from suijin.modules.tools.lib.race_test import cred_matrix as _cred_matrix
+from suijin.modules.tools.lib.race_test import race_test as _race_test
 from suijin.modules.tools.lib.self_config import adjust_config as _adjust_config
 from suijin.modules.tools.lib.skill_library import skill_load as _skill_load
 from suijin.modules.tools.lib.skill_library import skill_search as _skill_search
 from suijin.modules.tools.lib.surface_expand import surface_expand as _surface_expand
 from suijin.modules.tools.lib.tester_fleet import dispatch_testers as _dispatch_testers
 from suijin.modules.tools.lib.tester_fleet import select_lanes as _select_lanes
+from suijin.modules.tools.lib.ux_tools import api_discover as _api_discover
+from suijin.modules.tools.lib.ux_tools import collect_all as _collect_all
+from suijin.modules.tools.lib.ux_tools import dom_recon as _dom_recon
+from suijin.modules.tools.lib.ux_tools import jwt_decode as _jwt_decode
+from suijin.modules.tools.lib.ux_tools import response_diff as _response_diff
+from suijin.modules.tools.lib.ux_tools import smart_fetch as _smart_fetch
 from suijin.modules.tools.lib.web_session import web_session as _web_session
 
 
@@ -589,6 +619,72 @@ def _build_routes(config):
         "payload_mutate": lambda a: _payload_mutate(
             a.get("payload", ""), blocked_response=a.get("blocked_response", ""), vuln_class=a.get("vuln_class", "")
         ),
+        "race_test": lambda a: _race_test(
+            url=str(a.get("url") or a.get("target") or ""),
+            method=str(a.get("method") or "POST"),
+            payload=str(a.get("payload") or a.get("body") or ""),
+            count=int(a.get("count") or a.get("concurrent") or 5),
+            delay_ms=int(a.get("delay_ms") or 0),
+            headers=a.get("headers") or {},
+        ),
+        "cred_matrix": lambda a: _cred_matrix(
+            objects=a.get("objects") or [],
+            credentials=a.get("credentials") or [],
+            method=str(a.get("method") or "GET"),
+            base_url=str(a.get("base_url") or ""),
+        ),
+        "api_discover": lambda a: _api_discover(
+            url=str(a.get("url") or a.get("target") or ""),
+            click_interactive=bool(a.get("click", a.get("click_interactive", True))),
+            max_clicks=int(a.get("max_clicks") or 8),
+        ),
+        "dom_recon": lambda a: _dom_recon(),
+        "smart_fetch": lambda a: _smart_fetch(
+            url=str(a.get("url") or ""),
+            method=str(a.get("method") or "GET"),
+            body=str(a.get("body") or a.get("data") or ""),
+            headers=a.get("headers") or {},
+        ),
+        "jwt_decode": lambda a: _jwt_decode(str(a.get("token") or a.get("jwt") or "")),
+        "response_diff": lambda a: _response_diff(
+            url_a=str(a.get("url_a") or a.get("url1") or ""),
+            url_b=str(a.get("url_b") or a.get("url2") or ""),
+            method=str(a.get("method") or "GET"),
+            body_a=str(a.get("body_a") or ""),
+            body_b=str(a.get("body_b") or ""),
+            headers=a.get("headers") or {},
+        ),
+        "collect_all": lambda a: _collect_all(),
+        "auth_forge": lambda a: _auth_forge(
+            token=str(a.get("token") or ""),
+            test_url=str(a.get("test_url") or a.get("url") or ""),
+            method=str(a.get("method") or "GET"),
+            body=str(a.get("body") or ""),
+        ),
+        "param_pollute": lambda a: _param_pollute(
+            url=str(a.get("url") or ""),
+            params=a.get("params") or {},
+            method=str(a.get("method") or "GET"),
+        ),
+        "graphql_attack": lambda a: _graphql_attack(
+            endpoint=str(a.get("endpoint") or a.get("url") or ""),
+            headers=a.get("headers") or {},
+        ),
+        "mass_assign": lambda a: _mass_assign(
+            endpoint=str(a.get("endpoint") or a.get("url") or ""),
+            known_fields=a.get("known_fields") or a.get("fields") or {},
+            attack_fields=a.get("attack_fields"),
+            method=str(a.get("method") or "POST"),
+        ),
+        "header_enforce": lambda a: _header_enforce(str(a.get("url") or "")),
+        "origin_confuse": lambda a: _origin_confuse(str(a.get("url") or "")),
+        "state": lambda a: _state(
+            action=str(a.get("action") or "list"),
+            name=str(a.get("name") or ""),
+            value=str(a.get("value") or ""),
+        ),
+        "tools": lambda a: _tools(str(a.get("category") or "")),
+        "help": lambda a: _help_tool(str(a.get("tool") or a.get("name") or "")),
         "code_harness": lambda a: _code_harness(
             a.get("goal", ""),
             language=a.get("language", "python"),
@@ -922,9 +1018,79 @@ def reset_repeat_guard() -> None:
     _REPEAT_STATE["last_error"].clear()
 
 
+def _with_error_hints(tool_name: str, result: str) -> str:
+    """Enrich tool errors with fix hints — every error tells the agent
+    WHAT to do differently, not just what went wrong."""
+    result = str(result)
+    if not result.startswith("Error"):
+        return result
+
+    hints = {
+        "empty message": "Put the message in the 'message' argument, not the thought field.",
+        "not found": "Check the file path — use write_file first if you need to create it.",
+        "timeout": "Increase the timeout arg, or run in background with job_start.",
+        "cors": "Use smart_fetch instead — it automatically falls back to curl.",
+        "loopback": "Add allow_internal=true for loopback targets.",
+        "unexpected keyword": "Check help('" + tool_name + "') for the correct argument names.",
+        "refused": "The target may be down or the port is wrong. Try http_request to verify.",
+    }
+    for pattern, hint in hints.items():
+        if pattern.lower() in result.lower():
+            return result + "\n  FIX: " + hint
+
+    return result
+
+
 def route_tool(tool_name, args, config):
     if args is None:
         args = {}
+    # META-KWARG STRIP (2026-10-10, reddit run): the model sometimes passes
+    # thought=/reasoning= as tool arguments — they're metadata, not tool
+    # inputs. Strip them before routing so they can't cause TypeErrors.
+    _META_KWARGS = {"thought", "reasoning", "completion_reason", "chain_context", "_comment"}
+    if isinstance(args, dict) and any(k in _META_KWARGS for k in args):
+        args = {k: v for k, v in args.items() if k not in _META_KWARGS}
+
+    # ARGUMENT NORMALIZATION (2026-10-10, the Kali userland): consistent
+    # names. ONLY for tools whose dispatch lambda explicitly reads a.get(url)
+    # — tools that natively take target/endpoint are left alone.
+    _URL_TOOLS = frozenset(
+        [
+            "api_discover",
+            "smart_fetch",
+            "response_diff",
+            "auth_forge",
+            "graphql_attack",
+            "header_enforce",
+            "origin_confuse",
+            "param_pollute",
+            "race_test",
+            "http_request",
+            "bypass_403",
+            "crawl",
+            "inject_probe",
+            "dispatch_testers",
+            "js_bundle_analyze",
+            "http_replay",
+        ]
+    )
+    if isinstance(args, dict) and tool_name in _URL_TOOLS:
+        for _alias in ("target", "endpoint"):
+            if _alias in args and "url" not in args:
+                args["url"] = args.pop(_alias)
+
+    # ACTION CACHE (fixes 56 repeated identical calls): if the same
+    # tool+args was called recently, return the cached result with a
+    # hint. The agent can force re-execution with _force=True.
+    if isinstance(args, dict) and not args.get("_force"):
+        with contextlib.suppress(Exception):
+            from suijin.modules.tools.lib.ux_tools import cache_check
+
+            _cached = cache_check(tool_name, dict(args))
+            if _cached:
+                return _cached
+
+    result = None  # for the cache record below
     routes = _build_routes(config)
 
     # Safety-mode backstop (mode_hitl / mode_guardrail). The modes are also
@@ -973,22 +1139,33 @@ def route_tool(tool_name, args, config):
             return blocked_repeat
         result = _execute_with_healing(routes[tool_name], args, tool_name)
         _repeat_guard_record(tool_name, args, result)
-        return _with_install_hint(tool_name, result)
-    # Not found — suggest close matches; if none, point at the operator.
-    # One guess maximum: guessing repeatedly burns the engagement.
+        # ACTION CACHE: record for future dedup
+        with contextlib.suppress(Exception):
+            from suijin.modules.tools.lib.ux_tools import cache_record
+
+            cache_record(tool_name, dict(args), result)
+        return _with_error_hints(tool_name, _with_install_hint(tool_name, result))
+    # ── CUSTOM TOOL FALLBACK (2026-10-10) ────────────────────────────
+    # The agent names a tool that doesn't exist → instead of dead-ending,
+    # offer: (1) close matches, (2) compose it from the primitives it has.
+    # The model is ADVERSARIAL and CREATIVE — it needs tools that don't
+    # exist yet. The answer isn't "no", it's "here's how to build it."
     import difflib
 
     close = difflib.get_close_matches(tool_name, list(routes), n=3, cutoff=0.6)
-    if close:
-        return (
-            f"TOOL NOT FOUND: {tool_name}. Closest matches: {', '.join(close)}. "
-            "Use one of these, or if none is what you need, ASK THE OPERATOR "
-            "(action: ask_operator) whether the tool exists."
-        )
+    suggest = f" Closest: {', '.join(close)}." if close else ""
     return (
-        f"TOOL NOT FOUND: {tool_name} — nothing similar is registered. Do NOT guess again. "
-        "ASK THE OPERATOR (action: ask_operator, include your question) whether this tool "
-        "exists or where to find it."
+        f"TOOL NOT FOUND: {tool_name}.{suggest} "
+        "BUILD IT YOURSELF — you have the primitives:\n"
+        "  • code_harness: write and RUN custom code (python/bash/php/js/go) with "
+        "auto-retry on failures — this IS your custom tool\n"
+        "  • execute_terminal: any CLI tool on the system\n"
+        "  • mcp_browser_exec: arbitrary JavaScript in the live browser\n"
+        "  • http_request: raw HTTP with full control\n"
+        "  • write_file + execute_terminal: write a script, then run it\n"
+        f"\nIf you need '{tool_name}' repeatedly, write it ONCE with write_file "
+        "as a reusable script, then call it via execute_terminal. "
+        "Do NOT guess tool names again."
     )
 
 
@@ -1035,6 +1212,14 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
 
 ## Core Tools (args in the ALL AVAILABLE TOOLS registry below)
 - **execute_terminal** — Run ANY shell command. Use this for CLI tools: nmap, gobuster, ffuf, nikto, sqlmap, hydra, john, enum4linux, dirb, masscan, and any other pentesting tool installed on the system. Prefer dedicated CLI tools over raw curl/http_request for scanning and brute-forcing. SCRATCH FILES: write them under your workspace home ($HOME/tmp, also $TMPDIR) — NEVER hardcode /tmp: concurrent engagements on this machine SHARE /tmp, and a peer's downloaded artifact greps as YOUR finding. Before claiming any secret found in a scratch file, verify it appears on YOUR target's own pages.
+- **mcp_browser_net_start / mcp_browser_requests** — THE API DISCOVERY COMBO: start capture, navigate and interact, then read every request/response the page made (with bodies). You see the internal API calls the frontend makes — endpoints, tokens, headers the JS adds. Use this BEFORE probing blind: the page tells you what to test.
+- **mcp_browser_intercept** — Block or modify requests in-flight: strip security headers, block analytics, redirect to your test server, test CSP bypasses. The request never reaches the server unless you allow it.
+- **mcp_browser_cookies / mcp_browser_storage** — Read and manipulate the session: cookies per domain, localStorage/sessionStorage tokens. Check what auth state the page holds — CSRF tokens, session IDs, API keys in storage.
+- **mcp_browser_shadow** — Shadow-DOM-aware element interaction: pierces ALL shadow roots automatically. Use when mcp_browser_click misses elements inside custom web components.
+- **mcp_browser_console** — Read the page's JS console output: errors reveal internal service names, stack traces with source paths, deprecated API warnings, debug logging left in production.
+- **mcp_browser_tab_open / tab_switch** — Multi-tab testing: window.open scenarios, OAuth redirect flows (watch the popup get redirected), cross-tab state.
+- **mcp_browser_auth_save / auth_restore** — Login once (e.g. via mcp_browser_goto + type + click), save the auth state, restore it on any future page. Test authenticated endpoints without re-logging in.
+- **mcp_browser_fingerprint** — Quick page assessment: what frameworks are active, what storage exists, CSP, WebSocket/fetch availability.
 - **http_request** — Raw HTTP requests with full browser emulation. Use for manual web testing, not for scanning (use gobuster/nmap via execute_terminal instead).
 - **skill_search** / **skill_load** — The methodology library (125 WSTG + 16 attack methodologies): search by class/technique ('sqli', 'jwt', 'upload') then load the full testing guide. USE BEFORE attacking a new class — the WSTG test cases are the industry standard checklist. skill_search() with no args shows the library summary.
 - **dispatch_testers** — THE one-call vulnerability dispatch: pass a URL (optionally method/params/body_fields) and it selects the right tester lanes using the pattern table (numeric IDs → idor+authz; financial fields → business-logic; url params → ssrf; POST bodies → mass-assignment+injection; free-text → SQLi+XSS+SSTI floor). Returns ready-to-fire deploy_subagent tasks with doctrine attached. THE way to test a discovered endpoint.
@@ -1053,6 +1238,20 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
 - **inject_probe** — The evidence engine, NEVER an oracle: fires curated batteries (xss tag-survival + 20 weaponized payloads with sink-context classification; ssti 9-syntax product-discriminators — product-present + literal-absent = evaluated; cmd closed id/ver set; sqli DBMS error fingerprints + boolean pairs against a MEASURED noise floor; lfi file-signatures × 11 traversal shapes verbatim) and returns FACTS — surviving tags, reflection context, block signals ('WAF-blocked is NOT safe — escalate'), not_tested receipts. You craft the real exploit from the facts; confirm via catalog_exploit.
 - **adjust_config** — Tune YOUR OWN run: no args shows the effective config; with args adjusts allowlisted keys (posture, temperature, max_tokens_per_request, provider, fallback_providers, model ids) — changes go LIVE on the next turn/call. Use it when the situation changes: provider dying (switch provider / extend fallback chain), recon exhausted (posture), responses truncated (max_tokens). Cost caps, stealth, safety modes, and scope are operator-only.
 - **payload_mutate** — Evasion variants for a blocked payload: pass the payload (+ the blocked response) → ranked variants (case-rotation, inline comments, URL/double-URL/unicode encoding, whitespace, null-terminate) with family-escalation advice (reflected → blind → time-based → OOB). Fire variants one per request. THE answer to 'the payload worked manually but the WAF ate it'.
+- **race_test** — TOCTOU/race condition testing: fires N concurrent requests and diffs responses. Detects state races, rate-limit bypasses, oversell conditions. Args: url, method, payload, count (2-20), delay_ms. THE tool for testing payment flows, inventory, voting — anywhere concurrent access matters.
+- **cred_matrix** — Systematic IDOR detection: tests every credential against every object, reports cross-access. Args: objects (list of URLs/IDs), credentials (list of auth header dicts). The two-account privilege escalation finder.
+- **api_discover** — THE UNDERSTAND TOOL: one call that navigates, starts network capture, optionally clicks interactive elements (AI decides), stops capture, and returns ALL discovered endpoints + configs + scripts + auth mechanisms as structured JSON. Use this BEFORE manually probing. Set click=False on pages with destructive actions.
+- **dom_recon** — One comprehensive DOM scan: all forms (fields + hidden inputs + CSRF tokens), all scripts (src + inline configs), interesting links, iframes, security metas. Replaces the snapshot→extract→parse cycle.
+- **smart_fetch** — Fetch with automatic CORS fallback: tries in-page fetch (with cookies), falls back to curl if CORS-blocked. The agent never burns turns discovering CORS.
+- **jwt_decode** — Decode a JWT: header, payload, human-readable claims (expiry, role, user_id marked). Use BEFORE auth_forge to understand the token first.
+- **response_diff** — Fetch two URLs (or same URL with different bodies/auth) and diff status + headers + body. The A/B testing tool for auth bypass, IDOR, and feature-flag testing.
+- **collect_all** — Returns ALL finished background jobs + fireteam results + mesh notifications in one call. No more job_output polling.
+- **auth_forge** — Systematically modify a JWT (role→admin, user_id→1, expiry→+1year, alg→HS256, signature→removed) and test each variant against the target. Reports which forgeries are accepted. THE privilege escalation finder.
+- **param_pollute** — Parameter manipulation: array wrapping, type confusion, null injection, encoding attacks, MongoDB operators. Tests parameter handling edge cases systematically.
+- **graphql_attack** — Full GraphQL battery: introspection, depth attack, alias attack, batching attack, field suggestions. One call for the entire GraphQL attack surface.
+- **mass_assign** — Send known-good fields PLUS privileged fields (role, admin, price_override, tenant_id). Reports which are accepted. THE mass assignment finder.
+- **header_enforce** — Test which security headers (CSP, XFO, CORS, HSTS) are actually enforced vs just present. Includes clickjacking check.
+- **origin_confuse** — Test CORS from multiple origins (evil.example, null, subdomain), WebSocket origin validation. THE origin confusion finder.
 - **code_harness** — The exploit dev loop: write→run→triage→fix in a per-attempt sandbox. Args: goal, language (python/bash/php/go/js...), code, run_cmd ('{file}' placeholder), success_regex, fail_regex, timeout_s, max_cycles. Python gets mechanical fixes (auto pip-install, syntax catch). VERDICT: PASS is your EVIDENCE — record_finding on a code-based exploit claim REQUIRES a harness PASS in the same engagement; anything else is an unverified claim.
 - **read_file** — Read any file on the system.
 - **write_file** — Write files (scripts, payloads, notes). Defaults to suijin_agent/ for relative paths.

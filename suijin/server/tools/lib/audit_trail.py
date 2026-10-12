@@ -21,6 +21,7 @@ import json
 import threading
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from pathlib import Path as _P
 
 #: minimum seconds between disk writes for throttled saves
@@ -213,6 +214,21 @@ def end_audit(cost_usd: float = 0.0):
     trail["cost_usd"] = cost_usd
     _save(key, force=True)  # the end MUST land — this is the report of record
     path = _export_markdown(key)
+
+    # AUTO-REPORT (v7.2): generate per-finding BBP submissions + the
+    # system difficulties report from the trail. Best-effort — a report
+    # failure never blocks engagement completion.
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.bbp_report import generate_all_reports
+
+        trail_data = trail
+        eng_dir = Path(key) if Path(key).is_dir() else None
+        if eng_dir and eng_dir.exists():
+            generate_all_reports(
+                eng_dir,
+                trail_data.get("findings") or [],
+                trail_data.get("iterations") or [],
+            )
     with _meta_lock:
         _trails.pop(key, None)
         _locks.pop(key, None)

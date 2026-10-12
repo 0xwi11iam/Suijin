@@ -31,8 +31,8 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from rich import box
 from rich.align import Align
-from rich.box import SQUARE
 from rich.console import Console, Group
 from rich.layout import Layout
 from rich.live import Live
@@ -277,6 +277,7 @@ class Agent:
         "last_obs",
         "iterations",
         "system_one",
+        "runtime",
         "engagement_dir",
         "audit_data",
     )
@@ -413,6 +414,7 @@ def scan_agents(mesh_dir: Path, workspace: Path, live: bool = True) -> list[Agen
             iteration=int(state.get("iteration") or 0),
             findings=state.get("findings") or [],
             system_one=state.get("system_one") or None,
+            runtime=state.get("runtime") or None,
             footholds=state.get("footholds") or [],
             recent_actions=[str(x) for x in (state.get("recent_actions") or [])],
             beat=beat,
@@ -522,7 +524,7 @@ def write_demo(mesh: Path, ws: Path) -> None:
             "tool": "http_request",
             "args": {"method": "GET", "path": "/files/../../etc/credentials"},
             "chain": " foothold → credential access (in progress)",
-            "obs": "Status: 404 — %2F-encoded traversal rejected",
+            "obs": "Status: 404 Headers: {'Server': 'BaseHTTP/0.6 Python/3.14.6', 'Content-Type': 'application/json', 'X-Upstream': 'core-api/2.4.1 (upstream fastapi)', 'Content-Security-Policy': \"default-src 'self'\"}\nCookies: \nBody:\n{\"error\":\"not found\",\"hint\":\"%2F-encoded traversal rejected\"}",
             "ok": 32,
             "fail": 2,
             "started_offset": 920,
@@ -558,7 +560,7 @@ def write_demo(mesh: Path, ws: Path) -> None:
             "tool": "execute_terminal",
             "args": {"cmd": "python3 forge_token.py --alg HS256"},
             "chain": " recon → jwt forge (verified)",
-            "obs": "python3: HS256 with cert PEM accepted",
+            "obs": "python3 forge_token.py --alg HS256\n[+] JWKS publishes RSA public cert (kid=primary)\n[+] HS256 signature with cert PEM ACCEPTED by /auth/token\n[+] minted admin token: eyJhbGciOiJIUzI1NiIs...\nexit 0 (2.1s)",
             "ok": 18,
             "fail": 2,
             "started_offset": 880,
@@ -581,7 +583,7 @@ def write_demo(mesh: Path, ws: Path) -> None:
             "tool": "http_request",
             "args": {"method": "GET", "path": "/"},
             "chain": "",
-            "obs": "Status: 200 — root serves marketing HTML",
+            "obs": "Status: 200 Headers: {'Server': 'BaseHTTP/0.6', 'Content-Type': 'text/html'}\nBody:\n<html><head><title>Edge</title></head><body><!-- edge · auth · core-api · objects · cache --></body></html>",
             "ok": 12,
             "fail": 0,
             "started_offset": 240,
@@ -604,7 +606,7 @@ def write_demo(mesh: Path, ws: Path) -> None:
             "tool": "http_request",
             "args": {"method": "POST", "path": "/api/v1/webhooks"},
             "chain": " recon → ssrf probe",
-            "obs": "Status: 200 — internal auth service reachable",
+            "obs": 'Status: 200 Headers: {\'Content-Type\': \'application/json\', \'X-Upstream\': \'auth/1.4 (internal)\'}\nBody:\n{"ok": true, "service": "auth-internal", "hint": "webhook fetcher reaches loopback"}',
             "ok": 25,
             "fail": 3,
             "started_offset": 600,
@@ -627,7 +629,7 @@ def write_demo(mesh: Path, ws: Path) -> None:
             "tool": "surface_expand",
             "args": {"root": "/api/v1"},
             "chain": "",
-            "obs": "mapped 6 surfaces under /api/v1",
+            "obs": "surface_expand root=/api/v1\n[/api/v1/auth] 200 (POST login schema)\n[/api/v1/me] 200 (GET profile)\n[/api/v1/invoices] 200 (list, tenant-scoped)\n[/api/v1/webhooks] 201 (registration)\n[/api/v1/ping] 200\n6 surfaces, 4 with params",
             "ok": 8,
             "fail": 0,
             "started_offset": 120,
@@ -644,7 +646,7 @@ def write_demo(mesh: Path, ws: Path) -> None:
             "tool": "http_request",
             "args": {"method": "GET", "path": "/internal/credentials"},
             "chain": " ssrf → credential access (verified)",
-            "obs": "200 — data exfil confirmed",
+            "obs": 'Status: 200 Headers: {\'Content-Type\': \'application/json\', \'X-Upstream\': \'core-api/2.4.1\'}\nBody:\n{"grid": ["svc/edge", "svc/auth", "svc/objects"], "count": 3, "exfil": "confirmed via SSRF chain"}',
             "ok": 42,
             "fail": 3,
             "started_offset": 1800,
@@ -695,7 +697,7 @@ def write_demo(mesh: Path, ws: Path) -> None:
             "tool": "http_request",
             "args": {"method": "GET", "path": "/api/v1/invoices/EXT-0042"},
             "chain": "",
-            "obs": "Status: 200 — cross-tenant read",
+            "obs": 'Status: 200 Headers: {\'X-Upstream\': \'core-api/2.4.1\'}\nBody:\n{"invoice": "EXT-0042", "tenant": "OTHER-CORP", "total": 491.00}',
             "ok": 15,
             "fail": 2,
             "started_offset": 320,
@@ -719,7 +721,7 @@ def write_demo(mesh: Path, ws: Path) -> None:
             "tool": "execute_terminal",
             "args": {"cmd": "python3 forge_token.py --alg HS256"},
             "chain": " recon → jwt forge",
-            "obs": "python3: HS256 with cert PEM accepted",
+            "obs": "python3 forge_token.py --alg HS256\n[+] JWKS publishes RSA public cert (kid=primary)\n[+] HS256 signature with cert PEM ACCEPTED by /auth/token\n[+] minted admin token: eyJhbGciOiJIUzI1NiIs...\nexit 0 (2.1s)",
             "ok": 20,
             "fail": 2,
             "started_offset": 460,
@@ -742,7 +744,7 @@ def write_demo(mesh: Path, ws: Path) -> None:
             "tool": "http_request",
             "args": {"method": "HEAD", "path": "/"},
             "chain": "",
-            "obs": "x-cache: HIT — candidate for poisoning",
+            "obs": "HEAD / HTTP/1.1\nx-cache: HIT\nx-cache-key: /edge/root\nage: 214\n=> cache serves the root; unkeyed headers are a poisoning candidate",
             "ok": 3,
             "fail": 0,
             "started_offset": 45,
@@ -776,6 +778,13 @@ def write_demo(mesh: Path, ws: Path) -> None:
                     "findings": s["finds"],
                     "footholds": [],
                     "engagement_dir": str(eng),
+                    "runtime": {
+                        "model": "glm-5.3",
+                        "provider": "zai",
+                        "effort": "max",
+                        "tps": 70 + s["pid"] % 40,
+                        "tokens": 180_000 + s["iter"] * 4_200,
+                    },
                     "system_one": {
                         "engine": "laya-mlx",
                         "status": "loaded",
@@ -956,6 +965,18 @@ def _card(a: Agent, selected: bool, height: int) -> Panel:
         style=_cost_color(a.cost_usd or 0) if a.cost_usd else DIM,
     )
 
+    # token count from the runtime digest (session-fetched, never hardcoded)
+    rt = getattr(a, "runtime", None) or {}
+    tok = int(rt.get("tokens") or 0)
+    if tok >= 1_000_000:
+        tok_str = f"  {tok / 1_000_000:.1f}M tok"
+    elif tok >= 1_000:
+        tok_str = f"  {tok // 1_000}k tok"
+    else:
+        tok_str = ""
+    if tok_str:
+        body.append(tok_str, style=GRAY)
+
     return Panel(
         Align(body, vertical="middle"),
         border_style=f"bold {CYAN}" if selected else WHITE,
@@ -1111,7 +1132,9 @@ class OperatorTUI:
         grid.add_column(justify="right")
         grid.add_row(left, Text(f"{_version_label()} | ", style=WHITE), clock)
 
-        return Panel(grid, border_style=WHITE, padding=(0, 0))
+        # BORDERLESS, row 0 — the redteam strip's convention (the boxed
+        # header sat the content one row lower than a status line belongs)
+        return grid
 
     def _agents_panel(self) -> Panel:
         if not self.agents:
@@ -1187,11 +1210,12 @@ class OperatorTUI:
             lines.append(f"  \u2039 iteration {shown}/{newest} \u203a", style=f"bold {CYAN}")
         else:
             lines.append(f"  iteration {a.iteration}", style=f"bold {CYAN}")
-        ph = _phase_label(((it or {}).get("phase")) or a.phase)
-        lines.append(f"  \u00b7  {ph}", style=f"bold {pc}")
         lines.append("\n")
 
         thought = ((it or {}).get("thought")) or a.last_thought
+        has_cmd = bool(((it or {}).get("action") or {}).get("tool") if it else None) or bool(a.last_tool)
+        if not thought and not has_cmd:
+            lines.plain = lines.plain.rstrip("\n")  # nothing follows the header
         if thought:
             lines.append("  | ", style=f"bold {CYAN}")
             lines.append("thought: ", style=f"dim {CYAN}")
@@ -1205,31 +1229,61 @@ class OperatorTUI:
         if args is None:
             args = a.last_args or {}
         if tool:
-            # arg values capped for display — a python heredoc in `cmd`
-            # is not a spec; the full payload lives in the audit trail
+            # the engagement TUI's exact shape (c+p): ❯ tool, then the
+            # pretty-printed args. Arg values capped for display — a
+            # python heredoc in `cmd` is not a spec; the full payload
+            # lives in the audit trail
             shown_args = {k: (v if len(str(v)) <= 64 else str(v)[:61] + "…") for k, v in (args or {}).items()}
-            call = {"tool": tool, "args": shown_args}
             try:
-                call_json = json.dumps(call, ensure_ascii=False)
+                call_json = json.dumps(shown_args, ensure_ascii=False, indent=2)
             except Exception:
-                call_json = str(call)
-            json_box = Panel(
-                Syntax(call_json, "json", theme="monokai", word_wrap=True, background_color="default")
-                if self.console.is_terminal
-                else Text(call_json, style="white"),
-                box=SQUARE,
-                border_style="bright_white",
-                title=" json ",
-                title_align="left",
-                padding=(0, 1),
+                call_json = str(shown_args)
+            if self.console.is_terminal:
+                body_render = Syntax(
+                    "  " + call_json.replace("\n", "\n  "),
+                    "json",
+                    theme="monokai",
+                    word_wrap=True,
+                    background_color="default",
+                )
+            else:
+                body_render = Text("\n".join("  " + ln for ln in call_json.splitlines()), style="white")
+            json_box = Group(
+                Text(f"  \u276f {tool}", style=f"bold {GREEN}"),
+                Padding(body_render, (0, 0, 0, 2)),
+            )
+
+        obs = ""
+        if it:
+            obs = str((it or {}).get("observation") or a.last_obs or "")
+        elif a.last_obs:
+            obs = str(a.last_obs)
+
+        output_block = None
+        if obs:
+            # the COMMAND OUTPUT, verbatim structure (status/headers/body
+            # keep their line breaks), capped so a giant response can't
+            # eat the pane — under the args (command → args → rule →
+            # output, the engagement TUI's order)
+            cap = 600
+            o = obs[:cap]
+            output_block = Group(
+                Rule(style=DIM),
+                Text(o, style=GRAY),
+                *([Text(f"…(+{len(obs) - cap} chars)", style=DIM)] if len(obs) > cap else []),
             )
 
         rest = Text("\n")
-
+        if not thought and not has_cmd and not obs:
+            rest = Text("")  # nothing above — no leading blank
         if a.cost_usd:
             rest.append("  | ", style=DIM)
             rest.append("cost ", style=DIM)
             rest.append(f"${a.cost_usd:.4f}", style=_cost_color(a.cost_usd))
+            if a.ok_actions and a.total_actions:
+                rest.append(f"  ·  {a.ok_actions}/{a.total_actions} ok", style=DIM)
+                if a.fail_actions:
+                    rest.append(f"  ({a.fail_actions} fail)", style=f"bold {RED}")
             rest.append("\n")
 
         finds = a.findings or []
@@ -1238,15 +1292,21 @@ class OperatorTUI:
             for f in finds[:5]:
                 if isinstance(f, dict):
                     sev = str(f.get("severity", "info")).lower()
+                    desc = str(f.get("description") or f.get("title") or f.get("endpoint") or "?")
                     rest.append("  | ", style=f"bold {SEV_COLOR.get(sev, DIM)}")
-                    rest.append(f.get("endpoint", "?"), style=f"bold {WHITE}")
-                    desc = str(f.get("description") or f.get("title") or "")
-                    rest.append(f"  {desc}\n", style=WHITE)
+                    rest.append(f"{sev.upper():<8}", style=f"bold {SEV_COLOR.get(sev, DIM)}")
+                    rest.append(f" {desc}\n", style=WHITE)
                 else:  # live digests publish titles only
                     rest.append("  | ", style=f"bold {SEV_COLOR['info']}")
                     rest.append(f"{str(f)}\n", style=WHITE)
 
-        body = Group(lines, json_box, rest) if json_box is not None else Group(lines, rest)
+        parts = [lines]
+        if json_box is not None:
+            parts.append(json_box)
+        if output_block is not None:
+            parts.append(output_block)
+        parts.append(rest)
+        body = Group(*parts)
         return Panel(
             body,
             title=f" [{CYAN}]Details[/{CYAN}] " if self._focused("detail") else f" [{DIM}]Details[/{DIM}] ",
@@ -1281,8 +1341,9 @@ class OperatorTUI:
         )
 
     def _overview_panel(self) -> Panel:
-        """Right column top — one dense stats strip: every band one row,
-        no paragraph spacing, phases read as 'N in <phase>'."""
+        """Right column top — the strip: four single-line inline rows
+        (counts+units, severity tally, uptime, phases), one indent,
+        nothing wrapping (overview.png)."""
         n = len(self.agents)
         cost = sum(a.cost_usd or 0 for a in self.agents)
         iters = sum(a.iteration for a in self.agents)
@@ -1303,18 +1364,23 @@ class OperatorTUI:
         strip.append(f"{iters}", style=f"bold {WHITE}")
         strip.append(" iters\n ", style=GRAY)
 
-        strip.append(f"{sc['low']} LOW", style=f"bold {C_LOW}")
-        strip.append("  ", style=GRAY)
-        strip.append(f"{sc['medium']} MED", style=f"bold {C_MED}")
-        strip.append("  ", style=GRAY)
-        strip.append(f"{sc['high']} HIGH", style=f"bold {C_HIGH}")
-        strip.append("  ", style=GRAY)
-        strip.append(f"{sc['critical']} CRIT", style=f"bold {C_CRIT}")
+        strip.append(f"{sc['low']} ", style=DIM)
+        strip.append("LOW", style=f"bold {C_LOW}")
+        strip.append("   ", style=GRAY)
+        strip.append(f"{sc['medium']} ", style=DIM)
+        strip.append("MED", style=f"bold {C_MED}")
+        strip.append("   ", style=GRAY)
+        strip.append(f"{sc['high']} ", style=DIM)
+        strip.append("HIGH", style=f"bold {C_HIGH}")
+        strip.append("   ", style=GRAY)
+        strip.append(f"{sc['critical']} ", style=DIM)
+        strip.append("CRIT", style=f"bold {C_CRIT}")
         strip.append(f"   {total} findings\n ", style=GRAY)
-        strip.append(_fmt_dur(uptime), style=f"italic {WHITE}")
-        strip.append(" longest\n ", style=GRAY)
 
-        for i, (ph, cnt) in enumerate(sorted(phases.items(), key=lambda x: -x[1])):
+        strip.append(_fmt_dur(uptime), style=f"italic {WHITE}")
+        strip.append(" longest\n ", style=f"italic {GRAY}")
+
+        for i, (ph, cnt) in enumerate(sorted(phases.items(), key=lambda x: -x[1])[:4]):
             if i:
                 strip.append("  ", style=GRAY)
             strip.append(f"{cnt} in {ph}", style=f"bold {PHASE_COLOR.get(ph, WHITE)}")
@@ -1328,31 +1394,75 @@ class OperatorTUI:
         )
 
     def _system_one_block(self):
-        """System One decision models — a white rule, then engine,
-        model status and live counters aggregated across sessions."""
-        return Group(Rule(style=WHITE), self._system_one_text())
-
-    def _system_one_text(self) -> Text:
+        """System One + runtime — modelinfo.png: two rows, justified
+        left/right then left/center/right; every value digest-fed."""
         blocks = [a.system_one for a in self.agents if getattr(a, "system_one", None)]
-        t = Text("\n System One ", style=GRAY)
-        if not blocks:
-            t.append("not running", style=DIM)
-            return t
-        eng = str(blocks[0].get("engine") or "?")
-        status = str(blocks[0].get("status") or "?")
-        dec = sum(int(b.get("decisions") or 0) for b in blocks)
-        fb = sum(int(b.get("fallbacks") or 0) for b in blocks)
-        with_vals = [float(b.get("ms_avg") or 0) for b in blocks]
-        b_avg = round(sum(with_vals) / len(with_vals), 1) if with_vals else 0.0
-        t.append(eng, style=f"bold {WHITE}")
-        t.append("  ·  ", style=DIM)
-        t.append(status, style=f"bold {GREEN}" if status == "loaded" else f"bold {C_MED}")
-        t.append(f"\n {dec}", style=f"bold {WHITE}")
-        t.append(" decisions  ·  ", style=GRAY)
-        t.append(f"{fb}", style=f"bold {RED}" if fb else f"bold {WHITE}")
-        t.append(" fallback  ·  ", style=GRAY)
-        t.append(f"{b_avg}ms", style=GRAY)
-        return t
+        rt = None
+        for a in self.agents:
+            r = getattr(a, "runtime", None)
+            if r and r.get("model"):
+                rt = dict(r)
+                break
+        if rt is not None and not self.live:
+            # demo: the gauge BREATHES at 4Hz — quantized to 0.25s steps
+            # so every refresh visibly ticks (the demo files are static;
+            # the screen must not be)
+            q = int(time.time() * 4)
+            base = float(rt.get("tps") or 80.0)
+            wob = 0.5 + 0.5 * ((q * 0.31) % 1.0)
+            rt["tps"] = round(base * (0.75 + 0.5 * wob), 0)
+            if rt.get("tokens"):
+                rt["tokens"] = int(rt["tokens"]) + (q * 7) % 90
+
+        row1 = Table.grid(expand=True, pad_edge=False, padding=(0, 2))
+        row1.add_column(ratio=1)
+        row1.add_column(justify="right")
+        left = Text()
+        left.append("System One: ", style=GRAY)
+        if blocks:
+            left.append(str(blocks[0].get("engine") or "?"), style=f"bold {WHITE}")
+            left.append(": ", style=DIM)
+            status = str(blocks[0].get("status") or "?")
+            left.append(status, style=f"bold {GREEN}" if status == "loaded" else f"bold {C_MED}")
+        else:
+            left.append("not running", style=DIM)
+        right = Text()
+        if blocks:
+            dec = sum(int(b.get("decisions") or 0) for b in blocks)
+            with_vals = [float(b.get("ms_avg") or 0) for b in blocks]
+            ms = round(sum(with_vals) / len(with_vals), 1) if with_vals else 0.0
+            right.append(f"{dec}", style=f"bold {CYAN}")
+            right.append(" decisions  ", style=GRAY)
+            right.append(f"{ms}ms", style=f"bold {C_MED}")
+        row1.add_row(left, right)
+
+        row2 = Table.grid(expand=True, pad_edge=False, padding=(0, 2))
+        row2.add_column(ratio=1)
+        row2.add_column()
+        row2.add_column(justify="right")
+        l2 = Text()
+        m2 = Text()
+        r2 = Text()
+        if rt:
+            l2.append("Model: ", style=GRAY)
+            l2.append(f"{rt.get('provider') or 'auto'}/{rt.get('model')}", style=f"bold {CYAN}")
+            eff = str(rt.get("effort") or "")
+            if eff:
+                m2.append("Effort: ", style=GRAY)
+                m2.append(eff, style=f"bold {MAGENTA}")
+            tps = float(rt.get("tps") or 0)
+            tok = int(rt.get("tokens") or 0)
+            if tps >= 0.5:
+                r2.append(f"{tps:.0f} ", style=f"bold {GREEN}")
+                r2.append("t/s", style=GRAY)
+            elif tok:
+                # idle between turns: tokens still accumulate — the gauge
+                # reads "generating" when hot, "stock" when thinking/waiting
+                r2.append(f"{tok / 1000:.1f}k ", style=f"bold {WHITE}")
+                r2.append("tok", style=GRAY)
+        row2.add_row(l2, m2, r2)
+
+        return Group(Rule(style=WHITE), Text(""), row1, row2)
 
     def _mesh_panel(self) -> Panel:
         """Right column bottom — mesh chat feed (design.png: 36% height).
@@ -1404,41 +1514,46 @@ class OperatorTUI:
         return t
 
     def _input_area(self):
-        """Bottom-left — the suijin-style input box with command prediction
-        floating above it (design.png: 15% of height)."""
-        rows = []
+        """Bottom-left — one-row input that flexes for multi-line.
+        Suggestions and note float ABOVE (they don't consume the input's
+        space — they eat into the detail pane's bottom, like a dropdown)."""
+        # floating rows (suggestions + note) — rendered above the input
+        float_rows = []
         if self.input_buf.startswith("/") and self._filtered_suggestions():
             for i, (name, desc) in enumerate(self._filtered_suggestions()[:6]):
                 if i == self.sug_sel:
-                    rows.append(
+                    float_rows.append(
                         Text.assemble(("  › ", f"bold {CYAN}"), (f"{name:<16}", f"bold {CYAN}"), (desc[:40], CYAN))
                     )
                 else:
-                    rows.append(Text.assemble(("    ", DIM), (f"{name:<16}", ""), (desc[:40], DIM)))
+                    float_rows.append(Text.assemble(("    ", DIM), (f"{name:<16}", ""), (desc[:40], DIM)))
+        if self.note and time.time() - self.note_at < 5.0:
+            float_rows.append(Text(f"  {self.note}", style=GRAY))
 
+        # the input row: single-line borderless with inline hint
+        # if the buffer is multi-line (contains \n), it wraps and the
+        # row grows — but there's no Panel border eating 2 extra rows
         prompt = Text()
-        who = "root" if self.su_pid is None else _hex_id(self.su_pid)
+        who = "root" if self.su_pid is None else _hex_id(self.sui_pid)
         prompt.append(f" {who} » ", style=f"bold {GOLD}")
         prompt.append(self.input_buf, style=f"bold {WHITE}")
         prompt.append("█", style=f"bold {CYAN}")
+        prompt.append("  tab focus · j/k cards · ←→ hist · / cmds", style=DIM)
 
-        box = Panel(prompt, border_style=f"bold {CYAN}" if self._focused("input") else WHITE, padding=(0, 0))
-        # the hint rides a FIXED column beside the box — typing grows the
-        # buffer, never pushes the hint off (the disappearing-hint bug)
-        hints = Text(
-            "\n tab focus · j/k page cards\n ←→ history · / cmds",
-            style=DIM,
+        # single-row boxed input — a MINIMAL border (top + bottom only,
+        # not the 3-row SQUARE) so it reads as an input field without
+        # eating vertical space. Suggestions float above the box.
+        box_style = f"bold {CYAN}" if self._focused("input") else WHITE
+        input_panel = Panel(
+            prompt,
+            box=box.HORIZONTALS,
+            border_style=box_style,
+            padding=(0, 0),
+            expand=True,
         )
-        g = Table.grid(expand=True, pad_edge=False)
-        g.add_column(ratio=1)
-        g.add_column(width=26)
-        g.add_row(box, hints)
-        lead = list(rows)
-        if self.note and time.time() - self.note_at < 5.0:
-            lead.append(Text(f"  {self.note}", style=GRAY))
-        if lead:
-            return Group(*lead, g)
-        return Group(Text(""), g)
+        if float_rows:
+            return Group(*float_rows, input_panel)
+        return input_panel
 
     # ── layout ───────────────────────────────────────────────────────
 
@@ -1447,7 +1562,7 @@ class OperatorTUI:
         44 + input 15 | 32% right: overview 52 + mesh 36)."""
         layout = Layout(name="root")
         layout.split_column(
-            Layout(name="header", size=3),
+            Layout(name="header", size=1),
             Layout(name="body", ratio=1),
         )
         layout["body"].split_row(
@@ -1457,7 +1572,7 @@ class OperatorTUI:
         layout["left"].split_column(
             Layout(name="cards", ratio=29),
             Layout(name="detail", ratio=44),
-            Layout(name="input", ratio=15),
+            Layout(name="input", ratio=4),  # one row idle; flexes for multi-line
         )
         layout["right"].split_column(
             Layout(name="overview", ratio=52),
@@ -1755,8 +1870,13 @@ class OperatorTUI:
         return False
 
     def _say(self, msg: str) -> None:
-        """The operator speaks to the mesh — appended to gc.log, agents
-        read it when they build their next context."""
+        """The operator speaks — THROUGH THE GUIDANCE CHANNEL (the same
+        trusted path redteam-TUI typing uses: top of the next system
+        prompt, acted on immediately). The groupchat copy is for the
+        humans watching the mesh panel; the untrusted chat block FILTERS
+        operator lines out so the model never sees the operator's voice
+        demoted to peer data (the 'agents don't listen to /say' bug —
+        same words, opposite trust level)."""
         try:
             self.mesh_dir.mkdir(parents=True, exist_ok=True)
             gc = self.mesh_dir / "gc.log"
@@ -1765,8 +1885,23 @@ class OperatorTUI:
             with gc.open("a", encoding="utf-8") as fh:
                 fh.write(f"{stamp}|{os.getpid()}|operator|{msg[:400]}\n")
             self._chat_offset = pre_size  # our line (and later) surface
+            # the authoritative delivery: every live agent's guidance file
+            queued = 0
+            for a in self.agents:
+                eng = getattr(a, "engagement_dir", None)
+                if not eng:
+                    continue
+                gp = Path(eng) / "state" / "live_guidance.md"
+                gp.parent.mkdir(parents=True, exist_ok=True)
+                with gp.open("a", encoding="utf-8") as fh:
+                    fh.write(f"- {time.strftime('%H:%M:%S')} [OPERATOR] {msg[:400]}\n")
+                queued += 1
             self._poll_once()
-            self._note("broadcast to mesh")
+            self._note(
+                f"broadcast to mesh · guidance queued to {queued} agents"
+                if queued
+                else "broadcast to mesh (no engagements to guide)"
+            )
         except OSError as e:
             self._note(f"mesh unavailable: {e}")
 
