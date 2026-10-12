@@ -45,7 +45,16 @@ def mesh_dir() -> Path:
         return Path(v)
     from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-    return WORKSPACE_DIR.parent / "mesh"
+    # v7.2: mesh lives at ~/.suijin/config/mesh/ (the clean layout),
+    # but ONLY if the workspace-based path doesn't exist (tests and
+    # SUIJIN_WORKSPACE overrides take priority over the user layout)
+    ws_mesh = WORKSPACE_DIR.parent / "mesh"
+    if ws_mesh.is_dir():
+        return ws_mesh
+    new_path = Path.home() / ".suijin" / "config" / "mesh"
+    if new_path.is_dir():
+        return new_path
+    return ws_mesh
 
 
 def _me_file() -> Path:
@@ -239,6 +248,9 @@ def broadcast(message: str, name: str = "") -> str:
         with _gc_log().open("a", encoding="utf-8") as f:
             f.write(f"{_stamp()}|{os.getpid()}|{name or 'agent'}|{msg}\n")
         _tail_reset()
+        # OUR voice closes the unanswered window: everything a teammate
+        # says AFTER this point is a message we haven't replied to yet
+        _node["last_outbound_gc"] = _gc_log().stat().st_size
         return f"broadcast to mesh ({len(peers())} peers)"
     return "Error: mesh unavailable"
 
@@ -345,6 +357,11 @@ def render_chat_block() -> str:
     for ln in gc_lines[-GC_KEEP:]:
         with contextlib.suppress(Exception):
             _ts, pid, name, msg = ln.split("|", 3)
+            # OPERATOR lines ride the GUIDANCE channel (top of the system
+            # prompt, trusted, acted on) — showing them here too would
+            # demote the operator's voice to untrusted peer data
+            if str(name).lower() == "operator":
+                continue
             _tagged = f"[{_scope(int(pid))} node-{pid} {name} {_ts}] {msg}"
             (_team_lines if _scope(int(pid)) == "team" else _other_lines).append(_tagged)
     rows.extend(_team_lines[-GC_KEEP:])
@@ -356,6 +373,106 @@ def render_chat_block() -> str:
     if not rows:
         return ""
     return "\n".join(rows)
+
+
+def unanswered_team_lines() -> list[str]:
+    """Team-peer gc lines since OUR last outbound message — the inbox.
+    Same-target peers only; operator/system lines excluded (they ride
+    their own channels). Empty when we're caught up."""
+    try:
+        gc = _gc_log()
+        if not gc.is_file():
+            return []
+        offset = _node.get("last_outbound_gc", 0)
+        size = gc.stat().st_size
+        if size <= offset:
+            return []
+        with gc.open("rb") as fh:
+            fh.seek(offset)
+            raw = fh.read().decode("utf-8", "replace")
+        _mine = str((_node.get("me") or {}).get("summary", ""))[:80].lower()
+        out = []
+        _peer_summaries = {int(p.get("pid") or 0): str(p.get("summary", ""))[:50] for p in peers()}
+        for ln in raw.splitlines():
+            with contextlib.suppress(Exception):
+                _ts, pid, name, msg = ln.split("|", 3)
+                if int(pid) == os.getpid() or str(name).lower() in ("operator", "system"):
+                    continue
+                their = _peer_summaries.get(int(pid), "").lower()
+                if _mine and their and (their in _mine or _mine in their):
+                    out.append(f"[node-{pid} {_ts}] {msg}")
+        return out[-5:]
+    except Exception:  # noqa: BLE001 — the inbox never breaks a turn
+        return []
+
+
+def peer_registry_lines() -> list[str]:
+    """Snapshot registry of same-target teammates: who's alive, what
+    phase, how far, last spoke. Turns the mesh from anonymous chatter
+    into named collaborators whose silence is noticeable."""
+    import json as _json
+
+    out = []
+    _mine = str((_node.get("me") or {}).get("summary", ""))[:80].lower()
+    try:
+        gc = _gc_log()
+        last_spoke: dict[int, str] = {}
+        if gc.is_file():
+            for ln in gc.read_text(errors="replace").splitlines()[-60:]:
+                with contextlib.suppress(Exception):
+                    _ts, pid, name, _ = ln.split("|", 3)
+                    last_spoke[int(pid)] = _ts
+        for p in peers():
+            their = str(p.get("summary", ""))[:50].lower()
+            if not (_mine and their and (their in _mine or _mine in their)):
+                continue  # different target — background, not team
+            pid = int(p.get("pid") or 0)
+            st = {}
+            with contextlib.suppress(Exception):
+                st = _json.loads((mesh_dir() / f"{pid}-state.json").read_text())
+            out.append(
+                f"node-{pid} · {str(st.get('phase') or '?')} · iter {int(st.get('iteration') or 0)}"
+                f" · {len(st.get('findings') or [])} findings"
+                + (f" · last spoke {last_spoke[pid]}" if pid in last_spoke else " · SILENT (never spoke)")
+            )
+        return out[:8]
+    except Exception:  # noqa: BLE001
+        return out
+
+
+def duplicate_work_line(last_action_texts: list[str]) -> str:
+    """If the last action references an endpoint a same-target peer
+    already reported in the group chat, name the waste — silence has a
+    price. Empty string returns clean."""
+    import re as _re
+
+    try:
+        blob = " ".join(last_action_texts or [])
+        if not blob:
+            return ""
+        gc = _gc_log()
+        if not gc.is_file():
+            return ""
+        _mine = str((_node.get("me") or {}).get("summary", ""))[:80].lower()
+        _peer_summaries = {int(p.get("pid") or 0): str(p.get("summary", ""))[:50] for p in peers()}
+        paths = set(_re.findall(r"(/[A-Za-z0-9_.\-/]{4,60})", blob))
+        if not paths:
+            return ""
+        for ln in gc.read_text(errors="replace").splitlines()[-80:]:
+            with contextlib.suppress(Exception):
+                _ts, pid, name, msg = ln.split("|", 3)
+                their = _peer_summaries.get(int(pid), "").lower()
+                if int(pid) == os.getpid() or not (_mine and their and (their in _mine or _mine in their)):
+                    continue
+                hit = paths & set(_re.findall(r"(/[A-Za-z0-9_.\-/]{4,60})", msg))
+                if hit:
+                    return (
+                        f"DUPLICATE WORK: you just tested {sorted(hit)[0]} — node-{pid} "
+                        f"already reported it at {_ts}. That spend was wasted by silence."
+                    )
+        return ""
+    except Exception:  # noqa: BLE001
+        return ""
 
 
 def collect_dm_lines() -> None:

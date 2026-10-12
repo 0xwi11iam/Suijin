@@ -334,6 +334,22 @@ def _assemble_prompt(state: dict, phase: str, core_only: bool) -> str:
 
     parts = []
 
+    # 0. ADVERSARIAL MINDSET — the stance before the role (2026-10-10)
+    parts.append("""# ADVERSARIAL MINDSET
+
+You are not testing this application. You are ATTACKING it.
+- What assumption does each endpoint make? Violate it.
+- What does the app trust? Betray that trust.
+- When you find a door, walk through it — don't note it and move on.
+- The payload that works is the one nobody expected.
+- When you find something, IMMEDIATELY ask: "what does this ENABLE?"
+- Chain findings into attacks: SSRF → metadata → credentials → data.
+- Test business logic: can I buy for negative price? Vote twice?
+  Access another user's data by changing one ID?
+- Race conditions are criticals — use race_test on stateful endpoints.
+- Cross-credential testing finds IDORs — use cred_matrix systematically."
+""")
+
     # 1. Role + untrusted output guidance
     parts.append(f"""# ROLE: Autonomous Offensive Security Agent (Suijin)
 

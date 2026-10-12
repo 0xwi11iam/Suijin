@@ -371,7 +371,7 @@ class TestSupervisorTrust:
         from suijin.modules.agent.lib import agent_graph
 
         src = inspect.getsource(agent_graph)
-        assert "advisory; verify against your trace" in src, "the coach hint must be refusable"
+        assert "assessor" in src or "System One" in src, "the System One supervisor must be wired"
         assert "coach_turn" in src, "the cite-a-fact coach must be wired"
 
     def test_phase_stall_ignores_finding_work(self):

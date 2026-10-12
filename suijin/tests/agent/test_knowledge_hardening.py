@@ -276,3 +276,120 @@ class TestPostmortemFixes:
         assert "lab-cred" not in out
         assert "site-key" in out and "legacy" in out
         assert "cross-target observations hidden" in out
+
+
+class TestCommsIncentives:
+    """The 'agents don't care' fix stack: directive compliance loop,
+    peer inbox, registry, duplicate-work ledger, radio-silence detector."""
+
+    @pytest.fixture(autouse=True)
+    def _restore_mesh(self):
+        """These tests rewire mesh module state (dir, node, peer cache) —
+        snapshot and restore so the suite's mesh tests see a pristine
+        module (order isolation)."""
+        import suijin.modules.agent.lib.mesh as mesh
+
+        saved_node, saved_peers, saved_tail = dict(mesh._node), dict(mesh._peers), dict(mesh._tail_state)
+        saved_dir = mesh.mesh_dir
+        yield
+        mesh.mesh_dir = saved_dir
+        mesh._node.clear()
+        mesh._node.update(saved_node)
+        mesh._peers.clear()
+        mesh._peers.update(saved_peers)
+        mesh._tail_state.clear()
+        mesh._tail_state.update(saved_tail)
+
+    def _mesh(self, tmp_path, child):
+        import json as _json
+        import time as _t
+
+        import suijin.modules.agent.lib.mesh as mesh
+
+        mesh.mesh_dir = lambda: tmp_path
+        mesh._node["me"] = {"pid": 111, "summary": "http://t.example", "phase": "recon", "started": 0.0}
+        (tmp_path / f"{child.pid}.json").write_text(
+            _json.dumps(
+                {"pid": child.pid, "summary": "http://t.example", "phase": "r", "started": 0, "beat": _t.time()}
+            )
+        )
+        (tmp_path / f"{child.pid}-state.json").write_text(
+            _json.dumps(
+                {"pid": child.pid, "phase": "exploitation", "iteration": 30, "findings": [{"severity": "high"}]}
+            )
+        )
+        mesh._peers.update(at=0.0, list=[])
+        return mesh
+
+    def test_inbox_fills_and_clears_on_broadcast(self, tmp_path):
+        import subprocess
+
+        child = subprocess.Popen(["sleep", "30"])
+        try:
+            mesh = self._mesh(tmp_path, child)
+            (tmp_path / "gc.log").write_text(f"20:00:00|{child.pid}|agent|found sqli on /login\n")
+            assert len(mesh.unanswered_team_lines()) == 1
+            mesh.broadcast("my lane")
+            assert mesh.unanswered_team_lines() == []
+            (tmp_path / "gc.log").write_text(
+                (tmp_path / "gc.log").read_text() + f"20:05:00|{child.pid}|agent|dead end\n"
+            )
+            assert len(mesh.unanswered_team_lines()) == 1
+        finally:
+            child.kill()
+            child.wait()
+            mesh._node["me"] = None
+
+    def test_operator_and_system_lines_never_in_inbox(self, tmp_path):
+        import subprocess
+
+        child = subprocess.Popen(["sleep", "30"])
+        try:
+            mesh = self._mesh(tmp_path, child)
+            (tmp_path / "gc.log").write_text(
+                f"20:00:00|{child.pid}|operator|do things\n20:00:01|{child.pid}|system|phase -> x\n"
+            )
+            assert mesh.unanswered_team_lines() == []
+        finally:
+            child.kill()
+            child.wait()
+            mesh._node["me"] = None
+
+    def test_peer_registry_names_team(self, tmp_path):
+        import subprocess
+
+        child = subprocess.Popen(["sleep", "30"])
+        try:
+            mesh = self._mesh(tmp_path, child)
+            (tmp_path / "gc.log").write_text(f"20:00:00|{child.pid}|agent|hi\n")
+            reg = mesh.peer_registry_lines()
+            assert len(reg) == 1 and f"node-{child.pid}" in reg[0] and "exploitation" in reg[0]
+        finally:
+            child.kill()
+            child.wait()
+            mesh._node["me"] = None
+
+    def test_duplicate_work_detected(self, tmp_path):
+        import subprocess
+
+        child = subprocess.Popen(["sleep", "30"])
+        try:
+            mesh = self._mesh(tmp_path, child)
+            (tmp_path / "gc.log").write_text(f"20:00:00|{child.pid}|agent|/login has sqli\n")
+            dup = mesh.duplicate_work_line(["http_request probe /login"])
+            assert dup.startswith("DUPLICATE WORK") and "/login" in dup
+            assert mesh.duplicate_work_line(["probe /unmentioned/path"]) == ""
+        finally:
+            child.kill()
+            child.wait()
+            mesh._node["me"] = None
+
+    def test_radio_silence_detector(self):
+        from suijin.modules.agent.lib.supervisor import _detect_silent_teammate
+
+        quiet = [{"tool_name": "http_request", "thought": "peer said /admin dead; testing /login"}] * 12
+        assert _detect_silent_teammate(quiet) is not None
+        spoke = quiet[:-1] + [{"tool_name": "mesh_broadcast", "thought": "x"}]
+        assert _detect_silent_teammate(spoke) is None
+        no_mesh_signal = [{"tool_name": "http_request", "thought": "recon"}] * 12
+        assert _detect_silent_teammate(no_mesh_signal) is None

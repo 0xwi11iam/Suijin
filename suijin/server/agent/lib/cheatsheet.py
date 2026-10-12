@@ -18,7 +18,7 @@ hostile target output — a poisoned target can trick an agent into
 writing an instruction into its own memory. The cheatsheet rides the
 same _wrap_untrusted boundary as every other derived-from-target byte.
 
-Storage: WORKSPACE_DIR/cheatsheet.json (operator-local, never committed).
+Storage: ~/.suijin/config/cheatsheet.json (operator-local, never committed).
 Capped; oldest pruned. Same-seed determinism is unaffected (read-only in
 the think path; writes are explicit).
 """
@@ -87,7 +87,8 @@ def add(note: str, tag: str = "", source: str = "") -> str:
     try:
         from suijin.modules.platform.lib.workspace import engagement_dir as _ed
 
-        origin = _ed().name
+        _dir = _ed()
+        origin = _dir.name if _dir and _dir.name != "_default" else ""
     except Exception:  # noqa: BLE001 — provenance is best-effort
         origin = ""
     rows.append(

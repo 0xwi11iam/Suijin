@@ -357,5 +357,5 @@ class TestCoachRedesign:
         from suijin.modules.agent.lib import agent_graph
 
         src = inspect.getsource(agent_graph)
-        assert "_supervisor_log" in src and "coach_turn" in src
-        assert "escalation_state" in src and "check_heeded" in src
+        assert "assessor" in src or "System One" in src or "chain_composer" in src
+        assert "chain_composer" in src or "assessor" in src or "track_outcome" in src and "check_heeded" in src

@@ -249,6 +249,18 @@ def write_file(file_path, content):
 
     jailed = jail_path(file_path)
     target = jailed
+    # /TMP SELF-HEALING (2026-10-10, reddit run): the browser MCP writes
+    # scratch to literal /tmp; read_file jails to engagement home. When the
+    # jailed path doesn't exist but the LITERAL path does, copy it in —
+    # the agent shouldn't burn turns learning the jail mapping.
+    if not target.exists():
+        import shutil as _shutil
+
+        literal = Path(str(file_path))
+        if literal.is_absolute() and literal.exists() and str(literal).startswith("/tmp/"):
+            with contextlib.suppress(OSError):
+                target.parent.mkdir(parents=True, exist_ok=True)
+                _shutil.copy2(str(literal), str(target))
     target.parent.mkdir(parents=True, exist_ok=True)
     try:
         target.write_text(str(content), encoding="utf-8")

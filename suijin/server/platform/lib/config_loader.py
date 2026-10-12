@@ -28,7 +28,11 @@ from suijin.modules.platform.lib.constants import (
 )
 
 console = Console()
-BASE_DIR = Path(__file__).resolve().parents[3]  # suijin/ package (was 3 parents pre-move)
+# v7.2: config lives in ~/.suijin/config/ (the clean layout)
+# the package dir is only the DEFAULTS source
+_PACKAGE_DIR = Path(__file__).resolve().parents[3]
+_USER_CONFIG_DIR = Path.home() / ".suijin" / "config"
+BASE_DIR = _USER_CONFIG_DIR if _USER_CONFIG_DIR.is_dir() else _PACKAGE_DIR
 
 
 def _env_path(var: str, default_name: str) -> Path:

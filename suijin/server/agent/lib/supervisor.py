@@ -80,6 +80,28 @@ def _detect_question_recycling(trace: list, threshold: int = 3, window: int = 8)
     )
 
 
+def _detect_silent_teammate(trace: list, threshold: int = 12) -> Optional[str]:
+    """Peers are on the mesh and we haven't broadcast in N steps — the
+    team is running blind and duplicating work. Only fires when the
+    trace shows mesh activity exists (peers spoke; we didn't)."""
+    if len(trace) < threshold:
+        return None
+    recent = trace[-threshold:]
+    mine = [s for s in recent if str(s.get("tool_name", "")).startswith("mesh_")]
+    if mine:
+        return None  # we've spoken — fine
+    peers_spoke = any(
+        "mesh" in str(s.get("thought", "")).lower() or "peer" in str(s.get("thought", "")).lower() for s in recent
+    )
+    if not peers_spoke:
+        return None  # no evidence the mesh is alive in this window
+    return (
+        f"RADIO SILENCE: {threshold} actions without a broadcast while teammates are active. "
+        "Your team is duplicating your work (or you theirs). One mesh_broadcast with your "
+        "current lane + latest verdict costs one call and saves real money."
+    )
+
+
 def _detect_repeating_tool(trace: list, threshold: int = 3) -> Optional[str]:
     """Detect if the same tool+args has been used 3+ times in a row.
 
@@ -804,6 +826,7 @@ def analyze_trace(trace: list, iteration: float | None = None, **extra_kw) -> Op
     detectors = [
         _detect_missed_flag,
         _detect_question_recycling,
+        _detect_silent_teammate,
         _detect_phase_stall,
         _detect_repeating_tool,
         _detect_bookkeeping_loop,
