@@ -5,31 +5,48 @@
   "tools": {
     "mcp_browser_goto": {
       "description": "Navigate browser to a URL. Returns page title and final URL.",
-      "parameters": {"url": "Target URL", "wait_until": "load|domcontentloaded|networkidle (default networkidle)", "timeout": "Timeout in ms (default 30000)"}
+      "parameters": {
+        "url": "Target URL",
+        "wait_until": "load|domcontentloaded|networkidle (default networkidle)",
+        "timeout": "Timeout in ms (default 30000)"
+      }
     },
     "mcp_browser_snapshot": {
       "description": "Get a compact list of ALL interactive page elements (buttons, links, inputs) with index numbers. Use this before clicking/typing to identify target elements. Returns: [1] BUTTON 'Log in', [2] INPUT 'Email', etc.",
-      "parameters": {"max_elements": "Max elements to return (default 60)"}
+      "parameters": {
+        "max_elements": "Max elements to return (default 60)"
+      }
     },
     "mcp_browser_click": {
       "description": "Click an element. Accepts: snapshot index like [1] or 1, CSS selector like #login-btn, or visible text like 'Log in'.",
-      "parameters": {"selector": "Index number [N], CSS selector, or visible text"}
+      "parameters": {
+        "selector": "Index number [N], CSS selector, or visible text"
+      }
     },
     "mcp_browser_type": {
       "description": "Type text into an input field by snapshot index or CSS selector.",
-      "parameters": {"selector": "Index [N] or CSS selector", "text": "Text to type"}
+      "parameters": {
+        "selector": "Index [N] or CSS selector",
+        "text": "Text to type"
+      }
     },
     "mcp_browser_screenshot": {
       "description": "Capture a full-page screenshot. Saves to /tmp/suijin_screenshot.png by default.",
-      "parameters": {"filepath": "Output file path (optional)"}
+      "parameters": {
+        "filepath": "Output file path (optional)"
+      }
     },
     "mcp_browser_extract": {
       "description": "Extract visible text content from a specific element or the full page body.",
-      "parameters": {"selector": "CSS selector or 'body' for full page (default body)"}
+      "parameters": {
+        "selector": "CSS selector or 'body' for full page (default body)"
+      }
     },
     "mcp_browser_exec": {
       "description": "Execute arbitrary JavaScript in the page context. Returns JSON result.",
-      "parameters": {"js_code": "JavaScript code to execute"}
+      "parameters": {
+        "js_code": "JavaScript code to execute"
+      }
     },
     "mcp_browser_get_html": {
       "description": "Get the full rendered HTML source of the current page.",
@@ -38,8 +55,119 @@
     "mcp_browser_close": {
       "description": "Close the browser instance and free resources.",
       "parameters": {}
+    },
+    "mcp_browser_requests": {
+      "parameters": [
+        "offset",
+        "limit",
+        "filter"
+      ],
+      "description": "Read captured network traffic (requests + responses with bodies). Start capture with mcp_browser_net_start first."
+    },
+    "mcp_browser_net_start": {
+      "parameters": [],
+      "description": "Start capturing all network traffic the page makes. Use before navigating to catch API calls, tokens, internal endpoints."
+    },
+    "mcp_browser_net_stop": {
+      "parameters": [],
+      "description": "Stop network capture (entries retained until read)."
+    },
+    "mcp_browser_cookies": {
+      "parameters": [
+        "set_cookie",
+        "delete",
+        "domain"
+      ],
+      "description": "Read all cookies, or set/delete a specific one. Cookie object: {name, value, domain, path}."
+    },
+    "mcp_browser_storage": {
+      "parameters": [
+        "type",
+        "key",
+        "set_key",
+        "set_value"
+      ],
+      "description": "Inspect localStorage/sessionStorage. Read all keys, read one, or set one."
+    },
+    "mcp_browser_intercept": {
+      "parameters": [
+        "pattern",
+        "action",
+        "headers"
+      ],
+      "description": "Intercept requests matching a URL pattern. Actions: block, modify (set headers), passthrough. Essential for testing CSP, removing security headers, blocking scripts."
+    },
+    "mcp_browser_intercept_clear": {
+      "parameters": [],
+      "description": "Remove all request interception rules."
+    },
+    "mcp_browser_tab_open": {
+      "parameters": [
+        "url"
+      ],
+      "description": "Open a new browser tab (optionally navigate). For testing window.open, popups, multi-origin flows."
+    },
+    "mcp_browser_tab_switch": {
+      "parameters": [
+        "tab_id"
+      ],
+      "description": "Switch the active tab by ID."
+    },
+    "mcp_browser_tab_list": {
+      "parameters": [],
+      "description": "List all open tabs."
+    },
+    "mcp_browser_tab_close": {
+      "parameters": [
+        "tab_id"
+      ],
+      "description": "Close a tab (not the primary)."
+    },
+    "mcp_browser_console": {
+      "parameters": [
+        "limit"
+      ],
+      "description": "Read captured JS console output \u2014 errors reveal internal service names, stack traces, API endpoints."
+    },
+    "mcp_browser_wait": {
+      "parameters": [
+        "selector",
+        "timeout",
+        "state",
+        "ms"
+      ],
+      "description": "Smart wait: for a selector to appear/be visible/hidden, or a fixed delay in ms."
+    },
+    "mcp_browser_auth_save": {
+      "parameters": [
+        "path"
+      ],
+      "description": "Save the current browser auth state (cookies + localStorage) to reuse across engagements or restore after navigation."
+    },
+    "mcp_browser_auth_restore": {
+      "parameters": [
+        "path"
+      ],
+      "description": "Restore a previously saved auth state \u2014 login once, test across many pages."
+    },
+    "mcp_browser_shadow": {
+      "parameters": [
+        "selector",
+        "action",
+        "text"
+      ],
+      "description": "Shadow-DOM-aware element query/click/type \u2014 pierces ALL shadow roots automatically. Actions: text (query), click, type."
+    },
+    "mcp_browser_fingerprint": {
+      "parameters": [],
+      "description": "Current page fingerprint: frameworks in use, storage state, CSP, WebSocket/fetch availability, user agent."
     }
   },
-  "dependencies": ["playwright"],
-  "platforms": ["linux", "macos"]
+  "dependencies": [
+    "playwright"
+  ],
+  "platforms": [
+    "linux",
+    "macos"
+  ]
 }

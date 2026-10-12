@@ -46,6 +46,13 @@ def _resolve_workspace() -> Path:
     env = os.environ.get("SUIJIN_WORKSPACE")
     if env:
         return Path(env).expanduser()
+    # v7.2 clean layout: engagements at ~/.suijin/engagements/,
+    # config at ~/.suijin/config/. The workspace concept becomes the
+    # config dir for non-engagement paths.
+    new_eng = Path.home() / ".suijin" / "engagements"
+    new_cfg = Path.home() / ".suijin" / "config"
+    if new_eng.is_dir() and new_cfg.is_dir():
+        return new_cfg  # WORKSPACE_DIR = config/ (non-engagement paths)
     durable = Path.home() / ".suijin" / "workspace"
     if durable.is_dir():
         return durable
@@ -181,7 +188,10 @@ def set_engagement(objective: str = "") -> Path:
 
     ensure_global_layout()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    base = WORKSPACE_DIR / "engagements" / f"{stamp}_{_slugify(objective[:60])}"
+    eng_root = Path.home() / ".suijin" / "engagements"
+    if not eng_root.is_dir():
+        eng_root = WORKSPACE_DIR / "engagements"  # fallback to old layout
+    base = eng_root / f"{stamp}_{_slugify(objective[:60])}"
     # concurrent same-second starts (parallel agent launches) would silently
     # MERGE into one engagement — one audit trail, mixed findings. Uniquify.
     d = base
@@ -207,7 +217,10 @@ def set_engagement(objective: str = "") -> Path:
 def engagement_dir() -> Path:
     """The current engagement's folder (auto-created; `_default` before
     set_engagement boots — legacy callers keep working)."""
-    d = _CURRENT_ENGAGEMENT or WORKSPACE_DIR / "engagements" / "_default"
+    eng_root = Path.home() / ".suijin" / "engagements"
+    if not eng_root.is_dir():
+        eng_root = WORKSPACE_DIR / "engagements"
+    d = _CURRENT_ENGAGEMENT or eng_root / "_default"
     return _ensure(d)
 
 

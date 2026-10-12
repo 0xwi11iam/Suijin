@@ -219,7 +219,7 @@ class TestRouteTool:
         from suijin.modules.tools.lib.dispatch import route_tool
 
         result = route_tool("nonexistent_tool_xyz", {}, {})
-        assert "TOOL NOT FOUND" in result and "ASK THE OPERATOR" in result
+        assert "TOOL NOT FOUND" in result and "BUILD IT YOURSELF" in result
 
     def test_route_http_request_mocked(self, monkeypatch):
         """route_tool('http_request') uses the mocked module function.
@@ -288,13 +288,13 @@ class TestToolNotFound:
         from suijin.modules.tools.lib.dispatch import route_tool
 
         out = route_tool("nmap_scanx", {}, {})
-        assert "TOOL NOT FOUND" in out and "nmap_scan" in out and "ask_operator".upper() in out.upper()
+        assert "TOOL NOT FOUND" in out and "nmap_scan" in out and "BUILD IT YOURSELF" in out
 
     def test_no_match_points_at_operator(self):
         from suijin.modules.tools.lib.dispatch import route_tool
 
         out = route_tool("zzz_totally_unknown", {}, {})
-        assert "TOOL NOT FOUND" in out and "ASK THE OPERATOR" in out and "Do NOT guess" in out
+        assert "TOOL NOT FOUND" in out and "BUILD IT YOURSELF" in out and "Do NOT guess" in out
 
     def test_ask_operator_rule_in_prompt(self):
         from suijin.modules.loader import discover_modules

@@ -371,87 +371,64 @@ class SuijinAgentGraph:
                 # into coach_turn (cite-a-fact enforced structurally);
                 # the log tracks heeded/escalate/drop so the coach
                 # never repeats into the void.
+                # ═══ SYSTEM ONE SUPERVISOR + CRITICAL FINDER (2026-10-10) ═══
+                # The heuristic detector stack is REPLACED by the System One
+                # assessor: laya evaluates the evidence and returns a verdict.
+                # Silence is the fallback — no heuristic fires in its place.
+                # The critical finder (hypothesis queue + chain composer + app
+                # model) rides the same interval, injecting its own directives.
                 try:
-                    from suijin.modules.agent.lib.supervisor import (
-                        analyze_trace,
-                        check_heeded,
-                        coach_turn,
-                        escalation_state,
+                    from suijin.modules.agent.lib.reflex import hypotheses as _hyp
+                    from suijin.modules.agent.lib.reflex.chain_composer import check_chain_compliance
+                    from suijin.modules.agent.lib.reflex.supervisor.assessor import (
+                        ASSESS_INTERVAL,
+                        assess,
+                        format_intervention,
+                        track_outcome,
                     )
 
                     trace = result.get("execution_trace", state.get("execution_trace", []))
-                    _log = list(state.get("_supervisor_log") or [])
 
-                    # feedback bookkeeping: mark the last intervention heeded?
-                    if _log and _log[-1].get("heeded") is None:
-                        _log[-1]["heeded"] = check_heeded(_log[-1].get("text", ""), trace[-3:])
-                    _esc = escalation_state(_log)
-                    if _esc == "drop":
-                        # ignored three times: the model has decided.
-                        # Tell the OPERATOR once, stop telling the model.
-                        logger.warning("Supervisor: intervention ignored 3x — surfacing to operator")
-                        with contextlib.suppress(Exception):
-                            print("  [yellow]supervisor: guidance repeatedly ignored — see _supervisor_log[/yellow]")
-                        _log = [e for e in _log if e.get("heeded")]  # reset the unheeded streak
+                    # ── CHAIN COMPLIANCE (fires every turn — it's an obligation) ──
+                    _chain_msg = check_chain_compliance(state, trace)
+                    if _chain_msg:
+                        result.setdefault("messages", []).append({"role": "user", "content": _chain_msg})
+                        logger.info("Chain composer: %s", _chain_msg[:80])
 
-                    guidance = None
-                    kind = "deterministic"
+                    # ── HYPOTHESIS GENERATION (when the app model is ready) ──
+                    with contextlib.suppress(Exception):
+                        from suijin.modules.agent.lib.reflex.app_model import model_ready
 
-                    # ── REFLEX SUPERVISOR (System One decisions; config-gated) ──
-                    # tier-1 classifier verdict with ABSTAIN dominant, tier-2
-                    # grounded phrasing as the only generation. Miss/off =
-                    # the legacy rules+coach ladder below, unchanged.
-                    _reflex_cfg = state.get("_run_config") or self.run_config or {}
-                    _did_reflex = False
-                    try:
-                        from suijin.modules.agent.lib.reflex.supervisor import (
-                            phrase as _reflex_phrase,
-                        )
-                        from suijin.modules.agent.lib.reflex.supervisor import (
-                            reflex_enabled as _reflex_on,
-                        )
-                        from suijin.modules.agent.lib.reflex.supervisor import (
-                            shadow_supervisor as _reflex_shadow,
-                        )
-                        from suijin.modules.agent.lib.reflex.supervisor import (
-                            verdict as _reflex_verdict,
-                        )
+                        if model_ready(state) and _hyp.should_generate(state):
+                            new_hyps = _hyp.generate_from_model(
+                                state, state.get("_run_config") or self.run_config or {}
+                            )
+                            if new_hyps:
+                                state["_hypotheses"] = new_hyps
+                                result.setdefault("messages", []).append(
+                                    {
+                                        "role": "user",
+                                        "content": (
+                                            f"HYPOTHESIS QUEUE ({len(new_hyps)} generated from the application model). "
+                                            "Test CRITICAL and HIGH hypotheses BEFORE exploring new surfaces. "
+                                            "The completion gate refuses to end while critical hypotheses are untested."
+                                        ),
+                                    }
+                                )
+                                logger.info("Hypothesis queue generated: %d items", len(new_hyps))
 
-                        if _reflex_on(_reflex_cfg):
-                            _rv = _reflex_verdict(state, trace, _reflex_cfg)
-                            if _rv["act"]:
-                                guidance = await _reflex_phrase(_rv, self.generate_fn, state)
-                                kind = "reflex"
-                                if not guidance:
-                                    _rv = {**_rv, "act": False}  # phrasing refused: silence
-                            _reflex_shadow(state, trace, _reflex_cfg, _rv, legacy=None, acted=bool(guidance))
-                            _did_reflex = _rv["act"] and bool(guidance)
-                    except Exception as _rerr:  # noqa: BLE001 — reflex never breaks supervision
-                        logger.debug(f"reflex supervisor skipped: {_rerr}")
+                    # ── SYSTEM ONE ASSESSMENT (interval-gated) ──
+                    if iteration % ASSESS_INTERVAL == 0:
+                        verdict = assess(state, trace, state.get("_run_config") or self.run_config or {})
+                        track_outcome(state, verdict, iteration)
+                        _intervention = format_intervention(verdict)
+                        if _intervention:
+                            result.setdefault("messages", []).append({"role": "user", "content": _intervention})
+                            result["_supervisor_guidance"] = _intervention
+                            logger.info("System One intervention: %s", _intervention[:80])
 
-                    if _esc != "drop" and not _did_reflex:
-                        guidance = analyze_trace(trace[-15:], iteration=iteration)
-                    if guidance:
-                        kind = kind if _did_reflex else "deterministic"
-                    elif not _did_reflex:
-                        guidance = await coach_turn(state, trace, self.generate_fn, iteration)
-                        kind = "coach"
-                    if guidance:
-                        if _esc == "escalate" and kind == "coach":
-                            guidance = f"DIRECT: {guidance} (repeated because it matters)"
-                        prefix = (
-                            "SUPERVISOR: "
-                            if kind == "deterministic"
-                            else "SUPERVISOR (coach — advisory; verify against your trace): "
-                        )
-                        result.setdefault("messages", []).append({"role": "user", "content": prefix + guidance})
-                        result["_supervisor_guidance"] = guidance
-                        _log.append({"turn": iteration, "kind": kind, "text": guidance[:200], "heeded": None})
-                        logger.info("Supervisor %s intervention at %s: %s", kind, iteration, guidance[:80])
-                    result["_supervisor_log"] = _log[-20:]
-
-                except Exception as e:
-                    logger.warning(f"Supervisor check failed: {e}")
+                except Exception as _s1err:  # noqa: BLE001 — supervision never breaks a turn
+                    logger.debug(f"System One supervisor skipped: {_s1err}")
 
             # ── Oracle anomaly detection ───────────────────────────
             # Cadence configurable (2026-09-12): oracle_interval, 0 = off.
