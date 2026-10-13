@@ -25,7 +25,6 @@ import contextlib
 import importlib
 import json
 import os
-import shutil
 import socket
 import sys
 import time
@@ -80,7 +79,7 @@ def _fail(name, detail=""):
 
 def run_doctor() -> int:
     from suijin.modules.platform.lib.runtime import init_runtime
-    from suijin.modules.tools.lib.availability import install_hint
+    from suijin.modules.tools.lib.availability import install_hint, which_any
 
     init_runtime()
     rows = []
@@ -279,7 +278,7 @@ def run_doctor() -> int:
 
     # Required binaries
     for b in REQUIRED_BINARIES:
-        p = shutil.which(b)
+        p = which_any(b)
         if p:
             rows.append(_ok(f"bin/{b}", p))
         else:

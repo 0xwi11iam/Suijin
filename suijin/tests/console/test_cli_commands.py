@@ -195,7 +195,9 @@ class TestArtifactListings:
 
 class TestDoctorWorkspaceRow:
     def test_doctor_includes_workspace_row(self, monkeypatch, capsys):
-        monkeypatch.setattr(cli.shutil, "which", lambda _b: "/bin/true")
+        import suijin.modules.tools.lib.availability as _av
+
+        monkeypatch.setattr(_av, "which_any", lambda _b: "/bin/true")
         monkeypatch.setattr(cli, "REQUIRED_BINARIES", [])
         monkeypatch.setattr(cli, "_importable", lambda _m: True)
         monkeypatch.setattr(cli, "_port_free", lambda _p: True)
@@ -209,9 +211,10 @@ class TestDoctorWorkspaceRow:
     def test_doctor_pack_dep_sweep_shows_hints(self, monkeypatch, capsys):
         """The manifest-driven sweep: every pack dep checked, misses get
         the OS-tailored install command, coverage row summarises."""
+        import suijin.modules.tools.lib.availability as _av
         from suijin.modules.tools.lib import availability as av
 
-        monkeypatch.setattr(cli.shutil, "which", lambda _b: "/bin/true")
+        monkeypatch.setattr(_av, "which_any", lambda _b: "/bin/true")
         monkeypatch.setattr(cli, "REQUIRED_BINARIES", [])
         monkeypatch.setattr(cli, "_importable", lambda _m: True)
         monkeypatch.setattr(cli, "_port_free", lambda _p: True)
