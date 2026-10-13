@@ -64,13 +64,20 @@ def _resolve_workspace() -> Path:
 
 WORKSPACE_DIR = _resolve_workspace()
 
+#: an explicit SUIJIN_WORKSPACE means SELF-CONTAINMENT: everything the
+#: layout needs (engagements/, logs/, caches/) lives UNDER the override
+#: — never scattered into its parent (the distro-run catch: pinning
+#: /opt/suijin-ws created /opt/engagements beside it, and the workspace
+#: dir itself never existed).
+_EXPLICIT_WS = bool(os.environ.get("SUIJIN_WORKSPACE"))
+
 
 def base_dir() -> Path:
-    """The clean-layout parent: ~/.suijin in production, or the sandbox
-    root when SUIJIN_WORKSPACE points inside one (tests). config/,
-    engagements/, logs/ and caches/ hang off it. Nothing the agent
-    writes lands directly here."""
-    return WORKSPACE_DIR.parent
+    """The clean-layout parent. With an explicit SUIJIN_WORKSPACE the
+    override IS the base (self-contained). Otherwise: ~/.suijin in
+    production, with config/ as WORKSPACE_DIR hanging off it. Nothing
+    the agent writes lands directly here."""
+    return WORKSPACE_DIR if _EXPLICIT_WS else WORKSPACE_DIR.parent
 
 
 #: everything the engagement owns — created by set_engagement(). The

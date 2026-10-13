@@ -106,6 +106,7 @@ def red_mocks(monkeypatch, tmp_path):
     from suijin.modules.platform.lib import workspace as _ws
 
     monkeypatch.setattr(_ws, "WORKSPACE_DIR", tmp_path / "config")  # v7.2: base (engagements root) = tmp_path
+    monkeypatch.setattr(_ws, "_EXPLICIT_WS", False)  # prod-style base = parent
     _ws._reset_engagement()
     return {"agent": fake_agent, "tmpdir": str(tmp_path)}
 

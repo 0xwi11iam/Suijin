@@ -74,6 +74,7 @@ class TestInitRuntime:
         rt = __import__("suijin.modules.platform.lib.runtime", fromlist=["x"])
         # point workspace at a fresh tree and force a re-init
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        monkeypatch.setattr(ws, "_EXPLICIT_WS", False)  # prod-style: base = parent
         ws._reset_engagement()  # hermetic: no engagement pinned from another test
         import contextlib
 

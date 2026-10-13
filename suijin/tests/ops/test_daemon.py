@@ -32,6 +32,7 @@ def home(tmp_path, monkeypatch):
 
     (tmp_path / "config").mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path / "config")
+    monkeypatch.setattr(ws, "_EXPLICIT_WS", False)  # prod-style: base = parent
     ws._reset_engagement()
     yield tmp_path
     ws._reset_engagement()
