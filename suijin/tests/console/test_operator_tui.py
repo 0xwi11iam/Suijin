@@ -584,6 +584,7 @@ def test_mesh_arrows_page_history(demo):
 
 
 # ── 8. /report — operator-ordered wrap-up + self-termination ────────
+# ── 10. mesh paging ────────────────────────────────────────────────
 
 
 def test_report_tells_every_agent_to_wrap_up_and_end(demo):
@@ -631,3 +632,40 @@ def test_report_lists_in_suggestions(demo):
     ui._execute("/su 016379")
     ui.input_buf = "/rep"
     assert any(k.startswith("/report") for k, _ in ui._filtered_suggestions())
+
+
+# ── 9. real-engagement detail rendering (dirty tool output) ──────
+
+
+def test_detail_panel_survives_dirty_tool_output(demo):
+    """The real-engagement corruption: tool/model output carries raw ANSI
+    sequences and control bytes (curl progress, colored dumps) which a
+    Rich Text passes STRAIGHT THROUGH — the terminal interpreted them
+    (cursor moves, clears, bells) and the pane fell apart. Unbroken
+    blobs (JWTs, base64) also blew past the border. Both must be gone:
+    sanitized text, folded observation, nothing over-width."""
+    ui, _, _ = demo
+    import io
+
+    from rich.console import Console
+
+    a = ui.agents[0]
+    dirty = (
+        "\x1b[2K\rStatus: 200\x1b[32m OK\x1b[0m\r\n"
+        "Body: eyJhbGciOiJIUzI1NiJ9." + "x" * 180 + ".sig\n"
+        "\x1b[?25l 47%\x07\x00\n end"
+    )
+    a.iterations = [
+        {
+            "iteration": 12,
+            "thought": "Chaining SSRF \x1b[1mcred grid\x1b[0m",
+            "action": {"tool": "http_replay", "args": {"url": "https://t/api"}, "success": True},
+            "observation": dirty,
+            "phase": "exploitation",
+        }
+    ]
+    c = Console(width=120, height=40, force_terminal=True, record=True, file=io.StringIO())
+    c.print(ui._detail_panel())
+    lines = c.export_text().splitlines()
+    assert not any(c in l for l in lines for c in ("\x1b", "\r", "\x00", "\x07")), "control bytes leaked"
+    assert not [l for l in lines if len(l) > 120], "content escaped the pane border"

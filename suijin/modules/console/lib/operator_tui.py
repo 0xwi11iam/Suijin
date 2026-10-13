@@ -994,6 +994,23 @@ def _card(a: Agent, selected: bool, height: int) -> Panel:
     )
 
 
+_ANSI_RE = None
+
+
+def _sanitize(s: str) -> str:
+    """Make tool/model output SAFE for a Rich Text panel: raw ANSI/OSC
+    sequences and control bytes pass straight through a Text and get
+    INTERPRETED by the terminal (cursor moves, clears, bells — the
+    real-engagement detail-pane corruption). Keep newlines; fold the
+    rest to spaces."""
+    global _ANSI_RE
+    import re as _re
+
+    if _ANSI_RE is None:
+        _ANSI_RE = _re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|[\x00-\x08\x0b-\x1f\x7f]")
+    return _ANSI_RE.sub(" ", str(s or ""))
+
+
 class OperatorTUI:
     # focus ring follows the screen perimeter: cards (top-left) down the
     # left side (detail, input), up the right side (mesh, overview), wrap
@@ -1215,7 +1232,7 @@ class OperatorTUI:
             lines.append(f"  iteration {a.iteration}", style=f"bold {CYAN}")
         lines.append("\n")
 
-        thought = ((it or {}).get("thought")) or a.last_thought
+        thought = _sanitize(((it or {}).get("thought")) or a.last_thought or "")
         has_cmd = bool(((it or {}).get("action") or {}).get("tool") if it else None) or bool(a.last_tool)
         if not thought and not has_cmd:
             lines.plain = lines.plain.rstrip("\n")  # nothing follows the header
@@ -1262,6 +1279,7 @@ class OperatorTUI:
         elif a.last_obs:
             obs = str(a.last_obs)
 
+        obs = _sanitize(obs)
         output_block = None
         if obs:
             # the COMMAND OUTPUT, verbatim structure (status/headers/body
@@ -1272,7 +1290,7 @@ class OperatorTUI:
             o = obs[:cap]
             output_block = Group(
                 Rule(style=DIM),
-                Text(o, style=GRAY),
+                Text(o, style=GRAY, overflow="fold"),
                 *([Text(f"…(+{len(obs) - cap} chars)", style=DIM)] if len(obs) > cap else []),
             )
 
@@ -1295,7 +1313,7 @@ class OperatorTUI:
             for f in finds[:5]:
                 if isinstance(f, dict):
                     sev = str(f.get("severity", "info")).lower()
-                    desc = str(f.get("description") or f.get("title") or f.get("endpoint") or "?")
+                    desc = _sanitize(str(f.get("description") or f.get("title") or f.get("endpoint") or "?"))
                     rest.append("  | ", style=f"bold {SEV_COLOR.get(sev, DIM)}")
                     rest.append(f"{sev.upper():<8}", style=f"bold {SEV_COLOR.get(sev, DIM)}")
                     rest.append(f" {desc}\n", style=WHITE)
