@@ -214,14 +214,16 @@ def test_a_ended_run_is_saved_and_returns_to_the_menu(driven):
 
 
 def test_the_crash_log_lands_in_outputs_logs():
-    """The crash panel promises the run log dir — v7.2: base/logs
-    (WORKSPACE_DIR.parent/logs), never under config/ or an engagement
-    (the old outputs/logs path is retired with the restructure)."""
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR, base_dir, logs_dir
+    """The crash panel promises the run log dir — v7.2: base/logs.
+    Under the suite's SUIJIN_WORKSPACE override the base is the
+    workspace ITSELF (self-contained); prod splits it to the parent."""
+    from suijin.modules.platform.lib import workspace as ws
 
-    assert logs_dir() == base_dir() / "logs"
-    assert logs_dir() == WORKSPACE_DIR.parent / "logs"
-    assert logs_dir().is_dir()
+    if ws._EXPLICIT_WS:
+        assert ws.logs_dir() == ws.WORKSPACE_DIR / "logs"
+    else:
+        assert ws.logs_dir() == ws.WORKSPACE_DIR.parent / "logs"
+    assert ws.logs_dir().is_dir()
 
     import inspect
 

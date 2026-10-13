@@ -103,19 +103,23 @@ class TestCanonicalLayout:
         assert ws._resolve_workspace() == fake_home / ".suijin" / "config"
 
     def test_clean_skeleton(self, tmp_path, monkeypatch):
-        """ensure_global_layout creates exactly the v7.2 roots."""
+        """ensure_global_layout creates the v7.2 roots. Explicit
+        SUIJIN_WORKSPACE = SELF-CONTAINED (everything under the
+        override); prod mode (no env) splits base/{engagements,logs,caches}."""
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path / "config")
-        monkeypatch.setenv("SUIJIN_WORKSPACE", str(tmp_path / "config"))  # guard the migrator
+        monkeypatch.setattr(ws, "_EXPLICIT_WS", True)
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(tmp_path / "config"))
         ws.ensure_global_layout()
-        assert (tmp_path / "config" / "profiles").is_dir()
-        assert (tmp_path / "config" / "skills").is_dir()
-        assert (tmp_path / "config" / "packs").is_dir()
-        assert (tmp_path / "config" / "bugscope").is_dir()
-        assert (tmp_path / "engagements").is_dir()
-        assert (tmp_path / "logs").is_dir()
-        assert (tmp_path / "caches").is_dir()
+        for name in ("profiles", "skills", "packs", "bugscope", "engagements", "logs", "caches"):
+            assert (tmp_path / "config" / name).is_dir(), name
         assert not (tmp_path / "outputs").exists()
-        assert not (tmp_path / "config" / "logs").exists()
+        assert not (tmp_path / "engagements").exists()  # contained — no parent scatter
+        # prod mode: no override → base is the PARENT
+        monkeypatch.delenv("SUIJIN_WORKSPACE")
+        monkeypatch.setattr(ws, "_EXPLICIT_WS", False)
+        ws.ensure_global_layout()
+        for name in ("engagements", "logs", "caches"):
+            assert (tmp_path / name).is_dir(), f"base/{name}"
 
     def test_tool_dirs_anchored_to_engagement_or_base(self, tmp_path, monkeypatch):
         from suijin.modules.tools.lib import audit_trail, report_exporter, session_replay
@@ -143,6 +147,7 @@ class TestLegacyWorkspaceMigration:
         (legacy / "outputs").mkdir()
         (legacy / "outputs" / "stray.txt").write_text("junk")
         monkeypatch.delenv("SUIJIN_WORKSPACE", raising=False)
+        monkeypatch.setattr(ws, "_EXPLICIT_WS", False)  # prod mode: base = ~/.suijin
         monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: fake_home))
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", fake_home / ".suijin" / "config")
