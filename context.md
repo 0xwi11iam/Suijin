@@ -1,7 +1,7 @@
 # Suijin — Project Context
 
 > The architecture grip. Read top to bottom before touching anything.
-> Last updated 2026-10-12 (System One assessor + critical finder + adversarial depth tools).
+> Last updated 2026-10-12 (v7.2 clean layout RESTORED after mistaken rollback; trail-based reports; operator TUI fixes; container tilde ban; backup rotation).
 
 ## Repo facts
 
@@ -56,9 +56,12 @@
 26. Console is feature-blind: modules register menus/verbs via `console_hooks`; must tolerate `hooks is None` (headless). `unregister_owner` is the only bulk removal.
 27. New CLI verb → ALSO add to `_KNOWN_VERBS` (cli.py) or `python main.py <verb>` / container dispatch breaks (pytest argv firewall).
 28. main.py sys.path bootstrap runs BEFORE any `from suijin import …` (container fix).
-29. One workspace `~/.suijin/workspace` (override: `SUIJIN_WORKSPACE` env), resolved ONCE at import; per-engagement state under `engagements/<slug>/` (NOT `outputs/engagements`); `outputs/` holds cross-run artifacts (logs, audit_trails, reports). `artifact_dir()` validates names. Config path overridable via `SUIJIN_CONFIG`, secrets via `SUIJIN_ENV` (both read at import).
-29a. **Run logs go through `workspace.logs_dir()` = `outputs/logs/`** — the same path the panels advertise. Three handlers used to write to `<workspace>/logs/`, where the operator would never look (and a nested `logs/logs/` accumulated). Use `logs_dir()`, never `WORKSPACE_DIR / "logs"`.
+29. **v7.2 CLEAN LAYOUT (2026-10-12)**: `~/.suijin/config/` IS the workspace (WORKSPACE_DIR) — profiles/skills/packs/bugscope/SOUL.md/prompt.md/reflex-shadow/drive_policy/approvals/credentials/notify/recipes live under it. Engagements at `~/.suijin/engagements/<stamp>_<slug>/` (lazy subdirs; log/+state/ at create). System dirs `~/.suijin/logs/` (logs_dir()) and `~/.suijin/caches/` (models.dev, ms-playwright). Pre-engagement artifact writes park at `config/artifacts/<name>/` — idle reads never conjure `_default`. NOTHING else at the root. The old `~/.suijin/workspace` is retired (one-time `_migrate_legacy_workspace` folds survivors, parks husk at workspace.retired-*); the repo `suijin_agent` symlink is REMOVED, never recreated. `outputs/` is GONE: tool dumps → engagement `toollogs/`, surface verdicts → `state/`, pack exports → `config/packs/`. (Briefly rolled back same-day by mistake — RESTORED; the rollback round's backup had overwritten the only mirror, the rebuild came from the session record. The backup script now keeps one `.prev` generation.)
+29a. **Run logs go through `workspace.logs_dir()` = `~/.suijin/logs/`** — same path the panels advertise. Never `WORKSPACE_DIR/"logs"` or `"outputs"`.
 29b. **A crash is still an engagement**: the exception path saves a `.sje` through `CRASH_SAVER` (once-flagged, never raises) and the panel prints the resume line. The loop-breaker/`error:*` endings save via the normal end path and return to the menu.
+29c. **Husk prune**: an engagement with no events.jsonl, no audit_trails, no .sje and an empty log/ never had a run — the redteamer finally removes it (the paired-folder litter from aborted launches).
+29d. **Reports read the audit trail, never model JSON**: `generate_report` (tool) pulls `current_trail()` via `report_inputs()` (the ONE remap); one overwriting `reports/report.md` mid-run, `reports/final_report.md` written automatically by `end_audit` at conclusion. No timestamped copies.
+29e. **PERMANENT container rule**: NEVER use `~`/`$HOME` in containers — OrbStack binds the macOS home into them (the wipe cause). Container runs set `SUIJIN_WORKSPACE` to an explicit container-local path.
 30. Audit/diag/journal/events NEVER break the run (never raise; args digest-only; re-entrancy bounded).
 31. Tool calls are data: `call_tool` returns `"Error: …"` strings, every call audited, tools namespaced.
 32. Resume precedence: **engagement STATE rides the .sje; operator SETTINGS ride live config.json (current wins)** — the deepseek-402 incident.
@@ -361,9 +364,16 @@ p=0.31 below threshold → no intervention; model answered in 82-231ms.
    remediation maps) + system-difficulties report. **ai_env.py**:
    `state` (persistent agent variables), `tools` (categorized
    reference), `help` (runtime man page).
-8. Suite at this commit: 2862 passed / 11 skipped; `test_migration_e2e`
+8. Suite at this commit: 2863 passed / 9 skipped (gate `-m "not ai and
+   not slow"`, 15 deselected); `test_migration_e2e`
    can flake on port collision under the full run (passes isolated) —
-   known, benign.
+   known, benign. Operator TUI round (same day): history-recall ↓ crash
+   fixed (readline semantics), /command dropdown + note moved to their
+   own `floats` layout region so the input box (fixed size=3) can never
+   be cropped away — pinned in tests/console/test_operator_tui.py §7.
+   v7.2 round: restructure RESTORED after mistaken rollback (rebuild
+   notes in the vault); all 26 old-layout test pins fixed; backup
+   script keeps a .prev generation now.
 
 Restore note (2026-10-12): the working tree was rebuilt from the
 GitHub root layer + a pre-wipe tarball of the package dir after a

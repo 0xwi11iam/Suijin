@@ -82,15 +82,12 @@ def init_runtime(force: bool = False) -> None:
         # Workspace layout: merge any legacy suijin/suijin_agent real dir
         # into the canonical root workspace and symlink the inner path.
         ensure_workspace_layout()
-        # 2026-09-16 layout: global skeleton at the workspace root
-        # (profiles seeded, engagement trees generated per engagement by
-        # set_engagement). The outputs/ era ended with the restructure —
-        # the migrator is retired and nothing recreates that tree.
+        # v7.2 clean layout: config/{profiles,skills,packs} +
+        # base/{engagements,logs,caches} — ensure_global_layout owns the
+        # whole skeleton (and folds any legacy workspace in, once).
         import suijin.modules.platform.lib.workspace as _ws
 
         _ws.ensure_global_layout()
-        _ws.WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
-        (_ws.WORKSPACE_DIR / "scripts").mkdir(parents=True, exist_ok=True)
         _initialized = True
 
 

@@ -82,9 +82,9 @@ class TestLiveHandlers:
 
         import suijin.modules.platform.lib.workspace as ws
 
-        monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)  # notes live at engagement/.notes (2026-09-16)
+        monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)  # v7.2: idle /note parks at config/artifacts/.notes
         ws._reset_engagement()
-        notes = tmp_path / "engagements" / "_default" / ".notes"
+        notes = tmp_path / "artifacts" / ".notes"
         box, out = make_box()
         box.dispatch("/note found admin panel")
         assert any(notes.glob("*.md"))

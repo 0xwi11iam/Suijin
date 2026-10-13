@@ -36,13 +36,17 @@ def target_key(text: str) -> str:
 
 
 def _catalog_roots() -> list:
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR, engagements_root
 
     # The 2026-09-16 restructure moved exploits into engagements/<slug>/ —
     # reading only the legacy WORKSPACE_DIR/exploits root meant what_worked
     # saw NOTHING on any post-restructure run (the positive-memory reader
     # silently went blind). Both roots are read, engagements first.
-    roots = [WORKSPACE_DIR / "engagements", WORKSPACE_DIR / "exploits"]
+    roots = [
+        engagements_root(),
+        WORKSPACE_DIR / "artifacts" / "exploits",  # v7.2 idle parking (no engagement live)
+        WORKSPACE_DIR / "exploits",
+    ]
     out = []
     for r in roots:
         if r.is_dir():

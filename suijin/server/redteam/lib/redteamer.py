@@ -216,6 +216,36 @@ def _install_sigterm_save():
     _signal.signal(_signal.SIGHUP, _sigterm)
 
 
+class _OperatorPauseWatch:
+    """Mesh pause-flag watcher — gives `/pause` from `suijin operator` the
+    SAME mid-turn interrupt the engagement TUI's RunBox /pause gets: the
+    astream event loop raises KeyboardInterrupt and the pause console
+    opens right where the agent is, instead of waiting for the turn
+    boundary (turns run for minutes; the operator's pause must not).
+
+    Fires ONCE per flag placement — after the console session the loop
+    proceeds to the next boundary, where the between-turn hold (the
+    top-of-loop flag wait) keeps the agent parked until /resume. If the
+    operator re-pauses (new flag), the watcher re-arms: hit() is False
+    while the flag persists, True on the first check after each new
+    placement, and the flag's absence resets it."""
+
+    def __init__(self) -> None:
+        self._fired = False
+
+    def hit(self) -> bool:
+        with contextlib.suppress(Exception):
+            from suijin.modules.agent.lib.mesh import mesh_dir
+
+            if (mesh_dir() / "pause-operator").exists():
+                if not self._fired:
+                    self._fired = True
+                    return True
+                return False
+            self._fired = False
+        return False
+
+
 def _unattended() -> bool:
     """True when stdin can never answer a prompt (CI: /dev/null, closed, or
     non-TTY pipes) — press-Enter banners would block forever on an open
@@ -300,9 +330,9 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
     try:
         import logging as _logging
 
-        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR as _WS
+        from suijin.modules.platform.lib.workspace import logs_dir as _logs_dir
 
-        _logd = _WS / "outputs" / "logs"
+        _logd = _logs_dir()
         _logd.mkdir(parents=True, exist_ok=True)
         _fh = _logging.FileHandler(_logd / "engagement.log")
         _fh.setFormatter(_logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s"))
@@ -960,6 +990,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
 
     _resume_retry = False  # one clean-restart allowed after a paused resume
     _restart_stream = False  # provider restart / ask-hold: exit inner loop, re-stream
+    _op_pause_w = _OperatorPauseWatch()  # operator /pause → mid-turn interrupt, like RunBox /pause
 
     # STALE-PAUSE WARNING (2026-10-08, the permanent-pause incident): a
     # panic/pause flag from a dead session silently parks every NEW
@@ -1077,7 +1108,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                 try:
                     event = await asyncio.wait_for(asyncio.to_thread(_eq.get, timeout=2.0), timeout=3.0)
                 except (asyncio.TimeoutError, _qmod.Empty):
-                    if getattr(_signal, "_suijin_interrupted", False):
+                    if getattr(_signal, "_suijin_interrupted", False) or _op_pause_w.hit():
                         _reader_task.cancel()
                         raise KeyboardInterrupt()
                     continue
@@ -1086,7 +1117,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                     # the reader and arrives here as an ordinary end-of-stream
                     # — without this check the engagement ENDED instead of
                     # pausing whenever the signal hit the wrong frame
-                    if getattr(_signal, "_suijin_interrupted", False):
+                    if getattr(_signal, "_suijin_interrupted", False) or _op_pause_w.hit():
                         _reader_task.cancel()
                         raise KeyboardInterrupt()
                     if _stream_error:
@@ -1105,7 +1136,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                     console.print(f"[yellow]  skipped a malformed output from {node_name}[/yellow]")
                     continue
                 _got_events = True
-                if getattr(_signal, "_suijin_interrupted", False):
+                if getattr(_signal, "_suijin_interrupted", False) or _op_pause_w.hit():
                     _reader_task.cancel()
                     raise KeyboardInterrupt()
 
@@ -1922,6 +1953,22 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
             # restore the PRIOR sigint handler — the custom one used to
             # outlive the engagement (Ctrl+C at the menu still flipped flags)
             _signal.signal(_signal.SIGINT, _old_sigint)
+        with contextlib.suppress(Exception):
+            # HUSK PRUNE (v7.2): a launch that died before iteration 1
+            # (crash, instant abort, double-launch) leaves an engagement
+            # folder holding nothing but empty log/ + state/ dirs — the
+            # paired-folder litter. No .sje, no events, no audit trail =
+            # no run ever happened there: remove it.
+            from suijin.modules.platform.lib.workspace import engagement_dir as _ed
+
+            _eng = _ed()
+            if _eng.name != "_default":
+                _has_life = (_eng / "events.jsonl").exists() or (_eng / "audit_trails").is_dir()
+                _has_save = any((_eng / "state").glob("*.sje"))
+                if not _has_life and not _has_save and not any((_eng / "log").glob("*")):
+                    import shutil as _sh
+
+                    _sh.rmtree(_eng, ignore_errors=True)
         with contextlib.suppress(Exception):
             from suijin.modules.tools.lib import exploit_catalog as _ec
 

@@ -74,7 +74,7 @@ class TestSimpleVerbs:
         code, out = run_cli(["workspace"])
         assert code == 0
         assert "workspace:" in out
-        assert "symlink:" in out
+        assert "layout:" in out  # the layout row replaced the retired symlink row
 
 
 class TestEnvCommand:
@@ -155,7 +155,7 @@ class TestArtifactListings:
     def test_reports_listing(self, monkeypatch, tmp_path):
         import suijin.modules.platform.lib.workspace as ws
 
-        reports = tmp_path / "engagements" / "_default" / "reports"
+        reports = tmp_path / "artifacts" / "reports"
         reports.mkdir(parents=True)
         (reports / "eng_report.md").write_text("# report")
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
@@ -175,7 +175,7 @@ class TestArtifactListings:
     def test_sessions_listing_shows_objective(self, monkeypatch, tmp_path):
         import suijin.modules.platform.lib.workspace as ws
 
-        sessions = tmp_path / "engagements" / "_default" / "sessions"
+        sessions = tmp_path / "artifacts" / "sessions"
         sessions.mkdir(parents=True)
         (sessions / "s1.json").write_text(json.dumps({"objective": "own the lab"}))
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
@@ -204,7 +204,7 @@ class TestDoctorWorkspaceRow:
         out = capsys.readouterr().out
         assert code == 0
         assert "workspace" in out
-        assert "symlink ok" in out
+        assert "clean layout" in out  # v7.2 row (the symlink row is retired)
 
     def test_doctor_pack_dep_sweep_shows_hints(self, monkeypatch, capsys):
         """The manifest-driven sweep: every pack dep checked, misses get

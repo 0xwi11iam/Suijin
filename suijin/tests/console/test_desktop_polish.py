@@ -50,7 +50,7 @@ class TestStateMirror:
 
         dep = asyncio.run(go())
         assert dep["team_id"]
-        state = json.loads((fireteam_env / "engagements" / "_default" / "fireteam" / "registry.json").read_text())
+        state = json.loads((fireteam_env / "artifacts" / "fireteam" / "registry.json").read_text())
         team = state["teams"][0]
         assert team["team_id"] == dep["team_id"]
         assert team["running"] >= 1
@@ -72,7 +72,7 @@ class TestStateMirror:
 
         dep, msgs = asyncio.run(go())
         assert any("FIRETEAM RESULT" in m for m in msgs)
-        state = json.loads((fireteam_env / "engagements" / "_default" / "fireteam" / "registry.json").read_text())
+        state = json.loads((fireteam_env / "artifacts" / "fireteam" / "registry.json").read_text())
         # fully drained -> the team is forgotten
         assert all(t["team_id"] != dep["team_id"] for t in state["teams"])
 
@@ -87,9 +87,9 @@ class TestStateMirror:
             )
 
         asyncio.run(go())
-        assert (fireteam_env / "engagements" / "_default" / "fireteam" / "registry.json").exists()
+        assert (fireteam_env / "artifacts" / "fireteam" / "registry.json").exists()
         sn._reset_fireteams()
-        state = json.loads((fireteam_env / "engagements" / "_default" / "fireteam" / "registry.json").read_text())
+        state = json.loads((fireteam_env / "artifacts" / "fireteam" / "registry.json").read_text())
         assert state["teams"] == []
 
 
@@ -111,7 +111,7 @@ class TestGatewayFireteam:
             ],
             "updated": "2026-08-22T00:00:01",
         }
-        d = fireteam_env / "engagements" / "_default" / "fireteam"
+        d = fireteam_env / "artifacts" / "fireteam"
         d.mkdir(parents=True, exist_ok=True)
         (d / "registry.json").write_text(json.dumps(mirror))
 

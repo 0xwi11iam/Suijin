@@ -26,10 +26,12 @@ REPO = Path(__file__).resolve().parents[3]
 @pytest.fixture()
 def home(tmp_path, monkeypatch):
     """A hermetic workspace + engagement pin reset (daemon records live
-    at <workspace>/daemon)."""
+    at <workspace>/daemon). v7.2: WORKSPACE_DIR=<tmp>/config so the
+    base (engagements root) IS <tmp>."""
     from suijin.modules.platform.lib import workspace as ws
 
-    monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+    (tmp_path / "config").mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path / "config")
     ws._reset_engagement()
     yield tmp_path
     ws._reset_engagement()
@@ -286,13 +288,13 @@ class TestDetachedSpawn:
     def test_spawn_detaches_child_that_records_itself(self, home, monkeypatch):
         """The child survives the console (new session) and completes the
         record contract: pid, engagement, events, status."""
-        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home))
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home / "config"))  # match the fixture's workspace
         rid = daemon.new_id("stub run")
         # the stub child takes its id as argv[1] (python -c semantics)
         argv = _stub_argv()
         argv[-1] = rid
         rec = daemon.start_daemon(
-            "stub run", environ={"SUIJIN_WORKSPACE": str(home)}, child_argv=argv, confirm_seconds=10
+            "stub run", environ={"SUIJIN_WORKSPACE": str(home / "config")}, child_argv=argv, confirm_seconds=10
         )
         assert rec["status"] == "running" and rec["pid"] > 0
         assert rec["id"] == rid
@@ -313,11 +315,13 @@ class TestDetachedSpawn:
         os.kill(rec["pid"], signal.SIGTERM)
 
     def test_stop_waits_for_graceful_shutdown(self, home, monkeypatch):
-        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home))
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home / "config"))
         rid = daemon.new_id("stoppable")
         argv = _stub_argv(lifetime=60)
         argv[-1] = rid
-        daemon.start_daemon("stoppable", environ={"SUIJIN_WORKSPACE": str(home)}, child_argv=argv, confirm_seconds=10)
+        daemon.start_daemon(
+            "stoppable", environ={"SUIJIN_WORKSPACE": str(home / "config")}, child_argv=argv, confirm_seconds=10
+        )
         # wait for boot so the SIGTERM handler is installed
         deadline = time.time() + 10
         while time.time() < deadline and not (daemon._read_record(rid) or {}).get("engagement"):
@@ -330,11 +334,11 @@ class TestDetachedSpawn:
         assert not daemon.is_live(final)
 
     def test_child_natural_completion_lands_completed(self, home, monkeypatch):
-        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home))
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home / "config"))
         rid = daemon.new_id("shortlived")
         argv = _stub_argv(lifetime=0.2)
         argv[-1] = rid
-        daemon.start_daemon("shortlived", environ={"SUIJIN_WORKSPACE": str(home)}, child_argv=argv)
+        daemon.start_daemon("shortlived", environ={"SUIJIN_WORKSPACE": str(home / "config")}, child_argv=argv)
         deadline = time.time() + 30
         while time.time() < deadline:
             got = daemon._read_record(rid) or {}
@@ -346,10 +350,10 @@ class TestDetachedSpawn:
         assert not daemon.is_live(final)
 
     def test_spawn_dead_child_marked_dead(self, home, monkeypatch):
-        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home))
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home / "config"))
         rec = daemon.start_daemon(
             "doomed",
-            environ={"SUIJIN_WORKSPACE": str(home)},
+            environ={"SUIJIN_WORKSPACE": str(home / "config")},
             child_argv=[sys.executable, "-c", "raise SystemExit(3)"],
             confirm_seconds=5.0,
         )
@@ -720,7 +724,7 @@ class TestRealEntryPoint:
         rid = daemon.new_id("real entry")
         _rec(home, id=rid, status="running", pid=0, objective="real entry")
         env = dict(os.environ)
-        env.update({"SUIJIN_WORKSPACE": str(home), "PYTHONPATH": str(stub), "SUIJIN_DAEMON_ID": rid})
+        env.update({"SUIJIN_WORKSPACE": str(home / "config"), "PYTHONPATH": str(stub), "SUIJIN_DAEMON_ID": rid})
         out = subprocess.run(
             [sys.executable, "-m", "suijin.main", "daemon-run", "--id", rid, "--config", str(daemon._cfg_path(rid))],
             cwd=str(REPO),
@@ -779,7 +783,7 @@ class TestRealEntryPoint:
         )
         rec = daemon.start_daemon(
             "lifecycle target",
-            environ={"SUIJIN_WORKSPACE": str(home), "PYTHONPATH": stub},
+            environ={"SUIJIN_WORKSPACE": str(home / "config"), "PYTHONPATH": stub},
             confirm_seconds=15.0,
         )
         assert rec["status"] == "running" and rec["pid"] > 0
@@ -813,7 +817,7 @@ class TestLiveAttachIntegration:
         argv = [sys.executable, "-u", "-c", code, rid]
         rec = daemon.start_daemon(
             "attach target",
-            environ={"SUIJIN_WORKSPACE": str(home), "PYTHONPATH": str(stub_dir)},
+            environ={"SUIJIN_WORKSPACE": str(home / "config"), "PYTHONPATH": str(stub_dir)},
             child_argv=argv,
         )
         deadline = time.time() + 10
@@ -822,7 +826,7 @@ class TestLiveAttachIntegration:
         return rec
 
     def test_attach_streams_and_ends(self, home, capsys, monkeypatch):
-        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home))
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home / "config"))
         rid = daemon.new_id("attach target")
         stub = home / "stub"
         stub.mkdir()
@@ -838,7 +842,7 @@ class TestLiveAttachIntegration:
     def test_attach_writes_guidance_to_live_seam(self, home, capsys, monkeypatch):
         """The operator types a line; it lands in state/live_guidance.md
         exactly like the TUI's guidance channel."""
-        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home))
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home / "config"))
         rid = daemon.new_id("guidance target")
         stub = home / "stub"
         stub.mkdir()
@@ -855,7 +859,7 @@ class TestLiveAttachIntegration:
     def test_attach_detach_keeps_daemon_running(self, home, monkeypatch):
         """Detaching never stops the run — that is the whole point of the
         split (the console can leave and the engagement continues)."""
-        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home))
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home / "config"))
         rid = daemon.new_id("detach target")
         stub = home / "stub"
         stub.mkdir()
@@ -877,14 +881,14 @@ class TestPanicReachesDaemons:
     def test_panic_stops_live_daemon_with_full_save(self, home, monkeypatch, capsys):
         from suijin.modules.ops.lib import panic as pk
 
-        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home))
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home / "config"))
         stub = home / "stub"
         stub.mkdir()
         rid = daemon.new_id("panic target")
         code = _STUB_CHILD.format(repo=str(REPO), lifetime=120)
         daemon.start_daemon(
             "panic target",
-            environ={"SUIJIN_WORKSPACE": str(home), "PYTHONPATH": str(stub)},
+            environ={"SUIJIN_WORKSPACE": str(home / "config"), "PYTHONPATH": str(stub)},
             child_argv=[sys.executable, "-u", "-c", code, rid],
         )
         deadline = time.time() + 10
@@ -904,7 +908,7 @@ class TestPanicReachesDaemons:
     def test_panic_dry_run_reports_without_signalling(self, home, monkeypatch):
         from suijin.modules.ops.lib import panic as pk
 
-        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home))
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home / "config"))
         rid = "d_20260101_000000_obj"
         _rec(home, pid=os.getpid(), status="running")  # "live" (our own pid)
         out = pk.panic(dry_run=True)
@@ -915,7 +919,7 @@ class TestPanicReachesDaemons:
     def test_panic_reports_none_running(self, home, monkeypatch):
         from suijin.modules.ops.lib import panic as pk
 
-        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home))
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home / "config"))
         assert "daemon engagements: none running" in pk.panic(dry_run=True)
 
 
@@ -931,7 +935,7 @@ class TestConcurrencyAndRecovery:
     dies mid-update, kill -9, and ps/attach against garbage."""
 
     def test_two_daemons_are_independent(self, home, monkeypatch):
-        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home))
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home / "config"))
         stub = home / "stub"
         stub.mkdir()
         ids = []
@@ -940,7 +944,7 @@ class TestConcurrencyAndRecovery:
             code = _STUB_CHILD.format(repo=str(REPO), lifetime=lifetime)
             daemon.start_daemon(
                 f"parallel {i}",
-                environ={"SUIJIN_WORKSPACE": str(home), "PYTHONPATH": str(stub)},
+                environ={"SUIJIN_WORKSPACE": str(home / "config"), "PYTHONPATH": str(stub)},
                 child_argv=[sys.executable, "-u", "-c", code, rid],
             )
             ids.append(rid)
@@ -958,14 +962,14 @@ class TestConcurrencyAndRecovery:
     def test_kill9_leaves_record_and_ps_reports_dead(self, home, monkeypatch):
         """SIGKILL can't write a final record — ps must still tell the truth
         (dead), and the journal stays resumable."""
-        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home))
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home / "config"))
         stub = home / "stub"
         stub.mkdir()
         rid = daemon.new_id("hard killed")
         code = _STUB_CHILD.format(repo=str(REPO), lifetime=120)
         rec = daemon.start_daemon(
             "hard killed",
-            environ={"SUIJIN_WORKSPACE": str(home), "PYTHONPATH": str(stub)},
+            environ={"SUIJIN_WORKSPACE": str(home / "config"), "PYTHONPATH": str(stub)},
             child_argv=[sys.executable, "-u", "-c", code, rid],
         )
         deadline = time.time() + 10
@@ -1007,14 +1011,14 @@ class TestConcurrencyAndRecovery:
     def test_stop_while_child_bootstrapping(self, home, monkeypatch):
         """stop during boot (before the runner installs handlers): the
         child still dies and the record is not left lying."""
-        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home))
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home / "config"))
         stub = home / "stub"
         stub.mkdir()
         rid = daemon.new_id("early stop")
         code = _STUB_CHILD.format(repo=str(REPO), lifetime=120)
         daemon.start_daemon(
             "early stop",
-            environ={"SUIJIN_WORKSPACE": str(home), "PYTHONPATH": str(stub)},
+            environ={"SUIJIN_WORKSPACE": str(home / "config"), "PYTHONPATH": str(stub)},
             child_argv=[sys.executable, "-u", "-c", code, rid],
         )
         assert daemon.stop_daemon(rid, grace=20) == 0
@@ -1037,7 +1041,7 @@ class TestFastChildKeepsItsVerdict:
     (it cost a real run its completion record)."""
 
     def test_fast_completion_survives_boot_confirmation(self, home, monkeypatch):
-        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home))
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home / "config"))
         stub = home / "stub"
         stub.mkdir()
         (stub / "sitecustomize.py").write_text(
@@ -1052,7 +1056,7 @@ class TestFastChildKeepsItsVerdict:
         )
         rec = daemon.start_daemon(
             "fast finish",
-            environ={"SUIJIN_WORKSPACE": str(home), "PYTHONPATH": str(stub)},
+            environ={"SUIJIN_WORKSPACE": str(home / "config"), "PYTHONPATH": str(stub)},
             confirm_seconds=10.0,
         )
         # the child completes ASYNCHRONOUSLY: boot-confirmation fires at
@@ -1074,10 +1078,10 @@ class TestFastChildKeepsItsVerdict:
         assert final["iterations"] == 1
 
     def test_dead_on_arrival_is_still_marked_dead(self, home, monkeypatch):
-        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home))
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(home / "config"))
         rec = daemon.start_daemon(
             "dies at once",
-            environ={"SUIJIN_WORKSPACE": str(home)},
+            environ={"SUIJIN_WORKSPACE": str(home / "config")},
             child_argv=[sys.executable, "-c", "raise SystemExit(2)"],
             confirm_seconds=5.0,
         )

@@ -436,3 +436,198 @@ def test_hint_inside_input_box(demo):
         if "»" in line:
             assert "tab focus" in line  # same bordered row, never pushed off
             break
+
+
+# ── 7. regressions: history-nav crash + input box crowded off ───────
+
+
+def test_history_down_from_live_never_crashes(demo):
+    """The operator crash: ↓ with an empty buffer after running a command
+    computed hist_idx = len(history) (one past the end) → IndexError on
+    the next render. Down from the live line must be a no-op for recall."""
+    ui, _, _ = demo
+    ui._execute("/sort cost")  # history: ["/sort cost"]
+    ui.focus = ui.AREAS.index("input")
+    ui.input_buf = ""
+    ui._key("\x1b[B")  # ← the crash key
+    assert ui.input_buf == ""  # nothing recalled, nothing raised
+    assert ui.hist_idx is None
+
+
+def test_history_down_past_newest_returns_to_live_line(demo):
+    ui, _, _ = demo
+    ui._execute("/sort cost")
+    ui._execute("/say hi")
+    ui.focus = ui.AREAS.index("input")
+    ui.input_buf = ""
+    ui._key("\x1b[A")
+    assert ui.input_buf == "/say hi"  # newest
+    ui._key("\x1b[B")  # ↓ past the newest exits recall…
+    assert ui.input_buf == "" and ui.hist_idx is None
+    ui._key("\x1b[A")  # …and ↑ starts over from the newest
+    assert ui.input_buf == "/say hi"
+
+
+def test_history_up_at_oldest_clamps(demo):
+    ui, _, _ = demo
+    ui._execute("/sort cost")
+    ui.focus = ui.AREAS.index("input")
+    ui.input_buf = ""
+    ui._key("\x1b[A")
+    ui._key("\x1b[A")  # ↑ at the only (oldest) entry — clamps, no crash
+    assert ui.input_buf == "/sort cost"
+    assert ui.hist_idx == 0
+
+
+def test_input_box_survives_dropdown_and_note(demo):
+    """The 'box vanishes when I type /commands' bug: suggestions + note
+    used to render INSIDE the input region (sized for the box alone) and
+    cropped the panel away. Now they live in a separate floats region and
+    the input region is fixed at the panel's height."""
+    ui, _, _ = demo
+    from rich.console import Console, Group
+
+    # floats are separate from the box
+    ui.input_buf = "/s"
+    assert ui._float_rows(), "suggestions should float"
+    box = ui._input_area()
+    assert not isinstance(box, Group)  # panel ONLY — nothing stacked on it
+
+    # full render keeps BOTH the dropdown and the box visible
+    ui._execute("/sort cost")  # leaves a note + clears the buffer
+    layout = ui._build()
+    ui._render(layout)
+    shot = Console(width=100, height=30, force_terminal=True, record=True, file=io.StringIO())
+    shot.print(layout)
+    txt = shot.export_text()
+    assert "»" in txt and "tab focus" in txt  # the box is on screen
+    assert "sorted by cost" in txt  # …and so is the note, above it
+
+    # idle: the floats region collapses and the box still owns its rows
+    ui.note = None
+    ui.input_buf = ""
+    layout = ui._build()
+    ui._render(layout)
+    assert layout["floats"].visible is False
+    shot2 = Console(width=100, height=30, force_terminal=True, record=True, file=io.StringIO())
+    shot2.print(layout)
+    assert "»" in shot2.export_text()
+
+
+def test_mesh_feed_fills_available_space(demo):
+    """The 'chat truncates while the panel still has rows' bug: the
+    budget used a phantom 6-char width penalty + a 3-row height penalty,
+    so mid-length messages were billed 2 rows while rendering as 1.
+    The feed must fill the mesh region's REAL inner height."""
+    ui, _, _ = demo
+    from rich.console import Console
+
+    ui.console = Console(width=185, height=50, force_terminal=True)
+    # 55-char messages: 2 rows under the OLD width math (53 chars),
+    # 1 row under the real inner width (60 chars)
+    ui.chat = [f"[agent:0000{i:02d}] {'x' * 40}" for i in range(80)]
+    n = len(ui._mesh_panel().renderable.plain.rstrip("\n").splitlines())
+    expected = int((50 - 1) * 36 / 88) - 2  # real region: 18 rows
+    assert n == expected, (n, expected)
+    assert n >= 18  # the old math showed only 8–9 of these messages
+
+
+def test_mesh_messages_render_whole_never_split(demo):
+    """No truncation, ever: long multi-row messages appear COMPLETE on
+    the live page — the page boundary falls BETWEEN messages, never
+    mid-message, and the newest page is the full-height one."""
+    ui, _, _ = demo
+    from rich.console import Console
+
+    ui.console = Console(width=185, height=50, force_terminal=True)
+    ui.chat = [f"[agent:{i:04d}] {'y' * 150} END{i:04d}" for i in range(30)]
+    body = ui._mesh_panel().renderable.plain
+    present = [i for i in range(30) if f"END{i:04d}" in body]
+    assert present, "nothing rendered"
+    assert present == list(range(present[0], 30)), "page must be a contiguous newest slice"
+    assert present[-1] == 29  # newest message is on the live page, complete
+    assert f"END{present[0] - 1:04d}" not in body  # boundary is BETWEEN messages
+    assert len(present) < 30  # history pages exist behind the live page
+    # scrolling to the page before shows the next-older contiguous slice
+    ui.focus = ui.AREAS.index("mesh")
+    ui._key("\x1b[A")
+    older = ui._mesh_panel().renderable.plain
+    assert f"END{present[0] - 1:04d}" in older  # the message cut off at the boundary — whole, here
+
+
+def test_mesh_arrows_page_history(demo):
+    """↑/↓ while the mesh is focused walk the feed's pages; clamped at
+    the oldest; ↓ returns to live; the title carries the page marker."""
+    ui, _, _ = demo
+    from rich.console import Console
+
+    ui.console = Console(width=185, height=50, force_terminal=True)
+    ui.chat = [f"[agent:0000{i:02d}] msg {i:02d}" for i in range(60)]
+    ui.focus = ui.AREAS.index("mesh")
+
+    live = ui._mesh_panel().renderable.plain
+    assert "msg 59" in live and "msg 41" not in live  # 18 newest: 42..59
+    ui._key("\x1b[A")  # page older
+    p2 = ui._mesh_panel().renderable.plain
+    assert "msg 41" in p2 and "msg 59" not in p2
+    assert "▲ 2/" in ui._mesh_panel().title  # page marker in the title
+    for _ in range(50):  # clamp at the oldest page
+        ui._key("\x1b[A")
+    oldest = ui._mesh_panel().renderable.plain
+    assert "msg 00" in oldest and "msg 59" not in oldest
+    ui._key("\x1b[B")
+    assert ui._mesh_scroll == 2  # one page newer than the oldest (6/18/18/18)
+    for _ in range(10):
+        ui._key("\x1b[B")
+    assert ui._mesh_scroll == 0  # back to live, floor at 0
+    assert "msg 59" in ui._mesh_panel().renderable.plain
+
+
+# ── 8. /report — operator-ordered wrap-up + self-termination ────────
+
+
+def test_report_tells_every_agent_to_wrap_up_and_end(demo):
+    """/report queues the wrap-up guidance to EVERY agent: final report
+    AND self-termination authorized — the agent ends its own run, it
+    does not idle after reporting."""
+    ui, mesh, ws = demo
+    n = len(ui.agents)
+    assert n >= 2
+    ui._execute("/report")
+    assert ui.note == f"wrap-up + report + end queued to {n} agents"
+    for a in ui.agents:
+        g = (Path(a.engagement_dir) / "state" / "live_guidance.md").read_text()
+        assert "[REPORT] OPERATOR:" in g
+        assert "final report" in g
+        assert "END the run yourself" in g  # self-termination authorized
+        assert "Self-termination authorized" in g
+
+
+def test_report_carries_operator_note_and_su_scope(demo):
+    """/report <note> appends the note; su'd into an agent, /report
+    targets just that agent."""
+    ui, mesh, ws = demo
+    ui._execute("/report focus on the SSRF chain")
+    a = ui.agents[0]
+    g = (Path(a.engagement_dir) / "state" / "live_guidance.md").read_text()
+    assert "Operator note: focus on the SSRF chain" in g
+
+    ui._execute("/su 016379")
+    tgt = ui._su_agent()
+    assert tgt is not None
+    gp = Path(tgt.engagement_dir) / "state" / "live_guidance.md"
+    before = gp.read_text()
+    ui._execute("/report")  # agent context: one agent only
+    after = gp.read_text()
+    assert after.count("[REPORT]") == before.count("[REPORT]") + 1
+    assert ui.note == "wrap-up queued — report + end, the agent reads it next turn"
+
+
+def test_report_lists_in_suggestions(demo):
+    """/report is discoverable in both contexts' dropdowns."""
+    ui, _, _ = demo
+    ui.input_buf = "/rep"
+    assert any(k.startswith("/report") for k, _ in ui._filtered_suggestions())
+    ui._execute("/su 016379")
+    ui.input_buf = "/rep"
+    assert any(k.startswith("/report") for k, _ in ui._filtered_suggestions())

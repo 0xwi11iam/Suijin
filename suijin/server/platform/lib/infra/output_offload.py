@@ -7,8 +7,6 @@ sees a summary + file path instead.
 
 from datetime import datetime, timezone
 
-from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
-
 from .tool_offload_policy import OFFLOAD_THRESHOLD, get_offload_mode
 
 
@@ -25,8 +23,12 @@ def maybe_offload(tool_name: str, output: str) -> tuple[str, bool]:
     if mode == "auto" and len(output) <= OFFLOAD_THRESHOLD:
         return output, False
 
-    # Offload
-    outputs_dir = WORKSPACE_DIR / "outputs"
+    # Offload — engagement toollogs (v7.2: no more stray outputs/ at the
+    # workspace root; a tool dump is engagement-scoped, it dies with the
+    # engagement like every other artifact)
+    from suijin.modules.platform.lib.workspace import toollogs_dir
+
+    outputs_dir = toollogs_dir()
     outputs_dir.mkdir(parents=True, exist_ok=True)
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")

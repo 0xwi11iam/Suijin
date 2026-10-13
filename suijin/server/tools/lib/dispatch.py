@@ -1201,7 +1201,7 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
   ```json
   {"tool": "record_finding", "args": {"target": "TARGET", "finding_type": "verified_cve", "rule": "CVE-2021-41773 path traversal works on /cgi-bin/.%2e/%2e%2e/etc/passwd", "evidence": "Got /etc/passwd contents in response"}}
   ```
-- **generate_report** — MANDATORY at engagement end. Creates detailed Markdown report with all findings, attack chains, Mermaid diagrams. Call BEFORE complete/claim_flag.
+- **generate_report** — MANDATORY at engagement end. Writes the report FROM THE AUDIT TRAIL automatically — do NOT paste trace/findings JSON (it gets ignored). Creates detailed Markdown report with all findings, attack chains, Mermaid diagrams. Call BEFORE complete/claim_flag.
   ```json
   {"tool": "generate_report", "args": {"engagement": "target-name"}}
   ```

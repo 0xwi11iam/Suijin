@@ -72,7 +72,7 @@ class TestAskOperatorBridge:
         gw, _ap, tmp = stores
         qid = gw.push_question("Should I pivot to 10.10.10.0/24?")
         # the file the gateway serves
-        qs = json.loads((tmp / "engagements" / "_default" / "state" / "questions.jsonl").read_text().splitlines()[0])
+        qs = json.loads((tmp / "artifacts" / "state" / "questions.jsonl").read_text().splitlines()[0])
         assert qs["id"] == qid and qs["answered"] is False
 
         # the OPERATOR answers via the gateway API
