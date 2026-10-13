@@ -85,6 +85,13 @@ _INSTALL = {
     "trufflehog": {
         "brew": "brew install trufflehog",
         "go": "go install github.com/trufflesecurity/trufflehog/v3@latest",
+        "note": "Go >=1.26 refuses this (replace directives) — install the release binary: https://github.com/trufflesecurity/trufflehog/releases",
+    },
+    "ldapsearch": {
+        # the BINARY is ldapsearch; the PACKAGE is ldap-utils (there is
+        # no ldapsearch package — the old hint could never succeed)
+        "brew": "brew install openldap",
+        "apt": "sudo apt install ldap-utils",
     },
     # ── wireless ──────────────────────────────────────────────────────
     "aircrack-ng": {"brew": "brew install aircrack-ng", "apt": "sudo apt install aircrack-ng"},
@@ -173,7 +180,31 @@ def tool_dependencies() -> dict[str, list[str]]:
 _WHICH_ALIASES = {
     "metasploit": "msfconsole",
     "metasploit-framework": "msfconsole",
+    # the apt package testssl.sh installs a binary named `testssl`
+    "testssl.sh": "testssl",
 }
+
+#: sbin dirs a minimal PATH (containers, non-login shells, orb exec)
+#: misses — the distro-run catch: john/airodump-ng/iptables installed
+#: fine and read missing forever because /usr/sbin wasn't searched.
+_SBIN_DIRS = ("/usr/sbin", "/usr/local/sbin", "/sbin")
+
+
+def which_any(name: str) -> str | None:
+    """shutil.which that ALSO searches the sbin dirs — a tool's presence
+    must not depend on how fat the caller's PATH happens to be."""
+    hit = shutil.which(name)
+    if hit:
+        return hit
+    for d in _SBIN_DIRS:
+        try:
+            hit = shutil.which(name, path=f"{d}:{shutil.os.environ.get('PATH', '')}")
+        except Exception:  # noqa: BLE001
+            hit = None
+        if hit:
+            return hit
+    return None
+
 
 # pip distribution name -> import name (a declared dep like
 # "duckduckgo-search" imports as duckduckgo_search — find_spec on the
@@ -184,12 +215,14 @@ _IMPORT_ALIASES = {
     "gvm-tools": "gvmtools",
     "python-gvm": "gvm",
     "impacket-secretsdump": "impacket",  # script shipped by the impacket dist
+    "aws": "awscli",  # pip awscli ships the `aws` script — module is awscli
 }
 
 
 def _dependency_available(dep: str) -> bool:
-    """A declared dependency is satisfied by a binary on PATH or a Python package."""
-    if shutil.which(_WHICH_ALIASES.get(dep, dep)):
+    """A declared dependency is satisfied by a binary on PATH (sbin dirs
+    included) or a Python package."""
+    if which_any(_WHICH_ALIASES.get(dep, dep)):
         return True
     name = _IMPORT_ALIASES.get(dep, dep)
     try:
