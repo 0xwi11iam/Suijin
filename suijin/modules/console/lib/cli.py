@@ -197,9 +197,13 @@ def run_doctor() -> int:
         _plat_str += ")"
     rows.append(_ok("platform", f"{_plat_str} ({_plat.machine()})"))
 
-    # FOLDER HEALTH: verify the two-folder layout
-    _cfg_dir = Path.home() / ".suijin" / "config"
-    _eng_dir = Path.home() / ".suijin" / "engagements"
+    # FOLDER HEALTH: verify the two-folder layout at the ACTUAL workspace
+    # (honors SUIJIN_WORKSPACE — the distro-run catch: this row used to
+    # probe the machine home and cry wolf under an override)
+    import suijin.modules.platform.lib.workspace as ws
+
+    _cfg_dir = ws.WORKSPACE_DIR
+    _eng_dir = ws.engagements_root()
     _folder_issues = []
     if _cfg_dir.is_dir():
         _cfg_count = len(list(_cfg_dir.iterdir()))
@@ -213,7 +217,7 @@ def run_doctor() -> int:
     else:
         _folder_issues.append("engagements/ missing")
         _eng_count = 0
-    _old_ws = Path.home() / ".suijin" / "workspace"
+    _old_ws = ws.base_dir() / "workspace"
     if _old_ws.is_dir():
         _folder_issues.append("old workspace/ exists (migrate: delete after confirming new layout)")
     if _folder_issues:
