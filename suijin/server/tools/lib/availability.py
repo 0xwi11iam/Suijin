@@ -93,6 +93,12 @@ _INSTALL = {
         "brew": "brew install openldap",
         "apt": "sudo apt install ldap-utils",
     },
+    "iptables": {  # the python `iptables` dist is NOT the firewall tool
+        "brew": "brew install iptables",
+        "apt": "sudo apt install iptables",
+        "note": "the CLI binary — not the same-named pip package",
+    },
+    "sudo": {"note": "preinstalled on every Linux; macOS: not applicable"},
     # ── wireless ──────────────────────────────────────────────────────
     "aircrack-ng": {"brew": "brew install aircrack-ng", "apt": "sudo apt install aircrack-ng"},
     "airodump-ng": {"note": "ships with aircrack-ng (brew install aircrack-ng / sudo apt install aircrack-ng)"},
