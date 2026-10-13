@@ -203,6 +203,59 @@ class TestInterruptSemantics:
         assert len(agent._graph.astream_calls) >= 2, "the loop never resumed after the interrupt"
 
 
+class TestOperatorPause:
+    """`/pause` from `suijin operator` must land like the engagement TUI's
+    own /pause: MID-TURN interrupt → pause console → resume — not a flag
+    that only takes effect at the next turn boundary (turns run minutes)."""
+
+    def _mesh(self, monkeypatch, tmp_path):
+        from suijin.modules.agent.lib import mesh as _meshmod
+
+        monkeypatch.setattr(_meshmod, "mesh_dir", lambda: tmp_path)
+        return tmp_path / "pause-operator"
+
+    def test_watcher_fires_once_per_placement(self, monkeypatch, tmp_path):
+        flag = self._mesh(monkeypatch, tmp_path)
+        w = rt._OperatorPauseWatch()
+        assert w.hit() is False  # no flag
+        flag.write_text("paused by operator\n")
+        assert w.hit() is True  # placement fires ONCE
+        assert w.hit() is False  # …then stays quiet while it persists
+        assert w.hit() is False
+        flag.unlink()
+        assert w.hit() is False  # absence re-arms silently
+        flag.write_text("again\n")  # operator re-pauses → fires again
+        assert w.hit() is True
+        assert w.hit() is False
+
+    def test_operator_flag_midturn_pauses_not_ends(self, isolated, monkeypatch, tmp_path):
+        """Flag appears mid-stream: the loop must PAUSE (console opens,
+        operator /resume modeled by removing the flag) and re-stream —
+        never park forever at the boundary hold, never end the run."""
+        flag = self._mesh(monkeypatch, tmp_path)
+        paused = []
+
+        def fake_console(ctx, input_fn):
+            paused.append(True)
+            flag.unlink()  # operator /resume during the session
+            return ""
+
+        monkeypatch.setattr(rt.sc, "pause_console", fake_console)
+
+        async def flagged_then_ok(ig):
+            if len(ig.astream_calls) == 1:
+                flag.write_text("paused by operator\n")
+                return []  # sentinel immediately after the placement
+            return _ok_events()
+
+        agent = FakeAgent([flagged_then_ok])
+        isolated(agent)
+        out = _run()
+        assert out.get("completion_reason") == "objective_complete"
+        assert paused, "the operator flag never opened the pause console"
+        assert len(agent._graph.astream_calls) >= 2, "the loop never resumed after the operator pause"
+
+
 class TestAskFlow:
     def test_ask_holds_the_graph_and_injects(self, isolated, monkeypatch):
         """ask_operator = real pause: the stream is held (cancelled), the

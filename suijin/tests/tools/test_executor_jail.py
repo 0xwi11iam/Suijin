@@ -160,9 +160,12 @@ class TestExecuteTerminalWiring:
 
     @pytest.fixture
     def eng_ws(self, tmp_path, monkeypatch):
+        """v7.2: WORKSPACE_DIR=<tmp>/config, so base_dir()=<tmp> and the
+        agent home confines to <tmp>/engagements/_default/home."""
         from suijin.modules.platform.lib import workspace as ws
 
-        monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+        monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path / "config")
+        ws._reset_engagement()
         return tmp_path
 
     def test_home_and_pwd_confined(self, eng_ws):

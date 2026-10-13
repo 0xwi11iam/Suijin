@@ -56,14 +56,18 @@ def _engagement_key() -> str:
 
 
 def _audit_dir(key: str | None = None) -> _P:
-    """audit_trails dir for this engagement (or the override for tests)."""
+    """audit_trails dir for this engagement (or the override for tests).
+    key=None = the CLI-calls trail with NO engagement active — that one
+    parks at config/audit/ (v7.2: an idle `suijin doctor` must not
+    conjure a _default engagement dir out of a read-only path)."""
     if _overridden_dir is not None:
         return _overridden_dir
-    from suijin.modules.platform.lib.workspace import engagement_dir
+    from suijin.modules.platform.lib import workspace as _ws
 
-    eng = engagement_dir()
-    base = _P(eng) if eng is not None else _P.home() / ".suijin" / "workspace"
-    d = base / "audit_trails"
+    if _ws._CURRENT_ENGAGEMENT is None and _overridden_key is None:
+        d = _P(_ws.WORKSPACE_DIR) / "audit"
+    else:
+        d = _P(_ws.engagement_dir()) / "audit_trails"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -203,6 +207,33 @@ def log_finding(finding_type: str, severity: str, endpoint: str, description: st
     _save(key)
 
 
+def report_inputs(trail: dict) -> tuple:
+    """(trace, findings, cost, completion) from a trail — the ONE remap
+    every report writer uses. Iterations become the exporter's step
+    shape (tool_name/tool_args/tool_output/thought/…)."""
+    trace = [
+        {
+            "iteration": it.get("iteration"),
+            "phase": it.get("phase"),
+            "thought": it.get("thought", ""),
+            "reasoning": it.get("reasoning", ""),
+            "tool_name": (it.get("action") or {}).get("tool"),
+            "tool_args": (it.get("action") or {}).get("args") or {},
+            "tool_output": it.get("observation", ""),
+            "success": (it.get("action") or {}).get("success", True),
+        }
+        for it in trail.get("iterations", [])
+    ]
+    completion = ""
+    for it in reversed(trail.get("iterations", [])):
+        if it.get("completion_reason"):
+            completion = str(it["completion_reason"])
+            break
+    if not completion and trail.get("ended"):
+        completion = "ended"
+    return trace, trail.get("findings", []), float(trail.get("cost_usd") or 0.0), completion
+
+
 def end_audit(cost_usd: float = 0.0):
     """Conclude THIS engagement's trail — forced write + markdown export.
     Other engagements' trails are untouched."""
@@ -229,6 +260,23 @@ def end_audit(cost_usd: float = 0.0):
                 trail_data.get("findings") or [],
                 trail_data.get("iterations") or [],
             )
+    # AUTO-REPORT (v7.2): the FINAL engagement report from the trail —
+    # real findings, real thoughts, real cost. One file, conclusion-
+    # stamped: reports/final_report.md. Best-effort, never blocks.
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.report_exporter import generate_report
+
+        trace, findings, cost, completion = report_inputs(trail)
+        generate_report(
+            str(trail.get("engagement") or "engagement"),
+            trace,
+            findings,
+            {},
+            [],
+            cost,
+            completion,
+            final=True,
+        )
     with _meta_lock:
         _trails.pop(key, None)
         _locks.pop(key, None)
@@ -237,6 +285,32 @@ def end_audit(cost_usd: float = 0.0):
 
 
 # ── persistence ──────────────────────────────────────────────────────────
+
+
+def current_trail(engagement_name: str | None = None) -> dict | None:
+    """The engagement's trail — live in-memory if this process runs it,
+    else the persisted JSON from audit_trails/. THE source of truth for
+    reports: findings carry real keys (severity/type/endpoint/
+    description/evidence), iterations carry thought+action+output, and
+    cost/completion ride along. Reports must NEVER trust model-pasted
+    JSON again (the hollow-report bug: truncated hand-serialization,
+    empty finding rows, $0 cost)."""
+    fname = None
+    if engagement_name:
+        fname = str(engagement_name).replace("/", "_").replace(" ", "_").replace(":", "_")[:60]
+        for t in _trails.values():
+            if t.get("engagement") == engagement_name:
+                return t
+    elif _trails:
+        return max(_trails.values(), key=lambda t: str(t.get("started", "")))
+    if fname:
+        p = _audit_dir() / f"{fname}.json"
+        if p.is_file():
+            try:
+                return json.loads(p.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return None
+    return None
 
 
 def _save(key: str, force: bool = False):

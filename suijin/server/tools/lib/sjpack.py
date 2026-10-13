@@ -55,7 +55,7 @@ def _now() -> str:
 def _workspace_out(name: str) -> Path:
     from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-    d = WORKSPACE_DIR / "outputs"
+    d = WORKSPACE_DIR / "packs"
     d.mkdir(parents=True, exist_ok=True)
     return d / name
 

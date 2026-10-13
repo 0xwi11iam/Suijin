@@ -39,7 +39,7 @@ class TestKernelSurface:
         ctx, _ = controller.boot(module_roots=[SERVER, MODULES], workspace=tmp_path, quiet=True)
         ctx.call_tool("search_kb", {"keyword": "sqli"})
         ctx.tool_audit.flush()
-        raw = (tmp_path / "engagements" / "_default" / "audit_trails" / "tool_calls.jsonl").read_text()
+        raw = (tmp_path / "artifacts" / "audit_trails" / "tool_calls.jsonl").read_text()
         assert "sqli" not in raw  # the VALUE never appears
         entry = json.loads(raw.strip().splitlines()[-1])
         assert entry["args"]["keys"] == ["keyword"]
@@ -61,10 +61,10 @@ class TestKernelSurface:
         ctx, _ = controller.boot(module_roots=[SERVER, MODULES], workspace=tmp_path, quiet=True)
         ctx.call_tool("search_kb", {"keyword": "a"})
         ctx.tool_audit.flush()
-        first = (tmp_path / "engagements" / "_default" / "audit_trails" / "tool_calls.jsonl").read_text()
+        first = (tmp_path / "artifacts" / "audit_trails" / "tool_calls.jsonl").read_text()
         ctx.call_tool("search_kb", {"keyword": "b"})
         ctx.tool_audit.flush()
-        second = (tmp_path / "engagements" / "_default" / "audit_trails" / "tool_calls.jsonl").read_text()
+        second = (tmp_path / "artifacts" / "audit_trails" / "tool_calls.jsonl").read_text()
         assert second.startswith(first) and len(second) > len(first)
         ctx.shutdown()
 
@@ -77,7 +77,7 @@ class TestCliSurface:
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
         ws._reset_engagement()  # hermetic: no engagement pinned from another test
         ws._reset_engagement()  # hermetic: no engagement pinned from another test
-        audit_dir = tmp_path / "engagements" / "_default" / "audit_trails"
+        audit_dir = tmp_path / "audit"  # v7.2: idle CLI-verb audits park at config/audit
         import contextlib
         import io
 
@@ -104,7 +104,7 @@ class TestAgentSurface:
         state = {"_current_step": {"tool_name": "search_kb", "tool_args": {"keyword": "x"}}, "current_iteration": 3}
         out = asyncio.run(execute_tool_node(state, route_tool_fn=fake_route))
         assert out["_tool_result"]["success"]
-        path = tmp_path / "engagements" / "_default" / "audit_trails" / "agent_steps.jsonl"
+        path = tmp_path / "artifacts" / "audit_trails" / "agent_steps.jsonl"
         assert path.exists(), "agent step left no audit entry"
         entry = json.loads(path.read_text().strip().splitlines()[-1])
         assert entry["surface"] == "agent"

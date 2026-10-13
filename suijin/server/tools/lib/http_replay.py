@@ -58,10 +58,9 @@ _ERROR_SIGS = [
 
 
 def _traffic_path() -> Path:
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR, engagement_dir
+    from suijin.modules.platform.lib.workspace import engagement_dir
 
-    base = engagement_dir() or (WORKSPACE_DIR / "outputs" / "engagements" / "_default")
-    base = Path(base)
+    base = Path(engagement_dir())
     base.mkdir(parents=True, exist_ok=True)
     return base / "traffic.jsonl"
 

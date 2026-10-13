@@ -12,7 +12,12 @@ from suijin.modules.platform.lib.infra.tool_offload_policy import get_offload_mo
 class TestOutputOffload:
     @pytest.fixture(autouse=True)
     def _ws(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(oo, "WORKSPACE_DIR", tmp_path)
+        from suijin.modules.platform.lib import workspace as ws
+
+        eng = tmp_path / "eng"
+        (eng / "toollogs").mkdir(parents=True)
+        monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path / "config")
+        monkeypatch.setattr(ws, "_CURRENT_ENGAGEMENT", eng)
 
     def test_never_policy_passthrough(self):
         out, offloaded = oo.maybe_offload("search_kb", "x" * 200_000)
@@ -28,8 +33,8 @@ class TestOutputOffload:
         out, offloaded = oo.maybe_offload("nmap_scan", big)
         assert offloaded is True
         assert "[OUTPUT OFFLOADED" in out
-        assert str(tmp_path / "outputs") in out
-        files = list((tmp_path / "outputs").glob("nmap_scan_*.txt"))
+        assert "toollogs" in out  # engagement-scoped dump, not workspace outputs/
+        files = list((tmp_path / "eng" / "toollogs").glob("nmap_scan_*.txt"))
         assert len(files) == 1 and files[0].read_text() == big
         assert "middle truncated" in out  # head+tail digest, bounded
 

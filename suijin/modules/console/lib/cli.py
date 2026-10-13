@@ -207,7 +207,9 @@ def run_doctor() -> int:
         _folder_issues.append("config/ missing")
         _cfg_count = 0
     if _eng_dir.is_dir():
-        _eng_count = len([d for d in _eng_dir.iterdir() if d.is_dir()])
+        _eng_count = len(
+            [d for d in _eng_dir.iterdir() if d.is_dir() and d.name != "_default" and not d.name.startswith(".")]
+        )
     else:
         _folder_issues.append("engagements/ missing")
         _eng_count = 0
@@ -378,16 +380,18 @@ def run_doctor() -> int:
     except Exception as e:
         rows.append(_warn("knowledge base", str(e)))
 
-    # Workspace layout (canonical root dir + inner symlink)
+    # Workspace layout (v7.2 clean layout: config/ + engagements/)
     try:
         import suijin.modules.platform.lib.workspace as ws
 
-        ws.ensure_workspace_layout()
+        ws.ensure_global_layout()
         inner = ws.PROJECT_DIR / "suijin" / "suijin_agent"
-        if inner.is_symlink():
-            rows.append(_ok("workspace", f"{ws.WORKSPACE_DIR} (symlink ok)"))
+        if inner.exists() or inner.is_symlink():
+            rows.append(_warn("workspace", "retired suijin_agent path still exists (safe to delete)"))
+        elif ws.WORKSPACE_DIR.name == "config" or os.environ.get("SUIJIN_WORKSPACE"):
+            rows.append(_ok("workspace", f"{ws.WORKSPACE_DIR} (clean layout)"))
         else:
-            rows.append(_warn("workspace", "suijin/suijin_agent is not a symlink -> ../suijin_agent"))
+            rows.append(_warn("workspace", f"non-standard workspace: {ws.WORKSPACE_DIR}"))
     except Exception as e:
         rows.append(_warn("workspace", str(e)))
 
@@ -806,18 +810,23 @@ def run_workspace_status() -> int:
     import suijin.modules.platform.lib.workspace as ws
 
     console = _RC()
-    ws.ensure_workspace_layout()
-    inner = ws.PROJECT_DIR / "suijin" / "suijin_agent"
+    ws.ensure_global_layout()
     console.print(f"[bold white]workspace:[/bold white] [cyan]{ws.WORKSPACE_DIR}[/cyan]")
-    sym_ok = inner.is_symlink()
-    console.print(
-        "[bold white]symlink:[/bold white]   "
-        + (
-            "[green]suijin/suijin_agent -> ../suijin_agent (ok)[/green]"
-            if sym_ok
-            else "[red]MISSING — run: suijin selftest[/red]"
-        )
+    eng = ws.engagements_root()
+    n_eng = (
+        len([d for d in eng.iterdir() if d.is_dir() and d.name != "_default" and not d.name.startswith(".")])
+        if eng.is_dir()
+        else 0
     )
+    import os as _os
+
+    if _os.environ.get("SUIJIN_WORKSPACE"):
+        layout = f"[green]custom (SUIJIN_WORKSPACE) — {n_eng} engagement(s) at {eng}[/green]"
+    elif ws.WORKSPACE_DIR.name == "config":
+        layout = f"[green]v7.2 clean — {n_eng} engagement(s) at {eng}[/green]"
+    else:
+        layout = f"[yellow]non-standard workspace: {ws.WORKSPACE_DIR}[/yellow]"
+    console.print(f"[bold white]layout:[/bold white]     {layout}")
     t = Table(box=None, pad_edge=False, show_header=True, header_style="dim")
     t.add_column("entry", style="white", max_width=28, no_wrap=True, overflow="ellipsis")
     t.add_column("files", justify="right", style="dim", width=6, no_wrap=True)
@@ -841,7 +850,7 @@ def run_workspace_status() -> int:
                 t.add_row(Text(entry.name, style=style), "", f"{size / 1024:.0f} KB")
     t.add_row(Text("total", style="bold"), "", f"{total / 1024 / 1024:.1f} MB", style="bold")
     console.print(t)
-    return 0 if sym_ok else 1
+    return 0
 
 
 def run_reports_list() -> int:
@@ -2593,6 +2602,7 @@ def _audit_cli_call(args):
     """One audit line per CLI verb invocation (never raises)."""
     try:
         from suijin.kernel.audit import ToolAudit
+        from suijin.modules.platform.lib import workspace as _ws
 
         verb = getattr(args, "command", "") or "?"
         tool_args = {
@@ -2600,7 +2610,10 @@ def _audit_cli_call(args):
             for k, v in vars(args).items()
             if k not in ("func", "command") and isinstance(v, (str, int, bool, float))
         }
-        ToolAudit(_ad("audit_trails"), "cli_calls.jsonl", flush_every=1).record(
+        # v7.2: a CLI verb with no live engagement logs to config/audit —
+        # never conjure a _default engagement dir from a read-only verb
+        _aud = _ws.audit_dir()
+        ToolAudit(_aud, "cli_calls.jsonl", flush_every=1).record(
             surface="cli", name=verb, args=tool_args, outcome="invoked"
         )
     except Exception:  # noqa: BLE001 — audit must never break the CLI

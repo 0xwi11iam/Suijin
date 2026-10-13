@@ -144,7 +144,7 @@ def executor_env(root: Path | None = None) -> dict:
     churn so heavy the operator couldn't type, and the tree stays behind
     as garbage. One shared cache inside the workspace serves every
     engagement; the sandbox profile already allows writes there."""
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR, home_dir
+    from suijin.modules.platform.lib.workspace import home_dir
 
     env = os.environ.copy()
     home = Path(home_dir()) if root is None else Path(root) / "home"
@@ -153,8 +153,10 @@ def executor_env(root: Path | None = None) -> dict:
         tmp.mkdir(parents=True, exist_ok=True)
     env["HOME"] = str(home)
     env["TMPDIR"] = str(tmp)
-    with contextlib.suppress(OSError):
-        browsers = Path(WORKSPACE_DIR) / "caches" / "ms-playwright"
+    with contextlib.suppress(Exception):
+        from suijin.modules.platform.lib.workspace import caches_dir
+
+        browsers = caches_dir() / "ms-playwright"
         browsers.mkdir(parents=True, exist_ok=True)
         env.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(browsers))
     return env

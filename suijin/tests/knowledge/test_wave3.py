@@ -62,7 +62,7 @@ class TestEvidence:
         ok, _ = evidence.verify_chain()
         assert ok
         # tamper with the first record's evidence
-        chain_path = tmp_path / "engagements" / "_default" / "evidence" / "chain.json"
+        chain_path = tmp_path / "artifacts" / "evidence" / "chain.json"
         chain = json.loads(chain_path.read_text())
         chain[0]["evidence_text"] = "fabricated"
         chain_path.write_text(json.dumps(chain))

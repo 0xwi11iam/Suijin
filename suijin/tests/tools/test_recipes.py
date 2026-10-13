@@ -66,7 +66,8 @@ class TestMiner:
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
-        d = tmp_path / "engagements" / "_default" / "audit_trails"
+        ws._reset_engagement()
+        d = tmp_path / "artifacts" / "audit_trails"  # v7.2 idle parking (no _default conjuring)
         d.mkdir(parents=True)
         seq = [{"tool": t, "success": True} for t in ("a", "b", "c")]
         for name in ("eng1", "eng2"):

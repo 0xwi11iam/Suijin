@@ -22,6 +22,20 @@ SCHEMA_PATH = None
 RECOVERY_PATH = None
 
 
+def _save_schema(schema: dict, default=None) -> None:
+    """Write the schema, ensuring the engagement dir exists (v7.2:
+    engagement_dir() no longer conjures _default on read — a real write
+    creates its own home)."""
+    import json as _json
+
+    path = _schema_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if default is not None:
+        path.write_text(_json.dumps(schema, indent=2, default=default))
+    else:
+        path.write_text(_json.dumps(schema, indent=2))
+
+
 def _schema_path():
     v = globals().get("SCHEMA_PATH")
     if v is not None:
@@ -83,20 +97,20 @@ def load_engagement_schema() -> dict:
         schema = dict(DEFAULT_SCHEMA)
         schema["created_at"] = _utc_now()
         schema["updated_at"] = _utc_now()
-        _schema_path().write_text(json.dumps(schema, indent=2))
+        _save_schema(schema)
         return schema
     try:
         return json.loads(_schema_path().read_text())
     except json.JSONDecodeError:
         logger.warning("Corrupt engagement schema — regenerating")
-        _schema_path().write_text(json.dumps(DEFAULT_SCHEMA, indent=2))
+        _save_schema(DEFAULT_SCHEMA)
         return dict(DEFAULT_SCHEMA)
 
 
 def save_engagement_schema(schema: dict) -> None:
     """Persist the engagement schema to disk."""
     schema["updated_at"] = _utc_now()
-    _schema_path().write_text(json.dumps(schema, indent=2, default=str))
+    _save_schema(schema, default=str)
 
 
 def update_engagement_stats(**kwargs) -> None:

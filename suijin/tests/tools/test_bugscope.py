@@ -54,7 +54,7 @@ class TestH1:
         with mock.patch.object(bs.requests, "get", side_effect=[_Resp(programs_page), _Resp(scope_page)]):
             out = bs.scope_pull("h1", "user:tok")
         assert "pulled 2 scope entries across 1 program" in out
-        rows = json.loads((tmp_path / "engagements" / "_default" / "bugscope" / "h1.json").read_text())
+        rows = json.loads((tmp_path / "bugscope" / "h1.json").read_text())
         assert rows[0]["asset"] == "*.github.com" and rows[0]["eligible"] is True
 
     def test_basic_auth_form(self):
@@ -102,7 +102,7 @@ class TestBugcrowd:
             bs.requests, "get", side_effect=[_Resp(list_page), _Resp({}, text=program_html), _Resp(brief_doc)]
         ):
             bs.scope_pull("bugcrowd", "sess-tok")
-        rows = json.loads((tmp_path / "engagements" / "_default" / "bugscope" / "bugcrowd.json").read_text())
+        rows = json.loads((tmp_path / "bugscope" / "bugcrowd.json").read_text())
         by_asset = {r["asset"]: r for r in rows}
         assert by_asset["*.acme.com"]["eligible"] is True
         assert by_asset["*.acme.com"]["type"] == "website"
@@ -119,7 +119,7 @@ class TestBugcrowd:
             side_effect=[_Resp(self._list_page(["/engagements/x"])), _Resp({}, text="<html>no api</html>")],
         ):
             bs.scope_pull("bugcrowd", "t")
-        rows = json.loads((tmp_path / "engagements" / "_default" / "bugscope" / "bugcrowd.json").read_text())
+        rows = json.loads((tmp_path / "bugscope" / "bugcrowd.json").read_text())
         assert rows == []
 
 
@@ -141,7 +141,7 @@ class TestYWH:
         }
         with mock.patch.object(bs.requests, "get", side_effect=[_Resp(listing), _Resp(detail)]):
             bs.scope_pull("ywh", "tok")
-        rows = json.loads((tmp_path / "engagements" / "_default" / "bugscope" / "ywh.json").read_text())
+        rows = json.loads((tmp_path / "bugscope" / "ywh.json").read_text())
         by_asset = {r["asset"]: r for r in rows}
         assert by_asset["*.acme.com"]["eligible"] is True
         assert by_asset["legacy.acme.com"]["eligible"] is False  # out_of_scope wins
@@ -181,7 +181,7 @@ class TestIntigriti:
         with mock.patch.object(bs.requests, "get", side_effect=grab):
             bs.scope_pull("intigriti", "tok")
         assert any("offset=0" in u for u in calls)
-        rows = json.loads((tmp_path / "engagements" / "_default" / "bugscope" / "intigriti.json").read_text())
+        rows = json.loads((tmp_path / "bugscope" / "intigriti.json").read_text())
         assert {r["asset"] for r in rows} == {"https://acme.com", "https://api.acme.com"}
 
 
@@ -201,7 +201,7 @@ class TestImmunefi:
             bs.requests, "get", side_effect=[_Resp({}, text=listing_html), _Resp({}, text=program_html)]
         ):
             bs.scope_pull("immunefi", "tok")
-        rows = json.loads((tmp_path / "engagements" / "_default" / "bugscope" / "immunefi.json").read_text())
+        rows = json.loads((tmp_path / "bugscope" / "immunefi.json").read_text())
         assert len(rows) == 1  # invite-only skipped
         assert rows[0]["asset"] == "https://acme.io"
         assert rows[0]["type"] == "web"
@@ -250,7 +250,7 @@ class TestSearch:
         from suijin.modules.platform.lib import workspace as ws
 
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
-        d = tmp_path / "engagements" / "_default" / "bugscope"
+        d = tmp_path / "bugscope"
         d.mkdir(parents=True)
         (d / "h1.json").write_text(
             json.dumps(

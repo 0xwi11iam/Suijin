@@ -314,7 +314,12 @@ class TestRecentBundlesAndPicker:
         assert eb.pick_bundle() == p2
         assert "non-interactive" in capsys.readouterr().out
 
-    def test_pick_empty_inbox(self, capsys):
+    def test_pick_empty_inbox(self, capsys, monkeypatch, tmp_path):
+        # hermetic: another test's bundles in the shared sandbox
+        # engagements root must not leak into the picker
+        import suijin.modules.platform.lib.workspace as ws
+
+        monkeypatch.setattr(ws, "engagements_root", lambda: tmp_path)
         assert eb.pick_bundle() is None
         assert "no saved engagements" in capsys.readouterr().out
 

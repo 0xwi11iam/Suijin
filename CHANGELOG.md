@@ -8,6 +8,19 @@ All notable changes to Suijin.
 
 ## Unreleased
 
+- **v7.2 clean workspace layout** — `~/.suijin` now holds exactly
+  `config/` (profiles, skills, packs, prompt content, operator
+  settings) and `engagements/` (one folder per run, everything it owns)
+  plus system `logs/` and `caches/`. The old catch-all `workspace/`
+  tree (outputs/, nested logs/, root-level strays) is retired with a
+  one-time migration; aborted launches no longer leave empty paired
+  engagement folders (husks are pruned at run end)
+- **Reports rebuilt on the audit trail** — `generate_report` reads the
+  engagement's recorded trail (real findings, thoughts, cost,
+  completion) instead of model-pasted JSON that truncated into empty
+  rows and $0.00 totals; one overwriting `report.md` per engagement
+  plus an automatic `final_report.md` at conclusion — no timestamped
+  spam copies
 - **System One assessor** — the heuristic detector stack is replaced by
   one semantic assessment per interval (laya → LLM → loudest-detector
   fallbacks, silence-dominant, shadow-logged for fine-tuning)
@@ -29,6 +42,18 @@ All notable changes to Suijin.
   output panes, live token gauge, session-fetched token counts
 - **Reporting** — per-finding BBP submission generator (CWE/impact/
   remediation) and agent userland (`state`/`tools`/`help`)
+- **Operator TUI fixes** — history navigation no longer crashes on ↓
+  after a command (bounds-safe readline semantics: ↓ past newest exits
+  to the live line), the command box keeps its rows while the
+  suggestion dropdown / command feedback shows (they render in their own
+  region instead of cropping the box away), the mesh chat feed renders
+  whole messages measured with the real renderer and pages back through
+  history (↑/↓ while focused), and `/pause` from the operator console
+  now interrupts agents mid-turn (pause console opens) exactly like the
+  engagement TUI's own `/pause`
+- **`/report` in the operator console** — orders every agent (or the
+  su'd one) to wrap up: final report, then SELF-TERMINATE with an honest
+  completion reason; optional note rides the guidance line
 
 ## v7.1.0 — The Clean Memory Release
 

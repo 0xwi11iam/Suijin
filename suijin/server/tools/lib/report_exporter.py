@@ -41,15 +41,20 @@ def generate_report(
     cost_usd: float = 0.0,
     completion_reason: str = "",
     attack_chains: list = None,
+    final: bool = False,
 ) -> str:
-    """Generate a comprehensive engagement report in Markdown with Mermaid diagrams."""
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    """Generate the engagement report in Markdown with Mermaid diagrams.
+
+    v7.2 file policy (the report-spam ruling): ONE overwriting
+    `report.md` per engagement while running (`final=True` writes
+    `final_report.md` at conclusion) + ONE `data.json` — no more
+    timestamped copies accumulating per model call."""
     fname = engagement_name.replace("/", "_").replace(" ", "_").replace(":", "_")[:60]
-    path = _reports_dir() / f"{fname}_report_{ts}.md"
+    path = _reports_dir() / ("final_report.md" if final else "report.md")
     _ensure_dir()
     report_dir = _reports_dir() / fname
     report_dir.mkdir(parents=True, exist_ok=True)
-    json_path = report_dir / f"data_{ts}.json"
+    json_path = report_dir / "data.json"
 
     # Save full JSON data
     json_path.write_text(

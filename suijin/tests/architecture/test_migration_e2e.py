@@ -124,8 +124,12 @@ def test_medusa_to_suijin_migration(fake_machine, tmp_path):
     text = launcher.read_text()
     assert "suijin/modules/console/lib/cli.py" in text
 
-    # 4. the symlink contract holds in the installed tree
-    assert (installed_repo / "suijin" / "suijin_agent").is_symlink()
+    # 4. v7.2: the repo suijin_agent symlink is RETIRED — the merge
+    # contract holds, the link is gone (and must stay gone)
+    assert (
+        not (installed_repo / "suijin" / "suijin_agent").exists()
+        or not (installed_repo / "suijin" / "suijin_agent").is_symlink()
+    )
 
 
 def test_migration_via_python_layout_function(fake_machine, tmp_path):
@@ -141,7 +145,7 @@ def test_migration_via_python_layout_function(fake_machine, tmp_path):
     changed = ensure_workspace_layout(base_dir=src / "suijin", workspace_dir=src / "suijin_agent")
     assert changed is True
     assert (src / "suijin_agent" / "audit_trails" / "e.json").exists()
-    assert (src / "suijin" / "suijin_agent").is_symlink()
+    assert not (src / "suijin" / "suijin_agent").is_symlink()  # v7.2: retired
     # legacy root gone (renamed), no dangling inner entries left
     assert not legacy.exists()
     assert not (src / "suijin" / "medusa_agent").exists()

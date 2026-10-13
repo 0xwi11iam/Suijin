@@ -214,12 +214,13 @@ def test_a_ended_run_is_saved_and_returns_to_the_menu(driven):
 
 
 def test_the_crash_log_lands_in_outputs_logs():
-    """The crash panel promises outputs/logs/engage_crash.log — that is
-    where it must actually be written (it used to go to <ws>/logs, where
-    the operator would never find it)."""
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR, logs_dir
+    """The crash panel promises the run log dir — v7.2: base/logs
+    (WORKSPACE_DIR.parent/logs), never under config/ or an engagement
+    (the old outputs/logs path is retired with the restructure)."""
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR, base_dir, logs_dir
 
-    assert logs_dir() == WORKSPACE_DIR / "outputs" / "logs"
+    assert logs_dir() == base_dir() / "logs"
+    assert logs_dir() == WORKSPACE_DIR.parent / "logs"
     assert logs_dir().is_dir()
 
     import inspect

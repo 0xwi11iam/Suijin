@@ -23,9 +23,9 @@ from suijin.modules.agent.lib.event_log import read_events, replay
 
 
 def _engagement_dirs() -> Iterator[Path]:
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+    from suijin.modules.platform.lib.workspace import engagements_root
 
-    engs = WORKSPACE_DIR / "engagements"
+    engs = engagements_root()
     if engs.is_dir():
         yield from sorted(engs.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
 
@@ -65,7 +65,7 @@ def resumable_engagements() -> list[dict]:
 
 def _resolve_journal(ref: str) -> Path:
     """A path to the events.jsonl, an engagement dir, or a slug."""
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+    from suijin.modules.platform.lib.workspace import engagements_root
 
     p = Path(str(ref)).expanduser()
     if p.is_file() and p.name == "events.jsonl":
@@ -75,7 +75,7 @@ def _resolve_journal(ref: str) -> Path:
         if j.is_file():
             return j
     slug = Path(str(ref).strip().strip("/")).name
-    cand = WORKSPACE_DIR / "engagements" / slug / "events.jsonl"
+    cand = engagements_root() / slug / "events.jsonl"
     return cand
 
 

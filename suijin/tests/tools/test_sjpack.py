@@ -302,7 +302,7 @@ class TestRoundTrip:
 
     def test_rent_ledger_counters(self, tmp_path):
         sjpack.build(str(EXAMPLES / "headerpeek"), note="n", out=str(tmp_path / "hp.sjm"))
-        stats = json.loads((tmp_path / "outputs" / "pack_stats.json").read_text())
+        stats = json.loads((tmp_path / "packs" / "pack_stats.json").read_text())
         assert stats["built"]["headerpeek"] == 1
 
     def test_inspect_reports_clean_seal(self, tmp_path):

@@ -513,9 +513,9 @@ def _default_handlers(box: RunBox) -> dict:
 
     def out(args):
         """`/out` — list offloaded tool outputs; `/out <name-part>` — print one."""
-        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+        from suijin.modules.platform.lib.workspace import toollogs_dir
 
-        od = WORKSPACE_DIR / "outputs"
+        od = toollogs_dir()
         files = sorted(od.glob("*.txt"), key=lambda p: p.stat().st_mtime, reverse=True) if od.is_dir() else []
         if not files:
             box._out.print("[dim]  ▸ no offloaded outputs[/dim]")

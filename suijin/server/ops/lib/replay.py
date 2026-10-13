@@ -28,15 +28,15 @@ def _iter_audit_files() -> list[Path]:
     """Every audit trail on disk: the live engagement + all past ones
     (engagement folders stay in place at run end — history is finally
     enumerable) + the legacy root path while it still has content."""
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR, engagement_dir
+    from suijin.modules.platform.lib.workspace import engagement_dir, engagements_root
 
     roots = []
     with contextlib.suppress(Exception):
-        engs = WORKSPACE_DIR / "engagements"
+        engs = engagements_root()
         if engs.is_dir():
             roots.extend(sorted(engs.glob("*/audit_trails")))
     roots.append(engagement_dir() / "audit_trails")  # live one last (newest)
-    legacy = WORKSPACE_DIR / "outputs" / "audit_trails"
+    legacy = Path.home() / ".suijin" / "workspace" / "outputs" / "audit_trails"
     if legacy.is_dir():
         roots.insert(0, legacy)
     files: dict[str, Path] = {}

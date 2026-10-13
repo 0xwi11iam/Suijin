@@ -80,10 +80,15 @@ class TestInitRuntime:
         with contextlib.suppress(AttributeError):  # v4.2: runtime reads the workspace module directly
             monkeypatch.setattr(rt, "WORKSPACE_DIR", tmp_path)
         rt.init_runtime(force=True)
-        # 2026-09-16 layout: global skeleton at the root, engagement tree
-        # generated per engagement (set_engagement)
-        for name in ("profiles", "skills", "logs"):  # v3: exports/archive retired — bundles live in engagements
+        # v7.2 clean layout: config/{profiles,skills,packs} at the
+        # workspace root; logs/ + caches/ + engagements/ at the BASE
+        # (parent); nothing else anywhere
+        for name in ("profiles", "skills", "packs"):
             assert (tmp_path / name).is_dir(), f"{name}"
+        for name in ("engagements", "logs", "caches"):
+            assert (tmp_path.parent / name).is_dir(), f"base/{name}"
+        assert not (tmp_path / "outputs").exists()
+        assert not (tmp_path / "scripts").exists()
         eng = ws.set_engagement("phase0 probe")
         # 2026-10-05 LAZY SUBDIRS (operator: 'minimal and self-contained'):
         # only log/ + state/ are created upfront; everything else creates
