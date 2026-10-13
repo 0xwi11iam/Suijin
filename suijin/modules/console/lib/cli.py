@@ -388,9 +388,15 @@ def run_doctor() -> int:
     try:
         import suijin.modules.platform.lib.workspace as ws
 
-        ws.ensure_global_layout()
+        _layout_err = None
+        try:
+            ws.ensure_global_layout()
+        except Exception as e:  # noqa: BLE001 — the whole point is to SAY it
+            _layout_err = str(e)[:120]
         inner = ws.PROJECT_DIR / "suijin" / "suijin_agent"
-        if inner.exists() or inner.is_symlink():
+        if _layout_err:
+            rows.append(_warn("workspace", f"cannot create layout at {ws.WORKSPACE_DIR} ({_layout_err})"))
+        elif inner.exists() or inner.is_symlink():
             rows.append(_warn("workspace", "retired suijin_agent path still exists (safe to delete)"))
         elif ws.WORKSPACE_DIR.name == "config" or os.environ.get("SUIJIN_WORKSPACE"):
             rows.append(_ok("workspace", f"{ws.WORKSPACE_DIR} (clean layout)"))
