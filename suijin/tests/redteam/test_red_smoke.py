@@ -105,7 +105,8 @@ def red_mocks(monkeypatch, tmp_path):
     monkeypatch.setattr(rt, "SuijinAgentGraph", lambda **kwargs: fake_agent)
     from suijin.modules.platform.lib import workspace as _ws
 
-    monkeypatch.setattr(_ws, "WORKSPACE_DIR", tmp_path)
+    monkeypatch.setattr(_ws, "WORKSPACE_DIR", tmp_path / "config")  # v7.2: base (engagements root) = tmp_path
+    _ws._reset_engagement()
     return {"agent": fake_agent, "tmpdir": str(tmp_path)}
 
 

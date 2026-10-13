@@ -44,11 +44,24 @@ def _attack_tree(trace_json: str) -> str:
     return build_attack_tree(trace)
 
 
-def _gen_report(engagement: str, trace_json: str, findings_json: str) -> str:
+def _gen_report(engagement: str, trace_json: str = "", findings_json: str = "") -> str:
+    """Generate the engagement report FROM THE AUDIT TRAIL — the on-disk
+    truth (findings with real keys, thoughts, cost, completion). The
+    model-pasted JSON args are a LAST-RESORT fallback for pre-trail
+    calls only; the old behavior (model hand-serializing the trace)
+    produced truncated JSON, empty finding rows and $0.00 costs."""
     import json
 
+    from suijin.modules.tools.lib.audit_trail import current_trail
     from suijin.modules.tools.lib.report_exporter import generate_report
 
-    trace = json.loads(trace_json) if trace_json else []
-    findings = json.loads(findings_json) if findings_json else []
-    return generate_report(engagement, trace, findings, {}, [], 0)
+    trail = current_trail(engagement or None)
+    if trail:
+        from suijin.modules.tools.lib.audit_trail import report_inputs
+
+        trace, findings, cost, completion = report_inputs(trail)
+    else:
+        trace = json.loads(trace_json) if trace_json else []
+        findings = json.loads(findings_json) if findings_json else []
+        cost, completion = 0.0, ""
+    return generate_report(engagement, trace, findings, {}, [], cost, completion)

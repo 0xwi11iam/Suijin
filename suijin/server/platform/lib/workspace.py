@@ -1,25 +1,27 @@
-"""Workspace path management — the ONE owner of every path (2026-09-16 restructure).
+"""Workspace path management — the ONE owner of every path.
 
-The layout (per-engagement containment — nothing escapes the engagement folder):
+The v7.2 CLEAN LAYOUT (operator ruling 2026-10-12: "inside suijin agent
+there should only be /config and /engagements"):
 
-    workspace/
-    ├── profiles/<name>/{SOUL.md, rules.md, config.json}   # CTF + BBP seeded
-    ├── engagements/<stamp>_<slug>/                         # generated at start
-    │   ├── home/          # the agent's ~ — downloads, loot, scratch (its cwd)
-    │   ├── .notes/        # engagement notes (write_note)
-    │   ├── exploits/EXP-NNN/{description.md, exploit.yaml, run-N.log}
-    │   ├── audit_trails/
-    │   ├── dossiers/
-    │   ├── toollogs/      # nmap_scan_*.txt, execute_terminal_*.txt
-    │   ├── reports/
-    │   └── state/         # scratchpad, guidance, questions, coverage, .sje
-    ├── skills/            # SKILL.md library (knowledge, like profiles)
-    ├── exports/           # the .sje inbox (resume artifacts)
-    ├── logs/              # crash/engage logs
-    └── archive/           # ended engagements (immutable)
+    ~/.suijin/
+    ├── config/                     # WORKSPACE_DIR — non-engagement paths
+    │   ├── profiles/<name>/…       #   operator-owned personas
+    │   ├── skills/                 #   SKILL.md library
+    │   ├── packs/                  #   .sja pack exports
+    │   ├── prompts/, SOUL.md, …    #   prompt content
+    │   └── reflex-shadow.jsonl     #   decision-training corpus
+    ├── engagements/<stamp>_<slug>/ # generated at start — the ONLY other
+    │   ├── home/                   #   agent-owned root
+    │   │   ├── .notes/ exploits/ audit_trails/ dossiers/
+    │   │   ├── toollogs/ reports/ log/ state/ memory/ sessions/
+    ├── logs/                       # run-level crash/engage logs
+    ├── caches/                     # models.dev, ms-playwright (machine)
+    └── venv/ keys/ mesh/ repo/     # install-level (not agent content)
 
-Everything the engagement produces lives inside its folder and dies with it
-(archived on end). The agent's files land in home/ — no junk outside, ever.
+No agent or tool writes ANYWHERE at ~/.suijin except config/ and
+engagements/ (logs/ + caches/ are system dirs like venv/). The old
+~/.suijin/workspace layout is retired; a one-time migration folds its
+surviving content in and parks the husk at workspace.retired-<stamp>.
 """
 
 from __future__ import annotations
@@ -34,28 +36,21 @@ PROJECT_DIR = BASE_DIR.parent  # repo root
 
 
 def _resolve_workspace() -> Path:
-    """The ONE canonical agent workspace — durable across reinstalls.
+    """The ONE canonical workspace (= the config dir, v7.2 clean layout).
 
     Resolution order:
-      1. SUIJIN_WORKSPACE env (explicit override)
-      2. ~/.suijin/workspace — the durable home (created by install.sh;
-         survives repo re-clones, reinstalls and dev-tree wipes)
-      3. repo-local suijin_agent (source checkouts, tests, back-compat) —
-         if it is a symlink (install.sh wires this), follow it
+      1. SUIJIN_WORKSPACE env (explicit override — tests + operators)
+      2. ~/.suijin/config — the durable home (created on first boot;
+         survives repo re-clones, reinstalls, wipes)
+      3. repo-local suijin_agent (bare source checkouts with no
+         ~/.suijin at all) — if it is a symlink, follow it
     """
     env = os.environ.get("SUIJIN_WORKSPACE")
     if env:
         return Path(env).expanduser()
-    # v7.2 clean layout: engagements at ~/.suijin/engagements/,
-    # config at ~/.suijin/config/. The workspace concept becomes the
-    # config dir for non-engagement paths.
-    new_eng = Path.home() / ".suijin" / "engagements"
-    new_cfg = Path.home() / ".suijin" / "config"
-    if new_eng.is_dir() and new_cfg.is_dir():
-        return new_cfg  # WORKSPACE_DIR = config/ (non-engagement paths)
-    durable = Path.home() / ".suijin" / "workspace"
-    if durable.is_dir():
-        return durable
+    cfg = Path.home() / ".suijin" / "config"
+    if (Path.home() / ".suijin").is_dir() or cfg.is_dir():
+        return cfg  # installed machine — always the clean layout
     local = PROJECT_DIR / "suijin_agent"
     if local.is_symlink():
         try:
@@ -64,11 +59,19 @@ def _resolve_workspace() -> Path:
                 return resolved
         except OSError:
             pass
-        return durable
-    return local
+    return cfg  # default even bare: first boot creates the clean layout
 
 
 WORKSPACE_DIR = _resolve_workspace()
+
+
+def base_dir() -> Path:
+    """The clean-layout parent: ~/.suijin in production, or the sandbox
+    root when SUIJIN_WORKSPACE points inside one (tests). config/,
+    engagements/, logs/ and caches/ hang off it. Nothing the agent
+    writes lands directly here."""
+    return WORKSPACE_DIR.parent
+
 
 #: everything the engagement owns — created by set_engagement(). The
 #: operator ruling (2026-09-17): ONLY knowledge libraries and artifacts
@@ -116,11 +119,13 @@ ENGAGEMENT_LAZY = (
     "sandbox",
 )
 
-#: workspace-global: knowledge libraries + survival artifacts
+#: workspace-global: operator-owned knowledge + persona libraries —
+#: everything else is engagement-scoped or system-level (logs/, caches/)
 GLOBAL_DIRS = (
     "profiles",  # <name>/{SOUL.md, rules.md, config.json} — operator-owned
     "skills",  # the SKILL.md library (imported knowledge, like profiles)
-    "logs",  # crash/engage logs that must survive engagement end
+    "packs",  # .sja pack exports (module install artifacts)
+    "bugscope",  # program scope knowledge (bb-scope pulls — cross-engagement)
 )
 
 #: RETIRED (v3): exports/ and archive/ — the .sje bundle and everything
@@ -140,9 +145,35 @@ def _ensure(path: Path) -> Path:
 
 
 def ensure_global_layout() -> None:
-    """Create the workspace-global skeleton (idempotent, never raises)."""
+    """Create the clean-layout skeleton (idempotent, never raises):
+    config/{profiles,skills,packs} + base/engagements, base/logs,
+    base/caches — and fold any pre-v7.2 ~/.suijin/workspace in."""
     for name in GLOBAL_DIRS:
         _ensure(WORKSPACE_DIR / name)
+    _ensure(engagements_root())
+    _ensure(base_dir() / "logs")
+    _ensure(caches_dir())
+    _migrate_legacy_workspace()
+
+
+def engagements_root() -> Path:
+    """ALL engagement folders live here (~/.suijin/engagements)."""
+    return base_dir() / "engagements"
+
+
+def caches_dir() -> Path:
+    """Machine-level caches (models.dev.json, ms-playwright) — never
+    inside config/ or an engagement."""
+    return base_dir() / "caches"
+
+
+def audit_dir() -> Path:
+    """Where CLI-verb invocation audits go: the LIVE engagement's
+    audit_trails when a run is active, else config/audit — an idle verb
+    (doctor, version) must never conjure a _default engagement dir."""
+    if _CURRENT_ENGAGEMENT is not None:
+        return _ensure(_CURRENT_ENGAGEMENT / "audit_trails")
+    return _ensure(WORKSPACE_DIR / "audit")
 
 
 def artifact_dir(name: str) -> Path:
@@ -160,7 +191,9 @@ def artifact_dir(name: str) -> Path:
         return _ensure(engagement_dir())
     if name not in ENGAGEMENT_SUBDIRS and name not in ENGAGEMENT_LAZY:
         raise ValueError(f"unknown artifact dir {name!r} (one of {ARTIFACT_DIRS})")
-    return _ensure(engagement_dir() / name)
+    if _CURRENT_ENGAGEMENT is not None:
+        return _ensure(_CURRENT_ENGAGEMENT / name)
+    return _ensure(WORKSPACE_DIR / "artifacts" / name)
 
 
 # ── per-engagement state ──────────────────────────────────────────────
@@ -188,9 +221,7 @@ def set_engagement(objective: str = "") -> Path:
 
     ensure_global_layout()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    eng_root = Path.home() / ".suijin" / "engagements"
-    if not eng_root.is_dir():
-        eng_root = WORKSPACE_DIR / "engagements"  # fallback to old layout
+    eng_root = engagements_root()
     base = eng_root / f"{stamp}_{_slugify(objective[:60])}"
     # concurrent same-second starts (parallel agent launches) would silently
     # MERGE into one engagement — one audit trail, mixed findings. Uniquify.
@@ -215,13 +246,22 @@ def set_engagement(objective: str = "") -> Path:
 
 
 def engagement_dir() -> Path:
-    """The current engagement's folder (auto-created; `_default` before
-    set_engagement boots — legacy callers keep working)."""
-    eng_root = Path.home() / ".suijin" / "engagements"
-    if not eng_root.is_dir():
-        eng_root = WORKSPACE_DIR / "engagements"
-    d = _CURRENT_ENGAGEMENT or eng_root / "_default"
-    return _ensure(d)
+    """The current engagement's folder. Before set_engagement boots this
+    is the `_default` path — returned WITHOUT creating it (v7.2: an
+    idle read must not litter engagements/ with empty husks; write
+    accessors _ensure their own subdirs when a real engagement is set).
+    """
+    return _CURRENT_ENGAGEMENT or engagements_root() / "_default"
+
+
+def _engaged(sub: str) -> Path:
+    """engagement_dir()/sub — created ONLY when an engagement is live.
+    Pre-engagement callers get the path without conjuring a _default
+    husk (v7.2: reads must not litter; writes belong to live runs)."""
+    d = engagement_dir() / sub
+    if _CURRENT_ENGAGEMENT is not None:
+        _ensure(d)
+    return d
 
 
 def home_dir() -> Path:
@@ -238,22 +278,30 @@ def home_dir() -> Path:
 
 def notes_dir() -> Path:
     """Engagement notes (write_note) — inside the engagement, always."""
-    return _ensure(engagement_dir() / ".notes")
+    if _CURRENT_ENGAGEMENT is not None:
+        return _ensure(_CURRENT_ENGAGEMENT / ".notes")
+    return _ensure(WORKSPACE_DIR / "artifacts" / ".notes")
 
 
 def exploits_dir() -> Path:
     """The engagement's exploit catalog root (EXP-NNN/ folders)."""
-    return _ensure(engagement_dir() / "exploits")
+    if _CURRENT_ENGAGEMENT is not None:
+        return _ensure(_CURRENT_ENGAGEMENT / "exploits")
+    return _ensure(WORKSPACE_DIR / "artifacts" / "exploits")
 
 
 def state_dir() -> Path:
     """Per-engagement state files (scratchpad, guidance, questions, .sje)."""
-    return _ensure(engagement_dir() / "state")
+    if _CURRENT_ENGAGEMENT is not None:
+        return _ensure(_CURRENT_ENGAGEMENT / "state")
+    return _ensure(WORKSPACE_DIR / "artifacts" / "state")
 
 
 def toollogs_dir() -> Path:
     """Timestamped tool output dumps (nmap_scan_*, execute_terminal_*)."""
-    return _ensure(engagement_dir() / "toollogs")
+    if _CURRENT_ENGAGEMENT is not None:
+        return _ensure(_CURRENT_ENGAGEMENT / "toollogs")
+    return _ensure(WORKSPACE_DIR / "artifacts" / "toollogs")
 
 
 def profiles_root() -> Path:
@@ -262,14 +310,15 @@ def profiles_root() -> Path:
 
 
 def logs_dir() -> Path:
-    """Run-level logs: engagement.log, engage_crash.log. Not per-engagement
-    — these follow the workspace, not a run."""
-    return _ensure(WORKSPACE_DIR / "outputs" / "logs")
+    """Run-level logs: engage_crash.log and friends — base/logs, NEVER
+    under config/ or an engagement (the old WORKSPACE_DIR/'outputs'/logs
+    and the nested logs/logs are gone with v7.2)."""
+    return _ensure(base_dir() / "logs")
 
 
 def archive_engagement(reason: str = "ended") -> Path | None:
-    """Move the engagement folder into archive/ (timestamped, immutable) —
-    the .sje bundle inside state/ remains the resume artifact."""
+    """Move the engagement folder into engagements/.archive (timestamped,
+    immutable) — the .sje bundle inside state/ remains the resume artifact."""
     global _CURRENT_ENGAGEMENT
     if _CURRENT_ENGAGEMENT is None:
         return None
@@ -281,7 +330,7 @@ def archive_engagement(reason: str = "ended") -> Path | None:
     if not src.is_dir() or not any(src.iterdir()):
         return None
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    dest = WORKSPACE_DIR / "archive" / f"{stamp}_{src.name}_{_slugify(reason)}"
+    dest = engagements_root() / ".archive" / f"{stamp}_{src.name}_{_slugify(reason)}"
     dest.parent.mkdir(parents=True, exist_ok=True)
     try:
         move(str(src), str(dest))
@@ -305,7 +354,7 @@ def resolve_workspace_path(file_path: str | Path) -> Path:
         except Exception:
             real = p
         try:
-            real.relative_to(WORKSPACE_DIR.resolve())
+            real.relative_to(base_dir().resolve())
             return real
         except ValueError:
             allowlisted = ["/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp", os.environ.get("HOME", "/tmp")]
@@ -363,18 +412,20 @@ def ensure_workspace_layout(base_dir: Path | None = None, workspace_dir: Path | 
 
     ensure_global_layout()
 
+    # v7.2: the repo-level suijin_agent symlink is RETIRED — the
+    # workspace is no longer a single directory (config/ + engagements/
+    # + logs/ + caches/ under ~/.suijin). Remove a stale symlink from
+    # the old layout; never create a new one.
     if inner.is_symlink():
-        return migrated
-    if inner.exists():
+        with contextlib.suppress(OSError):
+            inner.unlink()
+        migrated = True
+    elif inner.exists():
         root.mkdir(parents=True, exist_ok=True)
         _merge_tree(inner, root)
         inner.rmdir()
-    try:
-        inner.symlink_to(os.path.relpath(root, base))
-        return True
-    except OSError:
-        inner.mkdir(exist_ok=True)
-        return migrated
+        migrated = True
+    return migrated
 
 
 def _merge_tree(src: Path, dst: Path) -> None:
@@ -391,3 +442,44 @@ def _merge_tree(src: Path, dst: Path) -> None:
                 else:
                     target.unlink()
             shutil.move(str(item), str(target))
+
+
+def _migrate_legacy_workspace() -> None:
+    """One-time (v7.2): fold the retired ~/.suijin/workspace into the
+    clean layout. Survivors: profiles/, skills/, prompts/, SOUL.md,
+    prompt.md, reflex-shadow.jsonl → config/; caches/ → base/caches;
+    engagements/* (minus _default/state husks) → base/engagements. The
+    husk itself is parked at workspace.retired-<stamp> for the operator
+    to delete — nothing is destroyed here. Idempotent, never raises,
+    and never runs when SUIJIN_WORKSPACE is set (tests own layouts)."""
+    if os.environ.get("SUIJIN_WORKSPACE"):
+        return
+    legacy = Path.home() / ".suijin" / "workspace"
+    if not legacy.is_dir() or (legacy / ".migrated-v72").exists():
+        return
+    import shutil as _sh
+    from datetime import datetime as _dt
+
+    def _take(name: str, dest: Path) -> None:
+        src = legacy / name
+        if not src.exists():
+            return
+        with contextlib.suppress(OSError):
+            if src.is_dir():
+                _sh.copytree(src, dest / src.name, dirs_exist_ok=True)
+            else:
+                _sh.copy2(src, dest / src.name)
+
+    for name in ("profiles", "skills", "prompts", "SOUL.md", "prompt.md", "reflex-shadow.jsonl"):
+        _take(name, WORKSPACE_DIR)
+    _take("caches", base_dir())
+    eng_src = legacy / "engagements"
+    if eng_src.is_dir():
+        for item in list(eng_src.iterdir()):
+            if item.name.startswith(".") or item.name in ("_default", "state"):
+                continue  # boot-time husks — die with the legacy root
+            with contextlib.suppress(OSError):
+                _sh.copytree(item, engagements_root() / item.name, dirs_exist_ok=True)
+    (legacy / ".migrated-v72").write_text(f"migrated {_dt.now().isoformat()}")
+    with contextlib.suppress(OSError):
+        legacy.rename(legacy.with_name(f"workspace.retired-{_dt.now():%Y%m%d_%H%M%S}"))

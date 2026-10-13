@@ -41,9 +41,9 @@ _negative_cache = False  # True after a failed fetch inside the backoff window
 
 
 def _cache_path():
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR  # function-local (boundary law)
+    from suijin.modules.platform.lib.workspace import caches_dir  # function-local (boundary law)
 
-    return WORKSPACE_DIR / "caches" / "models.dev.json"
+    return caches_dir() / "models.dev.json"
 
 
 def _load_cached() -> dict | None:

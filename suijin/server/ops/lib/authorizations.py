@@ -38,12 +38,13 @@ _PAGE_PATTERNS = [
 
 
 def _cfg_dir():
-    """The operator-owned config area — NOT the workspace root (engagement
-    code can write there; the authorization ledger must be operator-only).
-    Falls back to the workspace when config/ doesn't exist (legacy)."""
+    """The operator-owned config area — v7.2: WORKSPACE_DIR *is* the
+    config dir (engagement code may write other corners of it; the
+    authorization ledger lives in its own subdir and nothing else
+    writes there)."""
     from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-    cfg = WORKSPACE_DIR / "config"
+    cfg = WORKSPACE_DIR / "authorizations"
     cfg.mkdir(parents=True, exist_ok=True)
     return cfg
 

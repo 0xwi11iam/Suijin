@@ -98,8 +98,8 @@ class TestHitlRoundTrip:
         assert c.post("/api/approvals/99", headers=h, json={"action": "approve"}).status_code == 404
 
     def test_question_answer(self, client, tmp_path):
-        (tmp_path / "engagements" / "_default" / "state").mkdir(parents=True, exist_ok=True)
-        (tmp_path / "engagements" / "_default" / "state" / "questions.jsonl").write_text(
+        (tmp_path / "artifacts" / "state").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "artifacts" / "state" / "questions.jsonl").write_text(
             json.dumps({"id": 1, "question": "scope ok?", "answered": False}) + "\n"
         )
         c, h = client

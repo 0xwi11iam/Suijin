@@ -92,9 +92,9 @@ def record_send(req: dict) -> None:
 
 
 def _store_path() -> Path:
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR, engagement_dir
+    from suijin.modules.platform.lib.workspace import engagement_dir
 
-    base = Path(engagement_dir() or (WORKSPACE_DIR / "outputs" / "engagements" / "_default"))
+    base = Path(engagement_dir())
     return base / "web_session.jsonl"
 
 

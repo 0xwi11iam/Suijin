@@ -35,7 +35,7 @@ def test_what_worked_class_transfer_excludes_lab(tmp_path, monkeypatch):
     import suijin.modules.agent.lib.attack_memory as am
     import suijin.modules.platform.lib.workspace as ws
 
-    monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
+    monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path / "config")  # v7.2: engagements root = tmp_path
     for name, target, cls in (
         ("20260101_000000_real.example_a", "real.example", "ssrf"),
         ("20260101_000001_127_0_0_1_6000", "127.0.0.1:6000", "ssti"),

@@ -586,9 +586,9 @@ def surface_verdict(surface, verdict, defense="", config=None):
             "at X, output escaped by Y). 'looks safe' clears nothing."
         )
     try:
-        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+        from suijin.modules.platform.lib.workspace import state_dir
 
-        ledger = WORKSPACE_DIR / "outputs" / "surface_verdicts.jsonl"
+        ledger = state_dir() / "surface_verdicts.jsonl"
         ledger.parent.mkdir(parents=True, exist_ok=True)
         with ledger.open("a", encoding="utf-8") as f:
             f.write(_json.dumps({"surface": surface, "verdict": verdict, "defense": defense[:400]}) + "\n")

@@ -224,6 +224,7 @@ AGENT_COMMANDS = {
     "/findings": "confirmed exploits",
     "/note <text>": "write an engagement note",
     "/objective <text>": "redirect the agent (read next turn)",
+    "/report [note]": "wrap up: report + END the engagement",
     "/panic": "hold the agent now",
     "/su root": "back to the root operator",
 }
@@ -240,6 +241,7 @@ COMMANDS = {
     "/filter <phase>": "cards by phase; all clears",
     "/pause [msg]": "pause all agents; optional message they read on resume",
     "/resume": "release paused agents",
+    "/report [note]": "every agent wraps up, reports, and ENDS its engagement",
     "/su <hex>": "operate as an agent (root returns)",
     "/clear": "clear the chat display",
     "/refresh": "force an immediate rescan",
@@ -1023,6 +1025,7 @@ class OperatorTUI:
         self.hist_idx: int | None = None
         self.sug_sel = 0
         self._chat_offset = 0
+        self._mesh_scroll = 0  # mesh feed pages back from live (0 = newest); ↑/↓ while mesh is focused
         self._lock = threading.Lock()
 
     def start_poll(self) -> None:
@@ -1466,29 +1469,57 @@ class OperatorTUI:
 
     def _mesh_panel(self) -> Panel:
         """Right column bottom — mesh chat feed (design.png: 36% height).
-        Chat order: oldest at top, NEWEST AT THE BOTTOM — and bottom-
-        anchored, so the freshest lines always fit (the oldest drop off
-        the top when the panel is short)."""
+        Chat order: oldest at top, NEWEST AT THE BOTTOM.
+
+        No truncation, ever (the 2026-10-12 ruling): every message
+        renders WHOLE — rows are MEASURED with the real renderer (word
+        wrap at the panel's true inner width), never estimated from
+        character counts (estimates under-billed the width, so the feed
+        dropped lines while rows sat empty). The messages that fit the
+        region's real height are the LIVE page; the rest page backward —
+        ↑/↓ while the mesh is focused walks pages (title shows ▲ p/N),
+        and a message is never split across a page boundary."""
         lines = Text()
+        n_pages = 1
+        page_idx = 0
         if self.chat:
-            width = max(20, int(self.console.width * 0.32) - 6)
-            budget = max(1, int((self.console.height - 3) * 36 / 88) - 2)
-            kept: list[str] = []
+            inner_w = max(20, int(self.console.width * 32 / 94) - 2)
+            budget = max(1, int((self.console.height - 1) * 36 / 88) - 2)
+            opts = self.console.options.update(width=inner_w)
+            # exact rows per message — the renderer's own word wrap
+            rows = [len(self.console.render_lines(self._chat_line(m), opts, new_lines=False)) for m in self.chat]
+            # paginate by WHOLE messages, built from the NEWEST backward
+            # so the LIVE page is always full (the remainder page is the
+            # OLDEST — a short first page, like any pager); a single
+            # message taller than the panel still gets its own page
+            pages: list[list[int]] = []  # will end oldest→newest
+            cur: list[int] = []
             used = 0
-            for msg in reversed(self.chat):
-                rows = max(1, -(-len(msg) // width))
-                if used + rows > budget and kept:
-                    break
-                kept.append(msg)
-                used += rows
-            for msg in reversed(kept):
-                lines.append_text(self._chat_line(msg))
+            for i in range(len(rows) - 1, -1, -1):
+                if cur and used + rows[i] > budget:
+                    pages.append(cur)
+                    cur, used = [], 0
+                cur.append(i)
+                used += rows[i]
+            if cur:
+                pages.append(cur)
+            pages.reverse()
+            for p in pages:
+                p.reverse()  # display order: oldest at top within a page
+            n_pages = len(pages)
+            self._mesh_scroll = min(self._mesh_scroll, n_pages - 1)
+            page_idx = n_pages - 1 - self._mesh_scroll
+            for i in pages[page_idx]:
+                lines.append_text(self._chat_line(self.chat[i]))
                 lines.append("\n")
         else:
             lines.append("\n  (no mesh activity)\n", style=DIM)
+        title = "Mesh"
+        if self._mesh_scroll:
+            title = f"Mesh ▲ {self._mesh_scroll + 1}/{n_pages}"
         return Panel(
             lines,
-            title=f" [{CYAN}]Mesh[/{CYAN}] " if self._focused("mesh") else f" [{DIM}]Mesh[/{DIM}] ",
+            title=f" [{CYAN}]{title}[/{CYAN}] " if self._focused("mesh") else f" [{DIM}]{title}[/{DIM}] ",
             border_style=f"bold {CYAN}" if self._focused("mesh") else WHITE,
             padding=(0, 0),
         )
@@ -1513,28 +1544,36 @@ class OperatorTUI:
         t.append(f"{rest}", style=GRAY)
         return t
 
-    def _input_area(self):
-        """Bottom-left — one-row input that flexes for multi-line.
-        Suggestions and note float ABOVE (they don't consume the input's
-        space — they eat into the detail pane's bottom, like a dropdown)."""
-        # floating rows (suggestions + note) — rendered above the input
-        float_rows = []
+    def _float_rows(self) -> list:
+        """Suggestion dropdown + transient note — rendered in the dedicated
+        `floats` layout region BETWEEN detail and input, never inside the
+        input's own region. They used to ride above the panel inside the
+        input area; the region was sized for the box alone, so every
+        dropdown/note cropped the panel away and the input box vanished
+        for as long as the floats showed."""
+        rows: list = []
         if self.input_buf.startswith("/") and self._filtered_suggestions():
             for i, (name, desc) in enumerate(self._filtered_suggestions()[:6]):
                 if i == self.sug_sel:
-                    float_rows.append(
+                    rows.append(
                         Text.assemble(("  › ", f"bold {CYAN}"), (f"{name:<16}", f"bold {CYAN}"), (desc[:40], CYAN))
                     )
                 else:
-                    float_rows.append(Text.assemble(("    ", DIM), (f"{name:<16}", ""), (desc[:40], DIM)))
+                    rows.append(Text.assemble(("    ", DIM), (f"{name:<16}", ""), (desc[:40], DIM)))
         if self.note and time.time() - self.note_at < 5.0:
-            float_rows.append(Text(f"  {self.note}", style=GRAY))
+            rows.append(Text(f"  {self.note}", style=GRAY))
+        return rows
 
-        # the input row: single-line borderless with inline hint
-        # if the buffer is multi-line (contains \n), it wraps and the
-        # row grows — but there's no Panel border eating 2 extra rows
+    def _input_area(self):
+        """Bottom-left — the command box ALONE, in a fixed-height region:
+        one content row + top/bottom borders (HORIZONTALS box). Because
+        nothing else renders into that region, the box can never be
+        crowded or cropped away — suggestions and notes live in `floats`
+        above it."""
+        # the input row: single-line with inline hint. A long buffer
+        # wraps inside the fixed region; the box's borders stay put.
         prompt = Text()
-        who = "root" if self.su_pid is None else _hex_id(self.sui_pid)
+        who = "root" if self.su_pid is None else _hex_id(self.su_pid)
         prompt.append(f" {who} » ", style=f"bold {GOLD}")
         prompt.append(self.input_buf, style=f"bold {WHITE}")
         prompt.append("█", style=f"bold {CYAN}")
@@ -1544,22 +1583,24 @@ class OperatorTUI:
         # not the 3-row SQUARE) so it reads as an input field without
         # eating vertical space. Suggestions float above the box.
         box_style = f"bold {CYAN}" if self._focused("input") else WHITE
-        input_panel = Panel(
+        return Panel(
             prompt,
             box=box.HORIZONTALS,
             border_style=box_style,
             padding=(0, 0),
             expand=True,
         )
-        if float_rows:
-            return Group(*float_rows, input_panel)
-        return input_panel
 
     # ── layout ───────────────────────────────────────────────────────
 
     def _build(self) -> Layout:
         """design.png proportions: strip / body(62% left: cards 29 + detail
-        44 + input 15 | 32% right: overview 52 + mesh 36)."""
+        44 + floats (dropdown/note, sized per frame) + input fixed 3 |
+        32% right: overview 52 + mesh 36). The input region is FIXED at
+        the panel's exact height (content + 2 borders) and nothing else
+        renders into it — the box can never be cropped; the floats
+        region above absorbs the dropdown/note rows and collapses
+        (visible=False) when empty."""
         layout = Layout(name="root")
         layout.split_column(
             Layout(name="header", size=1),
@@ -1572,7 +1613,8 @@ class OperatorTUI:
         layout["left"].split_column(
             Layout(name="cards", ratio=29),
             Layout(name="detail", ratio=44),
-            Layout(name="input", ratio=4),  # one row idle; flexes for multi-line
+            Layout(name="floats", size=1, visible=False),  # dropdown/note — sized per frame
+            Layout(name="input", size=3),  # the box, always exactly this tall
         )
         layout["right"].split_column(
             Layout(name="overview", ratio=52),
@@ -1585,6 +1627,15 @@ class OperatorTUI:
             layout["header"].update(self._header())
             layout["cards"].update(self._agents_panel())
             layout["detail"].update(self._detail_panel())
+            rows = self._float_rows()
+            if rows:
+                # size is re-set every frame while visible: 0 is falsy
+                # (falls back to ratio), so EMPTY means visible=False
+                layout["floats"].visible = True
+                layout["floats"].size = len(rows)
+                layout["floats"].update(Group(*rows))
+            else:
+                layout["floats"].visible = False
             layout["input"].update(self._input_area())
             layout["overview"].update(self._overview_panel())
             layout["mesh"].update(self._mesh_panel())
@@ -1675,6 +1726,23 @@ class OperatorTUI:
         except OSError:
             return False
 
+    def _wrap_up_guidance(self, a, extra: str = "") -> bool:
+        """`/report`: the operator closes the engagement — wrap up, write
+        the final report, then SELF-TERMINATE. The authorization is
+        explicit: the agent ends its own run (complete action, honest
+        completion reason) instead of idling after reporting or waiting
+        for another instruction."""
+        text = (
+            "wrap up now: finish the current step, stop opening new "
+            "surfaces, verify and catalog findings, write the final report, "
+            "then END the run yourself (complete action, honest reason — "
+            "operator-requested wrap-up). Self-termination authorized; do "
+            "not wait for more instruction."
+        )
+        if extra:
+            text += f" Operator note: {extra[:100]}"
+        return self._write_agent_guidance(a, "REPORT", text)
+
     def _execute_agent(self, cmd: str, args: str, argv: list[str]) -> None:
         """Engagement commands while su'd into an agent — the same file
         surfaces the in-window pause console uses (guidance, notes,
@@ -1720,6 +1788,11 @@ class OperatorTUI:
                 self._note("usage: /objective <new objective>")
             elif self._write_agent_guidance(a, "OBJECTIVE", args):
                 self._note("objective change queued — the agent reads it next turn")
+            else:
+                self._note("no engagement dir for this agent")
+        elif cmd == "/report":
+            if self._wrap_up_guidance(a, args):
+                self._note("wrap-up queued — report + end, the agent reads it next turn")
             else:
                 self._note("no engagement dir for this agent")
         elif cmd == "/panic":
@@ -1848,6 +1921,12 @@ class OperatorTUI:
             with contextlib.suppress(OSError):
                 (self.mesh_dir / "pause-operator").unlink(missing_ok=True)
             self._note("agents resuming")
+        elif cmd == "/report":
+            queued = sum(1 for a in self.agents if self._wrap_up_guidance(a, args))
+            if queued:
+                self._note(f"wrap-up + report + end queued to {queued} agents")
+            else:
+                self._note("no engagement dirs — nothing running to wrap up")
         elif cmd == "/clear":
             p = self.mesh_dir / "gc.log"
             try:
@@ -1947,14 +2026,25 @@ class OperatorTUI:
                 self.input_buf = ""
                 self.sug_sel = 0
             elif ch in ("\x1b[A", "\x1b[B"):
-                # priority: active history recall > prediction pick > ring
-                if self.hist_idx is not None or (not self.input_buf and self.history):
-                    if self.hist_idx is None:
-                        self.hist_idx = len(self.history) - (1 if ch == "\x1b[A" else 0)
+                # priority: active history recall > prediction pick > ring.
+                # Bounds are re-derived EVERY branch: the old down-from-live
+                # path computed hist_idx = len(history) (one past the end)
+                # and crashed the TUI on the first ↓ after a command.
+                if self.hist_idx is not None and not self.history:
+                    self.hist_idx = None  # history emptied mid-recall
+                if self.hist_idx is not None:
+                    nxt = self.hist_idx + (-1 if ch == "\x1b[A" else 1)
+                    if nxt > len(self.history) - 1:
+                        self.hist_idx = None  # ↓ past the newest: back to the live line
+                        self.input_buf = ""
                     else:
-                        self.hist_idx = max(
-                            0, min(len(self.history) - 1, self.hist_idx + (-1 if ch == "\x1b[A" else 1))
-                        )
+                        self.hist_idx = max(0, nxt)  # ↑ at the oldest clamps
+                        self.input_buf = self.history[self.hist_idx]
+                    self.sug_sel = 0
+                elif ch == "\x1b[A" and not self.input_buf and self.history:
+                    # ↑ from the live line recalls the newest entry (↓ never
+                    # enters recall — nothing is newer than the live line)
+                    self.hist_idx = len(self.history) - 1
                     self.input_buf = self.history[self.hist_idx]
                     self.sug_sel = 0
                 elif self.input_buf.startswith("/") and self._filtered_suggestions():
@@ -1972,6 +2062,11 @@ class OperatorTUI:
             return
 
         # NAV — every non-input panel
+        if self._focused("mesh") and ch in ("\x1b[A", "\x1b[B"):
+            # the mesh feed pages its history: ↑ older, ↓ back toward
+            # live (0). _mesh_panel clamps at the oldest page.
+            self._mesh_scroll = max(0, self._mesh_scroll + (1 if ch == "\x1b[A" else -1))
+            return
         if ch == "q":
             self.running = False
         elif ch == "\x1b[A":  # ↑ previous focus

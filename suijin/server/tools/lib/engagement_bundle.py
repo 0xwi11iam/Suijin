@@ -301,10 +301,10 @@ def resume_engagement(path: str | Path) -> int:
 def _bundle_files() -> list[Path]:
     """All .sje on disk: v3 engagement state dirs first (the current one's
     bundles excluded), then the legacy workspace exports inbox."""
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR, engagements_root
 
     out: dict[str, Path] = {}
-    engs = WORKSPACE_DIR / "engagements"
+    engs = engagements_root()
     if engs.is_dir():
         for f in sorted(engs.glob("*/state/*.sje")):
             out.setdefault(str(f), f)
