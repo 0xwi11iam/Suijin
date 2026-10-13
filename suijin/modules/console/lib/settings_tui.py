@@ -1025,6 +1025,60 @@ def _draw_popup(stdscr, title: str, options: list[str], picked: int, height_cap:
         _put(stdscr, top + rows - 1, left + width - 9, f" {first + 1}-{first + inner}/{len(options)} ", "legend", width)
 
 
+def _get_key(stdscr):
+    """getch() that survives untranslated arrow keys.
+
+    curses keypad() only translates the sequences terminfo declares.
+    With TERM=xterm-256color the terminal is switched to application
+    cursor mode (arrows = ESC O A), but plenty of terminals/multiplexers
+    still send ESC [ A — which reads as bare ESC (prompt cancels, editor
+    quits) with the trailing '[A' typed into the field as garbage (the
+    'arrow keys render as something else' bug). Recognize BOTH forms
+    explicitly; a lone ESC stays ESC.
+    """
+    import curses
+
+    ch = stdscr.getch()
+    if ch != 27:
+        return ch
+    stdscr.nodelay(True)
+    try:
+        nxt = stdscr.getch()
+    except curses.error:
+        nxt = -1
+    finally:
+        stdscr.nodelay(False)
+    if nxt < 0:
+        return 27  # a real ESC
+    if chr(nxt) not in "[O":
+        return 27  # ESC + something we don't track
+    stdscr.nodelay(True)
+    try:
+        last = stdscr.getch()
+    except curses.error:
+        last = -1
+    finally:
+        stdscr.nodelay(False)
+    if last < 0:
+        return 27
+    seq = bytes([nxt, last])
+    mapping = {
+        b"[A": curses.KEY_UP,
+        b"[B": curses.KEY_DOWN,
+        b"[C": curses.KEY_RIGHT,
+        b"[D": curses.KEY_LEFT,
+        b"[H": curses.KEY_HOME,
+        b"[F": curses.KEY_END,
+        b"OA": curses.KEY_UP,
+        b"OB": curses.KEY_DOWN,
+        b"OC": curses.KEY_RIGHT,
+        b"OD": curses.KEY_LEFT,
+        b"OH": curses.KEY_HOME,
+        b"OF": curses.KEY_END,
+    }
+    return mapping.get(seq, 27)
+
+
 def _prompt(
     stdscr, label: str, default: str = "", choices: list[str] | None = None, secret: bool = False
 ) -> str | None:
@@ -1079,7 +1133,7 @@ def _prompt(
         with contextlib.suppress(curses.error):
             stdscr.move(h - 1, min(w - 2, 1 + len(text)))
 
-        ch = stdscr.getch()
+        ch = _get_key(stdscr)
         if ch in (curses.KEY_ENTER, 10, 13):
             if not opts_all:  # free text
                 value = typed.strip()
@@ -1219,6 +1273,61 @@ def _apply(config: dict, key: str, raw: str) -> bool:
     return changed
 
 
+def _provider_onboarding_curses(stdscr) -> str:
+    """First-run provider selection INSIDE curses (arrow-navigable popup
+    + masked key entry) — the old flow printed the Rich wizard and a
+    blocking input() straight over the curses screen: the screen
+    garbled, arrow keys echoed escape garbage, nothing navigated.
+
+    Returns a status note for the editor's status line. Custom
+    providers defer to the CLI flow — their multi-field setup stays
+    outside curses by design."""
+    from suijin.modules.platform.lib.config_loader import ENV_PATH, _write_config, load_config
+
+    options = [
+        ("Z.ai (GLM)", "zai", "ZAI_API_KEY"),
+        ("OpenRouter (one key → every major model)", "openrouter", "OPENROUTER_API_KEY"),
+        ("DeepSeek", "deepseek", "DEEPSEEK_API_KEY"),
+        ("OpenAI", "openai", "OPENAI_API_KEY"),
+        ("Gemini", "gemini", "GEMINI_API_KEY"),
+        ("AMD Cloud", "amd", "AMD_API_KEY"),
+        ("Hugging Face", "huggingface", "HF_TOKEN"),
+        ("Local (Ollama — no key, free)", "ollama", ""),
+        ("Custom OpenAI-compatible → finish in the terminal", "_custom", ""),
+    ]
+    labels = [o[0] for o in options]
+    picked = _prompt(stdscr, "Select AI Provider (↑↓ + Enter)", choices=labels, default=labels[0])
+    if picked is None:
+        return "onboarding skipped — Settings still works; add a key any time"
+    label, provider, env_name = next(o for o in options if o[0] == picked)
+
+    config = load_config()
+    if provider == "_custom":
+        return "custom provider: quit Settings (q) and run: suijin config"
+    if env_name:
+        key = _prompt(stdscr, f"{provider} API key (hidden, Enter = skip)", default="", secret=True)
+        if key is None:
+            key = ""
+        config["provider"] = provider
+        _write_config(config)
+        try:
+            ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
+            ENV_PATH.write_text(f"{env_name}={key}\n" if key else "")
+            if key:
+                os.environ[env_name] = key
+        except OSError:
+            return f"provider set, but .env write failed — export {env_name} by hand"
+        return f"provider: {provider}" + (" — key saved" if key else " — key still needed")
+    config["provider"] = provider
+    _write_config(config)
+    try:
+        ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
+        ENV_PATH.write_text("")
+    except OSError:
+        pass
+    return "local mode: ollama serve + ollama pull <model>"
+
+
 def _curses_loop(stdscr) -> int:
     import curses
 
@@ -1235,11 +1344,17 @@ def _curses_loop(stdscr) -> int:
         stdscr.getch()  # any key dismisses
         return 1
     with contextlib.suppress(Exception):
-        # the .env is loaded ONCE here, so the key row shows the real
-        # state and a key just written is visible
-        from suijin.modules.platform.lib.config_loader import load_env
+        # First run (no .env): provider onboarding runs INSIDE curses as
+        # an arrow-navigable popup — the CLI wizard's Rich prints and
+        # blocking input() used to land on top of the curses screen and
+        # garble everything. With .env present this is a silent load.
+        from suijin.modules.platform.lib.config_loader import ENV_PATH, load_env
 
-        load_env()
+        if not ENV_PATH.exists() and sys.stdin.isatty():
+            note = _provider_onboarding_curses(stdscr)
+            _draw(stdscr, config, None, 0, note, "ok")
+        else:
+            load_env()
     _init_colors(stdscr)
     stdscr.keypad(True)
     cursor = 0
@@ -1259,7 +1374,7 @@ def _curses_loop(stdscr) -> int:
         cursor = max(0, min(cursor, len(items) - 1))
         _repaint()
         note, loop_status = "", "ok"
-        ch = stdscr.getch()
+        ch = _get_key(stdscr)
         key = items[cursor][1]
 
         if ch in (ord("q"), ord("Q"), 27):  # q / Esc leave (after saving)
