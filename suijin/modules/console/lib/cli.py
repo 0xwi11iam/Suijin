@@ -130,15 +130,17 @@ def run_doctor() -> int:
                             break
                 # (b) pip console script: shebang python + its bin dir on sys.path
                 if not _winner_pts_to_us and _txt.startswith("#!"):
-                    _py = _txt.splitlines()[0][2:].strip()
-                    if _py:
-                        import subprocess as _sp
-                        import tempfile as _tf
+                    import shlex
+                    import subprocess as _sp
+                    import tempfile as _tf
 
+                    _shebang = shlex.split(_txt.splitlines()[0][2:].strip())
+                    _py = _shebang[0] if _shebang else None  # interpreter
+                    if _py:
                         _sc = Path(_tf.gettempdir()) / f"suijin_probe_{os.getpid()}.py"
                         _sc.write_text("import sys, suijin\nsys.stdout.write(suijin.__file__)\n")
                         _probe = _sp.run(
-                            [_py, str(_sc)],
+                            [*_shebang, str(_sc)],
                             capture_output=True,
                             text=True,
                             timeout=30,
