@@ -292,7 +292,9 @@ class TestZaiConfig:
         monkeypatch.setattr(cli, "_PKG_DIR", str(tmp_path))
         monkeypatch.setattr(cli, "_has_any_api_key", lambda _p: True)
         # Neutralize environment-dependent checks so run_doctor completes.
-        monkeypatch.setattr(cli.shutil, "which", lambda _b: "/bin/true")
+        import suijin.modules.tools.lib.availability as _av
+
+        monkeypatch.setattr(_av, "which_any", lambda _b: "/bin/true")
         monkeypatch.setattr(cli, "REQUIRED_BINARIES", [])
         monkeypatch.setattr(cli, "_importable", lambda _m: True)
         monkeypatch.setattr(cli, "_port_free", lambda _p: True)

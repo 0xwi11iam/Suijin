@@ -302,9 +302,12 @@ def _record_usage(provider, model, in_tok, out_tok, estimated: bool = False):
         USAGE["output_tokens"] += out_tok
         # LIVE t/s (2026-10-09): (time, out_tok) arrivals feed a rolling
         # gauge — the same convention the redteam strip uses, but at the
-        # accumulator so every surface (console digest included) reads it
+        # accumulator so every surface (console digest included) reads it.
+        # A STREAMED call already fed the window delta-by-delta (see
+        # _emit) — its lump is skipped; non-streamed calls land here.
         try:
-            USAGE.setdefault("_tok_arrivals", []).append((time.time(), out_tok))
+            if USAGE.pop("_stream_est_tok", 0) <= 0:
+                USAGE.setdefault("_tok_arrivals", []).append((time.time(), out_tok))
             arr = USAGE["_tok_arrivals"]
             if len(arr) > 400:
                 USAGE["_tok_arrivals"] = arr[-200:]
@@ -478,6 +481,15 @@ def _emit(on_delta, kind, piece):
         if not _diag_ttft["seen"]:
             _diag_first_token()
         with contextlib.suppress(Exception):  # display must never break generation
+            # LIVE t/s during streaming (2026-10-14): arrivals used to land
+            # only when a call COMPLETED — one lump per call meant the gauge
+            # stepped at call cadence (~0.2Hz) and sat frozen through long
+            # generations. Each delta now feeds the rolling window as it
+            # arrives (chars/4 heuristic); _record_usage skips its lump for
+            # streamed calls so nothing is double-counted.
+            est = len(piece) // 4 + 1
+            USAGE.setdefault("_tok_arrivals", []).append((time.time(), est))
+            USAGE["_stream_est_tok"] = int(USAGE.get("_stream_est_tok") or 0) + est
             on_delta(kind, piece)
 
 
