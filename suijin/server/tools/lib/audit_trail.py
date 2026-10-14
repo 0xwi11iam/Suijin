@@ -166,6 +166,17 @@ def log_iteration(
                 for fld in ("thought", "reasoning", "observation", "chain_context", "completion_reason"):
                     if not str(merged.get(fld) or "").strip() and str(old_e.get(fld) or "").strip():
                         merged[fld] = old_e[fld]
+                # 'none' is NOT content: the completion/bookkeeping turn
+                # logs tool=none for the SAME iteration that carried a
+                # real tool call — the real tool+args+obs+success must
+                # survive the merge (field-found on the live kali run:
+                # iteration 4's http_request was overwritten by the
+                # completion stub and the pane showed ❯ none, {})
+                _new_tool = str(merged["action"].get("tool") or "").strip()
+                if not _new_tool or _new_tool == "none":
+                    _old_act = old_e.get("action") or {}
+                    if str(_old_act.get("tool") or "").strip() and _old_act["tool"] != "none":
+                        merged["action"] = dict(_old_act)
                 if not (merged["action"].get("args") or {}):
                     merged["action"]["args"] = old_e.get("action", {}).get("args") or {}
                 kept[i] = merged
