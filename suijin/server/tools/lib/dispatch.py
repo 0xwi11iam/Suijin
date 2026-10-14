@@ -298,6 +298,8 @@ from suijin.modules.tools.lib.modes import check_mode_restrictions
 from suijin.modules.tools.lib.reporting import (
     _attack_tree,
     _diff_resp,
+    _export_burp,
+    _export_html,
     _gen_report,
     _payload_gen,
     _rate_all,
