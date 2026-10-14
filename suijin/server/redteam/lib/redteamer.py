@@ -1962,6 +1962,35 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
         # conclusion save above already claimed the once-flag.
         with contextlib.suppress(Exception):
             CRASH_SAVER.save("end")
+        # REPORT ON EVERY ENDING (2026-10-14): end_audit writes
+        # final_report.md + BBP submissions only on the CLEAN conclusion
+        # path — a crash, Ctrl+C or a closed window saved the .sje but
+        # produced ZERO report even though the trail holds everything.
+        # Best-effort, idempotent (skips when the report already
+        # exists), and never blocks exit.
+        with contextlib.suppress(Exception):
+            from suijin.modules.platform.lib.workspace import engagement_dir as _edr
+
+            _engd = _edr()
+            if _engd.name != "_default" and not (_engd / "reports" / "final_report.md").exists():
+                from suijin.modules.tools.lib.audit_trail import current_trail, report_inputs
+                from suijin.modules.tools.lib.report_exporter import generate_report
+
+                _trail = current_trail()
+                if _trail and (_trail.get("iterations") or []):
+                    _trace, _finds, _cost, _compl = report_inputs(_trail)
+                    if not _compl:
+                        _compl = str(final_state.get("completion_reason") or "interrupted")[:200]
+                    generate_report(
+                        str(_trail.get("engagement") or "engagement"),
+                        _trace,
+                        _finds,
+                        {},
+                        [],
+                        _cost,
+                        _compl,
+                        final=True,
+                    )
         # TERMINATION BANNER — one classifier, every ending, unskippable.
         # The field reports: declines and crashes read as silent failures.
         with contextlib.suppress(Exception):
