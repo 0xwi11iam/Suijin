@@ -153,7 +153,26 @@ def log_iteration(
         "completion_reason": completion_reason,
     }
     with _locks.get(key, _meta_lock):
-        trail["iterations"].append(entry)
+        # UPSERT by iteration (2026-10-14, the 'iteration N, no content'
+        # bug): think-side logs a tool=none stub for an iteration the
+        # execute-side then logs WITH the tool + observation — two rows
+        # for one iteration, one of them blank. The richer entry wins;
+        # same-numbered writes merge instead of stacking.
+        kept = trail["iterations"]
+        for i in range(len(kept) - 1, max(-1, len(kept) - 4), -1):
+            if kept[i].get("iteration") == iteration:
+                old_e = kept[i]
+                merged = dict(entry)
+                for fld in ("thought", "reasoning", "observation", "chain_context", "completion_reason"):
+                    if not str(merged.get(fld) or "").strip() and str(old_e.get(fld) or "").strip():
+                        merged[fld] = old_e[fld]
+                if not (merged["action"].get("args") or {}):
+                    merged["action"]["args"] = old_e.get("action", {}).get("args") or {}
+                kept[i] = merged
+                trail["total_actions"] = max(0, trail.get("total_actions", 1) - 1)  # no phantom action
+                break
+        else:
+            trail["iterations"].append(entry)
         trail["total_actions"] += 1
         if success:
             trail["successful_actions"] += 1
