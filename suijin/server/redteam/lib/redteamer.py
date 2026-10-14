@@ -605,7 +605,11 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
         # graph takes ~2 recursions per iteration (measured, the agent.run
         # seam uses max_iterations * 5 for its node-rich path; the astream
         # path averages tighter). Capped at 1M = Pydantic's own ceiling.
-        "recursion_limit": min(_iter_budget * 2, 1_000_000),
+        # +4 HEADROOM (2026-10-14, field-found on a 4-iteration lab run):
+        # the budget landed EXACTLY as the agent emitted its complete
+        # action — GraphRecursionError killed a fully-formed completion
+        # (initialize + completion routing need steps beyond N*2).
+        "recursion_limit": min(_iter_budget * 2 + 4, 1_000_000),
     }  # absent/0 max_iterations → the operator's infinite (250 killed real engagements)
 
     # .sje resume: seed the fresh thread with the saved engagement's state
@@ -1923,7 +1927,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                 objective=objective, final_state=final_state, config=config, thread_id=thread_id
             )
             if critique:
-                console.print("[dim]Self-critique saved (outputs/reports/critique_*.md)[/dim]")
+                console.print("[dim]Self-critique saved (reports/critique.md)[/dim]")
         except Exception as e:
             import logging
 
