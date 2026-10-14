@@ -78,6 +78,26 @@ PULSE_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "
 
 MESH_DIR = Path.home() / ".suijin" / "mesh"
 WORKSPACE_DIR = Path.home() / ".suijin" / "workspace"
+
+
+def _resolve_roots() -> tuple[Path, Path]:
+    """v7.2: honor SUIJIN_WORKSPACE the same way the runtime does — the
+    operator must scan the mesh/engagements the running agents actually
+    write (a pinned /opt/suijin-ws previously left MESH_DIR pointing at
+    ~/.suijin/mesh and the console showed zero agents)."""
+    import os
+
+    env = os.environ.get("SUIJIN_WORKSPACE")
+    if env:
+        ws = Path(env).expanduser()
+        return ws / "mesh", ws
+    cfg = Path.home() / ".suijin" / "config"
+    if cfg.is_dir() or not (Path.home() / ".suijin" / "workspace").is_dir():
+        return (Path.home() / ".suijin" / "mesh"), cfg
+    return MESH_DIR, WORKSPACE_DIR
+
+
+MESH_DIR, WORKSPACE_DIR = _resolve_roots()
 POLL_S = 0.2
 
 VISIBLE_CARDS = 5
