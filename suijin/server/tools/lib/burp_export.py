@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -37,9 +36,9 @@ def export_burp_xml(findings: list, output_path: str = None) -> str:
         ET.SubElement(issue, "issueDetail").text = str(f.get("detail", f.get("evidence", "")))[:2000]
         ET.SubElement(issue, "remediationBackground").text = str(f.get("remediation", ""))[:1000]
     tree = ET.ElementTree(root)
-    path = output_path or str(
-        _ws_dir() / "reports" / f"burp_export_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.xml"
-    )
+    from suijin.modules.platform.lib.workspace import artifact_dir as _ad
+
+    path = output_path or str(_ad("reports") / "burp_export.xml")
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     tree.write(path, encoding="utf-8", xml_declaration=True)
     return path

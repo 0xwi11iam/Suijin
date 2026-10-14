@@ -780,6 +780,8 @@ def _build_routes(config):
         "generate_report": lambda a: _gen_report(
             a.get("engagement", ""), a.get("trace_json", ""), a.get("findings_json", "")
         ),
+        "export_html": lambda a: _export_html(a.get("engagement", "")),
+        "export_burp": lambda a: _export_burp(a.get("engagement", "")),
         # deploy_subagent is an ACTION, not a tool. If the AI accidentally uses
         # it as a tool_name, show EXACTLY how to fix it so it self-corrects.
         "deploy_subagent": lambda a: (
@@ -1205,6 +1207,9 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
   ```json
   {"tool": "generate_report", "args": {"engagement": "target-name"}}
   ```
+- **export_html / export_burp** — deliverable formats from the same trail: one overwriting `reports/report.html` (client-facing, styled) and `reports/burp_export.xml` (Burp Suite import). No args needed beyond the engagement name.
+  ```json
+  {"tool": "export_html", "args": {"engagement": "target-name"}}
 - **catalog_exploit** — MANDATORY the moment you find something valuable. Call it with: `vuln_class`, `title`, `description` (one paragraph — what/where/impact), `severity`+`cvss`, `commands` (list of shell commands to run sequentially) and `expected_result` (the exact string the TARGET's output must contain to prove it). THE SYSTEM CREATES A FOLDER, writes finding.md + exploit.yaml, then the VERIFIER TAKES OVER: it runs every command sequentially and pauses you until it finishes. Match -> CONFIRMED, continue. No match -> you receive EVERY command and ALL its output back (copy-paste style) plus THREE options: (1) EDIT the YAML — re-call with `entry_id` + corrected `commands`/`expected_result`; (2) REWRITE — `entry_id` + `action:"rewrite"` (this exploit is abandoned; catalog a fresh one); (3) FALSE MISTAKE — it worked anyway, the result shows so: `entry_id` + `action:"worked_anyway"` + `evidence_line` (the EXACT output line that shows it — verified against the receipt; a fabricated line is rejected). Markers must be unique target-derived strings (>=8 chars, no generic '200/OK/root:'). A finding without a cataloged POC is a rumor.
   ```json
   {"tool": "catalog_exploit", "args": {"engagement": "t", "target": "http://t", "vuln_class": "sqli", "title": "login bypass", "description": "The id parameter on /admin concatenates raw SQL; OR 1=1 returns the admin row.", "severity": "critical", "cvss": 8.9, "commands": ["curl -s -c /tmp/j http://t/login -d 'u=x&p=y'", "curl -s -b /tmp/j 'http://t/admin?id=1 OR 1=1'"], "expected_result": "administrator:$(openssl rand -hex 6)", "guards": "needs low-priv session first"}}

@@ -133,8 +133,11 @@ def _write_report(critique: dict, objective: str, thread_id: str, final_state: d
 
         rdir = artifact_dir("reports")
         rdir.mkdir(parents=True, exist_ok=True)
-        safe = "".join(c for c in thread_id if c.isalnum() or c in "-_")[:40] or "engagement"
-        path = rdir / f"critique_{safe}.md"
+        # ONE overwriting critique per engagement (2026-10-14): the old
+        # per-thread filename accumulated a new file on every resume —
+        # the same spam class the reports were cleaned of. The thread id
+        # rides the header instead of the filename.
+        path = rdir / "critique.md"
         lines = [
             f"# Self-critique — {objective[:120]}",
             f"_completion: {final_state.get('completion_reason', '?')}, "
@@ -195,7 +198,9 @@ def promote_learnings(dry_run: bool = True) -> str:
 
     rdir = artifact_dir("reports")
     candidates = []
-    for p in sorted(rdir.glob("critique_*.md")) if rdir.is_dir() else []:
+    for p in ([rdir / "critique.md"] if (rdir / "critique.md").is_file() else []) + (
+        sorted(rdir.glob("critique_*.md")) if rdir.is_dir() else []
+    ):
         section = False
         for line in p.read_text(errors="ignore").splitlines():
             if line.startswith("## Tactics to remember"):
