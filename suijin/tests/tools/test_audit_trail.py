@@ -190,8 +190,27 @@ def test_completion_turn_does_not_erase_the_real_tool(tmp_path):
     completion thought — 'none' is not content."""
     at.set_audit_dir(tmp_path)
     at.start_audit("merge probe")
-    at.log_iteration(4, "probe files surface", "", "http_request", {"url": "http://t/files/public/"}, "404 not found", True, "exploitation")
-    at.log_iteration(4, "Objective met — completing with summary", "", "", {}, "", True, "informational", completion_reason="objective complete")
+    at.log_iteration(
+        4,
+        "probe files surface",
+        "",
+        "http_request",
+        {"url": "http://t/files/public/"},
+        "404 not found",
+        True,
+        "exploitation",
+    )
+    at.log_iteration(
+        4,
+        "Objective met — completing with summary",
+        "",
+        "",
+        {},
+        "",
+        True,
+        "informational",
+        completion_reason="objective complete",
+    )
     live = at.current_trail("merge probe")
     its = live["iterations"]
     assert len(its) == 1

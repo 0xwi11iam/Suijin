@@ -1322,6 +1322,8 @@ class OperatorTUI:
         paged_action = ((it or {}).get("action") or {}) if it else {}
         json_box = None
         tool = (paged_action.get("tool") if paged_action else None) or a.last_tool
+        if tool in ("none", ""):
+            tool = None  # a no-tool turn renders thought only — never a bare '❯ none {}' row
         args = paged_action.get("args") if paged_action else None
         if args is None:
             args = a.last_args or {}
