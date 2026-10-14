@@ -57,9 +57,11 @@ class TestSeeds:
 
     def test_recursion_limit_honors_max_iterations(self):
         """The caller's budget is real: recursion_limit derives from
-        max_iterations (the hardcoded 100000 made it advisory-only)."""
+        max_iterations (the hardcoded 100000 made it advisory-only).
+        2026-10-14: +4 headroom — a 4-iteration run died to
+        GraphRecursionError exactly as the agent completed."""
         src = Path(suijin.modules.redteam.lib.redteamer.__file__).read_text(encoding="utf-8")
-        assert '"recursion_limit": min(_iter_budget * 2, 1_000_000)' in src
+        assert '"recursion_limit": min(_iter_budget * 2 + 4, 1_000_000)' in src
 
     def test_prompt_builder_reads_seeded_run_config(self):
         """The behavior the seeding unlocks: state carrying _run_config

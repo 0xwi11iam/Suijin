@@ -574,7 +574,17 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         "CURRENT_STATE": (
             f"- **Phase**: {phase}\n"
             f"- **Iteration**: {iteration}/{state.get('max_iterations', 100)}\n"
-            f"- **Attack Path**: {state.get('attack_path_type', 'recon')}\n"
+            + (
+                # LOW-BUDGET DOCTRINE (2026-10-14): the agent saw N/M but
+                # nothing CHANGED its behavior near the end - it opened new
+                # chains at 23/25 and died mid-dive. The last iterations
+                # carry an explicit wrap-up order.
+                f"- **BUDGET LOW - {int(state.get('max_iterations', 100) or 100) - iteration} iterations left. WRAP UP: no new surfaces, no new chains. Verify + catalog what you hold, write the report, complete.**"
+                + chr(10)
+                if 0 < int(state.get("max_iterations", 100) or 100) - iteration <= 5
+                else ""
+            )
+            + f"- **Attack Path**: {state.get('attack_path_type', 'recon')}\n"
             + _governor_lines
             + _queued_plan_block(state)
         ),
