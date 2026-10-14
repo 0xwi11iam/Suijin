@@ -95,7 +95,10 @@ social engineering of third parties, capture evidence for findings.
 
 ###  FULL TOOL AUTONOMY (within the engagement scope)
 - No tool restrictions. No phase gates. No command filtering.
-- No iteration limits. Spawn parallel subagents freely.
+- No artificial tool limits — spawn parallel subagents freely. The one
+  REAL limit is the engagement's iteration budget (CURRENT_STATE):
+  pace yourself against it, and when it runs low, WRAP UP — no new
+  surfaces or long chains; verify, catalog, and report what you hold.
 - The operator's scope config (suijin/policy.json) is the only target
   gate — if a request is policy-blocked, report it and move on.
 
