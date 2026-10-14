@@ -65,3 +65,31 @@ def _gen_report(engagement: str, trace_json: str = "", findings_json: str = "") 
         findings = json.loads(findings_json) if findings_json else []
         cost, completion = 0.0, ""
     return generate_report(engagement, trace, findings, {}, [], cost, completion)
+
+
+def _export_html(engagement: str = "") -> str:
+    """Client-deliverable HTML report from the audit trail (one
+    overwriting reports/report.html)."""
+    from suijin.modules.tools.lib.audit_trail import current_trail, report_inputs
+    from suijin.modules.tools.lib.html_report import export_html
+
+    trail = current_trail(engagement or None)
+    if not trail:
+        return "Error: no audit trail yet — run at least one iteration first"
+    trace, findings, cost, _ = report_inputs(trail)
+    path = export_html(findings, str(trail.get("engagement") or "engagement"), cost_usd=cost, trace_count=len(trace))
+    return f"HTML report written: {path}"
+
+
+def _export_burp(engagement: str = "") -> str:
+    """Burp Suite XML import file from the audit trail (one overwriting
+    reports/burp_export.xml)."""
+    from suijin.modules.tools.lib.audit_trail import current_trail, report_inputs
+    from suijin.modules.tools.lib.burp_export import export_burp_xml
+
+    trail = current_trail(engagement or None)
+    if not trail:
+        return "Error: no audit trail yet — run at least one iteration first"
+    _, findings, _, _ = report_inputs(trail)
+    path = export_burp_xml(findings)
+    return f"Burp XML written: {path}"

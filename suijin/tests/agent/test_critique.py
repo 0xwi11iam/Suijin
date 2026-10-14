@@ -62,7 +62,7 @@ class TestCritique:
         )
         assert out and out["verdict"].startswith("B+")
         # report written
-        reports = list((tmp_path / "artifacts" / "reports").glob("critique_eng-42.md"))
+        reports = list((tmp_path / "artifacts" / "reports").glob("critique.md"))
         assert reports and "Tactics to remember" in reports[0].read_text()
         assert "/api/v2" in reports[0].read_text()
         # KG learnings recorded with the prefix + heuristic confidence

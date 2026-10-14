@@ -159,3 +159,25 @@ def test_same_iteration_upserts_no_blank_stub(tmp_path):
     assert its[0]["action"]["tool"] == "mesh_status"
     assert its[0]["observation"] == "roster: 3 nodes"
     assert live["total_actions"] == 1  # the stub did not count as an action
+
+
+def test_html_and_burp_export_from_trail(tmp_path):
+    """The wired exporters: trail-based, engagement-scoped, ONE
+    overwriting file each (no timestamped copies, no workspace-root
+    strays)."""
+    at.set_audit_dir(tmp_path)
+    at.start_audit("export probe")
+    at.log_finding("critical", "sqli", "/login", "login bypass", "admin row returned")
+    at.log_iteration(1, "t", "", "http_request", {"path": "/login"}, "200 admin row", True, "exploitation")
+    from suijin.modules.tools.lib.reporting import _export_burp, _export_html
+
+    h = _export_html("export probe")
+    b = _export_burp("export probe")
+    assert "Error" not in h and "report.html" in h, h
+    assert "Error" not in b and "burp_export.xml" in b, b
+    # overwrite policy: a second call does not create a second file
+    _export_html("export probe")
+    import pathlib
+
+    files = list(pathlib.Path(h.split(": ")[1]).parent.glob("*.html"))
+    assert len(files) == 1

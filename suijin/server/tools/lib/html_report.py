@@ -25,11 +25,11 @@ def __getattr__(name):
 def export_html(
     findings: list, engagement_name: str, cost_usd: float = 0.0, trace_count: int = 0, output_path: str = None
 ) -> str:
-    path = output_path or str(
-        _workspace_dir()
-        / "reports"
-        / f"{engagement_name.replace(' ', '_')}_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.html"
-    )
+    # engagement-scoped, ONE overwriting file (the 2026-10-14 reporting
+    # ruling: no timestamped copies accumulating per call)
+    from suijin.modules.platform.lib.workspace import artifact_dir as _ad
+
+    path = output_path or str(_ad("reports") / "report.html")
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     rows = ""
     for i, f in enumerate(findings[:50], 1):

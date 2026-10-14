@@ -492,6 +492,37 @@ def scan_agents(mesh_dir: Path, workspace: Path, live: bool = True) -> list[Agen
             # findings stay confirmed-exploits-only — audit claims
             # (behavior notes, false positives) never backfill the count
 
+        # EVENTS FALLBACK (2026-10-14): no audit match yet (trail not
+        # flushed / unmatched) but the engagement dir is known — rebuild
+        # the pager rows from events.jsonl (flushed per RECORD, so it is
+        # the freshest iteration source that exists mid-run).
+        if not a.iterations and a.engagement_dir:
+            with contextlib.suppress(Exception):
+                from suijin.modules.agent.lib.event_log import replay as _replay
+
+                st = _replay(Path(a.engagement_dir) / "events.jsonl")
+                trace = st.get("execution_trace") or []
+                if trace:
+                    a.iterations = [
+                        {
+                            "iteration": t.get("iteration") or (n + 1),
+                            "phase": "",
+                            "thought": "",
+                            "action": {
+                                "tool": t.get("tool_name"),
+                                "args": t.get("tool_args") or {},
+                                "success": t.get("success", True),
+                            },
+                            "observation": t.get("tool_output") or "",
+                        }
+                        for n, t in enumerate(trace[-20:])
+                    ]
+                    last = trace[-1]
+                    a.last_tool = str(last.get("tool_name") or "?")
+                    a.last_args = last.get("tool_args") or {}
+                    a.last_obs = str(last.get("tool_output") or "")
+                    a.last_ok = bool(last.get("success", True))
+
         agents.append(a)
 
     agents.sort(key=lambda x: -x.iteration)
