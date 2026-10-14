@@ -468,7 +468,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
                 )
             except Exception:  # noqa: BLE001 — the plain set_phase below still runs
                 pass
-        _mesh.set_phase(phase)
+        _mesh.set_phase(phase, silent=bool(_prev and _prev != str(phase)))
         _mesh.publish_state(
             {
                 "phase": phase,

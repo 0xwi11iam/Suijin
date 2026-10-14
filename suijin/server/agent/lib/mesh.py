@@ -148,15 +148,18 @@ def _write_me(me: dict) -> None:
     atomic_write(_me_file(), json.dumps(me))
 
 
-def set_phase(phase: str) -> None:
+def set_phase(phase: str, silent: bool = False) -> None:
     if _node["me"] is not None:
         new = str(phase)[:40]
         old = _node["me"].get("phase")
         _node["me"]["phase"] = new
         _write_me(_node["me"])
         # machine-driven comms (2026-10-07): every peer sees the phase
-        # transition instantly — no model choice involved
-        if old and old != new:
+        # transition instantly — no model choice involved. silent=True
+        # when the caller already announced a RICHER line (think_node's
+        # phase-change mandate carries findings) — the bare duplicate
+        # doubled every mesh line (field-found in the 2-agent run).
+        if old and old != new and not silent:
             with contextlib.suppress(OSError):
                 _announce_system(f"node-{os.getpid()} phase \u2192 {new}")
 
