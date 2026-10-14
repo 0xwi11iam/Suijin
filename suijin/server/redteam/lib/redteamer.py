@@ -584,6 +584,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
     agent._build()  # ensure graph is compiled
     last_iter = 0
     final_state = {}
+    _stream_completion = ""  # the stream's own completion reason — get_state on END can lose the final merge
     first_run = True
     _parse_retries = 0
     _operator_stopped = False  # unbound-local crash: the finally referenced
@@ -1578,6 +1579,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                         break  # exit the INNER loop — the outer loop re-streams
                     ui.flush_open()
                     final_state = node_output
+                    _stream_completion = final_state.get("completion_reason") or ""
                     _completed = True
                     break
 
@@ -1590,6 +1592,10 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                 # both exits were `break`, so this path was dead code and a
                 # stale resume ended as a FALSE no-output diagnosis)
                 final_state = agent.get_state(thread_id) or {}
+                if _stream_completion and not final_state.get("completion_reason"):
+                    final_state["completion_reason"] = (
+                        _stream_completion  # the stream's node_output HAD it; get_state on END can lose the final merge
+                    )
                 # Resume hardening: zero events from a resumed astream =
                 # the graph's internal state was stale after the KI —
                 # restart cleanly from the objective (one retry only)
@@ -1629,6 +1635,10 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                 if _input_reader is not None:
                     _input_reader.stop()
                 final_state = agent.get_state(thread_id) or {}
+                if _stream_completion and not final_state.get("completion_reason"):
+                    final_state["completion_reason"] = (
+                        _stream_completion  # the stream's node_output HAD it; get_state on END can lose the final merge
+                    )
                 _operator_stopped = True
                 break
             # _sigint STAYS installed through the pause: Ctrl+C raises
@@ -1685,6 +1695,10 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
             if _pause_session["stop"] or getattr(_pause_ctx, "stop_requested", False):
                 # /quit or force-quit — save everything (session + .sje)
                 final_state = agent.get_state(thread_id) or {}
+                if _stream_completion and not final_state.get("completion_reason"):
+                    final_state["completion_reason"] = (
+                        _stream_completion  # the stream's node_output HAD it; get_state on END can lose the final merge
+                    )
                 _operator_stopped = True  # the banner must not fake a completion
                 console.print("[dim]  engagement ended — full save follows[/dim]")
                 ui.stop()
@@ -1771,6 +1785,10 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
             except Exception:  # noqa: BLE001
                 pass
             final_state = agent.get_state(thread_id) or {}
+            if _stream_completion and not final_state.get("completion_reason"):
+                final_state["completion_reason"] = (
+                    _stream_completion  # the stream's node_output HAD it; get_state on END can lose the final merge
+                )
             break
 
     #  Final report (after normal completion)
