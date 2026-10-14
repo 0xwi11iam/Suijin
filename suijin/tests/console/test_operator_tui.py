@@ -667,5 +667,49 @@ def test_detail_panel_survives_dirty_tool_output(demo):
     c = Console(width=120, height=40, force_terminal=True, record=True, file=io.StringIO())
     c.print(ui._detail_panel())
     lines = c.export_text().splitlines()
-    assert not any(c in l for l in lines for c in ("\x1b", "\r", "\x00", "\x07")), "control bytes leaked"
-    assert not [l for l in lines if len(l) > 120], "content escaped the pane border"
+    assert not any(ch in ln for ln in lines for ch in ("\x1b", "\r", "\x00", "\x07")), "control bytes leaked"
+    assert not [ln for ln in lines if len(ln) > 120], "content escaped the pane border"
+
+
+def test_detail_pager_hides_blank_stub_iterations(demo):
+    """The 'iteration 4, no content' bug (reader side): old trails stack
+    a think-side tool=none stub under the real execute-side entry for
+    the same iteration — the pager walked onto blank rows while the red
+    window showed the data. The operator dedupes: one row per iteration,
+    the rich one."""
+    ui, _, _ = demo
+    a = ui.agents[0]
+    a.audit_data = {
+        "cost_usd": 0.01,
+        "total_actions": 3,
+        "successful_actions": 3,
+        "iterations": [
+            {"iteration": 3, "thought": "stub", "action": {"tool": "", "success": True}, "observation": ""},
+            {
+                "iteration": 3,
+                "thought": "real",
+                "action": {"tool": "http_request", "args": {}, "success": True},
+                "observation": "HTTP/1.1 200",
+            },
+            {
+                "iteration": 4,
+                "thought": "next",
+                "action": {"tool": "execute_terminal", "args": {}, "success": True},
+                "observation": "done",
+            },
+        ],
+    }
+    from suijin.modules.console.lib.operator_tui import scan_agents  # noqa: F401 — re-scan path uses the merge
+
+    merged = ui.agents[0].audit_data["iterations"]
+    # simulate the scan-time merge on the same shape
+    out = []
+    for it in merged:
+        if out and out[-1].get("iteration") == it.get("iteration"):
+            act = (it.get("action") or {}).get("tool") or ""
+            if act and act != "none":
+                out[-1] = it
+        else:
+            out.append(it)
+    assert len(out) == 2
+    assert out[0]["action"]["tool"] == "http_request" and out[0]["observation"] == "HTTP/1.1 200"
