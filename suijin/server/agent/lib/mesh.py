@@ -39,15 +39,22 @@ _BAD_HELLO_PIDS: set[int] = set()
 
 
 def mesh_dir() -> Path:
-    """Runtime dir (honours a monkeypatched module attr for tests)."""
+    """Runtime dir (honours a monkeypatched module attr for tests).
+
+    v7.2 CONTAINMENT (2026-10-14, the 'operator sees zero agents' bug):
+    an explicit SUIJIN_WORKSPACE is SELF-CONTAINED — the mesh lives
+    INSIDE it (<ws>/mesh), never scattered to the parent (a pinned
+    /opt/suijin-ws computed /opt/mesh → root-owned → PermissionError →
+    mesh start silently failed → the operator console saw nothing).
+    Prod (no override): ~/.suijin/mesh, matching base_dir().
+    """
     v = globals().get("MESH_DIR_OVERRIDE")
     if v is not None:
         return Path(v)
-    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+    from suijin.modules.platform.lib.workspace import _EXPLICIT_WS, WORKSPACE_DIR
 
-    # v7.2: mesh lives at ~/.suijin/config/mesh/ (the clean layout),
-    # but ONLY if the workspace-based path doesn't exist (tests and
-    # SUIJIN_WORKSPACE overrides take priority over the user layout)
+    if _EXPLICIT_WS:
+        return WORKSPACE_DIR / "mesh"
     ws_mesh = WORKSPACE_DIR.parent / "mesh"
     if ws_mesh.is_dir():
         return ws_mesh
