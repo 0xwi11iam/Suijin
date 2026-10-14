@@ -452,7 +452,20 @@ def scan_agents(mesh_dir: Path, workspace: Path, live: bool = True) -> list[Agen
             a.ok_actions = int(d.get("successful_actions") or 0)
             a.fail_actions = int(d.get("failed_actions") or 0)
             iters = d.get("iterations") or []
-            a.iterations = iters[-20:]
+            # DEDUPE by iteration number (2026-10-14, the 'iteration N,
+            # no content' bug): old trails carry think-side tool=none
+            # stubs STACKED with the real execute-side entry for the
+            # same iteration — the pager walked onto blank rows while
+            # the red window showed the data. Richest entry per number.
+            merged: list = []
+            for it in iters:
+                if merged and merged[-1].get("iteration") == it.get("iteration"):
+                    act = (it.get("action") or {}).get("tool") or ""
+                    if act and act != "none":
+                        merged[-1] = it  # the real entry supersedes the stub
+                else:
+                    merged.append(it)
+            a.iterations = merged[-20:]
             if iters:
                 last = iters[-1]
                 a.last_thought = str(last.get("thought") or "")

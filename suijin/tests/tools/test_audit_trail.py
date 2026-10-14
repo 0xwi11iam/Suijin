@@ -141,3 +141,21 @@ class TestLegacyAPI:
         at.log_finding("x", "y", "z", "w", "v")
         at.flush()
         assert at.end_audit() is None
+
+
+def test_same_iteration_upserts_no_blank_stub(tmp_path):
+    """The 'iteration N, no content' bug: think-side logged a tool=none
+    stub for an iteration the execute-side then logged WITH the tool +
+    observation — two stacked rows, one blank. The richer entry must
+    MERGE into one; a phantom action count must not accrue."""
+    at.set_audit_dir(tmp_path)
+    at.start_audit("upsert probe")
+    at.log_iteration(1, "plan the sweep", "", "", {}, "", True, "recon")  # think-side stub
+    at.log_iteration(1, "plan the sweep", "", "mesh_status", {"x": 1}, "roster: 3 nodes", True, "recon")
+    live = at.current_trail("upsert probe")
+    assert live is not None
+    its = live["iterations"]
+    assert len(its) == 1, its
+    assert its[0]["action"]["tool"] == "mesh_status"
+    assert its[0]["observation"] == "roster: 3 nodes"
+    assert live["total_actions"] == 1  # the stub did not count as an action
