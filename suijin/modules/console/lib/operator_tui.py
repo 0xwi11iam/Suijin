@@ -372,10 +372,23 @@ def scan_agents(mesh_dir: Path, workspace: Path, live: bool = True) -> list[Agen
     if not mesh_dir.is_dir():
         return agents
 
-    # index audit trails by started timestamp for matching
+    # index audit trails by started timestamp for matching. v7.2: the
+    # engagements root moved to base/ (~/.suijin/engagements) while the
+    # workspace param still points at config/ — search BOTH or every
+    # audit match fails and the detail pager shows numbered EMPTY rows
+    # (the 'still fucking empty lines' bug; trails were fine on disk).
     audits: list[tuple[float, dict, Path]] = []
-    eng_root = workspace / "engagements"
-    if eng_root.is_dir():
+    eng_roots: list[Path] = []
+    with contextlib.suppress(Exception):
+        from suijin.modules.platform.lib.workspace import engagements_root as _er
+
+        _er = _er()
+        if _er not in eng_roots:
+            eng_roots.append(_er)
+    eng_roots.append(workspace / "engagements")
+    for eng_root in eng_roots:
+        if not eng_root.is_dir():
+            continue
         for d in eng_root.iterdir():
             at = d / "audit_trails"
             if not at.is_dir():

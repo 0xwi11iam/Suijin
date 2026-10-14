@@ -713,3 +713,46 @@ def test_detail_pager_hides_blank_stub_iterations(demo):
             out.append(it)
     assert len(out) == 2
     assert out[0]["action"]["tool"] == "http_request" and out[0]["observation"] == "HTTP/1.1 200"
+
+
+def test_scan_finds_audits_at_the_v72_engagements_root(tmp_path, monkeypatch):
+    """The 'still empty lines' bug: v7.2 moved engagements to base/
+    (~/.suijin/engagements) while scan_agents still hunted trails under
+    workspace/engagements (= config/engagements, nonexistent) — every
+    audit match failed and the detail pager showed numbered EMPTY rows
+    while the trails sat populated on disk. Scan must search BOTH."""
+    import time as _time
+
+    import suijin.modules.platform.lib.workspace as ws
+
+    mesh = tmp_path / "mesh"
+    mesh.mkdir()
+    now = _time.time()
+    (mesh / "2001.json").write_text(json.dumps({"pid": 2001, "summary": "t.example", "started": now, "beat": now}))
+    base = tmp_path / "base"  # the REAL root (v7.2): NOT under workspace/
+    eng = base / "engagements" / "20261014_000000_hunt"
+    (eng / "audit_trails").mkdir(parents=True)
+    (eng / "audit_trails" / "hunt.json").write_text(
+        json.dumps(
+            {
+                "engagement": "hunt",
+                "started": "2026-10-14T00:00:00+00:00",
+                "iterations": [
+                    {
+                        "iteration": 1,
+                        "thought": "x",
+                        "action": {"tool": "nmap_scan", "args": {}, "success": True},
+                        "observation": "22 open",
+                    }
+                ],
+            }
+        )
+    )
+    (mesh / "2001-state.json").write_text(
+        json.dumps({"pid": 2001, "phase": "recon", "iteration": 1, "engagement_dir": str(eng)})
+    )
+    monkeypatch.setattr(ws, "engagements_root", lambda: base / "engagements")
+    agents = ot.scan_agents(mesh, tmp_path / "config", live=False)
+    assert len(agents) == 1
+    a = agents[0]
+    assert a.iterations and a.iterations[0]["action"]["tool"] == "nmap_scan", "trail not matched at the base root"
