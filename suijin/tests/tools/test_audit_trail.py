@@ -181,3 +181,23 @@ def test_html_and_burp_export_from_trail(tmp_path):
 
     files = list(pathlib.Path(h.split(": ")[1]).parent.glob("*.html"))
     assert len(files) == 1
+
+
+def test_completion_turn_does_not_erase_the_real_tool(tmp_path):
+    """Field-found on the live run: iteration N executes http_request,
+    then the SAME iteration number logs the completion turn (tool=none,
+    fresh thought). The merge must keep the real tool+args+obs AND the
+    completion thought — 'none' is not content."""
+    at.set_audit_dir(tmp_path)
+    at.start_audit("merge probe")
+    at.log_iteration(4, "probe files surface", "", "http_request", {"url": "http://t/files/public/"}, "404 not found", True, "exploitation")
+    at.log_iteration(4, "Objective met — completing with summary", "", "", {}, "", True, "informational", completion_reason="objective complete")
+    live = at.current_trail("merge probe")
+    its = live["iterations"]
+    assert len(its) == 1
+    it = its[0]
+    assert it["action"]["tool"] == "http_request", it["action"]
+    assert it["action"]["args"]["url"].endswith("/files/public/")
+    assert it["observation"] == "404 not found"
+    assert "Objective met" in it["thought"]
+    assert it["completion_reason"] == "objective complete"
