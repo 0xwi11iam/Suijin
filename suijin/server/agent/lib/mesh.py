@@ -164,6 +164,30 @@ def _announce_system(message: str) -> None:
         _tail_reset()
 
 
+def refresh_runtime_block() -> None:
+    """Republish JUST the runtime gauge of this node's state digest.
+
+    The red-teamer strip measures t/s from in-process delta arrivals at
+    frame rate; the operator console is a DIFFERENT process and only
+    sees this file — a per-turn publish made its gauge step at ~0.25Hz.
+    This refresh runs on a fast cadence from the engagement so the
+    operator's gauge tracks the same rolling number. Tiny json,
+    atomic write, never raises."""
+    p = mesh_dir() / f"{os.getpid()}-state.json"
+    if not p.exists() or _node["me"] is None:
+        return
+    with contextlib.suppress(Exception):
+        d = json.loads(p.read_text())
+        from suijin.modules.agent.lib.nodes.think_node import _runtime_status
+
+        rt = _runtime_status()
+        if rt:
+            d["runtime"] = rt
+        from suijin.modules.platform.lib.filelock import atomic_write
+
+        atomic_write(p, json.dumps(d, default=str))
+
+
 def publish_state(digest: dict) -> None:
     """Refresh the per-turn mesh-state digest peers may read (curated:
     board/findings/footholds/phase — NEVER operator guidance or DMs)."""

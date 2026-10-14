@@ -988,6 +988,26 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
     )
     console.print(HINT + " [dim]/think (toggle reasoning)[/dim]")
 
+    # RUNTIME GAUGE PUBLISHER (2026-10-14, "copy the redteamer method"):
+    # the strip measures t/s from in-process delta arrivals at frame
+    # rate; the operator console reads the state digest and only got a
+    # refresh per think turn (~0.25Hz). This thread republishes the
+    # runtime block every 0.5s so the operator's gauge moves like the
+    # strip's. Daemon + never raises: the mesh may never break a run.
+    def _runtime_publisher():
+        import time as _time
+
+        while True:
+            with contextlib.suppress(Exception):
+                from suijin.modules.agent.lib import mesh as _mesh
+
+                _mesh.refresh_runtime_block()
+            _time.sleep(0.5)
+
+    import threading as _threading
+
+    _threading.Thread(target=_runtime_publisher, daemon=True, name="runtime-gauge-pub").start()
+
     _resume_retry = False  # one clean-restart allowed after a paused resume
     _restart_stream = False  # provider restart / ask-hold: exit inner loop, re-stream
     _op_pause_w = _OperatorPauseWatch()  # operator /pause → mid-turn interrupt, like RunBox /pause
