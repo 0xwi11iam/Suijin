@@ -153,13 +153,21 @@ class TestZaiGenerate:
         assert call["json"]["model"] == "glm-5.3"
 
     def test_usage_recorded(self, monkeypatch):
+        # priced=True requires EXACT rate resolution (config/live catalog);
+        # the hermetic sandbox has no models.dev cache, so glm-5.3 lands
+        # on the offline table there = approximate = priced False. The
+        # exact path is simulated like its sibling pricing test.
+        monkeypatch.setattr(
+            "suijin.modules.providers.lib.model_meta.resolve_pricing",
+            lambda provider, model, cfg=None: (1.4, 4.4),
+        )
         monkeypatch.setattr(providers, "_HTTP", _FakeSession(_ok_response()))
         providers.generate([{"role": "user", "content": "hi"}], CFG, retries=1)
         u = providers.get_usage()
         assert u["calls"] == 1
         assert u["input_tokens"] == 10
         assert u["output_tokens"] == 5
-        assert u["priced"] is True  # glm-5.3 is in MODEL_PRICING
+        assert u["priced"] is True
 
     def test_model_remap_from_hf_style_id(self, monkeypatch):
         sess = _FakeSession(_ok_response())

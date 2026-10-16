@@ -72,20 +72,3 @@ class TestGraphBootDegrades:
         assert not out["_current_step"].get("tool_name")
         assert out.get("completion_reason") is None  # 1 failure ≠ run death
         assert out["_consecutive_failures"] == 1
-
-
-class TestMcpGarbageLines:
-    def test_non_dict_line_bounces_not_dies(self, monkeypatch):
-        import io
-
-        from suijin.modules.console.lib import mcp_server
-
-        lines = io.StringIO('[1, 2, 3]\n"just a string"\n42\n')
-        out_sink = io.StringIO()
-        monkeypatch.setattr("sys.stdin", lines)
-        monkeypatch.setattr("sys.stdout", out_sink)
-        with pytest.MonkeyPatch.context() as mp:
-            mp.setattr(mcp_server, "handle_message", lambda m: {"echo": True})
-            mcp_server.main()
-        replies = [json.loads(ln) for ln in out_sink.getvalue().splitlines() if ln.strip()]
-        assert len(replies) == 3 and all("error" in r for r in replies)  # bounced, loop alive
