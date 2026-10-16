@@ -485,13 +485,27 @@ class TestPricing:
 
         assert _price_for("totally-unknown-model-xyz") is None
 
-    def test_priced_flag_true_semantics(self):
-        """priced=False once ANY call uses the fallback rate."""
+    def test_priced_flag_true_semantics(self, monkeypatch):
+        """priced=False once ANY call uses the fallback rate; True only
+        while every rate is EXACT (config/live-catalog resolution). The
+        hermetic sandbox has no models.dev cache — glm-5.3 resolves via
+        the offline table there, which is approximate by design, so the
+        exact path is simulated (a config-resolved pair)."""
+
+        from suijin.modules.providers import lib as pl
         from suijin.modules.providers.lib import USAGE, _record_usage, reset_usage
 
+        monkeypatch.setattr(
+            "suijin.modules.providers.lib.model_meta.resolve_pricing",
+            lambda provider, model, cfg=None: (1.4, 4.4),  # exact: config-resolved
+        )
         reset_usage()
         _record_usage("t", "glm-5.3", 1000, 1000)
         assert USAGE["priced"] is True
+        monkeypatch.setattr(
+            "suijin.modules.providers.lib.model_meta.resolve_pricing",
+            lambda provider, model, cfg=None: None,  # no live rate for this one
+        )
         _record_usage("t", "totally-unknown-model-xyz", 1000, 1000)
         assert USAGE["priced"] is False
 
