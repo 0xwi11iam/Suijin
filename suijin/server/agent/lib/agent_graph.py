@@ -197,6 +197,27 @@ class SuijinAgentGraph:
             from suijin.modules.platform.lib.governor import budget_guard
 
             _cfg = state.get("_run_config") or self.run_config
+            # HARD ITERATION BUDGET (2026-10-16, the 27/25 field overrun):
+            # max_iterations was advisory — the real stop was recursion
+            # math, and bookkeeping turns (1 recursion, not 2) let the
+            # counter crawl past the budget while the agent kept diving.
+            # At N of N without a completion, the graph ends CLEANLY with
+            # the honest reason (classified BUDGET ending, never 'error
+            # before completion').
+            _iters = int(state.get("current_iteration") or 0)
+            _max_iters = int((_cfg or {}).get("max_iterations") or 0)
+            if _max_iters and _iters >= _max_iters and not state.get("completion_reason"):
+                return {
+                    "messages": [
+                        {
+                            "role": "assistant",
+                            "content": f"BUDGET EXHAUSTED — {_iters}/{_max_iters} iterations. Engagement ends here; the report covers what was verified.",
+                        }
+                    ],
+                    "completion_reason": f"budget_exhausted: {_iters}/{_max_iters} iterations reached",
+                    "final_summary": f"Iteration budget exhausted at {_iters}/{_max_iters}.",
+                    "current_iteration": _iters,
+                }
             _guard = budget_guard(_cfg)
             if _guard and _guard.startswith("COST LIMIT REACHED"):
                 return {
