@@ -1616,6 +1616,26 @@ class EngagementUI:
 
         tok = int(USAGE.get("input_tokens", 0)) + int(USAGE.get("output_tokens", 0))
         cost = float(USAGE.get("est_cost_usd", 0.0))
+        # BADGE SYNC ON EVERY HEADER (2026-10-16, the 'prompt always shows
+        # recon' report): the input badge only re-synced on GOVERNOR
+        # transitions (_just_transitioned_to) — model-driven transition_phase
+        # actions changed the phase without the flag, and the badge stayed
+        # pinned at its boot value forever. Every header now syncs the
+        # badge to the phase the trace actually carries.
+        _hdr_phase = str(phase or self.phase or "").lower()
+        _badge = None
+        for frag, mode in (
+            ("post_exploit", "exploit"),
+            ("exploit", "exploit"),
+            ("report", "report"),
+            ("recon", "recon"),
+            ("informational", "recon"),
+        ):
+            if frag in _hdr_phase:
+                _badge = mode
+                break
+        if _badge:
+            UI_STATE["input_mode"] = _badge
         self._cur = _Iteration(n, phase or self.phase, max(0, tok - self._last_tok), max(0.0, cost - self._last_cost))
         self._last_tok, self._last_cost = tok, cost
         self.iteration = n
