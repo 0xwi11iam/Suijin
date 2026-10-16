@@ -492,7 +492,6 @@ class TestPricing:
         the offline table there, which is approximate by design, so the
         exact path is simulated (a config-resolved pair)."""
 
-        from suijin.modules.providers import lib as pl
         from suijin.modules.providers.lib import USAGE, _record_usage, reset_usage
 
         monkeypatch.setattr(
