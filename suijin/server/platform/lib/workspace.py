@@ -119,7 +119,6 @@ ENGAGEMENT_LAZY = (
     "engagement_templates",
     "evidence",
     "fireteam",
-    "portal",
     "spar_baselines",
     "wordlists",
     "payloads",
