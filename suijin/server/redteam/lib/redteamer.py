@@ -2239,7 +2239,11 @@ def run_exploit(target: str = "", config=None):
         "write_note every attempt with its result; record_finding on anything confirmed. "
         "Show proof (response/output evidence) the moment something lands."
     )
-    return run_red_team(config, objective) or 0
+    # RELOAD AT LAUNCH (2026-10-16, the 'hardcoded provider' report): the
+    # menu loaded config ONCE at boot — edits made while sitting at the
+    # objective prompt (Settings in another window, hand-edited json)
+    # never reached the run and the banner printed the stale provider.
+    return run_red_team(load_config(), objective) or 0
 
 
 def main():
