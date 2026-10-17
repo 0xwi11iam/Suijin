@@ -250,6 +250,13 @@ class SuijinAgentGraph:
                 bool(_step.get("tool_name"))
                 or bool(result.get("completion_reason"))
                 or result.get("_just_transitioned_to")
+                # A REFUSED completion is still a decision (2026-10-17,
+                # the google run: 7 legitimate completes refused by the
+                # coverage gate, each counted as "no progress", breaker
+                # killed a finished engagement as 'error'). The model
+                # produced a complete action; the gate refused it — that
+                # is a dialogue, not a loop.
+                or result.get("_completion_refused") is True
             )
             if _did_work:
                 result["_no_progress_turns"] = 0
