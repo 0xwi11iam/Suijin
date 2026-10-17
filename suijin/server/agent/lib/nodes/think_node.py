@@ -1561,7 +1561,27 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
                 ]
                 _refusal = completion_blocked(assets)
         if _refusal:
-            updates["messages"].append({"role": "user", "content": _refusal})
+            # ESCALATION CAP (2026-10-17): the same gate refusing forever
+            # is a deadlock, not protection. After MAX_COMPLETION_REFUSALS
+            # the gate stands down with the refusal noted in the reason —
+            # the operator sees what was left untested in the report.
+            _n_refusals = int(state.get("_completion_refusals") or 0) + 1
+            updates["_completion_refusals"] = _n_refusals
+            if _n_refusals >= 5:
+                updates["completion_reason"] = (
+                    f"{completion_reason} [NOTE: {5} completion refusals overridden — "
+                    "remaining untested coverage documented in the report]"
+                )
+                updates["messages"].append(
+                    {"role": "user", "content": f"OBJECTIVE COMPLETE: {updates['completion_reason']}"}
+                )
+            else:
+                updates["messages"].append({"role": "user", "content": _refusal})
+                # THE REFUSAL IS A DECISION (2026-10-17): the no-progress
+                # breaker must not count a refused completion as an empty
+                # turn — the agent finished and a gate pushed back; that's
+                # a dialogue. The flag resets on the next real action.
+                updates["_completion_refused"] = True
         else:
             updates["completion_reason"] = completion_reason
             updates["messages"].append(
