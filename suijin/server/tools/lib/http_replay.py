@@ -426,31 +426,43 @@ def http_replay(
                 return f"Error: {guard}"
 
         if compare is not None:
-            # the BASELINE honors `credential` too: compare semantics are
-            # "this cred as-is vs the compare's cred". The old flow sent
-            # the baseline UNAUTHENTICATED (the param silently ignored) —
-            # a 403-by-default target masked it entirely.
-            if credential or unauthenticated:
-                base = apply_credential(dict(base), credential or None)
-            exploit_req = dict(base)
-            for m in compare.get("mutations") or []:
-                exploit_req = apply_mutation(exploit_req, m.get("op", ""), m.get("field", ""), m.get("value"))
-            if compare.get("credential") or compare.get("unauthenticated"):
-                exploit_req = apply_credential(exploit_req, compare.get("credential"))
-            a = _send(base, timeout, follow_redirects)
-            b = _send(exploit_req, timeout, follow_redirects)
-            _record_replay(exploit_req, "compare-exploit")
-            return json.dumps(
-                {
-                    "mode": "compare",
-                    "baseline": {k: a.get(k) for k in ("status", "length", "ms", "location", "set_cookie", "body")},
-                    "exploit": {k: b.get(k) for k in ("status", "length", "ms", "location", "set_cookie", "body")},
-                    "error_signatures": b.get("error_signatures") or [],
-                    "diff": _diff(a, b),
-                    "curl": _curl_of(exploit_req),
-                },
-                indent=2,
-            )[:6000]
+            # COMPARE COERCION (2026-10-17): the model habitually passes
+            # compare=true ("do a compare") or a bare string — .get() on
+            # a bool was the it-2 crash ('bool' object has no attribute
+            # 'get'). Anything truthy-but-not-a-dict becomes an empty
+            # compare (baseline vs exploit with mutations only).
+            if not isinstance(compare, dict):
+                compare = {} if compare else None
+            if compare is not None:
+                # the BASELINE honors `credential` too: compare semantics are
+                # "this cred as-is vs the compare's cred". The old flow sent
+                # the baseline UNAUTHENTICATED (the param silently ignored) —
+                # a 403-by-default target masked it entirely.
+                if credential or unauthenticated:
+                    base = apply_credential(dict(base), credential or None)
+                exploit_req = dict(base)
+                for m in compare.get("mutations") or []:
+                    if not isinstance(m, dict):
+                        continue
+                    exploit_req = apply_mutation(exploit_req, m.get("op", ""), m.get("field", ""), m.get("value"))
+                if compare.get("credential") or compare.get("unauthenticated"):
+                    exploit_req = apply_credential(
+                        exploit_req, compare.get("credential") if isinstance(compare.get("credential"), str) else None
+                    )
+                a = _send(base, timeout, follow_redirects)
+                b = _send(exploit_req, timeout, follow_redirects)
+                _record_replay(exploit_req, "compare-exploit")
+                return json.dumps(
+                    {
+                        "mode": "compare",
+                        "baseline": {k: a.get(k) for k in ("status", "length", "ms", "location", "set_cookie", "body")},
+                        "exploit": {k: b.get(k) for k in ("status", "length", "ms", "location", "set_cookie", "body")},
+                        "error_signatures": b.get("error_signatures") or [],
+                        "diff": _diff(a, b),
+                        "curl": _curl_of(exploit_req),
+                    },
+                    indent=2,
+                )[:6000]
 
         if sweep is not None:
             values = [str(v) for v in (sweep.get("values") or [])][:50]
