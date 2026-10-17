@@ -24,6 +24,15 @@ from suijin.modules.agent.lib.state import (
 logger = logging.getLogger(__name__)
 
 
+def _drain_chain(state: dict) -> dict | None:
+    """Pull the tools-layer confirmed-finding handoff into graph state."""
+    with __import__("contextlib").suppress(Exception):
+        from suijin.modules.agent.lib.reflex.chain_composer import drain_pending
+
+        return drain_pending(state)
+    return None
+
+
 def _tenant_ctx(user_id, project_id, session_id):
     from suijin.modules.platform.lib.agent_context import set_tenant_context
 
@@ -795,7 +804,15 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
             _section_sizes["HYPOTHESES"] = len(_hyp_txt)
             _block_parts.append("## ATTACK HYPOTHESES (your specific ideas to test)\n" + _hyp_txt)
 
-        _chain_txt = render_chain_directive(state)
+        # THE HEARTBEAT (2026-10-17): drain a confirmed-finding handoff
+        # from the tools layer into graph state so the CHAIN directive
+        # actually renders (the 202-iteration run where it never did).
+        _drained = _drain_chain(state)
+        if _drained is not None:
+            state["_chain_pending"] = _drained  # context renders it NOW;
+            # persistence rides the next updates dict (think always
+            # returns one) — no separate seam needed
+        _chain_txt = render_chain_directive(state, iteration_now=iteration)
         if _chain_txt:
             _section_sizes["CHAIN"] = len(_chain_txt)
             _block_parts.append(_chain_txt)
@@ -1494,6 +1511,22 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
                         "COMPLETION REFUSED (depth gate): you hold a confirmed capability whose "
                         "unlocks were never named. Say what it unlocks (todo: 'name unlocks'), test "
                         "the strongest, or mark it not_applicable — then complete."
+                    )
+        # THE CHAIN GATE (2026-10-17): completion is refused while a
+        # CONFIRMED finding's chain sits unexplored — same family as the
+        # depth gate, closing the "agent never knew to chain" hole.
+        if _refusal is None:
+            with contextlib.suppress(Exception):
+                from suijin.modules.agent.lib.reflex.chain_composer import drain_pending
+
+                _cp = state.get("_chain_pending") or drain_pending(state)
+                if _cp and not _cp.get("explored"):
+                    _refusal = (
+                        "COMPLETION REFUSED (chain gate): a CONFIRMED finding sits unexploited — "
+                        f"[{_cp.get('severity', '?')}] {str(_cp.get('finding', ''))[:100]} on "
+                        f"{_cp.get('endpoint', '?')}. Compose and test its worst 3-step chain "
+                        "(what it enables → what you can reach → maximum impact), catalog the "
+                        "result, THEN complete."
                     )
         # (Drive 2d) THE CONTINUATION VETO: drive energy high + live
         # threads → refuse the quiet exit ONCE per engagement. The

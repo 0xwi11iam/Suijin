@@ -23,7 +23,7 @@ logger = logging.getLogger("suijin.critique")
 
 _CRITIQUE_PROMPT = """You are reviewing your OWN completed security engagement.
 Objective: {objective}
-Result: {reason} ({ok}/{total} steps succeeded, ${{cost}} spent)
+Result: {reason} ({ok}/{total} steps succeeded, ${cost} spent)
 
 Execution trace (tool, args-digest, outcome, duration):
 {trace}

@@ -301,6 +301,16 @@ _FOOTHOLD_RX = _re.compile(
     r"uid=\d+\(|\bwhoami\b|shell obtained|reverse shell|webshell|FLAG\{[^}]*rce[^}]*\}",
     _re.I,
 )
+#: post-exploitation iterations allowed with no NEW confirmed finding
+#: before the governor releases back to exploitation (2026-10-17)
+POST_EXPLOIT_RELEASE = 10
+
+#: classes that DO constitute a foothold (data-plane/shell access)
+_FOOTHOLD_CLASSES = ("rce", "ssti", "command_injection", "cmdi", "deser", "privesc", "ssrf", "auth_bypass", "sqli")
+
+#: classes that NEVER do — an open redirect is a finding, not a foothold
+_NON_FOOTHOLD_CLASSES = ("redirect", "open_redirect", "xss", "csrf", "cors", "clickjacking", "info", "header", "jsonp")
+
 _SHELL_CLASSES = ("rce", "ssti", "command_injection", "cmdi", "deser", "file_upload", "upload", "privesc")
 
 
@@ -318,10 +328,14 @@ def update_foothold(state: dict, result: dict) -> bool:
         blob = "\n".join(texts)
         hit = bool(_FOOTHOLD_RX.search(blob))
         if not hit and "CONFIRMED" in blob and "catalog" in str(step.get("tool_name") or "") + blob[:200].lower():
-            for cls in _SHELL_CLASSES:  # catalog_exploit CONFIRMED on a shell-class entry
-                if cls in blob.lower():
-                    hit = True
-                    break
+            # FOOTHOLD PREDICATE TIGHTENING (2026-10-17): the google run
+            # classed open-redirect findings as FOOTHOLDS → forced
+            # post_exploit for 72% of the run. Only data-plane/shell
+            # classes count (creds/shell/pivot), per the original
+            # invariant — redirect/info/config classes NEVER do.
+            _low = blob.lower()
+            if any(cls in _low for cls in _FOOTHOLD_CLASSES) and not any(cls in _low for cls in _NON_FOOTHOLD_CLASSES):
+                hit = True
         if not hit:
             board = (state.get("target_info") or {}).get("credentials") or []
             # cred regexes straight off tool output (UI loot was display-only)
@@ -370,6 +384,8 @@ def govern(state: dict, cfg: dict | None) -> dict | None:
                     "_just_transitioned_to": "post_exploitation",
                     "attack_path_type": "post_exploit",
                     "_post_exploit_done": True,
+                    "_post_exploit_since": int(state.get("current_iteration") or 0),
+                    "_last_finding_iter": int(state.get("current_iteration") or 0),
                     "messages": [
                         {
                             "role": "user",
@@ -377,6 +393,31 @@ def govern(state: dict, cfg: dict | None) -> dict | None:
                                 "MODE CHANGE → post_exploitation (procedural: foothold established — credentials "
                                 "or shell access captured). Doctrine switched to: post_exploit. "
                                 "Consolidate: privesc checklist, loot inventory, pivot surface, cleanup."
+                            ),
+                        }
+                    ],
+                }
+            # POST-EXPLOIT BUDGET RELEASE (2026-10-17): the google run
+            # spent 146/202 iterations (72%) locked in post_exploit
+            # consolidation while the attack worklist sat open. No NEW
+            # confirmed finding for POST_EXPLOIT_RELEASE iters → release
+            # back to exploitation with an explicit message (the inverse
+            # gate; a fresh foothold re-enters normally).
+            _pe_since = int(state.get("_post_exploit_since") or 0)
+            _last_find = int(state.get("_last_finding_iter") or 0)
+            _iters_now = int(state.get("current_iteration") or 0)
+            if _pe_since and _iters_now - max(_pe_since, _last_find) >= POST_EXPLOIT_RELEASE:
+                return {
+                    "current_phase": "exploitation",
+                    "_just_transitioned_to": "exploitation",
+                    "attack_path_type": "exploit",
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": (
+                                f"MODE CHANGE → exploitation (procedural: {POST_EXPLOIT_RELEASE} post-exploitation "
+                                "iterations without a new confirmed finding — consolidation is exhausted). "
+                                "Return to the attack worklist: untried surfaces, pending chains, open leads."
                             ),
                         }
                     ],
