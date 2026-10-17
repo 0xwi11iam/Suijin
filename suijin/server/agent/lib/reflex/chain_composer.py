@@ -14,23 +14,49 @@ from __future__ import annotations
 
 import contextlib
 
+# THE HEARTBEAT HANDOFF (2026-10-17): _on_confirmed runs in the tools
+# layer with NO graph access — it used to call on_finding_confirmed()
+# with a THROWAWAY dict, so _chain_pending was set on garbage and the
+# CHAIN directive never rendered once in a 202-iteration run. The
+# pending chain lands here (module-level); think_node drains it into
+# graph state on the next turn.
+_PENDING_HANDOFF: dict | None = None
+
 
 def on_finding_confirmed(state: dict, finding: dict) -> None:
     """Called when catalog_exploit CONFIRMS (or a finding reaches high
     confidence). Sets the chain-pending state and auto-populates chain
     hypotheses."""
+    global _PENDING_HANDOFF
     with contextlib.suppress(Exception):
         from suijin.modules.agent.lib.reflex.hypotheses import add_chain_hypotheses
 
         iteration = int((state or {}).get("current_iteration") or 0)
-        state["_chain_pending"] = {
+        rec = {
             "finding": str(finding.get("description") or finding.get("title") or finding)[:200],
             "endpoint": str(finding.get("endpoint") or "?")[:100],
             "severity": str(finding.get("severity") or "?")[:20],
             "turn": iteration,
             "explored": False,
         }
+        state["_chain_pending"] = rec
+        _PENDING_HANDOFF = dict(rec)
         add_chain_hypotheses(state, finding)
+
+
+def drain_pending(state: dict) -> dict | None:
+    """think_node calls this each turn: any confirmed finding that
+    landed in the tools layer becomes graph state. Returns the record
+    (or None) — the caller merges it into its updates."""
+    global _PENDING_HANDOFF
+    if _PENDING_HANDOFF is None:
+        return state.get("_chain_pending")
+    rec = _PENDING_HANDOFF
+    _PENDING_HANDOFF = None
+    existing = state.get("_chain_pending") or {}
+    if existing.get("explored"):
+        return existing  # an older chain is mid-exploration — keep it
+    return rec
 
 
 def check_chain_compliance(state: dict, trace: list) -> str | None:
@@ -75,17 +101,24 @@ def check_chain_compliance(state: dict, trace: list) -> str | None:
     return None
 
 
-def render_chain_directive(state: dict) -> str:
+def render_chain_directive(state: dict, iteration_now: int = 0) -> str:
     """The context section for pending chains — injected into the
     hypothesis/chain area of the context block."""
-    pending = (state or {}).get("_chain_pending") or None
+    pending = drain_pending(state)
     if not pending or pending.get("explored"):
         return ""
 
     desc = pending.get("finding") or "?"
     sev = pending.get("severity") or "?"
+    stale = int(iteration_now or 0) - int(pending.get("turn") or 0)
+    urgent = stale >= 2
+    head = (
+        f"## ⚠ CHAIN REQUIRED — [{sev}] CONFIRMED finding sits UNEXPLOITED"
+        if urgent
+        else f"## CHAIN PENDING — [{sev}] finding unexplored"
+    )
     lines = [
-        f"## CHAIN PENDING — [{sev}] finding unexplored",
+        head,
         f"  finding: {desc[:150]}",
         f"  endpoint: {pending.get('endpoint', '?')}",
         "",
@@ -97,6 +130,11 @@ def render_chain_directive(state: dict) -> str:
         "Your inventory (credentials, footholds, tokens) + this finding",
         "= an attack chain. Build it. Test it. Catalog the result.",
     ]
+    if urgent:
+        lines.append(
+            "\nThis is not optional: chaining confirmed findings IS the job. "
+            "You will not complete while this sits unexplored."
+        )
     return "\n".join(lines)
 
 

@@ -6,6 +6,7 @@ Scoped to the agent workspace with destructive-command guardrails.
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import sys
 
@@ -19,16 +20,54 @@ def _ws():
 
 from .result import run_command
 
+# PERSISTENT CWD (2026-10-17): set when the model cd's, survives across
+# execute_terminal calls for the engagement, reset by _reset_cwd() at
+# engagement start. None = always the engagement home (old behavior).
+_PERSIST_CWD: str | None = None
 
-def execute_terminal(cmd, timeout=30):
+
+def _reset_cwd() -> None:
+    global _PERSIST_CWD
+    _PERSIST_CWD = None
+
+
+def _extract_cd(cmd: str) -> str | None:
+    """The path of a LEADING `cd <dir>` (the model's habit) — captured
+    so the NEXT call starts there instead of forcing another cd prefix."""
+    m = re.match(r"^\s*cd\s+([^;&|]+?)(?:\s*&&|\s*;|$)", cmd)
+    if not m:
+        return None
+    d = m.group(1).strip().strip("\"'")
+    if d in ("..", "-", "$OLDPWD") or d.startswith("$"):
+        return None
+    return d or None
+
+
+def execute_terminal(cmd, timeout=30, cwd=None):
     """Shell execution gateway — scoped to suijin_agent/ workspace.
 
     Commands that modify the global system (pip install, brew, apt, sudo, etc.)
     are intercepted and require explicit user approval before execution.
+
+    cwd: optional persistent working directory (the cwd-persistence
+    feature — None runs from the engagement home as before).
     """
     try:
         if not cmd:
             return "Error: No command provided."
+
+        # CWD PERSISTENCE (2026-10-17): 62% of the google run's terminal
+        # calls re-typed `cd /engagement/... && …` because each call
+        # reset to the home. A module-level cwd survives between calls
+        # (set when the model cd's, restored when the dir vanishes).
+        global _PERSIST_CWD
+        if cwd is None:
+            cwd = _PERSIST_CWD
+        _new_cwd = _extract_cd(cmd)  # from the ORIGINAL text, before prefixing
+        if _new_cwd:
+            _PERSIST_CWD = _new_cwd
+        if cwd:
+            cmd = f'cd {shlex.quote(str(cwd))} 2>/dev/null || cd "$SUIJIN_HOME"; {cmd}'
 
         # Suijin does not run as native Python on Windows — the tool
         # ecosystem (packs, POSIX shell) is Linux-based. Windows users

@@ -21,6 +21,7 @@ Layout:
 from __future__ import annotations
 
 import contextlib
+import time
 
 # Cross-module re-export surface: delegated lazily (boundary rule — no
 # module-level cross-module imports; delegation is also patch-transparent
@@ -163,9 +164,20 @@ def _mesh_tool(action: str, a: dict) -> str:
                 )
             return mesh.broadcast(msg)
         if action == "dm":
-            pid = mesh.resolve(a.get("node") or a.get("to") or "")
+            # PEER-CHURN RETRY (2026-10-17): a peer restarting mid-run
+            # drops its registry file for a beat; a single resolve miss
+            # failed the DM outright (google run it 61). One re-resolve
+            # after a short settle before giving up.
+            node_ref = a.get("node") or a.get("to") or ""
+            pid = mesh.resolve(node_ref)
             if not pid:
-                return f"Error: no such mesh node: {a.get('node', '')}"
+                time.sleep(1.5)
+                pid = mesh.resolve(node_ref)
+            if not pid:
+                return (
+                    f"Error: no such mesh node: {a.get('node', '')} (re-resolved after "
+                    "peer churn — if the peer just restarted, wait a beat and retry)"
+                )
             msg = a.get("message") or a.get("msg") or a.get("text") or ""
             if not msg:
                 return (
@@ -305,6 +317,25 @@ from suijin.modules.tools.lib.reporting import (
     _rate_all,
     _rate_check,
 )
+
+
+def _strip_home_dup(fp: str) -> str:
+    """Absolute paths that already point INSIDE the engagement home get
+    the home prefix stripped — the terminal writes /eng/home/Users/...,
+    read_file resolved it to /eng/home/eng/home/Users/... (ghost files).
+    Best-effort; anything odd passes through untouched."""
+    try:
+        from suijin.modules.platform.lib.workspace import home_dir
+
+        home = str(home_dir())
+        s = str(fp or "")
+        if s.startswith(home + "/"):
+            return s[len(home) :].lstrip("/")
+        return s
+    except Exception:
+        return str(fp or "")
+
+
 from suijin.modules.tools.lib.terminal import execute_terminal
 
 __all__ = [
@@ -429,7 +460,13 @@ def _build_routes(config):
 
     routes = {
         "execute_terminal": lambda a: execute_terminal(
-            a.get("cmd") or a.get("command"), timeout=int(a.get("timeout", 30))
+            a.get("cmd") or a.get("command"),
+            timeout=int(a.get("timeout", 30) or 30),
+            # KWARG TOLERANCE (2026-10-17): the model habitually rides
+            # decision fields (auto_actions, thought) into tool args —
+            # a TypeError burned a retry twice in the google run. Extra
+            # keys are dropped here, never fatal.
+            **({"cwd": a["cwd"]} if isinstance(a.get("cwd"), str) and a.get("cwd") else {}),
         ),
         # persistent shells — local-device work (cwd/env survive between sends)
         "shell_start": lambda a: shell_session.shell_start(shell=a.get("shell", ""), cwd=a.get("cwd", "")),
@@ -698,8 +735,15 @@ def _build_routes(config):
             timeout_s=int(a.get("timeout_s", 30)),
             max_cycles=int(a.get("max_cycles", 3)),
         ),
-        "read_file": lambda a: read_file(a.get("file_path", "")),
-        "write_file": lambda a: write_file(a.get("file_path", ""), a.get("content", "")),
+        # PATH-JAIL STRIP + ALIASES (2026-10-17): the model writes via
+        # terminal (absolute paths incl. the engagement home), then
+        # read_file prepends the home AGAIN — /eng/home/Users/... ghost
+        # paths burned iterations in the google run. Strip a leading
+        # engagement-home prefix from absolute paths; accept path= alias.
+        "read_file": lambda a: read_file(_strip_home_dup(a.get("file_path") or a.get("path") or "")),
+        "write_file": lambda a: write_file(
+            _strip_home_dup(a.get("file_path") or a.get("path") or ""), a.get("content", "")
+        ),
         "apply_patch": lambda a: apply_patch(a.get("vulnerability"), a.get("file_path", "lab.py")),
         "claim_flag": lambda a: f"OBJECTIVE MET: {a.get('flag')}",
         # Recon orchestration
