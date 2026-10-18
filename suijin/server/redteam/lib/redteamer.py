@@ -50,8 +50,9 @@ providers = load_local_module("providers")
 
 
 audit_mod = load_local_module("audit")
-supervisor = load_local_module("supervisor")
-supervisor.set_providers(providers)
+# Legacy intel/supervisor removed (2026-10-18): was loaded but never
+# invoked — the System One assessor in agent_graph.py IS the supervisor.
+# Fallback for non-laya users: assessor → local LLM → deterministic detectors.
 oracle = load_local_module("oracle")
 oracle.set_providers(providers)
 

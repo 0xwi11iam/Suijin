@@ -336,6 +336,40 @@ def _strip_home_dup(fp: str) -> str:
         return str(fp or "")
 
 
+def _completion_status() -> str:
+    from suijin.modules.agent.lib.completion_scoreboard import render_scoreboard
+    from suijin.modules.tools.lib.services import get as _svc
+
+    state = _svc("agent_state") or {}
+    if not state:
+        return "Error: no engagement state available yet"
+    return render_scoreboard(state)
+
+
+def _obs_status() -> str:
+    from suijin.modules.agent.lib.observation import status
+
+    return status()
+
+
+def _obs_record(args: dict) -> None:
+    """Observation engine: record every HTTP call's shape for deterministic
+    IDOR/BFLA/mass-assignment detection. Never raises."""
+    try:
+        from suijin.modules.agent.lib.observation import record
+
+        record(
+            endpoint=str(args.get("url") or ""),
+            method=str(args.get("method") or "GET"),
+            credential=str(args.get("credential") or "anon"),
+            params=args.get("body") if isinstance(args.get("body"), dict) else {},
+            status=0,  # filled by the caller if available
+            resp_size=0,
+        )
+    except Exception:
+        pass
+
+
 from suijin.modules.tools.lib.terminal import execute_terminal
 
 __all__ = [
@@ -566,7 +600,10 @@ def _build_routes(config):
         ),
         "mine_failures": lambda a: mine_failures(max_clusters=int(a.get("max_clusters", 5))),
         "anonymize_report": lambda a: anonymize_report(a.get("file_path", "")),
-        "http_request": lambda a: http_request(a.get("method", "GET"), a.get("url"), a.get("headers"), a.get("body")),
+        "http_request": lambda a: (
+            _obs_record(a),
+            http_request(a.get("method", "GET"), a.get("url"), a.get("headers"), a.get("body")),
+        )[-1],
         "bypass_403": lambda a: _bypass_403(a.get("url", "")),
         "skill_search": lambda a: _skill_search(a.get("query", ""), limit=int(a.get("limit", 10))),
         "skill_load": lambda a: _skill_load(a.get("skill_id", a.get("id", ""))),
@@ -635,6 +672,8 @@ def _build_routes(config):
             text=a.get("text", ""),
             assets=a.get("assets"),
         ),
+        "completion_status": lambda a: _completion_status(),
+        "observation_status": lambda a: _obs_status(),
         "surface_expand": lambda a: _surface_expand(
             url=a.get("url", ""),
             names=a.get("names"),

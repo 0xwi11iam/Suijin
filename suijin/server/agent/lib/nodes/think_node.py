@@ -847,6 +847,17 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
             # persistence rides the next updates dict (think always
             # returns one) — no separate seam needed
         _chain_txt = render_chain_directive(state, iteration_now=iteration)
+
+    # ── OBSERVATION ENGINE (2026-10-18, CyberStrike's deterministic
+    # IDOR/BFLA detection): surfaces what the accumulated HTTP evidence
+    # already shows — no LLM needed to see that user_a and user_b got
+    # different responses for the same object.
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.observation import render_for_context as _obs_render
+
+        _obs_txt = _obs_render(max_items=5)
+        if _obs_txt:
+            _block_parts.append(_obs_txt)
         if _chain_txt:
             _section_sizes["CHAIN"] = len(_chain_txt)
             _block_parts.append(_chain_txt)
@@ -1447,7 +1458,11 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
             "reasoning": reasoning,
         }
 
-    elif str(decision.get("tool_name") or "") == "surface_expand" and action == "use_tool" and (state.get("_chain_pending") or {}).get("explored") is False:
+    elif (
+        str(decision.get("tool_name") or "") == "surface_expand"
+        and action == "use_tool"
+        and (state.get("_chain_pending") or {}).get("explored") is False
+    ):
         # DEPTH-OVER-COVERAGE (2026-10-18, borrowed from ARTEX's planner
         # doctrine): a confirmed finding's chain is pending — enumerating
         # MORE surfaces right now is attention fragmentation. Go deep on

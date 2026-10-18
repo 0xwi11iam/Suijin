@@ -572,29 +572,37 @@ class SuijinAgentGraph:
                 except Exception as e:
                     logger.debug(f"Oracle check skipped: {e}")
 
-            # ── Drift analysis ─────────────────────────────────────
-            # Cadence configurable (2026-09-12): drift_interval, 0 = off.
+            # ── Drift analysis (2026-10-18: replaced keyword-overlap with
+            # the drifter's semantic alignment — same cadence, real signal).
+            # The old drift_analyser compared word overlap between the
+            # objective prose and tool-call text: an http_request to the
+            # target had zero keyword overlap and got flagged as drift.
+            # The drifter classifies alignment semantically per-turn and
+            # this block acts only on SUSTAINED drift (3-of-4 readings).
             _drift_iv = int((state.get("_run_config") or self.run_config or {}).get("drift_interval", 7) or 0)
             if _drift_iv > 0 and iteration > 0 and iteration % _drift_iv == 0:
                 try:
-                    from suijin.modules.redteam.lib.intel.drift_analyser import analyse_drift
+                    from suijin.modules.agent.lib.reflex.drifter.alignment import align as _drift_align
 
-                    objective = state.get("original_objective", "")
                     trace = result.get("execution_trace", state.get("execution_trace", []))
-                    recent_actions = [
-                        f"{s.get('tool_name', '?')}: {str(s.get('thought', ''))[:100]}" for s in trace[-10:]
-                    ]
-                    drift_result = analyse_drift(objective, recent_actions)
+                    _dr = _drift_align(state, trace, state.get("_run_config") or self.run_config or {})
+                    drift_result = {
+                        "drift_detected": _dr.get("sustained", False),
+                        "drift_count": int(_dr.get("score", 0) > 0.5),
+                        "drift_causes": [],
+                        "suggestions": [],
+                    }
+                    if drift_result["drift_detected"]:
+                        drift_result["suggestions"] = [
+                            f"alignment: {_dr.get('kind', '?')} (p={_dr.get('p', 0):.2f}) — "
+                            "the last 4 readings show sustained drift from the objective"
+                        ]
                     if drift_result.get("drift_detected"):
-                        from suijin.modules.redteam.lib.intel.drift_analyser import format_cause
-
                         suggestions = drift_result.get("suggestions", [])
-                        # readable causes, not a raw dict repr — the model
-                        # acts on this message, and {'action_index': 3, ...}
-                        # is noise it has to parse around
-                        cause_text = "; ".join(format_cause(c) for c in drift_result.get("drift_causes", [])[:3])
+                        # semantic drift: the suggestions carry the alignment
+                        # reading + trajectory — no cause formatting needed
                         msg = (
-                            f"DRIFT WARNING: {cause_text or 'unknown cause'}. Suggestions: {'; '.join(suggestions[:3])}"
+                            f"DRIFT WARNING: {'; '.join(suggestions[:3]) or 'sustained drift from objective detected'}"
                         )
                         result.setdefault("messages", []).append(
                             {

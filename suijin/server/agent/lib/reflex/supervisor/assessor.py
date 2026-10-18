@@ -234,27 +234,23 @@ def _deterministic_fallback(state: dict, trace: list) -> dict | None:
 
 
 def _llm_assess(evidence: str, config: dict | None) -> dict | None:
-    """The LLM fallback assessment — uses the main model to evaluate the
-    situation when laya is unavailable. Still semantic, still
-    evidence-grounded, still silence-dominant. NOT a heuristic."""
+    """The LLM fallback assessment — uses the main model's SYNC generate
+    (not generate_async → asyncio.run inside a sync call called from the
+    async event loop — that BLOCKED the entire TUI on slow providers).
+    Still semantic, still evidence-grounded, still silence-dominant."""
     with contextlib.suppress(Exception):
-        import asyncio
-
-        from suijin.modules.redteam.lib.red.llm_client import generate_async
+        from suijin.modules.providers.lib import generate as _sync_generate
 
         prompt = _question_for(evidence)
-        raw = asyncio.run(
-            generate_async(
-                [{"role": "user", "content": prompt}],
-                config or {},
-                {"max_tokens_per_request": 200, "temperature": 0.1},
-            )
+        raw = _sync_generate(
+            [{"role": "user", "content": prompt}],
+            config or {},
+            max_tokens=200,
+            temperature=0.1,
         )
-        if not raw:
+        if not raw or str(raw).startswith("Error:"):
             return None
-        # parse the JSON response
         text = str(raw).strip()
-        # find the JSON object (the model might wrap it)
         import re
 
         m = re.search(r"\{[^}]+\}", text, re.DOTALL)
@@ -269,7 +265,7 @@ def _llm_assess(evidence: str, config: dict | None) -> dict | None:
             "reason": parsed.get("reason") or "",
             "action": parsed.get("action") or "",
             "priority": parsed.get("priority") or "normal",
-            "p": 0.75,  # LLM fallback confidence — reasonable but not certain
+            "p": 0.75,
         }
     return None
 
