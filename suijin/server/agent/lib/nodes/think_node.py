@@ -889,6 +889,60 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         _bp_txt = _bp_render(state, limit=3)
         if _bp_txt:
             _block_parts.append(_bp_txt)
+
+    # ── TARGET LANDSCAPE (2026-10-18, the breadth dimension): shows
+    # product families explored vs untested so the agent knows whether
+    # it's searching one street or the whole city.
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.landscape import (
+            breadth_alert as _breadth_alert,
+        )
+        from suijin.modules.agent.lib.landscape import (
+            detect_families as _detect_families,
+        )
+        from suijin.modules.agent.lib.landscape import (
+            render_landscape as _render_landscape,
+        )
+        from suijin.modules.agent.lib.landscape import (
+            update_exploration as _update_exploration,
+        )
+
+        if not state.get("_landscape"):
+            _target = str(state.get("original_objective") or state.get("_objective") or "")
+            state["_landscape"] = [
+                {"name": f.name, "domains": f.domains, "explored": f.explored, "iterations": f.iterations}
+                for f in _detect_families(_target, state.get("_run_config") or {})
+            ]
+        _fam_objs = [
+            type(
+                "F",
+                (),
+                {
+                    "name": f["name"],
+                    "domains": f["domains"],
+                    "explored": f.get("explored", False),
+                    "iterations": f.get("iterations", 0),
+                },
+            )()
+            for f in state["_landscape"]
+        ]
+        _recent_urls = [
+            str((t.get("tool_args") or {}).get("url") or (t.get("tool_args") or {}).get("base_url") or "")
+            for t in (state.get("execution_trace") or [])[-20:]
+        ]
+        _fam_objs = _update_exploration(_fam_objs, [u for u in _recent_urls if u], len(_recent_urls))
+        # write back
+        state["_landscape"] = [
+            {"name": f.name, "domains": f.domains, "explored": f.explored, "iterations": f.iterations}
+            for f in _fam_objs
+        ]
+        _land_txt = _render_landscape(_fam_objs)
+        if _land_txt:
+            _block_parts.append(_land_txt)
+        # BREADTH ALERT: tunnel vision check
+        _alert = _breadth_alert(_fam_objs, [u for u in _recent_urls if u])
+        if _alert:
+            _block_parts.append(f"\n## ⚠ {_alert}")
         if _chain_txt:
             _section_sizes["CHAIN"] = len(_chain_txt)
             _block_parts.append(_chain_txt)
@@ -1494,24 +1548,38 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         and action == "use_tool"
         and (state.get("_chain_pending") or {}).get("explored") is False
     ):
-        # DEPTH-OVER-COVERAGE (2026-10-18, borrowed from ARTEX's planner
-        # doctrine): a confirmed finding's chain is pending — enumerating
-        # MORE surfaces right now is attention fragmentation. Go deep on
-        # what you hold first.
-        updates["_current_step"] = {}
-        updates["messages"] = updates.get("messages", []) + [
-            {"role": "assistant", "content": raw_response},
-            {
-                "role": "user",
-                "content": (
-                    "DEPTH FIRST — you have a CONFIRMED finding whose chain is unexplored. "
-                    "Surface enumeration is suppressed until the chain is tested. "
-                    "Execute the CHAIN todos in your list. When the chain is explored "
-                    "(or dead), surface enumeration resumes."
-                ),
-            },
-        ]
-        updates["current_iteration"] = iteration
+        # DEPTH-OVER-COVERAGE, FAMILY-SCOPED (2026-10-18 revision): the
+        # blanket block caused tunnel vision on large targets — the agent
+        # couldn't discover new product families while chaining a finding
+        # in one family. Now: surface_expand is blocked only for the SAME
+        # family as the pending chain; different families are ALWAYS
+        # allowed (breadth maintained even during chaining).
+        with contextlib.suppress(Exception):
+            from suijin.modules.agent.lib.landscape import classify_url as _classify
+
+            _fams = [
+                type("F", (), {"name": f["name"], "domains": f["domains"]})() for f in (state.get("_landscape") or [])
+            ]
+            _chain_fam = _classify(str((state.get("_chain_pending") or {}).get("endpoint") or ""), _fams)
+            _expand_url = str(
+                (decision.get("tool_args") or {}).get("base_url") or (decision.get("tool_args") or {}).get("url") or ""
+            )
+            _expand_fam = _classify(_expand_url, _fams)
+            if _chain_fam and _expand_fam and _chain_fam == _expand_fam:
+                updates["_current_step"] = {}
+                updates["messages"] = updates.get("messages", []) + [
+                    {"role": "assistant", "content": raw_response},
+                    {
+                        "role": "user",
+                        "content": (
+                            f"DEPTH FIRST on [{_chain_fam}] — you have a CONFIRMED finding in this family "
+                            "whose chain is unexplored. Surface enumeration WITHIN this family is suppressed "
+                            "until the chain is tested. Enumerating a DIFFERENT product family is always allowed — "
+                            "consider rotating to an untested family. Execute the CHAIN todos in your list."
+                        ),
+                    },
+                ]
+                updates["current_iteration"] = iteration
     elif action == "complete":
         completion_reason = decision.get("completion_reason", "Objective complete")
         # (Drive) the engagement's unfinished business persists — open
