@@ -621,6 +621,12 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
     _resume_scratchpad = None
     if resume_state:
         try:
+            # CONTAMINATION SCRUB (2026-10-18): dead credentials from the
+            # previous run ride in messages/trace as raw text — the model
+            # sees them as fresh discoveries. Scrub them before seeding.
+            from suijin.modules.agent.lib.contamination_scrub import scrub_state
+
+            resume_state = scrub_state(resume_state)
             # engagement memory travels IN the state but is NOT graph state:
             # pop it before seeding, write it into the NEW engagement dir
             _resume_ledger = resume_state.pop("_librarian_ledger", None)

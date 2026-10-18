@@ -63,6 +63,23 @@ def execute_terminal(cmd, timeout=30, cwd=None):
         global _PERSIST_CWD
         if cwd is None:
             cwd = _PERSIST_CWD
+        # TEMP DIR AUTO-RESOLUTION (2026-10-18): /tmp/foo → engagement
+        # home tmp/foo — the agent writes there naturally and the sandbox
+        # used to warn + redirect + confuse the model for 3 iterations.
+        # Only bare /tmp/ paths (NOT /var/tmp/ which the sandbox should
+        # deny — the jail test depends on that denial).
+        try:
+            _home = os.environ.get("SUIJIN_HOME") or os.path.join(os.path.expanduser("~"), ".suijin", "workspace")
+            if "/tmp/" in cmd and _home:
+                import re as _re_tmp
+
+                # only bare /tmp/, not /var/tmp/ or $TMPDIR
+                _resolved = _re_tmp.sub(r"(?<!var)/tmp/", f"{_home}/tmp/", cmd)
+                if _resolved != cmd:
+                    cmd = _resolved
+        except Exception:
+            pass
+
         _new_cwd = _extract_cd(cmd)  # from the ORIGINAL text, before prefixing
         if _new_cwd:
             _PERSIST_CWD = _new_cwd
