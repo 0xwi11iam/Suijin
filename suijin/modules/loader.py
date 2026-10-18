@@ -56,10 +56,8 @@ SEARCH_DIRS = [BASE_DIR]  # v4.1: all subsystems live in modules/ — by-name lo
 CANONICAL_ALIASES = {
     "providers": "suijin.modules.providers.lib",
     "audit": "suijin.modules.platform.lib.security.audit",
-    "supervisor": "suijin.modules.redteam.lib.intel.supervisor",
     "oracle": "suijin.modules.redteam.lib.intel.oracle",
     "knowledge_graph": "suijin.modules.redteam.lib.intel.knowledge_graph",
-    "drift_analyser": "suijin.modules.redteam.lib.intel.drift_analyser",
 }
 
 

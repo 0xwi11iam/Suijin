@@ -60,9 +60,7 @@ def validate(tool_name: str, args: dict) -> str | None:
     for k in required:
         if k not in args or args[k] in (None, "", {}):
             return (
-                f"Missing required argument '{k}'. "
-                f"Required: {', '.join(sorted(required))}. "
-                f"See the tool usage guide."
+                f"Missing required argument '{k}'. Required: {', '.join(sorted(required))}. See the tool usage guide."
             )
 
     for k, v in args.items():
