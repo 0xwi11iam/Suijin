@@ -1,0 +1,7 @@
+{
+  "type": "object",
+  "required": ["engagement"],
+  "properties": {
+    "engagement": {"type": "string", "description": "Engagement name (for the report title)"}
+  }
+}

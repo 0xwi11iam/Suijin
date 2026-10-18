@@ -1,0 +1,14 @@
+{
+  "type": "object",
+  "required": ["url"],
+  "properties": {
+    "url": {"type": "string", "description": "Target URL"},
+    "method": {"type": "string", "description": "HTTP method (default GET)"},
+    "headers": {"type": "object", "description": "Request headers dict"},
+    "body": {"type": "string", "description": "Request body"},
+    "compare": {"type": "object", "description": "Compare mode: pass an OBJECT with optional 'mutations' (list of {op, field, value}) and 'credential' (string name). NOT a boolean."},
+    "credential": {"type": "string", "description": "Named credential to apply (see web_session for available credentials)"},
+    "unauthenticated": {"type": "boolean", "description": "Strip all auth headers (true = unauthenticated baseline)"},
+    "follow_redirects": {"type": "boolean", "description": "Follow 3xx redirects (default false — redirect Location is the evidence)"}
+  }
+}

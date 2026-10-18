@@ -1,0 +1,6 @@
+{
+  "type": "object",
+  "properties": {
+    "query": {"type": "string", "description": "Search query for engagement memory (target, technique, tool)"}
+  }
+}

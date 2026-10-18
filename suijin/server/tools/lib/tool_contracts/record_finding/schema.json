@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "required": ["target", "finding_type", "rule", "evidence"],
+  "properties": {
+    "target": {"type": "string", "description": "Target host/domain"},
+    "finding_type": {"type": "string", "description": "Type: verified_cve, config_issue, exposed_service, info_disclosure, etc."},
+    "rule": {"type": "string", "description": "What was found (the specific rule/pattern)"},
+    "evidence": {"type": "string", "description": "Actual evidence text (response content, command output)"},
+    "severity": {"type": "string", "enum": ["critical", "high", "medium", "low", "info"]}
+  }
+}

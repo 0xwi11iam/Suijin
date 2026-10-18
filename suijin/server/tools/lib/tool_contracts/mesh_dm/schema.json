@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "required": ["node", "message"],
+  "additionalProperties": false,
+  "properties": {
+    "node": {"type": "string", "description": "Target node: pid number, 'node-NNNN', or a summary prefix"},
+    "message": {"type": "string", "description": "Direct message text"}
+  }
+}

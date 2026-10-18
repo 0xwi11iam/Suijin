@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "required": ["cmd"],
+  "additionalProperties": false,
+  "properties": {
+    "cmd": {
+      "type": "string",
+      "description": "The shell command to execute. Quote file paths with spaces. Use && to chain. Your cwd persists between calls."
+    },
+    "timeout": {
+      "type": "integer",
+      "description": "Timeout in seconds (default 30). Long scans: use background jobs instead."
+    },
+    "_force": {
+      "type": "boolean",
+      "description": "System flag: bypass the repeat guard for re-execution."
+    }
+  }
+}

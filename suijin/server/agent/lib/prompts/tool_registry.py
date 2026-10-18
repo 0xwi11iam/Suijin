@@ -583,6 +583,20 @@ def build_tool_catalog_prompt(phase: str = "informational") -> str:
     lines.append("name(args) — what it does. Copy arg names EXACTLY.")
     lines.append("")
 
+    # TOOL CONTRACTS (2026-10-18): usage docs from tool_contracts/ ride
+    # below the catalog — the model sees HOW to call correctly, not just
+    # THAT a tool exists. The CyberStrike lesson: tools that teach their
+    # own usage get used right the first time.
+    try:
+        from suijin.modules.tools.lib.tool_contracts import usage_docs
+
+        _docs = usage_docs(limit=15)
+        if _docs:
+            lines.append(_docs)
+            lines.append("")
+    except Exception:
+        pass
+
     for tool_name in allowed:
         info = TOOL_REGISTRY.get(tool_name)
         if not info:

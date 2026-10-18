@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "required": ["message"],
+  "additionalProperties": false,
+  "properties": {
+    "message": {
+      "type": "string",
+      "description": "The message text for the mesh. Put the actual content here, NOT in your thought field."
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "type": "object",
+  "required": ["base_url"],
+  "properties": {
+    "base_url": {"type": "string", "description": "The base URL to expand surfaces from"},
+    "depth": {"type": "integer", "description": "Expansion depth (default 1)"}
+  }
+}

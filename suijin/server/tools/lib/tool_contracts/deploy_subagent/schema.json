@@ -1,0 +1,7 @@
+{
+  "type": "object",
+  "required": ["subagent_task"],
+  "properties": {
+    "subagent_task": {"type": "string", "description": "The task for the sub-agent. Separate multiple parallel tasks with ||"}
+  }
+}

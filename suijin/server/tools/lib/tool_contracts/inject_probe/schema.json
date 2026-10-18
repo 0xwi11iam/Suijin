@@ -1,0 +1,9 @@
+{
+  "type": "object",
+  "required": ["url"],
+  "properties": {
+    "url": {"type": "string", "description": "Target URL to probe"},
+    "payloads": {"type": "array", "description": "Custom payload list (default: built-in battery)"},
+    "sink_contexts": {"type": "boolean", "description": "Also test sink contexts (where output appears)"}
+  }
+}
