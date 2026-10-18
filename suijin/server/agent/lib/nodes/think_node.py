@@ -24,6 +24,27 @@ from suijin.modules.agent.lib.state import (
 logger = logging.getLogger(__name__)
 
 
+def _detect_vuln_class(task_text: str) -> str:
+    """Rough class detection from the subagent's task text — enough to
+    pick the right specialist profile. Returns a vuln_class key or ""."""
+    t = str(task_text or "").lower()
+    checks = [
+        ("idor", ("idor", "object reference", "cross-account", "horizontal", "other user")),
+        ("injection", ("inject", "sqli", "xss", "nosql", "command injection", "payload")),
+        ("authz", ("authorization", "rbac", "role", "privilege", "bfla", "access control")),
+        ("authn", ("auth", "login", "token", "jwt", "session", "oauth", "password")),
+        ("ssrf", ("ssrf", "server-side request", "internal", "metadata endpoint")),
+        ("mass_assignment", ("mass assign", "parameter pollution", "role=admin")),
+        ("business_logic", ("race condition", "price", "workflow", "business logic", "coupon")),
+        ("file_upload", ("upload", "file inclusion", "path traversal", "directory traversal")),
+        ("info_disclosure", ("information disclosure", "debug", "source map", "stack trace", "verbose error")),
+    ]
+    for cls, keywords in checks:
+        if any(k in t for k in keywords):
+            return cls
+    return ""
+
+
 def _drain_chain(state: dict) -> dict | None:
     """Pull the tools-layer confirmed-finding handoff into graph state."""
     with __import__("contextlib").suppress(Exception):
@@ -858,6 +879,16 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         _obs_txt = _obs_render(max_items=5)
         if _obs_txt:
             _block_parts.append(_obs_txt)
+
+    # ── BLACKBOARD PEER FINDINGS (2026-10-18, ARTEX pattern): confirmed
+    # findings from teammates appear in the think context without the
+    # model choosing to look — the mesh system channel pushed them.
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.blackboard import render_peer_findings as _bp_render
+
+        _bp_txt = _bp_render(state, limit=3)
+        if _bp_txt:
+            _block_parts.append(_bp_txt)
         if _chain_txt:
             _section_sizes["CHAIN"] = len(_chain_txt)
             _block_parts.append(_chain_txt)
@@ -1737,6 +1768,18 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
                     "No third-party hosts. No personal data. Low volume: the HTTP engine's "
                     "pacing and stealth identity apply to you automatically — never bypass them."
                 )
+
+                # VULN-CLASS SPECIALIST (2026-10-18, CyberStrike pattern):
+                # detect the vulnerability class from the task text and
+                # enrich the subagent with the specialist's doctrine +
+                # preferred tools. The model gets a focused expert instead
+                # of a general worker told to "test for IDOR".
+                with contextlib.suppress(Exception):
+                    from suijin.modules.agent.lib.vuln_agents import get_profile as _vp
+
+                    _profile = _vp(_detect_vuln_class(subagent_task))
+                    if _profile:
+                        _doctrine += f"\n\n## SPECIALIST DOCTRINE ({_profile['description']})\n{_profile['doctrine']}"
 
                 if route_tool_fn is not None:
                     _rt = route_tool_fn  # blue graph: responders route BLUE tools
