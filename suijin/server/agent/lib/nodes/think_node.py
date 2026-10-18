@@ -578,7 +578,36 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
             state,
         )
 
+    # ── DELTA-FIRST (2026-10-18, borrowed from ARTEX's trigger events)
+    # The model reacts to WHAT CHANGED, not re-reads the whole picture.
+    # Computed from state vs the previous turn's snapshot — always the
+    # first thing the model sees.
+    _delta_lines: list[str] = []
+    _prev_iter = max(0, iteration - 1)
+    _prev_trace = [t for t in (state.get("execution_trace") or []) if int(t.get("iteration") or 0) == _prev_iter]
+    for _pt in _prev_trace[-2:]:
+        _tool = str(_pt.get("tool_name") or "?")
+        _ok = "OK" if _pt.get("success", True) else "FAILED"
+        _obs_head = str(_pt.get("tool_output") or "")[:120]
+        _delta_lines.append(f"- [{_tool}] {_ok}: {_obs_head}")
+    _new_findings = [
+        f
+        for f in (state.get("findings") or [])
+        if isinstance(f, dict) and int(f.get("_iter", _prev_iter)) == _prev_iter
+    ]
+    for _nf in _new_findings:
+        _delta_lines.append(f"- NEW FINDING: {str(_nf.get('title') or _nf.get('description') or '?')[:100]}")
+    _chain_p = state.get("_chain_pending") or {}
+    if _chain_p and not _chain_p.get("explored"):
+        _stale = iteration - int(_chain_p.get("turn") or 0)
+        _delta_lines.append(f"- CHAIN PENDING ({_stale} turns): {str(_chain_p.get('finding') or '?')[:80]}")
+    _budget_left = int(state.get("max_iterations", 100) or 100) - iteration
+    if 0 < _budget_left <= 5:
+        _delta_lines.append(f"- BUDGET: {_budget_left} iterations left — WRAP UP")
+    _delta_block = ("## SINCE YOUR LAST TURN\n" + "\n".join(_delta_lines) + "\n") if _delta_lines else ""
+
     _sections: dict[str, str] = {
+        "DELTA": _delta_block,
         "DRIVE": _drive_block,
         "CURRENT_STATE": (
             f"- **Phase**: {phase}\n"
@@ -617,6 +646,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     }
     _ORDER = {
         "informational": [
+            "DELTA",
             "CURRENT_STATE",
             "DRIVE",
             "RECENT_ACTIONS",
@@ -627,6 +657,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
             "RULES",
         ],
         "recon": [
+            "DELTA",
             "CURRENT_STATE",
             "DRIVE",
             "RECENT_ACTIONS",
@@ -637,6 +668,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
             "RULES",
         ],
         "exploitation": [
+            "DELTA",
             "CURRENT_STATE",
             "YOU_HOLD",
             "DRIVE",
@@ -659,6 +691,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     }.get(
         str(phase or "").lower(),
         [
+            "DELTA",
             "CURRENT_STATE",
             "YOU_HOLD",
             "DRIVE",
@@ -671,6 +704,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     )
 
     _pretty = {
+        "DELTA": "SINCE YOUR LAST TURN (react to these changes first)",
         "CURRENT_STATE": "CURRENT STATE",
         "DRIVE": "DRIVE — your own state (what pulls at you)",
         "YOU_HOLD": "YOU HOLD (capabilities won — use them before hunting more)",
@@ -1413,6 +1447,25 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
             "reasoning": reasoning,
         }
 
+    elif str(decision.get("tool_name") or "") == "surface_expand" and action == "use_tool" and (state.get("_chain_pending") or {}).get("explored") is False:
+        # DEPTH-OVER-COVERAGE (2026-10-18, borrowed from ARTEX's planner
+        # doctrine): a confirmed finding's chain is pending — enumerating
+        # MORE surfaces right now is attention fragmentation. Go deep on
+        # what you hold first.
+        updates["_current_step"] = {}
+        updates["messages"] = updates.get("messages", []) + [
+            {"role": "assistant", "content": raw_response},
+            {
+                "role": "user",
+                "content": (
+                    "DEPTH FIRST — you have a CONFIRMED finding whose chain is unexplored. "
+                    "Surface enumeration is suppressed until the chain is tested. "
+                    "Execute the CHAIN todos in your list. When the chain is explored "
+                    "(or dead), surface enumeration resumes."
+                ),
+            },
+        ]
+        updates["current_iteration"] = iteration
     elif action == "complete":
         completion_reason = decision.get("completion_reason", "Objective complete")
         # (Drive) the engagement's unfinished business persists — open
@@ -1521,6 +1574,33 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
 
                 _cp = state.get("_chain_pending") or drain_pending(state)
                 if _cp and not _cp.get("explored"):
+                    # AUTO-GENERATE CHAIN TODOS (2026-10-18, borrowed from
+                    # ARTEX's persistent planning todos): the chain is
+                    # structured as steps the agent executes one at a time,
+                    # not re-derived from scratch each turn.
+                    _existing_chain_todo = any(
+                        "CHAIN:" in str(t.get("content") or t.get("text") or "")
+                        for t in (state.get("todo_list") or [])
+                        if isinstance(t, dict) and t.get("status") != "completed"
+                    )
+                    if not _existing_chain_todo:
+                        _finding_short = str(_cp.get("finding") or "?")[:80]
+                        _chain_todos = [
+                            {
+                                "content": f"CHAIN: Test what '{_finding_short}' ENABLES (reach/access gained)",
+                                "status": "pending",
+                            },
+                            {
+                                "content": "CHAIN: Use the enabled access against an internal endpoint/service",
+                                "status": "pending",
+                            },
+                            {
+                                "content": "CHAIN: Measure maximum impact (data exposure, privilege escalation, RCE)",
+                                "status": "pending",
+                            },
+                        ]
+                        updates.setdefault("todo_list", list(state.get("todo_list") or []))
+                        updates["todo_list"] = updates["todo_list"] + _chain_todos
                     _refusal = (
                         "COMPLETION REFUSED (chain gate): a CONFIRMED finding sits unexploited — "
                         f"[{_cp.get('severity', '?')}] {str(_cp.get('finding', ''))[:100]} on "

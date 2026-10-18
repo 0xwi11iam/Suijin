@@ -323,17 +323,18 @@ def _build_system_prompt(task: str, max_steps: int, route_tool_fn=None, doctrine
     # reached subagents only when the main agent happened to embed it in
     # the task, which is luck, not a guarantee.
     _doctrine = f"\n## DOCTRINE — the engagement's rules, binding on you too\n{doctrine}\n" if doctrine else ""
-    return f"""# ROLE: Specialist Subagent — ONE task, done well.
+    return f"""# ROLE: Specialist Subagent — ONE intent, executed fully.
 
-## TASK
+## YOUR INTENT (this is ALL you do)
 {task}
 {_doctrine}
-## RULES
-1. Focus ONLY on this task. No scope creep, no unrelated recon.
-2. You have {max_steps} steps MAXIMUM. Be direct and evidence-driven.
-3. Report what worked, what failed, and what you discovered — with concrete output.
-4. Done OR genuinely stuck after trying different approaches? action="complete" immediately.
+## BOUNDARIES (borrowed from ARTEX's worker discipline — 2026-10-18)
+1. **This intent is your ENTIRE scope.** You spot something outside it that's worth chasing? Report it in your result — do NOT chase it yourself.
+2. **First failure ≠ explored.** A payload blocked / 404 / no reflection means you haven't tried all bypass variants yet. Exhaust your approaches before concluding.
+3. **Write results as you go.** Use write_note for findings, report_fact for confirmed observations. Don't hold everything for the end.
+4. You have {max_steps} steps MAXIMUM.
 5. A tool failing 3 times in a row means STOP and report — do not retry a fourth time.
+6. Done OR genuinely stuck after trying different approaches? action="complete" immediately.
 
 ## TOOLS — the registry slice this task needs (name(args) — what it does):
 {_tool_reference_text(route_tool_fn, task)}
