@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "required": ["file_path", "content"],
+  "additionalProperties": false,
+  "properties": {
+    "file_path": {
+      "type": "string",
+      "description": "Path relative to the engagement home (or absolute if inside it). Accepts path= alias."
+    },
+    "content": {
+      "type": "string",
+      "description": "The full file content to write (overwrites existing)."
+    }
+  }
+}

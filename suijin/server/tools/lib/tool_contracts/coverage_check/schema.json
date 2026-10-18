@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "action": {"type": "string", "enum": ["summary", "tested_vulnerable", "tested_not_vulnerable", "not_applicable"], "description": "What to do (default: summary)"},
+    "vuln_class": {"type": "string", "description": "The class being marked (for tested/not_applicable actions)"},
+    "asset": {"type": "string", "description": "The asset/endpoint being marked"},
+    "evidence": {"type": "string", "description": "Evidence for the marking (required for tested_vulnerable)"},
+    "reason": {"type": "string", "description": "Reason for not_applicable"}
+  }
+}

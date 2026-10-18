@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "required": ["file_path"],
+  "additionalProperties": false,
+  "properties": {
+    "file_path": {
+      "type": "string",
+      "description": "Path to read (relative to engagement home, or absolute — duplicated home prefixes are stripped)."
+    }
+  }
+}

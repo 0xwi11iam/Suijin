@@ -1090,6 +1090,18 @@ def _with_error_hints(tool_name: str, result: str) -> str:
 
 
 def route_tool(tool_name, args, config):
+    # TOOL CONTRACTS (2026-10-18): validate args against the schema
+    # before routing — the model gets a CLEAR error ("Argument 'compare'
+    # must be an object/dict") instead of a deep AttributeError three
+    # layers into business logic. Uncontracted tools pass through.
+    try:
+        from suijin.modules.tools.lib.tool_contracts import validate as _contract_validate
+
+        _err = _contract_validate(str(tool_name or ""), dict(args or {}))
+        if _err:
+            return f"Error: {_err}"
+    except Exception:
+        pass  # contracts must never break routing
     if args is None:
         args = {}
     # META-KWARG STRIP (2026-10-10, reddit run): the model sometimes passes

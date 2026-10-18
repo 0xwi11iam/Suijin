@@ -245,11 +245,14 @@ class TestRouteTool:
         assert "SYSTEM OVERRIDE" in result
 
     def test_route_deploy_subagent_guidance(self):
-        """deploy_subagent used as tool_name must return self-correction guidance."""
+        """deploy_subagent used as tool_name returns the contract error
+        (2026-10-18: tool contracts catch it before the old guidance)."""
         from suijin.modules.tools.lib.dispatch import route_tool
 
         result = route_tool("deploy_subagent", {}, {})
-        assert "WRONG FORMAT" in result
+        # either the contract error or the legacy guidance is correct —
+        # both teach the model to fix the format
+        assert "Error:" in result or "WRONG FORMAT" in result
 
     def test_route_claim_flag(self):
         from suijin.modules.tools.lib.dispatch import route_tool

@@ -1,0 +1,8 @@
+{
+  "type": "object",
+  "required": ["job_id"],
+  "properties": {
+    "job_id": {"type": "string", "description": "The job ID from a background command"},
+    "timeout": {"type": "integer", "description": "Max seconds to wait (default 60)"}
+  }
+}

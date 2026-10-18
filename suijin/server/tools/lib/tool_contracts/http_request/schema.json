@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "required": ["url"],
+  "additionalProperties": false,
+  "properties": {
+    "url": {"type": "string", "description": "Full URL to request (http:// or https://)"},
+    "method": {"type": "string", "enum": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"], "description": "HTTP method (default GET)"},
+    "headers": {"type": "object", "description": "Dict of request headers"},
+    "body": {"type": "string", "description": "Request body (for POST/PUT/PATCH)"},
+    "timeout": {"type": "integer", "description": "Timeout in seconds (default 30)"}
+  }
+}
