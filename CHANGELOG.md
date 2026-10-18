@@ -8,6 +8,95 @@ All notable changes to Suijin.
 
 ## Unreleased
 
+- **Target landscape** — the agent sees product families, not just
+  endpoints. Google.com resolves to 10 families (Search, Identity,
+  Cloud, YouTube, Maps, Developer, Workspace, Mobile, Ads, AI); the
+  think context renders "X/Y families explored (Z%)" with untested
+  names. A breadth alert fires when >60% of recent actions target one
+  family while untested families exist — the agent gets told to look
+  up from its shovel.
+- **Contamination scrub** — .sje resume scrubs dead credential
+  literals from carried messages: verified-dead API keys appear as
+  `[SCRUBBED:dead-key]` instead of as fresh discoveries to re-test.
+- **Temp dir auto-resolution** — bare `/tmp/` paths in
+  execute_terminal rewrite to the engagement home's `tmp/` in-place;
+  no more 3-iteration sandbox-warning dance to find your own script.
+- **Tool contracts** — JSON schemas + usage docs for the top 17 tools
+  by real engagement usage. Invalid args get clear boundary errors
+  ("Argument 'compare' must be an object/dict") instead of deep
+  AttributeErrors. Usage docs ride the tool catalog so the model sees
+  HOW to call, not just THAT a tool exists.
+- **Observation engine** — every http_request/http_replay call
+  accumulates (endpoint, method, credential, params, status, size);
+  deterministic detectors surface IDOR/BFLA/mass-assignment findings
+  the model can't miss from accumulated evidence.
+- **Vuln-class sub-agents** — deploy_subagent detects the
+  vulnerability class from task text and injects the specialist's
+  doctrine + preferred tools (9 profiles: idor, injection, authz,
+  authn, ssrf, mass_assignment, business_logic, file_upload,
+  info_disclosure).
+- **Blackboard finding propagation** — confirmed findings push into
+  peer mesh contexts automatically; a "PEER FINDINGS" section renders
+  in the think context so teammates see what landed without choosing
+  to look.
+- **Loop detection layers** — cross-turn RepeatDetector (identical
+  tool+args across turns, nudge at 3, abort at 5) + meaningful-progress
+  signals (findings/surfaces/creds = progress; gate refusals =
+  dialogue, not stuck).
+- **Completion scoreboard** — a `completion_status` tool showing
+  coverage %, chain status, depth obligations, and budget remaining
+  in one check the agent calls before trying to complete.
+- **Delta-first context** — "SINCE YOUR LAST TURN" section leads
+  every think context with what changed (tool results, confirmed
+  findings, chain status, budget) so the model reacts to changes
+  instead of re-reading identical state.
+- **Scoped subagent discipline** — subagents get "this intent is
+  your ENTIRE scope, first failure ≠ explored, write results as
+  you go" instead of paragraph-length wandering instructions.
+- **Auto chain todos** — the chain gate auto-generates 3 structured
+  todo steps (test enables → use access → measure impact) that
+  persist across iterations.
+- **Depth-over-coverage gate (family-scoped)** — surface_expand is
+  blocked only for the same product family as the pending chain;
+  different families are always allowed (breadth maintained even
+  during chaining).
+- **WSTG skills** — 11 skills generated from OWASP Web Security
+  Testing Guide data with YAML frontmatter (chains_with, cwe_ids).
+- **Legacy supervisor + drift analyser removed** — the System One
+  assessor (laya → local LLM → deterministic detectors) is the ONLY
+  supervisor. The keyword-overlap drift analyser (which flagged
+  http_request to the target as "drift") replaced by the semantic
+  drifter's timeline. The assessor's asyncio.run() event-loop blocker
+  fixed.
+- **Completion refusals are decisions** — a gate-refused complete
+  no longer counts as a no-progress turn; after 5 refusals of the
+  same gate, the gate stands down with the refusal noted in the
+  completion reason (deadlock is not protection).
+- **Hard iteration budget** — the graph ends cleanly at N of N with
+  an honest budget_exhausted completion (was advisory; bookkeeping
+  turns crawled past the cap).
+- **Chain heartbeat** — _on_confirmed's throwaway-dict bug fixed;
+  the pending chain hands off module-level, think_node drains it
+  into state, the directive escalates to CHAIN REQUIRED when stale,
+  and completion is refused while unexplored.
+- **Low-budget doctrine** — the last 5 iterations carry an explicit
+  wrap-up order in CURRENT_STATE.
+- **Menu config reload** — launching from the mode selector re-reads
+  config.json at launch time (stale provider/model banner fixed).
+- **Operator console fixes** — mesh phase lines deduped (set_phase
+  silent mode); the prompt badge follows the real phase; iteration
+  upserts prevent blank stub rows; v7.2 engagement trail discovery;
+  t/s gauge updates per streaming delta; the detail pane sanitizes
+  raw ANSI/control bytes from tool output.
+- **Reports rebuilt on the audit trail** — generate_report reads
+  recorded state, not model-pasted JSON; one overwriting report.md
+  plus automatic final_report.md on every ending (including crashes
+  and interrupts); critique.md single-file; export_html/export_burp
+  wired as trail-based tools.
+- **Dead code sweep** — tui_scope, mcp_server, portal + their tests
+  removed (verified orphans); kernel/native.py and _engage_worker.py
+  kept (architecture contracts).
+
 - **v7.2 clean workspace layout** — `~/.suijin` now holds exactly
   `config/` (profiles, skills, packs, prompt content, operator
   settings) and `engagements/` (one folder per run, everything it owns)

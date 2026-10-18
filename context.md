@@ -1,26 +1,88 @@
 # Suijin — Project Context
 
 > The architecture grip. Read top to bottom before touching anything.
-> Last updated 2026-10-12 (v7.2 clean layout RESTORED after mistaken rollback; trail-based reports; operator TUI fixes; container tilde ban; backup rotation).
+> Last updated 2026-10-18 (CyberStrike/ARTEX equalisation: tool contracts, observation engine, specialists, blackboard, loop detection, landscape, contamination scrub; legacy supervisor killed; reporting rebuilt).
 
 ## Repo facts
 
 - **Agent memory vault: `agent-vault/` (gitignored) — read it FIRST on a fresh session.** Decisions, session logs, engagement memory, roadmap state. Pointers from `AGENTS.md`.
 - Repo: `/Users/williamjiang/suijin`, GitHub: `https://github.com/0xwi11iam/Suijin`
 - venv: `.venv/bin/python` (Python 3.14); CI matrix py3.10/3.11/3.12
-- Gates: `.venv/bin/python -m pytest suijin/tests -q -m "not ai and not slow"` (~2870 passed) + `-m slow` + `ruff check` + `ruff format`. **The suite is HERMETIC**: `tests/conftest.py` redirects `HOME`, `SUIJIN_WORKSPACE`, `SUIJIN_CONFIG` and `SUIJIN_ENV` into a session sandbox AT IMPORT TIME (before any `suijin` import — `Path.home()` is baked into `PACK_ROOTS`/`WORKSPACE_DIR`/`CONFIG_PATH` on first import, so redirecting later does nothing). A test that needs the real home must opt in explicitly.
-- Version 5.7.0 published (PyPI/GHCR/Release).
-- Operator runs via `~/.local/bin/suijin` → `~/.suijin/venv/bin/python` + `~/.suijin/repo` (symlink to this tree). Their config: `suijin/config.json` IN THE TREE (provider: zai / glm-5.3, coding endpoint). `~/.local/bin/suijind` is the detached-daemon launcher.
+- Gates: `.venv/bin/python -m pytest suijin/tests -q -m "not ai and not slow"` (~2856 passed) + `-m slow` + `ruff check` + `ruff format`. **The suite is HERMETIC**: `tests/conftest.py` redirects `HOME`, `SUIJIN_WORKSPACE`, `SUIJIN_CONFIG` and `SUIJIN_ENV` into a session sandbox AT IMPORT TIME (before any `suijin` import — `Path.home()` is baked into `PACK_ROOTS`/`WORKSPACE_DIR`/`CONFIG_PATH` on first import, so redirecting later does nothing). A test that needs the real home must opt in explicitly.
+- Version 7.1.0 published (PyPI/GHCR/Release).
+- Operator runs via `~/.local/bin/suijin` → `~/.suijin/venv/bin/python` + `~/.suijin/repo` (symlink to this tree). Their config: `suijin/config.json` IN THE TREE (provider: opencode / deepseek-v4.1-flash-free). `~/.local/bin/suijind` is the detached-daemon launcher.
 - System-Python stale processes squat lab ports (5906/5910/5911) — check `lsof -nP -i :PORT`.
-- Working-tree strays (operator's): deleted assets, 7 lab whitespace reformats, 6 trivial style diffs — do NOT commit without asking.
 - `gh` CLI not authed; use `git credential fill`.
+- **Kali machine**: the operator's `kali` OrbStack machine has the pipx install at `/opt/pipx/venvs/suijin` + lab at ports 6000-6020. Refresh: `cd /opt/suijin && sudo git pull && sudo rm -rf build *.egg-info && pipx install --force /opt/suijin`. The `build/` + `*.egg-info` MUST be purged before reinstall or deleted files resurrect (field-verified).
+- **Backup rule**: `backup-suijin` after EVERY substantive round — mirrors repo + `~/.suijin` to the "Backup" partition with `.prev` generation rotation. See `agent-vault/decisions.md`.
+- **PERMANENT container rule**: NEVER `~`/`$HOME` in containers (OrbStack binds the Mac home — the wipe cause). Container runs use SUIJIN_WORKSPACE=/opt/... only.
 
 ## THE INVARIANTS — breaking any of these broke the field
 
+### Target landscape & breadth (2026-10-18)
+0. **The agent sees PRODUCT FAMILIES, not just endpoints** — `landscape.py` detects families (large platform → 10) and renders "X/Y explored" in think context. The BREADTH ALERT fires when >60% of last 20 actions target one family while untested families exist. The depth-over-coverage gate is FAMILY-SCOPED — surface_expand is blocked only for the same family as the pending chain, never across families (the blanket block caused heavy tunnel vision in a live run).
+0a. **Contamination scrub on .sje resume** — dead credential literals (verified SERVICE_DISABLED in a prior run) are scrubbed to `[SCRUBBED:dead-key]` before state seeding. K1/K2 API keys from dead runs stop appearing as fresh discoveries.
+0b. **Temp dir auto-resolution** — bare `/tmp/` in execute_terminal rewrites to engagement `tmp/` in-place. `/var/tmp/` preserved (sandbox denial is load-bearing).
+
 ### Config & enforcement
-1. **Config precedence**: `suijin/config.json` file value WINS over every code default (`load_config` setdefaults only; Pydantic `model_dump()` fills holes). Changing a model default does NOTHING if the operator's file pins the key — check their file.
-2. **Cost enforcement lives in THREE places**: `governor.py budget_guard` (`max_cost_usd`, absent→$25 hard stop), `supervisor.py` L327+ (`cost_budget_usd`/`cost_hard_cap_usd` steering), `supervisor.py` L216 (`cost_alert_usd` flag). **0 = DISABLED at all three (via `> 0` guards — `cost >= 0` is always true, the trap)**. Operator's file now: all 0, max_iterations 100000.
-3. `max_iterations` is ADVISORY (shown in prompt); the real stop is `recursion_limit` in redteamer's langgraph_config (100000, ~2 recursions/iteration) + `completion_reason`.
+1. **Config precedence**: `suijin/config.json` file value WINS over every code default (`load_config` setdefaults only; Pydantic `model_dump()` fills holes). Changing a model default does NOTHING if the operator's file pins the key — check their file. Menu launches RELOAD config at launch time (the stale-banner fix).
+2. **Cost enforcement lives in THREE places**: `governor.py budget_guard` (`max_cost_usd`, absent→$25 hard stop), `supervisor.py` L327+ (`cost_budget_usd`/`cost_hard_cap_usd` steering), `supervisor.py` L216 (`cost_alert_usd` flag). **0 = DISABLED at all three (via `> 0` guards — `cost >= 0` is always true, the trap)**.
+3. `max_iterations` is HARD-ENFORCED (2026-10-17): the graph wrapper ends cleanly at N of N with `budget_exhausted`. The recursion limit is `N*2 + 4` headroom. Bookkeeping turns can't crawl past the cap.
+
+### Tool contracts & agent UX (2026-10-18)
+3a. **Tool contracts** (`tool_contracts/`): 17 top tools have JSON schemas + usage docs. Dispatch validates args BEFORE routing — the model gets "Argument 'compare' must be an object/dict" at the boundary, not `'bool' object has no attribute 'get'` three layers deep. Usage docs ride the tool catalog in the think context.
+3b. **Observation engine** (`observation/`): http_request + http_replay record (endpoint, credential, params, status, size) per call. Deterministic IDOR/BFLA/mass-assignment detectors surface findings from accumulated evidence — no LLM needed to see that user_a and user_b got different responses.
+3c. **Vuln-class sub-agents** (`vuln_agents/`): 9 specialist profiles. deploy_subagent detects the class from task text and injects the specialist's doctrine + tools.
+
+### Provider layer (`server/providers/lib/__init__.py`)
+4. `generate()` returns STRINGS, never raises. `"Error:"` prefix = the failover protocol (`generate_with_failover` falls through only on it).
+5. `on_delta(kind, piece)` callback errors stay swallowed; `_stream_chat` returns `(status, content, reasoning, usage, body)`, status 0 = transport death → ONE `_post_chat` fallback.
+6. zai: 403 = endpoint mismatch, NO retry; 402 = plan quota/credits, explain the ~5h reset. 401/402/403 all emit `_diag_llm_done`.
+7. `llm_client.generate_async`: 180s hard timeout → error string. Silent (ONE Live region rule — the strip).
+
+### Agent graph (`server/agent/lib/`)
+8. **Guidance = file-based** (`live_guidance.md` in engagement_dir), consumed once per think turn, delivered as the LAST USER MESSAGE. Two writers (input box, pause console), one file. Never `update_state` guidance.
+9. **Tools dispatch via 3-arg `route_tool(name, args, config)`** everywhere; blue swaps the whole function (`route_blue_tool`), never the signature.
+10. **Router keys on `_current_step.tool_name` truthiness** — bookkeeping actions (complete/ask_user/switch_skill/transition_phase) MUST clear `_current_step` or the last tool re-executes. `deploy_subagent` uses `""`.
+11. `completion_reason` truthy = the ONLY normal graph exit. `.sje` resume must scrub it to None. **Completion refusals are decisions** (not no-progress); after 5 refusals of the same gate, the gate stands down.
+12. Circuit breaker: 3 consecutive provider/parse failures → forced end. Redteamer grants ONE full restart for provider_failure/llm_error only.
+13. Budget guard runs BEFORE every LM call in `_think` wrapper. messages/execution_trace hard cap 25 in `_merge_state`.
+14. **Blue mode swaps THREE things together**: prompt builder, tool router, subagent tool reference.
+15. failure-prefix sets: dispatch `_FAILURE_PREFIXES` == execute_tool_node's success check — keep synchronized.
+
+### Chain & loop enforcement (2026-10-17/18)
+15a. **Chain heartbeat**: `_on_confirmed` → `on_finding_confirmed()` → module-level `_PENDING_HANDOFF` → think_node drains into state → CHAIN directive renders → escalates to CHAIN REQUIRED at 2+ turns stale → completion refused while unexplored. The old throwaway-dict bug meant the directive NEVER rendered in 202 iterations.
+15b. **Loop detection layers**: Layer 1 = within-turn dedup (dispatch). Layer 2 = cross-turn RepeatDetector (same tool+args, nudge at 3, abort at 5). Layer 3 = meaningful-progress signals (findings/surfaces/creds = progress; gate refusals = dialogue; empty steps ≠ tool success).
+15c. **Blackboard**: `_on_confirmed` → `propagate_confirmed()` → mesh system announce → peer think context renders "PEER FINDINGS" section. Confirmed findings reach peers without the model choosing to broadcast.
+
+### Operator console (`modules/console/lib/`)
+16. **ONE Live region** (the strip, transient). Everything else prints above it.
+17. **Stdin has ONE owner**: TTY → RedInputReader (cbreak, ISIG on). Never `console.input()` while a cbreak reader lives. ask flow → `begin_ask` queue; ESC ESC → pause runs IN THE READER THREAD.
+18. All 19 EngagementUI methods are `_guarded` — never raise into the loop.
+19. Enter PRESERVES the input buffer; arrows never reach it; the armed pause queue survives `end_pause`.
+19a. **Mesh phase lines deduped** — `set_phase(silent=True)` when think_node already announced (the doubled-line bug). The input badge syncs on every iteration header.
+19b. **Detail pane sanitizes** raw ANSI/control bytes from tool output (the real-engagement garbling); long tokens fold at the border. Iteration upserts prevent blank stub rows.
+19c. **t/s gauge** updates per streaming delta (via `_emit` recording arrivals); the engagement republishes the runtime digest every 0.5s.
+
+### Termination & errors
+20. EVERY ending hits `_render_termination` (classifier: DECLINED/OPERATOR/NO_OUTPUT/FAILED/COMPLETE/BUDGET).
+21. The queue-bridge astream reader CAPTURES exceptions into `_stream_error` and the sentinel handler re-raises.
+22. `run_red_team` NEVER exits silently: crash panel + `outputs/logs/engage_crash.log`. **Reports generate on EVERY ending** (the finally generates final_report.md from the trail — idempotent).
+
+### Kernel & boot
+23. **Kernel purity**: kernel imports stdlib + suijin.kernel ONLY (AST-tested).
+24. `register()` is cheap/no-I/O; `start()` goes live. Core-tier failure aborts; others degrade silently.
+25. **Services are lazy**. TWO registries coexist: kernel Context + `tools/lib/services` seam — register on the right one.
+26. Console is feature-blind: modules register menus/verbs via `console_hooks`.
+27. New CLI verb → ALSO add to `_KNOWN_VERBS` (cli.py).
+28. main.py sys.path bootstrap runs BEFORE any `from suijin import …`.
+29. **v7.2 CLEAN LAYOUT**: `~/.suijin/config/` IS the workspace (WORKSPACE_DIR) — profiles/skills/packs/SOUL.md/prompt.md/reflex-shadow/drive_policy/approvals/credentials/notify/recipes. Engagements at `~/.suijin/engagements/<stamp>_<slug>/`. System dirs `~/.suijin/logs/` and `~/.suijin/caches/`. Pre-engagement writes park at `config/artifacts/<name>/`. The old `~/.suijin/workspace` is retired (one-time migration). The repo `suijin_agent` symlink is REMOVED. `outputs/` is GONE.
+29a. **Run logs go through `workspace.logs_dir()` = `~/.suijin/logs/`**.
+29b. **A crash is still an engagement**: .sje through `CRASH_SAVER`; the panel prints the resume line.
+29c. **Husk prune**: no events.jsonl + no audit_trails + no .sje + empty log/ = never had a run → removed.
+29d. **Reports read the audit trail, never model JSON**: one overwriting `reports/report.md` mid-run; `reports/final_report.md` at conclusion via `end_audit`.
+29e. **PERMANENT container rule**: NEVER `~`/`$HOME` in containers. Container runs set SUIJIN_WORKSPACE to explicit container-local paths.
+29f. **mesh honors SUIJIN_WORKSPACE containment** — the mesh lives INSIDE an explicit workspace override (`<ws>/mesh`), never scattered to the parent. The operator's MESH_DIR/WORKSPACE_DIR constants derive from the same rule.
 
 ### Provider layer (`server/providers/lib/__init__.py`)
 4. `generate()` returns STRINGS, never raises. `"Error:"` prefix = the failover protocol (`generate_with_failover` falls through only on it).
