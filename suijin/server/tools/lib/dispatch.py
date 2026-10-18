@@ -352,22 +352,35 @@ def _obs_status() -> str:
     return status()
 
 
-def _obs_record(args: dict) -> None:
-    """Observation engine: record every HTTP call's shape for deterministic
-    IDOR/BFLA/mass-assignment detection. Never raises."""
+def _obs_record_result(args: dict, result: str) -> None:
+    """Observation engine: record HTTP call with ACTUAL response status/size."""
     try:
         from suijin.modules.agent.lib.observation import record
 
+        status = 0
+        size = len(result) if result else 0
+        import re as _re
+
+        m = _re.search(r"(?:Status:|HTTP/\d.\s+|CODE=)(\d{3})", str(result or ""))
+        if m:
+            status = int(m.group(1))
         record(
             endpoint=str(args.get("url") or ""),
             method=str(args.get("method") or "GET"),
             credential=str(args.get("credential") or "anon"),
             params=args.get("body") if isinstance(args.get("body"), dict) else {},
-            status=0,  # filled by the caller if available
-            resp_size=0,
+            status=status,
+            resp_size=size,
         )
     except Exception:
         pass
+
+
+def _obs_wrap(args: dict, result) -> str:
+    """Wrap an HTTP tool call: execute, then record for the observation engine."""
+    _result = str(result)
+    _obs_record_result(args, _result)
+    return _result
 
 
 from suijin.modules.tools.lib.terminal import execute_terminal
@@ -600,10 +613,9 @@ def _build_routes(config):
         ),
         "mine_failures": lambda a: mine_failures(max_clusters=int(a.get("max_clusters", 5))),
         "anonymize_report": lambda a: anonymize_report(a.get("file_path", "")),
-        "http_request": lambda a: (
-            _obs_record(a),
-            http_request(a.get("method", "GET"), a.get("url"), a.get("headers"), a.get("body")),
-        )[-1],
+        "http_request": lambda a: _obs_wrap(
+            a, http_request(a.get("method", "GET"), a.get("url"), a.get("headers"), a.get("body"))
+        ),
         "bypass_403": lambda a: _bypass_403(a.get("url", "")),
         "skill_search": lambda a: _skill_search(a.get("query", ""), limit=int(a.get("limit", 10))),
         "skill_load": lambda a: _skill_load(a.get("skill_id", a.get("id", ""))),
@@ -630,22 +642,25 @@ def _build_routes(config):
         "crawl": lambda a: _crawl(
             url=a.get("url", ""), max_pages=int(a.get("max_pages", 20)), credential=a.get("credential", "")
         ),
-        "http_replay": lambda a: _http_replay(
-            request_id=a.get("request_id", ""),
-            method=a.get("method", "GET"),
-            url=a.get("url", ""),
-            headers=a.get("headers"),
-            body=a.get("body", ""),
-            mutations=a.get("mutations"),
-            codec=a.get("codec"),
-            codec_field=a.get("codec_field", ""),
-            credential=a.get("credential", ""),
-            unauthenticated=bool(a.get("unauthenticated")),
-            compare=a.get("compare"),
-            sweep=a.get("sweep"),
-            follow_redirects=bool(a.get("follow_redirects")),
-            timeout=int(a.get("timeout", 30)),
-            allow_internal=bool(a.get("allow_internal")),
+        "http_replay": lambda a: _obs_wrap(
+            a,
+            _http_replay(
+                request_id=a.get("request_id", ""),
+                method=a.get("method", "GET"),
+                url=a.get("url", ""),
+                headers=a.get("headers"),
+                body=a.get("body", ""),
+                mutations=a.get("mutations"),
+                codec=a.get("codec"),
+                codec_field=a.get("codec_field", ""),
+                credential=a.get("credential", ""),
+                unauthenticated=bool(a.get("unauthenticated")),
+                compare=a.get("compare"),
+                sweep=a.get("sweep"),
+                follow_redirects=bool(a.get("follow_redirects")),
+                timeout=int(a.get("timeout", 30)),
+                allow_internal=bool(a.get("allow_internal")),
+            ),
         ),
         "http_replay_raw": lambda a: _http_replay_raw(
             host=a.get("host", ""),

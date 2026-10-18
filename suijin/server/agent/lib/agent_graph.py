@@ -246,18 +246,45 @@ class SuijinAgentGraph:
             # forever with ZERO structural stop — every turn billed. After
             # a nudge the loop gets ONE last chance, then a clean stop.
             _step = result.get("_current_step") or {}
-            _did_work = (
-                bool(_step.get("tool_name"))
-                or bool(result.get("completion_reason"))
-                or result.get("_just_transitioned_to")
-                # A REFUSED completion is still a decision (2026-10-17,
-                # the google run: 7 legitimate completes refused by the
-                # coverage gate, each counted as "no progress", breaker
-                # killed a finished engagement as 'error'). The model
-                # produced a complete action; the gate refused it — that
-                # is a dialogue, not a loop.
-                or result.get("_completion_refused") is True
-            )
+
+            # ── LAYER 2: cross-turn repeat detector (2026-10-18, the
+            # CyberStrike stuck/ pattern) — catches identical (tool, args)
+            # signatures across turns that the single-counter approach
+            # misses entirely. Nudges at 3, aborts at 5.
+            _tool = str(_step.get("tool_name") or "")
+            _tool_args = _step.get("tool_args") or {}
+            if _tool:
+                with contextlib.suppress(Exception):
+                    from suijin.modules.agent.lib.loop_detection import RepeatDetector
+
+                    if not hasattr(self, "_repeat_det"):
+                        self._repeat_det = RepeatDetector(limit=3)
+                    _rv = self._repeat_det.feed(_tool, _tool_args)
+                    if _rv.level == "nudge":
+                        result.setdefault("messages", []).append(
+                            {"role": "user", "content": f"SYSTEM LOOP NUDGE: {_rv.message}"}
+                        )
+                    elif _rv.level == "abort":
+                        result["completion_reason"] = f"error: cross-turn repeat loop ({_rv.count}x identical calls)"
+                        result["final_summary"] = f"Engagement stopped: {_rv.message}"
+
+            # ── LAYER 3: meaningful-progress detector — replaces the
+            # single-counter approach with signal extraction. Gate
+            # refusals are dialogue, not stagnation.
+            _did_work = False
+            try:
+                from suijin.modules.agent.lib.loop_detection import extract_signals, is_progress
+
+                _signals = extract_signals(_step)
+                _signals.completion_refused = result.get("_completion_refused") is True
+                _did_work = is_progress(_signals) or bool(result.get("completion_reason"))
+            except Exception:
+                _did_work = (
+                    bool(_step.get("tool_name"))
+                    or bool(result.get("completion_reason"))
+                    or result.get("_just_transitioned_to")
+                    or result.get("_completion_refused") is True
+                )
             if _did_work:
                 result["_no_progress_turns"] = 0
             else:

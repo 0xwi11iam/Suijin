@@ -121,7 +121,9 @@ def extract_signals(trace_step: dict) -> ProgressSignals:
     success = bool(trace_step.get("success", True))
     obs = str(trace_step.get("tool_output") or "")
 
-    sig.tool_succeeded = success
+    # no tool called = no tool success (the dict default True is for
+    # real tool calls; an empty step from a parse failure is NOT progress)
+    sig.tool_succeeded = success if tool else False
 
     if tool == "catalog_exploit" and success and "CONFIRMED" in obs:
         sig.new_finding = True
