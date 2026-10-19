@@ -144,6 +144,11 @@ REPLAY_KEYS = (
     "findings",
     "_attack_queue",
     "_foothold_at",
+    # 2026-10-19: max_iterations MUST survive resume — every .sje resume
+    # ran with a phantom 100-iteration limit (the think context default)
+    # because this key wasn't in the replay contract
+    "max_iterations",
+    "_run_config",
 )
 
 #: resume-critical state the RUNNER snapshots each iteration into a
@@ -160,6 +165,7 @@ RESUME_SNAPSHOT_KEYS = (
     "current_phase",
     "phase_history",
     "current_iteration",
+    "max_iterations",
     "todo_list",
     "target_info",
     "chain_findings_memory",
