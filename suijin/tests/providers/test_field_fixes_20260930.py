@@ -26,11 +26,12 @@ class TestLocalContextWindow:
         monkeypatch.setattr(mm, "_catalog", lambda: None)
         assert mm.resolve_context_window("ollama", "anything", {"context_window": 32768}) == 32768
 
-    def test_cloud_unknown_keeps_the_1m_fallback(self, monkeypatch):
+    def test_cloud_unknown_uses_family_fallback(self, monkeypatch):
         from suijin.modules.providers.lib import model_meta as mm
 
         monkeypatch.setattr(mm, "_catalog", lambda: None)
-        assert mm.resolve_context_window("zai", "brand-new-model", {}) == 1_000_000
+        # family-aware fallback (2026-10-19): glm- prefix → 128k, not 1M
+        assert mm.resolve_context_window("zai", "brand-new-model", {}) == 128_000
 
 
 class TestLocalCompactionBranch:

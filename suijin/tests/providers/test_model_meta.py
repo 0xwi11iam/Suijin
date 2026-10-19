@@ -25,7 +25,7 @@ class TestResolutionOrder:
 
     def test_unknown_offline_falls_back_to_1m(self, monkeypatch):
         monkeypatch.setattr(mm, "_fetch_catalog", lambda: None)
-        assert mm.resolve_context_window("zai", "glm-5.3", {}) == mm.DEFAULT_CONTEXT_WINDOW == 1_000_000
+        assert mm.resolve_context_window("", "totally-unknown-xyz", {}) == 128_000  # family-aware fallback (2026-10-19)
 
     def test_cached_catalog_resolves_without_network(self, tmp_path, monkeypatch):
         p = tmp_path / "caches" / "models.dev.json"
@@ -83,7 +83,7 @@ class TestFetchBehavior:
         monkeypatch.setattr(mm, "_negative_cache", True)
         monkeypatch.setattr(mm, "_last_fetch_attempt", time.time())
         # inside the backoff window: no call, straight to fallback
-        assert mm.resolve_context_window("p", "m", {}) == 1_000_000
+        assert mm.resolve_context_window("p", "m", {}) == 128_000  # family-aware fallback
         assert calls == []
 
     def test_corrupt_cache_is_ignored(self, tmp_path, monkeypatch):
@@ -91,7 +91,7 @@ class TestFetchBehavior:
         p.parent.mkdir(parents=True)
         p.write_text("{corrupt")
         monkeypatch.setattr(mm, "_fetch_catalog", lambda: None)
-        assert mm.resolve_context_window("p", "m", {}) == 1_000_000
+        assert mm.resolve_context_window("p", "m", {}) == 128_000  # family-aware fallback
 
 
 class TestHelpers:
