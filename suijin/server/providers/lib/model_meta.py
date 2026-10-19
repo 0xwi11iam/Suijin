@@ -175,8 +175,39 @@ def resolve_context_window(provider: str, model: str, config: dict | None = None
     # 3. local-model default — small, honest, compaction-firing
     if str(provider or "").strip().lower() == "ollama":
         return LOCAL_DEFAULT_WINDOW
-    # 4. the fallback — assume 1M
-    return DEFAULT_CONTEXT_WINDOW
+    # 4. family-aware fallback (2026-10-19 — the ctx 1% bug): models.dev
+       # misses opencode/custom gateway model names like "deepseek-v4.1-flash-free".
+    # The blanket 1M fallback made the gauge permanently read 1-2% (15k
+    # tokens / 1M window) and compaction never fired (90% of 1M = never).
+    # Infer from the model NAME when the catalog misses: most model
+    # families have well-known windows we can fall back to honestly.
+    m_lower = str(model or "").lower()
+    _FAMILY_WINDOWS = {
+        "deepseek": 128_000,
+        "glm-": 128_000,
+        "glm-4": 128_000,
+        "glm-5": 128_000,
+        "claude": 200_000,
+        "gpt-4": 128_000,
+        "gpt-5": 128_000,
+        "o1": 128_000,
+        "o3": 128_000,
+        "o4": 128_000,
+        "llama": 128_000,
+        "mistral": 128_000,
+        "mixtral": 64_000,
+        "qwen": 128_000,
+        "gemini": 128_000,
+        "sonnet": 200_000,
+        "opus": 200_000,
+        "haiku": 200_000,
+    }
+    for prefix, win in _FAMILY_WINDOWS.items():
+        if prefix in m_lower:
+            return win
+    # 5. the final fallback — 128k is a realistic modern default; 1M
+    # was wildly optimistic and made the gauge + compaction useless
+    return 128_000
 
 
 def window_chars(provider: str, model: str, config: dict | None = None) -> int:
