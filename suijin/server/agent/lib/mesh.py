@@ -41,12 +41,11 @@ _BAD_HELLO_PIDS: set[int] = set()
 def mesh_dir() -> Path:
     """Runtime dir (honours a monkeypatched module attr for tests).
 
-    v7.2 CONTAINMENT (2026-10-14, the 'operator sees zero agents' bug):
-    an explicit SUIJIN_WORKSPACE is SELF-CONTAINED — the mesh lives
-    INSIDE it (<ws>/mesh), never scattered to the parent (a pinned
-    /opt/suijin-ws computed /opt/mesh → root-owned → PermissionError →
-    mesh start silently failed → the operator console saw nothing).
-    Prod (no override): ~/.suijin/mesh, matching base_dir().
+    v7.2 CONTAINMENT: an explicit SUIJIN_WORKSPACE is SELF-CONTAINED —
+    the mesh lives INSIDE it (<ws>/mesh). Prod (no override): platform
+    Application Support directory — NOT ~/.suijin (the operator's
+    2026-10-19 ruling: ~/.suijin holds only config, engagements, and
+    the dev install).
     """
     v = globals().get("MESH_DIR_OVERRIDE")
     if v is not None:
@@ -55,13 +54,17 @@ def mesh_dir() -> Path:
 
     if _EXPLICIT_WS:
         return WORKSPACE_DIR / "mesh"
-    ws_mesh = WORKSPACE_DIR.parent / "mesh"
-    if ws_mesh.is_dir():
-        return ws_mesh
-    new_path = Path.home() / ".suijin" / "config" / "mesh"
-    if new_path.is_dir():
-        return new_path
-    return ws_mesh
+    import sys
+
+    if sys.platform == "darwin":
+        d = Path.home() / "Library" / "Application Support" / "suijin" / "mesh"
+    else:
+        import os
+
+        xdg = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
+        d = Path(xdg) / "suijin" / "mesh"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 def _me_file() -> Path:

@@ -405,6 +405,17 @@ def build_pause_handlers(ctx: PauseContext) -> dict:
         ctx.stop_requested = True
         ctx.console.print("[dim]  quitting — saving session + .sje bundle...[/dim]")
 
+    def _die(_args):
+        """HARD EXIT — no save, no .sje, no report, nothing. The process
+        terminates immediately. You lose all state from this run."""
+        ctx.console.print("[bold red]  KILL — hard exit, nothing saved[/bold red]")
+        # set a flag, never os._exit here — a test that iterates the
+        # command registry would kill the pytest process
+        import suijin.client.tui.session_control as _sc
+
+        _sc._HARD_EXIT_REQUESTED = True
+        ctx.stop_requested = True
+
     return {
         "/report": _report,
         "/audit": _audit,
@@ -419,16 +430,21 @@ def build_pause_handlers(ctx: PauseContext) -> dict:
         "/finish": _finish,
         "/loot": _loot,
         "/jobs": _jobs,
-        "/kill": _kill,
         "/cost": _cost,
         "/quit": _quit,
+        "/kill": _kill,
+        "/die": _die,
     }
 
 
 # ONE pause indication: the strip's PAUSED badge owns the state, so the
 # banner carries only the how-to. The old banner led with "Paused" too —
 # two pause announcements stacked, which read as the UI stuttering.
-PAUSE_BANNER = "\n[dim]  type guidance, or /help for commands · Enter to resume · /quit saves[/dim]"
+# /kill sets this — the pause console exits, the main loop
+# checks it and os._exit(1)s WITHOUT saving anything
+_HARD_EXIT_REQUESTED = False
+
+PAUSE_BANNER = "\n[dim]  type guidance, or /help for commands · Enter to resume · /quit saves · /kill hard-exits[/dim]"
 
 
 def pause_console(ctx: PauseContext, input_fn) -> str:

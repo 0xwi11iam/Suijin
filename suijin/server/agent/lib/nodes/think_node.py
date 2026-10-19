@@ -632,7 +632,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         "DRIVE": _drive_block,
         "CURRENT_STATE": (
             f"- **Phase**: {phase}\n"
-            f"- **Iteration**: {iteration}/{state.get('max_iterations', 100)}\n"
+            f"- **Iteration**: {iteration}/{'unlimited' if int(state.get('max_iterations', 100) or 0) >= 100000 else state.get('max_iterations', 100)}\n"
             + (
                 # LOW-BUDGET DOCTRINE (2026-10-14): the agent saw N/M but
                 # nothing CHANGED its behavior near the end - it opened new

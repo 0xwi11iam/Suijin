@@ -157,8 +157,8 @@ def ensure_global_layout() -> None:
     for name in GLOBAL_DIRS:
         _ensure(WORKSPACE_DIR / name)
     _ensure(engagements_root())
-    _ensure(base_dir() / "logs")
-    _ensure(caches_dir())
+    # logs and caches live in platform dirs (caches_dir/logs_dir create
+    # themselves on access) — ~/.suijin stays clean
     _migrate_legacy_workspace()
 
 
@@ -168,9 +168,22 @@ def engagements_root() -> Path:
 
 
 def caches_dir() -> Path:
-    """Machine-level caches (models.dev.json, ms-playwright) — never
-    inside config/ or an engagement."""
-    return base_dir() / "caches"
+    """Machine-level caches (models.dev.json, ms-playwright) — platform
+    cache directory (~/Library/Caches/suijin on macOS, XDG_CACHE_HOME
+    on Linux), never inside ~/.suijin (the operator's 2026-10-19
+    ruling: keep ~/.suijin clean — only config, engagements, and the
+    dev install)."""
+    import sys
+
+    if sys.platform == "darwin":
+        d = Path.home() / "Library" / "Caches" / "suijin"
+    else:
+        import os
+
+        xdg = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
+        d = Path(xdg) / "suijin"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 def audit_dir() -> Path:
@@ -316,10 +329,18 @@ def profiles_root() -> Path:
 
 
 def logs_dir() -> Path:
-    """Run-level logs: engage_crash.log and friends — base/logs, NEVER
-    under config/ or an engagement (the old WORKSPACE_DIR/'outputs'/logs
-    and the nested logs/logs are gone with v7.2)."""
-    return _ensure(base_dir() / "logs")
+    """Run-level logs — platform log directory (~/Library/Logs/suijin
+    on macOS, XDG_STATE_HOME on Linux), never inside ~/.suijin."""
+    import sys
+
+    if sys.platform == "darwin":
+        d = Path.home() / "Library" / "Logs" / "suijin"
+    else:
+        import os
+
+        xdg = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
+        d = Path(xdg) / "suijin"
+    return _ensure(d)
 
 
 def archive_engagement(reason: str = "ended") -> Path | None:

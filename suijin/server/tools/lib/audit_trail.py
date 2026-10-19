@@ -290,6 +290,20 @@ def end_audit(cost_usd: float = 0.0):
                 trail_data.get("findings") or [],
                 trail_data.get("iterations") or [],
             )
+    # BUG BOUNTY REPORT (2026-10-19): the clean submission document —
+    # no logs, no traces, no system info. Just findings + POC + remediation.
+    # This is what the operator pastes into HackerOne/BugCrowd.
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.bug_bounty_report import generate_bug_bounty_report
+
+        _bbp_target = str(trail.get("engagement") or "engagement")
+        generate_bug_bounty_report(
+            _bbp_target,
+            trail.get("findings") or [],
+            target=_bbp_target,
+            engagement_dir=Path(key) if Path(key).is_dir() else None,
+        )
+
     # AUTO-REPORT (v7.2): the FINAL engagement report from the trail —
     # real findings, real thoughts, real cost. One file, conclusion-
     # stamped: reports/final_report.md. Best-effort, never blocks.

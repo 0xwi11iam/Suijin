@@ -360,10 +360,9 @@ class TestOracleHypotheses:
         hyps = oracle.generate_hypotheses("snippet", "payload", config={})
         assert len(hyps) >= 1
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# supervisor.py — verdict parsing, heuristics, evaluate loop
-# ═══════════════════════════════════════════════════════════════════════════════
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # supervisor.py — verdict parsing, heuristics, evaluate loop
+    # ═══════════════════════════════════════════════════════════════════════════════
     def _diag(self, exc):
         from suijin.modules.providers.lib import _diagnose_transport
 
