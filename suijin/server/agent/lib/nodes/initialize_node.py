@@ -26,10 +26,18 @@ def initialize_node(state: dict, *, objective: str, config: dict = None) -> dict
     """
     max_iters = (config or {}).get("max_iterations", 100)
 
-    # If resuming from checkpoint, don't reinitialize
+    # If resuming from checkpoint, don't reinitialize — BUT always
+    # carry max_iterations through (2026-10-19: every .sje resume ran
+    # with a phantom 100-iteration limit because this key wasn't in
+    # REPLAY_KEYS and the early return dropped it)
     if state.get("original_objective") and state.get("current_iteration", 0) > 0:
         logger.info("Resuming from checkpoint — skipping initialization")
-        return {}
+        result = {}
+        if max_iters and int(state.get("max_iterations") or 0) != int(max_iters):
+            result["max_iterations"] = max_iters
+            result["_run_config"] = dict(state.get("_run_config") or {})
+            result["_run_config"]["max_iterations"] = max_iters
+        return result
 
     now = utc_now()
 
