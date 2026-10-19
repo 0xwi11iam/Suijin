@@ -105,21 +105,22 @@ class TestCanonicalLayout:
     def test_clean_skeleton(self, tmp_path, monkeypatch):
         """ensure_global_layout creates the v7.2 roots. Explicit
         SUIJIN_WORKSPACE = SELF-CONTAINED (everything under the
-        override); prod mode (no env) splits base/{engagements,logs,caches}."""
+        override); prod mode engagements at base, logs/caches in
+        platform dirs (the 2026-10-19 clean ~/.suijin ruling)."""
         monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path / "config")
         monkeypatch.setattr(ws, "_EXPLICIT_WS", True)
         monkeypatch.setenv("SUIJIN_WORKSPACE", str(tmp_path / "config"))
         ws.ensure_global_layout()
-        for name in ("profiles", "skills", "packs", "bugscope", "engagements", "logs", "caches"):
+        for name in ("profiles", "skills", "packs", "bugscope", "engagements"):
             assert (tmp_path / "config" / name).is_dir(), name
         assert not (tmp_path / "outputs").exists()
         assert not (tmp_path / "engagements").exists()  # contained — no parent scatter
-        # prod mode: no override → base is the PARENT
+        # prod mode: no override → engagements at base; logs/caches
+        # live in PLATFORM dirs, not ~/.suijin
         monkeypatch.delenv("SUIJIN_WORKSPACE")
         monkeypatch.setattr(ws, "_EXPLICIT_WS", False)
         ws.ensure_global_layout()
-        for name in ("engagements", "logs", "caches"):
-            assert (tmp_path / name).is_dir(), f"base/{name}"
+        assert (tmp_path / "engagements").is_dir(), "base/engagements"
 
     def test_tool_dirs_anchored_to_engagement_or_base(self, tmp_path, monkeypatch):
         from suijin.modules.tools.lib import audit_trail, report_exporter, session_replay

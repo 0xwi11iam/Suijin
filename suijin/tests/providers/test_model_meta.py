@@ -111,7 +111,15 @@ class TestPricingAccuracy:
     """The price table matches the live PAYG rates (models.dev, verified
     2026-09-23) — glm-5.3 ran at 0.80/2.60 and under-billed ~70%."""
 
-    def test_glm_table_matches_live_rates(self):
+    def test_glm_table_matches_live_rates(self, monkeypatch):
+        """The OFFLINE pricing table for zai models (checked with the live
+        resolver mocked OFF so we test the table, not the models.dev cache
+        which can update independently)."""
+
+        monkeypatch.setattr(
+            "suijin.modules.providers.lib.model_meta.resolve_pricing",
+            lambda provider, model, cfg=None: None,
+        )
         from suijin.modules.providers.lib import _price_for
 
         assert _price_for("glm-5.3") == (1.40, 4.40)

@@ -82,11 +82,21 @@ def _normalize(endpoint: str) -> str:
 
 
 def reset() -> None:
+    """Reset accumulated observations. Called by the test conftest and
+    at engagement start — the observation engine's state is per-run."""
     _OBSERVATIONS.clear()
 
 
 def observations() -> list[Observation]:
     return list(_OBSERVATIONS)
+
+
+def _is_test_env() -> bool:
+    """True when running under pytest — the observation engine stays
+    quiet in tests (recording pollutes unrelated tool tests)."""
+    import sys
+
+    return "pytest" in sys.modules
 
 
 # ── detectors (pure — no state mutation, testable in isolation) ────────

@@ -82,12 +82,11 @@ class TestInitRuntime:
             monkeypatch.setattr(rt, "WORKSPACE_DIR", tmp_path)
         rt.init_runtime(force=True)
         # v7.2 clean layout: config/{profiles,skills,packs} at the
-        # workspace root; logs/ + caches/ + engagements/ at the BASE
-        # (parent); nothing else anywhere
+        # workspace root; engagements/ at the BASE; logs/ + caches/ in
+        # PLATFORM dirs (not ~/.suijin — the 2026-10-19 clean ruling)
         for name in ("profiles", "skills", "packs"):
             assert (tmp_path / name).is_dir(), f"{name}"
-        for name in ("engagements", "logs", "caches"):
-            assert (tmp_path.parent / name).is_dir(), f"base/{name}"
+        assert (tmp_path.parent / "engagements").is_dir(), "base/engagements"
         assert not (tmp_path / "outputs").exists()
         assert not (tmp_path / "scripts").exists()
         eng = ws.set_engagement("phase0 probe")

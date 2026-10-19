@@ -678,7 +678,7 @@ class TestPauseConsole:
 
         ctx, _ = self._ctx()
         h = build_pause_handlers(ctx)
-        assert len(h) == 16
+        assert len(h) == 17
         assert set(h) == {
             "/report",
             "/audit",
@@ -696,6 +696,7 @@ class TestPauseConsole:
             "/kill",
             "/cost",
             "/quit",
+            "/die",
         }
 
     def test_plain_line_is_guidance(self):

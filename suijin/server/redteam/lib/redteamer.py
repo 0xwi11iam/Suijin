@@ -778,7 +778,13 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
     # run (tests, CI, containers) used to UnboundLocalError on any restart
     # or Ctrl+C (latent since the pause machinery was TTY-only).
     _pause_live = {"agent": agent, "thread_id": thread_id, "final_state": {}, "objective": objective}
-    _pause_session = {"active": False, "guidance": None, "stop": False, "done": __import__("threading").Event()}
+    _pause_session = {
+        "active": False,
+        "guidance": None,
+        "stop": False,
+        "hard_exit": False,
+        "done": __import__("threading").Event(),
+    }
 
     class _NonTtyPauseCtx:
         """Attribute-compatible stub: pause commands are TTY-only, but the
@@ -805,7 +811,13 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
 
         _pause_q = _qmod.Queue()
 
-        _pause_session = {"active": False, "guidance": None, "stop": False, "done": __import__("threading").Event()}
+        _pause_session = {
+            "active": False,
+            "guidance": None,
+            "stop": False,
+            "hard_exit": False,
+            "done": __import__("threading").Event(),
+        }
 
         def _start_pause_session():
             """READER THREAD: the instant pause — banner + PAUSED visual +
@@ -1042,6 +1054,22 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
             )
 
     while True:
+        # HARD EXIT (/die) — check before anything else saves
+        try:
+            from suijin.client.tui.session_control import _HARD_EXIT_REQUESTED
+
+            if _HARD_EXIT_REQUESTED:
+                ui.stop()
+                run_box.stop()
+                if _input_reader is not None:
+                    _input_reader.stop()
+                console.print("[bold red]  KILLED — nothing saved[/bold red]")
+                import os as _os_kill
+
+                _os_kill._exit(1)
+        except ImportError:
+            pass
+
         # OPERATOR CONSOLE PAUSE — /pause in `suijn operator` drops a flag
         # in the mesh dir; every agent holds HERE, between turns, with the
         # same PAUSED strip badge as the in-window pause. Optional message

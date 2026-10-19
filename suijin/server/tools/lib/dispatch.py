@@ -355,6 +355,13 @@ def _obs_status() -> str:
 def _obs_record_result(args: dict, result: str) -> None:
     """Observation engine: record HTTP call with ACTUAL response status/size."""
     try:
+        from suijin.modules.agent.lib.observation import _is_test_env
+
+        if _is_test_env():
+            return  # never record during tests — state pollution
+    except ImportError:
+        pass
+    try:
         from suijin.modules.agent.lib.observation import record
 
         status = 0
