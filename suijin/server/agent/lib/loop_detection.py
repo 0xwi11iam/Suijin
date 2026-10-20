@@ -32,6 +32,11 @@ class RepeatDetector:
     Accumulates (tool, args) signatures over the whole run. Reacts when
     any signature repeats past a limit. Pure + deterministic — feed it
     signatures, get a verdict.
+
+    REPEAT-ECHO (2026-10-20, pentagi adaptation): the nudge carries the
+    tool's PREVIOUS answer — their incident: the suppressed answer WAS
+    the diagnosis, and a bare 'you are repeating' notice buried it.
+    Outputs are recorded by execute_tool_node via record_tool_output().
     """
 
     def __init__(self, limit: int = 3):
@@ -56,7 +61,7 @@ class RepeatDetector:
                 count,
                 f"You've called {_short(tool, args)} {count} times with identical args. "
                 "Change your approach — different params, different tool, or report why this exact "
-                "call needs repeating.",
+                "call needs repeating." + echo_for(sig),
             )
 
         return RepeatVerdict(
@@ -75,6 +80,33 @@ def _sig(tool: str, args: dict) -> str:
     """Stable signature: tool + canonical JSON of args."""
     canonical = json.dumps(args or {}, sort_keys=True, default=str)
     return hashlib.sha256(f"{tool}|{canonical}".encode()).hexdigest()[:16]
+
+
+#: REPEAT-ECHO store (2026-10-20): last output per signature, capped.
+#: Module-level so the tools layer (execute_tool_node) can record into
+#: the same map the detector reads — same pattern as the chain handoff.
+_LAST_OUTPUTS: dict[str, str] = {}
+_LAST_OUTPUTS_CAP = 48
+
+
+def record_tool_output(tool: str, args: dict, output: str) -> None:
+    """Record a call's output against its signature — the nudge echoes
+    it next time instead of burying the diagnosis. Capped, truncated."""
+    try:
+        sig = _sig(tool, args)
+        if len(_LAST_OUTPUTS) >= _LAST_OUTPUTS_CAP and sig not in _LAST_OUTPUTS:
+            _LAST_OUTPUTS.pop(next(iter(_LAST_OUTPUTS)))
+        _LAST_OUTPUTS[sig] = str(output or "")[:600]
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def echo_for(sig: str) -> str:
+    """The recorded previous answer for a signature ('' when none)."""
+    prev = _LAST_OUTPUTS.get(sig)
+    if not prev:
+        return ""
+    return f" Its previous answer (identical call — it will NOT change): {prev}"
 
 
 def _short(tool: str, args: dict) -> str:

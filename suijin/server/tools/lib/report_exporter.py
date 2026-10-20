@@ -81,6 +81,19 @@ def generate_report(
     catalog = _catalog_receipts(engagement_name)
 
     # Build Markdown report
+    # EVIDENCE VERIFICATION (2026-10-20): re-hash every captured PoC
+    # blob; drift renders as a staleness warning — the report never
+    # silently presents edited evidence (ARTEX evidence-store doctrine)
+    _evidence_warnings: list[str] = []
+    with contextlib.suppress(Exception):
+        from suijin.modules.platform.lib.workspace import engagement_dir as _ed
+        from suijin.modules.tools.lib.evidence_store import verify as _evv
+
+        _drift = _evv(_ed()).get("entries") or {}
+        for _eid, _probs in sorted(_drift.items()):
+            for _pr in _probs:
+                _evidence_warnings.append(f"{_eid}: {_pr}")
+
     lines = [
         "# Suijin Engagement Report",
         "",
@@ -95,6 +108,18 @@ def generate_report(
         "## Executive Summary",
         "",
     ]
+
+    if _evidence_warnings:
+        lines.insert(
+            lines.index("---"),
+            "\n".join(
+                [
+                    f"⚠ **EVIDENCE DRIFT** — {len(_evidence_warnings)} captured proof(s) changed after "
+                    "verification (re-verify before submitting):",
+                ]
+                + [f"- {w}" for w in _evidence_warnings]
+            ),
+        )
 
     # Summary stats
     successful = sum(1 for t in execution_trace if t.get("success", True))

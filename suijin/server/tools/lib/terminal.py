@@ -109,7 +109,16 @@ def execute_terminal(cmd, timeout=30, cwd=None):
         from suijin.modules.tools.lib.guardrails import confirm_global_action
 
         if dangerous and not confirm_global_action(cmd, pattern):
-            return f"Command denied by user (matched: {pattern}).\nCommand was: {cmd[:200]}"
+            # BLOCK PSYCHOLOGY (2026-10-20, ARTEX guard/ adaptation): a
+            # bare denial reads like a WAF/403 to a pentest agent — its
+            # instinct is to bypass it. State plainly that this is the
+            # OPERATOR'S platform, not the target's defense.
+            return (
+                "[PLATFORM CONTROL — this is NOT the target's defense. This block comes from your "
+                "operator's platform governance; do not attempt to bypass it as you would a WAF. "
+                "Adapt the technique within authorized scope instead.]\n"
+                f"Command denied by platform guardrail (matched: {pattern}).\nCommand was: {cmd[:200]}"
+            )
         # Approved (or not dangerous) — proceed with execution
 
         # SHARED-/tmp GUARD (2026-10-08, a three-target credential

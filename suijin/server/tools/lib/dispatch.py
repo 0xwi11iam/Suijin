@@ -82,11 +82,49 @@ def _with_install_hint(tool_name: str, result: str) -> str:
         from suijin.modules.tools.lib.availability import install_hint, tool_dependencies
 
         deps = tool_dependencies().get(tool_name) or []
-        hints = [f"→ install: {install_hint(b)}" for b in deps if install_hint(b)]
-        if not hints:
-            return result
-        return text + "\n" + "\n".join(hints[:2]) + "\n(you may install it via execute_terminal, then retry)"
+        hints = [f"→ install: {install_hint(b)} for {tool_name}" for b in deps if install_hint(b)]
+        hints.append("→ ensure_tools (idempotent self-provisioning, max 3 installs/call)")
+        return text + "\n" + "\n".join(hints[:3])
     except Exception:  # noqa: BLE001 — hints must never break a result
+        return result
+
+
+#: TOOL-SUBSTITUTION FALLBACKS (2026-10-20, hexstrike recovery adaptation):
+#: tool -> equivalent-coverage alternates. Appended to missing-binary and
+#: timeout failures — the failure output itself steers the next call
+#: instead of the agent re-deriving options (or stalling).
+_FALLBACKS: dict[str, list[str]] = {
+    "nmap": ["rustscan -a <target> -t 3000 --ulimit 5000", "masscan <target> -p0-65535 --rate=1000 (then service-probe open ports)"],
+    "gobuster": ["ffuf -u <url>/FUZZ -w <wordlist> -mc 200-399", "feroxbuster -u <url> -w <wordlist> --auto-tune"],
+    "dirsearch": ["ffuf -u <url>/FUZZ -w <wordlist>", "gobuster dir -u <url> -w <wordlist>"],
+    "nikto": ["nuclei -u <url> -tags cve,misconfig", "manual http_request probes on common sensitive paths"],
+    "sqlmap": ["manual injection probes via http_replay compare mode", "inject_probe with sqli battery"],
+    "wpscan": ["curl the wp-json/wp-login surfaces + source-map probe for plugin versions"],
+    "masscan": ["nmap -T5 --min-rate 1000 -p- <target>", "rustscan -a <target>"],
+    "subfinder": ["amass enum -passive -d <domain>", "web_search for certificate transparency logs"],
+    "amass": ["subfinder -d <domain>", "waybackurls <domain> via execute_terminal"],
+    "katana": ["hakrawler -u <url> -depth 3", "crawl tool + link extraction"],
+    "dalfox": ["inject_probe xss battery on reflected params"],
+    "hydra": ["cred_matrix with the credential set", "auth_forge variants on the login endpoint"],
+}
+
+
+def _with_fallback_hint(tool_name: str, result: str) -> str:
+    """Missing/failed tool → the equivalent-coverage alternates inline.
+    Fires on the same missing-binary shapes as the install hint plus
+    execution timeouts — advisory only, the model picks."""
+    try:
+        text = str(result)
+        alts = _FALLBACKS.get(str(tool_name or ""))
+        if not alts:
+            return result
+        tier_b = text.startswith("[COMMAND]") and ("[EXIT] 127" in text or "command not found" in text.lower())
+        failed = text.startswith(("Error", "Tool Error", "Tool error")) or tier_b
+        timed_out = "timed out" in text.lower() or "timeout" in text.lower()[:200]
+        if not (failed or timed_out):
+            return result
+        return text + "\n" + "FALLBACK (equivalent coverage without it): " + "; ".join(alts)
+    except Exception:  # noqa: BLE001
         return result
 
 
@@ -201,11 +239,14 @@ from suijin.modules.tools.lib.adversarial_tools import param_pollute as _param_p
 from suijin.modules.tools.lib.ai_env import help_tool as _help_tool
 from suijin.modules.tools.lib.ai_env import state as _state
 from suijin.modules.tools.lib.ai_env import tools as _tools
+from suijin.modules.tools.lib.attack_scripts import ssrf_listener as _ssrf_listener
 from suijin.modules.tools.lib.bypass_403 import bypass_403 as _bypass_403
 from suijin.modules.tools.lib.capture import crawl as _crawl
 from suijin.modules.tools.lib.capture import proxy_capture as _proxy_capture
 from suijin.modules.tools.lib.code_harness import code_harness as _code_harness
 from suijin.modules.tools.lib.coverage import coverage_check as _coverage_check
+from suijin.modules.tools.lib.csrf_extract import csrf_extract as _csrf_extract
+from suijin.modules.tools.lib.ensure_tools import ensure_tools as _ensure_tools
 from suijin.modules.tools.lib.exploit_catalog import catalog_exploit
 
 # Re-exported for backwards compatibility — these names lived on dispatch.py
@@ -256,6 +297,9 @@ from suijin.modules.tools.lib.skill_library import skill_search as _skill_search
 from suijin.modules.tools.lib.surface_expand import surface_expand as _surface_expand
 from suijin.modules.tools.lib.tester_fleet import dispatch_testers as _dispatch_testers
 from suijin.modules.tools.lib.tester_fleet import select_lanes as _select_lanes
+from suijin.modules.tools.lib.url_hygiene import url_dedup as _url_dedup
+from suijin.modules.tools.lib.url_hygiene import url_merge as _url_merge
+from suijin.modules.tools.lib.url_hygiene import url_rewrite as _url_rewrite
 from suijin.modules.tools.lib.ux_tools import api_discover as _api_discover
 from suijin.modules.tools.lib.ux_tools import collect_all as _collect_all
 from suijin.modules.tools.lib.ux_tools import dom_recon as _dom_recon
@@ -334,6 +378,87 @@ def _strip_home_dup(fp: str) -> str:
         return s
     except Exception:
         return str(fp or "")
+
+
+def _tool_search(query: str, limit: int = 8) -> str:
+    """LAZY REGISTRY (2026-10-20, CyberStrike adaptation): keyword search
+    over the routed tool set — name + one-line description + the usage
+    doc when a contract carries one. Lets the always-on catalog stay
+    lean while full calling docs stay one call away."""
+    try:
+        q = str(query or "").strip().lower()
+        if not q:
+            return "Error: query required (e.g. tool_search('jwt'))"
+        terms = [t for t in q.replace(",", " ").split() if len(t) > 1]
+        scored: list[tuple[int, str]] = []
+        for name, desc in _TOOL_DESCRIPTIONS().items():
+            hay = f"{name} {desc}".lower()
+            score = sum(hay.count(t) * (3 if t in name else 1) for t in terms)
+            if score > 0:
+                scored.append((score, name))
+        scored.sort(reverse=True)
+        if not scored:
+            return (
+                f"no tool matches {terms!r} — the catalog also lists everything via the `tools` tool; "
+                "execute_terminal covers anything shell-shaped."
+            )
+        out = [f"TOOL SEARCH '{query}' (top {min(limit, len(scored))} of {len(scored)}):"]
+        for _, name in scored[: max(1, limit)]:
+            desc = str(_TOOL_DESCRIPTIONS().get(name) or "")[:160]
+            out.append(f"- {name}: {desc}")
+            doc = _usage_doc(name)
+            if doc:
+                out.append(f"  usage: {doc[:300]}")
+        return "\n".join(out)
+    except Exception as e:  # noqa: BLE001
+        return f"Error: {e}"
+
+
+def _TOOL_DESCRIPTIONS() -> dict[str, str]:
+    """Name -> one-line description, parsed from the catalog prompt."""
+    global _TOOL_DESC_CACHE
+    if _TOOL_DESC_CACHE is not None:
+        return _TOOL_DESC_CACHE
+    import re as _re_desc
+
+    desc: dict[str, str] = {}
+    with contextlib.suppress(Exception):
+        src = get_tool_catalog()
+        for m in _re_desc.finditer(r"- \*\*([a-z0-9_]+)\*\* [—-] (.+)", src):
+            desc[m.group(1)] = m.group(2).strip()
+    _TOOL_DESC_CACHE = desc
+    return desc
+
+
+def catalog_budget_line() -> str:
+    """The agent-visible budget (CyberStrike lazy-registry adaptation):
+    one line telling the model what the catalog costs and that
+    tool_search exists for the rest."""
+    with contextlib.suppress(Exception):
+        n = len(_TOOL_DESCRIPTIONS()) or len(_TOOL_DESCRIPTIONS())
+        return (
+            f"[tool catalog: {n} tools indexed — find any by keyword with tool_search(query); "
+            "usage docs ride the result]"
+        )
+    return ""
+
+
+def _usage_doc(name: str) -> str:
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.tool_contracts import usage_docs
+
+        block = str(usage_docs(limit=99))
+        # pull this tool's section from the combined doc
+        marker = f"## {name}"
+        i = block.find(marker)
+        if i < 0:
+            return ""
+        j = block.find("\n## ", i + 3)
+        return block[i : j if j > i else i + 400].strip()
+    return ""
+
+
+_TOOL_DESC_CACHE: dict[str, str] | None = None
 
 
 def _completion_status() -> str:
@@ -586,6 +711,17 @@ def _build_routes(config):
         "fetch_authorization_page": lambda a: _fetch_auth_page(a.get("target", ""), a.get("url", "")),
         "google_key_probe": lambda a: google_key_probe(a.get("key", "")),
         "source_map_probe": lambda a: source_map_probe(a.get("url", "")),
+        "url_dedup": lambda a: _url_dedup(a.get("urls") or [], keep_per_template=int(a.get("keep_per_template", 5) or 5)),
+        "url_rewrite": lambda a: _url_rewrite(a.get("urls") or [], value=str(a.get("value", "FUZZ") or "FUZZ")),
+        "url_merge": lambda a: _url_merge(str(a.get("path") or ""), a.get("urls") or []),
+        "csrf_extract": lambda a: _csrf_extract(str(a.get("url") or "")),
+        "ssrf_listener": lambda a: _ssrf_listener(
+            action=str(a.get("action", "start") or "start"), port=int(a.get("port", 0) or 0)
+        ),
+        "ensure_tools": lambda a: _ensure_tools(
+            a.get("tools"), install=str(a.get("install", "true")).lower() not in ("false", "0", "no")
+        ),
+        "tool_search": lambda a: _tool_search(str(a.get("query") or ""), limit=int(a.get("limit", 8) or 8)),
         "kb_read": lambda a: _kb_read_tool(a.get("path", "")),
         "normalize_output": lambda a: normalize_output(a.get("output", ""), kind=a.get("kind", "auto")),
         "target_dossier": lambda a: _target_dossier_tool(a.get("target", "")),
@@ -1265,7 +1401,7 @@ def route_tool(tool_name, args, config):
             from suijin.modules.tools.lib.ux_tools import cache_record
 
             cache_record(tool_name, dict(args), result)
-        return _with_error_hints(tool_name, _with_install_hint(tool_name, result))
+        return _with_fallback_hint(tool_name, _with_error_hints(tool_name, _with_install_hint(tool_name, result)))
     # ── CUSTOM TOOL FALLBACK (2026-10-10) ────────────────────────────
     # The agent names a tool that doesn't exist → instead of dead-ending,
     # offer: (1) close matches, (2) compose it from the primitives it has.
@@ -1358,6 +1494,13 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
 - **web_session** — The cross-credential session model, built AUTOMATICALLY from every governed send: the access-control worklist (endpoint shapes reached by 2+ credentials, ID fields differing per credential — the IDOR substrate with the exact replay to fire) + hidden params (request fields the UI never exposed — mass-assignment targets). Role cycling: register credentials, replay the same surfaces as each, then action=summary.
 - **memory_recall** — The engagement memory (the librarian): every credential, leak, foothold, confirmed exploit, admin/upload surface and error oracle the run has observed, deduped — plus the latest condensed digest. Relevant entries surface automatically when you touch a matching target; call this when you need the FULL ledger or a filtered slice (`query` matches kind/value/where, `limit` up to 30).
 - **coverage_check** — The coverage ledger: mark (asset × vuln-class) cells tested_vulnerable / tested_not_vulnerable (EVIDENCE REQUIRED — a note without a sent request is a FALSE record that hides real vulnerabilities) / not_applicable; record wide notes (origin-wide facts, once — never re-derive JWT crypto per endpoint); action=untested lists your priority gaps. The completion gate READS this — closure is refused while cells remain.
+- **tool_search** — Keyword search over ALL routed tools: name + one-line description + the usage doc when a contract exists. Use when the catalog line you need isn't in view or you only remember the CONCEPT ('csrf', 'race', 'screenshot').
+- **csrf_extract** — Fetch a token-bearing page and get the FRESH CSRF token back as a ready http_replay mutation (set-body-field / set-header / set-cookie). Use before EVERY stateful authenticated request — tokens are single-use.
+- **ssrf_listener** — Out-of-band evidence collector: starts a callback HTTP listener; every hit (SSRF, blind XSS, webhook) is logged with timestamp+path+source IP as engagement evidence. action=start|hits|stop. The hit log IS the finding's proof.
+- **ensure_tools** — Idempotent toolchain self-provisioning: verifies the named recon binaries exist, installs only missing ones (max 3/call). Never reinstalls. The unblock-when-binary-missing move before falling back.
+- **url_dedup** — Collapse a URL flood into templates (numeric/opaque ids collapsed, first K per template kept). Run crawl output through this BEFORE reading it — 800 urls become ~12 groups.
+- **url_rewrite** — qsreplace: set every query param value to one value (default FUZZ) — the fuzzing-ready URL list in one call.
+- **url_merge** — anew: append only NEW lines to a file (append-only dedupe) — accumulate URL lists across recon steps without duplicates.
 - **surface_expand** — Sibling-endpoint enumeration: given a pattern URL ({name} placeholder or a known route's parent), probes the candidate siblings (portal nouns + derived forms .json/.bak/_x) through the governed engine; returns what EXISTS. The missed-pivot fix: a router accepting arbitrary names is an enumeration invitation.
 - **inject_probe** — The evidence engine, NEVER an oracle: fires curated batteries (xss tag-survival + 20 weaponized payloads with sink-context classification; ssti 9-syntax product-discriminators — product-present + literal-absent = evaluated; cmd closed id/ver set; sqli DBMS error fingerprints + boolean pairs against a MEASURED noise floor; lfi file-signatures × 11 traversal shapes verbatim) and returns FACTS — surviving tags, reflection context, block signals ('WAF-blocked is NOT safe — escalate'), not_tested receipts. You craft the real exploit from the facts; confirm via catalog_exploit.
 - **adjust_config** — Tune YOUR OWN run: no args shows the effective config; with args adjusts allowlisted keys (posture, temperature, max_tokens_per_request, provider, fallback_providers, model ids) — changes go LIVE on the next turn/call. Use it when the situation changes: provider dying (switch provider / extend fallback chain), recon exhausted (posture), responses truncated (max_tokens). Cost caps, stealth, safety modes, and scope are operator-only.
@@ -1544,6 +1687,13 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
 6. **Log everything** — `write_note` after every significant finding.
 7. **Tool not found?** — ONE guess maximum, then ASK THE OPERATOR (action: ask_operator) where it is or whether it exists. Never guess repeatedly.
 """
+    # LAZY REGISTRY LINE (2026-10-20): the agent sees the index size and
+    # knows tool_search exists for everything else (CyberStrike budget-
+    # visibility adaptation)
+    with contextlib.suppress(Exception):
+        _bl = catalog_budget_line()
+        if _bl:
+            catalog += "\n" + _bl + "\n"
     return catalog
 
 

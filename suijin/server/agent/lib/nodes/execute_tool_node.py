@@ -200,6 +200,10 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
         result = await _asyncio.to_thread(route_tool_fn, tool_name, tool_args, {})
         output, _ = _maybe_offload(tool_name, str(result))
         output = _satiation_tag(state, tool_name, str(output))
+        with contextlib.suppress(Exception):
+            from suijin.modules.agent.lib.loop_detection import record_tool_output
+
+            record_tool_output(tool_name, tool_args, output)
         duration_ms = int((_time.monotonic() - _t0_sync) * 1000)
         success = not output.startswith("Error:")
         _audit_step(state, tool_name, tool_args, success, duration_ms)
@@ -305,6 +309,11 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
     # SUCCESS in the trace (the '!' marker never fired for them either)
     _FAILS = ("Error:", "Tool error:", "Tool Error", "HTTP Error:", "Execution Fault:")
     output = _satiation_tag(state, tool_name, str(output))
+    # REPEAT-ECHO (2026-10-20): record for the loop detector's nudge
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.loop_detection import record_tool_output
+
+        record_tool_output(tool_name, tool_args, output)
     success = not str(output).startswith(_FAILS)
     _audit_step(state, tool_name, tool_args, success, duration_ms)
     ec = _classify_error_class(
