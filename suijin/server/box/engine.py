@@ -168,6 +168,15 @@ def run_in_box(cmd: str, timeout: int = 3600, engine: str | None = None) -> tupl
     return _run(["docker", "exec", BOX_NAME, "bash", "-lc", cmd], timeout=timeout)
 
 
+def box_cmd_argv(cmd: str, engine: str | None = None) -> list:
+    """The raw host-side argv for a box command (for streaming callers
+    that need a Popen, not a captured result)."""
+    eng = _engine_binary(engine or detect_engine())
+    if eng == ENGINE_DOCKER:
+        return ["docker", "exec", BOX_NAME, "bash", "-lc", cmd]
+    return ["orb", "-m", BOX_NAME, "bash", "-lc", cmd]
+
+
 def box_enter_interactive(action: str = "suijin", engine: str | None = None) -> int:
     """Replace this process with an interactive session in the box.
     action: 'suijin' (the menu) or 'shell'."""
