@@ -24,7 +24,10 @@ def initialize_node(state: dict, *, objective: str, config: dict = None) -> dict
         objective: The user's objective string.
         config: Optional config dict with max_iterations, etc.
     """
-    max_iters = (config or {}).get("max_iterations", 100)
+    max_iters = (config or {}).get("max_iterations", 100000)
+    # (2026-10-20: the 100 default was the phantom-limit's last hiding
+    # spot — the product default is INFINITE; only an explicit config
+    # value ever limits a run)
 
     # If resuming from checkpoint, don't reinitialize — BUT always
     # carry max_iterations through (2026-10-19: every .sje resume ran
