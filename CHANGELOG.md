@@ -8,6 +8,31 @@ All notable changes to Suijin.
 
 ## Unreleased
 
+- **Mesh engagement-scoping** — the session mesh is scoped per
+  engagement: nodes carry their engagement slug, chat lines are tagged
+  and readers render only same-engagement lines; stale residue from
+  other operations is invisible. Root cause of a real run's
+  authorization refusal: dead peers' exploit broadcasts from a
+  different engagement (18h stale) read as evidence the operation
+  covered two unrelated targets.
+- **Authorization is machine-backed** — engagement boot writes the
+  operator's authorization-of-record per host (config/authorizations/
+  <host>.md); the think context cites it every turn; operator guidance
+  affirming authorization is TERMINAL for the run (recorded in state,
+  cited by the new authorization gate) and decline-type completions
+  are refused while it stands. The operator owns authorization; the
+  model raises concerns via ask_user instead of unilaterally ending
+  engagements.
+- **Every ending reports** — end_audit runs in the finally: declines,
+  quits, and crashes all stamp the trail, export markdown, and write
+  BBP submissions (field case: a declined run produced no report at
+  all because its unwind never reached the normal conclusion path).
+- **Workspace cleanliness fixes** — the kernel diag log writes to the
+  v7.2 logs dir (the old default resurrected the retired workspace
+  tree on every write, two husks in one day); bug-bounty reports land
+  inside their engagement folder (was one directory too high); the
+  coverage ledger refuses `_default` writes (no engagement, no marks);
+  ms-playwright browsers live in the platform cache.
 - **Gate machinery hardening (the review round)** — six defects found
   by tracing the completion cascade end-to-end: gate state
   (pending chains, footholds, hypotheses, refusal counters) vanished

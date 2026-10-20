@@ -350,6 +350,13 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
     from suijin.modules.platform.lib.workspace import set_engagement
 
     set_engagement(objective)
+    # AUTHORIZATION OF RECORD (2026-10-20): the operator's standing
+    # authorization is written per-target BEFORE the agent thinks — the
+    # model gets an inspectable contract instead of prose to re-litigate
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.authorization import ensure_authorization
+
+        ensure_authorization(objective)
     # stderr poisons the Live strip: provider/tool warnings wrote straight
     # to the terminal above the region, leaving frozen artifact rows. The
     # suijin logger goes to a file for the engagement's lifetime instead.
@@ -2052,6 +2059,17 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
         # conclusion save above already claimed the once-flag.
         with contextlib.suppress(Exception):
             CRASH_SAVER.save("end")
+        # END_AUDIT ON EVERY EXIT (2026-10-20): field forensics found a
+        # declined engagement whose unwind NEVER reached the normal
+        # path's end_audit — trail "ended: None", no final report, no
+        # session.complete event, while the .sje landed via the quit
+        # path. end_audit is idempotent (re-stamps "ended", BBP export
+        # overwrites in place) — run it here unconditionally so every
+        # ending produces the report of record.
+        with contextlib.suppress(Exception):
+            from suijin.modules.tools.lib.audit_trail import end_audit as _end_audit
+
+            _end_audit(float(providers.USAGE.get("est_cost_usd", 0) or 0))
         # REPORT ON EVERY ENDING (2026-10-14): end_audit writes
         # final_report.md + BBP submissions only on the CLEAN conclusion
         # path — a crash, Ctrl+C or a closed window saved the .sje but

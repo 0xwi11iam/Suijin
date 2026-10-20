@@ -78,6 +78,13 @@ def _load() -> dict:
 def _save(d: dict) -> None:
     try:
         p = _store_path()
+        # _default GUARD (2026-10-20): engagement_dir() falls back to
+        # engagements/_default when no engagement is live — a late tool
+        # call from a cleared/non-engagement process littered a stray
+        # ledger there (and its marks belonged to a dead run anyway).
+        # Marks without a live engagement go nowhere.
+        if p.parent.name == "_default":
+            return
         p.parent.mkdir(parents=True, exist_ok=True)
         with _LOCK, open(p, "w") as fh:
             json.dump(d, fh, indent=2)

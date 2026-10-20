@@ -25,12 +25,16 @@ _MAX_BYTES = 10_000_000  # rotate beyond this
 def _log_path() -> Path:
     import os
 
-    # kernel purity: no suijin.modules imports — resolve the workspace dir
-    # from the environment or the canonical ~/.suijin/workspace location
+    # kernel purity: no suijin.modules imports — resolve the logs dir
+    # from the environment or the canonical v7.2 layout (~/.suijin/logs).
+    # 2026-10-20: the old default was ~/.suijin/workspace/logs/logs —
+    # the RETIRED tree with a doubled segment; every diag write
+    # resurrected workspace/ after each cleanup retirement (two husks
+    # accumulated in one day). Single "logs", home root.
     ws = os.environ.get("SUIJIN_WORKSPACE")
     if not ws:
-        ws = str(Path.home() / ".suijin" / "workspace")
-    d = Path(ws) / "logs" / "logs"
+        ws = str(Path.home() / ".suijin")
+    d = Path(ws) / "logs"
     d.mkdir(parents=True, exist_ok=True)
     return d / "diag.log"
 
