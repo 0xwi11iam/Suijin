@@ -50,16 +50,27 @@ def _state_write(state: dict) -> None:
 
 
 def _tool_apt_line(name: str) -> str:
-    """The apt install line for a tool (kali). The doctor's table is
-    the source; a miss falls back to the obvious apt name."""
+    """The install line for a tool (kali). The doctor's table is the
+    source; apt lines gain --no-install-recommends (minimal headless
+    disk); a miss falls back to the obvious apt name."""
     with contextlib.suppress(Exception):
         from suijin.modules.tools.lib.availability import _INSTALL
 
         entry = _INSTALL.get(name) or {}
         for key in ("apt", "pip", "go"):
             if entry.get(key):
-                return entry[key]
-    return f"sudo apt install -y {name}"
+                line = entry[key]
+                if key == "apt" and "--no-install-recommends" not in line:
+                    line = line.replace("apt install", "apt install --no-install-recommends", 1)
+                return line
+    return f"sudo apt install -y --no-install-recommends {name}"
+
+
+#: one tool may take this long before we stop WAITING for it (the
+#: aircrack lesson: 40-minute silent timeouts are unacceptable). The
+#: install thread keeps running in the background; presence decides.
+_TOOL_TIMEOUT_S = 600
+_HEARTBEAT_S = 30
 
 
 def stage_base(log) -> bool:
@@ -123,19 +134,52 @@ def stage_config(log) -> bool:
 def stage_tools(log, progress=None, cancel=None) -> bool:
     """Install the toolchain. progress(done, total, name, ok, note) for
     the live UI; cancel() -> True aborts after the current tool."""
+    import threading
+
     tools = tool_list()
     state = _state_read()
     done_tools = state.setdefault("tools", {})
     todo = [t for t in tools if not done_tools.get(t, {}).get("ok")]
     total, done_count = len(tools), len(tools) - len(todo)
     log(f"toolchain: {total - len(todo)}/{total} present, {len(todo)} to install")
+    # dpkg-lock repair first: a canceled/killed install leaves locks and
+    # half-configured packages; every later apt then hangs silently
+    # (the aircrack incident). Repair, then install.
+    with contextlib.suppress(Exception):
+        bx.run_in_box(
+            "sudo rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock 2>/dev/null; "
+            "sudo dpkg --configure -a >/dev/null 2>&1; true",
+            timeout=300,
+        )
     for name in todo:
         if cancel and cancel():
             log("paused — re-run build to continue")
             return False
         cmd = _tool_apt_line(name)
-        log(f"installing {name}: {cmd}")
-        rc, out = bx.run_in_box(f"set -o pipefail; DEBIAN_FRONTEND=noninteractive {cmd} 2>&1 | tail -2", timeout=2400)
+        log(f"installing {name}")
+        # heartbeat + bounded wait: run the installer in a daemon thread
+        # and speak every _HEARTBEAT_S seconds — silence reads as a hang
+        box: dict = {}
+
+        def _run_install(_sink=box, _cmd=cmd):  # bound per iteration (B023)
+            _sink["r"] = bx.run_in_box(
+                f"set -o pipefail; DEBIAN_FRONTEND=noninteractive {_cmd} 2>&1 | tail -2",
+                timeout=_TOOL_TIMEOUT_S,
+            )
+
+        th = threading.Thread(target=_run_install, daemon=True)
+        th.start()
+        t0 = time.time()
+        while th.is_alive() and time.time() - t0 < _TOOL_TIMEOUT_S:
+            th.join(_HEARTBEAT_S)
+            if th.is_alive():
+                log(f"  still installing {name} ({int(time.time() - t0)}s) …")
+        if th.is_alive():
+            log(f"  {name} exceeded {_TOOL_TIMEOUT_S}s — moving on (it may finish in the background)")
+            done_tools[name] = {"ok": False, "note": "timeout", "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+            _state_write(state)
+            continue
+        out = str((box.get("r") or (1, ""))[1])
         # PRESENCE is the truth (the smoke run proved installer exit
         # codes lie through pipes): an installer may no-op for a
         # preinstalled tool or "fail" after succeeding — command -v
