@@ -8,6 +8,25 @@ All notable changes to Suijin.
 
 ## Unreleased
 
+- **Weaponization engine** — impact over volume. All 15 coverage
+  classes weighted (`cmdi/ssti=15, authn/authz=12, idor=11 ... info=1`);
+  the untested list sorts by weight (crown jewels first); info/redirect
+  cells never block completion. Satiation fires a DEPTH DIRECTIVE at 4
+  trivia findings + 0 real ones (pressure-only, recon tool calls get
+  soft-tagged). 2+ confirmed findings render concrete ATTACK SCENARIOS
+  (identity × API replay, SSRF × metadata, race × money...). The
+  exploitation context leads with a WEAPONS block (auth_forge,
+  cred_matrix, race_test, mass_assign, graphql_attack, param_pollute,
+  jwt_decode) and the doctrine gains DEPTH OVER BREADTH;
+  `completion_status` reports an impact score.
+- **Context window family-aware fallback** — unknown cloud models
+  resolve their window from the model NAME (deepseek/glm → 128k,
+  claude → 200k...) instead of blanket 1M. The ctx gauge read 1-2%
+  forever because 15k real tokens over a 1M phantom denominator never
+  moved; compaction (90% trigger) was likewise unreachable.
+- **max_iterations survives resume** — the key was in neither
+  REPLAY_KEYS nor RESUME_SNAPSHOT_KEYS, so every .sje resume ran with
+  the think-context default: a phantom 100-iteration limit.
 - **Target landscape** — the agent sees product families, not just
   endpoints. Google.com resolves to 10 families (Search, Identity,
   Cloud, YouTube, Maps, Developer, Workspace, Mobile, Ads, AI); the
