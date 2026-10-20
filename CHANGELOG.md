@@ -8,6 +8,17 @@ All notable changes to Suijin.
 
 ## Unreleased
 
+- **Reference-adoption batch** — nine capabilities from the four
+  reference codebases: URL hygiene trio (dedup/rewrite/merge), fresh
+  CSRF token extraction returning ready replay mutations, an
+  out-of-band evidence listener for SSRF/blind-XSS hits, idempotent
+  toolchain self-provisioning, tool_search with an agent-visible
+  catalog budget line, tool-substitution fallback chains on missing/
+  failed binaries, platform-control framing on guardrail denials (so
+  the model stops treating its own guardrails as WAFs to bypass),
+  repeat-nudges that echo the tool's previous answer, and a
+  tamper-evident PoC evidence store (sha256 content-addressed blobs,
+  re-verified at report time with drift warnings).
 - **Environment contract in the doctrine** — the base prompt now
   states the machine reality explicitly (not a container; `$HOME` and
   `$TMPDIR` are the engagement home/tmp; writes jailed, reads and
