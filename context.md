@@ -55,6 +55,12 @@
 15b. **Loop detection layers**: Layer 1 = within-turn dedup (dispatch). Layer 2 = cross-turn RepeatDetector (same tool+args, nudge at 3, abort at 5). Layer 3 = meaningful-progress signals (findings/surfaces/creds = progress; gate refusals = dialogue; empty steps ≠ tool success).
 15c. **Blackboard**: `_on_confirmed` → `propagate_confirmed()` → mesh system announce → peer think context renders "PEER FINDINGS" section. Confirmed findings reach peers without the model choosing to broadcast.
 
+### Weaponization — impact over volume (2026-10-20)
+15d. **One source of truth**: `agent/lib/weaponization.py` — CLASS_WEIGHTS (all 15 coverage classes, cmdi/ssti=15 → info=1), BLOCKING_MIN_WEIGHT=5, satiation thresholds (4 trivia + 0 real), scenario pattern table, WEAPONS block. Coverage gate, scoreboard, think sections, and the recon-tool nudge ALL read it.
+15e. **Weight-aware gate**: `untested()` sorts weight DESC (crown jewels lead); `completion_blocked()` counts only weight≥5 cells — info/redirect never block. The agent can no longer buy completion with trivia cells.
+15f. **Satiation is pressure-only**: DEPTH DIRECTIVE leads DRIVE while saturated (+ PROMOTE order if still recon); recon tools (surface_expand/crawl/api_disdiscover/js_bundle_analyze/source_map_probe/dom_recon/smart_fetch) get the warning PREPENDED to their output. Never refused, never forced.
+15g. **ATTACK_SCENARIOS + WEAPONS sections** render in exploitation/post_exploitation phase contexts (skipped when empty); DEPTH OVER BREADTH doctrine lives in `prompts/base.py` adversarial core; completion_status carries an impact score + saturation warning.
+
 ### Operator console (`modules/console/lib/`)
 16. **ONE Live region** (the strip, transient). Everything else prints above it.
 17. **Stdin has ONE owner**: TTY → RedInputReader (cbreak, ISIG on). Never `console.input()` while a cbreak reader lives. ask flow → `begin_ask` queue; ESC ESC → pause runs IN THE READER THREAD.
