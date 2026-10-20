@@ -8,6 +8,17 @@ All notable changes to Suijin.
 
 ## Unreleased
 
+- **the box — `suijin box`** — a sealed linux environment (orbstack
+  first, docker fallback, overridable) that runs suijin and its tools:
+  build/start/stop/enter/status/refresh/destroy verbs plus a curses
+  manager tui. Host config, packs and prompts sync one-way into the
+  box (nothing the box generates flows back); entering detects drift
+  against the last-sync snapshot and offers to sync + install missing
+  tools; builds are resumable per stage and per tool; the repo is
+  live-mounted with an editable install so a host `git pull` is active
+  in the box instantly; destroy archives engagements to the host
+  first and requires a typed confirmation. Verified live end-to-end
+  against a real orbstack machine.
 - **Reference-adoption batch** — nine capabilities from the four
   reference codebases: URL hygiene trio (dedup/rewrite/merge), fresh
   CSRF token extraction returning ready replay mutations, an

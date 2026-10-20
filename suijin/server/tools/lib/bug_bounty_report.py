@@ -9,9 +9,25 @@ details — just what a human security researcher would write.
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 from suijin.server.tools.lib.bbp_report import _CWE_MAP
+
+
+def _render_triage_inline(findings: list) -> str:
+    """Duplicates/flagged from the findings' own triage states — they
+    never silently disappear, they render with their primary."""
+    lines = []
+    for f in findings:
+        if not isinstance(f, dict):
+            continue
+        t = f.get("triage")
+        if isinstance(t, dict) and t.get("status") in ("duplicate_of", "flagged"):
+            eid = str(f.get("id") or f.get("title") or "?")[:20]
+            tag = "duplicate" if t.get("status") == "duplicate_of" else "POSSIBLE duplicate (operator confirm)"
+            lines.append(f"- {eid}: {tag} of {t.get('of', '?')} — {t.get('reason', '')}")
+    return ("**Triage:**\n" + "\n".join(lines)) if lines else ""
 
 
 def generate_bug_bounty_report(
@@ -46,6 +62,9 @@ def generate_bug_bounty_report(
         if isinstance(f, dict)
         and str(f.get("severity", "info")).lower() in ("critical", "high", "medium", "low")
         and str(f.get("status", "")).upper() not in ("FALSE_POSITIVE", "REJECTED")
+        # TRIAGE (2026-10-20): duplicates never reach the submission —
+        # they render in the triage section instead
+        and not (isinstance(f.get("triage"), dict) and f["triage"].get("status") == "duplicate_of")
     ]
 
     lines: list[str] = []
@@ -57,6 +76,14 @@ def generate_bug_bounty_report(
     lines.append("")
     lines.append("## Summary")
     lines.append("")
+
+    # TRIAGE SECTION (2026-10-20): duplicates + flagged render with
+    # their primary — never silently dropped, never submitted
+    with contextlib.suppress(Exception):
+        _triage_block = _render_triage(findings)
+        if _triage_block:
+            lines.append(_triage_block)
+            lines.append("")
 
     if not real:
         lines.append("No exploitable vulnerabilities were identified during this assessment.")

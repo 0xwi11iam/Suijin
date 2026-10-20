@@ -2140,6 +2140,8 @@ _KNOWN_VERBS = frozenset(
         "replay",
         "bench",
         "pack",
+        "box",
+        "container",
         "install",
         "authorize",
         "bb-scope",
@@ -2172,6 +2174,12 @@ def is_known_verb(word: str) -> bool:
     """True when word is a suijin CLI verb (container argv dispatch uses
     this so pytest's argv never gets dispatched to the CLI)."""
     return str(word or "").strip() in _KNOWN_VERBS
+
+
+def _run_box_cli(argv: list) -> int:
+    from suijin.server.box.cli import run_box_cli
+
+    return run_box_cli([str(v) for v in (argv or [])])
 
 
 def main(argv=None):
@@ -2222,6 +2230,19 @@ def main(argv=None):
     labp = sub.add_parser("lab", help="Suijin Lab (northbridge): up/down/reset/status/telemetry")
     labp.add_argument("mode", nargs="?", default="status", choices=["up", "down", "reset", "status", "telemetry"])
     labp.set_defaults(func=lambda a: run_lab(a.mode))
+
+    # the box — a sealed linux environment that runs suijin and its tools
+    # (orbstack first, docker fallback; `suijin box` with no verb opens
+    # the manager tui)
+    boxp = sub.add_parser(
+        "box", aliases=["container"], help="the box: build/start/enter a sealed linux environment for suijin"
+    )
+    boxp.add_argument(
+        "verb",
+        nargs="*",
+        help="build · start · stop · enter · status · refresh · destroy — or nothing for the tui",
+    )
+    boxp.set_defaults(func=lambda a: _run_box_cli(getattr(a, "verb", None) or []))
 
     mp = sub.add_parser("mesh-port", help="print this session's mesh wire port (used by remote /connect)")
     mp.set_defaults(func=lambda _a: run_mesh_port())
