@@ -118,8 +118,16 @@ def execute_terminal(cmd, timeout=30, cwd=None):
         # by every concurrent engagement, so a peer's downloaded bundle
         # reads as this engagement's finding. Warn in the observation the
         # agent reads next turn; it self-corrects.
+        # 2026-10-20 COHERENCE: the bare-/tmp auto-rewrite above already
+        # redirected `/tmp/foo` away; this warning now fires ONLY on
+        # /tmp usage that SURVIVED rewriting, and NEVER on /var/tmp
+        # (which the old substring check matched — a denied jail probe
+        # was getting a 'shared /tmp' warning, two contradictory stories
+        # about the same path in one output).
         _tmp_warn = ""
-        if "/tmp" in cmd:
+        import re as _re_w
+
+        if _re_w.search(r"(?<!var)/tmp", cmd):
             _tmp_warn = (
                 "\n[sandbox] WARNING: that command touches /tmp, which is SHARED by all "
                 "concurrent engagements on this machine — a file there may be another "

@@ -20,9 +20,32 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent  # suijin/ root
 # v4.1: packs are vendored INTO the module home (suijin/modules/<pack>/)
-# plus the user extension dir (~/.suijin/modules). The legacy repo-level
-# Modules/Tools tree is gone.
-PACK_ROOTS = [BASE_DIR / "modules", Path.home() / ".suijin" / "modules"]
+# plus the user extension dir. The legacy repo-level Modules/Tools tree
+# is gone.
+# v7.2 ALIGNMENT (2026-10-20): the user extension root derives from the
+# WORKSPACE (config/modules) instead of the hardcoded ~/.suijin/modules —
+# the hardcoded root is kept as a READ fallback so packs written before
+# the alignment keep loading. Tests may monkeypatch PACK_ROOTS freely.
+
+
+def _default_pack_roots() -> list[Path]:
+    import contextlib
+
+    roots = [BASE_DIR / "modules"]
+    with contextlib.suppress(Exception):
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+        if WORKSPACE_DIR:
+            p = Path(WORKSPACE_DIR) / "modules"
+            if p not in roots:
+                roots.append(p)
+    legacy = Path.home() / ".suijin" / "modules"
+    if legacy not in roots:
+        roots.append(legacy)
+    return roots
+
+
+PACK_ROOTS = _default_pack_roots()
 
 # Recon profiles, container images, DNS records — defined inline
 

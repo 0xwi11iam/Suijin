@@ -8,6 +8,20 @@ All notable changes to Suijin.
 
 ## Unreleased
 
+- **Environment contract in the doctrine** — the base prompt now
+  states the machine reality explicitly (not a container; `$HOME` and
+  `$TMPDIR` are the engagement home/tmp; writes jailed, reads and
+  network free; bare `/tmp` auto-rewritten; `/var/tmp` denied by
+  design; long jobs backgrounded). The model previously learned the
+  three jail layers by bumping into them, three iterations at a time.
+- **Coherent /tmp messaging** — the shared-/tmp warning fires only on
+  /tmp usage that survived auto-rewriting (lookbehind guard); a denied
+  /var/tmp jail probe no longer also receives a contradictory
+  "shared /tmp" warning.
+- **Pack roots aligned to the v7.2 layout** — user packs load from
+  WORKSPACE/modules (legacy ~/.suijin/modules stays a read fallback);
+  write_tool lands in the first non-vendored root the loader actually
+  scans.
 - **Mesh engagement-scoping** — the session mesh is scoped per
   engagement: nodes carry their engagement slug, chat lines are tagged
   and readers render only same-engagement lines; stale residue from
