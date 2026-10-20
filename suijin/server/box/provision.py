@@ -50,37 +50,107 @@ def _state_write(state: dict) -> None:
 
 
 def _tool_apt_line(name: str) -> str:
-    """The install line for a tool (kali). The doctor's table is the
-    source; apt lines gain --no-install-recommends (minimal headless
-    disk); a miss falls back to the obvious apt name."""
+    """The install line for a tool (kali). BOX ORDER (2026-10-20, the
+    amass/go debugging): apt first; when the table has no apt entry
+    (macOS-centric brew/go rows), try the GENERIC kali package before
+    falling to pip/go — ffuf/nuclei/subfinder/katana all ship as kali
+    packages but the doctor table only carries their go lines, and go
+    lines fail instantly in a box without a go toolchain."""
     with contextlib.suppress(Exception):
         from suijin.modules.tools.lib.availability import _INSTALL
 
         entry = _INSTALL.get(name) or {}
-        for key in ("apt", "pip", "go"):
+        apt = entry.get("apt")
+        if apt:
+            line = apt
+            if "--no-install-recommends" not in line:
+                line = line.replace("apt install", "apt install --no-install-recommends", 1)
+            return line
+        for key in ("pip", "go"):
             if entry.get(key):
-                line = entry[key]
-                if key == "apt" and "--no-install-recommends" not in line:
-                    line = line.replace("apt install", "apt install --no-install-recommends", 1)
-                return line
+                # generic kali package FIRST (most go-only tools ship in
+                # kali); pip/go lines are the fallback, not the default
+                return f"sudo apt install -y --no-install-recommends {name} || {entry[key]}"
     return f"sudo apt install -y --no-install-recommends {name}"
 
 
-#: one tool may take this long before we stop WAITING for it (the
-#: aircrack lesson: 40-minute silent timeouts are unacceptable). The
-#: install thread keeps running in the background; presence decides.
-_TOOL_TIMEOUT_S = 600
-_HEARTBEAT_S = 30
+#: one tool may take this long before we kill it and move on (the
+#: aircrack lesson: silent 40-minute timeouts are unacceptable)
+_TOOL_TIMEOUT_S = 900
+_IDLE_HEARTBEAT_S = 45
+
+
+def _network_ok(log) -> bool:
+    """Pre-toolchain connectivity probe — fail LOUDLY instead of 40
+    minutes of per-tool timeouts when the box can't reach mirrors."""
+    rc, out = bx.run_in_box("curl -sI --max-time 10 http://http.kali.org/kali | head -1", timeout=30)
+    if rc == 0 and "HTTP/" in out:
+        log(f"network: mirrors reachable ({out.strip()[:40]})")
+        return True
+    log(f"network: the box CANNOT reach package mirrors — skipping the toolchain ({out.strip()[:80]})")
+    log("check the box's connectivity (orb networking / dns) and re-run `suijin box build`")
+    return False
+
+
+def _stream_install(cmd: str, name: str, log) -> tuple[bool, str]:
+    """Stream the installer's own output live (the amass incident: a
+    100MB package downloading invisibly reads as a hang). Idle
+    heartbeat when quiet; killed at the cap with the tail shown."""
+    import subprocess
+    import threading
+
+    argv = bx.box_cmd_argv(f"set -o pipefail; DEBIAN_FRONTEND=noninteractive {cmd}")
+    try:
+        proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
+    except Exception as e:  # noqa: BLE001
+        return False, f"spawn failed: {e}"
+    lines: list[str] = []
+    last_activity = [time.time()]
+
+    def _pump():
+        try:
+            for ln in proc.stdout or []:
+                ln = ln.rstrip()
+                if ln:
+                    lines.append(ln)
+                    last_activity[0] = time.time()
+                    log(f"    {ln[:160]}")  # live — the operator watches apt work
+        finally:
+            pass
+
+    threading.Thread(target=_pump, daemon=True).start()
+    t0 = time.time()
+    while proc.poll() is None:
+        if time.time() - t0 > _TOOL_TIMEOUT_S:
+            log(f"  {name} exceeded {_TOOL_TIMEOUT_S}s — killing and moving on")
+            with contextlib.suppress(Exception):
+                proc.kill()
+            return False, "\n".join(lines[-6:])
+        if time.time() - last_activity[0] >= _IDLE_HEARTBEAT_S:
+            log(f"  still installing {name} ({int(time.time() - t0)}s, no new output) …")
+            last_activity[0] = time.time()  # reset so the heartbeat paces itself
+        time.sleep(2)
+    with contextlib.suppress(Exception):
+        proc.wait(timeout=30)
+    return proc.returncode == 0, "\n".join(lines[-6:])
+
+
+def ensure_ws() -> bool:
+    """Create the box workspace owned by the box user (orb's default
+    user is unprivileged; /opt needs sudo once, then it's ours)."""
+    rc, _ = bx.run_in_box("sudo mkdir -p /opt/suijin-ws && sudo chown -R $(whoami) /opt/suijin-ws", timeout=60)
+    return rc == 0
 
 
 def stage_base(log) -> bool:
     log("installing base packages (python, pipx, git …)")
-    # pipefail: a piped tail must never mask the install's exit code
-    # (the first smoke run passed a broken stage this way). sudo: the
-    # orb default user is unprivileged with passwordless sudo.
+    # pipefail: a piped tail must never mask the install's exit code;
+    # sudo: the orb default user is unprivileged with passwordless sudo
     rc, out = bx.run_in_box(
         "set -o pipefail; sudo apt-get update -qq && "
-        "DEBIAN_FRONTEND=noninteractive sudo apt-get install -y -qq " + " ".join(_BASE_PACKAGES) + " 2>&1 | tail -3",
+        "DEBIAN_FRONTEND=noninteractive sudo apt-get install -y -qq --no-install-recommends "
+        + " ".join(_BASE_PACKAGES)
+        + " 2>&1 | tail -3",
         timeout=1800,
     )
     if rc != 0:
@@ -95,8 +165,6 @@ def stage_suijin(log) -> bool:
         log("cannot locate the suijin source tree on the host")
         return False
     log(f"editable install from {repo}")
-    # ORB mounts the host path at the same absolute location; DOCKER
-    # mounts it at /opt/suijin. Detect which one the box sees.
     rc, _ = bx.run_in_box(f"test -f {repo}/pyproject.toml", timeout=30)
     inner = repo if rc == 0 else "/opt/suijin"
     rc, out = bx.run_in_box(
@@ -131,74 +199,124 @@ def stage_config(log) -> bool:
     return True  # best-effort: partial sync still boots
 
 
-def stage_tools(log, progress=None, cancel=None) -> bool:
-    """Install the toolchain. progress(done, total, name, ok, note) for
-    the live UI; cancel() -> True aborts after the current tool."""
-    import threading
+# ── PREREQ-DECLARING INSTALL PLAN (2026-10-20, operator ruling: tools
+# declare what they need BEFORE anything runs — no one-at-a-time
+# discovery). Probe what the box can apt-install, choose each tool's
+# line, collect the RUNTIMES those choices require (go/gem), install
+# the runtimes first, then the tools — every step visible.
+_RUNTIME_PKGS = {"go": "golang-go", "gem": "ruby"}
 
+
+def _probe_apt_candidates(tools: list[str]) -> set[str]:
+    """Which tools have a kali apt candidate (one batched probe)."""
+    if not tools:
+        return set()
+    rc, out = bx.run_in_box(
+        "for t in " + " ".join(tools) + "; do apt-cache policy $t 2>/dev/null | grep -q 'Candidate:' && echo $t; done",
+        timeout=600,
+    )
+    return {ln.strip() for ln in out.splitlines() if ln.strip()} if rc == 0 else set()
+
+
+def _resolve_plan(tools: list[str]) -> dict[str, tuple[str, str]]:
+    """tool -> (runtime, install line). The doctor table's apt line
+    wins; else the generic kali package when a candidate exists; else
+    the table's pip/go/gem fallback (runtime declared); else a generic
+    apt attempt (runtime 'apt' — always present in the box)."""
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.availability import _INSTALL
+
+        table = _INSTALL
+    apt_ok = _probe_apt_candidates([t for t in tools if not (table.get(t) or {}).get("apt")])
+    plan: dict[str, tuple[str, str]] = {}
+    for t in tools:
+        entry = table.get(t) or {}
+        apt = entry.get("apt")
+        if apt:
+            line = apt
+            if "--no-install-recommends" not in line:
+                line = line.replace("apt install", "apt install --no-install-recommends", 1)
+            plan[t] = ("apt", line)
+        elif t in apt_ok:
+            plan[t] = ("apt", f"sudo apt install -y --no-install-recommends {t}")
+        else:
+            for rt, prefix in (("pip", "pip install"), ("go", "go install"), ("gem", "gem install")):
+                line = entry.get(rt)
+                if line:
+                    plan[t] = (rt, line)
+                    break
+            else:
+                plan[t] = ("apt", f"sudo apt install -y --no-install-recommends {t}")
+    return plan
+
+
+def _runtimes_for(plan: dict[str, tuple[str, str]]) -> set[str]:
+    """The non-apt runtimes the plan requires (prereqs to install
+    BEFORE the tools that need them)."""
+    return {rt for rt, _ in plan.values() if rt in _RUNTIME_PKGS}
+
+
+def stage_tools(log, progress=None, cancel=None) -> bool:
+    """Install the toolchain per the PREREQ-DECLARING plan: probe →
+    plan (visible summary) → runtimes → tools. Live output, visible
+    results, network precheck, dpkg-lock repair, presence decides."""
     tools = tool_list()
     state = _state_read()
     done_tools = state.setdefault("tools", {})
     todo = [t for t in tools if not done_tools.get(t, {}).get("ok")]
     total, done_count = len(tools), len(tools) - len(todo)
     log(f"toolchain: {total - len(todo)}/{total} present, {len(todo)} to install")
-    # dpkg-lock repair first: a canceled/killed install leaves locks and
-    # half-configured packages; every later apt then hangs silently
-    # (the aircrack incident). Repair, then install.
+    if todo and not _network_ok(log):
+        return False  # loud skip — no point timing out per-tool
     with contextlib.suppress(Exception):
         bx.run_in_box(
             "sudo rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock 2>/dev/null; "
             "sudo dpkg --configure -a >/dev/null 2>&1; true",
             timeout=300,
         )
+    plan = _resolve_plan(todo)
+    by_rt: dict[str, int] = {}
+    for rt, _ in plan.values():
+        by_rt[rt] = by_rt.get(rt, 0) + 1
+    log("plan: " + " · ".join(f"{n} via {rt}" for rt, n in sorted(by_rt.items())))
+    # PREREQS FIRST: runtimes the plan depends on, installed visibly
+    for rt in sorted(_runtimes_for(plan)):
+        pkg = _RUNTIME_PKGS[rt]
+        rc_chk, _ = bx.run_in_box(f"command -v {'go' if rt == 'go' else 'gem'}", timeout=30)
+        if rc_chk != 0:
+            log(
+                f"prereq: {len([1 for r, _ in plan.values() if r == rt])} tools need the {rt} runtime — installing {pkg}"
+            )
+            ok, tail = _stream_install(f"sudo apt install -y --no-install-recommends {pkg}", pkg, log)
+            if not ok:
+                log(f"prereq {pkg} failed — the {rt} tools will be skipped this round:")
+                for ln in (tail or "").splitlines()[-3:]:
+                    log(f"    {ln}")
+                plan = {t: v for t, v in plan.items() if v[0] != rt}
     for name in todo:
+        if name not in plan:
+            continue  # dropped: its runtime prereq failed
         if cancel and cancel():
             log("paused — re-run build to continue")
             return False
-        cmd = _tool_apt_line(name)
-        log(f"installing {name}")
-        # heartbeat + bounded wait: run the installer in a daemon thread
-        # and speak every _HEARTBEAT_S seconds — silence reads as a hang
-        box: dict = {}
-
-        def _run_install(_sink=box, _cmd=cmd):  # bound per iteration (B023)
-            _sink["r"] = bx.run_in_box(
-                f"set -o pipefail; DEBIAN_FRONTEND=noninteractive {_cmd} 2>&1 | tail -2",
-                timeout=_TOOL_TIMEOUT_S,
-            )
-
-        th = threading.Thread(target=_run_install, daemon=True)
-        th.start()
-        t0 = time.time()
-        while th.is_alive() and time.time() - t0 < _TOOL_TIMEOUT_S:
-            th.join(_HEARTBEAT_S)
-            if th.is_alive():
-                log(f"  still installing {name} ({int(time.time() - t0)}s) …")
-        if th.is_alive():
-            log(f"  {name} exceeded {_TOOL_TIMEOUT_S}s — moving on (it may finish in the background)")
-            done_tools[name] = {"ok": False, "note": "timeout", "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-            _state_write(state)
-            continue
-        out = str((box.get("r") or (1, ""))[1])
-        # PRESENCE is the truth (the smoke run proved installer exit
-        # codes lie through pipes): an installer may no-op for a
-        # preinstalled tool or "fail" after succeeding — command -v
-        # decides, and a miss downgrades ok regardless of rc
+        rt, cmd = plan[name]
+        log(f"installing {name} (via {rt}): {cmd}")
+        _ok, tail = _stream_install(cmd, name, log)
+        # PRESENCE is the truth (installer exit codes lie both ways)
         chk_rc, _ = bx.run_in_box(f"command -v {name}", timeout=30)
-        ok = chk_rc == 0
-        done_tools[name] = {"ok": ok, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        present = chk_rc == 0
+        done_tools[name] = {"ok": present, "via": rt, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
         done_count += 1
+        if present:
+            log(f"  ok {name}")
+        else:
+            log(f"  x {name} — not present after install; last output:")
+            for ln in (tail or "no output").splitlines()[-4:]:
+                log(f"    {ln}")
         if progress:
-            progress(done_count, total, name, ok, out.strip()[-120:] if not ok else "")
+            progress(done_count, total, name, present, "" if present else (tail or "")[-120:])
         _state_write(state)  # resumable per tool
     return True
-
-
-def ensure_ws() -> bool:
-    """Create the box workspace owned by the box user (orb's default
-    user is unprivileged; /opt needs sudo once, then it's ours)."""
-    rc, _ = bx.run_in_box("sudo mkdir -p /opt/suijin-ws && sudo chown -R $(whoami) /opt/suijin-ws", timeout=60)
-    return rc == 0
 
 
 def stage_verify(log) -> bool:
