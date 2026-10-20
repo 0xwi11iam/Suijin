@@ -7,7 +7,7 @@
 <p align="center"><i>Your team of fully autonomous web app pentesters and red teamers for any situation.</i></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/v7.1.0-suijin-brightgreen?style=flat-square" alt="version"/>
+  <img src="https://img.shields.io/badge/v7.2.0-suijin-brightgreen?style=flat-square" alt="version"/>
   <img src="https://img.shields.io/badge/license-AGPL%20v3-blue?style=flat-square" alt="license"/>
   <img src="https://img.shields.io/badge/python-3.10%2B-306998?style=flat-square&logo=python&logoColor=white" alt="python"/>
 </p>
@@ -125,7 +125,12 @@ history. The input box is a command line:
 the target produced the expected marker — unique, target-derived
 strings; `200 OK` proves nothing. No match means the exploit comes
 back with every command and output attached so you can fix or drop
-it. A finding without a cataloged POC is a rumor.
+it. A finding without a cataloged POC is a rumor. Confirmed findings
+capture their verifying output as **tamper-evident, content-addressed
+evidence** — the report re-hashes every proof at generation time and
+flags drift, so what you submit is provably what you verified. And
+severity is honest by construction: the system caps claims whose
+evidence only shows information-class output.
 
 **4a. The system catches what the model misses.** Every HTTP request
 feeds an observation engine that deterministically detects IDOR and
@@ -144,6 +149,20 @@ engagement — same target or same tech — starts with all of it and
 skips the graveyard. Resumed runs scrub verified-dead credentials
 from carried state — a key that was SERVICE_DISABLED yesterday
 doesn't come back as today's "discovery."
+
+**6. Or run it in a box.**
+```bash
+suijin box
+```
+A sealed linux environment (OrbStack on macOS, or Docker) that runs
+Suijin and its tools with your device untouched: build it once,
+enter it, work inside. Your config, packs and prompts sync one-way
+in — nothing the box generates ever flows back — and entering
+detects drift, offering to sync and install any newly-listed tools.
+Engagements live on the box's own disk and survive restarts;
+destroying it archives everything out first and asks you to type the
+confirmation. Bare `suijin` keeps working exactly as before — the
+box is a choice, not a migration.
 
 &nbsp;
 <p align="center"><img src="assets/sui.png" width="72" alt=""/></p>
