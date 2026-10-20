@@ -188,8 +188,8 @@ def build(resume: bool = True, log=print, progress=None, cancel=None) -> dict:
         "config": stage_config,
     }
     for stage in STAGES:
-        if stage == "tools":
-            continue
+        if stage in ("tools", "verify"):
+            continue  # tools runs with progress below; verify runs last
         if state["stages"].get(stage, {}).get("ok"):
             log(f"stage {stage}: already done (resumed)")
             continue
