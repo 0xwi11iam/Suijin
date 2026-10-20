@@ -152,7 +152,10 @@ def box_delete(engine: str | None = None) -> tuple[bool, str]:
     if not eng:
         return False, "no engine"
     if eng == ENGINE_ORB:
-        rc, out = _run(["orb", "delete", BOX_NAME], timeout=300)
+        # -f: orb delete prompts for confirmation on running machines
+        # — an invisible prompt on a pipe hangs forever (same class as
+        # the apt -y bug)
+        rc, out = _run(["orb", "delete", "-f", BOX_NAME], timeout=300)
         return rc == 0, out.strip()[-200:]
     rc, out = _run(["docker", "rm", "-f", BOX_NAME], timeout=300)
     return rc == 0, out.strip()[-200:]

@@ -122,9 +122,9 @@ class Tui:
     def status(self, y, x, kind, word, extra=""):
         color = {OK[0]: self.cg, PEND[0]: self.cy, FAIL[0]: self.cr, NEUTRAL[0]: self.cd}.get(kind, 0)
         self.line(y, x, kind, color)
-        self.line(y, x + 2, word, color)
+        self.line(y, x + len(kind) + 1, word, color)
         if extra:
-            self.line(y, x + 2 + len(word) + 1, extra, self.cd)
+            self.line(y, x + len(kind) + 1 + len(word) + 1, extra, self.cd)
 
     # ── screens ───────────────────────────────────────────────────
     def first_run(self) -> str:
