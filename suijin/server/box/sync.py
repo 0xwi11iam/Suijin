@@ -147,8 +147,14 @@ def sync_selected(items: list[str], log=print) -> list[str]:
                 tar = subprocess.run(["tar", "czf", "-", "-C", str(ws), item], capture_output=True, timeout=300)
                 if tar.returncode == 0:
                     quoted = bx.BOX_WS
+                    # --warning=no-unknown-keyword: the host tar embeds
+                    # mac xattrs (com.apple.provenance) as pax headers;
+                    # gnu tar on the linux side warns about every one of
+                    # them. They are meaningless there — silence it, and
+                    # capture so nothing leaks to the operator's terminal.
+                    extract_cmd = f"mkdir -p {quoted} && tar xzf - --warning=no-unknown-keyword -C {quoted}"
                     proc = subprocess.run(
-                        ["orb", "-m", bx.BOX_NAME, "bash", "-lc", f"mkdir -p {quoted} && tar xzf - -C {quoted}"]
+                        ["orb", "-m", bx.BOX_NAME, "bash", "-lc", extract_cmd]
                         if shutil_which_orb()
                         else [
                             "docker",
@@ -157,9 +163,10 @@ def sync_selected(items: list[str], log=print) -> list[str]:
                             bx.BOX_NAME,
                             "bash",
                             "-lc",
-                            f"mkdir -p {quoted} && tar xzf - -C {quoted}",
+                            extract_cmd,
                         ],
                         input=tar.stdout,
+                        capture_output=True,
                         timeout=300,
                     )
                     if proc.returncode == 0:
