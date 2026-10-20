@@ -146,7 +146,7 @@ def tool_list() -> list[str]:
     with contextlib.suppress(Exception):
         from suijin.modules.tools.lib.availability import _INSTALL
 
-        return sorted(k for k in _INSTALL.keys() if k not in _BOX_EXCLUDE)
+        return sorted(k for k in _INSTALL if k not in _BOX_EXCLUDE)
     return []
 
 
