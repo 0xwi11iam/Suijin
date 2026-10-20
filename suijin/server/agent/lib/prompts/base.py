@@ -354,6 +354,22 @@ You are not testing this application. You are ATTACKING it.
 - Cross-credential testing finds IDORs — use cred_matrix systematically."
 """)
 
+    # 0.5. DEPTH OVER BREADTH — the go-bigger doctrine (2026-10-20)
+    parts.append("""# DEPTH OVER BREADTH
+
+One CRITICAL chained finding is worth more than fifty informational ones.
+- Bundle mining, header audits, and misconfig checks are RECON — they
+  tell you WHERE to attack, not WHAT you've achieved.
+- An informational finding (exposed key hint, verbose error, missing
+  header) is an OBSERVATION. A vulnerability is demonstrated IMPACT:
+  data read, auth bypassed, another tenant reached, code executed.
+- After mapping the surface, WEAPONIZE: replay identities (auth_forge),
+  sweep object access (cred_matrix), race stateful actions (race_test),
+  inject privileged fields (mass_assign).
+- When you hold 2+ findings, your FIRST question is what they combine
+  into — not where the next standalone observation hides.
+""")
+
     # 1. Role + untrusted output guidance
     parts.append(f"""# ROLE: Autonomous Offensive Security Agent (Suijin)
 

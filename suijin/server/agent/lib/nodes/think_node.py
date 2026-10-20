@@ -599,6 +599,16 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
             state,
         )
 
+    # DEPTH DIRECTIVE (2026-10-20, go-bigger): while saturated with
+    # trivia findings and holding nothing real, DRIVE leads with the
+    # shift order. Pressure-only — the agent still owns its turn.
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.weaponization import directive as _wep_directive
+
+        _dep = _wep_directive(state)
+        if _dep:
+            _drive_block = _dep + "\n" + (_drive_block or "")
+
     # ── DELTA-FIRST (2026-10-18, borrowed from ARTEX's trigger events)
     # The model reacts to WHAT CHANGED, not re-reads the whole picture.
     # Computed from state vs the previous turn's snapshot — always the
@@ -627,6 +637,23 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         _delta_lines.append(f"- BUDGET: {_budget_left} iterations left — WRAP UP")
     _delta_block = ("## SINCE YOUR LAST TURN\n" + "\n".join(_delta_lines) + "\n") if _delta_lines else ""
 
+    # WEAPONS + ATTACK_SCENARIOS (2026-10-20, go-bigger): the depth
+    # tools the catalog buries, and concrete chain hypotheses once the
+    # agent holds 2+ findings. Phase lists below decide who sees them.
+    _weapons_block = ""
+    _scenarios_block = ""
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.weaponization import attack_scenarios, weapons_block
+
+        _weapons_block = weapons_block(state)
+        _scen = attack_scenarios(state)
+        if _scen:
+            _scenarios_block = (
+                "## ATTACK SCENARIOS — combine what you hold\n"
+                + "\n".join(f"- {s}" for s in _scen)
+                + "\n\nPick ONE and test it this turn. A chained finding is worth ten standalone ones.\n"
+            )
+
     _sections: dict[str, str] = {
         "DELTA": _delta_block,
         "DRIVE": _drive_block,
@@ -653,6 +680,8 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         "TARGET_INTELLIGENCE": _render_board(state),
         "TODO_LIST": todo_context,
         "CHAIN_CONTEXT": (chain_context or "(no chain context yet)"),
+        "WEAPONS": _weapons_block,
+        "ATTACK_SCENARIOS": _scenarios_block,
         "RULES": (
             "- NEVER repeat an IDENTICAL failed call (same tool, same args). A failed payload has taught you one context — vary the class/encoding/position and fire again on a surface that's still unproven.\n"
             "- NEVER install tools you already tried to install. Use what's available.\n"
@@ -693,6 +722,8 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
             "CURRENT_STATE",
             "YOU_HOLD",
             "DRIVE",
+            "ATTACK_SCENARIOS",
+            "WEAPONS",
             "CHAIN_CONTEXT",
             "RECENT_ACTIONS",
             "RECENT_MESSAGES",
@@ -702,6 +733,8 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         ],
         "post_exploitation": [
             "YOU_HOLD",
+            "ATTACK_SCENARIOS",
+            "WEAPONS",
             "DRIVE",
             "CHAIN_CONTEXT",
             "TODO_LIST",
@@ -729,6 +762,8 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         "CURRENT_STATE": "CURRENT STATE",
         "DRIVE": "DRIVE — your own state (what pulls at you)",
         "YOU_HOLD": "YOU HOLD (capabilities won — use them before hunting more)",
+        "ATTACK_SCENARIOS": "ATTACK SCENARIOS — combine what you hold",
+        "WEAPONS": "WEAPONS (depth tools built for this phase)",
         "RECENT_ACTIONS": "RECENT ACTIONS (last 8 tool calls — DO NOT REPEAT FAILURES)",
         "RECENT_MESSAGES": "RECENT MESSAGES (last 15 system/tool messages)",
         "TARGET_INTELLIGENCE": "TARGET INTELLIGENCE (your working board — accumulated, trust it)",
@@ -741,8 +776,8 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     for _name in _ORDER:
         _txt = _sections.get(_name) or ""
         _section_sizes[_name] = len(_txt)
-        if not _txt.strip() and _name in ("YOU_HOLD", "DRIVE"):
-            continue  # nothing held / no drive — the section stays out entirely
+        if not _txt.strip() and _name in ("YOU_HOLD", "DRIVE", "ATTACK_SCENARIOS"):
+            continue  # nothing held / no drive / <2 findings — the section stays out entirely
         _block_parts.append(f"## {_pretty[_name]}\n{_txt}")
     if _mesh_block:
         _block_parts.insert(0, _mesh_block)

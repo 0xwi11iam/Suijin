@@ -90,6 +90,41 @@ def _harvest_findings(state: dict, tool_name: str, output: str) -> dict:
     return {}
 
 
+#: Recon/surface-mapping tools (2026-10-20 go-bigger): while saturated
+#: with trivia findings, calls to these get the saturation warning
+#: prepended — soft-tagged, never refused.
+_RECON_TOOLS = frozenset(
+    {
+        "surface_expand",
+        "crawl",
+        "api_discover",
+        "js_bundle_analyze",
+        "source_map_probe",
+        "dom_recon",
+        "smart_fetch",
+    }
+)
+
+
+def _satiation_tag(state: dict, tool_name: str, output: str) -> str:
+    """Prepend the saturation warning to recon-tool output while the
+    agent is saturated with trivia. Soft nudge — the call still runs,
+    the result still lands, but the model reads the cost of staying
+    in scanner mode right on top of it."""
+    if tool_name not in _RECON_TOOLS:
+        return output
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.weaponization import satiation
+
+        if satiation(state).get("saturated"):
+            return (
+                "[SURFACE SATURATED — 4+ informational findings, zero high-impact ones. "
+                "More surface mapping adds NOTHING. Test a high-weight class instead: "
+                "authn / authz / idor / sqli — auth_forge, cred_matrix, race_test.]\n\n" + str(output)
+            )
+    return output
+
+
 async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
     """Execute tool. Set 'background': true in tool_args for async spawn."""
     step_data = state.get("_current_step", {})
@@ -164,6 +199,7 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
         _t0_sync = _time.monotonic()
         result = await _asyncio.to_thread(route_tool_fn, tool_name, tool_args, {})
         output, _ = _maybe_offload(tool_name, str(result))
+        output = _satiation_tag(state, tool_name, str(output))
         duration_ms = int((_time.monotonic() - _t0_sync) * 1000)
         success = not output.startswith("Error:")
         _audit_step(state, tool_name, tool_args, success, duration_ms)
@@ -268,6 +304,7 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
     # "Execution Fault:" were missing here, so HTTP failures registered as
     # SUCCESS in the trace (the '!' marker never fired for them either)
     _FAILS = ("Error:", "Tool error:", "Tool Error", "HTTP Error:", "Execution Fault:")
+    output = _satiation_tag(state, tool_name, str(output))
     success = not str(output).startswith(_FAILS)
     _audit_step(state, tool_name, tool_args, success, duration_ms)
     ec = _classify_error_class(

@@ -53,12 +53,17 @@ def scoreboard(state: dict) -> dict:
     current = int(state.get("current_iteration") or 0)
     budget_remaining = max_iter - current if max_iter > 0 else -1
 
+    # ── impact (2026-10-20, go-bigger) ────────────────────────────────
+    impact = _impact_score(state)
+
     return {
         "can_complete": len(blockers) == 0,
         "blockers": blockers,
         "coverage_pct": coverage_pct,
         "chain_pending": bool(chain and not chain.get("explored")),
         "budget_remaining": budget_remaining,
+        "impact_score": impact["total"],
+        "saturation": impact["satiation"],
     }
 
 
@@ -68,11 +73,18 @@ def render_scoreboard(state: dict) -> str:
     lines = [
         f"COMPLETION STATUS: {'✅ CAN COMPLETE' if sb['can_complete'] else '❌ BLOCKED'}",
         f"  Coverage: {sb['coverage_pct']}% tested",
+        f"  Impact: {sb.get('impact_score', 0)} (tested-cell weights + confirmed findings)",
         f"  Chain pending: {'YES' if sb['chain_pending'] else 'no'}",
         f"  Budget: {sb['budget_remaining']} iterations remaining"
         if sb["budget_remaining"] >= 0
         else "  Budget: unlimited",
     ]
+    sat = sb.get("saturation") or {}
+    if sat.get("saturated"):
+        lines.append(
+            f"  ⚠ SURFACE SATURATED: {sat.get('trivia', 0)} trivia findings, {sat.get('real', 0)} real — "
+            "stop scanning, start weaponizing (auth_forge / cred_matrix / race_test)"
+        )
     if sb["blockers"]:
         lines.append("  Blockers:")
         for b in sb["blockers"]:
@@ -83,6 +95,27 @@ def render_scoreboard(state: dict) -> str:
     else:
         lines.append("Resolve the blockers above, then complete.")
     return "\n".join(lines)
+
+
+def _impact_score(state: dict) -> dict:
+    """Impact = tested-cell weights + confirmed-finding weights. The
+    number the game rewards now: testing authn@target (12) moves it,
+    testing info@target (1) barely does."""
+    import contextlib
+
+    total = 0
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.weaponization import class_weight, finding_weight, satiation
+        from suijin.modules.tools.lib.coverage import _load
+
+        d = _load()
+        for key, c in (d.get("cells") or {}).items():
+            if c.get("status") in ("tested_vulnerable", "tested_not_vulnerable", "not_applicable"):
+                vc = str(key).rsplit("|", 1)[-1]
+                total += class_weight(vc)
+        total += sum(finding_weight(f) for f in (state.get("findings") or []) if isinstance(f, dict))
+        return {"total": total, "satiation": satiation(state)}
+    return {"total": total, "satiation": {"saturated": False, "trivia": 0, "real": 0}}
 
 
 def _tested_count(state: dict) -> int:
