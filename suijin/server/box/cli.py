@@ -18,6 +18,16 @@ def _print(msg: str = "") -> None:
     print(msg, flush=True)
 
 
+def _say(msg: str = "", style: str = "") -> None:
+    """Bold-colored CLI output: ok=green, x=red, !=yellow, stage=bold."""
+    try:
+        from rich.console import Console as _C
+
+        _C(stderr=False).print(msg, style=style) if style else _C().print(msg)
+    except Exception:  # noqa: BLE001 — styling never breaks output
+        _print(msg)
+
+
 def cmd_status(args=None) -> int:
     from suijin.server.box import engine as bx
     from suijin.server.box.sync import drift as compute_drift
@@ -69,7 +79,7 @@ def cmd_start(args=None) -> int:
         _print("box not built — run `suijin box build` first")
         return 1
     ok, out = bx.box_start()
-    _print("box running" if ok else f"start failed: {out}")
+    _say("box running", "green bold") if ok else _say(f"start failed: {out}", "red bold")
     return 0 if ok else 1
 
 
@@ -77,7 +87,7 @@ def cmd_stop(args=None) -> int:
     from suijin.server.box import engine as bx
 
     ok, out = bx.box_stop()
-    _print("box stopped (data kept)" if ok else f"stop failed: {out}")
+    _say("box stopped (data kept)", "green bold") if ok else _say(f"stop failed: {out}", "red bold")
     return 0 if ok else 1
 
 
@@ -124,7 +134,7 @@ def cmd_refresh(args=None) -> int:
         bx.box_start()
     d = compute_drift()
     if not (d["changed"] or d["missing_tools"]):
-        _print("in sync — nothing to do")
+        _say("in sync — nothing to do", "green")
         return 0
     if d["changed"]:
         done = sync_selected(d["changed"], log=_print)
@@ -132,7 +142,7 @@ def cmd_refresh(args=None) -> int:
     if d["missing_tools"]:
         _print(f"installing {len(d['missing_tools'])} missing tools …")
         stage_tools(log=_print)
-    _print("refresh complete")
+    _say("refresh complete", "green bold")
     return 0
 
 
@@ -140,41 +150,48 @@ def cmd_destroy(args=None) -> int:
     from suijin.server.box import engine as bx
 
     if not bx.box_exists():
-        _print("no box to destroy")
+        _say("no box to destroy", "dim")
         return 0
     archive = "--no-archive" not in (args or [])
     if archive:
-        _print("archiving engagements to ~/suijin-box-archive-<date>.tar.gz …")
-        ok = archive_box()
-        if not ok:
-            _print("archive failed — destroy aborted (box untouched)")
+        _say("archiving engagements to ~/suijin-box-archive-<date>.tar.gz …", "bold")
+        if not archive_box(_say):
+            _say("archive failed — destroy aborted (the box is untouched)", "red bold")
             return 1
     ok, out = bx.box_delete()
-    _print("box destroyed" + (" (archive kept)" if archive else "") if ok else f"destroy failed: {out}")
+    if ok:
+        _say("box destroyed" + (" (archive kept)" if archive else ""), "green bold")
+    else:
+        _say(f"destroy failed: {out}", "red bold")
     return 0 if ok else 1
 
 
-def archive_box() -> bool:
-    """Stream the box workspace out as a tarball on the host."""
+def archive_box(log=None) -> bool:
+    """Stream the box workspace out as a tarball on the host — with a
+    size estimate, live progress, and errors that actually print (the
+    silent-hang post-mortem)."""
     import os
     import subprocess
 
     from suijin.server.box import engine as bx
 
+    say = log or _print
     if not bx.box_running():
         bx.box_start()
+    total_mb = 0
+    with contextlib.suppress(Exception):
+        rc, out = bx.run_in_box("du -sm /opt/suijin-ws 2>/dev/null | cut -f1", timeout=60)
+        if rc == 0 and out.strip().isdigit():
+            total_mb = int(out.strip())
     date = __import__("time").strftime("%Y-%m-%d")
     dest = os.path.expanduser(f"~/suijin-box-archive-{date}.tar.gz")
     eng = bx.detect_engine()
+    pull_cmd = ["orb", "-m", bx.BOX_NAME, "bash", "-lc", "tar czf - -C /opt suijin-ws"]
+    if eng == bx.ENGINE_DOCKER:
+        pull_cmd = ["docker", "exec", bx.BOX_NAME, "bash", "-lc", "tar czf - -C /opt suijin-ws"]
     try:
-        if eng == bx.ENGINE_ORB:
-            pull = subprocess.Popen(
-                ["orb", "-m", bx.BOX_NAME, "bash", "-lc", "tar czf - -C /opt suijin-ws"], stdout=subprocess.PIPE
-            )
-        else:
-            pull = subprocess.Popen(
-                ["docker", "exec", bx.BOX_NAME, "bash", "-lc", "tar czf - -C /opt suijin-ws"], stdout=subprocess.PIPE
-            )
+        pull = subprocess.Popen(pull_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        wrote = 0
         with open(dest, "wb") as fh:
             assert pull.stdout is not None
             while True:
@@ -182,8 +199,25 @@ def archive_box() -> bool:
                 if not chunk:
                     break
                 fh.write(chunk)
-        return pull.wait() == 0
-    except Exception:  # noqa: BLE001
+                wrote += len(chunk)
+                mb = wrote >> 20
+                if mb and mb % 32 == 0:
+                    if total_mb:
+                        say(f"  archive {mb} mb (~{100 * mb // max(1, total_mb)}% of {total_mb} mb)")
+                    else:
+                        say(f"  archive {mb} mb")
+        rc = pull.wait(timeout=60)
+        if rc != 0 or wrote == 0:
+            say(f"  archive failed (rc={rc}, {wrote} bytes) — removing the partial file")
+            with contextlib.suppress(OSError):
+                os.unlink(dest)
+            return False
+        say(f"  archive complete: {dest} ({wrote >> 20} mb)")
+        return True
+    except Exception as e:  # noqa: BLE001
+        say(f"  archive error: {e}")
+        with contextlib.suppress(OSError):
+            os.unlink(dest)
         return False
 
 

@@ -49,28 +49,33 @@ def _state_write(state: dict) -> None:
     bx.run_in_box(f"mkdir -p {bx.BOX_WS} && printf '%s' '{body}' > {bx.BOX_STATE}", timeout=60)
 
 
+def _aptize(line: str) -> str:
+    """Make an apt line automation-safe: -y always (the doctor's table
+    lines are HUMAN hints — 'sudo apt install nikto' with no -y hangs
+    forever at the invisible continue? prompt on a pipe; this was the
+    aircrack/amass/nikto hang's true root cause), and
+    --no-install-recommends for the lean headless box."""
+    if "apt install" not in line:
+        return line
+    if " -y" not in line and "-y " not in line[: line.index("install") + len("install") + 1]:
+        line = line.replace("apt install", "apt install -y", 1)
+    if "--no-install-recommends" not in line:
+        line = line.replace("apt install", "apt install --no-install-recommends", 1)
+    return line
+
+
 def _tool_apt_line(name: str) -> str:
-    """The install line for a tool (kali). BOX ORDER (2026-10-20, the
-    amass/go debugging): apt first; when the table has no apt entry
-    (macOS-centric brew/go rows), try the GENERIC kali package before
-    falling to pip/go — ffuf/nuclei/subfinder/katana all ship as kali
-    packages but the doctor table only carries their go lines, and go
-    lines fail instantly in a box without a go toolchain."""
+    """The install line for a tool (kali) — automation-safe."""
     with contextlib.suppress(Exception):
         from suijin.modules.tools.lib.availability import _INSTALL
 
         entry = _INSTALL.get(name) or {}
         apt = entry.get("apt")
         if apt:
-            line = apt
-            if "--no-install-recommends" not in line:
-                line = line.replace("apt install", "apt install --no-install-recommends", 1)
-            return line
-        for key in ("pip", "go"):
+            return _aptize(apt)
+        for key in ("pip", "go", "gem"):
             if entry.get(key):
-                # generic kali package FIRST (most go-only tools ship in
-                # kali); pip/go lines are the fallback, not the default
-                return f"sudo apt install -y --no-install-recommends {name} || {entry[key]}"
+                return entry[key]
     return f"sudo apt install -y --no-install-recommends {name}"
 
 
@@ -233,10 +238,7 @@ def _resolve_plan(tools: list[str]) -> dict[str, tuple[str, str]]:
         entry = table.get(t) or {}
         apt = entry.get("apt")
         if apt:
-            line = apt
-            if "--no-install-recommends" not in line:
-                line = line.replace("apt install", "apt install --no-install-recommends", 1)
-            plan[t] = ("apt", line)
+            plan[t] = ("apt", _aptize(apt))
         elif t in apt_ok:
             plan[t] = ("apt", f"sudo apt install -y --no-install-recommends {t}")
         else:
