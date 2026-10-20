@@ -653,7 +653,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     if _chain_p and not _chain_p.get("explored"):
         _stale = iteration - int(_chain_p.get("turn") or 0)
         _delta_lines.append(f"- CHAIN PENDING ({_stale} turns): {str(_chain_p.get('finding') or '?')[:80]}")
-    _budget_left = int(state.get("max_iterations", 100) or 100) - iteration
+    _budget_left = int(state.get("max_iterations", 100000) or 100000) - iteration
     if 0 < _budget_left <= 5:
         _delta_lines.append(f"- BUDGET: {_budget_left} iterations left — WRAP UP")
     _delta_block = ("## SINCE YOUR LAST TURN\n" + "\n".join(_delta_lines) + "\n") if _delta_lines else ""
@@ -705,15 +705,15 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         "DRIVE": _drive_block,
         "CURRENT_STATE": (
             f"- **Phase**: {phase}\n"
-            f"- **Iteration**: {iteration}/{'unlimited' if int(state.get('max_iterations', 100) or 0) >= 100000 else state.get('max_iterations', 100)}\n"
+            f"- **Iteration**: {iteration}/{'unlimited' if int(state.get('max_iterations', 100000) or 0) >= 100000 else state.get('max_iterations', 100000)}\n"
             + (
                 # LOW-BUDGET DOCTRINE (2026-10-14): the agent saw N/M but
                 # nothing CHANGED its behavior near the end - it opened new
                 # chains at 23/25 and died mid-dive. The last iterations
                 # carry an explicit wrap-up order.
-                f"- **BUDGET LOW - {int(state.get('max_iterations', 100) or 100) - iteration} iterations left. WRAP UP: no new surfaces, no new chains. Verify + catalog what you hold, write the report, complete.**"
+                f"- **BUDGET LOW - {int(state.get('max_iterations', 100000) or 100000) - iteration} iterations left. WRAP UP: no new surfaces, no new chains. Verify + catalog what you hold, write the report, complete.**"
                 + chr(10)
-                if 0 < int(state.get("max_iterations", 100) or 100) - iteration <= 5
+                if 0 < int(state.get("max_iterations", 100000) or 100000) - iteration <= 5
                 else ""
             )
             + f"- **Attack Path**: {state.get('attack_path_type', 'recon')}\n"
