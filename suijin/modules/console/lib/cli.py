@@ -2242,7 +2242,12 @@ def main(argv=None):
         nargs="*",
         help="build · start · stop · enter · status · refresh · destroy — or nothing for the tui",
     )
-    boxp.set_defaults(func=lambda a: _run_box_cli(getattr(a, "verb", None) or []))
+    boxp.add_argument("--no-archive", action="store_true", help="destroy without archiving engagements")
+    boxp.set_defaults(
+        func=lambda a: _run_box_cli(
+            (getattr(a, "verb", None) or []) + (["--no-archive"] if getattr(a, "no_archive", False) else [])
+        )
+    )
 
     mp = sub.add_parser("mesh-port", help="print this session's mesh wire port (used by remote /connect)")
     mp.set_defaults(func=lambda _a: run_mesh_port())
