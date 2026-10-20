@@ -111,9 +111,32 @@ def drift() -> dict:
     return {"changed": changed, "missing_tools": missing, "manifest": host}
 
 
+#: tools that never belong in a headless box: wireless/hardware
+#: attackers with no radio, heavyweight DB/security suites that pull
+#: gigabytes. The box is for web-app work; add anything here back via
+#: container.tools in config.json.
+_BOX_EXCLUDE = {
+    "aircrack-ng",
+    "airodump-ng",
+    "reaver",
+    "wifite",
+    "bully",
+    "hostapd",
+    "gvm",
+    "gvm-tools",
+    "python-gvm",
+    "neo4j",
+    "metasploit",
+    "metasploit-framework",
+    "msfconsole",
+}
+
+
 def tool_list() -> list[str]:
     """The tools a box installs — host config container.tools, default
-    the doctor's curated set (the availability table)."""
+    the doctor's curated set MINUS the headless-excluded (wireless,
+    heavyweight suites): minimal disk, no radio-hardware tools that
+    would hang or bloat a container."""
     with contextlib.suppress(Exception):
         from suijin.modules.platform.lib.config_loader import load_config
 
@@ -123,7 +146,7 @@ def tool_list() -> list[str]:
     with contextlib.suppress(Exception):
         from suijin.modules.tools.lib.availability import _INSTALL
 
-        return sorted(_INSTALL.keys())
+        return sorted(k for k in _INSTALL.keys() if k not in _BOX_EXCLUDE)
     return []
 
 
