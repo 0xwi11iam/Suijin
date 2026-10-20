@@ -138,6 +138,168 @@ class TestWeaponsBlock:
             assert tool in w
 
 
+class TestChainCandidates:
+    """B (2026-10-20): detected finding pairs are obligations."""
+
+    PAIR_STATE = {
+        "findings": [
+            {"id": "EXP-001", "title": "HIGH CVSS 7.1 : JWT alg-none bypass on /auth/token"},
+            {"id": "EXP-002", "title": "MEDIUM : internal API surface /internal/admin discovered"},
+        ]
+    }
+
+    def test_pair_yields_candidate_with_clearing_classes(self):
+        cands = chain_candidates(self.PAIR_STATE)
+        assert len(cands) == 1
+        assert set(cands[0]["classes"]) & {"authn", "authz", "idor"}
+
+    def test_trivia_pair_no_candidate(self):
+        assert chain_candidates({"findings": [{"title": "INFO : a"}, {"title": "LOW : b"}]}) == []
+
+    def test_explicit_mark_clears(self):
+        from suijin.modules.agent.lib.weaponization import unexplored_candidates
+
+        cands = chain_candidates(self.PAIR_STATE)
+        state = dict(self.PAIR_STATE)
+        state["_chain_explored"] = {cands[0]["id"]: True}
+        assert unexplored_candidates(state) == []
+
+    def test_coverage_mark_clears(self, tmp_path, monkeypatch):
+
+        monkeypatch.setenv("SUIJIN_WORKSPACE", str(tmp_path))
+        from suijin.modules.tools.lib import coverage as cov
+
+        store = tmp_path / "coverage.json"
+        cov._store_path = lambda: store
+        cov.reset()
+        from suijin.modules.agent.lib.weaponization import unexplored_candidates
+
+        # mark one of the candidate's classes tested → cleared
+        # (the mark itself must clear the ≥50-char N/A justification bar)
+        cov.mark(
+            "https://x.test",
+            "authn",
+            "not_applicable",
+            evidence="static public origin with no authentication flow reachable — verified by route map",
+        )
+        assert unexplored_candidates(self.PAIR_STATE) == []
+        cov.reset()
+
+
+class TestRedFlags:
+    """A (2026-10-20): anti-gaming flags over the ledger shape."""
+
+    @pytest.fixture(autouse=True)
+    def _fresh_ledger(self, tmp_path):
+        from suijin.modules.tools.lib import coverage as cov
+
+        store = tmp_path / "coverage.json"
+        cov._store_path = lambda: store
+        cov.reset()
+        self.cov = cov
+        yield
+        cov.reset()
+
+    def test_contract_action_vocabulary_marks(self):
+        """F-round (2026-10-20): the contract enum (tested_vulnerable
+        etc. as ACTION) and the implementation verbs (mark/note/gate)
+        disagreed — marking through the tool was impossible. Both
+        vocabularies now land a real cell."""
+        from suijin.modules.tools.lib.coverage import coverage_check
+
+        r1 = coverage_check(
+            action="not_applicable",
+            asset="https://t.example",
+            vuln_class="authn",
+            evidence="static public origin, no authentication flow exists — verified by route enumeration",
+        )
+        assert "not_applicable" in r1 and "Error" not in r1
+        r2 = coverage_check(
+            action="mark",
+            asset="https://t.example",
+            vuln_class="authn",
+            status="tested_vulnerable",
+            evidence="auth bypass demonstrated with forged token",
+        )
+        assert "tested_vulnerable" in r2 and "Error" not in r2
+
+    EV = "sent GET /x, got 403 with hardening present, repeated with encoded payload variant"
+
+    def _mark6(self, evidence=EV):
+        why = evidence if len(evidence) >= 50 else evidence + " " + "x" * 60
+        for vc in ["authn", "authz", "idor", "sqli", "ssrf", "lfi"]:
+            self.cov.mark("https://t.example", vc, "tested_not_vulnerable", evidence=why, request_sent="GET /")
+
+    def test_copy_paste_flag(self):
+        self._mark6()
+        flags = red_flags({})
+        assert any("copy_paste" in f for f in flags)
+
+    def test_distinct_evidence_no_flag(self):
+        for i, vc in enumerate(["authn", "authz", "idor"]):
+            self.cov.mark(
+                "https://t.example",
+                vc,
+                "tested_not_vulnerable",
+                evidence=f"class-specific test {vc}: distinct request {i} " + "detail " * 8,
+                request_sent="GET /",
+            )
+        assert red_flags({}) == []
+
+    def test_na_flood_flag(self):
+        why = "static JSON origin with no server-side rendering path — verified per class "
+        for vc in ["authn", "authz", "idor", "sqli", "ssrf", "lfi", "xss", "upload", "xxe", "cmdi"]:
+            self.cov.mark("https://t.example", vc, "not_applicable", evidence=why + vc)
+        flags = red_flags({})
+        assert any("not_applicable" in f for f in flags)
+
+
+from suijin.modules.agent.lib.weaponization import chain_candidates, red_flags  # noqa: E402
+
+
+class TestSeverityHonesty:
+    """C (2026-10-20): the CODE sets severity from evidence presence."""
+
+    def test_info_only_critical_capped(self):
+        from suijin.modules.tools.lib.exploit_catalog import _honesty_check
+
+        e = {
+            "system_severity": "critical",
+            "cvss": None,
+            "marker": "server version banner",
+            "description": "nginx version in error page",
+            "poc": [],
+        }
+        _honesty_check(e)
+        assert e["system_severity"] == "medium" and "severity_note" in e
+
+    def test_cvss_stands_but_noted(self):
+        from suijin.modules.tools.lib.exploit_catalog import _honesty_check
+
+        e = {
+            "system_severity": "high",
+            "cvss": 9.1,
+            "marker": "stack trace in response",
+            "description": "verbose error message",
+            "poc": [],
+        }
+        _honesty_check(e)
+        assert e["cvss"] == 9.1 and "severity_note" in e
+
+    def test_impact_evidence_untouched(self):
+        from suijin.modules.tools.lib.exploit_catalog import _honesty_check
+
+        e = {
+            "system_severity": "critical",
+            "cvss": None,
+            "marker": "database dump of all users",
+            "description": "sqli reads users table",
+            "poc": [],
+        }
+        _honesty_check(e)
+        assert e["system_severity"] == "critical" and "severity_note" not in e
+
+
 class TestCoverageGateWeights:
     """The gate itself: trivia cells never block, ordering is weight DESC."""
 
@@ -163,11 +325,23 @@ class TestCoverageGateWeights:
 
     def test_only_trivia_untested_gate_opens(self):
         # the agent tested every real class, skipped info + redirect
+        # (A 2026-10-20: not_applicable on high-weight classes now
+        # REQUIRES ≥50-char justification)
+        why = "no server-side input path reaches a query context on this asset — static origin, verified"
         for vc in self.cov.CLASSES:
             if vc in ("info", "redirect"):
                 continue
-            self.cov.mark(BASE, vc, "not_applicable", evidence="ev", request_sent="GET /")
+            self.cov.mark(BASE, vc, "not_applicable", evidence=why, request_sent="GET /")
         assert self.cov.completion_blocked([BASE]) is None
+
+    def test_na_on_high_weight_requires_justification(self):
+        # A: the free N/A gate-bypass is closed — bare N/A on a crown
+        # jewel class errors
+        r = self.cov.mark(BASE, "authn", "not_applicable")
+        assert r.startswith("Error:") and "≥50" in r
+        # trivia classes mark freely
+        r2 = self.cov.mark(BASE, "info", "not_applicable")
+        assert not r2.startswith("Error")
 
     def test_real_class_untested_gate_blocks(self):
         # only trivia tested — the crown jewels untouched

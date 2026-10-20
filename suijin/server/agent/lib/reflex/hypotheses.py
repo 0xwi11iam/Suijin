@@ -134,6 +134,84 @@ def mark_tested(state: dict, hyp_id: int, result: str) -> None:
                 h["result"] = str(result)[:200]
 
 
+#: Tools whose successful use against a hypothesis's target counts as
+#: testing it (F5, 2026-10-20 — mark_tested had NO caller: the gate
+#: could only ever end via the 5-refusal stand-down).
+_PROBE_TOOLS = frozenset(
+    {
+        "http_request",
+        "http_replay",
+        "http_replay_raw",
+        "inject_probe",
+        "auth_forge",
+        "cred_matrix",
+        "bypass_403",
+        "race_test",
+        "mass_assign",
+        "graphql_attack",
+        "param_pollute",
+        "response_diff",
+        "diff_response",
+        "execute_terminal",
+        "catalog_exploit",
+    }
+)
+
+
+def auto_clear_from_trace(state: dict, window: int = 8) -> int:
+    """F5 (2026-10-20): machine-clear hypotheses the run already tested.
+
+    Two evidence channels, both deterministic:
+    1. TRACE — a recent successful probe-class tool call whose args
+       mention the hypothesis's target (the F2 lesson: read tool_args).
+    2. LEDGER — the coverage cell (hypothesis target × hypothesis class)
+       is marked tested_* / not_applicable.
+
+    Returns how many hypotheses were cleared. Called from think context
+    build each turn — the hypothesis gate finally has an honest exit
+    that isn't the 5-refusal stand-down."""
+    import contextlib
+
+    hyps = [h for h in ((state or {}).get("_hypotheses") or []) if isinstance(h, dict) and not h.get("tested")]
+    if not hyps:
+        return 0
+    trace = list((state or {}).get("execution_trace") or [])[-window:]
+    ledger: dict = {}
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.coverage import _load
+
+        ledger = {k: c.get("status") for k, c in (_load().get("cells") or {}).items()}
+    cleared = 0
+    for h in hyps:
+        target = str(h.get("target") or "").strip().lower()
+        klass = str(h.get("class") or "").strip().lower()
+        done = False
+        # channel 1: trace evidence
+        if target:
+            for t in trace:
+                if not t.get("success", True):
+                    continue
+                if str(t.get("tool_name") or "") not in _PROBE_TOOLS:
+                    continue
+                args = str(t.get("tool_args") or t.get("args") or "").lower()
+                if target[:40] in args:
+                    done = True
+                    break
+        # channel 2: ledger evidence
+        if not done and target and klass:
+            with contextlib.suppress(Exception):
+                for key, status in ledger.items():
+                    if status in ("tested_vulnerable", "tested_not_vulnerable", "not_applicable"):
+                        a, vc = str(key).rsplit("|", 1)
+                        if vc == klass and (target[:40] in a.lower() or a.lower() in target):
+                            done = True
+                            break
+        if done:
+            mark_tested(state, h.get("id"), "auto-cleared: probe/ledger evidence of testing")
+            cleared += 1
+    return cleared
+
+
 def can_complete(state: dict) -> tuple[bool, str]:
     """The completion gate check: refuse to end while critical
     hypotheses are untested. Returns (ok, reason_if_not)."""

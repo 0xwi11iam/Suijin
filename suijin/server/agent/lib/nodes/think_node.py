@@ -643,15 +643,31 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     _weapons_block = ""
     _scenarios_block = ""
     with contextlib.suppress(Exception):
-        from suijin.modules.agent.lib.weaponization import attack_scenarios, weapons_block
+        from suijin.modules.agent.lib.weaponization import attack_scenarios, unexplored_candidates, weapons_block
 
         _weapons_block = weapons_block(state)
+        # B (2026-10-20): obligations render FIRST and carry the gate
+        # language — they block completion until tested/cleared
+        _oblig = unexplored_candidates(state)
+        _oblig_lines = []
+        for c in _oblig:
+            _oblig_lines.append(
+                f"- ⛓ OBLIGATION (completion blocked until tested): {c.get('hypothesis', '?')} "
+                f"[findings: {' + '.join(x[:40] for x in c.get('findings', []))}] — "
+                f"clear it by marking {', '.join(c.get('classes', []))} tested via coverage_check, or prove it dead."
+            )
         _scen = attack_scenarios(state)
-        if _scen:
+        _scen_lines = [f"- {s}" for s in _scen if s not in {c.get("hypothesis") for c in _oblig}]
+        _parts = []
+        if _oblig_lines:
+            _parts.append("\n".join(_oblig_lines))
+        if _scen_lines:
+            _parts.append("\n".join(_scen_lines))
+        if _parts:
             _scenarios_block = (
                 "## ATTACK SCENARIOS — combine what you hold\n"
-                + "\n".join(f"- {s}" for s in _scen)
-                + "\n\nPick ONE and test it this turn. A chained finding is worth ten standalone ones.\n"
+                + "\n".join(_parts)
+                + "\n\nA chained finding is worth ten standalone ones. Test one THIS turn.\n"
             )
 
     _sections: dict[str, str] = {
@@ -902,6 +918,13 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
             state["_chain_pending"] = _drained  # context renders it NOW;
             # persistence rides the next updates dict (think always
             # returns one) — no separate seam needed
+        # F5 (2026-10-20): hypotheses machine-clear from trace/ledger
+        # evidence — the hypothesis gate finally has an honest exit
+        # that isn't the 5-refusal stand-down
+        with contextlib.suppress(Exception):
+            from suijin.modules.agent.lib.reflex.hypotheses import auto_clear_from_trace
+
+            auto_clear_from_trace(state)
         _chain_txt = render_chain_directive(state, iteration_now=iteration)
 
     # ── OBSERVATION ENGINE (2026-10-18, CyberStrike's deterministic
@@ -1789,6 +1812,38 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
                     str(state.get("_objective") or "")[:100]
                 ]
                 _refusal = completion_blocked(assets)
+        # A (2026-10-20): INTEGRITY GATE — anti-gaming red flags over the
+        # ledger shape (bulk copy-paste evidence, too-fast marking,
+        # not_applicable flooding). Joins the cascade contract:
+        # first-match-wins, refusal-as-decision, stands down with the
+        # shared counter at 5.
+        if _refusal is None:
+            with contextlib.suppress(Exception):
+                from suijin.modules.agent.lib.weaponization import red_flags
+
+                _flags = red_flags(state)
+                if _flags:
+                    _refusal = (
+                        "COMPLETION REFUSED (integrity gate): the coverage ledger shows anti-gaming "
+                        f"red flags — {'; '.join(_flags[:2])}. Fix the ledger with real per-class "
+                        "evidence (coverage_check mark with distinct, honest evidence strings), then complete."
+                    )
+        # B (2026-10-20): CHAIN-CANDIDATE GATE — detected finding pairs
+        # are obligations, not suggestions ("no active chain
+        # opportunities remain unexplored"). See weaponization.chain_candidates.
+        if _refusal is None:
+            with contextlib.suppress(Exception):
+                from suijin.modules.agent.lib.weaponization import unexplored_candidates
+
+                _unex_c = unexplored_candidates(state)
+                if _unex_c:
+                    _names = "; ".join(c.get("hypothesis", "?")[:70] for c in _unex_c[:2])
+                    _refusal = (
+                        f"COMPLETION REFUSED (chain-candidate gate): {len(_unex_c)} detected chain "
+                        f"opportunities sit unexplored — {_names}. Combined findings are the "
+                        "highest-impact work on the board; test one (coverage_check mark on the "
+                        "involved classes counts) or show it dead, then complete."
+                    )
         if _refusal:
             # ESCALATION CAP (2026-10-17): the same gate refusing forever
             # is a deadlock, not protection. After MAX_COMPLETION_REFUSALS
@@ -1949,5 +2004,15 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
 
     updates["execution_trace"] = exec_trace
     updates["tested_axes"] = tested_axes
+
+    # ── F1 (2026-10-20): GATE-STATE PASS-THROUGH ─────────────────────
+    # The completion-gate obligations ride graph state but were never
+    # returned from think — the snapshot writer filters on node_output,
+    # so resume silently dropped a pending chain / footholds /
+    # hypotheses / the refusal counter. Emit them every turn (present-
+    # in-state only; the writer's None filter handles the rest).
+    for _gk in ("_chain_pending", "_footholds", "_hypotheses", "_completion_refusals", "_chain_explored"):
+        if _gk not in updates and state.get(_gk) is not None:
+            updates[_gk] = state[_gk]
 
     return updates

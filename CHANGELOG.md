@@ -8,6 +8,34 @@ All notable changes to Suijin.
 
 ## Unreleased
 
+- **Gate machinery hardening (the review round)** — six defects found
+  by tracing the completion cascade end-to-end: gate state
+  (pending chains, footholds, hypotheses, refusal counters) vanished
+  on every resume; the chain `explored` matcher read a trace field that
+  doesn't exist (actions could never clear a chain); confirm-time chain
+  hypotheses died on a throwaway dict; the `completion_status` tool was
+  dead (wired to a deleted symbol); hypotheses had NO machine path to
+  clear; the scoreboard drifted from the real gates. All fixed.
+- **THE COVERAGE TOOL VOCABULARY BUG** — the coverage_check contract's
+  action enum disagreed with the implementation's verbs: the agent
+  could never mark a cell (action=mark failed validation;
+  action=not_applicable silently no-op'd). The coverage gate could
+  refuse completion but never be satisfied by testing. Both
+  vocabularies now work.
+- **Anti-gaming evidence gates** — not_applicable on high-weight
+  classes requires ≥50-char justification; red flags (copy-paste
+  evidence, marks without requests, N/A flooding) block completion via
+  the integrity gate and render in completion_status.
+- **Chain candidates are obligations** — detected finding pairs
+  (identity×API, SSRF×metadata, race×money...) block completion until
+  tested or proven dead; rendered as ⛓ OBLIGATION lines in ATTACK
+  SCENARIOS with their clearing classes named.
+- **Severity honesty** — critical/high claims with info-only evidence
+  cap at medium with a note; supplied CVSS is never rewritten (the
+  2026-09-17 ruling stands) but gets a verify-basis note at ≥7.0.
+- **Stop-condition doctrine** — explicit completion stop conditions +
+  the "when you think you're done" testing ladder (param pollution,
+  method switching, edge cases, races) in the base doctrine.
 - **Weaponization engine** — impact over volume. All 15 coverage
   classes weighted (`cmdi/ssti=15, authn/authz=12, idor=11 ... info=1`);
   the untested list sorts by weight (crown jewels first); info/redirect

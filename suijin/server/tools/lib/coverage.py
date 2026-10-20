@@ -114,6 +114,20 @@ def mark(asset: str, vuln_class: str, status: str, evidence: str = "", request_s
                 )
             if not str(request_sent).strip():
                 return "Error: tested_not_vulnerable requires request_sent (the verb/command you actually fired)."
+        # A (2026-10-20, go-bigger): not_applicable on a HIGH-WEIGHT class
+        # requires justification — the gate counts those cells as
+        # completion-blocking, so a bare N/A was a free gate-bypass on
+        # the crown jewels (authn/sqli/cmdi...). Trivia cells stay free.
+        if st == "not_applicable":
+            from suijin.modules.agent.lib.weaponization import class_weight
+
+            if class_weight(vc) >= 5 and len(str(evidence).strip()) < 50:
+                return (
+                    f"Error: not_applicable on a high-weight class ({vc}) REQUIRES justification (≥50 chars: "
+                    "WHY this class cannot exist on this asset — no auth flow, no user input, no server-side "
+                    "rendering, etc.). 'Doesn't apply' without a reason is avoidance, not a verdict. "
+                    "(Low-weight classes — info/redirect — mark freely.)"
+                )
         d = _load()
         key = f"{asset_of(asset)}|{vc}"
         d["cells"][key] = {
@@ -222,9 +236,20 @@ def coverage_check(
     assets: list | None = None,
 ) -> str:
     """The ledger tool: mark cells (with evidence), record wide/local
-    notes, or read the summary/untested list."""
+    notes, or read the summary/untested list.
+
+    2026-10-20 (F-round): the TOOL CONTRACT's enum (tested_vulnerable /
+    tested_not_vulnerable / not_applicable as ACTION values) disagreed
+    with this implementation's verbs (mark/note/untested/gate) — the
+    agent literally could not mark a cell: action=mark failed contract
+    validation, action=not_applicable fell through to summary. Both
+    vocabularies now work; status-as-action implies mark."""
     try:
         act = str(action or "summary").lower()
+        if act in ("tested_vulnerable", "tested_not_vulnerable", "not_applicable"):
+            if not str(status).strip():
+                status = act
+            act = "mark"
         if act == "mark":
             return mark(asset, vuln_class, status, evidence, request_sent)
         if act == "note":

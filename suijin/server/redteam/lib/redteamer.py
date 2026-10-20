@@ -59,6 +59,31 @@ oracle.set_providers(providers)
 
 console = Console()
 
+# F4 (2026-10-20): LIVE STATE MIRROR for the tools layer. The
+# completion_status tool's `agent_state` service was DEAD (registered on
+# the kernel Context with a producer referencing a symbol that no longer
+# exists — the tool always errored). This mirror is registered on the
+# TOOLS services seam and mutated IN PLACE from the astream loop, so the
+# service's once-cached reference stays live for the whole engagement.
+_LIVE_AGENT_STATE: dict = {}
+
+
+def _register_state_mirror(config: dict) -> None:
+    """(Re)arm the agent_state service + reset the mirror for a fresh
+    run (or restart). Idempotent; never raises into the run."""
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib import services as _svc
+
+        _LIVE_AGENT_STATE.clear()
+        _LIVE_AGENT_STATE.update(
+            {
+                "max_iterations": int((config or {}).get("max_iterations") or 0),
+                "_run_config": dict(config or {}),
+            }
+        )
+        _svc.register("agent_state", lambda: _LIVE_AGENT_STATE)
+
+
 _SCOPE_CONFIRM_RE = __import__("re").compile(
     r"(?i)(permission|authoriz|authoris|in scope|scope confirmed|i own|owned by me|my (server|domain|site|vm|box)"
     r"|written approval|h1|hacker ?one|bug ?bounty|contract|go ahead|approved|confirmed)"
@@ -500,6 +525,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
         max_iterations=config.get("max_iterations", 100000),  # operator: infinite by default
         run_config=config,
     )
+    _register_state_mirror(config)
 
     thread_id = f"redteam_{int(time.time())}"
 
@@ -1196,6 +1222,12 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                     console.print(f"[yellow]  skipped a malformed output from {node_name}[/yellow]")
                     continue
                 _got_events = True
+                # F4: the live-state mirror feeds the tools layer
+                # (completion_status/scoreboard) — merged IN PLACE so the
+                # service's cached dict reference stays current
+                with contextlib.suppress(Exception):
+                    if isinstance(node_output, dict):
+                        _LIVE_AGENT_STATE.update(node_output)
                 if getattr(_signal, "_suijin_interrupted", False) or _op_pause_w.hit():
                     _reader_task.cancel()
                     raise KeyboardInterrupt()
@@ -1575,6 +1607,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                             max_iterations=config.get("max_iterations", 100000),  # operator: infinite by default
                             run_config=config,
                         )
+                        _register_state_mirror(config)
                         thread_id = f"redteam_{int(time.time())}"
                         langgraph_config = {
                             "configurable": {"thread_id": thread_id},

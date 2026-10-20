@@ -105,10 +105,20 @@ class TestLedger:
     def test_dispatch_route(self):
         from suijin.modules.tools.lib.dispatch import route_tool
 
+        # the CONTRACT's action vocabulary (not coverage.py's internal
+        # mark/note verbs): action IS the status for marks. xss is a
+        # weight-5 class — N/A requires justification (A-round rule).
         out = route_tool(
-            "coverage_check", {"action": "mark", "asset": BASE, "vuln_class": "xss", "status": "not_applicable"}, {}
+            "coverage_check",
+            {
+                "action": "not_applicable",
+                "asset": BASE,
+                "vuln_class": "xss",
+                "evidence": "origin serves no HTML context — JSON API only, verified by content-type",
+            },
+            {},
         )
-        assert "not_applicable" in str(out)
+        assert "not_applicable" in str(out) and not str(out).startswith("Error")
 
 
 class TestCompletionGate:

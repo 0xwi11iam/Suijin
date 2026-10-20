@@ -125,53 +125,64 @@ def directive(state: dict) -> str:
 #: Scenario templates: (keywords_a, keywords_b, hypothesis). A pair of
 #: confirmed findings matching both sides suggests the chain. Matched
 #: against title+class text, case-insensitive; order-independent.
-_SCENARIO_PATTERNS: list[tuple[tuple[str, ...], tuple[str, ...], str]] = [
+#: Scenario templates: (keywords_a, keywords_b, hypothesis, classes).
+#: `classes` = the coverage classes whose tested_* marks CLEAR the
+#: candidate obligation (machine-checkable exit, B 2026-10-20).
+_SCENARIO_PATTERNS: list[tuple[tuple[str, ...], tuple[str, ...], str, tuple[str, ...]]] = [
     (
         ("redirect", "open redirect"),
         ("oauth", "callback", "token", "auth", "login", "session"),
         "Open redirect × auth flow: can the redirector intercept an OAuth callback "
         "or login return URL? Token/code theft via the redirector is a HIGH — test it.",
+        ("redirect", "authn"),
     ),
     (
         ("idor", "object", "bola", "horizontal"),
         ("admin", "internal", "private", "api", "endpoint"),
         "Object access × private surface: replay the IDOR against every internal/admin "
         "endpoint you discovered. Cross-tenant object reach is a CRITICAL.",
+        ("idor", "authz"),
     ),
     (
         ("ssrf", "server-side request"),
         ("metadata", "internal", "admin", "credential", "cloud"),
         "SSRF × internal surface: point the fetcher at cloud metadata / internal admin "
         "ports. Credential theft via SSRF is a HIGH-to-CRITICAL.",
+        ("ssrf",),
     ),
     (
         ("jwt", "token", "session", "auth bypass", "forgery"),
         ("api", "endpoint", "graphql", "rest"),
         "Identity control × API surface: replay the bypassed/forged identity against "
         "every authenticated endpoint, especially admin ones. Vertical reach is a CRITICAL.",
+        ("authn", "authz", "idor"),
     ),
     (
         ("key", "secret", "credential", "api key", "leak", "token"),
         ("api", "endpoint", "upload", "admin", "internal"),
         "Leaked secret × authenticated surface: replay the leaked credential against "
         "every private endpoint it names. Live privileged use is a HIGH.",
+        ("authn", "authz"),
     ),
     (
         ("upload", "file"),
         ("exec", "include", "path", "template", "render"),
         "Upload × execution surface: can an uploaded file reach an include path, template "
         "engine, or served-exec context? Upload-to-RCE is a CRITICAL.",
+        ("upload", "cmdi", "ssti", "lfi"),
     ),
     (
         ("xss", "script"),
         ("admin", "panel", "dashboard", "moderator", "internal"),
         "XSS × privileged surface: is there an admin/moderator panel where stored XSS "
         "fires? Privileged-session XSS is a HIGH.",
+        ("xss",),
     ),
     (
         ("race", "concurrent", "duplicate"),
         ("pay", "price", "balance", "credit", "withdraw", "transfer", "coupon", "vote"),
         "Race × stateful action: fire the concurrent burst on the money/vote action. Double-spend via race is a HIGH.",
+        ("race",),
     ),
 ]
 
@@ -197,7 +208,7 @@ def attack_scenarios(state: dict, limit: int = 3) -> list[str]:
                 continue
             ta = str(a.get("title") or a.get("description") or "")[:160].lower()
             tb = str(b.get("title") or b.get("description") or "")[:160].lower()
-            for kws_a, kws_b, hypothesis in _SCENARIO_PATTERNS:
+            for kws_a, kws_b, hypothesis, _classes in _SCENARIO_PATTERNS:
                 a_match = any(k in ta for k in kws_a) and any(k in tb for k in kws_b)
                 b_match = any(k in tb for k in kws_a) and any(k in ta for k in kws_b)
                 if a_match or b_match:
@@ -244,3 +255,176 @@ def weapons_block(state: dict | None = None) -> str:
     """Rendered in the exploitation/post-exploitation context (unused
     args keep the section-renderer signature uniform)."""
     return WEAPONS_BLOCK
+
+
+# ── B (2026-10-20): CHAIN CANDIDATES AS OBLIGATIONS ─────────────────
+# Detected finding pairs become completion-blocking work items (the
+# reference insight: "no active chain opportunities remain unexplored").
+# Derived deterministically from state["findings"] every turn — only
+# the explored MARKS live in state (_chain_explored, persisted via F1).
+# Machine-checkable exits: a tested_* coverage mark on any of the
+# pattern's classes clears it; the shared 5-refusal stand-down is the
+# deadlock backstop, same as every other gate.
+
+_MAX_ACTIVE_CANDIDATES = 3
+
+
+def _candidate_id(a: dict, b: dict) -> str:
+    import hashlib
+
+    titles = sorted(
+        [
+            str(a.get("id") or a.get("title") or "")[:80],
+            str(b.get("id") or b.get("title") or "")[:80],
+        ]
+    )
+    return hashlib.sha1("|".join(titles).encode()).hexdigest()[:12]
+
+
+def chain_candidates(state: dict) -> list[dict]:
+    """Derive chain candidates from confirmed finding pairs. Same
+    pattern engine as attack_scenarios, but returns obligation records
+    {id, hypothesis, findings, classes} capped at the top by combined
+    weight. Trivia pairs excluded (max pair weight ≥ 5)."""
+    founds = [f for f in ((state or {}).get("findings") or []) if isinstance(f, dict)]
+    if len(founds) < 2:
+        return []
+    out: list[tuple[int, dict]] = []
+    for i in range(len(founds)):
+        for j in range(i + 1, len(founds)):
+            a, b = founds[i], founds[j]
+            wa, wb = finding_weight(a), finding_weight(b)
+            if max(wa, wb) < 5:
+                continue
+            ta = str(a.get("title") or a.get("description") or "")[:160].lower()
+            tb = str(b.get("title") or b.get("description") or "")[:160].lower()
+            for kws_a, kws_b, hypothesis, classes in _SCENARIO_PATTERNS:
+                a_match = any(k in ta for k in kws_a) and any(k in tb for k in kws_b)
+                b_match = any(k in tb for k in kws_a) and any(k in ta for k in kws_b)
+                if a_match or b_match:
+                    out.append(
+                        (
+                            wa + wb,
+                            {
+                                "id": _candidate_id(a, b),
+                                "hypothesis": hypothesis,
+                                "findings": [
+                                    str(a.get("title") or "?")[:60],
+                                    str(b.get("title") or "?")[:60],
+                                ],
+                                "classes": list(classes),
+                            },
+                        )
+                    )
+                    break
+    out.sort(key=lambda x: x[0], reverse=True)
+    seen: set[str] = set()
+    uniq: list[dict] = []
+    for _, c in out:
+        if c["id"] not in seen:
+            seen.add(c["id"])
+            uniq.append(c)
+    return uniq[:_MAX_ACTIVE_CANDIDATES]
+
+
+def unexplored_candidates(state: dict) -> list[dict]:
+    """Candidates not yet cleared. Clears on: an explored mark in
+    state['_chain_explored'], OR a tested_* coverage mark on any of the
+    pattern's classes (the ledger is the shared evidence store)."""
+    import contextlib
+
+    cands = chain_candidates(state)
+    if not cands:
+        return []
+    explored = {
+        str(k) for k in ((state or {}).get("_chain_explored") or {}) if (state.get("_chain_explored") or {}).get(k)
+    }
+    tested_classes: set[str] = set()
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.coverage import _load
+
+        for key, c in (_load().get("cells") or {}).items():
+            if c.get("status") in ("tested_vulnerable", "tested_not_vulnerable", "not_applicable"):
+                tested_classes.add(str(key).rsplit("|", 1)[-1])
+    live = []
+    for c in cands:
+        if c["id"] in explored:
+            continue
+        if any(cl in tested_classes for cl in c["classes"]):
+            continue
+        live.append(c)
+    return live
+
+
+#: A (2026-10-20): ANTI-GAMING RED FLAGS — adapted from the reference
+#: methodology engines (detectRedFlags): the ledger shape itself tells
+#: you when the agent is marking cells instead of testing classes.
+#: Each flag is a completion blocker until the ledger shape changes.
+def red_flags(state: dict) -> list[str]:
+    """Deterministic anti-gaming flags over the coverage ledger + trace.
+
+    - bulk_copy_paste: ≥5 cells sharing the same evidence string
+    - too_fast: ≥10 marked cells but <5 successful HTTP-ish tool calls
+      in the whole trace (marks without requests = paperwork, not tests)
+    - all_not_applicable: >60% of marked cells are N/A ("may be avoiding
+      work" — the honest N/A rate on a real target is far lower)
+    """
+    import contextlib
+
+    flags: list[str] = []
+    with contextlib.suppress(Exception):
+        from collections import Counter
+
+        from suijin.modules.tools.lib.coverage import _load
+
+        cells = [c for c in (_load().get("cells") or {}).values() if isinstance(c, dict)]
+        marked = [
+            c for c in cells if c.get("status") in ("tested_vulnerable", "tested_not_vulnerable", "not_applicable")
+        ]
+        if not marked:
+            return []
+
+        ev_counts = Counter(
+            str(c.get("evidence") or "").strip() for c in marked if str(c.get("evidence") or "").strip()
+        )
+        for ev, n in ev_counts.most_common(1):
+            if n >= 5:
+                flags.append(
+                    f"bulk_copy_paste: {n} coverage cells share one identical evidence string — "
+                    "re-test each class individually or write real per-class evidence"
+                )
+                break
+
+        na = sum(1 for c in marked if c.get("status") == "not_applicable")
+        if na and na / len(marked) > 0.6 and len(marked) >= 8:
+            flags.append(
+                f"all_not_applicable: {na}/{len(marked)} marked cells are not_applicable "
+                "(>60%) — the honest N/A rate is far lower; justify each or test them"
+            )
+
+        if len(marked) >= 10:
+            trace = list((state or {}).get("execution_trace") or [])
+            http_ish = sum(
+                1
+                for t in trace
+                if isinstance(t, dict)
+                and t.get("success", True)
+                and str(t.get("tool_name") or "")
+                in (
+                    "http_request",
+                    "http_replay",
+                    "http_replay_raw",
+                    "inject_probe",
+                    "execute_terminal",
+                    "auth_forge",
+                    "cred_matrix",
+                    "bypass_403",
+                    "catalog_exploit",
+                )
+            )
+            if http_ish < 5:
+                flags.append(
+                    f"too_fast: {len(marked)} cells marked with only {http_ish} actual probe-class calls in the "
+                    "trace — you cannot have tested that many classes; mark what you actually tested"
+                )
+    return flags

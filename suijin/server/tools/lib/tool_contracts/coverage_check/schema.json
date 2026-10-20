@@ -1,10 +1,12 @@
 {
   "type": "object",
   "properties": {
-    "action": {"type": "string", "enum": ["summary", "tested_vulnerable", "tested_not_vulnerable", "not_applicable"], "description": "What to do (default: summary)"},
+    "action": {"type": "string", "enum": ["summary", "mark", "note", "untested", "gate", "tested_vulnerable", "tested_not_vulnerable", "not_applicable"], "description": "What to do (default: summary). Status-as-action (tested_vulnerable etc.) implies mark; 'mark' takes an explicit status= argument. 'untested' lists priority gaps, 'gate' reads the completion gate, 'note' records a wide/local note."},
+    "status": {"type": "string", "enum": ["", "tested_vulnerable", "tested_not_vulnerable", "not_applicable"], "description": "The verdict (for action=mark)"},
     "vuln_class": {"type": "string", "description": "The class being marked (for tested/not_applicable actions)"},
     "asset": {"type": "string", "description": "The asset/endpoint being marked"},
-    "evidence": {"type": "string", "description": "Evidence for the marking (required for tested_vulnerable)"},
+    "evidence": {"type": "string", "description": "Evidence for the marking — REQUIRED for tested_not_vulnerable (≥30 chars + request_sent) and for not_applicable on high-weight classes (≥50 chars: why the class cannot exist here)"},
+    "request_sent": {"type": "string", "description": "The verb/command actually fired (required for tested_not_vulnerable)"},
     "reason": {"type": "string", "description": "Reason for not_applicable"}
   }
 }
