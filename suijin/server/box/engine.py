@@ -95,8 +95,15 @@ def box_create(engine: str | None = None) -> tuple[bool, str]:
     if not eng:
         return False, "no container engine found (install orbstack or docker)"
     if eng == ENGINE_ORB:
-        # orb takes a DISTRO name, not a docker image ref
-        rc, out = _run(["orb", "create", "kali", BOX_NAME], timeout=1800)
+        # orb takes a DISTRO name, not a docker image ref. Resource caps
+        # keep every user's box bounded: the kali base is already
+        # headless (no desktop metapackage ever pulled), and the disk
+        # cap prevents toolchain balloon — trim container.tools in
+        # config.json for a smaller footprint.
+        rc, out = _run(
+            ["orb", "create", "--memory", "4G", "--cpus", "2", "--disk", "25G", "kali", BOX_NAME],
+            timeout=1800,
+        )
         return rc == 0, out.strip()[-400:]
     rc, out = _run(
         [
