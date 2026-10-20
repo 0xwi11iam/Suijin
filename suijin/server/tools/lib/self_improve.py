@@ -136,6 +136,21 @@ def write_tool(tool_name: str, code: str) -> str:
     """
     import json as _json
 
+    def _user_pack_root():
+        # v7.2 (2026-10-20): write where the LOADER actually scans — the
+        # first non-vendored root in PACK_ROOTS (workspace modules dir in
+        # prod; a test's pinned root under test). Falls back to the
+        # legacy home path when nothing else is writable.
+        from suijin.modules.loader import PACK_ROOTS
+
+        for root in PACK_ROOTS[1:]:
+            try:
+                Path(root).mkdir(parents=True, exist_ok=True)
+                return Path(root)
+            except Exception:  # noqa: BLE001 — try the next root
+                continue
+        return Path.home() / ".suijin" / "modules"
+
     safe_name = "".join(c for c in tool_name if c.isalnum() or c == "_").lower()
     if not safe_name or safe_name[0].isdigit():
         return "Error: invalid tool name — lowercase alphanumeric + underscores, not starting with a digit."
@@ -144,7 +159,7 @@ def write_tool(tool_name: str, code: str) -> str:
             f"Error: the code must define `def {safe_name}(**kwargs) -> str` — "
             "that exact function is what gets routed. Never raise; return 'Error: ...' strings."
         )
-    pack_dir = Path.home() / ".suijin" / "modules" / safe_name
+    pack_dir = _user_pack_root() / safe_name
     try:
         pack_dir.mkdir(parents=True, exist_ok=True)
         # snapshot prior version (the edit_skill pattern)
