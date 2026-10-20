@@ -8,6 +8,11 @@ All notable changes to Suijin.
 
 ## Unreleased
 
+## v7.2.0 — The Impact Release
+
+The doctrine shift: depth over volume, proof that stays provable, and
+a sealed box to run it all in.
+
 - **the box — `suijin box`** — a sealed linux environment (orbstack
   first, docker fallback, overridable) that runs suijin and its tools:
   build/start/stop/enter/status/refresh/destroy verbs plus a curses
