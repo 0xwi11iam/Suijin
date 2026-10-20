@@ -176,7 +176,7 @@ def resolve_context_window(provider: str, model: str, config: dict | None = None
     if str(provider or "").strip().lower() == "ollama":
         return LOCAL_DEFAULT_WINDOW
     # 4. family-aware fallback (2026-10-19 — the ctx 1% bug): models.dev
-       # misses opencode/custom gateway model names like "deepseek-v4.1-flash-free".
+    # misses opencode/custom gateway model names like "deepseek-v4.1-flash-free".
     # The blanket 1M fallback made the gauge permanently read 1-2% (15k
     # tokens / 1M window) and compaction never fired (90% of 1M = never).
     # Infer from the model NAME when the catalog misses: most model

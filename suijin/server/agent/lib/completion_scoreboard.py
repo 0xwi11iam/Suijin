@@ -25,7 +25,10 @@ def scoreboard(state: dict) -> dict:
     blockers: list[str] = []
 
     # ── coverage gate ─────────────────────────────────────────────────
-    from suijin.modules.tools.lib.coverage import untested
+    # F6 (2026-10-20): NO MORE DRIFT — this calls the SAME function the
+    # think-level cascade calls (completion_blocked, weight-filtered),
+    # instead of re-implementing a raw count the real gate ignores.
+    from suijin.modules.tools.lib.coverage import completion_blocked, untested
 
     assets = list({str(s.get("surface", "")) for s in (state.get("_attack_queue") or [])[:20]}) or [
         str(state.get("_objective") or "")[:100]
@@ -33,20 +36,36 @@ def scoreboard(state: dict) -> dict:
     ute = untested(assets, limit=999)
     total_cells = len(ute) + _tested_count(state)
     coverage_pct = round(100 * _tested_count(state) / max(1, total_cells), 1)
-    if len(ute) > 3:
-        top = ", ".join(f"{u['vuln_class']}@{u['asset'].split('//')[-1][:25]}" for u in ute[:3])
-        blockers.append(f"Coverage: {len(ute)} high-priority cells untested (top: {top})")
+    _cb = completion_blocked(assets)
+    if _cb:
+        blockers.append(_cb.split(". ", 1)[0])
 
     # ── chain gate ────────────────────────────────────────────────────
     chain = state.get("_chain_pending") or {}
     if chain and not chain.get("explored"):
         blockers.append(f"Chain: CONFIRMED finding '{str(chain.get('finding', '?'))[:60]}' sits unexploited")
 
+    # ── chain candidates (B, 2026-10-20) ─────────────────────────────
+    with __import__("contextlib").suppress(Exception):
+        from suijin.modules.agent.lib.weaponization import unexplored_candidates as _uc
+
+        _unc = _uc(state)
+        if _unc:
+            blockers.append(
+                f"Chain candidates: {len(_unc)} detected finding-pair chains unexplored "
+                f"(top: {str(_unc[0].get('hypothesis', '?'))[:60]})"
+            )
+
     # ── depth gate (footholds with untested unlocks) ──────────────────
-    footholds = state.get("_footholds") or []
-    untested_unlocks = [f for f in footholds if f.get("status") == "open" and not f.get("unlock_targets")]
-    if untested_unlocks:
-        blockers.append(f"Depth: {len(untested_unlocks)} confirmed capabilities have untested unlocks")
+    # F6: same semantics as the think gate — footholds.unexploited()
+    # catches EVERY non-tested status (the old open+no-unlocks check
+    # missed armed footholds)
+    with __import__("contextlib").suppress(Exception):
+        from suijin.modules.agent.lib.footholds import unexploited as _unex
+
+        _unex_f = _unex(state.get("_footholds") or [])
+        if _unex_f:
+            blockers.append(f"Depth: {len(_unex_f)} confirmed capabilities have untested unlocks")
 
     # ── budget ────────────────────────────────────────────────────────
     max_iter = int(state.get("max_iterations") or 0)
@@ -56,6 +75,14 @@ def scoreboard(state: dict) -> dict:
     # ── impact (2026-10-20, go-bigger) ────────────────────────────────
     impact = _impact_score(state)
 
+    # ── anti-gaming red flags (A, 2026-10-20) ─────────────────────────
+    with __import__("contextlib").suppress(Exception):
+        from suijin.modules.agent.lib.weaponization import red_flags as _rf
+
+        _flags = _rf(state)
+        for f in _flags:
+            blockers.append(f"Integrity: {f}")
+
     return {
         "can_complete": len(blockers) == 0,
         "blockers": blockers,
@@ -64,6 +91,7 @@ def scoreboard(state: dict) -> dict:
         "budget_remaining": budget_remaining,
         "impact_score": impact["total"],
         "saturation": impact["satiation"],
+        "red_flags": [b[len("Integrity: ") :] for b in blockers if b.startswith("Integrity:")],
     }
 
 
@@ -85,6 +113,8 @@ def render_scoreboard(state: dict) -> str:
             f"  ⚠ SURFACE SATURATED: {sat.get('trivia', 0)} trivia findings, {sat.get('real', 0)} real — "
             "stop scanning, start weaponizing (auth_forge / cred_matrix / race_test)"
         )
+    for f in sb.get("red_flags") or []:
+        lines.append(f"  ⚠ RED FLAG — {f}")
     if sb["blockers"]:
         lines.append("  Blockers:")
         for b in sb["blockers"]:

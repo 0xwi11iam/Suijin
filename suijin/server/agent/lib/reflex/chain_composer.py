@@ -26,7 +26,12 @@ _PENDING_HANDOFF: dict | None = None
 def on_finding_confirmed(state: dict, finding: dict) -> None:
     """Called when catalog_exploit CONFIRMS (or a finding reaches high
     confidence). Sets the chain-pending state and auto-populates chain
-    hypotheses."""
+    hypotheses.
+
+    F3 (2026-10-20): the chain hypotheses used to be written ONLY onto
+    the throwaway tools-layer dict (add_chain_hypotheses(state, ...))
+    — they died there. They now ride the module handoff alongside the
+    chain record and are merged into graph state at drain time."""
     global _PENDING_HANDOFF
     with contextlib.suppress(Exception):
         from suijin.modules.agent.lib.reflex.hypotheses import add_chain_hypotheses
@@ -40,19 +45,36 @@ def on_finding_confirmed(state: dict, finding: dict) -> None:
             "explored": False,
         }
         state["_chain_pending"] = rec
-        _PENDING_HANDOFF = dict(rec)
-        add_chain_hypotheses(state, finding)
+        handoff = dict(rec)
+        # F3: capture the hypotheses onto a dict the drain can read —
+        # add_chain_hypotheses writes state["_hypotheses"], so give it
+        # the handoff itself
+        add_chain_hypotheses(handoff, finding)
+        _PENDING_HANDOFF = handoff
 
 
 def drain_pending(state: dict) -> dict | None:
     """think_node calls this each turn: any confirmed finding that
     landed in the tools layer becomes graph state. Returns the record
-    (or None) — the caller merges it into its updates."""
+    (or None) — the caller merges it into its updates.
+
+    F3: the handoff may carry `_hypotheses` (chain hypotheses born at
+    confirm time) — merge them into graph state here, they previously
+    died on the throwaway dict."""
     global _PENDING_HANDOFF
     if _PENDING_HANDOFF is None:
         return state.get("_chain_pending")
     rec = _PENDING_HANDOFF
     _PENDING_HANDOFF = None
+    hyps = rec.pop("_hypotheses", None)
+    if hyps:
+        with contextlib.suppress(Exception):
+            existing = list(state.get("_hypotheses") or [])
+            known = {str(h.get("hypothesis") or h.get("id")) for h in existing}
+            for h in hyps:
+                if str(h.get("hypothesis") or h.get("id")) not in known:
+                    existing.append(h)
+            state["_hypotheses"] = existing
     existing = state.get("_chain_pending") or {}
     if existing.get("explored"):
         return existing  # an older chain is mid-exploration — keep it
@@ -73,12 +95,15 @@ def check_chain_compliance(state: dict, trace: list) -> str | None:
 
     # check if the agent explored: did recent thoughts/tools reference
     # the finding or target a NEW endpoint it enables access to?
+    # F2 (2026-10-20): the trace stores tool_args (think_node :1416) —
+    # this read `args` only, so the actions channel NEVER matched and
+    # only a thought mentioning the finding could clear a chain.
     finding_kw = str(pending.get("finding") or "").lower()[:60]
     endpoint_kw = str(pending.get("endpoint") or "").lower()[:40]
     recent = list(trace or [])[-3:]
     for t in recent:
         thought = str(t.get("thought") or "").lower()
-        target = str(t.get("args") or "").lower()
+        target = str(t.get("tool_args") or t.get("args") or "").lower()
         if finding_kw[:20] in thought or endpoint_kw[:20] in target:
             pending["explored"] = True
             state["_chain_pending"] = pending

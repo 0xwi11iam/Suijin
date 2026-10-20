@@ -149,6 +149,17 @@ REPLAY_KEYS = (
     # because this key wasn't in the replay contract
     "max_iterations",
     "_run_config",
+    # 2026-10-20 (gate-state persistence, F1): the completion-gate
+    # obligations lived ONLY in live graph state — a resume silently
+    # dropped a pending chain, footholds, hypotheses, and the refusal
+    # counter, so every gate reset mid-engagement (same bug class as
+    # the phantom 100-limit). Think emits these each turn so the
+    # snapshot filter carries them.
+    "_chain_pending",
+    "_footholds",
+    "_hypotheses",
+    "_completion_refusals",
+    "_chain_explored",
 )
 
 #: resume-critical state the RUNNER snapshots each iteration into a
@@ -176,6 +187,13 @@ RESUME_SNAPSHOT_KEYS = (
     "_foothold_at",
     "attack_path_type",
     "pending_questions",
+    # F1 (2026-10-20): gate obligations must survive the per-iteration
+    # snapshot too — see REPLAY_KEYS note
+    "_chain_pending",
+    "_footholds",
+    "_hypotheses",
+    "_completion_refusals",
+    "_chain_explored",
 )
 
 

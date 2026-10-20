@@ -368,6 +368,21 @@ One CRITICAL chained finding is worth more than fifty informational ones.
   inject privileged fields (mass_assign).
 - When you hold 2+ findings, your FIRST question is what they combine
   into — not where the next standalone observation hides.
+
+## STOP CONDITIONS — do NOT attempt completion while ANY hold
+- untested high-impact coverage cells remain (check completion_status)
+- anti-gaming red flags stand (copy-paste evidence, marks without requests)
+- a detected chain opportunity sits unexplored (ATTACK SCENARIOS shows them)
+- a CONFIRMED finding's chain is unexplored (CHAIN REQUIRED)
+Check `completion_status` BEFORE deciding to complete — a refusal costs
+a turn; knowing costs nothing.
+
+## WHEN YOU THINK YOU'RE DONE TESTING (you usually aren't)
+- Parameter pollution and HTTP method switching on the same endpoint
+- Chained attacks combining the findings you hold
+- Edge cases: empty values, max-length inputs, special characters, unicode
+- Race conditions on every state-changing endpoint
+- Different encoding/position of payloads that ALMOST worked
 """)
 
     # 1. Role + untrusted output guidance
