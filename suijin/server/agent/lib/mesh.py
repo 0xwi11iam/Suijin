@@ -87,11 +87,20 @@ def start(summary: str = "", phase: str = "starting") -> None:
     """Register this session as a mesh node; start heartbeat + poll +
     the loopback wire server (v2).
 
-    Idempotent — a process is exactly one node."""
+    Idempotent — a process is exactly one node. The node carries its
+    ENGAGEMENT slug (2026-10-20): the mesh is engagement-scoped so
+    group-chat lines never cross operations (see
+    workspace.current_engagement_slug for the field incident)."""
     if _node["me"] is not None:
         return
     mesh_dir().mkdir(parents=True, exist_ok=True)
-    me = {"pid": os.getpid(), "summary": summary[:120], "phase": phase, "started": time.time()}
+    me = {
+        "pid": os.getpid(),
+        "summary": summary[:120],
+        "phase": phase,
+        "started": time.time(),
+        "engagement": _engagement_tag(),
+    }
     _node["me"] = me
     _write_me(me)
     with contextlib.suppress(Exception):
@@ -118,6 +127,39 @@ def start(summary: str = "", phase: str = "starting") -> None:
     import atexit
 
     atexit.register(stop)
+
+
+def _engagement_tag() -> str:
+    """This node's engagement slug ('' when unset). Captured at start()
+    — the node IS the engagement scope for its whole lifetime; a live
+    workspace re-read could drift mid-run. Best-effort always."""
+    me = _node.get("me") or {}
+    tag = str(me.get("engagement") or "")
+    if tag:
+        return tag
+    with contextlib.suppress(Exception):
+        from suijin.modules.platform.lib.workspace import current_engagement_slug
+
+        return current_engagement_slug()
+    return ""
+
+
+def _line_engagement(line: str) -> str:
+    """The engagement field of a chat line. Format (2026-10-20):
+    stamp|pid|name|engagement|msg — legacy lines (4 fields) have none."""
+    parts = line.split("|")
+    return parts[3].strip() if len(parts) >= 5 else ""
+
+
+def _visible_line(line: str, my_engagement: str) -> bool:
+    """Engagement scope filter: a tagged node sees ONLY its own
+    engagement's lines. Untagged nodes (no live engagement) see
+    everything — the legacy behavior. Untagged LEGACY lines are hidden
+    from tagged nodes: stale residue from prior operations is exactly
+    what the filter exists to remove."""
+    if not my_engagement:
+        return True
+    return _line_engagement(line) == my_engagement
 
 
 def stop() -> None:
@@ -173,7 +215,7 @@ def _announce_system(message: str) -> None:
     with contextlib.suppress(OSError):
         mesh_dir().mkdir(parents=True, exist_ok=True)
         with _gc_log().open("a", encoding="utf-8") as f:
-            f.write(f"{_stamp()}|{os.getpid()}|system|{str(message)[:400]}\n")
+            f.write(f"{_stamp()}|{os.getpid()}|system|{_engagement_tag()}|{str(message)[:400]}\n")
         _tail_reset()
 
 
@@ -211,7 +253,7 @@ def publish_state(digest: dict) -> None:
     with contextlib.suppress(OSError):
         atomic_write(
             mesh_dir() / f"{os.getpid()}-state.json",
-            json.dumps({"pid": os.getpid(), **digest}, default=str),
+            json.dumps({"pid": os.getpid(), "engagement": _engagement_tag(), **digest}, default=str),
         )
 
 
@@ -276,14 +318,14 @@ def _stamp() -> str:
 
 
 def broadcast(message: str, name: str = "") -> str:
-    """Append to the group chat (all nodes see it; ephemeral)."""
+    """Append to the group chat (engagement-scoped readers see it)."""
     msg = str(message or "").strip().replace("\n", " ")[:400]
     if not msg:
         return "Error: empty message"
     with contextlib.suppress(OSError):
         mesh_dir().mkdir(parents=True, exist_ok=True)
         with _gc_log().open("a", encoding="utf-8") as f:
-            f.write(f"{_stamp()}|{os.getpid()}|{name or 'agent'}|{msg}\n")
+            f.write(f"{_stamp()}|{os.getpid()}|{name or 'agent'}|{_engagement_tag()}|{msg}\n")
         _tail_reset()
         # OUR voice closes the unanswered window: everything a teammate
         # says AFTER this point is a message we haven't replied to yet
@@ -300,7 +342,7 @@ def dm(other_pid: int, message: str, name: str = "") -> str:
     with contextlib.suppress(OSError):
         mesh_dir().mkdir(parents=True, exist_ok=True)
         with _dm_file(int(other_pid)).open("a", encoding="utf-8") as f:
-            f.write(f"{_stamp()}|{os.getpid()}|{name or 'agent'}|{msg}\n")
+            f.write(f"{_stamp()}|{os.getpid()}|{name or 'agent'}|{_engagement_tag()}|{msg}\n")
         return f"DM sent to node-{other_pid}"
     return "Error: mesh unavailable"
 
@@ -344,8 +386,9 @@ def poll_chat() -> list[str]:
     (untrusted-wrapped by the caller). v2: wire-delivered lines (remote
     DMs, asks, replies) tail the same way."""
     out: list[str] = []
+    _my_eng = _engagement_tag()
     gc_lines, _tail_state["gc"] = _tail(_gc_log(), _tail_state["gc"])
-    out += [f"GC {ln}" for ln in gc_lines]
+    out += [f"GC {ln}" for ln in gc_lines if _visible_line(ln, _my_eng)]
     dm_out = []
     for p in peers():
         pid = int(p.get("pid") or 0)
@@ -354,9 +397,13 @@ def poll_chat() -> list[str]:
         lines, off = _tail(_dm_file(pid), _tail_state["dm"].get(pid, 0.0))
         _tail_state["dm"][pid] = off
         # only lines addressed TO me (I tail pair files; my own writes are
-        # excluded so a DM isn't echoed back to its sender)
+        # excluded so a DM isn't echoed back to its sender) — and only
+        # MY engagement's lines (the gc scope rule, same incident)
         dm_out += [
-            f"DM {ln}" for ln in lines if ln.split("|")[1:2] == [str(os.getpid())] or ln.split("|")[1:2] != [str(pid)]
+            f"DM {ln}"
+            for ln in lines
+            if _visible_line(ln, _my_eng)
+            and (ln.split("|")[1:2] == [str(os.getpid())] or ln.split("|")[1:2] != [str(pid)])
         ]
     wire_lines, _tail_state["wire"] = _tail(_wire_inbox(), _tail_state.get("wire", 0.0))
     out += [f"RDM {ln}" for ln in wire_lines]

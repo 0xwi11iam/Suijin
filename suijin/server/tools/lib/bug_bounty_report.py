@@ -32,7 +32,10 @@ def generate_bug_bounty_report(
     from datetime import datetime, timezone
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    reports_dir = (engagement_dir or Path(".")).parent / "reports"
+    # 2026-10-20: `.parent / "reports"` put the submission at the
+    # ENGAGEMENTS ROOT (one directory too high) — the report belongs
+    # INSIDE the engagement folder it documents.
+    reports_dir = (engagement_dir or Path(".")).joinpath("reports")
     reports_dir.mkdir(parents=True, exist_ok=True)
     path = reports_dir / "bug_bounty_report.md"
 

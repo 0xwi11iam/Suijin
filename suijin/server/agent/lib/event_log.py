@@ -160,6 +160,7 @@ REPLAY_KEYS = (
     "_hypotheses",
     "_completion_refusals",
     "_chain_explored",
+    "_auth_final",
 )
 
 #: resume-critical state the RUNNER snapshots each iteration into a
@@ -194,6 +195,7 @@ RESUME_SNAPSHOT_KEYS = (
     "_hypotheses",
     "_completion_refusals",
     "_chain_explored",
+    "_auth_final",
 )
 
 

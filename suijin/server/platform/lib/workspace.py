@@ -273,6 +273,20 @@ def engagement_dir() -> Path:
     return _CURRENT_ENGAGEMENT or engagements_root() / "_default"
 
 
+def current_engagement_slug() -> str:
+    """The live engagement's folder name, or '' when none is set.
+
+    THE MESH SCOPE TAG (2026-10-20): the session mesh is
+    engagement-scoped — group-chat lines carry this slug and readers
+    filter on it. Field origin: a run read DEAD peers' exploit
+    broadcasts from a *different* engagement (18h stale) in the shared
+    gc.log tail and reasoned the operation covered two unrelated
+    targets — authorization-refused on the strength of it. Cross-
+    engagement chatter must be invisible, not just untrusted-wrapped.
+    """
+    return _CURRENT_ENGAGEMENT.name if _CURRENT_ENGAGEMENT else ""
+
+
 def _engaged(sub: str) -> Path:
     """engagement_dir()/sub — created ONLY when an engagement is live.
     Pre-engagement callers get the path without conjuring a _default
