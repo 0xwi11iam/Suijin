@@ -41,6 +41,14 @@ CLASSES = (
     "info",
 )
 
+#: 2026-10-20 (go-bigger): cells below this weight never block
+#: completion — imported from the weaponization engine (single source
+#: of truth for impact weights).
+try:
+    from suijin.modules.agent.lib.weaponization import BLOCKING_MIN_WEIGHT  # noqa: F401
+except Exception:  # noqa: BLE001 — bridge-less contexts keep a sane default
+    BLOCKING_MIN_WEIGHT = 5
+
 _NOTES: dict[str, list] = {}  # "wide" | "local" -> list of note dicts
 
 
@@ -138,8 +146,14 @@ def note(kind: str, subject: str, text: str) -> str:
 
 
 def untested(assets: list[str], limit: int = 5) -> list[dict]:
-    """The priority untested list for the given assets (origin or shape)."""
+    """The priority untested list for the given assets (origin or shape).
+    Ordered by class weight DESC (2026-10-20): the agent sees authn/
+    authz/idor-class gaps first, trivia last — the equal-count list sent
+    it curling info cells because they sorted the same as the crown
+    jewels."""
     try:
+        from suijin.modules.agent.lib.weaponization import class_weight
+
         d = _load()
         done = {k: c["status"] for k, c in d["cells"].items()}
         out = []
@@ -148,7 +162,8 @@ def untested(assets: list[str], limit: int = 5) -> list[dict]:
             for vc in CLASSES:
                 st = done.get(f"{a_key}|{vc}")
                 if st is None or st == "pending":
-                    out.append({"asset": a_key, "vuln_class": vc})
+                    out.append({"asset": a_key, "vuln_class": vc, "weight": class_weight(vc)})
+        out.sort(key=lambda u: u.get("weight", 0), reverse=True)
         return out[:limit]
     except Exception:  # noqa: BLE001
         return []
@@ -175,13 +190,19 @@ def summary() -> str:
 
 def completion_blocked(assets: list[str]) -> str | None:
     """The completion gate: closure is refused while priority cells are
-    untested — returns the refusal directive or None."""
-    ute = untested(assets, limit=999)
+    untested — returns the refusal directive or None.
+
+    Weight-aware (2026-10-20): only weight ≥ BLOCKING_MIN_WEIGHT cells
+    block. info (1) and redirect (2) are recon output, not obligations —
+    the agent can no longer buy completion with trivia cells, and trivia
+    cells can no longer pad the refusal count."""
+    ute_all = untested(assets, limit=999)
+    ute = [u for u in ute_all if u.get("weight", 5) >= BLOCKING_MIN_WEIGHT]
     if len(ute) <= 3:  # a residue of 3 is completion noise, not avoidance
         return None
-    top = ", ".join(f"{u['vuln_class']}@{u['asset'].split('//')[-1][:30]}" for u in ute[:4])
+    top = ", ".join(f"{u['vuln_class']}@{u['asset'].split('//')[-1][:30]} (w{u.get('weight', '?')})" for u in ute[:4])
     return (
-        f"COMPLETION REFUSED (coverage gate): {len(ute)} high-priority vuln-class cells remain untested "
+        f"COMPLETION REFUSED (coverage gate): {len(ute)} high-impact vuln-class cells remain untested "
         f"(top: {top}). Mark each tested_vulnerable / tested_not_vulnerable (with evidence) / not_applicable "
         "via coverage_check, or state in your thought why the remaining classes cannot apply — "
         "then complete. 'Tested 3 endpoints and declared victory' is the failure mode this gate exists for."
