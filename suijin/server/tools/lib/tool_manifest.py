@@ -97,8 +97,68 @@ _OVERRIDES: dict[str, dict] = {
     },
     "aws": {"platforms": ["kali", "linux", "macos"]},
     "sudo": {"platforms": ["kali", "linux"], "built_in": True},
-    # NetExec ships `nxc`; the pipx line never creates a crackmapexec binary
-    "crackmapexec": {"verify": {"kind": "binary", "value": "nxc"}},
+    # NetExec ships `nxc`; Kali's apt package ships `crackmapexec` — both
+    # are valid, so presence accepts either (apt path won the probe)
+    "crackmapexec": {"verify": {"kind": "binary", "values": ["nxc", "crackmapexec"]}},
+    # Kali's apt dirsearch imports pkg_resources, which setuptools >=81
+    # removed and Python 3.14 distros no longer shim — install the compat
+    # copy in the user site so the packaged binary actually runs
+    "dirsearch": {
+        "platforms": ["kali", "linux", "macos"],
+        "kali": [
+            'sudo apt install -y --no-install-recommends dirsearch && pip install --user --break-system-packages --ignore-installed "setuptools<81"',
+        ],
+        "linux": ['pip install --user --break-system-packages --ignore-installed "setuptools<81" dirsearch'],
+        "macos": ["pip install dirsearch"],
+    },
+    # Kali packages trufflehog directly; the go module is UNINSTALLABLE
+    # (replace directives) so the vendor script is the real fallback
+    "trufflehog": {
+        "platforms": ["kali", "linux", "macos"],
+        "kali": [
+            "sudo apt install -y --no-install-recommends trufflehog",
+            "go install github.com/trufflesecurity/trufflehog/v3@latest",
+            "curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sudo sh -s -- -b /usr/local/bin",
+        ],
+        "linux": [
+            "go install github.com/trufflesecurity/trufflehog/v3@latest",
+            "curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sudo sh -s -- -b /usr/local/bin",
+        ],
+        "macos": ["brew install trufflehog"],
+    },
+    # Kali packages azure-cli; Debian gets the vendor apt script
+    "az": {
+        "platforms": ["kali", "linux", "macos"],
+        "kali": [
+            "sudo apt install -y --no-install-recommends azure-cli",
+            "curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash",
+        ],
+        "linux": [
+            "sudo apt install -y --no-install-recommends azure-cli",
+            "curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash",
+        ],
+        "macos": ["brew install azure-cli"],
+    },
+    # no distro package — the official linux tarball, installed per-user
+    # (the shell profile carries ~/google-cloud-sdk/bin)
+    "gcloud": {
+        "platforms": ["kali", "linux", "macos"],
+        "kali": [
+            'ARCH=$(uname -m); case "$ARCH" in aarch64|arm64) SUF=arm;; *) SUF=x86_64;; esac; curl -sSL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-${SUF}.tar.gz" | tar xz -C "$HOME" && "$HOME/google-cloud-sdk/install.sh" --quiet',
+        ],
+        "linux": [
+            'ARCH=$(uname -m); case "$ARCH" in aarch64|arm64) SUF=arm;; *) SUF=x86_64;; esac; curl -sSL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-${SUF}.tar.gz" | tar xz -C "$HOME" && "$HOME/google-cloud-sdk/install.sh" --quiet',
+        ],
+        "macos": ["brew install --cask google-cloud-sdk"],
+    },
+    # headless box: the shell is what web automation needs, not 1.3G of
+    # every browser engine (other engines install on demand)
+    "playwright": {
+        "platforms": ["kali", "linux", "macos"],
+        "kali": ["pip install playwright && python3 -m playwright install chromium --only-shell"],
+        "linux": ["pip install playwright && python3 -m playwright install chromium --only-shell"],
+        "macos": ["pip install playwright && python3 -m playwright install chromium --only-shell"],
+    },
 }
 
 #: platform -> the keys of a hint-table entry that imply support
@@ -300,9 +360,13 @@ def _entry_for(name: str, raw: dict, packed: dict) -> dict:
         if plat not in platforms:
             continue  # no chain for an undeclared platform — the contract
         if plat == "macos":
-            chains[plat] = list(ovr.get("macos") or ((([brew] if brew else []) + runtimes) or [generic_brew]))
+            chains[plat] = list(ovr.get("macos") or (([brew] if brew else [generic_brew]) + runtimes))
         elif plat in ("kali", "linux"):
-            chains[plat] = list(ovr.get(plat) or ((([apt] if apt else []) + runtimes) or [generic_apt]))
+            # ALWAYS include the apt attempt (explicit package line, or
+            # the generic package named after the tool) — the batched
+            # probe decides, and Kali packages more than the hint table
+            # knew (trufflehog, azure-cli, mitmproxy were missed).
+            chains[plat] = list(ovr.get(plat) or (([apt] if apt else [generic_apt]) + runtimes))
     _rt: set[str] = set()
     for _chain in chains.values():
         for line in _chain:
@@ -375,13 +439,23 @@ def prereqs_for(tools: list[str], platform: str = "kali") -> set[str]:
     return out
 
 
-def verify_of(tool: str) -> tuple[str, str]:
-    """(kind, value): ``binary`` (name) or ``python`` (module)."""
+def verify_checks(tool: str) -> list[tuple[str, str]]:
+    """Every acceptable presence check for a tool — a list because some
+    tools ship different binaries per install path (Kali's apt
+    crackmapexec vs pipx's nxc)."""
     rec = manifest().get(tool) or {}
     v = rec.get("verify") or {}
-    if v.get("kind"):
-        return str(v["kind"]), str(v.get("value") or tool)
-    return "binary", tool
+    kind = str(v.get("kind") or "binary")
+    raw = v.get("values")
+    if raw is None:
+        raw = [v.get("value") or tool]
+    return [(kind, str(x)) for x in raw if str(x)]
+
+
+def verify_of(tool: str) -> tuple[str, str]:
+    """The FIRST declared check — kept for callers that report one."""
+    checks = verify_checks(tool)
+    return checks[0] if checks else ("binary", tool)
 
 
 def supports(tool: str, platform: str | None = None) -> bool:

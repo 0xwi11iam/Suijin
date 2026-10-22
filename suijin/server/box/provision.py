@@ -52,11 +52,13 @@ def _state_write(state: dict) -> None:
 
 def _tool_apt_line(name: str) -> str:
     """The install line for a tool (kali) — the manifest's first line,
-    box-safe. Used by the TUI's manual per-tool install."""
+    box-safe. Used by the TUI's manual per-tool install. Built-ins get
+    a no-op (nothing to install)."""
     with contextlib.suppress(Exception):
         from suijin.modules.tools.lib.tool_manifest import install_plan
 
-        return _box_line(install_plan(name, "kali")[0])
+        plan = install_plan(name, "kali")
+        return _box_line(plan[0]) if plan else "true"
     return f"sudo apt install -y --no-install-recommends {name}"
 
 
@@ -102,7 +104,7 @@ def _stream_install(cmd: str, name: str, log) -> tuple[bool, str]:
     import threading
 
     argv = bx.box_cmd_argv(
-        f"set -o pipefail; export PATH=$HOME/go/bin:$HOME/.local/bin:$PATH; DEBIAN_FRONTEND=noninteractive {cmd}"
+        f"set -o pipefail; export PATH=$HOME/google-cloud-sdk/bin:$HOME/go/bin:$HOME/.local/bin:$PATH; DEBIAN_FRONTEND=noninteractive {cmd}"
     )
     try:
         proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
@@ -184,7 +186,10 @@ def stage_suijin(log) -> bool:
 
 def stage_profile(log) -> bool:
     log("writing the shell profile (workspace + path)")
-    profile = "export SUIJIN_WORKSPACE=/opt/suijin-ws\nexport PATH=$HOME/.local/bin:$HOME/go/bin:$PATH\n"
+    profile = (
+        "export SUIJIN_WORKSPACE=/opt/suijin-ws\n"
+        "export PATH=$HOME/.local/bin:$HOME/go/bin:$HOME/google-cloud-sdk/bin:/usr/local/sbin:/usr/sbin:/sbin:$PATH\n"
+    )
     quoted = profile.replace("'", "'\\''")
     rc, _ = bx.run_in_box(
         f"printf '%s' '{quoted}' | sudo tee {bx.PROFILE_DROPIN} >/dev/null && sudo chmod 644 {bx.PROFILE_DROPIN}",
@@ -263,9 +268,11 @@ def _resolve_plan(tools: list[str]) -> dict[str, tuple[str, str]]:
     for t in tools:
         chain = chains[t]
         if not chain:
-            # known built-in or undeclared platform — nothing to run;
-            # the declared presence check still decides the state
-            plan[t] = ("builtin", "true")
+            rec = tm.manifest().get(t) or {}
+            # known built-in → nothing to run; known tool with no chain
+            # declared for kali (e.g. a macOS-only CLI) → say so, don't
+            # pretend it is built in
+            plan[t] = ("builtin", "true") if rec.get("built_in") else ("unsupported", "")
             continue
         apt_line = apt_lines[t]
         fallbacks = [ln for ln in chain if "apt install" not in ln]
@@ -290,31 +297,56 @@ def _runtimes_for(plan: dict[str, tuple[str, str]]) -> set[str]:
 
 def presence_script(tools: list[str]) -> str:
     """One shell script reporting each tool's DECLARED presence
-    ('<tool> ok' / '<tool> missing') — binaries by command -v, python
-    deps by import. Single box round-trip for the TUI tools screen."""
-    from suijin.modules.tools.lib.tool_manifest import verify_of
+    ('<tool> ok' / '<tool> missing') — any acceptable binary OR a
+    python module. Single box round-trip for the TUI tools screen."""
+    from suijin.modules.tools.lib.tool_manifest import verify_checks
 
     parts = []
     for name in tools:
-        kind, value = verify_of(name)
-        check = f'python3 -c "import {value}"' if kind == "python" else f"command -v {value}"
-        parts.append(f'{check} >/dev/null 2>&1 && echo "{name} ok" || echo "{name} missing"')
+        cmds = [
+            f'python3 -c "import {value}"' if kind == "python" else f"command -v {value}"
+            for kind, value in verify_checks(name)
+        ]
+        joined = " || ".join(cmds) if cmds else f"command -v {name}"
+        parts.append(f'({joined}) >/dev/null 2>&1 && echo "{name} ok" || echo "{name} missing"')
     return "; ".join(parts)
 
 
 def _present(name: str) -> bool:
-    """Presence per the manifest's DECLARED verify: a binary name
-    (testssl.sh ships `testssl`) or a python module (requests has no
+    """Presence per the manifest's DECLARED checks: any acceptable
+    binary (nxc OR crackmapexec) or a python module (requests has no
     binary). Installer exit codes lie both ways — this decides."""
     with contextlib.suppress(Exception):
-        from suijin.modules.tools.lib.tool_manifest import verify_of
+        from suijin.modules.tools.lib.tool_manifest import verify_checks
 
-        kind, value = verify_of(name)
-        cmd = f'python3 -c "import {value}"' if kind == "python" else f"command -v {value}"
-        rc, _ = bx.run_in_box(cmd, timeout=30)
+        cmds = [
+            f'python3 -c "import {value}"' if kind == "python" else f"command -v {value}"
+            for kind, value in verify_checks(name)
+        ]
+        rc, _ = bx.run_in_box(" || ".join(cmds) if cmds else f"command -v {name}", timeout=30)
         return rc == 0
     rc, _ = bx.run_in_box(f"command -v {name}", timeout=30)
     return rc == 0
+
+
+def _fallback_attempts(name: str, chosen: str) -> list[tuple[str, str]]:
+    """Chain lines AFTER the chosen one — genuine fall-through. apt
+    lines are skipped (the probe already decided apt); box-safe
+    transforms apply; the chosen line is not repeated."""
+    out: list[tuple[str, str]] = []
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.tool_manifest import _line_runtime, install_plan
+
+        seen = {chosen}
+        for line in install_plan(name, "kali"):
+            if "apt install" in line:
+                continue
+            boxed = _box_line(line)
+            if boxed in seen:
+                continue
+            seen.add(boxed)
+            out.append((_line_runtime(line) or "shell", boxed))
+    return out
 
 
 def stage_tools(log, progress=None, cancel=None) -> bool:
@@ -363,18 +395,34 @@ def stage_tools(log, progress=None, cancel=None) -> bool:
             return False
         rt, cmd = plan[name]
         tail = ""
+        via = rt
         if rt == "builtin":
             log(f"checking {name} (built in / nothing to install)")
-        else:
-            log(f"installing {name} (via {rt}): {cmd}")
-            _ok, tail = _stream_install(cmd, name, log)
-        # DECLARED presence is the truth (installer exit codes lie both ways)
-        present = _present(name)
-        done_tools[name] = {"ok": present, "via": rt, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-        with contextlib.suppress(Exception):
-            from suijin.modules.tools.lib.tool_manifest import verify_of
+            present = _present(name)
+        elif rt == "unsupported":
+            from suijin.modules.tools.lib.tool_manifest import platforms_of
 
-            done_tools[name]["check"] = ":".join(verify_of(name))
+            plats = ", ".join(platforms_of(name)) or "none declared"
+            log(f"skipping {name} — no install path declared for kali (platforms: {plats})")
+            present = _present(name)
+        else:
+            # ORDERED FALL-THROUGH: the chosen line first, then every
+            # declared fallback — stop as soon as presence passes
+            attempts = [(rt, cmd)] + _fallback_attempts(name, cmd)
+            present = False
+            for art, acmd in attempts:
+                log(f"installing {name} (via {art}): {acmd}")
+                _ok, tail = _stream_install(acmd, name, log)
+                present = _present(name)
+                via = art
+                if present:
+                    break
+        # DECLARED presence is the truth (installer exit codes lie both ways)
+        done_tools[name] = {"ok": present, "via": via, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        with contextlib.suppress(Exception):
+            from suijin.modules.tools.lib.tool_manifest import verify_checks
+
+            done_tools[name]["check"] = ",".join(":".join(c) for c in verify_checks(name))
         done_count += 1
         if present:
             log(f"  ok {name}")

@@ -99,15 +99,18 @@ def drift() -> dict:
     host = host_manifest()
     have = box_manifest(read_box_file)
     changed = [i for i, h in host.items() if have.get(i) != h]
-    # tools drift: host container.tools vs what the box reports present
+    # tools drift: host container.tools vs the box's DECLARED presence
+    # checks (command -v alone falsely reports python-module deps like
+    # requests/impacket as missing)
     missing: list[str] = []
     with contextlib.suppress(Exception):
+        from suijin.server.box.provision import presence_script
+
         want = tool_list()
-        rc, out = bx.run_in_box(
-            "for t in " + " ".join(want) + "; do command -v $t >/dev/null || echo $t; done", timeout=120
-        )
-        if rc == 0:
-            missing = [ln.strip() for ln in out.splitlines() if ln.strip()]
+        if want:
+            rc, out = bx.run_in_box(presence_script(want), timeout=120)
+            if rc == 0:
+                missing = [ln.split()[0] for ln in out.splitlines() if ln.endswith(" missing")]
     return {"changed": changed, "missing_tools": missing, "manifest": host}
 
 
