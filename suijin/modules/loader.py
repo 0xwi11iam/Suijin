@@ -161,6 +161,15 @@ def discover_modules():
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         except Exception:
             continue
+        # Optional (additive) manifest fields — documented in context.md:
+        #   platforms     ["macos","linux","kali","windows"] — where the
+        #                 pack runs; the doctor skips deps of packs that
+        #                 don't support the host OS
+        #   prereqs       ["go","gem","pip"] — runtimes its tools need
+        #   tool_install  {tool: {platforms, prereqs, install, verify}} —
+        #                 install metadata for the pack's dependencies,
+        #                 merged into the tool manifest (box + doctor)
+        # Unknown fields are carried through untouched (no schema gate).
 
         key = folder.name
         _loaded_modules[key] = {"manifest": manifest, "tools": {}, "skill": ""}

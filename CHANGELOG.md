@@ -8,6 +8,50 @@ All notable changes to Suijin.
 
 ## Unreleased
 
+### the declarative tool manifest (2026-10-22)
+- Every tool now DECLARES its installation contract instead of
+  discovering it by failure: `platforms` (kali · linux · macos — the
+  vocabulary pack manifests already use), `prereqs` (go · pip · gem,
+  installed before any tool that needs them), an ORDERED per-platform
+  fallback chain (apt first when available, declared runtime fallbacks
+  after; every apt line automation-safe), and `verify` (a binary name —
+  `testssl.sh` ships `testssl` — or a python module for pip-only deps).
+- Pack manifests may carry an optional `tool_install` block so a pack
+  declares install metadata for its own dependencies; `platforms` and
+  `prereqs` already present in pack manifests are now consumed: doctor
+  skips dependencies that don't apply to the host OS and annotates
+  missing ones with their declared prerequisites.
+- `suijin tools --manifest` prints the whole contract (platforms,
+  prereqs, this host's first install line); `suijin modules` shows
+  pack-declared platforms and prerequisites.
+- The box consumes the manifest: one batched apt probe by PACKAGE name
+  (ldap-utils ships ldapsearch), fallback chains on probe miss, pip
+  fallbacks made PEP 668-safe (`--user --break-system-packages`), gem
+  fallbacks run under sudo, and presence verified by the declared
+  check. Field-proven live on OrbStack: the apt path (nmap/wafw00f)
+  and the pip-fallback path (duckduckgo-search, verified by import)
+  both green.
+
+### engine picker
+- When both container runtimes are installed and stdin is a terminal,
+  the first box command asks which engine to use and persists the
+  choice to `container.engine` — asked once, never again; a saved
+  choice is consulted before any prompt.
+
+### fixes
+- `suijin box build` clobbered its own per-tool records with a stale
+  pre-toolchain snapshot (summary said `tools 0/2` after a green
+  install); the tools stage now reconciles every build and the summary
+  counts only the current `container.tools` list (a stale record had
+  made it read `3/2`).
+- `psutil<6.0` → `<8.0`: Kali rolling ships Python 3.14, where 5.x has
+  no wheel and pip tried to compile it with no compiler in the box.
+- `version.json` bumped to 7.2.0 — the tagged release was still
+  reporting `suijin 7.1.0` because this file is the version source.
+- BBP report triage section referenced an undefined `_render_triage`
+  (typo for `_render_triage_inline`); the dormant wiring now renders.
+
+
 ## v7.2.0 — The Impact Release
 
 The doctrine shift: depth over volume, proof that stays provable, and
