@@ -28,22 +28,81 @@ ENGINE_ORB = "orb"
 ENGINE_DOCKER = "docker"
 
 
-def detect_engine() -> str:
-    """The resolved engine for this host."""
+def detect_engine(interactive: bool = True) -> str:
+    """The resolved engine for this host.
+
+    Order: SUIJIN_CONTAINER_ENGINE env > config container.engine >
+    interactive pick (asked ONCE, when both runtimes are present and
+    stdin is a terminal — the choice persists to config) > auto (orb
+    first). A persisted choice is never asked again."""
     v = str(os.environ.get("SUIJIN_CONTAINER_ENGINE") or "").strip().lower()
     if v in (ENGINE_ORB, ENGINE_DOCKER):
         return v
+    configured = _configured_engine()
+    if configured:
+        return configured
+    import shutil as _sh
+
+    have_orb, have_docker = bool(_sh.which("orb")), bool(_sh.which("docker"))
+    if have_orb and have_docker and interactive and _stdin_is_tty():
+        choice = _prompt_engine()
+        if choice in (ENGINE_ORB, ENGINE_DOCKER):
+            _persist_engine(choice)
+            return choice
+    if have_orb:
+        return ENGINE_ORB
+    if have_docker:
+        return ENGINE_DOCKER
+    return ""
+
+
+def _configured_engine() -> str:
+    """The persisted engine choice, if any (config container.engine)."""
     with contextlib.suppress(Exception):
         from suijin.modules.platform.lib.config_loader import load_config
 
         c = str((load_config() or {}).get("container", {}).get("engine") or "").strip().lower()
         if c in (ENGINE_ORB, ENGINE_DOCKER):
             return c
-    if shutil.which("orb"):
-        return ENGINE_ORB
-    if shutil.which("docker"):
-        return ENGINE_DOCKER
     return ""
+
+
+def _stdin_is_tty() -> bool:
+    import sys
+
+    try:
+        return sys.stdin.isatty()
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _prompt_engine() -> str:
+
+    try:
+        print("both container runtimes are available:")
+        print("  1) orbstack (orb) — mac-native, recommended on this device")
+        print("  2) docker")
+        raw = input("select [1/2, enter = 1]: ").strip()
+        return ENGINE_DOCKER if raw == "2" else ENGINE_ORB
+    except Exception:  # noqa: BLE001 — non-interactive contexts
+        return ""
+
+
+def _persist_engine(choice: str) -> None:
+    """Remember the pick so it is asked exactly once."""
+    with contextlib.suppress(Exception):
+        import json
+        from pathlib import Path
+
+        from suijin.modules.platform.lib.config_loader import CONFIG_PATH
+
+        p = Path(CONFIG_PATH)
+        cfg = {}
+        if p.exists():
+            cfg = json.loads(p.read_text(encoding="utf-8") or "{}")
+        cont = cfg.setdefault("container", {})
+        cont["engine"] = choice
+        p.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
 
 
 def _engine_binary(engine: str) -> str:

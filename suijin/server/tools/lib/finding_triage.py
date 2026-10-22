@@ -108,9 +108,7 @@ def check_new_entry(entry: dict, entries: dict) -> dict | None:
             if not isinstance(other, dict) or eid == entry.get("id"):
                 continue
             v = root_cause_compare(entry, other)
-            if v == "merge":
-                cands.append((eid, v))
-            elif v == "uncertain":
+            if v in ("merge", "uncertain"):
                 cands.append((eid, v))
         if not cands:
             return {"status": "new"}
@@ -121,7 +119,11 @@ def check_new_entry(entry: dict, entries: dict) -> dict | None:
                 "of": prim,
                 "reason": "root-cause match: same host+class+sink (path/marker/POC overlap)",
             }
-        return {"status": "flagged", "of": prim, "reason": "possible duplicate — operator to confirm (uncertain root-cause)"}
+        return {
+            "status": "flagged",
+            "of": prim,
+            "reason": "possible duplicate — operator to confirm (uncertain root-cause)",
+        }
     except Exception:  # noqa: BLE001
         return None
 

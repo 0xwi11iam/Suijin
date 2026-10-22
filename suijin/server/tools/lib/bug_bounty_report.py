@@ -80,7 +80,7 @@ def generate_bug_bounty_report(
     # TRIAGE SECTION (2026-10-20): duplicates + flagged render with
     # their primary — never silently dropped, never submitted
     with contextlib.suppress(Exception):
-        _triage_block = _render_triage(findings)
+        _triage_block = _render_triage_inline(findings)
         if _triage_block:
             lines.append(_triage_block)
             lines.append("")

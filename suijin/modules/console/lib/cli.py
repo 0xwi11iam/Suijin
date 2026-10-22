@@ -289,17 +289,58 @@ def run_doctor() -> int:
 
     # Pack-declared dependencies — EVERY dep of EVERY loaded pack (vendored
     # + user ~/.suijin/modules), each miss with the OS-tailored install
-    # command. Replaces the stale hardcoded optional list.
+    # command. The manifest adds the declared prereqs; packs that already
+    # declare `platforms` are honored — a dependency that only exists for
+    # another OS must not read as a missing install on this one.
     try:
         from suijin.modules.tools.lib.availability import binary_status
+        from suijin.modules.tools.lib.tool_manifest import (
+            host_platform,
+            platform_supported,
+            prereqs_of,
+        )
+        from suijin.modules.tools.lib.tool_manifest import (
+            platforms_of as prereq_platforms,
+        )
+
+        _host_plat = host_platform()
+        _dep_platforms: dict[str, list[list]] = {}
+        with contextlib.suppress(Exception):
+            from suijin.modules.loader import get_loaded_modules
+
+            for _mod_data in (get_loaded_modules() or {}).values():
+                _mf = _mod_data.get("manifest") or {}
+                _plats = list(_mf.get("platforms") or [])
+                if not _plats:
+                    continue  # no declaration → inherit the tool manifest's
+                for _dep in _mf.get("dependencies") or []:
+                    _dep_platforms.setdefault(str(_dep), []).append(_plats)
 
         declared = {d: ok for d, ok in binary_status().items() if d not in REQUIRED_BINARIES}
-        missing = sorted(d for d, ok in declared.items() if not ok)
+        applicable: dict[str, bool] = {}
+        skipped = 0
+        for _dep, _dep_ok in declared.items():
+            # pack-declared platforms win; a pack that declares none
+            # inherits the tool manifest's declaration
+            _plats_list = _dep_platforms.get(_dep) or []
+            if not _plats_list:
+                _plats_list = [prereq_platforms(_dep)]
+            if _plats_list and not any(platform_supported(p, _host_plat) for p in _plats_list):
+                skipped += 1
+                continue
+            applicable[_dep] = _dep_ok
+        missing = sorted(d for d, ok in applicable.items() if not ok)
         for dep in missing:
-            rows.append(_warn(f"tool/{dep}", f"missing — {install_hint(dep)}"))
-        if declared:
-            avail = len(declared) - len(missing)
-            cov = f"{avail}/{len(declared)} pack dependencies available"
+            hint = install_hint(dep)
+            pre = prereqs_of(dep, _host_plat)
+            if pre:
+                hint += f" (needs {', '.join(pre)})"
+            rows.append(_warn(f"tool/{dep}", f"missing — {hint}"))
+        if skipped:
+            rows.append(_ok("tool platform", f"{skipped} dependency(ies) not applicable on {_host_plat}"))
+        if applicable:
+            avail = len(applicable) - len(missing)
+            cov = f"{avail}/{len(applicable)} pack dependencies available"
             rows.append(
                 _ok("tool coverage", cov) if not missing else _warn("tool coverage", f"{cov} (see hints above)")
             )
@@ -677,14 +718,40 @@ def run_capability() -> int:
     return code
 
 
-def run_tools_list() -> int:
-    """Every callable agent tool, core + module, with availability marks."""
+def run_tools_list(manifest: bool = False) -> int:
+    """Every callable agent tool, core + module, with availability marks.
+    With manifest=True, print the declarative install contract: each
+    tool's platforms, prereqs and this host's first install line."""
     from suijin.modules.tools.lib.dispatch import list_route_tools
 
     core = sorted(list_route_tools())
     print(f"Core tools ({len(core)}):")
     for t in core:
         print(f"  {t}")
+    if manifest:
+        try:
+            from suijin.modules.tools.lib import tool_manifest as tm
+
+            host = tm.host_platform()
+            records = tm.manifest()
+            print(f"\nTool manifest ({len(records)} tools · this host: {host}):\n")
+            print(f"  {'tool':24} {'platforms':20} {'prereq':8} install line ({host})")
+            for name in sorted(records):
+                rec = records[name]
+                plats = ",".join(rec.get("platforms") or [])
+                pre = ",".join(rec.get("prereqs") or []) or "-"
+                if not tm.platform_supported(rec.get("platforms") or [], host):
+                    head = "unsupported here"
+                else:
+                    chain = tm.install_plan(name, host)
+                    head = chain[0] if chain else ("nothing to install" if rec.get("built_in") else "-")
+                room = max(0, 78 - 2 - 24 - 20 - 8)
+                if len(head) > room:
+                    head = head[: max(0, room - 2)] + ".."
+                print(f"  {name:24} {plats:20} {pre:8} {head}")
+        except Exception as e:  # noqa: BLE001 — listing never crashes doctor-adjacent output
+            print(f"\nTool manifest: unavailable — {e}")
+        return 0
     try:
         from suijin.modules.loader import discover_modules, get_loaded_modules
         from suijin.modules.tools.lib.availability import missing_binaries
@@ -726,6 +793,12 @@ def run_modules_list() -> int:
         deps = manifest.get("dependencies", [])
         total_tools += len(tools)
         line = f"  {name:22} {len(tools)} tool{'s' if len(tools) != 1 else ''}"
+        plats = manifest.get("platforms") or []
+        if plats:
+            line += f"  [{', '.join(plats)}]"
+        pre = manifest.get("prereqs") or []
+        if pre:
+            line += f"  (prereq: {', '.join(pre)})"
         if deps:
             line += f"  (requires: {', '.join(deps)})"
         print(line)
@@ -2212,7 +2285,6 @@ def main(argv=None):
         "version": ("print version, python, and package details", run_version),
         "env": ("show API key presence (names only, never values)", run_env),
         "custom": ("add an OpenAI-compatible provider — your base URL + API key (anything)", run_custom),
-        "tools": ("list all agent tools with availability", run_tools_list),
         "capability": ("no-orphan-code audit: routes ↔ catalog parity + pack integrity (CI gate)", run_capability),
         "modules": ("list loaded module packs", run_modules_list),
         "workspace": ("workspace layout, usage, and symlink health", run_workspace_status),
@@ -2222,6 +2294,14 @@ def main(argv=None):
     for name, (help_text, fn) in SIMPLE_COMMANDS.items():
         p = sub.add_parser(name, help=help_text)
         p.set_defaults(func=lambda _a, _fn=fn: _fn())
+
+    tools_p = sub.add_parser("tools", help="list all agent tools with availability")
+    tools_p.add_argument(
+        "--manifest",
+        action="store_true",
+        help="show the declarative install contract: platforms, prereqs, first install line",
+    )
+    tools_p.set_defaults(func=lambda a: run_tools_list(manifest=a.manifest))
 
     opp = sub.add_parser("operator", help="multi-agent command center: live dashboard for all running engagements")
     opp.add_argument("--demo", action="store_true", help="render with mock data (no live agents needed)")

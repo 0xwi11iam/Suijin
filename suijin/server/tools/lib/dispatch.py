@@ -94,7 +94,10 @@ def _with_install_hint(tool_name: str, result: str) -> str:
 #: timeout failures — the failure output itself steers the next call
 #: instead of the agent re-deriving options (or stalling).
 _FALLBACKS: dict[str, list[str]] = {
-    "nmap": ["rustscan -a <target> -t 3000 --ulimit 5000", "masscan <target> -p0-65535 --rate=1000 (then service-probe open ports)"],
+    "nmap": [
+        "rustscan -a <target> -t 3000 --ulimit 5000",
+        "masscan <target> -p0-65535 --rate=1000 (then service-probe open ports)",
+    ],
     "gobuster": ["ffuf -u <url>/FUZZ -w <wordlist> -mc 200-399", "feroxbuster -u <url> -w <wordlist> --auto-tune"],
     "dirsearch": ["ffuf -u <url>/FUZZ -w <wordlist>", "gobuster dir -u <url> -w <wordlist>"],
     "nikto": ["nuclei -u <url> -tags cve,misconfig", "manual http_request probes on common sensitive paths"],
@@ -711,7 +714,9 @@ def _build_routes(config):
         "fetch_authorization_page": lambda a: _fetch_auth_page(a.get("target", ""), a.get("url", "")),
         "google_key_probe": lambda a: google_key_probe(a.get("key", "")),
         "source_map_probe": lambda a: source_map_probe(a.get("url", "")),
-        "url_dedup": lambda a: _url_dedup(a.get("urls") or [], keep_per_template=int(a.get("keep_per_template", 5) or 5)),
+        "url_dedup": lambda a: _url_dedup(
+            a.get("urls") or [], keep_per_template=int(a.get("keep_per_template", 5) or 5)
+        ),
         "url_rewrite": lambda a: _url_rewrite(a.get("urls") or [], value=str(a.get("value", "FUZZ") or "FUZZ")),
         "url_merge": lambda a: _url_merge(str(a.get("path") or ""), a.get("urls") or []),
         "csrf_extract": lambda a: _csrf_extract(str(a.get("url") or "")),

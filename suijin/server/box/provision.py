@@ -2,8 +2,9 @@
 
 State lives on the box (/opt/suijin-ws/.box-state.json): every finished
 stage and tool is recorded, so a canceled or failed build resumes where
-it stopped — never from zero. Tool installs use the doctor's apt lines
-(kali), idempotent by nature (skip-if-present re-check per tool).
+it stopped — never from zero. Tool installs come from the declarative
+tool manifest (tool_manifest.py: platforms, prereqs, ordered fallback
+chains), idempotent by nature (skip-if-present re-check per tool).
 
 Stage order:
   1 base      system packages (python, pipx, git, tar, curl)
@@ -49,34 +50,29 @@ def _state_write(state: dict) -> None:
     bx.run_in_box(f"mkdir -p {bx.BOX_WS} && printf '%s' '{body}' > {bx.BOX_STATE}", timeout=60)
 
 
-def _aptize(line: str) -> str:
-    """Make an apt line automation-safe: -y always (the doctor's table
-    lines are HUMAN hints — 'sudo apt install nikto' with no -y hangs
-    forever at the invisible continue? prompt on a pipe; this was the
-    aircrack/amass/nikto hang's true root cause), and
-    --no-install-recommends for the lean headless box."""
-    if "apt install" not in line:
-        return line
-    if " -y" not in line and "-y " not in line[: line.index("install") + len("install") + 1]:
-        line = line.replace("apt install", "apt install -y", 1)
-    if "--no-install-recommends" not in line:
-        line = line.replace("apt install", "apt install --no-install-recommends", 1)
-    return line
-
-
 def _tool_apt_line(name: str) -> str:
-    """The install line for a tool (kali) — automation-safe."""
+    """The install line for a tool (kali) — the manifest's first line,
+    box-safe. Used by the TUI's manual per-tool install."""
     with contextlib.suppress(Exception):
-        from suijin.modules.tools.lib.availability import _INSTALL
+        from suijin.modules.tools.lib.tool_manifest import install_plan
 
-        entry = _INSTALL.get(name) or {}
-        apt = entry.get("apt")
-        if apt:
-            return _aptize(apt)
-        for key in ("pip", "go", "gem"):
-            if entry.get(key):
-                return entry[key]
+        return _box_line(install_plan(name, "kali")[0])
     return f"sudo apt install -y --no-install-recommends {name}"
+
+
+def _box_line(line: str) -> str:
+    """Make a manifest fallback executable as the unprivileged box user.
+    pip needs --user + --break-system-packages (PEP 668), gem needs sudo
+    (the system gem dir); apt lines arrive already automation-safe."""
+    line = line.split(" (", 1)[0].strip()  # drop trailing prose/parentheticals
+    if line.startswith(("pip install ", "pip3 install ")):
+        tools = line.split()
+        rest = tools[2:]
+        flags = [f for f in ("--user", "--break-system-packages") if f not in rest]
+        return " ".join([tools[0], "install", *flags, *rest])
+    if line.startswith("gem install "):
+        return f"sudo {line}"
+    return line
 
 
 #: one tool may take this long before we kill it and move on (the
@@ -100,11 +96,14 @@ def _network_ok(log) -> bool:
 def _stream_install(cmd: str, name: str, log) -> tuple[bool, str]:
     """Stream the installer's own output live (the amass incident: a
     100MB package downloading invisibly reads as a hang). Idle
-    heartbeat when quiet; killed at the cap with the tail shown."""
+    heartbeat when quiet; killed at the cap with the tail shown. PATH
+    carries the go/pip-user install dirs so fallback chains can run."""
     import subprocess
     import threading
 
-    argv = bx.box_cmd_argv(f"set -o pipefail; DEBIAN_FRONTEND=noninteractive {cmd}")
+    argv = bx.box_cmd_argv(
+        f"set -o pipefail; export PATH=$HOME/go/bin:$HOME/.local/bin:$PATH; DEBIAN_FRONTEND=noninteractive {cmd}"
+    )
     try:
         proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace")
     except Exception as e:  # noqa: BLE001
@@ -185,7 +184,7 @@ def stage_suijin(log) -> bool:
 
 def stage_profile(log) -> bool:
     log("writing the shell profile (workspace + path)")
-    profile = "export SUIJIN_WORKSPACE=/opt/suijin-ws\nexport PATH=$HOME/.local/bin:$PATH\n"
+    profile = "export SUIJIN_WORKSPACE=/opt/suijin-ws\nexport PATH=$HOME/.local/bin:$HOME/go/bin:$PATH\n"
     quoted = profile.replace("'", "'\\''")
     rc, _ = bx.run_in_box(
         f"printf '%s' '{quoted}' | sudo tee {bx.PROFILE_DROPIN} >/dev/null && sudo chmod 644 {bx.PROFILE_DROPIN}",
@@ -206,56 +205,116 @@ def stage_config(log) -> bool:
 
 # ── PREREQ-DECLARING INSTALL PLAN (2026-10-20, operator ruling: tools
 # declare what they need BEFORE anything runs — no one-at-a-time
-# discovery). Probe what the box can apt-install, choose each tool's
-# line, collect the RUNTIMES those choices require (go/gem), install
-# the runtimes first, then the tools — every step visible.
-_RUNTIME_PKGS = {"go": "golang-go", "gem": "ruby"}
+# discovery). The manifest (tool_manifest.py) supplies every tool's
+# platform matrix, prereqs and ordered fallback chain; one batched apt
+# probe decides whether the apt line or a declared fallback applies.
+# Runtimes are installed BEFORE the tools — every step visible.
+_RUNTIME_PKGS = {"go": "golang-go", "gem": "ruby", "pip": "python3-pip"}
+_RUNTIME_BIN = {"go": "go", "gem": "gem", "pip": "pip3"}
 
 
-def _probe_apt_candidates(tools: list[str]) -> set[str]:
-    """Which tools have a kali apt candidate (one batched probe)."""
-    if not tools:
+def _apt_package(line: str) -> str | None:
+    """The package an apt line installs ('sudo apt install -y ldap-utils'
+    -> 'ldap-utils') — the probe must ask about the PACKAGE, not the
+    binary name (ldapsearch/searchsploit/smbclient all differ)."""
+    toks = line.replace("sudo ", "", 1).split()
+    with contextlib.suppress(ValueError):
+        idx = toks.index("install")
+        for tok in toks[idx + 1 :]:
+            if not tok.startswith("-"):
+                return tok
+    return None
+
+
+def _probe_apt_candidates(packages: dict[str, str]) -> set[str] | None:
+    """Which tools have a kali apt candidate (one batched probe).
+    ``packages`` maps tool -> package name. None means the probe itself
+    failed — no information, trust the manifest instead of mass
+    falling back."""
+    if not packages:
+        return set()
+    pairs = " ".join(f"{t}:{pkg}" for t, pkg in packages.items() if pkg)
+    if not pairs.strip():
         return set()
     rc, out = bx.run_in_box(
-        "for t in " + " ".join(tools) + "; do apt-cache policy $t 2>/dev/null | grep -q 'Candidate:' && echo $t; done",
+        "for pair in " + pairs + '; do t="${pair%%:*}"; p="${pair#*:}"; '
+        'apt-cache show "$p" >/dev/null 2>&1 && echo "$t"; done',
         timeout=600,
     )
-    return {ln.strip() for ln in out.splitlines() if ln.strip()} if rc == 0 else set()
+    if rc != 0:
+        return None
+    return {ln.strip() for ln in out.splitlines() if ln.strip()}
 
 
 def _resolve_plan(tools: list[str]) -> dict[str, tuple[str, str]]:
-    """tool -> (runtime, install line). The doctor table's apt line
-    wins; else the generic kali package when a candidate exists; else
-    the table's pip/go/gem fallback (runtime declared); else a generic
-    apt attempt (runtime 'apt' — always present in the box)."""
-    with contextlib.suppress(Exception):
-        from suijin.modules.tools.lib.availability import _INSTALL
+    """tool -> (runtime, install line) from the DECLARATIVE MANIFEST.
 
-        table = _INSTALL
-    apt_ok = _probe_apt_candidates([t for t in tools if not (table.get(t) or {}).get("apt")])
+    Chain line 1 first (apt when the tool ships a kali package), then
+    the manifest's declared fallbacks (go/pip/gem) — each carrying its
+    declared runtime. One batched apt probe (by PACKAGE name) refines
+    the apt choice; a failed probe trusts the manifest."""
+    from suijin.modules.tools.lib import tool_manifest as tm
+
+    chains = {t: tm.install_plan(t, "kali") for t in tools}
+    apt_lines = {t: next((ln for ln in chains[t] if "apt install" in ln), None) for t in tools}
+    packages = {t: _apt_package(ln) for t, ln in apt_lines.items() if ln}
+    apt_ok = _probe_apt_candidates(packages)  # None = probe unavailable
     plan: dict[str, tuple[str, str]] = {}
     for t in tools:
-        entry = table.get(t) or {}
-        apt = entry.get("apt")
-        if apt:
-            plan[t] = ("apt", _aptize(apt))
-        elif t in apt_ok:
-            plan[t] = ("apt", f"sudo apt install -y --no-install-recommends {t}")
+        chain = chains[t]
+        if not chain:
+            # known built-in or undeclared platform — nothing to run;
+            # the declared presence check still decides the state
+            plan[t] = ("builtin", "true")
+            continue
+        apt_line = apt_lines[t]
+        fallbacks = [ln for ln in chain if "apt install" not in ln]
+        if apt_line and (apt_ok is None or t in apt_ok):
+            plan[t] = ("apt", apt_line)
+        elif fallbacks:
+            raw = fallbacks[0]
+            plan[t] = (tm._line_runtime(raw) or "shell", _box_line(raw))
+        elif apt_line:
+            plan[t] = ("apt", apt_line)  # last resort — presence decides
         else:
-            for rt, prefix in (("pip", "pip install"), ("go", "go install"), ("gem", "gem install")):
-                line = entry.get(rt)
-                if line:
-                    plan[t] = (rt, line)
-                    break
-            else:
-                plan[t] = ("apt", f"sudo apt install -y --no-install-recommends {t}")
+            plan[t] = ("apt", f"sudo apt install -y --no-install-recommends {t}")
     return plan
 
 
 def _runtimes_for(plan: dict[str, tuple[str, str]]) -> set[str]:
-    """The non-apt runtimes the plan requires (prereqs to install
-    BEFORE the tools that need them)."""
-    return {rt for rt, _ in plan.values() if rt in _RUNTIME_PKGS}
+    """Runtimes the plan requires that this stage can install — from
+    the manifest-declared runtime of each chosen line (never discovered
+    by failure)."""
+    return {rt for rt, _ in plan.values() if _RUNTIME_PKGS.get(rt)}
+
+
+def presence_script(tools: list[str]) -> str:
+    """One shell script reporting each tool's DECLARED presence
+    ('<tool> ok' / '<tool> missing') — binaries by command -v, python
+    deps by import. Single box round-trip for the TUI tools screen."""
+    from suijin.modules.tools.lib.tool_manifest import verify_of
+
+    parts = []
+    for name in tools:
+        kind, value = verify_of(name)
+        check = f'python3 -c "import {value}"' if kind == "python" else f"command -v {value}"
+        parts.append(f'{check} >/dev/null 2>&1 && echo "{name} ok" || echo "{name} missing"')
+    return "; ".join(parts)
+
+
+def _present(name: str) -> bool:
+    """Presence per the manifest's DECLARED verify: a binary name
+    (testssl.sh ships `testssl`) or a python module (requests has no
+    binary). Installer exit codes lie both ways — this decides."""
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.tool_manifest import verify_of
+
+        kind, value = verify_of(name)
+        cmd = f'python3 -c "import {value}"' if kind == "python" else f"command -v {value}"
+        rc, _ = bx.run_in_box(cmd, timeout=30)
+        return rc == 0
+    rc, _ = bx.run_in_box(f"command -v {name}", timeout=30)
+    return rc == 0
 
 
 def stage_tools(log, progress=None, cancel=None) -> bool:
@@ -280,11 +339,12 @@ def stage_tools(log, progress=None, cancel=None) -> bool:
     by_rt: dict[str, int] = {}
     for rt, _ in plan.values():
         by_rt[rt] = by_rt.get(rt, 0) + 1
-    log("plan: " + " · ".join(f"{n} via {rt}" for rt, n in sorted(by_rt.items())))
+    if plan:
+        log("plan: " + " · ".join(f"{n} via {rt}" for rt, n in sorted(by_rt.items())))
     # PREREQS FIRST: runtimes the plan depends on, installed visibly
     for rt in sorted(_runtimes_for(plan)):
         pkg = _RUNTIME_PKGS[rt]
-        rc_chk, _ = bx.run_in_box(f"command -v {'go' if rt == 'go' else 'gem'}", timeout=30)
+        rc_chk, _ = bx.run_in_box(f"command -v {_RUNTIME_BIN.get(rt, rt)}", timeout=30)
         if rc_chk != 0:
             log(
                 f"prereq: {len([1 for r, _ in plan.values() if r == rt])} tools need the {rt} runtime — installing {pkg}"
@@ -302,12 +362,19 @@ def stage_tools(log, progress=None, cancel=None) -> bool:
             log("paused — re-run build to continue")
             return False
         rt, cmd = plan[name]
-        log(f"installing {name} (via {rt}): {cmd}")
-        _ok, tail = _stream_install(cmd, name, log)
-        # PRESENCE is the truth (installer exit codes lie both ways)
-        chk_rc, _ = bx.run_in_box(f"command -v {name}", timeout=30)
-        present = chk_rc == 0
+        tail = ""
+        if rt == "builtin":
+            log(f"checking {name} (built in / nothing to install)")
+        else:
+            log(f"installing {name} (via {rt}): {cmd}")
+            _ok, tail = _stream_install(cmd, name, log)
+        # DECLARED presence is the truth (installer exit codes lie both ways)
+        present = _present(name)
         done_tools[name] = {"ok": present, "via": rt, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        with contextlib.suppress(Exception):
+            from suijin.modules.tools.lib.tool_manifest import verify_of
+
+            done_tools[name]["check"] = ":".join(verify_of(name))
         done_count += 1
         if present:
             log(f"  ok {name}")
@@ -362,19 +429,26 @@ def build(resume: bool = True, log=print, progress=None, cancel=None) -> dict:
         _state_write(state)
         if not ok:
             return {"ok": False, "error": f"stage {stage} failed (re-run to resume)", "stages": state["stages"]}
-    if not state["stages"].get("tools", {}).get("ok"):
-        ok = stage_tools(log, progress=progress, cancel=cancel)
-        state["stages"]["tools"] = {"ok": ok}
-        _state_write(state)
-        if not ok and not (cancel and cancel()):
-            pass  # paused, not failed — summary reflects partial
+    # ALWAYS reconcile: per-tool state is the source of truth, and a
+    # previous run may have recorded the stage flag without the tool
+    # records (or lost them). Complete boxes finish this in one no-op
+    # read; incomplete ones resume per tool.
+    ok = stage_tools(log, progress=progress, cancel=cancel)
+    state = _state_read()  # stage_tools persisted per-tool records
+    state["stages"]["tools"] = {"ok": ok}
+    _state_write(state)
+    if not ok and not (cancel and cancel()):
+        pass  # paused, not failed — summary reflects partial
     ok = stage_verify(log)
     state["stages"]["verify"] = {"ok": ok}
     _state_write(state)
     tools_state = _state_read().get("tools", {})
+    current = tool_list()
     return {
         "ok": ok,
         "stages": state["stages"],
-        "tools_ok": sum(1 for v in tools_state.values() if v.get("ok")),
-        "tools_total": len(tool_list()),
+        # count only the CURRENT list — stale records from an earlier
+        # container.tools config must not inflate the summary
+        "tools_ok": sum(1 for t in current if tools_state.get(t, {}).get("ok")),
+        "tools_total": len(current),
     }

@@ -1,6 +1,6 @@
 {
-  "version": "7.1.0",
+  "version": "7.2.0",
   "codename": "Suijin OS",
-  "release_date": "2026-10-08",
-  "description": "Suijin OS v7.1.0 \u2014 The Clean Memory Release. Every channel that feeds the agent's past into its present is hardened: shared-/tmp scratch warnings and on-target verification rules, cross-target credential rejection at record time, librarian target isolation on memory recall, a three-strike oracle rule that breaks 'one decisive script' spirals, and stale-pause transparency at boot. Live-run fixes: the mesh panel append bug, per-iteration cost accounting, cached mascots + alternate-screen rendering (no flicker), capped JSON arg display, colored card severities, unambiguous phase counts. Neo4j polish: [kg] extra, driver in the Docker image, doctor liveness (UP/DOWN with the JSON fallback named). First console test suite. 2,840+ tests green."
+  "release_date": "2026-10-20",
+  "description": "Suijin OS v7.2.0 — The Impact Release. Depth over volume, proof that stays provable, and a sealed box to run it all in. `suijin box` builds a resumable, resource-capped Kali environment (orbstack first, docker fallback, overridable) with one-way host→box config sync and drift-aware enter; every tool declares its platforms, prereqs and ordered fallback install chains instead of discovering them by failure; the reference-adoption batch lands URL hygiene, fresh CSRF extraction, out-of-band SSRF evidence, tool_search with a catalog budget, tool fallback chains, platform-control framing, repeat-nudges, and a tamper-evident PoC store re-verified at report time; the doctrine states the environment contract explicitly; and the silent max_iterations 100 ceiling is gone — infinite is the product default."
 }

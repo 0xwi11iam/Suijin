@@ -1671,6 +1671,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
                 updates["current_iteration"] = iteration
     elif action == "complete":
         from suijin.modules.agent.lib.authorization import is_decline_reason
+
         completion_reason = decision.get("completion_reason", "Objective complete")
         # (Drive) the engagement's unfinished business persists — open
         # questions + the earned identity flush to the scratchpad the
@@ -2063,7 +2064,14 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
     # so resume silently dropped a pending chain / footholds /
     # hypotheses / the refusal counter. Emit them every turn (present-
     # in-state only; the writer's None filter handles the rest).
-    for _gk in ("_chain_pending", "_footholds", "_hypotheses", "_completion_refusals", "_chain_explored", "_auth_final"):
+    for _gk in (
+        "_chain_pending",
+        "_footholds",
+        "_hypotheses",
+        "_completion_refusals",
+        "_chain_explored",
+        "_auth_final",
+    ):
         if _gk not in updates and state.get(_gk) is not None:
             updates[_gk] = state[_gk]
 

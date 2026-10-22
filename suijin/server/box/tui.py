@@ -564,10 +564,9 @@ def _tools_screen(t: Tui) -> None:
     tools = tool_list()
     rows = []
     with contextlib.suppress(Exception):
-        rc, out = bx.run_in_box(
-            "for t in " + " ".join(tools) + '; do command -v $t >/dev/null && echo "$t ok" || echo "$t missing"; done',
-            timeout=120,
-        )
+        from suijin.server.box.provision import presence_script
+
+        rc, out = bx.run_in_box(presence_script(tools), timeout=120)
         rows = [ln.split() for ln in out.splitlines() if len(ln.split()) == 2]
     sel = 0
     while True:
