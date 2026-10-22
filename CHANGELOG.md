@@ -31,6 +31,22 @@ All notable changes to Suijin.
   check. Field-proven live on OrbStack: the apt path (nmap/wafw00f)
   and the pip-fallback path (duckduckgo-search, verified by import)
   both green.
+- **field proof: a clean 44-tool box** (OrbStack, PTY-driven, rebuilt
+  from scratch twice): 44/44 tools install and 43/43 runtime smoke
+  checks pass. The field runs found and fixed: tools with only a
+  runtime hint never probed apt (Kali packages trufflehog, mitmproxy
+  and azure-cli); trufflehog's Go module cannot build (replace
+  directives) so it has a vendor-installer fallback — and the
+  installer chain now genuinely falls through line by line until
+  presence passes; Kali's apt dirsearch dies on Python 3.14
+  (`pkg_resources` was removed from setuptools, so a compat shim is
+  installed with it); crackmapexec accepts either `nxc` or
+  `crackmapexec`; az and gcloud got real Kali paths (apt / official
+  tarball); playwright installs the 280MB headless shell instead of
+  1.3GB of every engine.
+- Drift and `suijin box status` use the declared presence checks, so
+  python-module dependencies no longer read as "5 tools pending" on a
+  fully built box.
 
 ### engine picker
 - When both container runtimes are installed and stdin is a terminal,

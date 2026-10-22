@@ -93,6 +93,26 @@ class TestDrift:
         d = bsync.drift()
         assert "prompt.md" in d["changed"]
 
+    def test_missing_tools_use_declared_presence(self, fake, tmp_path, monkeypatch):
+        """command -v falsely reports python-module deps (requests) as
+        missing; drift must use the declared checks."""
+        monkeypatch.setattr(bsync, "_ws_dir", lambda: tmp_path)
+        (tmp_path / "prompt.md").write_text("v1")
+        fake.files[".sync-manifest.json"] = json.dumps({"synced": bsync.host_manifest()})
+        fake.exists = fake.running = True
+        monkeypatch.setattr(bsync, "tool_list", lambda: ["requests", "testssl.sh"])
+        seen: dict[str, str] = {}
+
+        def fake_run(cmd, timeout=600, engine=None):
+            seen["cmd"] = cmd
+            return 0, "requests ok\ntestssl.sh missing"
+
+        monkeypatch.setattr(bx, "run_in_box", fake_run)
+        d = bsync.drift()
+        assert "import requests" in seen["cmd"]
+        assert "command -v testssl" in seen["cmd"]
+        assert d["missing_tools"] == ["testssl.sh"]
+
 
 class TestToolLines:
     def test_apt_line_from_doctor_table(self):

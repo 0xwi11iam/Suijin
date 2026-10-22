@@ -79,6 +79,16 @@ class TestPrereqs:
 
         assert prereqs_of("wafw00f") == ["pip"]
 
+    def test_runtime_only_tools_still_probe_apt(self):
+        """Regression (full-box build 2026-10-22): when a tool had only a
+        runtime hint and no apt key, the chain skipped the generic apt
+        probe — so Kali's real packages for trufflehog/mitmproxy were
+        never tried. Line 1 must be the apt attempt."""
+        from suijin.modules.tools.lib.tool_manifest import install_plan
+
+        assert "apt install" in install_plan("mitmproxy", "kali")[0]
+        assert "apt install" in install_plan("trufflehog", "kali")[0]
+
     def test_prereqs_for_set(self):
         from suijin.modules.tools.lib.tool_manifest import prereqs_for
 
@@ -110,12 +120,47 @@ class TestFallbackChains:
         chain = install_plan("warpdrive", "kali")
         assert chain and "warpdrive" in chain[0]
 
+    def test_az_and_gcloud_have_kali_paths(self):
+        """Full-box build 2026-10-22: both were declared macOS-only and
+        failed as 'unsupported'. Kali packages azure-cli; gcloud has an
+        official tarball."""
+        from suijin.modules.tools.lib.tool_manifest import install_plan, platforms_of
+
+        for name in ("az", "gcloud"):
+            assert "kali" in platforms_of(name)
+            assert install_plan(name, "kali"), name
+
+    def test_playwright_installs_headless_shell_only(self):
+        from suijin.modules.tools.lib.tool_manifest import install_plan
+
+        assert "--only-shell" in install_plan("playwright", "kali")[0]
+
+    def test_trufflehog_chain_has_vendor_fallback(self):
+        from suijin.modules.tools.lib.tool_manifest import install_plan
+
+        assert "install.sh" in " ".join(install_plan("trufflehog", "kali"))
+
+    def test_dirsearch_chain_installs_pkg_resources_shim(self):
+        """Full-box smoke 2026-10-22: apt dirsearch died on import
+        (pkg_resources is gone from setuptools 81+/Python 3.14)."""
+        from suijin.modules.tools.lib.tool_manifest import install_plan
+
+        assert "setuptools<81" in install_plan("dirsearch", "kali")[0]
+
 
 class TestVerify:
     def test_binary_alias(self):
         from suijin.modules.tools.lib.tool_manifest import verify_of
 
         assert verify_of("testssl.sh") == ("binary", "testssl")
+
+    def test_alternate_binaries(self):
+        """Kali's apt crackmapexec ships `crackmapexec`; pipx NetExec
+        ships `nxc` — either validates the tool."""
+        from suijin.modules.tools.lib.tool_manifest import verify_checks
+
+        values = [v for _, v in verify_checks("crackmapexec")]
+        assert "crackmapexec" in values and "nxc" in values
 
     def test_python_module_for_pip_only_dep(self):
         from suijin.modules.tools.lib.tool_manifest import verify_of
@@ -225,6 +270,23 @@ class TestProvisionPlan:
         assert 'python3 -c "import requests"' in script
         assert "command -v testssl" in script
         assert "command -v nmap" in script
+
+    def test_presence_script_accepts_either_binary(self):
+        from suijin.server.box.provision import presence_script
+
+        script = presence_script(["crackmapexec"])
+        assert "command -v nxc" in script
+        assert "command -v crackmapexec" in script
+
+    def test_fallthrough_attempts_are_declared(self):
+        """Real fall-through: if the chosen installer fails, the vendor
+        script is still tried (trufflehog's go module can't build)."""
+        from suijin.server.box.provision import _fallback_attempts
+
+        attempts = _fallback_attempts("trufflehog", "sudo apt install -y --no-install-recommends trufflehog")
+        cmds = [c for _, c in attempts]
+        assert cmds and all("apt install" not in c for c in cmds)
+        assert any("install.sh" in c for c in cmds)
 
 
 class TestEnginePicker:
