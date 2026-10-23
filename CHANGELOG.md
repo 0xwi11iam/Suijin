@@ -8,6 +8,29 @@ All notable changes to Suijin.
 
 ## Unreleased
 
+### box config + provider-key plumbing (2026-10-23 — the 5-second engagement crash)
+
+A box engagement crashed seconds after state resumed: the box had no
+`~/.suijin/config`, so the config loader fell back to the package dir —
+which inside the box is the LIVE-MOUNTED HOST REPO. It read the repo's
+keyless `.env` ("API key not set") and wrote the model picker's choice
+back INTO the host tree. Both halves fixed:
+
+- The box profile now exports `SUIJIN_CONFIG`/`SUIJIN_ENV` pointing at
+  the synced workspace (`/opt/suijin-ws/{config.json,.env}`) — the box
+  reads and writes its OWN config, never the mounted repo.
+- `.env` is a first-class sync item: the host workspace `.env`
+  (SUIJIN_ENV override wins) rides along on every sync, chmod 600 in
+  the box. Provider keys were previously never synced at all.
+- `profile` and `config` stages re-run on every build (they were
+  "already done (resumed)" — a resumed box could never pick up new
+  plumbing or a refreshed `.env`).
+- `run_red_team_async` calls `load_env()` first: the TUI/daemon entries
+  never loaded `.env`, so even a correctly-synced box died at the first
+  provider call.
+- Field-proven: the same box+provider that died in 5s ran a real
+  engagement (3 iterations, live fetch, $0.06) and paused safe on Ctrl-C.
+
 ### the declarative tool manifest (2026-10-22)
 - Every tool now DECLARES its installation contract instead of
   discovering it by failure: `platforms` (kali · linux · macos — the
