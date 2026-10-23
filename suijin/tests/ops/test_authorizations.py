@@ -79,7 +79,7 @@ class TestScopeUrl:
             assert auth.parse_scope_url(url) == (plat, handle), url
 
     def test_rejects_non_program_urls(self):
-        for u in ("https://example.com", "https://hackerone.com/", "not a url", ""):
+        for u in ("https://example.com", "https://example.org/", "not a url", ""):
             assert auth.parse_scope_url(u) is None
 
 

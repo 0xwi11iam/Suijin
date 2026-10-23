@@ -13,9 +13,7 @@ import re
 import sys
 from pathlib import Path
 
-SPAN_RE = re.compile(
-    r'<span style="background-color:(#[0-9a-f]{6});color: ?(#[0-9a-f]{6});">([^<]*)</span>'
-)
+SPAN_RE = re.compile(r'<span style="background-color:(#[0-9a-f]{6});color: ?(#[0-9a-f]{6});">([^<]*)</span>')
 DEFAULT = {"ch": " ", "bg": "#000000", "fg": "#800000"}
 
 
@@ -32,7 +30,6 @@ def parse_source(src: str) -> list[list[dict]]:
             continue
         row: list[dict] = []
         # tokenize: Rn markers and spans
-        pos = 0
         token_re = re.compile(r"R(\d+)|R\*|(<span )")
         for m in token_re.finditer(line):
             if m.group(1):
@@ -42,11 +39,10 @@ def parse_source(src: str) -> list[list[dict]]:
             else:
                 sm = SPAN_RE.match(line, m.start())
                 if not sm:
-                    print(f"UNPARSED SPAN at row {len(rows)}: {line[m.start():m.start()+80]!r}", file=sys.stderr)
+                    print(f"UNPARSED SPAN at row {len(rows)}: {line[m.start() : m.start() + 80]!r}", file=sys.stderr)
                     sys.exit(1)
                 bg, fg, ch = sm.group(1), sm.group(2), sm.group(3)
                 row.append({"ch": ch, "bg": bg, "fg": fg})
-                pos = sm.end()
         if row:
             rows.append(row)
     return rows

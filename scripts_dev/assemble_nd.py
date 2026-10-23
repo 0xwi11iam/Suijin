@@ -19,8 +19,10 @@ WIDTH = 100
 
 def parse(path: str) -> list[list[int]]:
     rows = []
-    for i, line in enumerate(open(path), 1):
-        line = line.strip()
+    with open(path) as fh:
+        lines = fh.readlines()
+    for i, raw in enumerate(lines, 1):
+        line = raw.strip()
         if not line or line.startswith("#"):
             continue
         cells: list[int] = []
@@ -74,13 +76,14 @@ def build(rows: list[list[int]]) -> str:
 
 
 if __name__ == "__main__":
-    rows = parse("/tmp/nd_segments.txt")
+    rows = parse(sys.argv[1] if len(sys.argv) > 1 else "/tmp/nd_segments.txt")
     print(f"rows: {len(rows)}", file=sys.stderr)
     art = build(rows)
-    open("suijin/assets/banner.ans", "w").write(art)
+    with open("suijin/assets/banner.ans", "w") as fh:
+        fh.write(art)
     n_rows = len(art.rstrip("\n").split("\n"))
     xs_len = None
     # recompute cropped width for the gate
     ys = [y for y, r in enumerate(rows) if any(c != 0 for c in r)]
     xs = [x for x in range(WIDTH) if any(r[x] != 0 for r in rows)]
-    print(f"banner.ans: {len(art)} bytes, {n_rows} rows, art width {max(xs)-min(xs)+1}", file=sys.stderr)
+    print(f"banner.ans: {len(art)} bytes, {n_rows} rows, art width {max(xs) - min(xs) + 1}", file=sys.stderr)

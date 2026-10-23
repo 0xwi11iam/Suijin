@@ -78,7 +78,7 @@ def sshd(tmp_path_factory):
         "PasswordAuthentication no\n"
         "PubkeyAuthentication yes\n"
         f"AuthorizedKeysFile {ak}\n"
-        f"AllowUsers {os.environ.get('USER', 'williamjiang')}\n"
+        f"AllowUsers {os.environ.get('USER', 'user')}\n"
         "PidFile none\n"
     )
     # sshd needs root for privilege separation on macOS; the local rig has

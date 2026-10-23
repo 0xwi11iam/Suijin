@@ -18,8 +18,8 @@
 # This script is the answer. If the partition is missing, FAIL LOUD.
 set -euo pipefail
 
-SRC="${SUIJIN_SRC:-/Users/williamjiang/suijin}"
-HOME_DIR="${SUIJIN_HOME_DIR:-/Users/williamjiang/.suijin}"
+SRC="${SUIJIN_SRC:-$HOME/suijin}"
+HOME_DIR="${SUIJIN_HOME_DIR:-$HOME/.suijin}"
 PART=""
 for cand in "/Volumes/Suijin Backup" "/Volumes/Backup"; do
   if [ -d "$cand" ]; then PART="$cand"; break; fi

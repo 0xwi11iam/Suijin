@@ -418,7 +418,7 @@ def render_chat_block() -> str:
     ([team] = same target as us, [other:<summary>] = different
     engagement) — the agent can self-filter relevance without burning
     a reasoning turn on it (2026-10-02: lab-target chatter from an
-    unrelated engagement session confused the run's opening turn)."""
+    unrelated engagement's session confused the run's opening turn)."""
     gc_lines, _ = _tail(_gc_log(), 0.0)
     if not gc_lines and not _tail_state["dm_lines"]:
         return ""

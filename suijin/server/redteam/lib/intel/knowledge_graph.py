@@ -8,42 +8,84 @@ finding is stored here. All attack branches consult this graph BEFORE generating
 payloads — we never waste cycles on strings we already know get blocked.
 
 Storage backends (v5.1):
-  json   — the default: knowledge_graph.json in this directory (human-
-           readable, git-friendly) — unchanged behavior.
+  json   — the default: knowledge_graph.json. WORKSPACE-FIRST: the live
+           graph is <workspace>/intel/knowledge_graph.json (learned
+           intel NEVER writes into the package tree — that path once
+           put a live engagement's API keys and target intel into git);
+           the in-tree file is a READ-ONLY neutral seed, copied to the
+           workspace on first boot.
   neo4j  — flip config.json "kg_backend": "neo4j" (+ neo4j_uri/user/
            password, or SUIJIN_NEO4J_* env vars) to switch. Same API,
            same result shapes; see kg_backend.py for the schema and the
            switch contract.
 """
 
+import contextlib
 import json
 from pathlib import Path
 
 from suijin.modules.redteam.lib.intel.kg_backend import get_backend
 
 BASE_DIR = Path(__file__).resolve().parent
-GRAPH_PATH = BASE_DIR / "knowledge_graph.json"
+#: the READ-ONLY shipped seed: neutral, engagement-free lessons only.
+#: The LIVE graph lives in the WORKSPACE — learned intel (findings,
+#: API keys, target behavior) must NEVER write into the package tree:
+#: that path put a live engagement's keys and target intel into git
+#: (operator ruling 2026-10-23: nothing hardcoded, nothing engagement-
+#: identifying in committed artifacts).
+SEED_PATH = BASE_DIR / "knowledge_graph.json"
+
+
+def _default_graph_path() -> Path:
+    """Workspace-first resolution ( GRAPH_PATH stays the monkeypatch seam:
+    tests reassign it and _kg() re-resolves on every call)."""
+    with contextlib.suppress(Exception):
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+        return WORKSPACE_DIR / "intel" / "knowledge_graph.json"
+    return SEED_PATH
+
+
+GRAPH_PATH = _default_graph_path()
 
 
 # Back-compat file ops (tests and tooling use these directly on the JSON
 # store; the neo4j backend is exercised through the public API below).
 def _load():
-    if not GRAPH_PATH.exists():
-        return {}
-    try:
-        return json.loads(GRAPH_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+    for p in (GRAPH_PATH, SEED_PATH):
+        if p.exists():
+            try:
+                return json.loads(p.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+    return {}
 
 
 def _save(data):
+    # workspace only — never the package seed
+    GRAPH_PATH.parent.mkdir(parents=True, exist_ok=True)
     GRAPH_PATH.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
 
 
 def _kg():
     """The configured backend. GRAPH_PATH is resolved at EVERY call so
     monkeypatching it (tests) keeps working through the seam."""
-    return get_backend(lambda: GRAPH_PATH)
+    return get_backend(_seeded_path)
+
+
+def _seeded_path() -> Path:
+    """GRAPH_PATH, materialized: on a fresh workspace the shipped seed
+    is copied ONCE so the graph boots with its neutral lessons. A
+    monkeypatched GRAPH_PATH (tests) is never touched — they own that
+    file outright."""
+    p = GRAPH_PATH
+    if p == _default_graph_path() and SEED_PATH.exists() and not p.exists():
+        with contextlib.suppress(Exception):
+            import shutil
+
+            p.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(SEED_PATH, p)
+    return p
 
 
 # ---------------------------------------------------------------------------

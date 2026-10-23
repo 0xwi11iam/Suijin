@@ -180,7 +180,7 @@ def archive_box(log=None) -> bool:
         bx.box_start()
     total_mb = 0
     with contextlib.suppress(Exception):
-        rc, out = bx.run_in_box("du -sm /opt/suijin-ws 2>/dev/null | cut -f1", timeout=60)
+        rc, out = bx.run_in_box(f"du -sm {bx.BOX_WS} 2>/dev/null | cut -f1", timeout=60)
         if rc == 0 and out.strip().isdigit():
             total_mb = int(out.strip())
     date = __import__("time").strftime("%Y-%m-%d")

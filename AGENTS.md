@@ -37,3 +37,24 @@ obligation to the operator, not a style preference.
 Applied retroactively when found: if a target name is already in a
 committed artifact, flag it to the operator and scrub on the next commit
 (history rewrites only on explicit request).
+
+## Nothing hardcoded (PERMANENT operator ruling, 2026-10-23)
+
+No hardcoded values in committed artifacts, ever:
+
+- No credentials or credential-shaped strings — test fixtures are
+  self-evidently synthetic (`ghp_` + filler chars), never real keys.
+- No engagement-derived data: target names, program intel, or learned
+  knowledge in the tree. The knowledge graph's write path once pointed
+  into the package dir and committed a live engagement's API keys and
+  target intel — it is WORKSPACE-first now (workspace intel/
+  knowledge_graph.json), with a neutral read-only seed in-tree.
+- No machine-specific paths (`/Users/<name>`, `/home/<name>`) — derive
+  from `$HOME`, the workspace, or config.
+- Operator-tunable data lives in config/registry tables, not logic.
+  Safety floors (the hard-guardrail denylist) are deliberately
+  hardcoded — do not move them to config.
+
+`suijin/tests/ops/test_no_hardcode.py` is the tripwire (secrets,
+machine paths, package-tree writes). Engagement tokens for its scan
+come from local-only `agent-vault/targets.txt` — never committed.

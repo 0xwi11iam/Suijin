@@ -196,7 +196,7 @@ def generate_skill(key: str, data: dict) -> str:
     """Generate a SKILL.md file content with YAML frontmatter."""
     fm_lines = [
         "---",
-        f'name: {data["name"]}',
+        f"name: {data['name']}",
         f'description: "{data["description"][:120]}"',
         f'category: "{data["category"]}"',
         'version: "1.0"',

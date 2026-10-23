@@ -112,7 +112,7 @@ def sshd(tmp_path_factory):
         f"Port {SSHD_PORT}\nListenAddress 127.0.0.1\nHostKey {tmp / 'hk'}\nUsePAM {'no' if sys.platform == 'darwin' else 'yes'}\n"
         "StrictModes no\n"  # CI tmp dirs are world-writable parents
         f"PasswordAuthentication no\nPubkeyAuthentication yes\nAuthorizedKeysFile {ak}\n"
-        f"AllowUsers {os.environ.get('USER', 'williamjiang')}\nPidFile none\n"
+        f"AllowUsers {os.environ.get('USER', 'user')}\nPidFile none\n"
     )
     try:
         subprocess.run(["sudo", "-n", "true"], capture_output=True, timeout=10, check=True)

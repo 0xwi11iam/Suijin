@@ -6,7 +6,7 @@
 ## Repo facts
 
 - **Agent memory vault: `agent-vault/` (gitignored) — read it FIRST on a fresh session.** Decisions, session logs, engagement memory, roadmap state. Pointers from `AGENTS.md`.
-- Repo: `/Users/williamjiang/suijin`, GitHub: `https://github.com/0xwi11iam/Suijin`
+- Repo: `~/suijin` (live tree), GitHub: `https://github.com/0xwi11iam/Suijin`
 - venv: `.venv/bin/python` (Python 3.14); CI matrix py3.10/3.11/3.12
 - Gates: `.venv/bin/python -m pytest suijin/tests -q -m "not ai and not slow"` (~2918 passed) + `-m slow` + `ruff check` + `ruff format`. **The suite is HERMETIC**: `tests/conftest.py` redirects `HOME`, `SUIJIN_WORKSPACE`, `SUIJIN_CONFIG` and `SUIJIN_ENV` into a session sandbox AT IMPORT TIME (before any `suijin` import — `Path.home()` is baked into `PACK_ROOTS`/`WORKSPACE_DIR`/`CONFIG_PATH` on first import, so redirecting later does nothing). A test that needs the real home must opt in explicitly. KNOWN IN-FULL-RUN FLAKE (pre-existing, P0 tree consolidation): the `sys.modules` bridge (`suijin/modules/*` ↔ `suijin/server/*`) makes ~41 tests fail + 19 collection errors in one process depending on order; every affected suite is green run in isolation.
 - Version 7.2.0 published (PyPI/GHCR/Release); `suijin/version.json` was stale at 7.1.0 — bumped (it is the single source of truth for `suijin --version`).
@@ -20,7 +20,7 @@
 ## THE INVARIANTS — breaking any of these broke the field
 
 ### Target landscape & breadth (2026-10-18)
-0. **The agent sees PRODUCT FAMILIES, not just endpoints** — `landscape.py` detects families (large platform → 10) and renders "X/Y explored" in think context. The BREADTH ALERT fires when >60% of last 20 actions target one family while untested families exist. The depth-over-coverage gate is FAMILY-SCOPED — surface_expand is blocked only for the same family as the pending chain, never across families (the blanket block caused heavy tunnel vision in a live run).
+0. **The agent sees PRODUCT FAMILIES, not just endpoints** — `landscape.py` detects families (a large platform → 10) and renders "X/Y explored" in think context. The BREADTH ALERT fires when >60% of last 20 actions target one family while untested families exist. The depth-over-coverage gate is FAMILY-SCOPED — surface_expand is blocked only for the same family as the pending chain, never across families (the blanket block caused heavy tunnel vision in a live run).
 0a. **Contamination scrub on .sje resume** — dead credential literals (verified SERVICE_DISABLED in a prior run) are scrubbed to `[SCRUBBED:dead-key]` before state seeding. K1/K2 API keys from dead runs stop appearing as fresh discoveries.
 0b. **Temp dir auto-resolution** — bare `/tmp/` in execute_terminal rewrites to engagement `tmp/` in-place. `/var/tmp/` preserved (sandbox denial is load-bearing).
 
@@ -388,6 +388,20 @@ p=0.31 below threshold → no intervention; model answered in 82-231ms.
 
 ## Knowledge hardening + KG live (2026-10-07)
 
+0. **The KG is WORKSPACE-FIRST (2026-10-23, the no-hardcode ruling)**:
+   the live graph is `<workspace>/intel/knowledge_graph.json` — the
+   in-tree `knowledge_graph.json` is a READ-ONLY neutral seed (lab +
+   example.com + target-agnostic methodology), copied to the workspace
+   on first boot. The write path used to point at the package dir,
+   which committed live-engagement API keys and target intel into git
+   (the file was later gitignored, but history holds it — flagged to
+   the operator 2026-10-23). Landscape platform-maps moved the same
+   way: `_KNOWN_FAMILIES` ships EMPTY, operators carry their maps in
+   config `landscape_families` (dict = per-platform, list = any
+   target). `suijin/tests/ops/test_no_hardcode.py` is the standing
+   tripwire (synthetic-only secrets, no machine paths, no package-tree
+   writes; engagement tokens from local-only
+   `agent-vault/targets.txt`). Ruling codified in AGENTS.md.
 1. **Neo4j KG is the live backend** (local config `kg_backend=neo4j`):
    docker container `suijn-kg` (neo4j:5, volume `suijn-kg-data`, bolt
    127.0.0.1:7687, creds in `suijin/.env` — NEVER config.json, that file
