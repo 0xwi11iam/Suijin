@@ -496,12 +496,35 @@ def _emit(on_delta, kind, piece):
 _diag_ttft = {"t0": None, "seen": False}
 
 
+def _diag_caller() -> str:
+    """Best-effort 'who asked for this call' for llm diag lines: the
+    first frame outside provider internals. '' when the trail crosses a
+    thread boundary (asyncio.to_thread) — partial identity still beats
+    none (field 2026-10-23: a 1-msg call sat in the diag with no way to
+    tell which subsystem made it)."""
+    import sys
+
+    skip = ("providers", "llm_client", "threading", "concurrent", "asyncio")
+    try:
+        f = sys._getframe(1)
+        hops = 0
+        while f is not None and hops < 12:
+            mod = str(f.f_globals.get("__name__", ""))
+            if mod and not any(s in mod for s in skip):
+                return f"{mod.rsplit('.', 1)[-1]}.{f.f_code.co_name}"
+            f = f.f_back
+            hops += 1
+    except Exception:  # noqa: BLE001 — diagnostics must never raise
+        pass
+    return ""
+
+
 def _diag_llm_start(provider: str, model: str, msgs: int):
     from suijin.kernel.diag import diag
 
     _diag_ttft["t0"] = time.monotonic()
     _diag_ttft["seen"] = False
-    diag("llm_start", provider=provider, model=model, msgs=msgs)
+    diag("llm_start", provider=provider, model=model, msgs=msgs, caller=_diag_caller() or "thread")
 
 
 def _diag_llm_done(provider: str, model: str, ok: bool, wall_s: float):
@@ -640,6 +663,22 @@ def _diagnose_transport(exc) -> str:
     if "connection" in low:
         return f"connection failed — reset/refused mid-transport (often VPN/proxy flapping) [{name}]"
     return f"{name}: {str(exc)[:120]}"
+
+
+def _transient_transport(diag: str) -> bool:
+    """Transport-class failures (DNS/connection/timeout/TLS) usually heal
+    in tens of seconds, so they earn a steeper backoff than HTTP errors.
+    A ~30s DNS blip once ended a healthy engagement (2026-10-23): the
+    whole chain's 2s+4s per provider gave up before DNS returned."""
+    d = str(diag).lower()
+    return any(k in d for k in ("dns", "getaddrinfo", "connection", "timeout", "tls", "transport failure"))
+
+
+def _retry_sleep(attempt: int, last_diag: str) -> float:
+    """Backoff between attempts: 2s·2^n for HTTP-class errors (fail fast,
+    failover is cheaper), 5s·2^n capped at 30s for transport-class ones
+    (waiting out the blip is cheaper than dying)."""
+    return min(30, 5 * 2**attempt) if _transient_transport(last_diag) else 2 * 2**attempt
 
 
 # ----------------------------------------------------------------------
@@ -1253,7 +1292,7 @@ def generate(
                 last_diag = _diagnose_transport(e)
             logger.warning(f"Z.ai attempt {attempt + 1} failed — {last_diag}")
             if attempt < retries - 1:
-                time.sleep(2 * (2**attempt))  # 2s, 4s, 8s backoff
+                time.sleep(_retry_sleep(attempt, last_diag))  # transport blips get the steep curve
         _diag_llm_done("zai", zai_model, False, time.monotonic() - _zai_t0)
         return f"Error: Z.ai API unreachable after {retries} attempt(s) — {last_diag}"
 
@@ -1373,7 +1412,7 @@ def _compat_call(spec, messages, config, *, temperature, max_tokens, retries, on
             last_diag = _diagnose_transport(e)
         logger.warning(f"{spec.label} attempt {attempt + 1} failed — {last_diag}")
         if attempt < retries - 1:
-            time.sleep(2 * (2**attempt))
+            time.sleep(_retry_sleep(attempt, last_diag))
     _diag_llm_done(spec.key, model, False, time.monotonic() - _t0)
     return f"Error: {spec.label} unreachable after {retries} attempt(s) — {last_diag}"
 
@@ -1406,6 +1445,7 @@ def generate_with_failover(messages, config=None, **kwargs) -> str:
     chain += [p for p in (cfg.get("fallback_providers") or []) if p != chain[0]]
     FAILOVER_STATS["chains"] += 1
     last = ""
+    errs: list[tuple[str, str]] = []  # (provider, error) in chain order
     for i, provider in enumerate(chain):
         cfg["provider"] = str(provider).lower()
         out = generate(messages, cfg, **kwargs)
@@ -1421,6 +1461,17 @@ def generate_with_failover(messages, config=None, **kwargs) -> str:
             FAILOVER_STATS["errors_by_provider"].get(cfg["provider"], 0) + 1
         )
         last = out
+        errs.append((cfg["provider"], str(out)))
     FAILOVER_STATS["all_down"] += 1
     _failover_event(f"ALL {len(chain)} provider(s) failed: {', '.join(chain)}")
+    if len(errs) > 1:
+        # NAME THE WHOLE CHAIN. Returning only the last provider's error
+        # made a zai outage read as an OpenCode Zen one — the operator
+        # concluded the UI was lying about the model (field 2026-10-23).
+        def _seg(err: str) -> str:
+            return str(err).removeprefix("Error: ")[:200]
+
+        segs = [f"primary {errs[0][0]}: {_seg(errs[0][1])}"]
+        segs += [f"fallback {name}: {_seg(err)}" for name, err in errs[1:]]
+        return "Error: all providers failed — " + " | ".join(segs)
     return last

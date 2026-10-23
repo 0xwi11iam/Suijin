@@ -304,13 +304,32 @@ class TestFailover:
         )
         assert out == "fine" and calls == ["zai"]
 
-    def test_all_down_returns_last_error(self, monkeypatch):
+    def test_all_down_names_the_whole_chain(self, monkeypatch):
+        """Field 2026-10-23: returning only the LAST provider's error made
+        a zai outage read as an OpenCode Zen one — the operator concluded
+        the UI was lying about the model. The aggregate names everyone."""
+        from suijin.modules.providers import lib as providers
+
+        def fake_generate(messages, config=None, **kw):
+            if config["provider"] == "zai":
+                return "Error: Z.ai API unreachable after 3 attempt(s) — DNS failure"
+            return "Error: 402 (OpenCode Zen rejected the call — insufficient credits)"
+
+        monkeypatch.setattr(providers, "generate", fake_generate)
+        out = providers.generate_with_failover(
+            [{"role": "user", "content": "hi"}], {"provider": "zai", "fallback_providers": ["opencode"]}
+        )
+        assert out.startswith("Error: all providers failed")
+        assert "primary zai: Z.ai API unreachable" in out
+        assert "fallback opencode: 402" in out
+        # the primary segment (what out-of-credits detection reads) has no 402
+        assert "402" not in out.split(" | fallback")[0]
+
+    def test_single_provider_chain_keeps_its_error(self, monkeypatch):
         from suijin.modules.providers import lib as providers
 
         monkeypatch.setattr(providers, "generate", lambda m, c=None, **k: "Error: nope")
-        out = providers.generate_with_failover(
-            [{"role": "user", "content": "hi"}], {"provider": "zai", "fallback_providers": ["deepseek"]}
-        )
+        out = providers.generate_with_failover([{"role": "user", "content": "hi"}], {"provider": "zai"})
         assert out == "Error: nope"
 
 
