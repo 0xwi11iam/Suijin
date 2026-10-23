@@ -190,18 +190,11 @@ def sync_selected(items: list[str], log=print) -> list[str]:
                     # them. They are meaningless there — silence it, and
                     # capture so nothing leaks to the operator's terminal.
                     extract_cmd = f"mkdir -p {quoted} && tar xzf - --warning=no-unknown-keyword -C {quoted}"
+                    # the DETECTED engine, not orb-presence: a mac user
+                    # who chose docker streamed through orb anyway (and a
+                    # linux user has no orb to find) — full-compat rule
                     proc = subprocess.run(
-                        ["orb", "-m", bx.BOX_NAME, "bash", "-lc", extract_cmd]
-                        if shutil_which_orb()
-                        else [
-                            "docker",
-                            "exec",
-                            "-i",
-                            bx.BOX_NAME,
-                            "bash",
-                            "-lc",
-                            extract_cmd,
-                        ],
+                        bx.box_cmd_argv(extract_cmd, stdin_attached=True),
                         input=tar.stdout,
                         capture_output=True,
                         timeout=300,
@@ -237,3 +230,6 @@ def shutil_which_orb() -> bool:
     import shutil
 
     return shutil.which("orb") is not None
+
+
+_ = shutil_which_orb  # retained for backwards compatibility of imports

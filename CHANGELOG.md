@@ -8,6 +8,36 @@ All notable changes to Suijin.
 
 ## Unreleased
 
+### box: full engine compatibility + clean build rows + `box shell` (2026-10-24)
+
+Suijin supports OrbStack and Docker with full compatibility for both
+(operator manual-tests OrbStack now; Docker later):
+
+- engine detection is platform-aware: OrbStack is macOS-only — a Linux
+  user with docker gets docker SILENTLY (never asked, an `orb` binary
+  off-mac is ignored). The one-time picker only fires on mac with both
+  runtimes.
+- the docker path got real: same memory/cpu caps as orb (disk cap
+  omitted — `--storage-opt size=` only works on pquota-xfs hosts), a
+  CONDITIONAL repo mount (pip-installed hosts have no tree to mount)
+  with Windows path translation, `-i` exec for stdin tar-streams
+  through the detected engine (a mac user who chose docker used to
+  stream through orb anyway), and the root-without-sudo bootstrap —
+  kalilinux images run as root with no `sudo` binary, so base/`/opt`
+  setup adapts with `$S` and `sudo` is installed as a base package so
+  every manifest sudo-line works identically.
+- CLEAN ROWS: installs run as `apt-get -q -o Dpkg::Use-Pty=0` and the
+  live stream collapses `\r`-redraws — apt's pty progress bars used to
+  shred the build output into diagonal scattered rows across the
+  terminal. Verified live: install blocks now render one straight row
+  per line (drift 4 = the indent, was hundreds).
+- tools are on PATH in EVERY shell: profile.d (login shells — all exec
+  paths) AND `~/.bashrc` (interactive sessions). Verified live: pip
+  (~/.local/bin), SDK (google-cloud-sdk/bin), go (~/go/bin) and sbin
+  tools all resolve in login, interactive, and `box shell` sessions.
+- `suijin box shell` — straight into an interactive bash in the box,
+  no drift ceremony (`enter` keeps that job).
+
 ### nothing hardcoded — the 2026-10-23 sweep (PERMANENT ruling)
 
 Operator ruling: no hardcoded values in committed artifacts, ever.

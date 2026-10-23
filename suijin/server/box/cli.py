@@ -3,7 +3,8 @@
 suijin box                the manager tui (interactive)
 suijin box build          create + provision (resumable)
 suijin box start          ensure running
-suijin box enter          drift check → interactive session
+suijin box enter          drift check → interactive session (menu or shell)
+suijin box shell          straight into an interactive bash shell in the box
 suijin box status         one-line state
 suijin box refresh        host → box sync (all items)
 suijin box stop / destroy
@@ -221,11 +222,30 @@ def archive_box(log=None) -> bool:
         return False
 
 
+def cmd_shell(args=None) -> int:
+    """`suijin box shell` — straight into an interactive bash shell in
+    the box. No drift ceremony (that's `enter`'s job): this is the 'let
+    me poke around' door. Starts the box if needed."""
+    from suijin.server.box import engine as bx
+
+    if not bx.box_exists():
+        _print("box not built — run `suijin box build` first")
+        return 1
+    if not bx.box_running():
+        ok, out = bx.box_start()
+        if not ok:
+            _print(f"box failed to start: {out}")
+            return 1
+        _print("box started")
+    return bx.box_enter_interactive(action="shell")
+
+
 VERBS = {
     "build": cmd_build,
     "start": cmd_start,
     "stop": cmd_stop,
     "enter": cmd_enter,
+    "shell": cmd_shell,
     "status": cmd_status,
     "refresh": cmd_refresh,
     "destroy": cmd_destroy,

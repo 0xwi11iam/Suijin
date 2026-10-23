@@ -34,6 +34,10 @@ _BASE_PACKAGES = [
     "curl",
     "tar",
     "ca-certificates",
+    # the toolchain's manifest lines are sudo-prefixed; root-only docker
+    # images (kalilinux) ship without the binary — install it as root so
+    # every later line works identically on every engine
+    "sudo",
 ]
 
 
@@ -65,7 +69,10 @@ def _tool_apt_line(name: str) -> str:
 def _box_line(line: str) -> str:
     """Make a manifest fallback executable as the unprivileged box user.
     pip needs --user + --break-system-packages (PEP 668), gem needs sudo
-    (the system gem dir); apt lines arrive already automation-safe."""
+    (the system gem dir); apt lines arrive already automation-safe — and
+    run as apt-get in PIPE MODE: the fancy `apt` front-end draws \\r-based
+    progress bars that shred the live stream into diagonal scattered
+    rows when the runtime allocates a pty (field 2026-10-24)."""
     line = line.split(" (", 1)[0].strip()  # drop trailing prose/parentheticals
     if line.startswith(("pip install ", "pip3 install ")):
         tools = line.split()
@@ -74,7 +81,26 @@ def _box_line(line: str) -> str:
         return " ".join([tools[0], "install", *flags, *rest])
     if line.startswith("gem install "):
         return f"sudo {line}"
+    # apt -> apt-get, quiet, dpkg without its pty progress redraws —
+    # every engine (orb's exec gives a pty; docker exec doesn't) gets
+    # the same clean line output
+    if " apt install " in f" {line} " or line.endswith(" apt install"):
+        line = line.replace("apt install", "apt-get install -q -o Dpkg::Use-Pty=0")
+    if " apt update" in line:
+        line = line.replace("apt update", "apt-get update -q")
     return line
+
+
+def _clean_stream_line(ln: str) -> str:
+    """One clean row per streamed line: \r-redraws collapse to their
+    FINAL state, control chars drop, and the padding redraws leave
+    behind collapses — the operator sees straight rows (2026-10-24)."""
+    import re
+
+    ln = ln.split("\r")[-1]
+    ln = re.sub(r"[\x00-\x08\x0b-\x1f\x1b]", "", ln)
+    ln = re.sub(r" {4,}", "   ", ln)
+    return ln.strip()
 
 
 #: one tool may take this long before we kill it and move on (the
@@ -116,7 +142,7 @@ def _stream_install(cmd: str, name: str, log) -> tuple[bool, str]:
     def _pump():
         try:
             for ln in proc.stdout or []:
-                ln = ln.rstrip()
+                ln = _clean_stream_line(ln)
                 if ln:
                     lines.append(ln)
                     last_activity[0] = time.time()
@@ -143,18 +169,27 @@ def _stream_install(cmd: str, name: str, log) -> tuple[bool, str]:
 
 def ensure_ws() -> bool:
     """Create the box workspace owned by the box user (orb's default
-    user is unprivileged; /opt needs sudo once, then it's ours)."""
-    rc, _ = bx.run_in_box(f"sudo mkdir -p {bx.BOX_WS} && sudo chown -R $(whoami) {bx.BOX_WS}", timeout=60)
+    user is unprivileged; docker's kali image runs as root without a
+    sudo binary — $S covers both)."""
+    rc, _ = bx.run_in_box(
+        "S=''; command -v sudo >/dev/null 2>&1 && S=sudo; "
+        f"$S mkdir -p {bx.BOX_WS} && $S chown -R $(whoami) {bx.BOX_WS}",
+        timeout=60,
+    )
     return rc == 0
 
 
 def stage_base(log) -> bool:
     log("installing base packages (python, pipx, git …)")
-    # pipefail: a piped tail must never mask the install's exit code;
-    # sudo: the orb default user is unprivileged with passwordless sudo
+    # pipefail: a piped tail must never mask the install's exit code.
+    # sudo is OPTIONAL: orb's default user is unprivileged (passwordless
+    # sudo), but docker's kalilinux image runs as ROOT with no sudo
+    # binary — `$S` is empty there and the bootstrap still works
+    # (full-compatibility rule 2026-10-24: same path on every engine).
     rc, out = bx.run_in_box(
-        "set -o pipefail; sudo apt-get update -qq && "
-        "DEBIAN_FRONTEND=noninteractive sudo apt-get install -y -qq --no-install-recommends "
+        "set -o pipefail; S=''; command -v sudo >/dev/null 2>&1 && S=sudo; "
+        "$S apt-get update -qq && "
+        "DEBIAN_FRONTEND=noninteractive $S apt-get install -y -qq -o Dpkg::Use-Pty=0 --no-install-recommends "
         + " ".join(_BASE_PACKAGES)
         + " 2>&1 | tail -3",
         timeout=1800,
@@ -207,7 +242,18 @@ def stage_profile(log) -> bool:
         f"printf '%s' '{quoted}' | sudo tee {bx.PROFILE_DROPIN} >/dev/null && sudo chmod 644 {bx.PROFILE_DROPIN}",
         timeout=60,
     )
-    return rc == 0
+    # PATH for EVERY shell, not just login shells: profile.d covers
+    # `bash -l` (all our exec paths), .bashrc covers the interactive
+    # `box enter` shell — installed tools must answer `command -v` in
+    # both (operator ruling 2026-10-24: make sure it adds tools to path)
+    rc2, _ = bx.run_in_box(
+        "grep -q 'suijin-box path' ~/.bashrc 2>/dev/null || "
+        "printf '%s\\n' '# suijin-box path (tools on PATH in every shell)' "
+        "'export PATH=$HOME/.local/bin:$HOME/go/bin:$HOME/google-cloud-sdk/bin:/usr/local/sbin:/usr/sbin:/sbin:$PATH' "
+        ">> ~/.bashrc",
+        timeout=60,
+    )
+    return rc == 0 and rc2 == 0
 
 
 def stage_config(log) -> bool:
@@ -392,7 +438,7 @@ def stage_tools(log, progress=None, cancel=None) -> bool:
             log(
                 f"prereq: {len([1 for r, _ in plan.values() if r == rt])} tools need the {rt} runtime — installing {pkg}"
             )
-            ok, tail = _stream_install(f"sudo apt install -y --no-install-recommends {pkg}", pkg, log)
+            ok, tail = _stream_install(_box_line(f"sudo apt install -y --no-install-recommends {pkg}"), pkg, log)
             if not ok:
                 log(f"prereq {pkg} failed — the {rt} tools will be skipped this round:")
                 for ln in (tail or "").splitlines()[-3:]:
