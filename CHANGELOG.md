@@ -8,6 +8,35 @@ All notable changes to Suijin.
 
 ## Unreleased
 
+### provider failover: stop misattributing outages (2026-10-23)
+
+A healthy zai/glm-5.3 engagement (17 iterations, $0.18) died in a ~30s
+DNS blip and the failure panel blamed **OpenCode Zen** — the operator
+concluded the UI was lying about the model. The event log proved
+provider=zai all along: the auto-failover chain had silently tried
+opencode after zai's DNS failure, and only the LAST provider's error
+was returned.
+
+- When the whole chain fails, the error is now an aggregate naming
+  every provider in chain order: `Error: all providers failed —
+  primary zai: … | fallback opencode: …`. Nobody has to guess which
+  model was actually running.
+- The out-of-credits halt fires only when the PRIMARY credit-died —
+  a dead fallback's 402 no longer masks the primary's real error.
+- Transport-class failures (DNS/connection/timeout/TLS) now back off
+  5s·2^n capped at 30s instead of 2s·2^n — the blip outlived the old
+  curve. HTTP-class errors keep the fast curve (failover is cheaper).
+- Field-verified in the box: the aggregate renders through the real
+  failover path, and healthy zai calls are untouched.
+- A session END now tears down its background machinery
+  (`job_registry.cancel_all` + `mesh.stop` in the run's finally): the
+  mesh heartbeat was still beating and tool jobs still scanning TEN
+  MINUTES after the session died — their "tap on the shoulder" prints
+  interleaved with the mode-selector redraw and mangled the banner.
+- Every `llm_start` diag line carries a `caller` tag — the next
+  anonymous LLM call in the log identifies its subsystem instead of
+  becoming archaeology.
+
 ### box config + provider-key plumbing (2026-10-23 — the 5-second engagement crash)
 
 A box engagement crashed seconds after state resumed: the box had no

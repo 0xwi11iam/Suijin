@@ -1256,9 +1256,13 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
         # Provider error: no point retrying parse, provider already retried internally.
         # One retry at think level for transient network glitches, then bail.
         # 402 = OUT OF CREDITS: no point retrying at all — kill instantly
-        # with a message the operator can read.
+        # with a message the operator can read. PRIMARY SEGMENT ONLY: a
+        # fallback's 402 must not mask the primary's real error (the
+        # aggregated chain error names every provider; credit-death is
+        # only terminal for the provider the operator actually selected).
         if isinstance(raw_response, str) and raw_response.startswith("Error:"):
-            if "402" in raw_response or "credit" in raw_response.lower() or "billing" in raw_response.lower():
+            _primary_seg = raw_response.split(" | fallback", 1)[0]
+            if "402" in _primary_seg or "credit" in _primary_seg.lower() or "billing" in _primary_seg.lower():
                 return {
                     "messages": [
                         {

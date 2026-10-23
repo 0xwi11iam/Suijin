@@ -58,6 +58,33 @@ class TestJobRegistry:
         jr.cancel(job_id)  # idempotent-ish: already finished
         assert jr.get(job_id)["status"] == "cancelled"
 
+    def test_cancel_all_kills_running_only(self):
+        """Session end must take its background work with it — the
+        mangled-menu field report (2026-10-23) was job taps printing
+        after the operator was already back at the mode selector."""
+        import threading
+
+        release = threading.Event()
+
+        def slow(name, args, cfg):
+            release.wait(10)
+
+        running_a = jr.spawn("scan_a", {}, fn=slow)
+        running_b = jr.spawn("scan_b", {}, fn=slow)
+        done_c = jr.spawn("quick", {}, fn=lambda n, a, c: "ok")
+        deadline = time.time() + 5
+        while time.time() < deadline and jr.get(done_c)["status"] not in ("done", "failed"):
+            time.sleep(0.05)
+        cancelled = jr.cancel_all("session ended")
+        assert sorted(cancelled) == sorted([running_a, running_b])
+        deadline = time.time() + 5
+        while time.time() < deadline and any(jr.get(j)["status"] == "running" for j in (running_a, running_b)):
+            time.sleep(0.05)
+        assert jr.get(running_a)["status"] == "cancelled"
+        assert jr.get(running_b)["status"] == "cancelled"
+        assert jr.get(done_c)["status"] == "done"  # finished work untouched
+        release.set()
+
     def test_node_delegates_to_registry(self):
         """execute_tool_node must use THE registry — no private copy."""
         from suijin.modules.agent.lib.nodes import execute_tool_node as node

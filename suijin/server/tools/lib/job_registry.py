@@ -186,6 +186,19 @@ def _register_proc(proc) -> None:
             j["_proc"] = proc
 
 
+def cancel_all(reason: str = "") -> list[str]:
+    """Cancel EVERY running job — session end. The session owns its
+    background work: without this, tool subprocesses kept scanning and
+    job 'taps' kept printing after the operator was back at the menu
+    (field 2026-10-23: the taps interleaved with the mode-selector
+    redraw and mangled the banner). Returns the ids cancelled."""
+    with _job_lock:
+        running = [k for k, v in _jobs.items() if v["status"] == "running"]
+    for k in running:
+        cancel(k)
+    return running
+
+
 def cancel(job_id: str) -> bool:
     """Cancel a job. v5.2: actually KILLS the subprocess process-group.
 

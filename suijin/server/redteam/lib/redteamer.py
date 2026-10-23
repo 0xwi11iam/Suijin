@@ -2110,6 +2110,20 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
 
             _lb.stop()  # flush the ledger; the digest state persists for resume
             _lb.set_ui_publish(None)  # UI is going down — never call a dead sink
+        # BACKGROUND MACHINERY TEARDOWN (2026-10-23): the session ended
+        # but its machinery didn't — daemon threads (mesh heartbeat, tool
+        # jobs) kept running under the mode selector: job taps interleaved
+        # with the menu redraw (the mangled-banner field report) and tool
+        # subprocesses kept scanning with nobody watching. The session
+        # owns its background work; it dies here.
+        with contextlib.suppress(Exception):
+            from suijin.modules.tools.lib import job_registry as _jr
+
+            _jr.cancel_all("session ended")
+        with contextlib.suppress(Exception):
+            from suijin.modules.agent.lib import mesh as _mesh
+
+            _mesh.stop()
         with contextlib.suppress(Exception):
             # restore the PRIOR sigint handler — the custom one used to
             # outlive the engagement (Ctrl+C at the menu still flipped flags)
