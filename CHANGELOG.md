@@ -67,6 +67,11 @@ was returned.
 - Every `llm_start` diag line carries a `caller` tag — the next
   anonymous LLM call in the log identifies its subsystem instead of
   becoming archaeology.
+- Pausing is SILENT now: Ctrl-C's KeyboardInterrupt used to surface at
+  GC as "Task exception was never retrieved" printed AFTER the PAUSED
+  SAFE panel — it read like a crash on every pause. The interrupt is
+  handled inside the run (sentinel + shared PAUSED SAFE panel) and the
+  loop's exception handler drops interruption noise at teardown.
 
 ### box config + provider-key plumbing (2026-10-23 — the 5-second engagement crash)
 

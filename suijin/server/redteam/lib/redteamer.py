@@ -334,11 +334,30 @@ def _merge_profile_overrides(cfg: dict) -> dict:
     return cfg
 
 
+def _quiet_teardown_handler(loop, context):
+    """Pause/teardown noise: Ctrl-C interrupts land on the main task and
+    surface at GC as "Task exception was never retrieved" — printed AFTER
+    the PAUSED SAFE panel, reading like a crash on every pause (field
+    report 2026-10-23). Interruption at shutdown is expected; swallow it,
+    keep the default voice for everything else."""
+    exc = context.get("exception")
+    msg = str(context.get("message", ""))
+    if isinstance(exc, (asyncio.CancelledError, KeyboardInterrupt)) and (
+        msg.startswith(("Task exception was never retrieved", "Task was destroyed")) or not msg
+    ):
+        return
+    if msg.startswith(("Task was destroyed", "unhandled exception during asyncio.run() shutdown")):
+        return
+    loop.default_exception_handler(context)
+
+
 async def run_red_team_async(config, objective, api_key=None, resume_state=None, seed_queue=None):
     # PROVIDER KEYS FIRST: the TUI/daemon entries never called load_env,
     # so a box with a perfectly good .env still died at the first call
     # ("API key not set", field report 2026-10-22). Idempotent.
     load_env()
+    with contextlib.suppress(Exception):
+        asyncio.get_running_loop().set_exception_handler(_quiet_teardown_handler)
     # the pydantic cost-cap warning echoes validator internals as a wall of
     # text — silenced everywhere; ONE red line below instead
     import warnings
@@ -2035,6 +2054,14 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
         import traceback
 
         traceback.print_exc()
+    except KeyboardInterrupt:
+        # Ctrl-C must not stay UNRETRIEVED on the main task: asyncio.run's
+        # teardown GCs it and Python prints a "Task exception was never
+        # retrieved" traceback AFTER the PAUSED SAFE panel — it read like
+        # a crash on every pause (field report 2026-10-23). Handle it
+        # HERE (the finally below still saves everything) and let the
+        # sync wrapper print the panel from the sentinel.
+        return {"_interrupted": True}
     finally:
         with contextlib.suppress(Exception):
             from suijin.modules.agent.lib.event_log import RESUME_SNAPSHOT_KEYS as _snap_keys
@@ -2241,6 +2268,26 @@ def _strip_rtf(path):
     return sc._strip_rtf(path)
 
 
+def _paused_safe_panel():
+    """The PAUSED SAFE panel — printed for every operator interrupt, from
+    whichever layer caught it (the async sentinel or the sync wrapper)."""
+    from rich.panel import Panel as _Panel
+
+    console.print(
+        _Panel(
+            "interrupted — the engagement was saved and can resume exactly where it stopped",
+            title=" PAUSED SAFE ",
+            title_align="left",
+            border_style="yellow",
+        )
+    )
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.engagement_bundle import CRASH_SAVER
+
+        if CRASH_SAVER.last_path is not None:
+            console.print(f"[dim]resume: suijin load {CRASH_SAVER.last_path.name}[/dim]")
+
+
 def run_red_team(config, objective, api_key=None, resume_state=None):
     """Sync entry point for TUI. NEVER exits silently — any crash renders
     a visible error panel (the launcher used to swallow it and drop back
@@ -2250,26 +2297,16 @@ def run_red_team(config, objective, api_key=None, resume_state=None):
 
     try:
         if resume_state is not None:
-            asyncio.run(run_red_team_async(config, objective, api_key=api_key, resume_state=resume_state))
+            _res = asyncio.run(run_red_team_async(config, objective, api_key=api_key, resume_state=resume_state))
         else:
-            asyncio.run(run_red_team_async(config, objective, api_key=api_key))
+            _res = asyncio.run(run_red_team_async(config, objective, api_key=api_key))
+        if isinstance(_res, dict) and _res.get("_interrupted"):
+            _paused_safe_panel()
     except KeyboardInterrupt:
         # NO interrupt may end a run silently: the async finally already
         # saved (crash-saver .sje + session) — surface the resume pointer
         # instead of a bare OPERATOR STOP (the old message read as a crash)
-        console.print(
-            _Panel(
-                "interrupted — the engagement was saved and can resume exactly where it stopped",
-                title=" PAUSED SAFE ",
-                title_align="left",
-                border_style="yellow",
-            )
-        )
-        with contextlib.suppress(Exception):
-            from suijin.modules.tools.lib.engagement_bundle import CRASH_SAVER
-
-            if CRASH_SAVER.last_path is not None:
-                console.print(f"[dim]resume: suijin load {CRASH_SAVER.last_path.name}[/dim]")
+        _paused_safe_panel()
     except Exception as e:  # noqa: BLE001 — the TUI must show, not swallow
         import traceback
 
