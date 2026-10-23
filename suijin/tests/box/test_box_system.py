@@ -61,16 +61,61 @@ class TestEngineDetect:
     def test_autodetect_orb_first(self, monkeypatch):
         monkeypatch.delenv("SUIJIN_CONTAINER_ENGINE", raising=False)
         import shutil
+        import sys
 
+        monkeypatch.setattr(sys, "platform", "darwin")
         monkeypatch.setattr(shutil, "which", lambda n: n == "orb")
         assert bx.detect_engine() == "orb"
 
     def test_none_when_nothing(self, monkeypatch):
         monkeypatch.delenv("SUIJIN_CONTAINER_ENGINE", raising=False)
         import shutil
+        import sys
 
+        monkeypatch.setattr(sys, "platform", "darwin")
         monkeypatch.setattr(shutil, "which", lambda n: False)
         assert bx.detect_engine() == ""
+
+    def test_linux_never_sees_orb_and_is_never_asked(self, monkeypatch):
+        """Full-compatibility rule (2026-10-24): orbstack is mac-only.
+        A linux user with docker gets docker SILENTLY — no prompt, even
+        with both binaries oddly on PATH and a TTY."""
+        import shutil
+        import sys
+
+        monkeypatch.delenv("SUIJIN_CONTAINER_ENGINE", raising=False)
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr(shutil, "which", lambda n: n in ("orb", "docker"))
+        monkeypatch.setattr(bx, "_configured_engine", lambda: "")
+        prompted: list[str] = []
+        monkeypatch.setattr(bx, "_prompt_engine", lambda: (prompted.append("x"), "")[1])
+        monkeypatch.setattr(bx, "_stdin_is_tty", lambda: True)
+        assert bx.detect_engine(interactive=True) == "docker"
+        assert not prompted
+
+    def test_docker_exec_gets_minus_i_for_stdin_streams(self, monkeypatch):
+        monkeypatch.setattr(bx, "detect_engine", lambda interactive=True: "docker")
+        argv = bx.box_cmd_argv("tar xzf - -C /opt", stdin_attached=True)
+        assert argv[:4] == ["docker", "exec", "-i", "suijin-box"]
+        plain = bx.box_cmd_argv("true")
+        assert "-i" not in plain
+
+    def test_docker_create_caps_resources_and_mounts_conditionally(self, monkeypatch):
+        captured: dict[str, list] = {}
+
+        def fake_run(cmd, timeout=600):
+            captured["argv"] = cmd
+            return 0, "container-id"
+
+        monkeypatch.setattr(bx, "detect_engine", lambda interactive=True: "docker")
+        monkeypatch.setattr(bx, "_run", fake_run)
+        monkeypatch.setattr(bx, "repo_root", lambda: "/home/user/src/suijin")
+        ok, _ = bx.box_create()
+        assert ok and "--memory" in captured["argv"] and "--cpus" in captured["argv"]
+        assert "-v" in captured["argv"]
+        monkeypatch.setattr(bx, "repo_root", lambda: "")  # pip-installed: no tree
+        ok, _ = bx.box_create()
+        assert ok and "-v" not in captured["argv"]
 
 
 class TestDrift:
@@ -133,13 +178,14 @@ class TestConfigSync:
         seen: dict[str, str] = {}
 
         def fake_run(cmd, timeout=600, engine=None):
-            seen["cmd"] = cmd
+            seen[cmd] = cmd
             return 0, ""
 
         monkeypatch.setattr(bx2, "run_in_box", fake_run)
         assert prov.stage_profile(lambda _m: None)
-        assert "SUIJIN_CONFIG=/opt/suijin-ws/config.json" in seen["cmd"]
-        assert "SUIJIN_ENV=/opt/suijin-ws/.env" in seen["cmd"]
+        profile_cmd = next(c for c in seen if "profile.d" in c)
+        assert "SUIJIN_CONFIG=/opt/suijin-ws/config.json" in profile_cmd
+        assert "SUIJIN_ENV=/opt/suijin-ws/.env" in profile_cmd
 
 
 class TestToolLines:
@@ -177,7 +223,7 @@ class TestCliRouting:
     def test_verbs_registered(self):
         from suijin.server.box.cli import VERBS
 
-        assert set(VERBS) == {"build", "start", "stop", "enter", "status", "refresh", "destroy"}
+        assert set(VERBS) == {"build", "start", "stop", "enter", "shell", "status", "refresh", "destroy"}
 
 
 class TestProvisionResume:
@@ -223,3 +269,57 @@ class TestVerbRegistered:
 
         assert "box" in _KNOWN_VERBS and is_known_verb("box")
         assert "container" in _KNOWN_VERBS
+
+    def test_shell_verb_registered(self):
+        from suijin.server.box.cli import VERBS
+
+        assert "shell" in VERBS
+
+
+class TestCleanRowsAndCompat:
+    """Field 2026-10-24: apt's pty progress redraws shredded the live
+    build stream into diagonal scattered rows; and docker/root boxes
+    ship without sudo. Both fixed for every engine."""
+
+    def test_apt_becomes_quiet_pipe_mode_apt_get(self):
+        from suijin.server.box.provision import _box_line
+
+        out = _box_line("sudo apt install --no-install-recommends -y nmap")
+        assert out.startswith("sudo apt-get install")
+        assert "-q" in out and "Dpkg::Use-Pty=0" in out
+        assert "nmap" in out
+
+    def test_clean_stream_line_collapses_redraws(self):
+        from suijin.server.box.provision import _clean_stream_line
+
+        assert _clean_stream_line("Progress: [ 5%]\rProgress: [ 55%]\rProgress: [100%]") == "Progress: [100%]"
+        assert _clean_stream_line("(Reading database ... 5%\x08\x08\x08 10%)") == "(Reading database ... 5% 10%)"
+        assert "    " not in _clean_stream_line("a    b        c")
+
+    def test_base_bootstrap_survives_root_without_sudo(self):
+        """docker's kali image runs as root with no sudo binary — the
+        bootstrap must adapt with $S instead of dying on `sudo:`."""
+        import inspect
+
+        from suijin.server.box import provision
+
+        src = inspect.getsource(provision.stage_base)
+        assert "command -v sudo" in src and "$S apt-get" in src
+
+    def test_profile_writes_bashrc_too(self, fake, monkeypatch):
+        """Tools must be on PATH in EVERY shell: profile.d covers login
+        shells (our exec paths), .bashrc covers the interactive `box
+        shell` session (operator ruling 2026-10-24)."""
+        from suijin.server.box import engine as bx2
+        from suijin.server.box import provision as prov
+
+        cmds: list[str] = []
+
+        def fake_run(cmd, timeout=600, engine=None):
+            cmds.append(cmd)
+            return 0, ""
+
+        monkeypatch.setattr(bx2, "run_in_box", fake_run)
+        assert prov.stage_profile(lambda _m: None)
+        assert any("profile.d" in c for c in cmds)
+        assert any(".bashrc" in c and "suijin-box path" in c for c in cmds)

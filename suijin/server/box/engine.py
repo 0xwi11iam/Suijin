@@ -1,9 +1,11 @@
-"""box engine — orbstack first, docker fallback, overridable.
+"""box engine — macOS: orbstack first; every other platform: docker.
 
 Detection order (first match wins):
   1. SUIJIN_CONTAINER_ENGINE env var      (system-level override)
   2. config.json -> container.engine
-  3. auto-detect: orb on PATH -> ORB, else docker on PATH -> DOCKER
+  3. one-time interactive pick — ONLY on macOS with BOTH runtimes
+     (orbstack is mac-only; a Linux user with docker is never asked)
+  4. auto-detect: macOS -> orb, else docker
 
 All box operations go through this module; nothing else shells to a
 container runtime directly. Every command runs with explicit /opt
@@ -28,22 +30,31 @@ ENGINE_ORB = "orb"
 ENGINE_DOCKER = "docker"
 
 
+def _orb_available() -> bool:
+    """OrbStack exists on macOS only — an `orb` binary on any other
+    platform is not a usable engine (full-compatibility rule 2026-10-24:
+    never assume the mac setup)."""
+    import sys
+
+    return sys.platform == "darwin" and bool(shutil.which("orb"))
+
+
 def detect_engine(interactive: bool = True) -> str:
     """The resolved engine for this host.
 
     Order: SUIJIN_CONTAINER_ENGINE env > config container.engine >
-    interactive pick (asked ONCE, when both runtimes are present and
-    stdin is a terminal — the choice persists to config) > auto (orb
-    first). A persisted choice is never asked again."""
+    one-time interactive pick (macOS with BOTH runtimes and a TTY — the
+    choice persists to config) > auto-detect (macOS: orb first; every
+    other platform: docker). A persisted choice is never asked again;
+    a Linux user with docker is NEVER asked."""
     v = str(os.environ.get("SUIJIN_CONTAINER_ENGINE") or "").strip().lower()
     if v in (ENGINE_ORB, ENGINE_DOCKER):
         return v
     configured = _configured_engine()
     if configured:
         return configured
-    import shutil as _sh
 
-    have_orb, have_docker = bool(_sh.which("orb")), bool(_sh.which("docker"))
+    have_orb, have_docker = _orb_available(), bool(shutil.which("docker"))
     if have_orb and have_docker and interactive and _stdin_is_tty():
         choice = _prompt_engine()
         if choice in (ENGINE_ORB, ENGINE_DOCKER):
@@ -149,10 +160,22 @@ def box_running(engine: str | None = None) -> bool:
     return "true" in out.lower()
 
 
+def _docker_mount_path(host_path: str) -> str:
+    """Docker Desktop (Windows hosts) wants /c/Users/... not C:\\Users\\...;
+    posix hosts pass through untouched."""
+    import sys
+
+    if sys.platform == "win32" and len(host_path) > 2 and host_path[1] == ":":
+        drive = host_path[0].lower()
+        rest = host_path[2:].replace("\\", "/")
+        return f"/{drive}{rest}"
+    return host_path
+
+
 def box_create(engine: str | None = None) -> tuple[bool, str]:
     eng = _engine_binary(engine or detect_engine())
     if not eng:
-        return False, "no container engine found (install orbstack or docker)"
+        return False, "no container engine found — install docker (or orbstack on macOS)"
     if eng == ENGINE_ORB:
         # orb takes a DISTRO name, not a docker image ref. Resource caps
         # keep every user's box bounded: the kali base is already
@@ -164,21 +187,27 @@ def box_create(engine: str | None = None) -> tuple[bool, str]:
             timeout=1800,
         )
         return rc == 0, out.strip()[-400:]
-    rc, out = _run(
-        [
-            "docker",
-            "run",
-            "-d",
-            "--name",
-            BOX_NAME,
-            "-v",
-            f"{repo_root()}:/opt/suijin",
-            "kalilinux/kali-rolling",
-            "sleep",
-            "infinity",
-        ],
-        timeout=1800,
-    )
+    # docker (linux/windows/any): same resource posture as orb minus the
+    # disk cap — `--storage-opt size=` only works on pquota-xfs hosts and
+    # would fail creation outright everywhere else. The repo mount is
+    # conditional: a pip-installed suijin has no tree to mount and the
+    # build falls back cleanly instead of `docker run` dying on `-v ""`.
+    argv = [
+        "docker",
+        "run",
+        "-d",
+        "--name",
+        BOX_NAME,
+        "--memory",
+        "4g",
+        "--cpus",
+        "2",
+    ]
+    root = repo_root()
+    if root:
+        argv += ["-v", f"{_docker_mount_path(root)}:/opt/suijin"]
+    argv += ["kalilinux/kali-rolling", "sleep", "infinity"]
+    rc, out = _run(argv, timeout=1800)
     return rc == 0, out.strip()[-400:]
 
 
@@ -230,12 +259,14 @@ def run_in_box(cmd: str, timeout: int = 3600, engine: str | None = None) -> tupl
     return _run(["docker", "exec", BOX_NAME, "bash", "-lc", cmd], timeout=timeout)
 
 
-def box_cmd_argv(cmd: str, engine: str | None = None) -> list:
+def box_cmd_argv(cmd: str, engine: str | None = None, stdin_attached: bool = False) -> list:
     """The raw host-side argv for a box command (for streaming callers
-    that need a Popen, not a captured result)."""
+    that need a Popen, not a captured result). `stdin_attached` adds -i
+    on docker (tar streams); orb's exec is pty-based and always accepts
+    stdin."""
     eng = _engine_binary(engine or detect_engine())
     if eng == ENGINE_DOCKER:
-        return ["docker", "exec", BOX_NAME, "bash", "-lc", cmd]
+        return ["docker", "exec", *(["-i"] if stdin_attached else []), BOX_NAME, "bash", "-lc", cmd]
     return ["orb", "-m", BOX_NAME, "bash", "-lc", cmd]
 
 

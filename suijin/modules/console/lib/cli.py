@@ -2320,7 +2320,7 @@ def main(argv=None):
     boxp.add_argument(
         "verb",
         nargs="*",
-        help="build · start · stop · enter · status · refresh · destroy — or nothing for the tui",
+        help="build · start · stop · enter · shell · status · refresh · destroy — or nothing for the tui",
     )
     boxp.add_argument("--no-archive", action="store_true", help="destroy without archiving engagements")
     boxp.set_defaults(
