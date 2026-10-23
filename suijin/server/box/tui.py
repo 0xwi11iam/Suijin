@@ -375,7 +375,7 @@ def _gather_info() -> dict:
             )
         with contextlib.suppress(Exception):
             rc, out = bx.run_in_box(
-                "ls /opt/suijin-ws/engagements 2>/dev/null | wc -l; du -sh /opt/suijin-ws 2>/dev/null | cut -f1",
+                f"ls {bx.BOX_WS}/engagements 2>/dev/null | wc -l; du -sh {bx.BOX_WS} 2>/dev/null | cut -f1",
                 timeout=60,
             )
             parts = out.split()

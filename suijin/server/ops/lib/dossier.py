@@ -31,6 +31,12 @@ def _red_kg_path():
     v = globals().get("RED_KG_PATH")
     if v is not None:
         return v
+    # same workspace-first resolution as the KG itself (the legacy
+    # package-path read kept engagement intel flowing into git)
+    with contextlib.suppress(Exception):
+        from suijin.modules.redteam.lib.intel import knowledge_graph as _kgm
+
+        return _kgm.GRAPH_PATH
     return _workspace_dir().parent / "suijin" / "modules" / "redteam" / "lib" / "intel" / "knowledge_graph.json"
 
 

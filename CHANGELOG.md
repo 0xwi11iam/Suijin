@@ -8,6 +8,37 @@ All notable changes to Suijin.
 
 ## Unreleased
 
+### nothing hardcoded — the 2026-10-23 sweep (PERMANENT ruling)
+
+Operator ruling: no hardcoded values in committed artifacts, ever.
+The sweep found and fixed real violations:
+
+- **the knowledge graph wrote into the package tree**: its write path
+  was the in-tree json, so a live engagement's API keys and target
+  intel ended up in git (the file was gitignored at some point, but
+  the history holds it — flagged; rewrite only on explicit request).
+  The KG is WORKSPACE-FIRST now (`<workspace>/intel/`), with a
+  neutral read-only seed in-tree (lab + example.com + target-agnostic
+  methodology). The operator's live intel was migrated to both
+  workspaces — nothing lost.
+- **landscape platform-maps were engagement-derived code**: the
+  shipped `_KNOWN_FAMILIES` table (built during live engagements) is
+  now EMPTY; maps live in config `landscape_families` (dict form is
+  per-platform, list form applies to any target). Migrated for the
+  operator locally; verified: 10 families still detected for the live
+  target via config.
+- **test fixtures carried a real-format API key and real target
+  names** — replaced with self-evidently synthetic filler and
+  example.com; docstrings quoting engagement metrics genericized.
+- **machine paths scrubbed**: backup script defaults derive from
+  $HOME; no username left in any tracked file.
+- `suijin/tests/ops/test_no_hardcode.py` is the standing tripwire:
+  secret-shaped strings must be synthetic, no machine-specific paths,
+  no package-tree writes. Engagement tokens for its scan come from
+  local-only `agent-vault/targets.txt` (absent on CI = that half
+  skips). Safety floors (the hard-guardrail denylist) are exempt by
+  design. Ruling codified in AGENTS.md.
+
 ### provider failover: stop misattributing outages (2026-10-23)
 
 A healthy zai/glm-5.3 engagement (17 iterations, $0.18) died in a ~30s

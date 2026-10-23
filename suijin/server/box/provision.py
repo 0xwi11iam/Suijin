@@ -144,7 +144,7 @@ def _stream_install(cmd: str, name: str, log) -> tuple[bool, str]:
 def ensure_ws() -> bool:
     """Create the box workspace owned by the box user (orb's default
     user is unprivileged; /opt needs sudo once, then it's ours)."""
-    rc, _ = bx.run_in_box("sudo mkdir -p /opt/suijin-ws && sudo chown -R $(whoami) /opt/suijin-ws", timeout=60)
+    rc, _ = bx.run_in_box(f"sudo mkdir -p {bx.BOX_WS} && sudo chown -R $(whoami) {bx.BOX_WS}", timeout=60)
     return rc == 0
 
 
@@ -193,13 +193,13 @@ def _stage_resumable(stage: str) -> bool:
 def stage_profile(log) -> bool:
     log("writing the shell profile (workspace + path)")
     profile = (
-        "export SUIJIN_WORKSPACE=/opt/suijin-ws\n"
+        f"export SUIJIN_WORKSPACE={bx.BOX_WS}\n"
         # the box workspace IS the config source (host: ~/.suijin/config).
         # Without these the loader fell back to the package dir — which in
         # the box is the live-mounted host repo, so it read the repo .env
         # (no provider key) and wrote model choices INTO the host tree.
-        "export SUIJIN_CONFIG=/opt/suijin-ws/config.json\n"
-        "export SUIJIN_ENV=/opt/suijin-ws/.env\n"
+        f"export SUIJIN_CONFIG={bx.BOX_WS}/config.json\n"
+        f"export SUIJIN_ENV={bx.BOX_WS}/.env\n"
         "export PATH=$HOME/.local/bin:$HOME/go/bin:$HOME/google-cloud-sdk/bin:/usr/local/sbin:/usr/sbin:/sbin:$PATH\n"
     )
     quoted = profile.replace("'", "'\\''")
