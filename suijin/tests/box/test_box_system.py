@@ -114,6 +114,34 @@ class TestDrift:
         assert d["missing_tools"] == ["testssl.sh"]
 
 
+class TestConfigSync:
+    def test_env_is_a_sync_item(self):
+        assert ".env" in bsync._SYNC_ITEMS
+
+    def test_env_source_is_the_workspace_env(self, tmp_path, monkeypatch):
+        ws = tmp_path / "ws"
+        ws.mkdir()
+        (ws / ".env").write_text("OPENCODE_API_KEY=x\n")
+        monkeypatch.delenv("SUIJIN_ENV", raising=False)
+        monkeypatch.setattr(bsync, "_ws_dir", lambda: ws)
+        assert bsync._env_source() == ws / ".env"
+
+    def test_profile_points_the_loader_at_the_workspace(self, fake, monkeypatch):
+        from suijin.server.box import engine as bx2
+        from suijin.server.box import provision as prov
+
+        seen: dict[str, str] = {}
+
+        def fake_run(cmd, timeout=600, engine=None):
+            seen["cmd"] = cmd
+            return 0, ""
+
+        monkeypatch.setattr(bx2, "run_in_box", fake_run)
+        assert prov.stage_profile(lambda _m: None)
+        assert "SUIJIN_CONFIG=/opt/suijin-ws/config.json" in seen["cmd"]
+        assert "SUIJIN_ENV=/opt/suijin-ws/.env" in seen["cmd"]
+
+
 class TestToolLines:
     def test_apt_line_from_doctor_table(self):
         from suijin.server.box.provision import _tool_apt_line
@@ -164,6 +192,13 @@ class TestProvisionResume:
         from suijin.server.box.provision import STAGES
 
         assert STAGES == ("base", "suijin", "profile", "config", "tools", "verify")
+
+    def test_profile_and_config_never_resume_skip(self):
+        from suijin.server.box.provision import _stage_resumable
+
+        assert not _stage_resumable("profile")
+        assert not _stage_resumable("config")
+        assert _stage_resumable("base")
 
 
 class TestTuiRender:

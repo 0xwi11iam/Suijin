@@ -20,6 +20,7 @@ from pathlib import Path
 #: host-workspace items synced into the box (files, dirs, or globs)
 _SYNC_ITEMS = (
     "config.json",
+    ".env",
     "packs",
     "skills",
     "prompts",
@@ -28,6 +29,14 @@ _SYNC_ITEMS = (
     "drive_policy.json",
     "profiles",
 )
+
+
+def _env_source() -> Path | None:
+    """Host .env: SUIJIN_ENV wins, else the workspace (on the host the
+    workspace IS ~/.suijin/config). This is what the box agent needs —
+    provider keys live here, NOT in the repo."""
+    p = Path(os.environ.get("SUIJIN_ENV") or (_ws_dir() / ".env"))
+    return p if p.is_file() else None
 
 
 def _ws_dir() -> Path:
@@ -58,8 +67,8 @@ def host_manifest() -> dict:
     with contextlib.suppress(Exception):
         ws = _ws_dir()
         for item in _SYNC_ITEMS:
-            p = ws / item
-            if p.exists():
+            p = _env_source() if item == ".env" else ws / item
+            if p is not None and p.exists():
                 out[item] = _hash_path(p)
     return out
 
@@ -164,7 +173,9 @@ def sync_selected(items: list[str], log=print) -> list[str]:
     for item in items:
         if item not in host:
             continue
-        src = ws / item
+        src = _env_source() if item == ".env" else ws / item
+        if src is None or not src.exists():
+            continue
         if src.is_dir():
             # tar-stream the dir across (engine-agnostic)
             import subprocess
@@ -203,6 +214,8 @@ def sync_selected(items: list[str], log=print) -> list[str]:
             with contextlib.suppress(Exception):
                 content = src.read_text(encoding="utf-8", errors="replace")
                 if write_box_file(item, content):
+                    if item == ".env":
+                        bx.run_in_box(f"chmod 600 {bx.BOX_WS}/.env", timeout=30)
                     done.append(item)
     if done:
         manifest = json.dumps({"synced": {k: host[k] for k in done if k in host}})
@@ -217,16 +230,6 @@ def sync_selected(items: list[str], log=print) -> list[str]:
             f"cp {bx.BOX_WS}/.sync-manifest.json.partial {bx.BOX_WS}/.sync-manifest.json",
             timeout=60,
         )
-    # secrets: the repo .env rides along when config synced
-    with contextlib.suppress(Exception):
-        env_src = Path(os.environ.get("SUIJIN_ENV") or "")
-        if not env_src.exists():
-            from suijin.server.box.engine import repo_root
-
-            r = repo_root()
-            env_src = Path(r) / ".env" if r else None
-        if env_src and env_src.exists():
-            write_box_file(".env", env_src.read_text(encoding="utf-8", errors="replace"))
     return done
 
 

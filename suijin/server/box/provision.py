@@ -184,10 +184,22 @@ def stage_suijin(log) -> bool:
     return True
 
 
+def _stage_resumable(stage: str) -> bool:
+    """profile/config re-run every build (the host→box contract, cheap and
+    secret-bearing); the heavy stages resume from box state."""
+    return stage not in ("profile", "config")
+
+
 def stage_profile(log) -> bool:
     log("writing the shell profile (workspace + path)")
     profile = (
         "export SUIJIN_WORKSPACE=/opt/suijin-ws\n"
+        # the box workspace IS the config source (host: ~/.suijin/config).
+        # Without these the loader fell back to the package dir — which in
+        # the box is the live-mounted host repo, so it read the repo .env
+        # (no provider key) and wrote model choices INTO the host tree.
+        "export SUIJIN_CONFIG=/opt/suijin-ws/config.json\n"
+        "export SUIJIN_ENV=/opt/suijin-ws/.env\n"
         "export PATH=$HOME/.local/bin:$HOME/go/bin:$HOME/google-cloud-sdk/bin:/usr/local/sbin:/usr/sbin:/sbin:$PATH\n"
     )
     quoted = profile.replace("'", "'\\''")
@@ -200,10 +212,9 @@ def stage_profile(log) -> bool:
 
 def stage_config(log) -> bool:
     log("syncing host config → box (packs, prompts, config, .env)")
-    done = sync_selected(
-        ["config.json", "packs", "skills", "prompts", "prompt.md", "SOUL.md", "drive_policy.json", "profiles"],
-        log=log,
-    )
+    from suijin.server.box.sync import _SYNC_ITEMS
+
+    done = sync_selected(list(_SYNC_ITEMS), log=log)
     log(f"synced: {', '.join(done) if done else 'nothing new'}")
     return True  # best-effort: partial sync still boots
 
@@ -469,7 +480,11 @@ def build(resume: bool = True, log=print, progress=None, cancel=None) -> dict:
     for stage in STAGES:
         if stage in ("tools", "verify"):
             continue  # tools runs with progress below; verify runs last
-        if state["stages"].get(stage, {}).get("ok"):
+        # profile/config are the host→box contract and cheap to redo:
+        # skipping them on resume left existing boxes on a stale profile
+        # (the 2026-10-22 field crash: no SUIJIN_CONFIG/SUIJIN_ENV, so the
+        # box read the mounted repo's config instead of its own).
+        if _stage_resumable(stage) and state["stages"].get(stage, {}).get("ok"):
             log(f"stage {stage}: already done (resumed)")
             continue
         ok = runners[stage](log)

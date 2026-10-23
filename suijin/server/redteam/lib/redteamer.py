@@ -335,6 +335,10 @@ def _merge_profile_overrides(cfg: dict) -> dict:
 
 
 async def run_red_team_async(config, objective, api_key=None, resume_state=None, seed_queue=None):
+    # PROVIDER KEYS FIRST: the TUI/daemon entries never called load_env,
+    # so a box with a perfectly good .env still died at the first call
+    # ("API key not set", field report 2026-10-22). Idempotent.
+    load_env()
     # the pydantic cost-cap warning echoes validator internals as a wall of
     # text — silenced everywhere; ONE red line below instead
     import warnings
