@@ -414,6 +414,38 @@ class TestCleanRowsAndCompat:
         assert _clean_stream_line("(Reading database ... 5%\x08\x08\x08 10%)") == "(Reading database ... 5% 10%)"
         assert "    " not in _clean_stream_line("a    b        c")
 
+    def test_docker_box_exists_exact_name_match(self, monkeypatch):
+        """Substring matching made 'suijin-box' match 'suijin-box-old' —
+        exists must be an EXACT container-name line match."""
+        import suijin.server.box.engine as eng
+
+        monkeypatch.setattr(eng, "detect_engine", lambda interactive=True: "docker")
+        monkeypatch.setattr(eng, "box_name", lambda: "suijin-box")
+        monkeypatch.setattr(eng, "_run", lambda cmd, timeout=600: (0, "suijin-box-old\nother\n"))
+        assert not eng.box_exists()
+        monkeypatch.setattr(eng, "_run", lambda cmd, timeout=600: (0, "suijin-box-old\nsuijin-box\n"))
+        assert eng.box_exists()
+
+    def test_docker_enter_suijin_goes_through_login_shell(self, monkeypatch):
+        """`docker exec -it X suijin` resolves against the IMAGE PATH,
+        which lacks ~/.local/bin (pipx) — the menu action needs bash -lc
+        so the profile dropin puts suijin on PATH (shell action is a real
+        interactive bash and reads .bashrc, so it stays direct)."""
+        import suijin.server.box.engine as eng
+
+        monkeypatch.setattr(eng, "box_name", lambda: "suijin-box")
+        assert eng._enter_argv("suijin", eng.ENGINE_DOCKER) == [
+            "docker",
+            "exec",
+            "-it",
+            "suijin-box",
+            "bash",
+            "-lc",
+            "suijin",
+        ]
+        assert eng._enter_argv("shell", eng.ENGINE_DOCKER) == ["docker", "exec", "-it", "suijin-box", "bash"]
+        assert eng._enter_argv("suijin", eng.ENGINE_ORB) == ["orb", "-m", "suijin-box", "suijin"]
+
     def test_stage_events_start_before_done(self):
         """The white 'running' row must come from a REAL start event —
         the first-not-done heuristic painted verify white before it ran
