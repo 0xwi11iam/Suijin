@@ -184,7 +184,10 @@ class Tui:
         self.frame("suijin box")
         y = 2
         if info["running"]:
-            self.status(y, 2, "ok", "running", f"· {info['name']} · kali · up {info['uptime']} · {info['engine']}")
+            badge = " · adopted (yours — never deleted)" if info.get("adopted") else ""
+            self.status(
+                y, 2, "ok", "running", f"· {info['name']} · kali · up {info['uptime']} · {info['engine']}{badge}"
+            )
         elif info["exists"]:
             self.status(y, 2, "o", "stopped", f"· {info['name']} · {info['engine']}")
         else:
@@ -282,10 +285,10 @@ class Tui:
             elif not active_assigned:
                 # the live stage: white/bold — it's where the work is
                 active_assigned = True
-                self.line(y, 8, f"o {label}", self.cb)
+                self.line(y, 8, f"• {label}", self.cb)
             else:
                 # not started yet: dim gray
-                self.line(y, 8, f"o {label}", self.cd)
+                self.line(y, 8, f"• {label}", self.cd)
             y += 1
         self.line(y + 1, 2, "─ output " + "─" * max(0, self.cols - 12), self.cd)
         # fill the whole bottom with output: the pane used to show a
@@ -347,14 +350,23 @@ class Tui:
     def confirm_destroy(self, info: dict) -> str:
         """typed confirmation — the only one in the app."""
         self.frame("destroy")
-        self.line(2, 2, "this deletes the box and its disk.", self.cr)
-        self.line(4, 2, f"engagements on it: {info.get('engagements', '?')} ({info.get('size', '?')}).")
-        self.line(6, 2, "[a] archive first, then destroy", self.cb)
-        self.line(7, 4, "→ ~/suijn-box-archive-<date>.tar.gz", self.cd)
-        self.line(8, 2, "[d] destroy without archive — type: destroy suijin-box", self.cr)
-        self.line(9, 4, "> ", 0)
+        if info.get("adopted"):
+            self.line(2, 2, f"{info['name']} is YOUR container — it is kept.", self.cy)
+            self.line(3, 2, "destroy removes only suijin's footprint inside it:", 0)
+            self.line(4, 4, "/opt/suijin-ws · the toolchain · the profile dropin", self.cd)
+            self.line(6, 2, "[a] archive engagements first, then clean   [c] cancel", self.cb)
+            self.line(7, 2, f"[d] clean without archive — type: clean {info['name']}", self.cr)
+        else:
+            self.line(2, 2, "this deletes the box and its disk.", self.cr)
+            self.line(4, 2, f"engagements on it: {info.get('engagements', '?')} ({info.get('size', '?')}).")
+            self.line(6, 2, "[a] archive first, then destroy", self.cb)
+            self.line(7, 4, "→ ~/suijn-box-archive-<date>.tar.gz", self.cd)
+            self.line(8, 2, "[d] destroy without archive — type: destroy suijin-box", self.cr)
+            self.line(9, 4, "> ", 0)
         self.s.refresh()
         typed = ""
+        confirm_word = "clean" if info.get("adopted") else "destroy"
+        expect = f"{confirm_word} {info['name']}"
         while True:
             k = _get_key(self.s)
             if k == "a":
@@ -362,7 +374,7 @@ class Tui:
             if k == "esc" or k == "c":
                 return "cancel"
             if k == "enter":
-                if typed.strip() == "destroy suijin-box":
+                if typed.strip() == expect:
                     return "destroy"
                 typed = ""
                 self.line(9, 4, "> " + " " * 30, 0)
@@ -390,7 +402,8 @@ def _gather_info() -> dict:
     running = bx.box_running(eng) if exists else False
     info = {
         "engine": eng or "none",
-        "name": bx.BOX_NAME,
+        "name": bx.box_name(),
+        "adopted": bx.is_adopted(),
         "exists": exists,
         "running": running,
         "code": "-",
@@ -556,8 +569,13 @@ def _run_build(t: Tui) -> None:
         if ok is False:
             tail.append(f"x  {name} — {note}")
 
+    def stage_done(name, ok):
+        # provision.build fires this as each stage COMPLETES — the rows
+        # recolor live (done=green, doing=white, pending=dim)
+        state["stages"][name] = {"ok": ok, "at": ""}
+
     def worker():
-        summary = provision.build(log=log, progress=progress, cancel=paused.is_set)
+        summary = provision.build(log=log, progress=progress, cancel=paused.is_set, stage_cb=stage_done)
         state["summary"] = summary
         stop.set()
 

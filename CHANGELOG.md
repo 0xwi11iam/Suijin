@@ -8,6 +8,35 @@ All notable changes to Suijin.
 
 ## Unreleased
 
+### box adopt — bring your own container (2026-10-24)
+
+The escape hatch for "the managed box misbehaves on my setup": point
+suijin at a container you already run and it provisions INTO it.
+
+- `suijin box adopt <name>` — probes the container (starting it if
+  stopped), warns on non-debian bases (apt chains miss honestly),
+  persists `container.name`, then runs the standard build against it.
+  Every engine call routes through `box_name()`; `unadopt` reverts.
+- adopted containers get no live mount, so the source tree tar-streams
+  to `/opt/suijin` (agent-vault/.venv/.git excluded — secrets and bulk
+  never cross) and pipx installs from there; existing venvs refresh
+  in place instead of erroring on re-adopt.
+- **destroy NEVER deletes an adopted container** — it removes only
+  suijin's footprint inside (workspace, tree, profile dropin; explicit
+  /opt paths) and says so; the typed confirm reads `clean <name>`.
+- field-proven on a throwaway docker container: adopt → base + stream
+  + toolchain in 92s (suijin 7.2.0 runs inside, tools resolve, config
+  synced), destroy cleaned the footprint while `docker ps` still
+  showed the container running.
+
+### box tui: live build screen colors + the stage-state fix (2026-10-24)
+
+- the build screen's stage state was NEVER updated during a build —
+  done stages showed white/gray forever. `build(stage_cb=...)` now
+  fires as each stage completes (resumed counts as done): done green,
+  doing white, not-started dim gray BULLETS (the stray "o" markers and
+  the redundant "pending" word are gone).
+
 ### box: full engine compatibility + clean build rows + `box shell` (2026-10-24)
 
 Suijin supports OrbStack and Docker with full compatibility for both

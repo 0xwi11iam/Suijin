@@ -153,15 +153,25 @@ def cmd_destroy(args=None) -> int:
     if not bx.box_exists():
         _say("no box to destroy", "dim")
         return 0
+    adopted = bx.is_adopted()
     archive = "--no-archive" not in (args or [])
     if archive:
         _say("archiving engagements to ~/suijin-box-archive-<date>.tar.gz …", "bold")
         if not archive_box(_say):
             _say("archive failed — destroy aborted (the box is untouched)", "red bold")
             return 1
+    if adopted:
+        _say(
+            f"{bx.box_name()} is YOUR container — suijin removes only its own footprint (workspace, tools, profile).",
+            "yellow bold",
+        )
     ok, out = bx.box_delete()
     if ok:
-        _say("box destroyed" + (" (archive kept)" if archive else ""), "green bold")
+        if adopted:
+            _say(str(out) or "suijin removed from the adopted container — the container itself is kept", "green bold")
+            _say("revert with: suijin box unadopt", "dim")
+        else:
+            _say("box destroyed" + (" (archive kept)" if archive else ""), "green bold")
     else:
         _say(f"destroy failed: {out}", "red bold")
     return 0 if ok else 1
@@ -186,10 +196,7 @@ def archive_box(log=None) -> bool:
             total_mb = int(out.strip())
     date = __import__("time").strftime("%Y-%m-%d")
     dest = os.path.expanduser(f"~/suijin-box-archive-{date}.tar.gz")
-    eng = bx.detect_engine()
-    pull_cmd = ["orb", "-m", bx.BOX_NAME, "bash", "-lc", "tar czf - -C /opt suijin-ws"]
-    if eng == bx.ENGINE_DOCKER:
-        pull_cmd = ["docker", "exec", bx.BOX_NAME, "bash", "-lc", "tar czf - -C /opt suijin-ws"]
+    pull_cmd = bx.box_cmd_argv("tar czf - -C /opt suijin-ws")
     try:
         pull = subprocess.Popen(pull_cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         wrote = 0
@@ -240,12 +247,107 @@ def cmd_shell(args=None) -> int:
     return bx.box_enter_interactive(action="shell")
 
 
+def cmd_adopt(args=None) -> int:
+    """`suijin box adopt <name>` — point suijin at a container the
+    OPERATOR already runs. Suijin provisions into it (base packages,
+    editable install, toolchain) and every box verb operates on it.
+    The escape hatch when the managed box misbehaves on someone's
+    setup: their container, suijin's tooling. NEVER deletes it."""
+    from suijin.server.box import engine as bx
+
+    argv = [a for a in (args or []) if a and not a.startswith("-")]
+    if not argv:
+        name = bx.box_name()
+        if bx.is_adopted():
+            _say(f"currently adopted: {name} — revert with `suijin box unadopt`", "dim")
+        else:
+            _say("usage: suijin box adopt <container-or-machine-name>", "dim")
+        return 0
+    name = argv[0].strip()
+    if name == bx.DEFAULT_BOX_NAME:
+        _say(f"{name} is the managed box name — nothing to adopt (plain `suijin box build` manages it)", "yellow bold")
+        return 1
+    eng = bx.detect_engine()
+    if not eng:
+        _say("no container engine found — install docker (or orbstack on macOS)", "red bold")
+        return 1
+    # probe: the container must exist and answer an exec
+    if eng == bx.ENGINE_DOCKER:
+        import subprocess as _sp
+
+        with contextlib.suppress(Exception):
+            _sp.run(["docker", "start", name], capture_output=True, text=True, timeout=120)
+        rc, out = bx._run(["docker", "exec", name, "true"], timeout=120)
+    else:
+        rc, out = bx._run(["orb", "-m", name, "true"], timeout=180)
+    if rc != 0:
+        _say(f"cannot exec into {name!r} ({eng}): {(out or '').strip()[-160:]}", "red bold")
+        return 1
+    # base-family check: the toolchain's apt chains need a debian-ish base
+    with contextlib.suppress(Exception):
+        _, osr = (0, "")
+        rc2, osr = bx._run(
+            (
+                ["docker", "exec", name, "bash", "-lc", "cat /etc/os-release"]
+                if eng == bx.ENGINE_DOCKER
+                else ["orb", "-m", name, "bash", "-lc", "cat /etc/os-release"]
+            ),
+            timeout=60,
+        )
+        fam = ""
+        for ln in (osr or "").splitlines():
+            if ln.startswith("ID="):
+                fam = ln.split("=", 1)[1].strip('"').lower()
+        if rc2 == 0 and fam and not any(k in fam for k in ("debian", "ubuntu", "kali", "apt")):
+            _say(
+                f"warning: {name} is {fam!r}-based — the apt tool chains will mostly miss; install results are reported honestly",
+                "yellow bold",
+            )
+    _persist_container_key("name", name)
+    _say(f"adopted {name!r} — provisioning into it now (revert any time: suijin box unadopt)", "green bold")
+    return cmd_build()
+
+
+def cmd_unadopt(args=None) -> int:
+    """Revert to the managed box (container.name cleared)."""
+    from suijin.server.box import engine as bx
+
+    if not bx.is_adopted():
+        _say("not adopted — the managed box is in charge", "dim")
+        return 0
+    _persist_container_key("name", "")
+    _say(f"unadopted — back to the managed box ({bx.DEFAULT_BOX_NAME})", "green bold")
+    return 0
+
+
+def _persist_container_key(key: str, value: str) -> None:
+    """Write container.<key> into config.json (engine pick, adopted name)."""
+    with contextlib.suppress(Exception):
+        import json
+        from pathlib import Path
+
+        from suijin.modules.platform.lib.config_loader import CONFIG_PATH
+
+        p = Path(CONFIG_PATH)
+        cfg = {}
+        if p.exists():
+            cfg = json.loads(p.read_text(encoding="utf-8") or "{}")
+        cont = cfg.setdefault("container", {})
+        if value:
+            cont[key] = value
+        else:
+            cont.pop(key, None)
+        p.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+
+
 VERBS = {
     "build": cmd_build,
     "start": cmd_start,
     "stop": cmd_stop,
     "enter": cmd_enter,
     "shell": cmd_shell,
+    "adopt": cmd_adopt,
+    "unadopt": cmd_unadopt,
     "status": cmd_status,
     "refresh": cmd_refresh,
     "destroy": cmd_destroy,

@@ -200,6 +200,50 @@ def stage_base(log) -> bool:
     return True
 
 
+def _stream_repo_into_box(log) -> bool:
+    """Tar-stream the source tree into /opt/suijin (adopted containers
+    get no live mount — docker can't add -v to an existing container).
+    Excludes carry real weight: .venv is 170MB+, and agent-vault holds
+    local-only secrets that must NEVER cross into any container."""
+    import subprocess
+
+    repo = bx.repo_root()
+    if not repo:
+        return False
+    excludes = [
+        "--exclude=.venv",
+        "--exclude=.git",
+        "--exclude=agent-vault",
+        "--exclude=__pycache__",
+        "--exclude=.pytest_cache",
+        "--exclude=.ruff_cache",
+        "--exclude=node_modules",
+        "--exclude=*.egg-info",
+    ]
+    try:
+        tar = subprocess.run(["tar", "czf", "-", *excludes, "-C", repo, "."], capture_output=True, timeout=600)
+        if tar.returncode != 0:
+            log(f"repo tar failed: {tar.stderr.decode()[-160:]}")
+            return False
+        proc = subprocess.run(
+            bx.box_cmd_argv(
+                "mkdir -p /opt/suijin && tar xzf - --warning=no-unknown-keyword -C /opt/suijin",
+                stdin_attached=True,
+            ),
+            input=tar.stdout,
+            capture_output=True,
+            timeout=600,
+        )
+        if proc.returncode != 0:
+            log(f"repo extract failed: {proc.stderr.decode()[-160:]}")
+            return False
+        log(f"streamed the source tree into /opt/suijin ({len(tar.stdout) >> 20}MB) — no live mount on this container")
+        return True
+    except Exception as e:  # noqa: BLE001
+        log(f"repo stream failed: {e}")
+        return False
+
+
 def stage_suijin(log) -> bool:
     repo = bx.repo_root()
     if not repo:
@@ -207,10 +251,19 @@ def stage_suijin(log) -> bool:
         return False
     log(f"editable install from {repo}")
     rc, _ = bx.run_in_box(f"test -f {repo}/pyproject.toml", timeout=30)
-    inner = repo if rc == 0 else "/opt/suijin"
+    inner = repo if rc == 0 else ""
+    if not inner:
+        # no live mount (adopted container, or a mount that vanished):
+        # refresh /opt/suijin from the host tree, then install from there
+        if not _stream_repo_into_box(log):
+            return False
+        inner = "/opt/suijin"
     rc, out = bx.run_in_box(
         "set -o pipefail; export PATH=$HOME/.local/bin:$PATH; "
-        f"pipx install --editable {inner} --pip-args=--no-cache-dir 2>&1 | tail -3",
+        "if test -d ~/.local/pipx/venvs/suijin; then "
+        f"cd {inner} && ~/.local/pipx/venvs/suijin/bin/pip install --editable . --no-deps -q 2>&1 | tail -2; "
+        "else "
+        f"pipx install --editable {inner} --pip-args=--no-cache-dir 2>&1 | tail -3; fi",
         timeout=2400,
     )
     if rc != 0:
@@ -507,9 +560,17 @@ def stage_verify(log) -> bool:
     return True
 
 
-def build(resume: bool = True, log=print, progress=None, cancel=None) -> dict:
+def build(resume: bool = True, log=print, progress=None, cancel=None, stage_cb=None) -> dict:
     """Run all stages. Returns a summary {ok, stages, tools_ok,
-    tools_total}. Resumes from recorded state when resume=True."""
+    tools_total}. Resumes from recorded state when resume=True.
+    `stage_cb(name, ok)` fires as each stage COMPLETES — the tui colors
+    its rows from these (done=green) instead of guessing."""
+
+    def _stage_done(name: str, ok: bool) -> None:
+        with contextlib.suppress(Exception):
+            if stage_cb:
+                stage_cb(name, ok)
+
     if not bx.box_exists():
         log("creating the box (kali) — first boot may take a few minutes")
         ok, out = bx.box_create()
@@ -534,10 +595,12 @@ def build(resume: bool = True, log=print, progress=None, cancel=None) -> dict:
         # box read the mounted repo's config instead of its own).
         if _stage_resumable(stage) and state["stages"].get(stage, {}).get("ok"):
             log(f"stage {stage}: already done (resumed)")
+            _stage_done(stage, True)  # resumed counts as done — green row
             continue
         ok = runners[stage](log)
         state["stages"][stage] = {"ok": ok, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
         _state_write(state)
+        _stage_done(stage, ok)
         if not ok:
             return {"ok": False, "error": f"stage {stage} failed (re-run to resume)", "stages": state["stages"]}
     # ALWAYS reconcile: per-tool state is the source of truth, and a
@@ -548,11 +611,13 @@ def build(resume: bool = True, log=print, progress=None, cancel=None) -> dict:
     state = _state_read()  # stage_tools persisted per-tool records
     state["stages"]["tools"] = {"ok": ok}
     _state_write(state)
+    _stage_done("tools", ok)
     if not ok and not (cancel and cancel()):
         pass  # paused, not failed — summary reflects partial
     ok = stage_verify(log)
     state["stages"]["verify"] = {"ok": ok}
     _state_write(state)
+    _stage_done("verify", ok)
     tools_state = _state_read().get("tools", {})
     current = tool_list()
     return {
