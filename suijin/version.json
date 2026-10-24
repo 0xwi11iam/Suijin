@@ -1,6 +1,6 @@
 {
-  "version": "7.3.0",
+  "version": "7.3.1",
   "codename": "Suijin OS",
-  "release_date": "2026-10-24",
-  "description": "Suijin OS v7.3.0 — The Anywhere Release. The box works for everyone, everywhere: OrbStack on macOS and Docker on every other platform at full parity (platform-aware detection, one-time arrow-key picker, optional pinned docker contexts with daemon transparency), bring-your-own-container via `suijin box adopt` (provisions into an operator's container, never deletes it), `suijin box shell` for instant bash, tools on PATH in every shell, clean row-by-row install streaming, and host trust anchors for TLS-filtered networks. Field-hardened the same week: provider-failover errors name the whole chain, transport blunts get real backoff, sessions tear down their background machinery, pauses are silent, the knowledge graph is workspace-first with a neutral in-tree seed, and a standing no-hardcode guard keeps secrets, engagement data and machine paths out of the tree."
+  "release_date": "2026-10-25",
+  "description": "Suijin OS v7.3.1 \u2014 headless-terminal hardening for the box tui: a missing/dumb TERM falls back to xterm, 8/16-color terminals get a safe gray, and any curses startup failure degrades to the verb-based path (build/status/enter/shell) instead of a traceback."
 }

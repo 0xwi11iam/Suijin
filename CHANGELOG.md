@@ -6,6 +6,16 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
+## v7.3.1
+
+- the box tui survives headless terminals: a missing or dumb TERM
+  falls back to xterm, 8/16-color terminals get a safe gray pair
+  (python 3.14 curses raises ValueError, not curses.error, for
+  out-of-range colors — caught), and any curses startup/teardown
+  failure degrades to the verb-based path (build/status/enter/shell
+  with the engine line) instead of a traceback. Found boxing from
+  inside an ubuntu container with a stripped environment.
+
 ## v7.3.0 — The Anywhere Release
 
 The box works for everyone, everywhere: both engines at full parity,

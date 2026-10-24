@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import contextlib
 import curses
+import os
 import time
 
 WIDTH = 80
@@ -92,16 +93,18 @@ class Tui:
         # GRAY is a REAL color pair, not A_DIM: A_DIM alone renders as
         # plain white on most terminals, and A_DIM stacked on gray was
         # TOO dim to read ("this is too dim"). Pure color: 245 mid-gray
-        # on 256-color terminals, bright-black (8) otherwise.
+        # on 256-color terminals, bright-black on 16-color, A_DIM on
+        # 8-color/mono (color 8 exceeds COLORS-1 there — python 3.14
+        # curses raises ValueError, not curses.error, so catch both).
+        self.cd = curses.A_DIM
         if curses.has_colors():
-            gray = 245 if curses.COLORS >= 256 else 8
-            try:
-                curses.init_pair(5, gray, -1)
-                self.cd = curses.color_pair(5)
-            except curses.error:
-                self.cd = curses.A_DIM
-        else:
-            self.cd = curses.A_DIM
+            gray = 245 if curses.COLORS >= 256 else (8 if curses.COLORS >= 16 else None)
+            if gray is not None:
+                try:
+                    curses.init_pair(5, gray, -1)
+                    self.cd = curses.color_pair(5)
+                except (curses.error, ValueError):
+                    self.cd = curses.A_DIM
         self.cb = curses.A_BOLD
 
     # ── primitives ────────────────────────────────────────────────
@@ -498,7 +501,49 @@ def _code_head() -> str:
     return out.strip()[:8] if rc == 0 else "?"
 
 
+def _tui_fallback() -> int:
+    """What `suijin box` prints when curses can't start (no TERM, dumb
+    terminal, no terminfo — headless shells inside containers): the
+    verb-based path instead of a traceback (field 2026-10-25)."""
+
+    from suijin.server.box import engine as bx
+
+    term = os.environ.get("TERM", "")
+    why = f"TERM={term!r} has no terminfo entry" if term else "TERM is not set"
+    print(f"no usable terminal for the tui ({why}) — the verbs work everywhere:")
+    print("  suijin box build     create + provision (resumable)")
+    print("  suijin box status    one-glance state")
+    print("  suijin box enter     drift check → the suijin menu in the box")
+    print("  suijin box shell     straight into bash in the box")
+    print("  suijin box refresh / stop / start / destroy")
+    with contextlib.suppress(Exception):
+        eng = bx.detect_engine(interactive=False)
+        if eng:
+            print(f"engine: {eng}" + (f" (daemon: {bx.docker_daemon()})" if eng == bx.ENGINE_DOCKER else ""))
+    return 0
+
+
 def run_tui() -> int:
+    import curses
+
+    # a sane TERM when the shell brought none (or 'dumb' — no terminfo
+    # entry exists for it): xterm is the least-common-denominator that
+    # every terminfo db carries
+    if os.environ.get("TERM", "") in ("", "dumb", "unknown"):
+        os.environ["TERM"] = "xterm"
+    try:
+        return _run_tui_curses()
+    except curses.error:
+        return _tui_fallback()
+    except Exception:  # noqa: BLE001 — curses teardown errors (nocbreak
+        # ERR on stdin-less runs, color init ValueErrors on odd terms)
+        # degrade to the verbs, never a traceback
+        return _tui_fallback()
+
+
+def _run_tui_curses() -> int:
+    import curses
+
     def _main(stdscr) -> int:
         t = Tui(stdscr)
         from suijin.server.box import engine as bx
