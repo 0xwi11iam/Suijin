@@ -6,7 +6,12 @@ All notable changes to Suijin.
 > Entries below were written under the Medusa name at the time; command and
 > path examples have been updated to the new names.
 
-## Unreleased
+## v7.3.0 — The Anywhere Release
+
+The box works for everyone, everywhere: both engines at full parity,
+bring-your-own-container, clean build output — plus the reliability a
+week of live field runs shook out (failover attribution, transport
+backoff, session teardown, and nothing hardcoded, ever).
 
 ### box adopt — bring your own container (2026-10-24)
 
