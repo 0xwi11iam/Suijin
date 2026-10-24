@@ -566,7 +566,8 @@ def build(resume: bool = True, log=print, progress=None, cancel=None, stage_cb=N
     `stage_cb(name, ok)` fires as each stage COMPLETES — the tui colors
     its rows from these (done=green) instead of guessing."""
 
-    def _stage_done(name: str, ok: bool) -> None:
+    def _stage_evt(name: str, ok: bool | None) -> None:
+        """ok=None → the stage STARTED (white row); True/False → done."""
         with contextlib.suppress(Exception):
             if stage_cb:
                 stage_cb(name, ok)
@@ -595,29 +596,32 @@ def build(resume: bool = True, log=print, progress=None, cancel=None, stage_cb=N
         # box read the mounted repo's config instead of its own).
         if _stage_resumable(stage) and state["stages"].get(stage, {}).get("ok"):
             log(f"stage {stage}: already done (resumed)")
-            _stage_done(stage, True)  # resumed counts as done — green row
+            _stage_evt(stage, True)  # resumed counts as done — green row
             continue
+        _stage_evt(stage, None)  # started: white row while it actually runs
         ok = runners[stage](log)
         state["stages"][stage] = {"ok": ok, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
         _state_write(state)
-        _stage_done(stage, ok)
+        _stage_evt(stage, ok)
         if not ok:
             return {"ok": False, "error": f"stage {stage} failed (re-run to resume)", "stages": state["stages"]}
     # ALWAYS reconcile: per-tool state is the source of truth, and a
     # previous run may have recorded the stage flag without the tool
     # records (or lost them). Complete boxes finish this in one no-op
     # read; incomplete ones resume per tool.
+    _stage_evt("tools", None)
     ok = stage_tools(log, progress=progress, cancel=cancel)
     state = _state_read()  # stage_tools persisted per-tool records
     state["stages"]["tools"] = {"ok": ok}
     _state_write(state)
-    _stage_done("tools", ok)
+    _stage_evt("tools", ok)
     if not ok and not (cancel and cancel()):
         pass  # paused, not failed — summary reflects partial
+    _stage_evt("verify", None)
     ok = stage_verify(log)
     state["stages"]["verify"] = {"ok": ok}
     _state_write(state)
-    _stage_done("verify", ok)
+    _stage_evt("verify", ok)
     tools_state = _state_read().get("tools", {})
     current = tool_list()
     return {

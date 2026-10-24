@@ -261,7 +261,6 @@ class Tui:
             "first-boot verify",
         ]
         y = 2
-        active_assigned = False  # the FIRST not-done stage is the live one
         for i, (key, label) in enumerate(
             zip(("base", "suijin", "profile", "config", "tools", "verify"), names, strict=True)
         ):
@@ -270,7 +269,9 @@ class Tui:
             self.line(y, 2, num, self.cd)
             if key == "tools" and state.get("total"):
                 frac = state.get("done", 0) / max(1, state["total"])
-                self.line(y, 8, label, self.cb)  # in progress: white
+                # white while running, green when done, dim before it starts
+                style = self.cg if st.get("ok") is True else (self.cb if st.get("ok") is None else self.cd)
+                self.line(y, 8, label, style)
                 self.line(y + 1, 8, _bar(frac, 24) + f"  {int(frac * 100)}%", self.cc)
                 if state.get("current"):
                     elapsed = max(0.0, (state.get("tick") or 0) - (state.get("started_at") or 0))
@@ -278,16 +279,15 @@ class Tui:
                     y += 3
                 else:
                     y += 2
-            elif st.get("ok"):
+            elif st.get("ok") is True:
                 self.status(y, 8, "ok", label, st.get("at", ""))  # green
-            elif st.get("failed"):
+            elif st.get("ok") is False:
                 self.status(y, 8, "x", label, "— re-run resumes here")  # red
-            elif not active_assigned:
-                # the live stage: white/bold — it's where the work is
-                active_assigned = True
+            elif st.get("ok") is None:
+                # actually RUNNING right now (a start event landed): white
                 self.line(y, 8, f"• {label}", self.cb)
             else:
-                # not started yet: dim gray
+                # not started: dim gray — never white on a guess
                 self.line(y, 8, f"• {label}", self.cd)
             y += 1
         self.line(y + 1, 2, "─ output " + "─" * max(0, self.cols - 12), self.cd)
