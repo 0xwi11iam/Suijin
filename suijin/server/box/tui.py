@@ -59,7 +59,7 @@ def _get_key(stdscr) -> str:
         return "esc"
     if k == ord(" "):
         return "space"
-    if k >= 0 and chr(k).isprintable():
+    if k >= 0 and 32 < k < 127 and chr(k).isprintable():
         return chr(k).lower()
     return ""
 
@@ -286,7 +286,7 @@ class Tui:
             if key == "tools" and state.get("total"):
                 frac = state.get("done", 0) / max(1, state["total"])
                 # white while running, green when done, dim before it starts
-                style = self.cg if st.get("ok") is True else (self.cb if st.get("ok") is None else self.cd)
+                style = self.cg if st.get("ok") is True else (self.cb if "ok" in st else self.cd)
                 self.line(y, 8, label, style)
                 self.line(y + 1, 8, _bar(frac, 24) + f"  {int(frac * 100)}%", self.cc)
                 if state.get("current"):
@@ -299,11 +299,12 @@ class Tui:
                 self.status(y, 8, "ok", label, st.get("at", ""))  # green
             elif st.get("ok") is False:
                 self.status(y, 8, "x", label, "— re-run resumes here")  # red
-            elif st.get("ok") is None:
+            elif "ok" in st:
                 # actually RUNNING right now (a start event landed): white
                 self.line(y, 8, f"• {label}", self.cb)
             else:
-                # not started: dim gray — never white on a guess
+                # not started: dim gray — an ABSENT stage must never read
+                # as running (st.get("ok") is None matched BOTH before)
                 self.line(y, 8, f"• {label}", self.cd)
             y += 1
         self.line(y + 1, 2, "─ output " + "─" * max(0, self.cols - 12), self.cd)
@@ -382,7 +383,7 @@ class Tui:
         self.s.refresh()
         typed = ""
         confirm_word = "clean" if info.get("adopted") else "destroy"
-        expect = f"{confirm_word} {info['name']}"
+        self.line(10, 4, "(type it with or without spaces — enter to confirm)", self.cd)
         while True:
             k = _get_key(self.s)
             if k == "a":
@@ -390,15 +391,32 @@ class Tui:
             if k == "esc" or k == "c":
                 return "cancel"
             if k == "enter":
-                if typed.strip() == expect:
+                if _confirm_phrase_ok(typed, confirm_word, info["name"]):
                     return "destroy"
                 typed = ""
                 self.line(9, 4, "> " + " " * 30, 0)
                 self.s.refresh()
-            elif k and len(k) == 1:
+            elif k == "space":
+                typed += " "
+                self.line(9, 4, "> " + typed, 0)
+                self.s.refresh()
+            elif k and len(k) == 1 and k.isascii():
                 typed += k
                 self.line(9, 4, "> " + typed, 0)
                 self.s.refresh()
+
+
+def _confirm_phrase_ok(typed: str, word: str, name: str) -> bool:
+    """Forgiving confirmation: compares lowercase alphanumerics only —
+    eaten spaces, missing dashes, and 'delete' as a synonym all match
+    (the typed echo ate spaces for weeks: the phrase was IMPOSSIBLE to
+    confirm; 2026-10-24)."""
+
+    def norm(s: str) -> str:
+        return "".join(ch for ch in s.lower() if ch.isalnum())
+
+    t = norm(typed)
+    return t in (norm(f"{word} {name}"), norm(f"delete {name}"))
 
 
 def _has(binary: str) -> bool:

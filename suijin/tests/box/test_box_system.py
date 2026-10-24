@@ -513,6 +513,32 @@ class TestCleanRowsAndCompat:
         monkeypatch.setattr(real_sp, "run", lambda argv, **kw: (_ for _ in ()).throw(AssertionError("must not stream")))
         assert prov._sync_host_cas(lambda m: None)
 
+    def test_absent_stage_is_dim_not_running(self):
+        """st.get('ok') is None matched BOTH 'started' and ABSENT stages —
+        not-started rows rendered white (the operator's exact complaint).
+        The renderer must distinguish via key presence."""
+        import inspect
+
+        from suijin.server.box import tui as btui
+
+        src = inspect.getsource(btui.Tui.build_screen)
+        assert src.count('"ok" in st') >= 2  # tools style + the running branch
+        assert 'st.get("ok") is None' not in src
+
+    def test_confirm_phrase_is_forgiving(self):
+        """The typed echo ate spaces for weeks — the destroy phrase was
+        IMPOSSIBLE to confirm. The matcher now ignores separators and
+        accepts 'delete' as a synonym; garbage bytes never land."""
+        from suijin.server.box.tui import _confirm_phrase_ok as ok
+
+        assert ok("destroy suijin-box", "destroy", "suijin-box")
+        assert ok("destroysuijinbox", "destroy", "suijin-box")  # spaces eaten
+        assert ok("DELETE SUIJIN-BOX", "destroy", "suijin-box")
+        assert ok("delete suijinbox", "destroy", "suijin-box")
+        assert ok("clean mine", "clean", "mine")
+        assert not ok("destroy other-box", "destroy", "suijin-box")
+        assert not ok("destroy", "destroy", "suijin-box")
+
     def test_stage_events_start_before_done(self):
         """The white 'running' row must come from a REAL start event —
         the first-not-done heuristic painted verify white before it ran
