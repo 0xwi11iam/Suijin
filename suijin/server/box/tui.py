@@ -304,7 +304,7 @@ class Tui:
                 self.line(y, 8, f"• {label}", self.cb)
             else:
                 # not started: dim gray — an ABSENT stage must never read
-                # as running (st.get("ok") is None matched BOTH before)
+                # as running (a missing key is not a None start event)
                 self.line(y, 8, f"• {label}", self.cd)
             y += 1
         self.line(y + 1, 2, "─ output " + "─" * max(0, self.cols - 12), self.cd)

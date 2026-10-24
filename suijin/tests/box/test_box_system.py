@@ -557,7 +557,7 @@ class TestCleanRowsAndCompat:
 
         tsrc = inspect.getsource(btui.Tui.build_screen)
         assert "active_assigned" not in tsrc
-        assert "never white on a guess" in tsrc
+        assert "a missing key is not a None start event" in tsrc
 
     def test_base_bootstrap_survives_root_without_sudo(self):
         """docker's kali image runs as root with no sudo binary — the
