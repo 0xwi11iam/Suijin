@@ -128,43 +128,56 @@ class Tui:
 
     # ── screens ───────────────────────────────────────────────────
     def first_run(self) -> str:
+        """First-run screen WITH a real engine picker: up/down arrows
+        select among the available engines (the pick persists to
+        container.engine immediately), b/enter builds with the choice.
+        Before this the screen just SHOWED the autodetect result — there
+        was no way to pick the other engine from the tui at all."""
         from suijin.server.box import engine as bx
 
-        eng = bx.detect_engine()
-        self.frame("suijin box")
-        y = 3
-        self.line(y, 2, "no box exists yet.", self.cb)
-        y += 2
-        self.line(y, 2, "a box is a sealed linux environment that runs suijin and")
-        y += 1
-        self.line(y, 2, "its tools. your device stays untouched, and engagements")
-        y += 1
-        self.line(y, 2, "live on the box's own disk.")
-        y += 2
-        self.line(y, 2, "engine detected", self.cb)
-        y += 1
-        if eng == "orb":
-            self.status(y, 4, "ok", "orbstack (orb)")
-            y += 1
-            self.status(y, 4, "o", "docker (also available)" if _has("docker") else "docker (not found)")
-            y += 1
-        elif eng == "docker":
-            self.status(y, 4, "ok", "docker")
-            y += 1
-            self.status(y, 4, "o", "orbstack (not found)")
-            y += 1
-        else:
-            self.status(y, 4, "x", "no engine found", "— install orbstack or docker")
-            y += 1
-        y += 1
-        self.line(y, 2, "switch any time with SUIJIN_CONTAINER_ENGINE or settings", self.cd)
-        self.cta([("q", "quit")] + ([("b", "build the box")] if eng else []))
-        self.s.refresh()
+        detected = bx.detect_engine()
+        avail: list[str] = []
+        if bx._orb_available():  # mac-only, per the platform gate
+            avail.append("orb")
+        if _has("docker"):
+            avail.append("docker")
+        sel = detected if detected in avail else (avail[0] if avail else "")
+        labels = {"orb": "orbstack (orb)", "docker": "docker"}
         while True:
+            self.frame("suijin box")
+            y = 3
+            self.line(y, 2, "no box exists yet.", self.cb)
+            y += 2
+            self.line(y, 2, "a box is a sealed linux environment that runs suijin and")
+            y += 1
+            self.line(y, 2, "its tools. your device stays untouched, and engagements")
+            y += 1
+            self.line(y, 2, "live on the box's own disk.")
+            y += 2
+            self.line(y, 2, "engine", self.cb)
+            if len(avail) > 1:
+                self.line(y, 9, "up/down arrows change it — the pick persists", self.cd)
+            y += 1
+            for e in avail:
+                mark = "ok" if e == sel else "o"
+                word = labels[e] + ("  ←" if e == sel else "")
+                self.status(y, 4, mark, word)
+                y += 1
+            if not avail:
+                self.status(y, 4, "x", "no engine found", "— install orbstack or docker")
+                y += 1
+            y += 1
+            self.line(y, 2, "switch any time with SUIJIN_CONTAINER_ENGINE or settings", self.cd)
+            self.cta([("q", "quit")] + ([("b", "build the box")] if sel else []))
+            self.s.refresh()
             k = _get_key(self.s)
-            if k == "b" and eng:
+            if k in ("up", "down") and len(avail) > 1:
+                i = avail.index(sel)
+                sel = avail[(i + (1 if k == "down" else -1)) % len(avail)]
+                bx._persist_engine(sel)
+            elif k in ("b", "enter") and sel:
                 return "build"
-            if k == "q" or k == "esc":
+            elif k in ("q", "esc"):
                 return "quit"
 
     def dashboard(self, info: dict) -> str:
@@ -205,10 +218,14 @@ class Tui:
                     f"· {len(info['missing'])} pending",
                     self.cy,
                 )
+        else:
+            # never a blank row: an unbuilt/mid-build box still answers
+            self.line(y, 8, "… building" if info["running"] else "—", self.cd)
         if info["running"]:
             keys = [
                 ("e", "enter"),
                 ("r", "refresh"),
+                ("b", "build"),
                 ("t", "tools"),
                 ("g", "data"),
                 ("s", "stop"),
@@ -241,6 +258,7 @@ class Tui:
             "first-boot verify",
         ]
         y = 2
+        active_assigned = False  # the FIRST not-done stage is the live one
         for i, (key, label) in enumerate(
             zip(("base", "suijin", "profile", "config", "tools", "verify"), names, strict=True)
         ):
@@ -249,21 +267,34 @@ class Tui:
             self.line(y, 2, num, self.cd)
             if key == "tools" and state.get("total"):
                 frac = state.get("done", 0) / max(1, state["total"])
-                self.line(y, 8, label)
+                self.line(y, 8, label, self.cb)  # in progress: white
                 self.line(y + 1, 8, _bar(frac, 24) + f"  {int(frac * 100)}%", self.cc)
                 if state.get("current"):
-                    self.line(y + 2, 8, f"!  {state['current']}", self.cy)
-                y += 3
+                    elapsed = max(0.0, (state.get("tick") or 0) - (state.get("started_at") or 0))
+                    self.line(y + 2, 8, f"!  {state['current']} · {elapsed:.1f}s", self.cy)
+                    y += 3
+                else:
+                    y += 2
             elif st.get("ok"):
-                self.status(y, 8, "ok", label, st.get("at", ""))
+                self.status(y, 8, "ok", label, st.get("at", ""))  # green
             elif st.get("failed"):
-                self.status(y, 8, "x", label, "— re-run resumes here")
+                self.status(y, 8, "x", label, "— re-run resumes here")  # red
+            elif not active_assigned:
+                # the live stage: white/bold — it's where the work is
+                active_assigned = True
+                self.line(y, 8, f"o {label}", self.cb)
             else:
-                self.status(y, 8, "o", label, "pending")
+                # not started yet: dim gray
+                self.line(y, 8, f"o {label}", self.cd)
             y += 1
         self.line(y + 1, 2, "─ output " + "─" * max(0, self.cols - 12), self.cd)
-        for j, ln in enumerate(out_tail[-5:]):
-            self.line(y + 2 + j, 2, ln[: self.cols - 4], self.cd)
+        # fill the whole bottom with output: the pane used to show a
+        # fixed 5 lines above a wall of empty rows (operator 2026-10-24)
+        top = y + 2
+        bottom = self.rows - 3  # the cta owns rows-2
+        n = max(0, bottom - top)
+        for j, ln in enumerate(out_tail[-n:] if n else []):
+            self.line(top + j, 2, ln[: self.cols - 4], self.cd)
         self.cta([("p", "pause after current tool"), ("esc", "cancel (kept)")], row=self.rows - 2)
         self.s.refresh()
         return None
@@ -288,7 +319,11 @@ class Tui:
             if k in ("f", "j", "c", "esc"):
                 return k if k != "esc" else "c"
 
-    def message(self, title: str, lines: list, keys=None) -> str:
+    def message(self, title: str, lines: list, keys=None, hold_s: float = 1.6) -> str:
+        """Result flash: shows briefly (or until a listed key), then
+        RETURNS so the caller redraws — every action ends in a redraw
+        (operator 2026-10-24: 'in sync · nothing to do' used to sit on
+        screen forever after pressing r)."""
         self.frame(title)
         y = 2
         for ln in lines:
@@ -296,10 +331,18 @@ class Tui:
             y += 1
         self.cta(keys or [("q", "done")], row=y + 1)
         self.s.refresh()
-        while True:
-            k = _get_key(self.s)
-            if k in {kk for kk, _ in (keys or [("q", "")])} | {"esc", "q"}:
-                return k
+        with contextlib.suppress(Exception):
+            self.s.timeout(int(hold_s * 1000))
+            try:
+                k = self.s.getch()
+            finally:
+                self.s.timeout(-1)
+            if k in (-1, ord("q"), 27):
+                return "q" if k == ord("q") else ""
+            for kk, _ in keys or []:
+                if k == ord(kk):
+                    return kk
+        return ""
 
     def confirm_destroy(self, info: dict) -> str:
         """typed confirmation — the only one in the app."""
@@ -363,6 +406,19 @@ def _gather_info() -> dict:
     }
     with contextlib.suppress(Exception):
         info["code"] = _code_head()
+    if exists:
+        # the tools row must ALWAYS answer: ok/total from the box's own
+        # state file (blank row = looks broken, operator 2026-10-24)
+        with contextlib.suppress(Exception):
+            import json as _json
+
+            from suijin.server.box.sync import tool_list
+
+            rc, out = bx.run_in_box(f"cat {bx.BOX_STATE} 2>/dev/null", timeout=30)
+            tools = (_json.loads(out or "{}").get("tools") or {}) if rc == 0 else {}
+            ok = sum(1 for v in tools.values() if isinstance(v, dict) and v.get("ok"))
+            total = len(tool_list()) or len(tools)
+            info["tools_ok"], info["tools_total"] = ok, total
     if running:
         with contextlib.suppress(Exception):
             from suijin.server.box.sync import drift as compute_drift
@@ -487,15 +543,17 @@ def _run_build(t: Tui) -> None:
 
     def log(m):
         tail.append(str(m))
-        tail[:] = tail[-40:]
+        tail[:] = tail[-120:]
 
     def progress(done, total, name, ok, note):
-        state["done"], state["total"], state["current"] = (
-            done,
-            total,
-            ("" if ok else f"{name} — {note}" if note else name),
-        )
-        if not ok:
+        # ok=None means IN FLIGHT (the tool started, not finished): the
+        # current-tool line shows it with a live elapsed clock so the
+        # screen visibly ticks (>=3 changes/sec) through long installs
+        cur = name if ok is None else ("" if ok else (f"{name} — {note}" if note else name))
+        if cur != state["current"]:
+            state["started_at"] = time.time()
+        state["done"], state["total"], state["current"] = done, total, cur
+        if ok is False:
             tail.append(f"x  {name} — {note}")
 
     def worker():
@@ -509,6 +567,7 @@ def _run_build(t: Tui) -> None:
     t.s.nodelay(True)
     try:
         while not stop.is_set():
+            state["tick"] = time.time()
             t.build_screen(state, tail)
             k = _get_key(t.s)
             if k == "p":
