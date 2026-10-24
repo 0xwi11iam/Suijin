@@ -89,7 +89,17 @@ class Tui:
         self.cy = curses.color_pair(2)
         self.cr = curses.color_pair(3) | curses.A_BOLD
         self.cc = curses.color_pair(4)
-        self.cd = curses.A_DIM
+        # GRAY is a REAL color pair, not A_DIM: A_DIM renders as plain
+        # white on most terminals (the "these are white not gray"
+        # report) — bright-black (8) is the portable dim gray
+        if curses.has_colors():
+            try:
+                curses.init_pair(5, 8, -1)
+                self.cd = curses.color_pair(5) | curses.A_DIM
+            except curses.error:
+                self.cd = curses.A_DIM
+        else:
+            self.cd = curses.A_DIM
         self.cb = curses.A_BOLD
 
     # ── primitives ────────────────────────────────────────────────
