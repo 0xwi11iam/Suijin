@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "suijin"
-version = "7.2.0"
+version = "7.3.0"
 description = "Suijin — the autonomous red team (formerly Medusa)"
 readme = "README.md"
 license = { text = "AGPL-3.0-or-later" }
