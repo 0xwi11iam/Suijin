@@ -165,7 +165,9 @@ def box_exists(engine: str | None = None) -> bool:
         rc, _ = _run(["orb", "-m", box_name(), "true"], timeout=120)
         return rc == 0
     rc, out = _run(["docker", "ps", "-a", "--format", "{{.Names}}"], timeout=30)
-    return box_name() in out
+    # EXACT name match: a substring test made "suijin-box" match
+    # "suijin-box-old" (and any adopted name match its prefixes)
+    return box_name() in (out or "").split()
 
 
 def box_running(engine: str | None = None) -> bool:
@@ -311,6 +313,20 @@ def box_cmd_argv(cmd: str, engine: str | None = None, stdin_attached: bool = Fal
     return ["orb", "-m", box_name(), "bash", "-lc", cmd]
 
 
+def _enter_argv(action: str, eng: str) -> list:
+    """The host argv for an interactive session. The suijin action goes
+    through `bash -lc` on docker: `docker exec -it X suijin` resolves
+    the binary against the IMAGE's default PATH, which does not carry
+    ~/.local/bin (where pipx puts suijin) — a login shell loads the
+    profile dropin and finds it. orb's exec already runs profiled."""
+    cmd = "suijin" if action == "suijin" else "bash"
+    if eng == ENGINE_ORB:
+        return ["orb", "-m", box_name(), cmd]
+    if cmd == "suijin":
+        return ["docker", "exec", "-it", box_name(), "bash", "-lc", "suijin"]
+    return ["docker", "exec", "-it", box_name(), "bash"]
+
+
 def box_enter_interactive(action: str = "suijin", engine: str | None = None) -> int:
     """Replace this process with an interactive session in the box.
     action: 'suijin' (the menu) or 'shell'."""
@@ -318,8 +334,7 @@ def box_enter_interactive(action: str = "suijin", engine: str | None = None) -> 
     if not eng:
         print("no container engine found")
         return 1
-    cmd = "suijin" if action == "suijin" else "bash"
-    argv = ["orb", "-m", box_name(), cmd] if eng == ENGINE_ORB else ["docker", "exec", "-it", box_name(), cmd]
+    argv = _enter_argv(action, eng)
     os.execvp(argv[0], argv)  # noqa: S606 — a real TTY handoff
     return 1
 
