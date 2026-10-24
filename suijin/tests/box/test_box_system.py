@@ -414,6 +414,26 @@ class TestCleanRowsAndCompat:
         assert _clean_stream_line("(Reading database ... 5%\x08\x08\x08 10%)") == "(Reading database ... 5% 10%)"
         assert "    " not in _clean_stream_line("a    b        c")
 
+    def test_stage_events_start_before_done(self):
+        """The white 'running' row must come from a REAL start event —
+        the first-not-done heuristic painted verify white before it ran
+        (operator 2026-10-24: not-done = dim gray, always)."""
+        import inspect
+
+        from suijin.server.box import provision
+
+        src = inspect.getsource(provision.build)
+        # every runner call is preceded by a started event
+        assert "_stage_evt(stage, None)" in src
+        assert '_stage_evt("tools", None)' in src
+        assert '_stage_evt("verify", None)' in src
+        # and no first-not-done guessing remains in the tui renderer
+        from suijin.server.box import tui as btui
+
+        tsrc = inspect.getsource(btui.Tui.build_screen)
+        assert "active_assigned" not in tsrc
+        assert "never white on a guess" in tsrc
+
     def test_base_bootstrap_survives_root_without_sudo(self):
         """docker's kali image runs as root with no sudo binary — the
         bootstrap must adapt with $S instead of dying on `sudo:`."""
