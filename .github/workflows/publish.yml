@@ -13,7 +13,7 @@ env:
 
 jobs:
   wheel-build:
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    if: github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -21,6 +21,17 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+
+      - name: Version sources agree (pyproject == version.json)
+        run: |
+          python - <<'PYEOF'
+          import json, re, sys
+          pj = re.search(r'^version = "(.+)"', open("pyproject.toml").read(), re.M).group(1)
+          vj = json.load(open("suijin/version.json"))["version"]
+          if pj != vj:
+              sys.exit(f"VERSION DRIFT: pyproject={pj} version.json={vj} — sync them before tagging")
+          print(f"version sources agree: {pj}")
+          PYEOF
 
       - name: Build and check the wheel
         run: |

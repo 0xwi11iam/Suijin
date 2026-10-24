@@ -125,6 +125,19 @@ class TestNoHardcode:
                 offenders.append(f"{f.relative_to(REPO)}: {m.group(0)}")
         assert not offenders, "machine-specific paths in tracked files: " + "; ".join(offenders[:10])
 
+    def test_version_sources_agree(self):
+        """The v7.3.0 release died on PyPI: pyproject's static version
+        drifted from version.json — the wheel built 7.2.0 and the upload
+        was rejected as a duplicate. They must ALWAYS match."""
+        import json
+        import re
+        from pathlib import Path
+
+        repo = Path(__file__).resolve().parents[3]
+        pj = re.search(r'^version = "(.+)"', (repo / "pyproject.toml").read_text(), re.M).group(1)
+        vj = json.loads((repo / "suijin" / "version.json").read_text())["version"]
+        assert pj == vj, f"VERSION DRIFT: pyproject={pj} version.json={vj}"
+
     def test_knowledge_graph_writes_never_touch_the_package_seed(self):
         """The mechanism behind the 2026-10-23 leak: learned intel must
         land in the WORKSPACE, never in the package tree."""
