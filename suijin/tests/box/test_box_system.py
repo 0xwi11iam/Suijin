@@ -479,6 +479,40 @@ class TestCleanRowsAndCompat:
         monkeypatch.setattr(eng, "_run", lambda cmd, timeout=600: (0, "orbstack\n"))
         assert eng.docker_daemon() == "orbstack"
 
+    def test_host_ca_sync_installs_anchors_on_filtered_networks(self, monkeypatch):
+        """Intercepting networks (school/corp TLS filters) MITM the VM's
+        HTTPS: the host trusts the filter root, the container doesn't —
+        pip/curl died with CERTIFICATE_VERIFY_FAILED on docker-desktop.
+        _sync_host_cas streams the host anchors in and refreshes the
+        store; no anchors on plain networks is a quiet no-op."""
+        import suijin.server.box.provision as prov
+
+        monkeypatch.setattr(prov, "_host_ca_pem", lambda: "-----BEGIN CERT-----\nxyz\n-----END CERT-----\n")
+        inbox: list[str] = []
+        monkeypatch.setattr(
+            prov.bx, "run_in_box", lambda cmd, timeout=600, engine=None: (inbox.append(cmd), (0, ""))[1]
+        )
+
+        import subprocess as real_sp
+
+        class P:
+            returncode = 0
+
+        monkeypatch.setattr(real_sp, "run", lambda argv, **kw: P())
+        logs: list[str] = []
+        assert prov._sync_host_cas(lambda m: logs.append(m))
+        assert any("update-ca-certificates" in c for c in inbox)
+        assert any("anchors installed" in m for m in logs)
+
+    def test_no_anchors_is_a_quiet_noop(self, monkeypatch):
+        import suijin.server.box.provision as prov
+
+        monkeypatch.setattr(prov, "_host_ca_pem", lambda: "")
+        import subprocess as real_sp
+
+        monkeypatch.setattr(real_sp, "run", lambda argv, **kw: (_ for _ in ()).throw(AssertionError("must not stream")))
+        assert prov._sync_host_cas(lambda m: None)
+
     def test_stage_events_start_before_done(self):
         """The white 'running' row must come from a REAL start event —
         the first-not-done heuristic painted verify white before it ran
