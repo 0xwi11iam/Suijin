@@ -19,7 +19,9 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import time
+from pathlib import Path
 
 from suijin.server.box import engine as bx
 from suijin.server.box.sync import sync_selected, tool_list
@@ -179,6 +181,70 @@ def ensure_ws() -> bool:
     return rc == 0
 
 
+def _host_ca_pem() -> str:
+    """The host's trust anchors as PEM — macOS keychains (system + login
+    carry network-filter roots on managed networks), linux system store.
+    On intercepting networks (school/corp TLS filters) the VM's egress
+    is MITM'd; the host trusts the filter root, the container doesn't —
+    syncing anchors makes pip/curl/go work through the filter."""
+    import subprocess
+
+    parts: list[str] = []
+    import sys as _sys
+
+    if _sys.platform == "darwin":
+        for keychain in (
+            "/Library/Keychains/System.keychain",
+            os.path.expanduser("~/Library/Keychains/login.keychain-db"),
+        ):
+            with contextlib.suppress(Exception):
+                r = subprocess.run(
+                    ["security", "find-certificate", "-a", "-p", keychain], capture_output=True, text=True, timeout=60
+                )
+                if r.returncode == 0 and "BEGIN CERT" in (r.stdout or ""):
+                    parts.append(r.stdout.strip())
+    else:
+        for p in ("/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt"):
+            with contextlib.suppress(Exception):
+                parts.append(Path(p).read_text(errors="replace"))
+    return "\n".join(parts)
+
+
+def _sync_host_cas(log) -> bool:
+    """Install the host trust anchors into the box CA store. Best-effort:
+    no anchors found (or a plain network) is not an error — the standard
+    store already works there."""
+    pem = _host_ca_pem()
+    if "BEGIN CERT" not in pem:
+        return True
+    try:
+        import subprocess
+
+        proc = subprocess.run(
+            bx.box_cmd_argv("tee /tmp/suijin-host-cas.crt >/dev/null", stdin_attached=True),
+            input=pem.encode(),
+            capture_output=True,
+            timeout=120,
+        )
+        if proc.returncode != 0:
+            log("host CA sync: stream failed — continuing with the standard store")
+            return True
+        rc, out = bx.run_in_box(
+            "S=''; command -v sudo >/dev/null 2>&1 && S=sudo; "
+            "$S mv /tmp/suijin-host-cas.crt /usr/local/share/ca-certificates/suijin-host-cas.crt && "
+            "$S update-ca-certificates 2>&1 | tail -1",
+            timeout=300,
+        )
+        if rc == 0:
+            log("host trust anchors installed (filtered networks: pip/https now verify)")
+        else:
+            log(f"host CA install failed: {out.strip()[-120:]}")
+        return True
+    except Exception as e:  # noqa: BLE001 — CA sync must never break the build
+        log(f"host CA sync error (ignored): {e}")
+        return True
+
+
 def stage_base(log) -> bool:
     log("installing base packages (python, pipx, git …)")
     # pipefail: a piped tail must never mask the install's exit code.
@@ -197,6 +263,7 @@ def stage_base(log) -> bool:
     if rc != 0:
         log(f"base packages failed: {out.strip()[-200:]}")
         return False
+    _sync_host_cas(log)  # filtered networks: the VM's https needs the host's anchors
     return True
 
 
@@ -288,6 +355,13 @@ def stage_profile(log) -> bool:
         # (no provider key) and wrote model choices INTO the host tree.
         f"export SUIJIN_CONFIG={bx.BOX_WS}/config.json\n"
         f"export SUIJIN_ENV={bx.BOX_WS}/.env\n"
+        # pip/requests carry their OWN CA bundles (certifi) and would
+        # miss host-installed anchors on filtered networks — point them
+        # at the system store (harmless on plain networks)
+        "export PIP_CERT=/etc/ssl/certs/ca-certificates.crt\n"
+        "export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt\n"
+        "export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt\n"
+        "export GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt\n"
         "export PATH=$HOME/.local/bin:$HOME/go/bin:$HOME/google-cloud-sdk/bin:/usr/local/sbin:/usr/sbin:/sbin:$PATH\n"
     )
     quoted = profile.replace("'", "'\\''")
