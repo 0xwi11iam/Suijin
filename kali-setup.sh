@@ -36,10 +36,26 @@ fail() { printf "  ${RED}fail${OFF} %s\n" "$*"; exit 1; }
 note() { printf "      ${DIM}%s${OFF}\n" "$*"; }
 
 # ── 0. KALI CHECK — before touching anything ───────────────────────────
-if [ ! -r /etc/os-release ] || ! grep -q '^ID=kali' /etc/os-release 2>/dev/null; then
-  printf "  ${RED}fail${OFF} this host is not Kali (no ID=kali in /etc/os-release) — aborting.\n"
-  printf '        native installs: use install.sh, then `suijin box build`\n'
+OS_ID=""
+[ -r /etc/os-release ] && OS_ID=$(grep '^ID=' /etc/os-release | cut -d= -f2)
+if [ -z "$OS_ID" ]; then
+  printf "  ${RED}fail${OFF} no /etc/os-release — aborting.\n"
   exit 1
+fi
+if [ "$OS_ID" != "kali" ]; then
+  # the apt ARSENAL groups are kali-packaged; on ubuntu/debian only the
+  # skip-arsenal flow (the box carries the tools) is supported
+  if [ "$OS_ID" = "ubuntu" ] || [ "$OS_ID" = "debian" ]; then
+    if [ "${SUIJIN_SKIP_ARSENAL:-0}" != "1" ]; then
+      printf "  ${RED}fail${OFF} $OS_ID is supported only with SUIJIN_SKIP_ARSENAL=1 (the box carries the tools).\n"
+      exit 1
+    fi
+    export SUIJIN_SKIP_ARSENAL=1
+  else
+    printf "  ${RED}fail${OFF} unsupported distro (ID=$OS_ID) — aborting.\n"
+    printf '        native installs: use install.sh, then `suijin box build`\n'
+    exit 1
+  fi
 fi
 
 INSTALL_DIR="${SUIJIN_INSTALL_DIR:-/opt/suijin}"
