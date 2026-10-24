@@ -414,6 +414,31 @@ class TestCleanRowsAndCompat:
         assert _clean_stream_line("(Reading database ... 5%\x08\x08\x08 10%)") == "(Reading database ... 5% 10%)"
         assert "    " not in _clean_stream_line("a    b        c")
 
+    def test_docker_create_retries_bare_when_mount_denied(self, monkeypatch):
+        """BOXING FROM INSIDE A CONTAINER: the daemon resolves -v mounts
+        against ITS host, where the inner repo path doesn't exist
+        ('mounts denied') — create must retry WITHOUT the mount (the
+        tar-stream fallback carries the source)."""
+        import suijin.server.box.engine as eng
+
+        runs: list[list] = []
+
+        def fake_run(cmd, timeout=600):
+            runs.append(cmd)
+            if "-v" in cmd:
+                return 1, "mounts denied: The path /opt/suijin/repo is not shared from the host"
+            return 0, "container-id"
+
+        monkeypatch.setattr(eng, "detect_engine", lambda interactive=True: "docker")
+        monkeypatch.setattr(eng, "box_name", lambda: "suijin-box")
+        monkeypatch.setattr(eng, "repo_root", lambda: "/opt/suijin/repo")
+        monkeypatch.setattr(eng, "_run", fake_run)
+        ok, out = eng.box_create()
+        assert ok
+        assert any("-v" in a for a in runs)  # attempt 1: mounted
+        assert runs[-1].count("-v") == 0  # attempt 2: bare
+        assert any("rm" in " ".join(map(str, a)) for a in runs[1:])  # cleaned the corpse
+
     def test_docker_box_exists_exact_name_match(self, monkeypatch):
         """Substring matching made 'suijin-box' match 'suijin-box-old' —
         exists must be an EXACT container-name line match."""

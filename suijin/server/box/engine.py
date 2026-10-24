@@ -285,6 +285,15 @@ def box_create(engine: str | None = None) -> tuple[bool, str]:
         argv += ["-v", f"{_docker_mount_path(root)}:/opt/suijin"]
     argv += ["kalilinux/kali-rolling", "sleep", "infinity"]
     rc, out = _run(argv, timeout=1800)
+    if rc != 0 and root:
+        # The daemon can't share this path — BOXING FROM INSIDE A
+        # CONTAINER: mounts resolve against the DAEMON'S host (the
+        # machine), where the inner container's repo path doesn't exist
+        # ("mounts denied … not shared from the host"). Retry bare:
+        # stage_suijin's tar-stream fallback carries the source in.
+        _run(docker_argv("rm", "-f", box_name()), timeout=120)
+        bare = [a for i, a in enumerate(argv) if not (a == "-v" or (i and argv[i - 1] == "-v"))]
+        rc, out = _run(bare, timeout=1800)
     return rc == 0, out.strip()[-400:]
 
 
