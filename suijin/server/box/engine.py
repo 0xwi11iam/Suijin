@@ -20,7 +20,6 @@ import os
 import shutil
 import subprocess
 
-BOX_NAME = "suijin-box"
 BOX_WS = "/opt/suijin-ws"
 BOX_STATE = f"{BOX_WS}/.box-state.json"
 SYNC_MANIFEST = f"{BOX_WS}/.sync-manifest.json"
@@ -28,6 +27,30 @@ PROFILE_DROPIN = "/etc/profile.d/suijin-box.sh"
 
 ENGINE_ORB = "orb"
 ENGINE_DOCKER = "docker"
+
+#: the managed box (created/owned/deleted by suijin). An ADOPTED
+#: container — config `container.name`, set by `suijin box adopt` — is
+#: the operator's own: suijin provisions INTO it and never deletes it.
+DEFAULT_BOX_NAME = "suijin-box"
+BOX_NAME = DEFAULT_BOX_NAME  # back-compat alias; prefer box_name()
+
+
+def box_name() -> str:
+    """The container every box verb operates on: config container.name
+    (an adopted container) > the managed default. Validated lazily —
+    a broken config never breaks the box layer."""
+    with contextlib.suppress(Exception):
+        from suijin.modules.platform.lib.config_loader import load_config
+
+        n = str((load_config() or {}).get("container", {}).get("name") or "").strip()
+        if n:
+            return n
+    return DEFAULT_BOX_NAME
+
+
+def is_adopted() -> bool:
+    """True when suijin points at an operator-owned container."""
+    return box_name() != DEFAULT_BOX_NAME
 
 
 def _orb_available() -> bool:
@@ -139,10 +162,10 @@ def box_exists(engine: str | None = None) -> bool:
         # `orb list` shows running machines only — a stopped machine
         # still answers a direct exec (orb auto-starts on use), which
         # is the honest existence probe
-        rc, _ = _run(["orb", "-m", BOX_NAME, "true"], timeout=120)
+        rc, _ = _run(["orb", "-m", box_name(), "true"], timeout=120)
         return rc == 0
     rc, out = _run(["docker", "ps", "-a", "--format", "{{.Names}}"], timeout=30)
-    return BOX_NAME in out
+    return box_name() in out
 
 
 def box_running(engine: str | None = None) -> bool:
@@ -153,10 +176,10 @@ def box_running(engine: str | None = None) -> bool:
         rc, out = _run(["orb", "list"], timeout=30)
         for ln in out.splitlines():
             parts = ln.split()
-            if parts and parts[0] == BOX_NAME:
+            if parts and parts[0] == box_name():
                 return len(parts) > 1 and parts[1] == "running"
         return False
-    rc, out = _run(["docker", "inspect", "-f", "{{.State.Running}}", BOX_NAME], timeout=30)
+    rc, out = _run(["docker", "inspect", "-f", "{{.State.Running}}", box_name()], timeout=30)
     return "true" in out.lower()
 
 
@@ -176,6 +199,10 @@ def box_create(engine: str | None = None) -> tuple[bool, str]:
     eng = _engine_binary(engine or detect_engine())
     if not eng:
         return False, "no container engine found — install docker (or orbstack on macOS)"
+    if is_adopted():
+        # the operator OWNS this container — suijin never creates (or
+        # deletes) it; `suijin box adopt <name>` provisioned INTO it
+        return False, f"container.name is set to the adopted container {box_name()!r} — suijin does not create it"
     if eng == ENGINE_ORB:
         # orb takes a DISTRO name, not a docker image ref. Resource caps
         # keep every user's box bounded: the kali base is already
@@ -183,7 +210,7 @@ def box_create(engine: str | None = None) -> tuple[bool, str]:
         # cap prevents toolchain balloon — trim container.tools in
         # config.json for a smaller footprint.
         rc, out = _run(
-            ["orb", "create", "--memory", "4G", "--cpus", "2", "--disk", "25G", "kali", BOX_NAME],
+            ["orb", "create", "--memory", "4G", "--cpus", "2", "--disk", "25G", "kali", box_name()],
             timeout=1800,
         )
         return rc == 0, out.strip()[-400:]
@@ -197,7 +224,7 @@ def box_create(engine: str | None = None) -> tuple[bool, str]:
         "run",
         "-d",
         "--name",
-        BOX_NAME,
+        box_name(),
         "--memory",
         "4g",
         "--cpus",
@@ -218,9 +245,9 @@ def box_start(engine: str | None = None) -> tuple[bool, str]:
     if eng == ENGINE_ORB:
         if box_running(eng):
             return True, "already running"
-        rc, out = _run(["orb", "start", BOX_NAME], timeout=300)
+        rc, out = _run(["orb", "start", box_name()], timeout=300)
         return rc == 0, out.strip()[-200:]
-    rc, out = _run(["docker", "start", BOX_NAME], timeout=300)
+    rc, out = _run(["docker", "start", box_name()], timeout=300)
     return rc == 0, out.strip()[-200:]
 
 
@@ -229,9 +256,9 @@ def box_stop(engine: str | None = None) -> tuple[bool, str]:
     if not eng:
         return False, "no engine"
     if eng == ENGINE_ORB:
-        rc, out = _run(["orb", "stop", BOX_NAME], timeout=300)
+        rc, out = _run(["orb", "stop", box_name()], timeout=300)
         return rc == 0, out.strip()[-200:]
-    rc, out = _run(["docker", "stop", BOX_NAME], timeout=300)
+    rc, out = _run(["docker", "stop", box_name()], timeout=300)
     return rc == 0, out.strip()[-200:]
 
 
@@ -239,13 +266,27 @@ def box_delete(engine: str | None = None) -> tuple[bool, str]:
     eng = _engine_binary(engine or detect_engine())
     if not eng:
         return False, "no engine"
+    if is_adopted():
+        # ADOPTED containers are the operator's own: remove ONLY suijin's
+        # footprint INSIDE them — never the container itself. Explicit
+        # /opt paths only (the standing container rule).
+        name = box_name()
+        rc, out = run_in_box(
+            "S=''; command -v sudo >/dev/null 2>&1 && S=sudo; "
+            f"$S rm -rf {BOX_WS} /opt/suijin && $S rm -f {PROFILE_DROPIN}",
+            timeout=300,
+            engine=eng,
+        )
+        return (rc == 0), (
+            f"suijin's footprint removed from {name} — the container itself is kept" if rc == 0 else out.strip()[-200:]
+        )
     if eng == ENGINE_ORB:
         # -f: orb delete prompts for confirmation on running machines
         # — an invisible prompt on a pipe hangs forever (same class as
         # the apt -y bug)
-        rc, out = _run(["orb", "delete", "-f", BOX_NAME], timeout=300)
+        rc, out = _run(["orb", "delete", "-f", box_name()], timeout=300)
         return rc == 0, out.strip()[-200:]
-    rc, out = _run(["docker", "rm", "-f", BOX_NAME], timeout=300)
+    rc, out = _run(["docker", "rm", "-f", box_name()], timeout=300)
     return rc == 0, out.strip()[-200:]
 
 
@@ -255,8 +296,8 @@ def run_in_box(cmd: str, timeout: int = 3600, engine: str | None = None) -> tupl
     if not eng:
         return 1, "no engine"
     if eng == ENGINE_ORB:
-        return _run(["orb", "-m", BOX_NAME, "bash", "-lc", cmd], timeout=timeout)
-    return _run(["docker", "exec", BOX_NAME, "bash", "-lc", cmd], timeout=timeout)
+        return _run(["orb", "-m", box_name(), "bash", "-lc", cmd], timeout=timeout)
+    return _run(["docker", "exec", box_name(), "bash", "-lc", cmd], timeout=timeout)
 
 
 def box_cmd_argv(cmd: str, engine: str | None = None, stdin_attached: bool = False) -> list:
@@ -266,8 +307,8 @@ def box_cmd_argv(cmd: str, engine: str | None = None, stdin_attached: bool = Fal
     stdin."""
     eng = _engine_binary(engine or detect_engine())
     if eng == ENGINE_DOCKER:
-        return ["docker", "exec", *(["-i"] if stdin_attached else []), BOX_NAME, "bash", "-lc", cmd]
-    return ["orb", "-m", BOX_NAME, "bash", "-lc", cmd]
+        return ["docker", "exec", *(["-i"] if stdin_attached else []), box_name(), "bash", "-lc", cmd]
+    return ["orb", "-m", box_name(), "bash", "-lc", cmd]
 
 
 def box_enter_interactive(action: str = "suijin", engine: str | None = None) -> int:
@@ -278,7 +319,7 @@ def box_enter_interactive(action: str = "suijin", engine: str | None = None) -> 
         print("no container engine found")
         return 1
     cmd = "suijin" if action == "suijin" else "bash"
-    argv = ["orb", "-m", BOX_NAME, cmd] if eng == ENGINE_ORB else ["docker", "exec", "-it", BOX_NAME, cmd]
+    argv = ["orb", "-m", box_name(), cmd] if eng == ENGINE_ORB else ["docker", "exec", "-it", box_name(), cmd]
     os.execvp(argv[0], argv)  # noqa: S606 — a real TTY handoff
     return 1
 

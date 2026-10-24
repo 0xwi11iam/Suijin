@@ -223,7 +223,18 @@ class TestCliRouting:
     def test_verbs_registered(self):
         from suijin.server.box.cli import VERBS
 
-        assert set(VERBS) == {"build", "start", "stop", "enter", "shell", "status", "refresh", "destroy"}
+        assert set(VERBS) == {
+            "build",
+            "start",
+            "stop",
+            "enter",
+            "shell",
+            "adopt",
+            "unadopt",
+            "status",
+            "refresh",
+            "destroy",
+        }
 
 
 class TestProvisionResume:
@@ -261,6 +272,113 @@ class TestTuiRender:
 
         assert _bar(-1, 6).startswith("░")
         assert _bar(2, 6).endswith("█")
+
+
+class TestAdopt:
+    """Bring-your-own-container (2026-10-24): suijin points at an
+    operator-owned container, provisions into it, and NEVER deletes
+    it — destroy removes only suijin's footprint inside."""
+
+    def test_box_name_default_and_config(self, monkeypatch):
+        import shutil
+        import sys
+
+        import suijin.server.box.engine as eng
+
+        monkeypatch.delenv("SUIJIN_CONTAINER_ENGINE", raising=False)
+        monkeypatch.setattr(sys, "platform", "darwin")
+        monkeypatch.setattr(shutil, "which", lambda n: True)
+        monkeypatch.setattr(eng, "_configured_engine", lambda: "")
+        monkeypatch.setattr(eng, "_configured_container_name", lambda: "", raising=False)
+        monkeypatch.setattr(eng, "load_config", lambda: {}, raising=False)
+        # fresh module state: patch box_name's config read via its lazy import
+        monkeypatch.setattr(eng, "box_name", eng.box_name)  # no-op keep
+        assert eng.box_name() == "suijin-box"
+        assert not eng.is_adopted()
+
+    def test_run_in_box_uses_adopted_name(self, monkeypatch):
+        import suijin.server.box.engine as eng
+
+        captured: dict[str, list] = {}
+        monkeypatch.setattr(eng, "detect_engine", lambda interactive=True: "docker")
+        monkeypatch.setattr(eng, "box_name", lambda: "ops-container")
+        monkeypatch.setattr(eng, "_run", lambda cmd, timeout=600: (captured.setdefault("argv", cmd), (0, ""))[1])
+        eng.run_in_box("true")
+        assert captured["argv"] == ["docker", "exec", "ops-container", "bash", "-lc", "true"]
+
+    def test_adopted_delete_never_removes_the_container(self, monkeypatch):
+        import suijin.server.box.engine as eng
+
+        argvs: list[list] = []
+        inbox: list[str] = []
+
+        def fake_run(cmd, timeout=600):
+            argvs.append(cmd)
+            return 0, ""
+
+        def fake_inbox(cmd, timeout=3600, engine=None):
+            inbox.append(cmd)
+            return 0, ""
+
+        monkeypatch.setattr(eng, "detect_engine", lambda interactive=True: "docker")
+        monkeypatch.setattr(eng, "box_name", lambda: "ops-container")
+        monkeypatch.setattr(eng, "is_adopted", lambda: True)
+        monkeypatch.setattr(eng, "_run", fake_run)
+        monkeypatch.setattr(eng, "run_in_box", fake_inbox)
+        ok, note = eng.box_delete()
+        assert ok
+        assert "kept" in note
+        # no docker rm / orb delete ANYWHERE — the container survives
+        flat = " ".join(" ".join(a) for a in argvs)
+        assert "rm" not in flat and "delete" not in flat
+        # the footprint removal runs INSIDE the container, /opt paths only
+        assert any("rm -rf /opt/suijin-ws" in c and "/etc/profile.d/suijin-box.sh" in c for c in inbox)
+
+    def test_adopted_box_create_refuses(self, monkeypatch):
+        import suijin.server.box.engine as eng
+
+        monkeypatch.setattr(eng, "detect_engine", lambda interactive=True: "docker")
+        monkeypatch.setattr(eng, "box_name", lambda: "ops-container")
+        monkeypatch.setattr(eng, "is_adopted", lambda: True)
+        ok, msg = eng.box_create()
+        assert not ok and "adopted" in msg
+
+    def test_stage_suijin_streams_repo_when_unmounted(self, monkeypatch):
+        """Adopted containers have no live mount — the source tree must
+        tar-stream to /opt/suijin (agent-vault/.venv EXCLUDED: secrets
+        and 170MB never cross the boundary)."""
+        import suijin.server.box.provision as prov
+        from suijin.server.box import engine as bx2
+
+        monkeypatch.setattr(bx2, "repo_root", lambda: "/home/user/src/suijin")
+        monkeypatch.setattr(bx2, "detect_engine", lambda interactive=True: "docker")
+        monkeypatch.setattr(
+            bx2, "run_in_box", lambda cmd, timeout=600, engine=None: (1, "") if "pyproject" in cmd else (0, "")
+        )
+        streamed: dict[str, object] = {}
+
+        class FakeTar:
+            returncode = 0
+            stdout = b"tree"
+            stderr = b""
+
+        import subprocess as real_sp
+
+        def fake_run(argv, **kw):
+            if argv[0] == "tar":
+                streamed["host_tar"] = argv
+                return FakeTar()
+            streamed["box_argv"] = argv
+            streamed["input"] = kw.get("input")
+            return FakeTar()
+
+        monkeypatch.setattr(real_sp, "run", fake_run)
+        logs: list[str] = []
+        assert prov._stream_repo_into_box(lambda m: logs.append(m))
+        assert "--exclude=agent-vault" in streamed["host_tar"]
+        assert "--exclude=.venv" in streamed["host_tar"]
+        assert "-i" in streamed["box_argv"]  # stdin stream through docker
+        assert any("streamed the source tree" in m for m in logs)
 
 
 class TestVerbRegistered:
