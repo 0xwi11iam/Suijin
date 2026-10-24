@@ -1,7 +1,7 @@
 # Suijin — Project Context
 
 > The architecture grip. Read top to bottom before touching anything.
-> Last updated 2026-10-18 (CyberStrike/ARTEX equalisation: tool contracts, observation engine, specialists, blackboard, loop detection, landscape, contamination scrub; legacy supervisor killed; reporting rebuilt).
+> Last updated 2026-10-24 (v7.3.0 The Anywhere Release: box engine parity orb+docker, adopt-a-container, box shell, clean build rows, PATH everywhere, filtered-network CAs; failover attribution + backoff; session teardown; no-hardcode sweep + history scrub; workspace-first KG.)
 
 ## Repo facts
 

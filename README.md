@@ -7,7 +7,7 @@
 <p align="center"><i>Your team of fully autonomous web app pentesters and red teamers for any situation.</i></p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/v7.2.0-suijin-brightgreen?style=flat-square" alt="version"/>
+  <img src="https://img.shields.io/badge/v7.3.0-suijin-brightgreen?style=flat-square" alt="version"/>
   <img src="https://img.shields.io/badge/license-AGPL%20v3-blue?style=flat-square" alt="license"/>
   <img src="https://img.shields.io/badge/python-3.10%2B-306998?style=flat-square&logo=python&logoColor=white" alt="python"/>
 </p>
@@ -154,15 +154,24 @@ doesn't come back as today's "discovery."
 ```bash
 suijin box
 ```
-A sealed linux environment (OrbStack on macOS, or Docker) that runs
-Suijin and its tools with your device untouched: build it once,
-enter it, work inside. Your config, packs and prompts sync one-way
-in — nothing the box generates ever flows back — and entering
-detects drift, offering to sync and install any newly-listed tools.
-Engagements live on the box's own disk and survive restarts;
-destroying it archives everything out first and asks you to type the
-confirmation. Bare `suijin` keeps working exactly as before — the
-box is a choice, not a migration.
+A sealed linux environment that runs Suijin and its tools with your
+device untouched: build it once, enter it, work inside. OrbStack on
+macOS or Docker everywhere else — full compatibility with both, and
+when both are available the first screen lets you pick with the arrow
+keys. Your config, packs, prompts and provider keys sync one-way in —
+nothing the box generates ever flows back — and entering detects
+drift, offering to sync and install any newly-listed tools. The whole
+toolchain installs from declared fallback chains (apt → pip/go/vendor)
+with clean row-by-row output, every tool lands on PATH in every shell,
+and builds resume per stage and per tool. `suijin box shell` drops
+you straight into bash inside. `suijin box adopt <name>` points
+Suijin at a container you already run — it provisions into it and
+never deletes it (destroy cleans only Suijin's footprint). Managed
+networks with TLS-intercepting filters just work: the host's trust
+anchors install into the box automatically. Destroy archives
+engagements to the host first and asks you to type the confirmation.
+Bare `suijin` keeps working exactly as before — the box is a choice,
+not a migration.
 
 &nbsp;
 <p align="center"><img src="assets/sui.png" width="72" alt=""/></p>
