@@ -501,16 +501,14 @@ def _code_head() -> str:
     return out.strip()[:8] if rc == 0 else "?"
 
 
-def _tui_fallback() -> int:
+def _tui_fallback(why: str = "") -> int:
     """What `suijin box` prints when curses can't start (no TERM, dumb
     terminal, no terminfo — headless shells inside containers): the
     verb-based path instead of a traceback (field 2026-10-25)."""
 
     from suijin.server.box import engine as bx
 
-    term = os.environ.get("TERM", "")
-    why = f"TERM={term!r} has no terminfo entry" if term else "TERM is not set"
-    print(f"no usable terminal for the tui ({why}) — the verbs work everywhere:")
+    print(f"no usable terminal for the tui ({why or 'curses could not start'}) — the verbs work everywhere:")
     print("  suijin box build     create + provision (resumable)")
     print("  suijin box status    one-glance state")
     print("  suijin box enter     drift check → the suijin menu in the box")
@@ -519,7 +517,8 @@ def _tui_fallback() -> int:
     with contextlib.suppress(Exception):
         eng = bx.detect_engine(interactive=False)
         if eng:
-            print(f"engine: {eng}" + (f" (daemon: {bx.docker_daemon()})" if eng == bx.ENGINE_DOCKER else ""))
+            daemon = f" (daemon: {bx.docker_daemon()})" if eng == bx.ENGINE_DOCKER and bx.docker_daemon() else ""
+            print(f"engine: {eng}{daemon}")
     return 0
 
 
@@ -529,16 +528,17 @@ def run_tui() -> int:
     # a sane TERM when the shell brought none (or 'dumb' — no terminfo
     # entry exists for it): xterm is the least-common-denominator that
     # every terminfo db carries
-    if os.environ.get("TERM", "") in ("", "dumb", "unknown"):
+    orig = os.environ.get("TERM", "")
+    if orig in ("", "dumb", "unknown"):
         os.environ["TERM"] = "xterm"
     try:
         return _run_tui_curses()
-    except curses.error:
-        return _tui_fallback()
-    except Exception:  # noqa: BLE001 — curses teardown errors (nocbreak
+    except curses.error as e:
+        return _tui_fallback(why=f"{e}; TERM was {orig!r}" if orig else str(e))
+    except Exception as e:  # noqa: BLE001 — curses teardown errors (nocbreak
         # ERR on stdin-less runs, color init ValueErrors on odd terms)
         # degrade to the verbs, never a traceback
-        return _tui_fallback()
+        return _tui_fallback(why=str(e) or "curses could not start")
 
 
 def _run_tui_curses() -> int:
