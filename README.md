@@ -154,24 +154,10 @@ doesn't come back as today's "discovery."
 ```bash
 suijin box
 ```
-A sealed linux environment that runs Suijin and its tools with your
-device untouched: build it once, enter it, work inside. OrbStack on
-macOS or Docker everywhere else — full compatibility with both, and
-when both are available the first screen lets you pick with the arrow
-keys. Your config, packs, prompts and provider keys sync one-way in —
-nothing the box generates ever flows back — and entering detects
-drift, offering to sync and install any newly-listed tools. The whole
-toolchain installs from declared fallback chains (apt → pip/go/vendor)
-with clean row-by-row output, every tool lands on PATH in every shell,
-and builds resume per stage and per tool. `suijin box shell` drops
-you straight into bash inside. `suijin box adopt <name>` points
-Suijin at a container you already run — it provisions into it and
-never deletes it (destroy cleans only Suijin's footprint). Managed
-networks with TLS-intercepting filters just work: the host's trust
-anchors install into the box automatically. Destroy archives
-engagements to the host first and asks you to type the confirmation.
-Bare `suijin` keeps working exactly as before — the box is a choice,
-not a migration.
+A sealed linux container that runs Suijin and its tools with your
+device untouched — build once, enter, work inside. See **The Box**
+section below for the full command set, engine choice, and
+bring-your-own-container.
 
 &nbsp;
 <p align="center"><img src="assets/sui.png" width="72" alt=""/></p>
@@ -243,12 +229,88 @@ cd Suijin && pip install -e .
 
 # dev install (live local copy)
 pip install -e ".[dev]"
-
-# docker (turnkey)
-docker build -t suijin .
 ```
 
+Running Suijin **inside a container**? Don't docker-build an image —
+install on your machine with any method above, then read the next
+section: `suijin box build` gives you the turnkey containerized
+Suijin (tools and all) in one command.
+
 </details>
+
+## The Box
+
+```bash
+suijin box          # the manager tui — or use the verbs directly
+```
+
+The Box is a sealed linux container that runs Suijin and its whole
+toolchain. Your device stays untouched: nothing installs on the host
+beyond Suijin itself, engagements live on the box's own disk, and the
+agent, its tools and its network activity all stay contained. Bare
+`suijin` keeps working exactly as before — the box is a choice, not a
+migration.
+
+**Engines.** OrbStack on macOS, Docker on every other platform — full
+compatibility with both. When both are installed the first screen
+lets you pick with the arrow keys (the choice persists). A Linux user
+with Docker is never asked anything. On machines where another tool
+hijacks the `docker` CLI, pin the daemon with `SUIJIN_DOCKER_CONTEXT`
+or `container.docker_context` in config — Suijin shows which daemon
+it's using in `suijin box status`.
+
+**The commands.**
+
+```bash
+suijin box build      # create + provision (kali, suijin, 40+ tools) — resumable
+suijin box            # manager tui: live build screen, drift, tools, destroy
+suijin box enter      # drift check → the Suijin menu inside the box
+suijin box shell      # straight into a bash shell inside the box
+suijin box status     # one-glance state: engine, sync, tools
+suijin box refresh    # re-sync host config/packs/prompts → box
+suijin box stop       # stop it (data kept)
+suijin box start      # start it again
+suijin box destroy    # archives engagements to the host, typed confirm
+```
+
+**Bring your own container.**
+
+```bash
+suijin box adopt <name>    # provision Suijin into a container you already run
+suijin box unadopt         # back to the managed box
+```
+
+Adopting is the escape hatch for any setup the managed box doesn't
+like: Suijin provisions into *your* container — base packages, an
+editable install, the toolchain — and **never deletes it**. Destroy on
+an adopted container removes only Suijin's footprint inside (the
+workspace, the tools, the profile drop-in); the container survives.
+
+**What you get, guaranteed.**
+
+- one-way sync: your config, packs, prompts and provider keys flow
+  into the box; nothing the box generates ever flows back
+- every tool lands on PATH in every shell — login, interactive,
+  `box shell` (pip user bins, Go bins, the gcloud SDK, sbin)
+- the toolchain installs from declared fallback chains (apt →
+  pip/go/vendor) with clean row-by-row output, and builds resume per
+  stage and per tool
+- entering detects drift against the last sync and offers to fix it
+- TLS-intercepting networks (school/corporate filters) just work:
+  your host trust anchors install into the box automatically
+- `suijin box build` after a host `git pull` is active in the box
+  instantly (editable, live-mounted)
+
+**Config keys** (in `config.json` under `container`, all optional):
+
+| key | meaning |
+|---|---|
+| `engine` | `"orb"` or `"docker"` — otherwise auto-detected per platform |
+| `tools` | override the default tool list |
+| `name` | the adopted container name (set by `suijin box adopt`) |
+| `docker_context` | pin the docker daemon to use |
+
+Environment overrides: `SUIJIN_CONTAINER_ENGINE`, `SUIJIN_DOCKER_CONTEXT`.
 
 <details>
 <summary><b> CLI reference</b></summary>
@@ -259,7 +321,7 @@ docker build -t suijin .
 | operator | `operator` `tui` `attach` `ps` `stop` `daemon` `suijind` `mesh-port` |
 | knowledge | `kg` `kb` `recipes` `wordlist` `pull` `creds` `bb-scope` |
 | workspace | `workspace` `sessions` `reports` `export` `clean` |
-| system | `doctor` `selftest` `status` `version` `env` `providers` `config` `install` `lab` `bench` `pack` `capability` `tools` `modules` `module` `skills` `profile` `prompt` `theater` `market` `gateway` `tokens` `rules` `policy` `notify` `compliance` `authorize` |
+| system | `doctor` `selftest` `status` `version` `env` `providers` `config` `install` `lab` `bench` `pack` `capability` `tools` `modules` `module` `skills` `profile` `prompt` `theater` `market` `gateway` `tokens` `rules` `policy` `notify` `compliance` `authorize` `box` |
 
 </details>
 
