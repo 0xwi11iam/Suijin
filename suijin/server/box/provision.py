@@ -450,6 +450,8 @@ def stage_tools(log, progress=None, cancel=None) -> bool:
         if cancel and cancel():
             log("paused — re-run build to continue")
             return False
+        if progress:
+            progress(done_count, total, name, None, "installing …")  # in-flight: the bar breathes
         rt, cmd = plan[name]
         tail = ""
         via = rt
