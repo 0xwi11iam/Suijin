@@ -40,7 +40,8 @@ def cmd_status(args=None) -> int:
     exists = bx.box_exists(eng)
     running = bx.box_running(eng) if exists else False
     repo = bx.repo_root() or "?"
-    _print(f"engine   {eng}")
+    daemon = bx.docker_daemon() if eng == bx.ENGINE_DOCKER else ""
+    _print(f"engine   {eng}" + (f" (daemon: {daemon})" if daemon else ""))
     _print(f"box      {'running' if running else ('stopped' if exists else 'not built')}")
     _print(f"code     {repo} (live mount when built)")
     _print(f"data     {bx.BOX_WS}")

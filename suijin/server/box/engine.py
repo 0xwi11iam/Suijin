@@ -154,6 +154,55 @@ def _run(cmd: list, timeout: int = 600) -> tuple[int, str]:
         return 1, str(e)
 
 
+def docker_context_pin() -> str:
+    """The docker context suijin PINS its docker calls to (config
+    container.docker_context / SUIJIN_DOCKER_CONTEXT). With OrbStack
+    installed its context hijacks the plain `docker` CLI — a pin makes
+    every suijin docker call deterministic ( OrbStack can re-assert its
+    global context all it wants; suijin still hits the pinned daemon).
+    '' = follow the machine's current context."""
+    import os as _os
+
+    v = str(_os.environ.get("SUIJIN_DOCKER_CONTEXT") or "").strip()
+    if v:
+        return v
+    with contextlib.suppress(Exception):
+        from suijin.modules.platform.lib.config_loader import load_config
+
+        v = str((load_config() or {}).get("container", {}).get("docker_context") or "").strip()
+        if v:
+            return v
+    return ""
+
+
+def docker_argv(*args) -> list:
+    """A docker command argv with the pinned context (if any) applied."""
+    ctx = docker_context_pin()
+    return ["docker", *(["--context", ctx] if ctx else []), *args]
+
+
+def docker_daemon() -> str:
+    """WHICH docker daemon suijin's docker calls resolve to: the pinned
+    context first, then DOCKER_HOST, then the machine's current context
+    ('orbstack', 'desktop-linux', …). Surfaced in status/TUI so nobody
+    wonders why a 'docker' pick lands inside OrbStack (2026-10-24)."""
+    import os as _os
+
+    ctx = docker_context_pin()
+    if ctx:
+        return ctx
+    host = str(_os.environ.get("DOCKER_HOST") or "").strip()
+    if host:
+        tail = host.rsplit("/", 1)[-1]
+        return tail or host
+    with contextlib.suppress(Exception):
+        rc, out = _run(["docker", "context", "show"], timeout=15)
+        c = (out or "").strip()
+        if rc == 0 and c and c != "default":
+            return c
+    return ""
+
+
 def box_exists(engine: str | None = None) -> bool:
     eng = _engine_binary(engine or detect_engine())
     if not eng:
@@ -164,7 +213,7 @@ def box_exists(engine: str | None = None) -> bool:
         # is the honest existence probe
         rc, _ = _run(["orb", "-m", box_name(), "true"], timeout=120)
         return rc == 0
-    rc, out = _run(["docker", "ps", "-a", "--format", "{{.Names}}"], timeout=30)
+    rc, out = _run(docker_argv("ps", "-a", "--format", "{{.Names}}"), timeout=30)
     # EXACT name match: a substring test made "suijin-box" match
     # "suijin-box-old" (and any adopted name match its prefixes)
     return box_name() in (out or "").split()
@@ -181,7 +230,7 @@ def box_running(engine: str | None = None) -> bool:
             if parts and parts[0] == box_name():
                 return len(parts) > 1 and parts[1] == "running"
         return False
-    rc, out = _run(["docker", "inspect", "-f", "{{.State.Running}}", box_name()], timeout=30)
+    rc, out = _run(docker_argv("inspect", "-f", "{{.State.Running}}", box_name()), timeout=30)
     return "true" in out.lower()
 
 
@@ -221,8 +270,7 @@ def box_create(engine: str | None = None) -> tuple[bool, str]:
     # would fail creation outright everywhere else. The repo mount is
     # conditional: a pip-installed suijin has no tree to mount and the
     # build falls back cleanly instead of `docker run` dying on `-v ""`.
-    argv = [
-        "docker",
+    argv = docker_argv(
         "run",
         "-d",
         "--name",
@@ -231,7 +279,7 @@ def box_create(engine: str | None = None) -> tuple[bool, str]:
         "4g",
         "--cpus",
         "2",
-    ]
+    )
     root = repo_root()
     if root:
         argv += ["-v", f"{_docker_mount_path(root)}:/opt/suijin"]
@@ -249,7 +297,7 @@ def box_start(engine: str | None = None) -> tuple[bool, str]:
             return True, "already running"
         rc, out = _run(["orb", "start", box_name()], timeout=300)
         return rc == 0, out.strip()[-200:]
-    rc, out = _run(["docker", "start", box_name()], timeout=300)
+    rc, out = _run(docker_argv("start", box_name()), timeout=300)
     return rc == 0, out.strip()[-200:]
 
 
@@ -260,7 +308,7 @@ def box_stop(engine: str | None = None) -> tuple[bool, str]:
     if eng == ENGINE_ORB:
         rc, out = _run(["orb", "stop", box_name()], timeout=300)
         return rc == 0, out.strip()[-200:]
-    rc, out = _run(["docker", "stop", box_name()], timeout=300)
+    rc, out = _run(docker_argv("stop", box_name()), timeout=300)
     return rc == 0, out.strip()[-200:]
 
 
@@ -288,7 +336,7 @@ def box_delete(engine: str | None = None) -> tuple[bool, str]:
         # the apt -y bug)
         rc, out = _run(["orb", "delete", "-f", box_name()], timeout=300)
         return rc == 0, out.strip()[-200:]
-    rc, out = _run(["docker", "rm", "-f", box_name()], timeout=300)
+    rc, out = _run(docker_argv("rm", "-f", box_name()), timeout=300)
     return rc == 0, out.strip()[-200:]
 
 
@@ -299,7 +347,7 @@ def run_in_box(cmd: str, timeout: int = 3600, engine: str | None = None) -> tupl
         return 1, "no engine"
     if eng == ENGINE_ORB:
         return _run(["orb", "-m", box_name(), "bash", "-lc", cmd], timeout=timeout)
-    return _run(["docker", "exec", box_name(), "bash", "-lc", cmd], timeout=timeout)
+    return _run(docker_argv("exec", box_name(), "bash", "-lc", cmd), timeout=timeout)
 
 
 def box_cmd_argv(cmd: str, engine: str | None = None, stdin_attached: bool = False) -> list:
@@ -309,7 +357,7 @@ def box_cmd_argv(cmd: str, engine: str | None = None, stdin_attached: bool = Fal
     stdin."""
     eng = _engine_binary(engine or detect_engine())
     if eng == ENGINE_DOCKER:
-        return ["docker", "exec", *(["-i"] if stdin_attached else []), box_name(), "bash", "-lc", cmd]
+        return docker_argv("exec", *(["-i"] if stdin_attached else []), box_name(), "bash", "-lc", cmd)
     return ["orb", "-m", box_name(), "bash", "-lc", cmd]
 
 
@@ -323,8 +371,8 @@ def _enter_argv(action: str, eng: str) -> list:
     if eng == ENGINE_ORB:
         return ["orb", "-m", box_name(), cmd]
     if cmd == "suijin":
-        return ["docker", "exec", "-it", box_name(), "bash", "-lc", "suijin"]
-    return ["docker", "exec", "-it", box_name(), "bash"]
+        return docker_argv("exec", "-it", box_name(), "bash", "-lc", "suijin")
+    return docker_argv("exec", "-it", box_name(), "bash")
 
 
 def box_enter_interactive(action: str = "suijin", engine: str | None = None) -> int:

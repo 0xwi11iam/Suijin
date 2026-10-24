@@ -152,3 +152,4 @@ agent-vault/
 
 # private operator vault (never shared, never committed)
 private-vault/
+._*
