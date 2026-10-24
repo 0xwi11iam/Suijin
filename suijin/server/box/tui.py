@@ -153,6 +153,10 @@ class Tui:
             avail.append("docker")
         sel = detected if detected in avail else (avail[0] if avail else "")
         labels = {"orb": "orbstack (orb)", "docker": "docker"}
+        if "docker" in avail:
+            d = bx.docker_daemon()
+            if d:
+                labels["docker"] = f"docker (daemon: {d})"
         while True:
             self.frame("suijin box")
             y = 3
@@ -411,7 +415,8 @@ def _gather_info() -> dict:
     exists = bx.box_exists(eng) if eng else False
     running = bx.box_running(eng) if exists else False
     info = {
-        "engine": eng or "none",
+        "engine": (eng or "none")
+        + (f" (daemon: {bx.docker_daemon()})" if eng == bx.ENGINE_DOCKER and bx.docker_daemon() else ""),
         "name": bx.box_name(),
         "adopted": bx.is_adopted(),
         "exists": exists,

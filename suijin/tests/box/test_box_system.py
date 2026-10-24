@@ -446,6 +446,39 @@ class TestCleanRowsAndCompat:
         assert eng._enter_argv("shell", eng.ENGINE_DOCKER) == ["docker", "exec", "-it", "suijin-box", "bash"]
         assert eng._enter_argv("suijin", eng.ENGINE_ORB) == ["orb", "-m", "suijin-box", "suijin"]
 
+    def test_docker_context_pin_is_opt_in_only(self, monkeypatch):
+        """Unpinned = PLAIN docker for everyone (no flags); the pin is
+        the escape hatch for hijacked setups (orbstack's context)."""
+        import suijin.server.box.engine as eng
+
+        monkeypatch.setattr(eng, "docker_context_pin", lambda: "")
+        assert eng.docker_argv("ps") == ["docker", "ps"]
+        monkeypatch.setattr(eng, "docker_context_pin", lambda: "desktop-linux")
+        assert eng.docker_argv("ps") == ["docker", "--context", "desktop-linux", "ps"]
+
+    def test_run_in_box_carries_the_pinned_context(self, monkeypatch):
+        import suijin.server.box.engine as eng
+
+        captured: dict[str, list] = {}
+        monkeypatch.setattr(eng, "detect_engine", lambda interactive=True: "docker")
+        monkeypatch.setattr(eng, "box_name", lambda: "suijin-box")
+        monkeypatch.setattr(eng, "docker_context_pin", lambda: "desktop-linux")
+        monkeypatch.setattr(eng, "_run", lambda cmd, timeout=600: (captured.setdefault("argv", cmd), (0, ""))[1])
+        eng.run_in_box("true")
+        assert captured["argv"][:3] == ["docker", "--context", "desktop-linux"]
+
+    def test_docker_daemon_reports_the_pin_first(self, monkeypatch):
+        import suijin.server.box.engine as eng
+
+        monkeypatch.setattr(eng, "docker_context_pin", lambda: "desktop-linux")
+        assert eng.docker_daemon() == "desktop-linux"
+        monkeypatch.setattr(eng, "docker_context_pin", lambda: "")
+        monkeypatch.setenv("DOCKER_HOST", "unix:///x/orbstack")
+        assert eng.docker_daemon() == "orbstack"
+        monkeypatch.delenv("DOCKER_HOST")
+        monkeypatch.setattr(eng, "_run", lambda cmd, timeout=600: (0, "orbstack\n"))
+        assert eng.docker_daemon() == "orbstack"
+
     def test_stage_events_start_before_done(self):
         """The white 'running' row must come from a REAL start event —
         the first-not-done heuristic painted verify white before it ran
