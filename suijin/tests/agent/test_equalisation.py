@@ -127,6 +127,33 @@ class TestLoopDetection:
         v = det.feed("http_request", {"url": "https://t/3"})
         assert v.level == "ok"
 
+    def test_scattered_repeats_are_not_a_loop(self):
+        """The $2.47 run (2026-10-25): job_output for the same job at
+        iterations 20/25/50/53 counted as a 'cross-turn repeat loop' and
+        killed a healthy 53-iteration engagement. A DIFFERENT call
+        between repeats resets the count — a loop is back-to-back."""
+        det = RepeatDetector(limit=3)
+        det.feed("job_output", {"job_id": "abc"})
+        det.feed("http_request", {"url": "https://t/other"})  # lane switch
+        det.feed("job_output", {"job_id": "abc"})
+        det.feed("write_note", {"content": "x"})
+        det.feed("job_output", {"job_id": "abc"})
+        v = det.feed("http_request", {"url": "https://t/z"})
+        assert v.level == "ok"
+
+    def test_job_polling_never_aborts(self):
+        """Even CONSECUTIVE job polling is patience, not a loop — the
+        tool itself answers 'still running, work another lane'; the
+        detector nudges (with the echo) but the run must live."""
+        det = RepeatDetector(limit=3)
+        for _ in range(3):
+            det.feed("job_output", {"job_id": "abc"})
+        v = det.feed("job_output", {"job_id": "abc"})
+        assert v.level == "nudge"
+        assert "other lane" in v.message
+        v2 = det.feed("job_output", {"job_id": "abc"})
+        assert v2.level == "nudge"  # still never abort
+
     def test_gate_refusal_is_progress(self):
         """A completion refusal is dialogue, not stagnation."""
         signals = ProgressSignals(completion_refused=True)

@@ -58,3 +58,18 @@ No hardcoded values in committed artifacts, ever:
 `suijin/tests/ops/test_no_hardcode.py` is the tripwire (secrets,
 machine paths, package-tree writes). Engagement tokens for its scan
 come from local-only `agent-vault/targets.txt` — never committed.
+
+## One environment's fix must not break another (PERMANENT operator ruling, 2026-10-26)
+
+Suijin runs on macOS, Linux, inside containers, over OrbStack and
+Docker, on 8-color terminals and headless shells. Every fix must work
+EVERYWHERE or degrade gracefully at its own boundary:
+
+- environment-specific behavior lives behind a capability CHECK (color
+  depth, TERM, platform, engine presence) — never a platform guess
+- a guarded failure degrades to the general path (the box tui's verb
+  fallback, the gray pair's A_DIM fallback, adopt's tar-stream when no
+  mount exists) — it never takes the common path down with it
+- subprocesses never inherit stdin (a supervisor's open pipe blocks
+  container CLIs forever); tests run under pytest too — a feature that
+  shells out must be test-safe or explicitly gated

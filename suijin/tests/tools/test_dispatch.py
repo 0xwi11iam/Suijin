@@ -237,6 +237,31 @@ class TestRouteTool:
         result = d.route_tool("http_request", {"url": "http://test.local", "method": "GET"}, {})
         assert "Mocked" in result
 
+    def test_force_flag_is_consumed_not_forwarded(self, monkeypatch):
+        """The POC verifier routes with _force=True (its job is re-running
+        identical commands). The flag is routing metadata — if it reaches
+        the tool as a kwarg, EVERY verifier command dies with "unexpected
+        keyword argument '_force'" (the EXP-003 six-iteration loop)."""
+        import suijin.modules.tools.lib.dispatch as d
+
+        seen: dict[str, object] = {}
+
+        def mock_term(*a, **kw):
+            for one in a:
+                if isinstance(one, dict):
+                    seen.update(one)
+                elif isinstance(one, str):
+                    seen.setdefault("cmd", one)
+            seen.update(kw)
+            return "ok"
+
+        monkeypatch.setattr(d, "get_module_tools", lambda: {})
+        monkeypatch.setattr(d, "execute_terminal", mock_term)
+        result = d.route_tool("execute_terminal", {"cmd": "echo hi", "timeout": 5, "_force": True}, {})
+        assert result == "ok"
+        assert "_force" not in seen, "control flag leaked into the tool call"
+        assert seen.get("cmd") == "echo hi" or "echo hi" in str(seen.values()), f"cmd lost: {seen}"
+
     def test_route_execute_terminal_self_kill(self):
         from suijin.modules.tools.lib.dispatch import route_tool
 

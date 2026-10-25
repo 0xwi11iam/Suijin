@@ -302,12 +302,14 @@ class Agent:
         "runtime",
         "engagement_dir",
         "audit_data",
+        "origin",
     )
 
     def __init__(self, **kw):
         for k in self.__slots__:
             setattr(self, k, kw.get(k))
         self.audit_data = None
+        self.origin = kw.get("origin") or "local"
 
     @property
     def alive(self) -> bool:
@@ -384,10 +386,96 @@ def _pid_alive(pid: int) -> bool:
         return True
 
 
+#: box-source cache — one exec round-trip every 2s, not every 0.2s poll
+_BOX_SRC = {"at": 0.0, "agents": [], "running": False}
+
+
+def _box_agents() -> list[Agent]:
+    """Engagements running INSIDE the box, surfaced to a host-side
+    operator console (the 'operator catches nothing' report 2026-10-26:
+    box agents write their mesh under /opt/suijin-ws — invisible to a
+    local scan). Strictly additive and guarded: no box, no docker, any
+    error → empty list; nothing here can affect local discovery.
+    TEST-SAFETY: never fires under pytest (engine execs wedge under the
+    harness's fd redirection — the 7-hang incident) regardless of the
+    live flag's path here."""
+    import os as _os
+
+    if _os.environ.get("PYTEST_CURRENT_TEST"):
+        return []
+    now = time.time()
+    if now - _BOX_SRC["at"] < 2.0:
+        return _BOX_SRC["agents"]
+    _BOX_SRC["at"] = now
+    _BOX_SRC["agents"] = []
+    with contextlib.suppress(Exception):
+        from suijin.server.box import engine as bx
+
+        if not bx.box_running():
+            return []
+        rc, out = bx.run_in_box(
+            'for f in /opt/suijin-ws/mesh/*.json; do echo "== $f"; cat "$f"; echo; done 2>/dev/null',
+            timeout=30,
+        )
+        if rc != 0:
+            return []
+        # parse each ==-headed block as one json doc
+        blocks: dict[str, str] = {}
+        name = None
+        buf: list[str] = []
+        for ln in (out or "").splitlines():
+            if ln.startswith("== "):
+                if name:
+                    blocks[name] = "\n".join(buf)
+                name = ln[3:].strip().split("/")[-1]
+                buf = []
+            else:
+                buf.append(ln)
+        if name:
+            blocks[name] = "\n".join(buf)
+        agents: list[Agent] = []
+        now2 = time.time()
+        for fname, text in blocks.items():
+            if fname.endswith("-state.json") or fname == "remote-peers.json":
+                continue
+            rec = _rj_text(text)
+            pid = int(rec.get("pid") or 0) if rec else 0
+            if not pid:
+                continue
+            state = _rj_text(blocks.get(f"{pid}-state.json", "")) or {}
+            beat = float(rec.get("beat") or 0)
+            if beat and now2 - beat > 300:  # no host PID check possible:
+                continue  # a 5-minute-stale beat means it's gone
+            agents.append(
+                Agent(
+                    pid=pid,
+                    target=str(rec.get("summary") or "?")[:50],
+                    phase=str(state.get("phase") or rec.get("phase") or "?"),
+                    iteration=int(state.get("iteration") or 0),
+                    findings=state.get("findings") or [],
+                    system_one=state.get("system_one") or None,
+                    runtime=state.get("runtime") or None,
+                    footholds=state.get("footholds") or [],
+                    recent_actions=[str(x) for x in (state.get("recent_actions") or [])],
+                    beat=beat,
+                    port=int(rec.get("port") or 0),
+                    started=float(rec.get("started") or 0),
+                    origin="box",
+                )
+            )
+        _BOX_SRC["agents"] = agents
+    return _BOX_SRC["agents"]
+
+
+def _rj_text(text: str):
+    import json as _json
+
+    with contextlib.suppress(Exception):
+        return _json.loads(text)
+    return None
+
+
 def scan_agents(mesh_dir: Path, workspace: Path, live: bool = True) -> list[Agent]:
-    """Mesh nodes, enriched with audit-trail detail. Live mode drops (and
-    prunes the files of) processes that no longer exist — a closed window
-    is gone. Demo mode trusts the registry as written."""
     agents: list[Agent] = []
     if not mesh_dir.is_dir():
         return agents
@@ -1018,6 +1106,8 @@ def _card(a: Agent, selected: bool, height: int) -> Panel:
     body = Text()
     body.append(f" {_pulse() if a.alive else '✗'} ", style=f"bold {GREEN if a.alive else RED}")
     body.append(f"Agent {_hex_id(a.pid)}", style=f"bold {CYAN}")
+    if getattr(a, "origin", "local") == "box":
+        body.append(" ·box", style=f"dim {CYAN}")  # runs inside the box
 
     body.append(f"\n {_fmt_dur(a.uptime)}", style=f"italic {GREEN}")
     body.append(f"\n {a.iteration} iters", style=f"bold {C_HIGH}")
@@ -1133,6 +1223,10 @@ class OperatorTUI:
 
     def _poll_once(self) -> None:
         agents = scan_agents(self.mesh_dir, self.workspace, live=self.live)
+        if self.live:  # demo/test mode never probes live engines — a
+            with contextlib.suppress(Exception):  # fixture console must
+                agents = agents + _box_agents()  # not shell out (the
+            # 7 hung operator tests; AGENTS.md 2026-10-26 rule)
         agents = self._filter_agents(self._sort_agents(agents))
         chat, offset = read_chat(self.mesh_dir, skip_bytes=self._chat_offset)
         with self._lock:
