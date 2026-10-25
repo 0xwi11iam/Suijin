@@ -144,9 +144,12 @@ def _engine_binary(engine: str) -> str:
 
 
 def _run(cmd: list, timeout: int = 600) -> tuple[int, str]:
-    """Run a host-side runtime command; never raises."""
+    """Run a host-side runtime command; never raises. stdin is DEVNULL:
+    an inherited stdin (a supervisor's open pipe — pytest, launchers,
+    daemons) makes container CLIs block forever reading it (the
+    operator-console test hang, 2026-10-26)."""
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
         return p.returncode, (p.stdout or "") + (p.stderr or "")
     except subprocess.TimeoutExpired:
         return 124, "timeout"

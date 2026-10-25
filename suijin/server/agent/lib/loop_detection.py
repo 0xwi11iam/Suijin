@@ -29,15 +29,26 @@ class RepeatVerdict:
 class RepeatDetector:
     """Cross-turn identical-call detector.
 
-    Accumulates (tool, args) signatures over the whole run. Reacts when
-    any signature repeats past a limit. Pure + deterministic — feed it
-    signatures, get a verdict.
+    CONSECUTIVE repeats only (2026-10-26, the $2.47 run): counts used to
+    accumulate over the WHOLE engagement, so a job_output poll at
+    iterations 20/25/50/53 of a 53-iteration run counted as a "loop" and
+    the breaker killed a healthy run as 'error: cross-turn repeat loop'.
+    A different call between repeats resets the signature — a stuck loop
+    is the SAME call back-to-back, not the same call ever.
+
+    PATIENT-POLL TOOLS (job_output/job_status): a background job still
+    running is legitimate waiting, not a loop — the tool itself already
+    answers 'STILL RUNNING, work another lane'. These never abort; they
+    nudge with the echo, which is the correct nudge.
 
     REPEAT-ECHO (2026-10-20, pentagi adaptation): the nudge carries the
     tool's PREVIOUS answer — their incident: the suppressed answer WAS
     the diagnosis, and a bare 'you are repeating' notice buried it.
     Outputs are recorded by execute_tool_node via record_tool_output().
     """
+
+    #: polling these with identical args is patience, not a loop
+    PATIENT_TOOLS = frozenset({"job_output", "job_status"})
 
     def __init__(self, limit: int = 3):
         self.limit = limit
@@ -47,11 +58,18 @@ class RepeatDetector:
     def feed(self, tool: str, args: dict) -> RepeatVerdict:
         """Feed one tool call's signature. Returns the strongest verdict."""
         sig = _sig(tool, args)
+        # consecutive semantics: any DIFFERENT call resets the others
+        for s in list(self._counts):
+            if s != sig:
+                del self._counts[s]
         self._counts[sig] = self._counts.get(sig, 0) + 1
         count = self._counts[sig]
 
         if count < self.limit:
             return RepeatVerdict("ok", sig, count)
+
+        echo = _LAST_OUTPUTS.get(sig)
+        echo_for = f" LAST OUTPUT (for reference): {echo[-400:]}" if echo else ""
 
         if sig not in self._nudged:
             self._nudged.add(sig)
@@ -59,17 +77,28 @@ class RepeatDetector:
                 "nudge",
                 sig,
                 count,
-                f"You've called {_short(tool, args)} {count} times with identical args. "
+                f"You've called {_short(tool, args)} {count} times in a row with identical args. "
                 "Change your approach — different params, different tool, or report why this exact "
-                "call needs repeating." + echo_for(sig),
+                "call needs repeating." + echo_for,
+            )
+
+        if tool in self.PATIENT_TOOLS:
+            # never abort a poller: keep nudging (with the echo) so the
+            # agent has every reason to switch lanes, but the run lives
+            return RepeatVerdict(
+                "nudge",
+                sig,
+                count,
+                f"job_output for the same job {count} times in a row — it is STILL RUNNING and "
+                "will tap you on the shoulder when it finishes. Work another lane now." + echo_for,
             )
 
         return RepeatVerdict(
             "abort",
             sig,
             count,
-            f"Identical call to {_short(tool, args)} repeated {count} times after a nudge. "
-            "This is a loop — the engagement will stop.",
+            f"Identical call to {_short(tool, args)} repeated {count} times consecutively after a "
+            "nudge. This is a loop — the engagement will stop.",
         )
 
     def counts(self) -> dict[str, int]:

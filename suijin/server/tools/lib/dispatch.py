@@ -1344,7 +1344,15 @@ def route_tool(tool_name, args, config):
     # ACTION CACHE (fixes 56 repeated identical calls): if the same
     # tool+args was called recently, return the cached result with a
     # hint. The agent can force re-execution with _force=True.
-    if isinstance(args, dict) and not args.get("_force"):
+    if isinstance(args, dict) and args.get("_force"):
+        # ROUTING FLAG, NOT A TOOL ARG: consume it here — forwarding it
+        # made every POC-verifier command die with "execute_terminal()
+        # got an unexpected keyword argument '_force'" (the EXP-003
+        # six-iteration loop, field 2026-10-26). Args reach the tool as
+        # kwargs; control flags must never ride along.
+        with contextlib.suppress(Exception):
+            args = {k: v for k, v in args.items() if k != "_force"}
+    elif isinstance(args, dict):
         with contextlib.suppress(Exception):
             from suijin.modules.tools.lib.ux_tools import cache_check
 
