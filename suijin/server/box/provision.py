@@ -362,7 +362,16 @@ def stage_profile(log) -> bool:
         "export REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt\n"
         "export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt\n"
         "export GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt\n"
-        "export PATH=$HOME/.local/bin:$HOME/go/bin:$HOME/google-cloud-sdk/bin:/usr/local/sbin:/usr/sbin:/sbin:$PATH\n"
+        # HOST PROXY INHERITANCE: on proxy-only networks (filtered
+        # campuses), a host-side HTTPS_PROXY is the box's only route to
+        # providers — AI calls from inside containers died for a whole
+        # engagement before this (field 2026-10-25). Exported verbatim.
+        + "".join(
+            f"export {k}='{os.environ[k]}'\n"
+            for k in ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy")
+            if os.environ.get(k)
+        )
+        + "export PATH=$HOME/.local/bin:$HOME/go/bin:$HOME/google-cloud-sdk/bin:/usr/local/sbin:/usr/sbin:/sbin:$PATH\n"
     )
     quoted = profile.replace("'", "'\\''")
     rc, _ = bx.run_in_box(
