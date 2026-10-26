@@ -14,7 +14,7 @@ class TestR1Distillation:
         from suijin.modules.agent.lib.context_distill import distill_result
 
         huge = "Status: 200\nServer: nginx\n\n" + ("A" * 35_000)
-        out = distill_result(huge, cap=8_000)
+        out = distill_result(huge, cap=50_000)
         assert len(out) < 9_000
         assert "Status: 200" in out and "Server: nginx" in out
         assert "full output lives in the audit trail" in out
