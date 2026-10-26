@@ -943,7 +943,7 @@ class TypewriterStream:
         IDENTICAL consecutive spans render ONCE — glm's reasoning stream
         often rehearses the exact decision JSON that arrives again as
         content (the duplicate-box field bug)."""
-        norm = " ".join(str(content).split())[:2000]
+        norm = " ".join(str(content).split())[:50_000]
         if norm and norm == getattr(self, "_last_box_norm", None):
             return
         self._last_box_norm = norm
@@ -951,12 +951,12 @@ class TypewriterStream:
             lexer = lang if lang not in ("", "bash", "sh") else "bash"
             if lexer in ("json", "javascript", "js", "python", "bash", "sh", "html", "xml"):
                 body = self._ui.console.is_terminal and Syntax(
-                    str(content)[:2000], lexer, theme="monokai", word_wrap=True, background_color="default"
+                    str(content)[:50_000], lexer, theme="monokai", word_wrap=True, background_color="default"
                 )
                 if not body:
-                    body = Text(str(content)[:2000], style="white")
+                    body = Text(str(content)[:50_000], style="white")
             else:
-                body = Text(str(content)[:2000], style="white")
+                body = Text(str(content)[:50_000], style="white")
             self._ui.console.print(
                 Panel(
                     body,
