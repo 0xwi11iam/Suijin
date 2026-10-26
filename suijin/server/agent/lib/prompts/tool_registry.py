@@ -413,10 +413,41 @@ TOOL_REGISTRY = {
     # these from the model's view entirely — the agent LITERALLY reported
     # 'catalog_exploit doesn't exist in my tool list' mid-engagement) =====
     "catalog_exploit": {
-        "purpose": "MANDATORY on every valuable find — writes the exploit folder (finding.md + exploit.yaml) and the verifier RUNS your POC before you continue; verdict + three options on miss",
+        "purpose": "MANDATORY on every valuable find — writes the exploit folder and the verifier RUNS your POC; verdict + copy-paste fix options on miss",
         "when_to_use": "The moment something is exploitable.",
-        "args_format": '"engagement": "...", "target": "...", "vuln_class": "sqli", "title": "...", "description": "one paragraph", "severity": "high", "cvss": 8.9, "commands": ["cmd1"], "expected_result": "the marker ONLY the payload produces (flag, error, data fragment)", "control_commands": ["same request(s) WITHOUT the payload"]',
-        "description": "**catalog_exploit** — the verifier runs your POC. Injection classes (sqli/ssti/xss/rce/lfi/ssrf/deserialization) REQUIRE control_commands: the same request minus the payload. CONFIRMED needs the marker WITH the payload and NOT without it — a word the endpoint prints on every response proves nothing (e.g. a key from its normal JSON). Pick a marker only the payload can produce: {{7*7}}→49, an attacker-chosen UNION literal, an echoed id.",
+        "args_format": '"engagement": "...", "target": "...", "vuln_class": "sqli", "title": "...", "description": "one paragraph", "severity": "high", "cvss": 8.9, "commands": ["python3 tmp/poc_<name>.py"], "expected_result": "MARKER:<unique-string>", "control_commands": ["python3 tmp/poc_<name>_control.py"]',
+        "description": (
+            "**catalog_exploit** — write a POC script, the system runs it, marker in output → CONFIRMED.\n\n"
+            "**THE RECIPE (do exactly this):**\n"
+            "1. `write_file` → `tmp/poc_<name>.py` — a python script that (a) contacts the target, "
+            "(b) prints `MARKER:<unique-string>` on success, (c) exits 1 on failure.\n"
+            '2. `catalog_exploit` with `commands=["python3 tmp/poc_<name>.py"]` and '
+            '`expected_result="MARKER:<unique-string>"`.\n'
+            "3. The verifier runs your script fresh; marker appears → CONFIRMED. Done.\n\n"
+            "**SKELETON** (copy this, change the URL + the marker):\n"
+            "```python\n"
+            "import urllib.request\n"
+            "url = 'http://TARGET/vuln?param=PAYLOAD'\n"
+            "body = urllib.request.urlopen(url, timeout=15).read().decode('utf-8','replace')\n"
+            "if 'EXPECTED-UNIQUE-STRING' in body:\n"
+            "    print('MARKER:EXPECTED-UNIQUE-STRING')\n"
+            "else:\n"
+            "    print('MISS — got %d bytes, no marker' % len(body)); raise SystemExit(1)\n"
+            "```\n\n"
+            "**THE 4 GATES (checked before the run — fix upfront, not by failure):**\n"
+            "- marker: ≥8 chars, unique to the payload (a computed value, an echoed id, a fragment "
+            "the endpoint only prints WITH your payload) — generic words rejected\n"
+            "- target: the target host must appear in a command string OR in the output (your "
+            "script's URL counts — it's in the command)\n"
+            "- echo-block: `echo MARKER:...` as a shell command is rejected — the marker must come "
+            "from a script's print AFTER contacting the target\n"
+            "- differential: injection classes (sqli/ssti/xss/rce/lfi/ssrf/deserialization) require "
+            "`control_commands` — same script minus the payload; marker must NOT appear in control "
+            "output\n\n"
+            "**ON MISS:** the receipt tells you which gate failed and hands you copy-paste JSON for "
+            "the three options: (1) edit + re-call with entry_id, (2) action=rewrite, "
+            "(3) action=worked_anyway + evidence_line (the exact output line)."
+        ),
     },
     "memory_recall": {
         "purpose": "The engagement memory — every credential, leak, foothold, confirmed exploit and admin surface observed, plus the condensed digest",
