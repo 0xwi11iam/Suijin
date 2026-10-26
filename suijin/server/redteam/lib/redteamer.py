@@ -1053,8 +1053,14 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                                 return ""
             finally:
                 _input_reader.end_ask()
-                with contextlib.suppress(Exception):
-                    ui.stop()
+                # DON'T stop the strip here (2026-10-26): the caller's
+                # ui.start() is idempotent — stopping + restarting created
+                # 4 visual transitions per ask (the "fucked up and messy"
+                # report). Leave it running; the caller's restart is a
+                # no-op and the strip stays stable through the whole ask.
+                # (The OLD stop was balanced for the caller's start, but
+                # the strip is _live_ — stopping it makes the input box
+                # vanish for a frame before the restart paints it back.)
         if run_box.alive:
             return _ask_op(run_box, console, "", timeout_s=timeout_s, label=label.strip())
         try:

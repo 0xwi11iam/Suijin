@@ -457,6 +457,19 @@ TOOL_REGISTRY = {
             "(3) action=worked_anyway + evidence_line (the exact output line)."
         ),
     },
+    "request_auth": {
+        "purpose": "Get authenticated access — the operator provides credentials, tokens, or does a browser login",
+        "when_to_use": "When you hit a login wall (401/403/redirect-to-login) and need authenticated testing.",
+        "args_format": '"target": "api.example.com", "hint": "login form", "login_url": "https://api.example.com/login"',
+        "description": (
+            "request_auth — the operator helps you sign in. When you hit an auth wall "
+            "(401, 403, login redirect), call this instead of guessing credentials. "
+            "The operator provides credentials (user/pass), a token/cookie, or does "
+            "a browser login (2FA/CAPTCHA handled by the human). "
+            "Store the result with creds_add, then use http_request(credential=name). "
+            "Never guess passwords. Never try common credentials. Ask."
+        ),
+    },
     "memory_recall": {
         "purpose": "The engagement memory — every credential, leak, foothold, confirmed exploit and admin surface observed, plus the condensed digest",
         "when_to_use": "Before attacking a surface — check what the engagement already knows about it.",
@@ -525,6 +538,7 @@ _ALL_TOOLS = {
     "source_map_probe",
     "search_cve",
     "catalog_exploit",
+    "request_auth",
     "memory_recall",
     "http_replay",
     "inject_probe",

@@ -629,6 +629,13 @@ def _recon_chain_route(target, config, ports=None):
     return recon_chain(target, config=config, ports=ports)
 
 
+def _request_auth_fn():
+    """Lazily import request_auth (boundary rule: no circular imports)."""
+    from suijin.modules.tools.lib.request_auth import request_auth
+
+    return request_auth
+
+
 def _build_routes(config):
     from suijin.modules.knowledge.lib.kb_tools import (
         anonymize_report,
@@ -969,6 +976,15 @@ def _build_routes(config):
         # by naming the concrete defense. Consumed by mode_governor.
         "surface_verdict": lambda a: _intel.surface_verdict(
             a.get("surface"), a.get("verdict"), defense=a.get("defense", ""), config=config
+        ),
+        # AUTH: the agent's authenticated-testing entry point — asks the
+        # operator for credentials, tokens, or a browser login session
+        "request_auth": lambda a: _request_auth_fn()(
+            a.get("target", ""),
+            hint=a.get("hint", ""),
+            login_url=a.get("login_url", ""),
+            credential_name=a.get("credential_name", ""),
+            config=config,
         ),
         # POC-backed exploit catalog (v3) — the verifier TAKES OVER: it
         # writes the folder (finding.md + exploit.yaml), runs the yaml
