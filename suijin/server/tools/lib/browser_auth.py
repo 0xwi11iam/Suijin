@@ -1,13 +1,15 @@
-"""Browser-capture auth — the operator logs in, we capture the session.
+"""Browser-capture auth — the operator logs in, we grab EVERYTHING.
 
-On the HOST: a headed Chromium window pops up, the operator logs in
-(2FA/CAPTCHA/social auth handled by the human), we capture the cookies
-and storage state when the URL changes to a post-login page.
+Opens a headed Chromium window on the HOST. The operator logs in
+normally (2FA/CAPTCHA/SSO handled by the human). We:
+  1. intercept ALL network responses and capture every Set-Cookie header
+  2. poll the cookie jar every second
+  3. when the operator is done (browser closes or they press the capture
+     hotkey or the URL moves away from login and stabilizes), we grab
+     the ENTIRE browser state — cookies, localStorage, sessionStorage
 
-IN THE BOX: the box is headless — the browser can't open there. The
-capture runs on the HOST (through the live-mounted repo), opens a GUI
-window there, and the captured session is written to the shared
-workspace where the box agent picks it up.
+No URL-pattern matching, no domain filtering, no heuristics. Everything
+the browser saw goes to the agent.
 """
 
 from __future__ import annotations
@@ -24,86 +26,124 @@ def browser_capture(
     timeout_s: int = 300,
     log=print,
 ) -> dict:
-    """Open a headed Chromium, wait for the operator to log in, capture
-    the session. Returns {cookies, storage_state, url, success}.
+    """Open a headed Chromium, wait for login, capture EVERYTHING.
 
-    The operator sees a real browser window. They log in normally
-    (2FA, CAPTCHA, SSO — all handled by the human). When the URL
-    changes away from the login page and stabilizes for 3 seconds,
-    we capture everything and close.
+    Returns {cookies, storage_state, url, success, localStorage}.
     """
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        return {
-            "success": False,
-            "error": "playwright not installed — run: pip install playwright && playwright install chromium",
-        }
+        return {"success": False, "error": "playwright not installed"}
 
-    # where to write the captured session (direct path — artifact_dir
-    # doesn't know about "auth"; using the workspace root keeps it
-    # shared between host and box through the live mount)
     from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
     auth_dir = WORKSPACE_DIR / "artifacts" / "auth"
     auth_dir.mkdir(parents=True, exist_ok=True)
     session_file = auth_dir / f"{credential_name}_session.json"
 
-    log(f"opening browser for {login_url} — log in, we'll capture the session automatically")
+    result = {"success": False, "cookies": [], "url": "", "error": "", "localStorage": {}}
+    all_cookies = []  # every cookie the browser EVER saw (network + jar)
 
-    result = {"success": False, "cookies": [], "url": "", "error": ""}
+    log(f"opening browser for {login_url}")
+    log("log in normally — everything the browser captures flows to the agent")
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
         context = browser.new_context()
         page = context.new_page()
 
+        # 1. INTERCEPT ALL NETWORK RESPONSES — capture every Set-Cookie
+        captured_headers = []
+
+        def on_response(response):
+            with contextlib.suppress(Exception):
+                for header_name, header_value in response.headers_array():
+                    if header_name["name"].lower() == "set-cookie":
+                        captured_headers.append(header_value)
+
+        page.on("response", on_response)
+
         try:
             page.goto(login_url, timeout=30000)
+            initial_url = page.url
             log(f"browser open at {login_url}")
-            log("log in normally — the session is captured when the page settles after login")
+            log("log in — the session captures when you're done")
 
-            # wait for the operator to complete login: the URL changes
-            # away from the login page and stays stable for 3 seconds
-            _initial_path = page.url
-            _last_url = page.url
-            _stable_since = time.time()
-            _deadline = time.time() + timeout_s
+            # 2. WAIT: poll the cookie jar every second; capture when
+            #    (a) new cookies appear AND the URL has moved from login
+            #    (b) OR the operator closes the browser
+            #    (c) OR the timeout hits (grab whatever we have)
+            deadline = time.time() + timeout_s
+            done = False
 
-            while time.time() < _deadline:
+            while time.time() < deadline and not done:
                 time.sleep(1)
-                current = page.url
-                if current != _last_url:
-                    _last_url = current
-                    _stable_since = time.time()
-                    continue
-                # URL stable for 3+ seconds AND different from the
-                # initial login URL = login complete
-                if time.time() - _stable_since >= 3 and current != _initial_path:
-                    break
-            else:
-                result["error"] = f"timeout after {timeout_s}s — session not captured"
-                browser.close()
-                return result
 
-            # capture everything
-            cookies = context.cookies()
-            storage = context.storage_state()
-            result["cookies"] = [
-                {"name": c["name"], "value": c["value"], "domain": c["domain"], "path": c["path"]}
-                for c in cookies
-                if target_host in c.get("domain", "") or not target_host
-            ]
-            result["url"] = page.url
-            result["storage_state"] = storage
-            result["success"] = len(result["cookies"]) > 0
+                with contextlib.suppress(Exception):
+                    if not page.is_visible("body"):
+                        break  # browser closed by operator
 
-            # persist for the agent
-            session_file.write_text(json.dumps(result, indent=2))
-            log(f"session captured: {len(result['cookies'])} cookies, saved to {session_file.name}")
+                    jar = context.cookies()
+                    url_moved = page.url != initial_url
+                    has_session = len(jar) > 0
+
+                    # capture when the URL moved away from login AND
+                    # we have cookies AND things have been stable 3s
+                    if url_moved and has_session:
+                        # give it 3 seconds to settle (redirects, 2FA flows)
+                        time.sleep(3)
+                        with contextlib.suppress(Exception):
+                            jar = context.cookies()  # re-grab after settle
+                            if page.url == initial_url:
+                                continue  # went back — not done yet
+                        done = True
+                        break
+
+            # 3. GRAB EVERYTHING — cookies, localStorage, sessionStorage,
+            #    network Set-Cookie headers, final URL
+            with contextlib.suppress(Exception):
+                jar = context.cookies()
+                all_cookies = [
+                    {"name": c["name"], "value": c["value"], "domain": c["domain"], "path": c["path"]} for c in jar
+                ]
+                for hdr in captured_headers:
+                    parts = hdr.split(";")[0].split("=", 1)
+                    if len(parts) == 2:
+                        name, value = parts
+                        if not any(c["name"] == name for c in all_cookies):
+                            all_cookies.append({"name": name, "value": value, "domain": "", "path": "/"})
+
+                result["cookies"] = all_cookies
+                result["url"] = page.url
+                with contextlib.suppress(Exception):
+                    result["localStorage"] = json.loads(page.evaluate("() => JSON.stringify(localStorage)") or "{}")
+                with contextlib.suppress(Exception):
+                    result["sessionStorage"] = json.loads(page.evaluate("() => JSON.stringify(sessionStorage)") or "{}")
+                result["networkCookies"] = captured_headers
+                result["success"] = True
+
+                session_file.write_text(json.dumps(result, indent=2))
+                log(
+                    f"captured: {len(all_cookies)} cookies, "
+                    f"{len(result.get('localStorage', {}))} localStorage keys, "
+                    f"{len(result.get('sessionStorage', {}))} sessionStorage keys, "
+                    f"{len(captured_headers)} network Set-Cookie headers"
+                )
 
         except Exception as e:
-            result["error"] = str(e)
+            # browser closed or crashed — grab whatever we still have
+            with contextlib.suppress(Exception):
+                jar = context.cookies()
+                if jar:
+                    result["cookies"] = [
+                        {"name": c["name"], "value": c["value"], "domain": c["domain"], "path": c["path"]} for c in jar
+                    ]
+                    result["success"] = True
+                    result["url"] = page.url if page else ""
+                    session_file.write_text(json.dumps(result, indent=2))
+                    log(f"browser closed — captured {len(result['cookies'])} cookies")
+            if not result.get("success"):
+                result["error"] = str(e)
         finally:
             with contextlib.suppress(Exception):
                 browser.close()

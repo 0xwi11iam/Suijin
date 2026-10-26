@@ -1456,13 +1456,31 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                                     if _cap.get("success"):
                                         _cookies = _cap.get("cookies", [])
                                         _hdr = "; ".join(f"{c['name']}={c['value']}" for c in _cookies)
+                                        _ls = _cap.get("localStorage") or {}
+                                        _ss = _cap.get("sessionStorage") or {}
+                                        _url = _cap.get("url", "")
+                                        # give the agent EVERYTHING from the browser
+                                        _extras = []
+                                        if _ls:
+                                            _ls_str = json.dumps(_ls)[:500]
+                                            _extras.append(f"localStorage: {_ls_str}")
+                                        if _ss:
+                                            _ss_str = json.dumps(_ss)[:300]
+                                            _extras.append(f"sessionStorage: {_ss_str}")
+                                        _extras_s = ("\n" + "\n".join(_extras)) if _extras else ""
                                         answer = (
                                             f"OPERATOR AUTH: browser login captured — "
-                                            f"{len(_cookies)} cookies. "
-                                            f'Store with creds_add(name="{_cred_name}", type="cookie", '
-                                            f'value="{_hdr[:300]}") then use http_request(credential="{_cred_name}")'
+                                            f"{len(_cookies)} cookies, {len(_ls)} localStorage, "
+                                            f"{len(_ss)} sessionStorage from {_url}\n"
+                                            f"COOKIE HEADER: {_hdr[:500]}\n"
+                                            f'Store: creds_add(name="{_cred_name}", type="cookie", value="{_hdr[:300]}")\n'
+                                            f'Use: http_request(credential="{_cred_name}")'
+                                            f"{_extras_s}"
                                         )
-                                        console.print(f"[green]auth: {len(_cookies)} cookies captured[/green]")
+                                        console.print(
+                                            f"[green]auth: {len(_cookies)} cookies, "
+                                            f"{len(_ls)} localStorage, {len(_ss)} sessionStorage[/green]"
+                                        )
                                     else:
                                         _err = _cap.get("error", "unknown")
                                         console.print(f"[red]auth: browser failed — {_err}[/red]")
