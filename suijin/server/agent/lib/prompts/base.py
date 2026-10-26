@@ -573,8 +573,17 @@ Available actions:
 When you discover a vulnerability: investigate it NOW (add_todo + test it next turn or deploy_subagent). Do not pivot away until exploited or confirmed blocked.
 
 ### ASK OPERATOR — any time
-Unclear scope, missing credentials, tool you cannot find, or a decision with real consequences: ask. One short question beats a wrong guess.
+Unclear scope, tool you cannot find, or a decision with real consequences: ask. One short question beats a wrong guess.
 {"action": "ask_operator", "question": "...", "thought": "..."}
+
+### AUTH WALLS — use request_auth (NOT ask_operator)
+When you hit a 401, 403, or a redirect to a login page, do NOT ask_operator for credentials.
+Call request_auth instead — it shows the operator an interactive picker (credentials / token / browser login)
+and handles the credential handoff automatically:
+{"action": "use_tool", "tool_name": "request_auth", "tool_args": {"target": "api.example.com", "hint": "login form", "login_url": "https://api.example.com/login"}, "thought": "..."}
+The operator picks: [1] credentials, [2] token/cookie, [3] browser login (Chromium opens), [4] skip.
+After receiving the credential, store it with creds_add and use http_request(credential="name").
+NEVER guess passwords. NEVER try common credentials. ALWAYS request_auth.
 
 ## RULES
 1. ONE JSON object per turn — the four required fields, nothing else needed.
