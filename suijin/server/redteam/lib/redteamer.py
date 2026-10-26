@@ -1434,6 +1434,8 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                                 # browser login: launch capture, grab the cookies
                                 console.print("[cyan]auth: launching browser for login...[/cyan]")
                                 try:
+                                    import asyncio as _aio_thread
+
                                     from suijin.modules.tools.lib.browser_auth import browser_capture
 
                                     _login_url = ""
@@ -1446,7 +1448,11 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                                         if "Credential name:" in _ln:
                                             _cred_name = _ln.split("Credential name:")[1].strip()
                                             break
-                                    _cap = browser_capture(_login_url or "https://localhost/login", _cred_name)
+                                    # sync_playwright REFUSES to run inside asyncio —
+                                    # it must run in a separate thread
+                                    _cap = await _aio_thread.to_thread(
+                                        browser_capture, _login_url or "https://localhost/login", _cred_name
+                                    )
                                     if _cap.get("success"):
                                         _cookies = _cap.get("cookies", [])
                                         _hdr = "; ".join(f"{c['name']}={c['value']}" for c in _cookies)
@@ -1458,8 +1464,14 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                                         )
                                         console.print(f"[green]auth: {len(_cookies)} cookies captured[/green]")
                                     else:
-                                        answer = f"OPERATOR AUTH: browser login failed — {_cap.get('error', 'unknown')}. Continue unauthenticated."
+                                        _err = _cap.get("error", "unknown")
+                                        console.print(f"[red]auth: browser failed — {_err}[/red]")
+                                        answer = (
+                                            f"OPERATOR AUTH: browser login failed — {_err}. "
+                                            "Continue unauthenticated or ask for credentials via choice [1]."
+                                        )
                                 except Exception as _be:
+                                    console.print(f"[red]auth: browser error — {_be}[/red]")
                                     answer = f"OPERATOR AUTH: browser unavailable ({_be}). Continue unauthenticated."
                             else:
                                 # 4 or anything unrecognized → skip
