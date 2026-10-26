@@ -40,11 +40,12 @@ def browser_capture(
             "error": "playwright not installed — run: pip install playwright && playwright install chromium",
         }
 
-    # where to write the captured session (shared between host and box
-    # through the live-mounted workspace)
-    from suijin.modules.platform.lib.workspace import artifact_dir
+    # where to write the captured session (direct path — artifact_dir
+    # doesn't know about "auth"; using the workspace root keeps it
+    # shared between host and box through the live mount)
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-    auth_dir = artifact_dir("auth")
+    auth_dir = WORKSPACE_DIR / "artifacts" / "auth"
     auth_dir.mkdir(parents=True, exist_ok=True)
     session_file = auth_dir / f"{credential_name}_session.json"
 
