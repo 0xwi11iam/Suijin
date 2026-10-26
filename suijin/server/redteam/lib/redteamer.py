@@ -646,7 +646,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
     _parse_retries = 0
     _operator_stopped = False  # unbound-local crash: the finally referenced
     # this before ANY assignment when an early exception jumped the loop
-    _provider_retried = False
+    _provider_restarts = 0
     # FULL-AUTO mode (unattended/CI): headless runs — asks
     # auto-answer, no press-Enter prompts, SIGTERM saves. Default off:
     # interactive operator runs are unchanged.
@@ -1617,17 +1617,26 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                 # Check completion
                 if node_output.get("completion_reason"):
                     _cr = str(node_output.get("completion_reason", ""))
-                    if _cr in ("provider_failure", "llm_error") and not _provider_retried:
-                        # provider flake (timeouts/empty responses under load)
-                        # does NOT end the engagement: rebuild + CARRY STATE +
-                        # re-stream. (The old code `continue`d the INNER loop —
-                        # the fresh graph was never streamed and the dead one
-                        # re-emitted provider_failure: the restart was fiction.)
-                        _provider_retried = True
-                        console.print(
-                            f"[yellow]provider trouble ({_cr}) — one automatic restart (state carried), then it ends[/yellow]"
-                        )
-                        ui.flush_open()
+                    if _cr in ("provider_failure", "llm_error"):
+                        # PROGRESSIVE BACKOFF (2026-10-26, the iteration-43
+                        # crash): one restart was fiction when the cause was
+                        # a ~30s network blip — the restart hit the same
+                        # dead provider and died too. Now: up to 3 restarts
+                        # with escalating waits (30s, 60s, 120s) that outlast
+                        # filter/proxy hiccups. After 3, it ends for real.
+                        _MAX_PROVIDER_RESTARTS = 3
+                        if _provider_restarts < _MAX_PROVIDER_RESTARTS:
+                            _provider_restarts += 1
+                            _wait_s = 30 * (2 ** (_provider_restarts - 1))  # 30, 60, 120
+                            console.print(
+                                f"[yellow]provider trouble ({_cr}) — restart "
+                                f"{_provider_restarts}/{_MAX_PROVIDER_RESTARTS} in {_wait_s}s "
+                                f"(state carried, waiting out the blip)[/yellow]"
+                            )
+                            import asyncio as _aio
+
+                            await _aio.sleep(_wait_s)
+                            ui.flush_open()
                         _carry = {}
                         with contextlib.suppress(Exception):
                             _carry = agent.get_state(thread_id) or {}
