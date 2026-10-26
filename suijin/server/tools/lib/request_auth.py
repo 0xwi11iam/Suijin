@@ -54,10 +54,27 @@ def request_auth(
     # Store the auth request in the workspace for the operator console / TUI
     _write_auth_request(target, hint, login_url, cred_name)
 
-    # The actual operator interaction happens through the ask_operator
-    # mechanism — we return a structured prompt the think-node turns into
-    # an ask. But for now, return a direct instruction that the agent
-    # should call ask_operator with the auth question.
+    # BROWSER CAPTURE: if playwright is available, open a real browser
+    # on the HOST (the operator logs in — 2FA/CAPTCHA handled by the
+    # human) and capture the session automatically. In the BOX, the
+    # browser opens on the HOST through the live-mounted workspace.
+    with contextlib.suppress(Exception):
+        from suijin.server.tools.lib.browser_auth import browser_capture
+
+        result = browser_capture(login_url, cred_name, target_host=target)
+        if result.get("success"):
+            cookies = result.get("cookies", [])
+            cookie_header = "; ".join(f"{c['name']}={c['value']}" for c in cookies)
+            return (
+                f"AUTH CAPTURED via browser login — {len(cookies)} cookies from {result.get('url', '')}\n"
+                f'Store them now: creds_add(name="{cred_name}", type="cookie", value="{cookie_header[:300]}")\n'
+                f'Then use: http_request(url="https://{target}/api", credential="{cred_name}")\n'
+                f"Full session saved: auth/{cred_name}_session.json"
+            )
+        if result.get("error") and "not installed" not in str(result.get("error", "")):
+            return f"AUTH FAILED: {result['error']}"
+
+    # FALLBACK: instruct the agent to ask the operator directly
     return (
         f"AUTH NEEDED: {target} — {hint}\n"
         f"Login URL: {login_url}\n"
