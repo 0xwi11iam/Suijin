@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 
 #: default per-result cap in state (config: context_result_cap)
-DEFAULT_RESULT_CAP = 8_000
+DEFAULT_RESULT_CAP = 50_000
 
 _POINTER = "\n…[distilled {kept} of {total} chars — full output lives in the audit trail / toollogs]"
 
