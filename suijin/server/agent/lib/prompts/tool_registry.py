@@ -418,7 +418,15 @@ TOOL_REGISTRY = {
         "args_format": '"engagement": "...", "target": "...", "vuln_class": "sqli", "title": "...", "description": "one paragraph", "severity": "high", "cvss": 8.9, "commands": ["python3 tmp/poc_<name>.py"], "expected_result": "MARKER:<unique-string>", "control_commands": ["python3 tmp/poc_<name>_control.py"]',
         "description": (
             "**catalog_exploit** — write a POC script, the system runs it, marker in output → CONFIRMED.\n\n"
-            "**THE RECIPE (do exactly this):**\n"
+            "**THE RECIPE (do exactly this — step 1 FIRST or you WILL fail):**\n"
+            "1. `execute_terminal` → run your POC command ONCE to see the actual output\n"
+            "2. `write_file` → `tmp/poc_<name>.py` — script that prints `MARKER:<literal-string-from-step-1>` on success\n"
+            "3. `catalog_exploit` with `expected_result` = **the LITERAL string you saw in step 1** — NOT a description\n"
+            "\n"
+            "**expected_result is a LITERAL STRING MATCH** — the verifier checks if this exact string "
+            "appears in the output. NOT 'grep count >= 1', NOT a sentence, NOT a description. "
+            "If the output says `1`, the marker is `1`. If it says `Example Domain`, the marker is "
+            "`Example Domain`. COPY-PASTE from what you SAW.\n"
             "1. `write_file` → `tmp/poc_<name>.py` — a python script that (a) contacts the target, "
             "(b) prints `MARKER:<unique-string>` on success, (c) exits 1 on failure.\n"
             '2. `catalog_exploit` with `commands=["python3 tmp/poc_<name>.py"]` and '
