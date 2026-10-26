@@ -156,6 +156,49 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
             "messages": [{"role": "user", "content": f"AGENT QUESTION: {question}"}],
         }
 
+    # ── request_auth: the AUTH PICKER (2026-10-26) ─────────────────
+    # Routes through the ask mechanism with numbered choices so the
+    # operator gets an interactive picker, not a text prompt the agent
+    # relays. The answer determines the credential handoff mode.
+    if tool_name == "request_auth":
+        target = tool_args.get("target", "")
+        hint = tool_args.get("hint", "authentication required")
+        login_url = tool_args.get("login_url", f"https://{target}/login")
+        cred_name = tool_args.get("credential_name", target.replace(":", "_") if target else "auth")
+        question = (
+            f"AUTH NEEDED: {target} — {hint}\n"
+            f"Login URL: {login_url}\n\n"
+            f"[1] Provide credentials (type: user:password)\n"
+            f"[2] Paste a token/cookie/API key\n"
+            f"[3] Browser login (a Chromium window opens, you log in)\n"
+            f"[4] Skip (test unauthenticated only)\n\n"
+            f"Type a number (1-4), or for [1] type: 1 user:pass\n"
+            f"For [2] type: 2 <token-value>"
+        )
+        step_data.update({"tool_output": question, "success": True, "error_class": "ask_operator"})
+        return {
+            "_current_step": step_data,
+            "execution_trace": [dict(step_data)],
+            "_tool_result": {"success": True, "output": question},
+            "messages": [
+                {
+                    "role": "user",
+                    "content": (
+                        f"AGENT QUESTION: {question}\n\n"
+                        f"The operator's answer determines the credential. Parse it:\n"
+                        f"- starts with '1' → credentials follow (user:pass)\n"
+                        f"- starts with '2' → a token/cookie value follows\n"
+                        f"- is '3' → browser login mode: call request_auth again with "
+                        f"login_url='{login_url}' to trigger the browser capture\n"
+                        f"- is '4' or 'skip' → no auth, continue unauthenticated\n\n"
+                        f"After parsing, store the credential:\n"
+                        f"creds_add(name='{cred_name}', type='cookie', value='<the value>')\n"
+                        f"Then use: http_request(url='http://{target}/api', credential='{cred_name}')"
+                    ),
+                }
+            ],
+        }
+
     # ── Background spawn ──────────────────────────────────────────────
     if want_bg:
         job_id = _spawn_background_job(tool_name, tool_args, route_tool_fn)
