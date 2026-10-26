@@ -1396,6 +1396,76 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                             answer = fetch_answer(qid, timeout_s=600.0) or ""
                         if not answer:
                             answer = "Continue as you see fit."
+
+                        # AUTH CHOICE PARSER (2026-10-26): when the ask came
+                        # from request_auth, the operator typed a choice:
+                        #   1 / 1 user:pass  → credentials
+                        #   2 / 2 <token>    → token/cookie
+                        #   3                → browser login (launch capture)
+                        #   4 / anything else → skip (unauthenticated)
+                        if ec == "ask_operator" and "AUTH NEEDED" in out:
+                            _choice = answer.strip().split()[0] if answer.strip() else "4"
+                            if _choice == "1":
+                                # credentials: "1 user:pass" or just "1" (prompt for them)
+                                _cred_part = answer.strip()[1:].strip()
+                                if not _cred_part:
+                                    # they just typed "1" — ask for the creds inline
+                                    ui.stop()
+                                    _cred_part = _operator_input("Credentials (user:password):")
+                                    ui.start()
+                                _user, _, _pass = _cred_part.partition(":")
+                                answer = (
+                                    f"OPERATOR AUTH: credentials provided — username={_user}. "
+                                    f"Login with POST to the login URL using username={_user} password={_pass}. "
+                                    f"Store the session with creds_add after logging in."
+                                )
+                                console.print(f"[green]auth: credentials for {_user}[/green]")
+                            elif _choice == "2":
+                                _tok = answer.strip()[1:].strip()
+                                if not _tok:
+                                    ui.stop()
+                                    _tok = _operator_input("Token/cookie value:")
+                                    ui.start()
+                                answer = (
+                                    f"OPERATOR AUTH: token provided. Use it as a Bearer header or cookie: {_tok[:100]}"
+                                )
+                                console.print("[green]auth: token stored[/green]")
+                            elif _choice == "3":
+                                # browser login: launch capture, grab the cookies
+                                console.print("[cyan]auth: launching browser for login...[/cyan]")
+                                try:
+                                    from suijin.modules.tools.lib.browser_auth import browser_capture
+
+                                    _login_url = ""
+                                    for _ln in out.splitlines():
+                                        if "Login URL:" in _ln:
+                                            _login_url = _ln.split("Login URL:")[1].strip()
+                                            break
+                                    _cred_name = "target_session"
+                                    for _ln in out.splitlines():
+                                        if "Credential name:" in _ln:
+                                            _cred_name = _ln.split("Credential name:")[1].strip()
+                                            break
+                                    _cap = browser_capture(_login_url or "https://localhost/login", _cred_name)
+                                    if _cap.get("success"):
+                                        _cookies = _cap.get("cookies", [])
+                                        _hdr = "; ".join(f"{c['name']}={c['value']}" for c in _cookies)
+                                        answer = (
+                                            f"OPERATOR AUTH: browser login captured — "
+                                            f"{len(_cookies)} cookies. "
+                                            f'Store with creds_add(name="{_cred_name}", type="cookie", '
+                                            f'value="{_hdr[:300]}") then use http_request(credential="{_cred_name}")'
+                                        )
+                                        console.print(f"[green]auth: {len(_cookies)} cookies captured[/green]")
+                                    else:
+                                        answer = f"OPERATOR AUTH: browser login failed — {_cap.get('error', 'unknown')}. Continue unauthenticated."
+                                except Exception as _be:
+                                    answer = f"OPERATOR AUTH: browser unavailable ({_be}). Continue unauthenticated."
+                            else:
+                                # 4 or anything unrecognized → skip
+                                answer = "OPERATOR AUTH: skipped — test unauthenticated only."
+                                console.print("[yellow]auth: skipped[/yellow]")
+
                         # URL in the answer = the operator linked a program page:
                         # persist it onto the target's authorize record, and
                         # tell the agent it can fetch it (with the CF-exists
