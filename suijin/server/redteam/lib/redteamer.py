@@ -1015,7 +1015,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                 console.print(
                     _AskPanel(
                         _AskText.assemble(
-                            (str(label or "").strip()[:300] or "Operator input needed.", "bold white"),
+                            (str(label or "").strip()[:50_000] or "Operator input needed.", "bold white"),
                             ("\n\nType your answer in the input box below...", "dim"),
                         ),
                         title=" agent question ",
@@ -1516,7 +1516,12 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                         # ask turns (BOTH forms): question + Answer prompt only —
                         # no thinking/said sections. The action-form ask carries
                         # tool_name on _current_step, not on the trace step.
-                        _is_ask = tool_name == "ask_operator" or step.get("tool_name") == "ask_operator"
+                        _is_ask = (
+                            tool_name == "ask_operator"
+                            or step.get("tool_name") == "ask_operator"
+                            or tool_name == "request_auth"
+                            or step.get("tool_name") == "request_auth"
+                        )
                         if thought and not _is_ask:
                             ui.thinking(thought)
                         if not _is_ask:
