@@ -343,17 +343,17 @@ def profiles_root() -> Path:
 
 
 def logs_dir() -> Path:
-    """Run-level logs — platform log directory (~/Library/Logs/suijin
-    on macOS, XDG_STATE_HOME on Linux), never inside ~/.suijin."""
-    import sys
+    """Run-level logs — beside/inside the workspace, NOT a platform dir.
 
-    if sys.platform == "darwin":
-        d = Path.home() / "Library" / "Logs" / "suijin"
-    else:
-        import os
-
-        xdg = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
-        d = Path(xdg) / "suijin"
+    The old body platform-guessed (~/Library/Logs/suijin on macOS,
+    XDG_STATE_HOME on Linux) and so escaped the workspace jail the moment
+    HOME was confined — under the suite's SUIJIN_WORKSPACE override the
+    crash log landed in <engagement home>/Library/Logs instead of the
+    promised <workspace>/logs (field + test both caught it). Same layout
+    every environment: explicit workspace (tests, boxes) is
+    self-contained at <ws>/logs; production splits to <ws>.parent/logs
+    (v7.2 contract — run logs out of the config workspace)."""
+    d = WORKSPACE_DIR / "logs" if _EXPLICIT_WS else WORKSPACE_DIR.parent / "logs"
     return _ensure(d)
 
 

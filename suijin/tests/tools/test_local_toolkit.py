@@ -178,7 +178,11 @@ class TestForceCompact:
         import suijin.modules.redteam.lib.redteamer as rt
 
         src = inspect.getsource(rt)
-        start = src.find("one automatic restart")
+        # v7.3 restart block anchors: the progressive-restart branch (the
+        # old "one automatic restart" string died with the 30/60/120 rework)
+        start = src.find('_cr in ("provider_failure", "llm_error")')
+        if start < 0:
+            start = src.find("provider_failure")
         end = src.find("_restart_stream = True", start)
         assert start > 0 and end > start
         restart = src[start:end]

@@ -93,6 +93,36 @@ def _runtime_once():
 
 
 @pytest.fixture(autouse=True)
+def reset_module_singletons():
+    """Module singletons pinned by one test must not leak into the next:
+    engagement pins redirected later files' workspace writes, and jobs
+    spawned by one file sat in job_registry when the next file counted
+    them. Reset the engagement pin and drain the job registry BEFORE and
+    AFTER every test.
+
+    (NOTE: this does NOT fix the separate import-threshold flake —
+    TestH2JobSemantics failing with ImportError after ~110 tests from a
+    7-file combination; that one is cumulative runtime state, see the
+    bugs ledger 2026-10-27.)"""
+    import contextlib
+
+    def _reset():
+        with contextlib.suppress(Exception):
+            from suijin.modules.platform.lib import workspace as ws
+
+            ws._reset_engagement()
+        with contextlib.suppress(Exception):
+            from suijin.modules.tools.lib import job_registry as jr
+
+            jr.cancel_all(reason="test hygiene")
+            jr._jobs.clear()
+
+    _reset()
+    yield
+    _reset()
+
+
+@pytest.fixture(autouse=True)
 def reset_cost_tracking():
     """Reset provider cost tracking before each test."""
     try:

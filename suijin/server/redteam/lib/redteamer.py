@@ -351,6 +351,20 @@ def _quiet_teardown_handler(loop, context):
     loop.default_exception_handler(context)
 
 
+def resume_seed_messages(messages, limit=200):
+    """Dict messages, last `limit`, with STALE system prompts dropped
+    (2026-10-27, field-found): the system prompt is rebuilt fresh EVERY
+    run (think_node) — seeded system-role messages replay the OLD tool
+    catalog forever. A resumed engagement's agent couldn't see
+    request_auth a full day after it shipped, guessed its arguments, and
+    opened a browser at a dead localhost URL."""
+    return [
+        m
+        for m in (messages or [])
+        if isinstance(m, dict) and isinstance(m.get("content"), (str, list)) and m.get("role") != "system"
+    ][-limit:]
+
+
 async def run_red_team_async(config, objective, api_key=None, resume_state=None, seed_queue=None):
     # PROVIDER KEYS FIRST: the TUI/daemon entries never called load_env,
     # so a box with a perfectly good .env still died at the first call
@@ -698,11 +712,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
             # used to pass straight into the graph and detonate turns later
             _seed = dict(resume_state)
             with contextlib.suppress(Exception):
-                _seed["messages"] = [
-                    m
-                    for m in (_seed.get("messages") or [])
-                    if isinstance(m, dict) and isinstance(m.get("content"), (str, list))
-                ][-200:]
+                _seed["messages"] = resume_seed_messages(_seed.get("messages"))
                 if not isinstance(_seed.get("_current_step", {}), dict):
                     _seed.pop("_current_step", None)
                 _seed["execution_trace"] = [t for t in (_seed.get("execution_trace") or []) if isinstance(t, dict)][
