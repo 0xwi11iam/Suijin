@@ -1458,12 +1458,37 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                                         if "Credential name:" in _ln:
                                             _cred_name = _ln.split("Credential name:")[1].strip()
                                             break
-                                    # sync_playwright REFUSES to run inside asyncio —
-                                    # it must run in a separate thread
-                                    _cap = await _aio_thread.to_thread(
-                                        browser_capture, _login_url or "https://localhost/login", _cred_name
+                                    # NEVER default the browser at a dead localhost
+                                    # URL (2026-10-27, the recurring crash): the old
+                                    # fallback literal 'https://localhost/login' popped
+                                    # a window that instantly died on
+                                    # ERR_CONNECTION_REFUSED. If the agent passed no
+                                    # login URL (or a local one for a remote target),
+                                    # ASK the operator for the real sign-in page —
+                                    # the human knows it; the guess does not.
+                                    _bad_login = not _login_url.startswith(("http://", "https://")) or (
+                                        ("localhost" in _login_url or "127.0.0.1" in _login_url)
+                                        and "localhost" not in (out or "")
                                     )
-                                    if _cap.get("success"):
+                                    if _bad_login:
+                                        ui.stop()
+                                        _login_url = _operator_input(
+                                            f"Sign-in URL for browser login (credential '{_cred_name}'): "
+                                        ).strip()
+                                        ui.start()
+                                    _cap = None
+                                    if not _login_url.startswith(("http://", "https://")):
+                                        answer = (
+                                            "OPERATOR AUTH: browser login cancelled — no valid sign-in "
+                                            "URL. Call request_auth again WITH the real login_url "
+                                            '(e.g. request_auth(target="<host>", login_url="https://<host>/login")). '
+                                            "Do not retry without it."
+                                        )
+                                    else:
+                                        # sync_playwright REFUSES to run inside asyncio —
+                                        # it must run in a separate thread
+                                        _cap = await _aio_thread.to_thread(browser_capture, _login_url, _cred_name)
+                                    if _cap and _cap.get("success"):
                                         _cookies = _cap.get("cookies", [])
                                         _hdr = "; ".join(f"{c['name']}={c['value']}" for c in _cookies)
                                         _ls = _cap.get("localStorage") or {}
@@ -1512,7 +1537,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                                             f"{len(_ls)} localStorage, {len(_ss)} sessionStorage[/green]"
                                         )
                                     else:
-                                        _err = _cap.get("error", "unknown")
+                                        _err = (_cap or {}).get("error", "cancelled — no valid sign-in URL provided")
                                         console.print(f"[red]auth: browser failed — {_err}[/red]")
                                         answer = (
                                             f"OPERATOR AUTH: browser login failed — {_err}. "
