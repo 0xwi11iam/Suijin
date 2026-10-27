@@ -161,15 +161,30 @@ def browser_capture(
                 with contextlib.suppress(Exception):
                     result["sessionStorage"] = json.loads(page.evaluate("() => JSON.stringify(sessionStorage)") or "{}")
                 result["networkCookies"] = captured_headers
-                result["success"] = True
 
-                session_file.write_text(json.dumps(result, indent=2))
-                log(
-                    f"captured: {len(all_cookies)} cookies, "
-                    f"{len(result.get('localStorage', {}))} localStorage keys, "
-                    f"{len(result.get('sessionStorage', {}))} sessionStorage keys, "
-                    f"{len(captured_headers)} network Set-Cookie headers"
-                )
+                # EMPTY CAPTURES ARE FAILURES (2026-10-27, direct-test
+                # catch): closing the browser without logging in used to
+                # report success=True with 0 cookies — request_auth then
+                # announced "AUTH CAPTURED", stored an empty credential,
+                # and handed the agent a dead env var. A capture that
+                # captured nothing is a failure.
+                captured_anything = bool(all_cookies or result.get("localStorage") or result.get("sessionStorage"))
+                if captured_anything:
+                    result["success"] = True
+                    session_file.write_text(json.dumps(result, indent=2))
+                    log(
+                        f"captured: {len(all_cookies)} cookies, "
+                        f"{len(result.get('localStorage', {}))} localStorage keys, "
+                        f"{len(result.get('sessionStorage', {}))} sessionStorage keys, "
+                        f"{len(captured_headers)} network Set-Cookie headers"
+                    )
+                else:
+                    result["success"] = False
+                    result["error"] = (
+                        "nothing captured — the login never completed (no cookies, no storage "
+                        "at capture time). Re-run and finish the sign-in in the browser window."
+                    )
+                    log(result["error"])
 
         except Exception as e:
             # browser closed or crashed — grab whatever we still have

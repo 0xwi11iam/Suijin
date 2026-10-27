@@ -69,6 +69,23 @@ class TestBrowserFailureGuidance:
         if out.startswith("AUTH FAILED"):
             assert "wrong login_url" in out.lower() or "WRONG login_url" in out
 
+    def test_empty_capture_is_not_auth(self, monkeypatch, _no_browser):
+        """success=True with 0 cookies (browser closed before login) must
+        NOT be announced as AUTH CAPTURED — the direct-test catch: the
+        agent was handed a dead env var for an empty credential."""
+        import suijin.server.tools.lib.browser_auth as ba
+
+        monkeypatch.setattr(
+            ba,
+            "browser_capture",
+            lambda *a, **k: {"success": True, "cookies": [], "url": "http://localhost:6789/login"},
+        )
+        from suijin.server.tools.lib.request_auth import request_auth
+
+        out = request_auth(target="localhost:6789", login_url="http://localhost:6789/login")
+        assert "AUTH CAPTURED" not in out
+        assert out.startswith("AUTH FAILED") or "login never completed" in out or "AUTH NEEDED" in out
+
 
 class TestResumeSeedHygiene:
     def test_stale_system_prompts_dropped(self):
