@@ -19,6 +19,47 @@ import json
 import time
 
 
+def _launch_chromium(p, log):
+    """Launch headed chromium, self-installing the browser ONCE when the
+    pinned build is missing (2026-10-27).
+
+    Every playwright package version pins a different chromium build
+    (1228/1243/1248/...) and the cache holds whichever builds were ever
+    downloaded — so a pip upgrade orphans the launcher. Probe the pinned
+    path; if absent, install it via THIS interpreter's playwright (stdin
+    never inherited; container-safe), then launch. If it still fails,
+    degrade to an actionable error instead of a stack trace."""
+    import os
+    import subprocess
+    import sys
+
+    try:
+        pinned = str(p.chromium.executable_path)
+    except Exception:  # noqa: BLE001 — unresolvable path: let launch() speak
+        pinned = ""
+    if pinned and not os.path.exists(pinned):
+        log(f"chromium build missing ({pinned.rsplit('/', 1)[-1]}) — one-time download…")
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "playwright", "install", "chromium"],
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                timeout=600,
+                check=False,
+            )
+        except Exception as e:  # noqa: BLE001 — install failure falls through to launch()
+            log(f"auto-install skipped: {e}")
+    try:
+        return p.chromium.launch(headless=False)
+    except Exception as e:
+        if "Executable doesn't exist" in str(e):
+            raise RuntimeError(
+                f"chromium not installed for this interpreter ({sys.executable}). "
+                "Run: python -m playwright install chromium"
+            ) from e
+        raise
+
+
 def browser_capture(
     login_url: str,
     credential_name: str,
@@ -48,7 +89,7 @@ def browser_capture(
     log("log in normally — everything the browser captures flows to the agent")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = _launch_chromium(p, log)
         context = browser.new_context()
         page = context.new_page()
 

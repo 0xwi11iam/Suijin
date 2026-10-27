@@ -211,6 +211,11 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
             f"For [2] type: 2 <token-value>"
         )
         step_data.update({"tool_output": question, "success": True, "error_class": "ask_operator"})
+        env_var = f"SUIJIN_CRED_{cred_name.upper()}"
+        with contextlib.suppress(Exception):
+            from suijin.modules.credential_store.main import env_name_for
+
+            env_var = env_name_for(cred_name)
         return {
             "_current_step": step_data,
             "execution_trace": [dict(step_data)],
@@ -227,8 +232,10 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
                         f"login_url='{login_url}' to trigger the browser capture\n"
                         f"- is '4' or 'skip' → no auth, continue unauthenticated\n\n"
                         f"After parsing, store the credential:\n"
-                        f"creds_add(name='{cred_name}', type='cookie', value='<the value>')\n"
-                        f"Then use: http_request(url='http://{target}/api', credential='{cred_name}')"
+                        f"creds_add(service='{cred_name}', type='cookie', value='<the value>')\n"
+                        f"Then use ${env_var} in execute_terminal commands (auto-exported — never "
+                        f"paste the literal into commands or files), or "
+                        f"http_request(url='http://{target}/api', credential='{cred_name}')"
                     ),
                 }
             ],

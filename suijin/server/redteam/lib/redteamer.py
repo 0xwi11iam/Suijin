@@ -1468,13 +1468,33 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                                             _ss_str = json.dumps(_ss)[:300]
                                             _extras.append(f"sessionStorage: {_ss_str}")
                                         _extras_s = ("\n" + "\n".join(_extras)) if _extras else ""
+                                        # SERVER-SIDE STORE (2026-10-27): store the
+                                        # captured cookie directly — the literal never
+                                        # enters the agent's text. It references the
+                                        # exported env var instead.
+                                        _env_var = _cred_name
+                                        with contextlib.suppress(Exception):
+                                            from suijin.modules.credential_store.main import (
+                                                creds_add as _creds_add,
+                                            )
+                                            from suijin.modules.credential_store.main import (
+                                                env_name_for as _env_name_for,
+                                            )
+
+                                            _creds_add(
+                                                service=_cred_name,
+                                                cred_type="cookie",
+                                                value=_hdr,
+                                                notes=f"browser capture: {_url}",
+                                            )
+                                            _env_var = _env_name_for(_cred_name)
                                         answer = (
                                             f"OPERATOR AUTH: browser login captured — "
                                             f"{len(_cookies)} cookies, {len(_ls)} localStorage, "
                                             f"{len(_ss)} sessionStorage from {_url}\n"
-                                            f"COOKIE HEADER: {_hdr[:500]}\n"
-                                            f'Store: creds_add(name="{_cred_name}", type="cookie", value="{_hdr[:300]}")\n'
-                                            f'Use: http_request(credential="{_cred_name}")'
+                                            f"Stored as credential '{_cred_name}' (literal withheld).\n"
+                                            f"Use ${_env_var} in commands (auto-exported), or "
+                                            f'http_request(credential="{_cred_name}")'
                                             f"{_extras_s}"
                                         )
                                         console.print(
