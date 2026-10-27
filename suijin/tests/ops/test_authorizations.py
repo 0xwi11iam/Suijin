@@ -396,8 +396,12 @@ class TestProviderRecovery:
         import suijin.modules.redteam.lib.redteamer as rt
 
         src = inspect.getsource(rt.run_red_team_async)
-        assert "provider_failure" in src and "one automatic restart" in src
-        assert "_provider_retried" in src  # once, not forever
+        # v7.3 contract: provider_failure triggers PROGRESSIVE restarts
+        # (30/60/120s backoff) up to _MAX_PROVIDER_RESTARTS — the counter
+        # is _provider_restarts (plural: it is not a one-shot retry)
+        assert "provider_failure" in src and "_provider_restarts" in src
+        assert "_MAX_PROVIDER_RESTARTS" in src  # bounded, not forever
+        assert "30, 60, 120" in src  # progressive backoff documented in code
 
     def test_parse_failure_banner_names_the_cause(self):
         from rich.console import Console

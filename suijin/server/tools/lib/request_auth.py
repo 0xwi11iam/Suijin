@@ -51,6 +51,26 @@ def request_auth(
     login_url = str(login_url or "").strip() or f"https://{target}/login"
     cred_name = str(credential_name or "").strip() or target.split("/")[0].replace(":", "_")
 
+    # LOGIN-URL SANITY (2026-10-27, field-found): the agent guessed
+    # login_url=https://localhost/login for a REMOTE target — a browser
+    # popped and instantly died on ERR_CONNECTION_REFUSED. A local login
+    # host for a remote target is never a real sign-in page; refuse it
+    # EARLY with the correct call shape instead of opening a window.
+    _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+    with contextlib.suppress(Exception):
+        from urllib.parse import urlparse
+
+        _login_host = (urlparse(login_url).hostname or "").lower()
+        _target_host = (urlparse(target).hostname if "//" in target else target).split("/")[0].split(":")[0].lower()
+        if _login_host in _LOCAL_HOSTS and _target_host not in _LOCAL_HOSTS:
+            return (
+                f"AUTH CONFIG ERROR: login_url '{login_url}' points at the LOCAL machine but the "
+                f"target is '{target}'. Do not open a browser against it.\n"
+                f'Call again with the real sign-in page:\n'
+                f'  request_auth(target="{target}", login_url="https://<real-sign-in-host>/...", hint="{hint}")\n'
+                f'Example: target="idp.example.com", login_url="https://idp.example.com/login"'
+            )
+
     # Store the auth request in the workspace for the operator console / TUI
     _write_auth_request(target, hint, login_url, cred_name)
 
@@ -87,7 +107,12 @@ def request_auth(
                 f"Full session saved: auth/{cred_name}_session.json"
             )
         if result.get("error") and "not installed" not in str(result.get("error", "")):
-            return f"AUTH FAILED: {result['error']}"
+            return (
+                f"AUTH FAILED: {result['error']}\n"
+                f"Most login failures are a WRONG login_url. Re-check the sign-in page and call again:\n"
+                f'  request_auth(target="{target}", login_url="<the real sign-in URL>", hint="{hint}")\n'
+                f'Do NOT retry the same URL and do NOT fall back to guessing credentials.'
+            )
 
     # FALLBACK: instruct the agent to ask the operator directly
     env_var = cred_name
