@@ -204,4 +204,17 @@ def browser_capture(
             with contextlib.suppress(Exception):
                 browser.close()
 
+    # SILENT-FAILURE NET (2026-10-27, direct-test catch #2): an exception
+    # inside the grab block is contextlib-suppressed — execution jumped
+    # past BOTH the captured and nothing-captured branches, and result
+    # returned success=False with NO error, so request_auth fell to its
+    # generic AUTH NEEDED fallback with no diagnosis. A failed capture
+    # always carries an error.
+    if not result.get("success") and not result.get("error"):
+        result["error"] = (
+            "nothing captured — the browser closed before the login completed "
+            "(no cookies, no storage). Re-run and finish the sign-in."
+        )
+        with contextlib.suppress(Exception):
+            log(result["error"])
     return result
