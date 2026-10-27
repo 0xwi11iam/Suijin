@@ -23,6 +23,28 @@ def _save_store(data):
     STORE_PATH.write_text(json.dumps(data, indent=2))
 
 
+def env_name_for(service: str) -> str:
+    """The env-var name a stored credential is exported under."""
+    import re as _re
+
+    return "SUIJIN_CRED_" + _re.sub(r"[^A-Z0-9]+", "_", str(service).upper()).strip("_")
+
+
+def cred_env() -> dict:
+    """SUIJIN_CRED_<NAME> -> value for every stored credential.
+
+    execute_terminal exports these into each command's environment so the
+    agent writes "$SUIJIN_CRED_<NAME>" in commands — the literal secret
+    never lands in command text, transcripts, or artifacts.
+    """
+    out = {}
+    for c in _load_store().get("credentials", []):
+        val = str(c.get("value", "") or "").strip()
+        if c.get("service") and val:
+            out[env_name_for(c["service"])] = val
+    return out
+
+
 def creds_add(service="", cred_type="", value="", username="", notes="", **aliases):
     """Tolerant to argument drift from the model: note→notes, type→cred_type,
     token/key/password shorthand → value. The old rigid signature returned
@@ -42,15 +64,19 @@ def creds_add(service="", cred_type="", value="", username="", notes="", **alias
         "notes": notes or "",
         "discovered_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
+    _use = (
+        f"Use it as ${env_name_for(service)} — exported to every execute_terminal "
+        f"command automatically. NEVER paste the literal value into commands, files, or reports."
+    )
     # Deduplicate
     for c in store["credentials"]:
         if c.get("service") == service and c.get("value") == value:
             c.update(entry)
             _save_store(store)
-            return f"Updated existing credential: {service}"
+            return f"Updated existing credential: {service}\n{_use}"
     store["credentials"].append(entry)
     _save_store(store)
-    return f"Credential stored: {service} ({cred_type})"
+    return f"Credential stored: {service} ({cred_type})\n{_use}"
 
 
 def creds_list(filter=""):
@@ -63,8 +89,13 @@ def creds_list(filter=""):
         return "(no credentials stored)"
     lines = []
     for c in creds:
+        # MASKED (2026-10-27): the old listing printed the first 60 chars
+        # of every secret into tool output — transcripts carried the
+        # literal creds. Show a prefix + length and the env var instead.
+        val = str(c.get("value", "") or "")
+        masked = f"{val[:3]}***(len {len(val)})" if val else "(empty)"
         lines.append(
-            f"[{c['type']}] {c['service']}: {c['value'][:60]}{'...' if len(c['value']) > 60 else ''} (user: {c.get('username', '?')})"
+            f"[{c.get('type', '?')}] {c.get('service', '?')}: {masked} — use ${env_name_for(c.get('service', '?'))} (user: {c.get('username', '?')})"
         )
     return "\n".join(lines)
 

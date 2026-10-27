@@ -11,11 +11,13 @@ from __future__ import annotations
 
 class TestR1Distillation:
     def test_big_result_is_capped_with_a_pointer(self):
-        from suijin.modules.agent.lib.context_distill import distill_result
+        from suijin.modules.agent.lib.context_distill import DEFAULT_RESULT_CAP, distill_result
 
-        huge = "Status: 200\nServer: nginx\n\n" + ("A" * 35_000)
-        out = distill_result(huge, cap=50_000)
-        assert len(out) < 9_000
+        # must EXCEED the cap (50k since the 2026-10-26 truncation fix) to
+        # trigger capping — the old 8k-era input passed through untouched
+        huge = "Status: 200\nServer: nginx\n\n" + ("A" * (DEFAULT_RESULT_CAP + 10_000))
+        out = distill_result(huge)
+        assert len(out) < DEFAULT_RESULT_CAP + 2_000
         assert "Status: 200" in out and "Server: nginx" in out
         assert "full output lives in the audit trail" in out
 
@@ -35,10 +37,10 @@ class TestR1Distillation:
         from suijin.modules.agent.lib.nodes.execute_tool_node import _state_result_message
 
         msg = _state_result_message(
-            "http_request", 120, {"iteration": 3}, "Status: 200\n\n" + "B" * 40_000, {"_run_config": {}}
+            "http_request", 120, {"iteration": 3}, "Status: 200\n\n" + "B" * 60_000, {"_run_config": {}}
         )
         assert msg.startswith("RESULT (http_request, 120ms, iteration 3):")
-        assert len(msg) < 9_500  # distilled, not raw
+        assert len(msg) < 52_000  # distilled to the 50k cap, not raw 60k
         assert "audit trail" in msg
 
         pinned = _state_result_message(

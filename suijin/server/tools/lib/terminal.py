@@ -158,6 +158,17 @@ def execute_terminal(cmd, timeout=30, cwd=None):
                 current_path = f"{bp}:{current_path}"
         env["PATH"] = current_path
 
+        # STORED CREDENTIALS AS ENV VARS (2026-10-27): every credential in
+        # the store exports as $SUIJIN_CRED_<NAME> so command text
+        # references the VARIABLE — the literal secret never appears in
+        # the command line, transcript, or any artifact the agent writes.
+        try:
+            from suijin.modules.credential_store.main import cred_env
+
+            env.update(cred_env())
+        except Exception:  # noqa: BLE001 — a store hiccup must not kill the shell
+            pass
+
         # CRITICAL (v5.2): commands containing shell metacharacters
         # (;|&><$`() must run through a shell — shlex.split succeeds on
         # them but the tokens are meaningless as argv, so "a; b" was

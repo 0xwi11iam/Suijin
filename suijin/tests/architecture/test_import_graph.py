@@ -12,7 +12,14 @@ EXCLUDE = {"tests", "lab", "__pycache__", "kb_cache", "ui"}
 
 
 def _live_files():
-    return [p for p in PKG.rglob("*.py") if not any(part in EXCLUDE for part in p.parts)]
+    # `._foo.py` are macOS AppleDouble resource forks (binary, null bytes)
+    # — 952 of them pollute a network-copied checkout and compile() chokes.
+    # Not Python source; skip by name (capability check, not platform guess).
+    return [
+        p
+        for p in PKG.rglob("*.py")
+        if not any(part in EXCLUDE for part in p.parts) and not p.name.startswith("._")
+    ]
 
 
 _SPLIT_HOMES = {"agent", "platform", "providers", "tools", "ops", "redteam"}

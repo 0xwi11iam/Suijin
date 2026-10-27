@@ -65,16 +65,36 @@ def request_auth(
         if result.get("success"):
             cookies = result.get("cookies", [])
             cookie_header = "; ".join(f"{c['name']}={c['value']}" for c in cookies)
+            use_var = cred_name
+            with contextlib.suppress(Exception):
+                from suijin.modules.credential_store.main import creds_add, env_name_for
+
+                # SERVER-SIDE STORE (2026-10-27): store the captured cookie
+                # here — the literal never passes through the agent's text
+                # at all. The agent references $SUIJIN_CRED_<NAME> only.
+                creds_add(
+                    service=cred_name,
+                    cred_type="cookie",
+                    value=cookie_header,
+                    notes=f"browser capture: {target}",
+                )
+                use_var = env_name_for(cred_name)
             return (
                 f"AUTH CAPTURED via browser login — {len(cookies)} cookies from {result.get('url', '')}\n"
-                f'Store them now: creds_add(name="{cred_name}", type="cookie", value="{cookie_header[:300]}")\n'
-                f'Then use: http_request(url="https://{target}/api", credential="{cred_name}")\n'
+                f"Stored as credential '{cred_name}'. In commands use ${use_var} "
+                f"(exported to execute_terminal automatically — never paste the literal).\n"
+                f'For HTTP requests use: http_request(url="https://{target}/api", credential="{cred_name}")\n'
                 f"Full session saved: auth/{cred_name}_session.json"
             )
         if result.get("error") and "not installed" not in str(result.get("error", "")):
             return f"AUTH FAILED: {result['error']}"
 
     # FALLBACK: instruct the agent to ask the operator directly
+    env_var = cred_name
+    with contextlib.suppress(Exception):
+        from suijin.modules.credential_store.main import env_name_for
+
+        env_var = env_name_for(cred_name)
     return (
         f"AUTH NEEDED: {target} — {hint}\n"
         f"Login URL: {login_url}\n"
@@ -84,8 +104,9 @@ def request_auth(
         f"Please provide credentials (user/pass), a session token/cookie, "
         f"or type 'browser' to open a login window I can watch.\"\n\n"
         f"After receiving credentials, store them with:\n"
-        f'  creds_add(name="{cred_name}", type="<bearer|cookie|basic>", value="<credential>")\n'
-        f'Then use: http_request(url="https://{target}/api", credential="{cred_name}")'
+        f'  creds_add(service="{cred_name}", type="<bearer|cookie|basic>", value="<credential>")\n'
+        f"Then use ${env_var} in execute_terminal commands (auto-exported — never paste the "
+        f'literal into commands), or http_request(url="https://{target}/api", credential="{cred_name}")'
     )
 
 
