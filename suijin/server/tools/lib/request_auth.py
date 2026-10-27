@@ -66,7 +66,7 @@ def request_auth(
             return (
                 f"AUTH CONFIG ERROR: login_url '{login_url}' points at the LOCAL machine but the "
                 f"target is '{target}'. Do not open a browser against it.\n"
-                f'Call again with the real sign-in page:\n'
+                f"Call again with the real sign-in page:\n"
                 f'  request_auth(target="{target}", login_url="https://<real-sign-in-host>/...", hint="{hint}")\n'
                 f'Example: target="idp.example.com", login_url="https://idp.example.com/login"'
             )
@@ -82,7 +82,10 @@ def request_auth(
         from suijin.server.tools.lib.browser_auth import browser_capture
 
         result = browser_capture(login_url, cred_name, target_host=target)
-        if result.get("success"):
+        # EMPTY CAPTURES ARE NOT AUTH (2026-10-27): success with 0 cookies
+        # means the browser closed before the login completed — announce a
+        # failure with the retry guidance, never "AUTH CAPTURED — 0 cookies".
+        if result.get("success") and result.get("cookies"):
             cookies = result.get("cookies", [])
             cookie_header = "; ".join(f"{c['name']}={c['value']}" for c in cookies)
             use_var = cred_name
@@ -111,7 +114,7 @@ def request_auth(
                 f"AUTH FAILED: {result['error']}\n"
                 f"Most login failures are a WRONG login_url. Re-check the sign-in page and call again:\n"
                 f'  request_auth(target="{target}", login_url="<the real sign-in URL>", hint="{hint}")\n'
-                f'Do NOT retry the same URL and do NOT fall back to guessing credentials.'
+                f"Do NOT retry the same URL and do NOT fall back to guessing credentials."
             )
 
     # FALLBACK: instruct the agent to ask the operator directly
