@@ -470,6 +470,76 @@ TOOL_REGISTRY = {
             "Never guess passwords. Never try common credentials. Ask."
         ),
     },
+    "nmap_scan": {
+        "purpose": "Ports/services/versions — the recon first move",
+        "when_to_use": "First contact with a host, or when service versions matter for CVE matching.",
+        "args_format": '"target": "10.0.0.9", "flags": "-sV --top-ports 1000"',
+        "description": (
+            "**nmap_scan** — nmap wrapper (background it for full ranges). Ports → services → "
+            "versions feeds search_cve directly. For a quick sweep: flags='-T4 --top-ports 200'."
+        ),
+    },
+    "gobuster_dir": {
+        "purpose": "Directory/file brute-force on a web root",
+        "when_to_use": "Web server enumerated — find hidden paths (admin, backups, .git) before blind fuzzing.",
+        "args_format": '"url": "https://t.example", "wordlist": "/path/w.txt", "extensions": "php,html"',
+        "description": "**gobuster_dir** — gobuster dir mode. Use find_wordlist if no wordlist path handy.",
+    },
+    "gobuster_dns": {
+        "purpose": "Subdomain brute-force",
+        "when_to_use": "Scope expansion: find subdomains beyond DNS records.",
+        "args_format": '"domain": "example.com", "wordlist": "/path/subs.txt"',
+        "description": "**gobuster_dns** — gobuster dns mode.",
+    },
+    "katana_crawl": {
+        "purpose": "JS-aware crawler — endpoints inside JS bundles",
+        "when_to_use": "SPA/JS-heavy targets, or building an endpoint list for ffuf_fuzz/IDOR lanes.",
+        "args_format": '"url": "https://t.example", "depth": 3, "flags": "-js-crawl -silent"',
+        "description": "**katana_crawl** — katana wrapper; -js-crawl pulls endpoint strings from JS bundles.",
+    },
+    "nikto_scan": {
+        "purpose": "Web-server misconfig scan",
+        "when_to_use": "After the port scan identifies a web server; fast config-level checks.",
+        "args_format": '"url": "https://t.example"',
+        "description": "**nikto_scan** — noisy by nature; findings need verification before recording.",
+    },
+    "whatweb_scan": {
+        "purpose": "Tech fingerprint → search_cve the versions",
+        "when_to_use": "Before CVE hunting: identify the stack, then search_cve the versions.",
+        "args_format": '"url": "https://t.example"',
+        "description": "**whatweb_scan** — whatweb wrapper; feeds search_cve + search_kb.",
+    },
+    "feroxbuster_scan": {
+        "purpose": "Recursive content discovery",
+        "when_to_use": "Alternative to gobuster_dir when recursion or auto-tuning helps.",
+        "args_format": '"url": "https://t.example", "wordlist": "/path/w.txt", "extensions": ""',
+        "description": "**feroxbuster_scan** — feroxbuster wrapper.",
+    },
+    "nuclei_scan": {
+        "purpose": "Template vuln scan — cve/exposures/misconfig",
+        "when_to_use": "After fingerprinting; also targeted re-scans when new templates land.",
+        "args_format": '"target": "https://t.example", "templates": "cve,exposures,misconfig"',
+        "description": "**nuclei_scan** — nuclei wrapper; template groups: cve, exposures, misconfig, vulnerabilities.",
+    },
+    "ffuf_fuzz": {
+        "purpose": "The FUZZ-keyword fuzzer",
+        "when_to_use": "Endpoint discovery (FUZZ in path), param names, or with -of json for parseable results.",
+        "args_format": '"url": "https://t.example/FUZZ", "wordlist": "/path/w.txt", "options": "-mc 200-499"',
+        "description": (
+            "**ffuf_fuzz** — ffuf wrapper; -of json output parses to a clean results table "
+            "automatically. NEVER read raw ffuf progress output."
+        ),
+    },
+    "tool_inventory": {
+        "purpose": "Your full kit — catalog tools + installed binaries",
+        "when_to_use": "Engagement start, or whenever you feel stuck: the right tool may be installed but invisible to you.",
+        "args_format": '{}',
+        "description": (
+            "**tool_inventory** — a human pentester knows their kit; this shows yours: every "
+            "catalog tool plus every classic binary on PATH (nmap, gobuster, katana, nikto, "
+            "whatweb, feroxbuster, nuclei, ffuf, sqlmap, …) each with a one-line doctrine."
+        ),
+    },
     "memory_recall": {
         "purpose": "The engagement memory — every credential, leak, foothold, confirmed exploit and admin surface observed, plus the condensed digest",
         "when_to_use": "Before attacking a surface — check what the engagement already knows about it.",
@@ -539,6 +609,16 @@ _ALL_TOOLS = {
     "search_cve",
     "catalog_exploit",
     "request_auth",
+    "nmap_scan",
+    "gobuster_dir",
+    "gobuster_dns",
+    "katana_crawl",
+    "nikto_scan",
+    "whatweb_scan",
+    "feroxbuster_scan",
+    "nuclei_scan",
+    "ffuf_fuzz",
+    "tool_inventory",
     "memory_recall",
     "http_replay",
     "inject_probe",
