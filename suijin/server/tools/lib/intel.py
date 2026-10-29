@@ -108,6 +108,22 @@ def search_cve(software, config, version=None, limit=5):
         return f"No CVEs found for: {q}"
 
     scored = []
+    import re as _re
+
+    # VERSION RELEVANCE (2026-10-29, the nginx-1.18 catch): the old check
+    # was a bare substring over str(descriptions-LIST) — "1.1.18" contains
+    # "1.18", so a 2012 CVE for 1.0.x–1.1.x outranked everything and the
+    # model over-trusted it. Boundary-aware match on the REAL English
+    # description; non-matching results carry an explicit applicability
+    # note instead of silently ranking as exact hits.
+    def _version_in_desc(cve: dict) -> bool:
+        if not version_str:
+            return True
+        for d in cve.get("descriptions", []):
+            if d.get("lang") == "en":
+                return bool(_re.search(rf"(?<![\d.]){_re.escape(version_str)}(?![\d])", d.get("value", "")))
+        return False
+
     for item in vulns:
         cve = item.get("cve", {})
         score_val, _ = _extract_cvss(cve)
@@ -116,24 +132,23 @@ def search_cve(software, config, version=None, limit=5):
         except (ValueError, TypeError):
             score_float = 0.0
 
-        if version_str:
-            descs = str(cve.get("descriptions", ""))
-            if version_str in descs:
-                score_float += 100  # exact version matches ranked first
+        if _version_in_desc(cve):
+            score_float += 100  # boundary-exact version matches ranked first
 
-        scored.append((score_float, item))
+        scored.append((score_float, item, _version_in_desc(cve)))
 
     scored.sort(key=lambda x: -x[0])
-    vulns = [item for _, item in scored[:limit]]
+    vulns = [(item, vm) for _, item, vm in scored[:limit]]
 
     if version_str and strategy > 0:
-        filtered = [v for v in vulns if version_str in str(v.get("cve", {}).get("descriptions", ""))]
+        filtered = [(v, True) for v, vm in vulns if vm]
         if filtered:
             vulns = filtered
 
     results = []
-    for item in vulns:
+    for item, version_match in vulns:
         cve = item.get("cve", {})
+        cve_id = cve.get("id", "UNKNOWN")
         cve_id = cve.get("id", "UNKNOWN")
 
         desc_text = ""
@@ -144,6 +159,11 @@ def search_cve(software, config, version=None, limit=5):
 
         score, severity = _extract_cvss(cve)
         kev = "ACTIVELY EXPLOITED" if _is_kev(cve) else ""
+        vnote = (
+            ""
+            if version_match
+            else f" [version note: advisory text does not mention {version_str} — verify applicability]"
+        )
 
         refs = []
         for r in cve.get("references", []):
@@ -164,7 +184,7 @@ def search_cve(software, config, version=None, limit=5):
                     weaknesses.append(val)
         cwe_str = ", ".join(weaknesses[:3])
 
-        entry = f"[{cve_id}] {severity} ({score})\n  {desc_text[:300]}\n"
+        entry = f"[{cve_id}] {severity} ({score}){vnote}\n  {desc_text[:300]}\n"
         if cwe_str:
             entry += f"  CWE: {cwe_str}\n"
         if kev:
