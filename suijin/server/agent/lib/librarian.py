@@ -217,6 +217,44 @@ _KIND_CAP = 40  # per-kind cap keeps one noisy pattern from starving the rest
 _LEDGER_CAP = 400
 
 
+def _jwt_fingerprint(val: str) -> tuple[str, str] | None:
+    """(stable_key, display) for a JWT — or None if not a JWT.
+
+    Short-lived tokens refresh their signature/exp EVERY response; the
+    raw-string dedupe saw each mint as a brand-new credential and the
+    ledger filled with 20 near-identical entries (the ×23 echo in the
+    2026-10-28 trail). Identity = alg + sub/role/aud + exp-day; the raw
+    token belongs in the credential store, not the ledger."""
+    import base64
+    import contextlib
+    import json as _json
+    import time as _time
+
+    with contextlib.suppress(Exception):
+        parts = val.split(".")
+        if len(parts) < 2:
+            return None
+        pad = lambda s: s + "=" * (-len(s) % 4)  # noqa: E731
+        hdr = _json.loads(base64.urlsafe_b64decode(pad(parts[0]) + "=="))
+        pl = _json.loads(base64.urlsafe_b64decode(pad(parts[1]) + "=="))
+        if not isinstance(hdr, dict) or not isinstance(pl, dict):
+            return None
+        alg = str(hdr.get("alg", "?"))
+        sub = str(pl.get("sub", pl.get("uid", pl.get("email", "?"))))
+        role = str(pl.get("role", pl.get("scope", "")))
+        exp = pl.get("exp")
+        if not isinstance(exp, (int, float)):
+            expired = ""
+            exp_s = "?"
+        else:
+            expired = " EXPIRED" if exp < _time.time() else ""
+            exp_s = _time.strftime("%m-%d", _time.gmtime(exp))
+        key = f"jwt|{alg}|{sub}|{role}|{exp_s}"
+        disp = f"JWT {alg} sub={sub[:24]}" + (f" role={role[:16]}" if role else "") + f" exp={exp_s}{expired}"
+        return key, disp
+    return None
+
+
 class Librarian:
     def __init__(self, generate_fn, engagement_dir, interval: int = 10, target: str = ""):
         self._gen = generate_fn
@@ -323,6 +361,36 @@ class Librarian:
                 val = " ".join(str(m.group(0)).split())[:160]
                 if not val or (kind, val) in seen:
                     continue
+                # JWT AWARENESS (2026-10-29): short-lived tokens mint a new
+                # signature per response — dedupe on the token's IDENTITY
+                # (alg+sub+role+exp-day), display the fingerprint, keep the
+                # raw token OUT of the ledger (it lives in the credential
+                # store; the ledger echoed one JWT 23× in a single trail).
+                if kind == "credential":
+                    fp = _jwt_fingerprint(val)
+                    if fp:
+                        _key, disp = fp
+                        # dedupe on the DISPLAY — deterministic per token
+                        # identity (same alg+sub+role+exp-day ⇒ same text);
+                        # `seen` is built from stored values.
+                        if (kind, disp) in seen:
+                            continue
+                        seen.add((kind, disp))
+                        if kind_counts.get(kind, 0) >= _KIND_CAP:
+                            continue
+                        kind_counts[kind] = kind_counts.get(kind, 0) + 1
+                        entries.append(
+                            {
+                                "kind": kind,
+                                "value": disp,
+                                "where": where,
+                                "iter": iteration,
+                                "ts": time.strftime("%H:%M:%S"),
+                                "run": self.run_id,
+                                "target": self._target,
+                            }
+                        )
+                        continue
                 if kind_counts.get(kind, 0) >= _KIND_CAP:
                     continue
                 seen.add((kind, val))
