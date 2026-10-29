@@ -113,3 +113,39 @@ def test_dispatch_route_registered():
     routes_present = "bypass_403"
     out = route_tool(routes_present, {"url": ""}, {})
     assert str(out).startswith("Error:")  # empty URL → clean error string, no raise
+
+
+def test_one_variant_exception_never_kills_the_battery(monkeypatch):
+    """2026-10-29: a raising http_request on ONE variant used to escape and
+    kill the whole battery with 'bypass_403 failed' after 20 good rows."""
+    from suijin.modules.tools.lib import bypass_403 as b
+
+    calls = {"n": 0}
+
+    def flaky(m, u, headers=None, body=""):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("transport blowup")
+        return "Status: 403\nBody:\nforbidden"
+
+    monkeypatch.setattr("suijin.modules.tools.lib.http_tools.http_request", flaky)
+    out = b.bypass_403("https://example.com/secret")
+    assert "ERR" in out and "variant error" in out
+    assert "bypass_403 failed" not in out
+    rows = [ln for ln in out.splitlines() if ln.strip() and ln.strip()[0].isdigit()]
+    assert len(rows) + out.count("ERR") >= 20  # the battery RAN end to end
+
+
+def test_zero_wins_names_untried_avenues(monkeypatch):
+    """Hope management: a held 403 must list what's still concretely
+    doable — not 'move on' while doors remain untested."""
+    from suijin.modules.tools.lib import bypass_403 as b
+
+    monkeypatch.setattr(
+        "suijin.modules.tools.lib.http_tools.http_request",
+        lambda m, u, headers=None, body="": "Status: 403\nBody:\nforbidden",
+    )
+    out = b.bypass_403("https://example.com/secret")
+    assert "NOT PROVEN CLOSED" in out
+    for needle in ("request_auth", "ffuf_fuzz", "chain_suggest"):
+        assert needle in out, needle
