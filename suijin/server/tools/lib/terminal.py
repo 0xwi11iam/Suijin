@@ -68,8 +68,12 @@ def execute_terminal(cmd, timeout=30, cwd=None):
         # used to warn + redirect + confuse the model for 3 iterations.
         # Only bare /tmp/ paths (NOT /var/tmp/ which the sandbox should
         # deny — the jail test depends on that denial).
+        # 2026-10-29 ROOT-CAUSE FIX: the fallback default here used to be
+        # the RETIRED ~/.suijin/workspace path — the harness itself taught
+        # the model that path (54 uses in one trail, every one denied).
+        # The engagement home from the workspace module is canonical now.
         try:
-            _home = os.environ.get("SUIJIN_HOME") or os.path.join(os.path.expanduser("~"), ".suijin", "workspace")
+            _home = os.environ.get("SUIJIN_HOME") or str(_ws().home_dir())
             if "/tmp/" in cmd and _home:
                 import re as _re_tmp
 
@@ -77,6 +81,16 @@ def execute_terminal(cmd, timeout=30, cwd=None):
                 _resolved = _re_tmp.sub(r"(?<!var)/tmp/", f"{_home}/tmp/", cmd)
                 if _resolved != cmd:
                     cmd = _resolved
+        except Exception:
+            pass
+
+        # PATH HEALING (2026-10-29): retired workspace paths rewrite to
+        # the engagement home; redirects-quoted-inside-paths get flagged.
+        _heal_notes: list[str] = []
+        try:
+            from suijin.server.tools.lib.output_normalizer import heal_command
+
+            cmd, _heal_notes = heal_command(cmd, _home if "/tmp/" in cmd or ".suijin" in cmd else str(_ws().home_dir()))
         except Exception:
             pass
 
@@ -140,9 +154,9 @@ def execute_terminal(cmd, timeout=30, cwd=None):
             _tmp_warn = (
                 "\n[sandbox] WARNING: that command touches /tmp, which is SHARED by all "
                 "concurrent engagements on this machine — a file there may be another "
-                "engagement's artifact (cross-target key confusion has happened). Use "
-                "$TMPDIR / your workspace home for scratch, and verify any /tmp-sourced "
-                "secret actually appears on YOUR target before claiming it.\n"
+                "engagement's artifact (cross-target key confusion has happened). Write "
+                "scratch files to $TMPDIR (your engagement tmp/ — it exists) and verify any "
+                "/tmp-sourced secret actually appears on YOUR target before claiming it.\n"
             )
 
         # Build environment with homebrew paths (macOS) on top of the
@@ -209,6 +223,18 @@ def execute_terminal(cmd, timeout=30, cwd=None):
         from suijin.modules.platform.lib.runtime import truncate
 
         out = result.format()
+        # OUTPUT NORMALIZATION (2026-10-29): the model reads RESULTS, not
+        # noise — ffuf usage dumps collapse to a diagnosis, -o json parses
+        # to a table, progress spam strips, giant JSON extracts to a
+        # summary. Field evidence: 4 help dumps + 15/52 truncated steps.
+        try:
+            from suijin.server.tools.lib.output_normalizer import normalize_output
+
+            out = normalize_output(cmd, out)
+        except Exception:  # noqa: BLE001 — normalization never kills a result
+            pass
+        for _note in _heal_notes:
+            out = _note + "\n" + out
         if _tmp_warn:
             out = _tmp_warn + out
         return truncate(out)
