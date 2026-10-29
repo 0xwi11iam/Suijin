@@ -60,6 +60,8 @@ def _variants(url: str) -> list[tuple[str, str, dict, str]]:
     v.append(("GET", url, {"X-Rewrite-URL": stem}, "header X-Rewrite-URL"))
     v.append(("GET", url, {"X-Override-URL": stem}, "header X-Override-URL"))
     v.append(("GET", url, {"X-Forwarded-For": "127.0.0.1"}, "header XFF 127.0.0.1"))
+    v.append(("GET", url, {"X-Real-IP": "127.0.0.1"}, "header X-Real-IP 127.0.0.1"))
+    v.append(("GET", url, {"X-Custom-IP-Authorization": "127.0.0.1"}, "header X-Custom-IP-Authorization 127.0.0.1"))
     v.append(("GET", url, {"X-Forwarded-Host": host, "X-Host": host}, "headers X-Forwarded-Host + X-Host"))
     v.append(("GET", url, {"Referer": f"{scheme}{host}{stem}"}, "header same-origin Referer"))
 
@@ -104,8 +106,17 @@ def bypass_403(url: str) -> str:
         rows: list[str] = []
         wins: list[str] = []
         inconclusive = 0
+        errors = 0
         for method, vurl, headers, desc in variants:
-            res = http_request(method, vurl, headers=headers)
+            # PER-VARIANT FAULT ISOLATION (2026-10-29): one variant's
+            # exception used to escape to the outer handler and kill the
+            # WHOLE battery — 'bypass_403 failed' after 20 good rows.
+            try:
+                res = http_request(method, vurl, headers=headers)
+            except Exception as ve:  # noqa: BLE001 — one variant never sinks the fleet
+                errors += 1
+                rows.append(f"    ERR       {desc} — variant error: {str(ve)[:60]}")
+                continue
             st = _status_of(res)
             n = _len_of(res)
             mark = ""
@@ -141,7 +152,17 @@ def bypass_403(url: str) -> str:
                 "(rate-limited or transport error). Retry later; do NOT record this as enforced."
             )
         else:
-            verdict = "\nVERDICT: 0 bypasses — the 403 held across every variant. Record as enforced and move on."
+            verdict = (
+                "\nVERDICT: 0 bypasses in this battery — the 403 held. THE DOOR IS NOT PROVEN CLOSED:"
+                "\n  - this battery tests PATH/HEADER/METHOD games only. Still untried:"
+                "\n      • authenticated access — request_auth (a 403 with a session is a different test)"
+                "\n      • what's BEHIND the door — ffuf_fuzz the route tree with any token you hold"
+                "\n      • the API schema — chain_suggest('api_openapi'); schemas often authorize differently"
+                "\n      • chain_suggest('bypass_403_chain') for the full door-enumeration template"
+                "\n  - record the battery as enforced if you exhaust these too — not before."
+            )
+        if errors:
+            verdict += f"\n({errors} variant(s) errored mid-battery and were skipped — rerun for full coverage.)"
         if inconclusive and wins:
             verdict += f"\n({inconclusive} variant(s) were inconclusive and are not counted either way.)"
         return "\n".join(header + rows + [verdict])
