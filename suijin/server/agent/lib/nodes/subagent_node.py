@@ -21,6 +21,7 @@ v5.1 rebuild (the subagent was "always a bit cooked"):
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 import uuid
@@ -547,7 +548,12 @@ def _state_path() -> Path:
 
 
 def _persist_state() -> None:
-    """Mirror the registry to outputs/fireteam/registry.json. Never raises."""
+    """Mirror the registry to outputs/fireteam/registry.json. Never raises.
+
+    2026-10-29: drained teams are ARCHIVED (last 10) instead of vanishing
+    — the old flow deleted a finished team and THEN snapshotted, so the
+    operator's registry read {"teams": []} after a run that used lanes.
+    On resume, archived teams load back as history."""
     try:
         import json as _json
 
@@ -558,8 +564,26 @@ def _persist_state() -> None:
         pass
 
 
+_TEAM_ARCHIVE: list[dict] = []  # drained teams kept for the registry mirror
+_ARCHIVE_CAP = 10
+
+
+def _load_archive() -> None:
+    """On process start, pull prior teams out of the registry so a RESUMED
+    engagement keeps its fireteam history (and results) visible."""
+    global _TEAM_ARCHIVE
+    with contextlib.suppress(Exception):
+        import json as _json
+
+        p = _state_path()
+        if p.is_file():
+            data = _json.loads(p.read_text(encoding="utf-8"))
+            prior = [t for t in data.get("teams", []) if not t.get("running")]
+            _TEAM_ARCHIVE = (prior + _TEAM_ARCHIVE)[-_ARCHIVE_CAP:]
+
+
 def _snapshot() -> dict:
-    """Serializable registry snapshot: teams with per-task live status."""
+    """Serializable registry snapshot: live teams + archived history."""
     teams = []
     for tid, t in sorted(_FIRETEAMS.items()):
         running = len(t["futures"])
@@ -582,6 +606,9 @@ def _snapshot() -> dict:
             else:
                 tasks.append({"task": task, "state": "queued", "success": None, "steps": None, "findings": ""})
         teams.append({"team_id": tid, "started": t["started"], "running": running, "tasks": tasks})
+    # archived teams ride along (drained history — the operator reads this
+    # file to see what the lanes actually found)
+    teams.extend(_TEAM_ARCHIVE)
     return {"teams": teams, "updated": datetime.now(timezone.utc).isoformat()}
 
 
@@ -685,11 +712,27 @@ def collect_finished_teams(max_messages: int = 6) -> list[str]:
                 f"FIRETEAM RESULT [{team_id}] {status} ({r.steps} steps)\n"
                 f"Task: {r.task[:200]}\nFindings:\n{r.findings[:2000]}"
             )
+            # MEMORY RETURN (2026-10-29): lane findings enter the engagement
+            # ledger like any tool output — the operator's question 'are the
+            # results returned to the memory?' was no: results lived only
+            # in conversation messages and the registry mirror.
+            with contextlib.suppress(Exception):
+                from suijin.modules.agent.lib import librarian as _lb
+
+                if _lb.active() is not None:
+                    _lb.observe("fireteam", {"target": r.task[:120]}, f"{status}: {r.findings}", iteration=0)
             if len(messages) >= max_messages:
                 _persist_state()
                 return messages
         if not team["futures"] and team_id in _FIRETEAMS:
-            del _FIRETEAMS[team_id]  # fully drained — forget it
+            # ARCHIVE, don't delete (2026-10-29): the drained team kept its
+            # results in the registry mirror; deleting it here is why the
+            # operator's registry.json read {"teams": []} after lane runs.
+            with contextlib.suppress(Exception):
+                archived = [t for t in _snapshot()["teams"] if t.get("team_id") == team_id]
+                _TEAM_ARCHIVE.extend(archived)
+                del _TEAM_ARCHIVE[:-_ARCHIVE_CAP]
+            del _FIRETEAMS[team_id]  # fully drained — forget the LIVE copy
     _persist_state()
     return messages
 
