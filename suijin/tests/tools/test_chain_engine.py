@@ -143,3 +143,25 @@ class TestDispatch:
 
         out = dispatch.route_tool("chain_suggest", {"template": "api_openapi"}, config={})
         assert "CHAIN TEMPLATE" in out
+
+
+class TestCatalogLookup:
+    def test_lookup_finds_attck_by_stage_and_query(self):
+        out = ce.lookup("credential", stage="privilege-escalation")
+        assert "mitre-attack" in out and "T1" in out
+
+    def test_lookup_finds_wstg(self):
+        out = ce.lookup("parameter pollution")
+        assert "WSTG-INJT-04" in out
+
+    def test_curated_templates_rank_first(self):
+        out = ce.lookup("openapi")
+        assert "[curated]" in out and "chain_suggest('api_openapi')" in out
+
+    def test_no_hits_degrades_to_guidance(self):
+        out = ce.lookup("zzzqqqxxx")
+        assert "No catalog hits" in out and "Try broader" in out
+
+    def test_catalog_size_is_the_promised_diversity(self):
+        total = len(ce._catalogs())
+        assert total >= 800, f"catalog shrank: {total}"

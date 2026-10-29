@@ -1,0 +1,29 @@
+{
+ "built_at": "2026-10-29 11:36",
+ "sources": {
+  "attck": {
+   "fetched": "enterprise-attack.json (26690 objects)",
+   "kept": 706,
+   "rejected": 161,
+   "reject_reasons_sample": [
+    "Indicator Removal from Tools: revoked/deprecated",
+    "Malicious Shell Modification: revoked/deprecated",
+    "Bootkit: revoked/deprecated",
+    "Hidden Window: revoked/deprecated",
+    "LC_LOAD_DYLIB Addition: revoked/deprecated"
+   ]
+  },
+  "wstg": {
+   "fetched": "wstg master tarball (149 md files)",
+   "kept": 109,
+   "rejected": 39,
+   "reject_reasons_sample": [
+    "README.md: no WSTG id table row / H1 title",
+    "00-Information_Gathering_Overview.md: no WSTG id table row / H1 title",
+    "WSTG-INFO-09: summary too thin \u2014 stub page",
+    "README.md: no WSTG id table row / H1 title",
+    "WSTG-CONF-03: summary too thin \u2014 stub page"
+   ]
+  }
+ }
+}

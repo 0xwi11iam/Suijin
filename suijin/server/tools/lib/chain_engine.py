@@ -43,6 +43,62 @@ def load_templates() -> list[dict]:
     return []
 
 
+def _catalogs() -> list[dict]:
+    """ATT&CK + WSTG lookup catalogs (public frameworks, cleaned at import
+    — see chain_catalog_manifest.json for provenance and rejects)."""
+    out = []
+    for name in ("attck", "wstg"):
+        p = Path(__file__).resolve().parent / f"chain_catalog_{name}.json"
+        with contextlib.suppress(Exception):
+            data = json.loads(p.read_text(encoding="utf-8"))
+            out.extend(data.get("entries", []))
+    return out
+
+
+def lookup(query: str, stage: str = "", limit: int = 8) -> str:
+    """Search the curated templates + the ATT&CK/WSTG catalogs (815
+    cleaned entries — the depth layer; indicators only fire the curated
+    set, this searches everything)."""
+    q = str(query or "").strip().casefold()
+    if not q:
+        return "chain_lookup(query='jwt|privesc|upload|…', stage='optional filter')"
+    hits: list[tuple[int, dict]] = []
+    # curated templates rank first
+    for t in load_templates():
+        hay = f"{t['id']} {t['name']} {t.get('trigger_hint', '')}".casefold()
+        if q in hay:
+            hits.append(
+                (
+                    100,
+                    {
+                        "id": t["id"],
+                        "name": t["name"],
+                        "stages": ["chain-template"],
+                        "summary": t.get("trigger_hint", ""),
+                        "source": "curated",
+                    },
+                )
+            )
+    for e in _catalogs():
+        if stage and stage.casefold() not in " ".join(e.get("stages", [])).casefold():
+            continue
+        hay = f"{e['id']} {e['name']} {e.get('summary', '')}".casefold()
+        if q in hay:
+            hits.append((10, e))
+    hits.sort(key=lambda h: -h[0])
+    if not hits:
+        return (
+            f"No catalog hits for '{q}'. Try broader terms (injection, privilege, upload, "
+            "session, ssrf) or stage='07-Injection' / 'privilege-escalation'."
+        )
+    lines = [f"chain catalog: {len(hits)} hit(s) for '{q}'" + (f" (stage {stage})" if stage else "")]
+    for _, e in hits[: max(1, min(int(limit or 8), 20))]:
+        src = e.get("source", "?")
+        kind = "TEMPLATE chain_suggest('" + e["id"] + "')" if src == "curated" else e["id"]
+        lines.append(f"- [{src}] {e['name']} ({kind}) — {e.get('summary', '')[:180]}")
+    return "\n".join(lines)
+
+
 def template_ids() -> list[str]:
     return [t.get("id", "?") for t in load_templates()]
 

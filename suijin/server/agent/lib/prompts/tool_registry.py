@@ -559,6 +559,16 @@ TOOL_REGISTRY = {
             "tool results can't evict it. confirm a node and its dependent templates unlock."
         ),
     },
+    "chain_lookup": {
+        "purpose": "Search the full technique catalog (ATT&CK + WSTG, 815 cleaned entries)",
+        "when_to_use": "Deeper than the curated templates: look up a technique class, stage, or platform.",
+        "args_format": '"query": "credential dumping", "stage": "privilege-escalation"',
+        "description": (
+            "**chain_lookup** — curated templates fire on indicators; this searches the full "
+            "815-entry ATT&CK/WSTG depth layer (imported with a cleaning gate, provenance in "
+            "chain_catalog_manifest.json). Curated hits come back with chain_suggest pointers."
+        ),
+    },
     "memory_recall": {
         "purpose": "The engagement memory — every credential, leak, foothold, confirmed exploit and admin surface observed, plus the condensed digest",
         "when_to_use": "Before attacking a surface — check what the engagement already knows about it.",
@@ -640,6 +650,7 @@ _ALL_TOOLS = {
     "tool_inventory",
     "chain_suggest",
     "chain_track",
+    "chain_lookup",
     "memory_recall",
     "http_replay",
     "inject_probe",
