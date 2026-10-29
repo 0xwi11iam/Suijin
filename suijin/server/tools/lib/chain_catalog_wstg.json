@@ -1,0 +1,1314 @@
+{
+"source": "OWASP WSTG (public framework)",
+"fetched_at": "2026-10-29",
+"entries": [
+{
+"id": "WSTG-INFO-01",
+"name": "Conduct Search Engine Reconnaissance for Information Leakage",
+"stages": [
+"01-Information_Gathering"
+],
+"platforms": [
+"web"
+],
+"summary": "In order for search engines to work, computer programs (or `robots`) regularly fetch data (referred to as crawling(https://en.wikipedia.org/wiki/Web_crawler)) from billions of pages on the web.[…] | Objectives: Identify what sensitive design and configuration information of the application, system, or organization is exposed directly (on the organization's site) or indirectly (via third-party services).",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INFO-02",
+"name": "Fingerprint Web Server",
+"stages": [
+"01-Information_Gathering"
+],
+"platforms": [
+"web"
+],
+"summary": "Web server fingerprinting is the task of identifying the type and version of web server that a target is running on.[…] | Objectives: Determine the version and type of a running web server to enable further discovery of any known vulnerabilities.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INFO-03",
+"name": "Review Webserver Metafiles for Information Leakage",
+"stages": [
+"01-Information_Gathering"
+],
+"platforms": [
+"web"
+],
+"summary": "This section describes how to test various metadata files for information leakage of the web application's path(s), or functionality.[…] | Objectives: Identify hidden or obfuscated paths and functionality through the analysis of metadata files. Extract and map other information that could lead to a better understanding of the systems at hand.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INFO-04",
+"name": "Attack Surface Identification",
+"stages": [
+"01-Information_Gathering"
+],
+"platforms": [
+"web"
+],
+"summary": "Identifying the attack surface of a web application involves discovering all applications, domains, virtual hosts, and externally exposed services associated with the target infrastructure.[…] | Objectives: Enumerate all web applications within scope. Identify DNS names, domains, and virtual hosts associated with the target.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INFO-05",
+"name": "Review Web Page Content for Information Leakage",
+"stages": [
+"01-Information_Gathering"
+],
+"platforms": [
+"web"
+],
+"summary": "It is very common, and even recommended, for programmers to include detailed comments and metadata on their source code.[…] | Objectives: Review web page comments, metadata, and redirect bodies to find any information leakage. Gather JavaScript files and review the JS code to better understand the application and to find any information leakage.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INFO-06",
+"name": "Identify Application Entry Points",
+"stages": [
+"01-Information_Gathering"
+],
+"platforms": [
+"web"
+],
+"summary": "Enumerating the application and its attack surface is a key precursor before any thorough testing can be undertaken, as it allows the tester to identify likely areas of weakness.[…] | Objectives: Identify possible entry and injection points through request and response analysis.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INFO-07",
+"name": "Map Execution Paths Through Application",
+"stages": [
+"01-Information_Gathering"
+],
+"platforms": [
+"web"
+],
+"summary": "Before commencing security testing, understanding the structure of the application is paramount. Without a thorough understanding of the application's layout, a comprehensive test is unlikely. | Objectives: Map the target application and understand the principal workflows.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INFO-08",
+"name": "Fingerprint Web Application Framework",
+"stages": [
+"01-Information_Gathering"
+],
+"platforms": [
+"web"
+],
+"summary": "It wouldn't be a stretch to say that almost every conceivable idea for a web application has already been put into development.[…] | Objectives: Fingerprint the components used by the web applications.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INFO-10",
+"name": "Map Application Architecture",
+"stages": [
+"01-Information_Gathering"
+],
+"platforms": [
+"web"
+],
+"summary": "In order to effectively test an application, and to be able to provide meaningful recommendations on how to address any of the issues identified, it is important to understand what one is actually testing.[…] | Objectives: Understand the architecture of the application and the technologies in use.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CONF-01",
+"name": "Network Infrastructure Configuration",
+"stages": [
+"02-Configuration_and_Deployment_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "A web application's infrastructure - web/application servers, databases, authentication servers, load balancers/CDNs, and (in modern deployments) cloud network controls and container/orchestration layers - is only as secure as its weakest, most poorly configur[…] | Objectives: Review the applications' configurations set across the network and validate that they are not vulnerable.[…]",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CONF-02",
+"name": "Application Platform Configuration",
+"stages": [
+"02-Configuration_and_Deployment_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "Proper configuration of the single elements that make up an application architecture is important in order to prevent mistakes that might compromise the security of the whole architecture.[…] | Objectives: Ensure that default, sample, and known files have been removed from the deployed platform, container image, or serverless package.[…]",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CONF-04",
+"name": "Review Old Backup and Unreferenced Files for Sensitive Information",
+"stages": [
+"02-Configuration_and_Deployment_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "Web servers commonly accumulate unreferenced or forgotten files: renamed old versions, editor/manual backups (`file~`, `file.old`, `.bak`), archives, and file-system \"snapshots\". Because these often keep a different extension or name than the original (e.g.[…] | Objectives: Find and analyze old, backup, and unreferenced files - including files exposed only through their extension, and objects left in cloud storage - that might contain sensitive information.[…]",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CONF-05",
+"name": "Enumerate Infrastructure and Application Admin Interfaces",
+"stages": [
+"02-Configuration_and_Deployment_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "Administrator interfaces may be present in the application or on the application server to allow certain users to perform privileged activities on the site.[…] | Objectives: Identify hidden administrator interfaces and functionality, including cloud, container-orchestration, API-management, and CI/CD management consoles.[…]",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CONF-06",
+"name": "HTTP Methods",
+"stages": [
+"02-Configuration_and_Deployment_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "HTTP offers a number of methods (or verbs) that can be used to perform actions on the web server.[…] | Objectives: Enumerate supported HTTP methods. Test for access control bypass.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CONF-07",
+"name": "HTTP Strict Transport Security",
+"stages": [
+"02-Configuration_and_Deployment_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "The HTTP Strict Transport Security (HSTS) feature enables a web server to inform the user's browser, via a special response header, that it should never establish an unencrypted HTTP connection to the specified domain servers.[…] | Objectives: Review the HSTS header, its directives, and their values for consistency with current best practice. Confirm the site is protected against the first-request trust gap, either via preload or an otherwise hardened HTTP-to-HTTPS path.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CONF-09",
+"name": "File Permissions",
+"stages": [
+"02-Configuration_and_Deployment_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "When a resource is given a permissions setting that provides access to a wider range of actors than required, it could lead to the exposure of sensitive information, or the modification of that resource by unintended parties.[…] | Objectives: Review and identify any rogue file permissions on the host filesystem, in container images/filesystems, and on cloud storage objects. Assess whether Kubernetes volume mounts and `securityContext` settings enforce least-privilege access to files and secrets.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CONF-10",
+"name": "Subdomain Takeover",
+"stages": [
+"02-Configuration_and_Deployment_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "A successful exploitation of this kind of vulnerability allows an adversary to claim and take control of the victim's subdomain. This attack relies on the following: 1.[…] | Objectives: Enumerate all possible domains (previous and current), including wildcard-covered names. Identify any forgotten or misconfigured domains, and any dangling-service signature not covered by a known response fingerprint.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CONF-11",
+"name": "Cloud Storage",
+"stages": [
+"02-Configuration_and_Deployment_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "Cloud storage services (AWS S3, Azure Blob Storage, Google Cloud Storage, and equivalents) allow web applications to store and access objects without running their own file servers.[…] | Objectives: Assess that the access control configuration for the storage services (bucket/container-level public access, and object/principal-level ACLs or IAM policies) is properly in place.[…]",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CONF-12",
+"name": "Content Security Policy",
+"stages": [
+"02-Configuration_and_Deployment_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "Content Security Policy (CSP) is a declarative allow-list policy enforced through `Content-Security-Policy` response header or equivalent `<meta>` element.[…] | Objectives: Review the Content-Security-Policy header or meta element to identify misconfigurations.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CONF-13",
+"name": "Path Confusion",
+"stages": [
+"02-Configuration_and_Deployment_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "Path Confusion occurs when different components in the request path (routers, proxies, caches, WAFs, the application itself) disagree on what a given URL path identifies, due to path normalization, trailing slashes, case sensitivity, or encoding differences.[…] | Objectives: Make sure application paths are configured and normalized consistently across all components (application, proxy, cache, CDN, WAF) that make decisions based on the path.[…]",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CONF-14",
+"name": "Other HTTP Security Header Misconfigurations",
+"stages": [
+"02-Configuration_and_Deployment_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "Security headers play a vital role in protecting web applications from a wide range of attacks, including Cross-Site Scripting (XSS), Clickjacking, and data injection attacks.[…] | Objectives: Identify improperly configured security headers. Assess the impact of misconfigured security headers.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CONF-15",
+"name": "Feature Flag Security Bypass",
+"stages": [
+"02-Configuration_and_Deployment_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "Feature flags are commonly used to control application functionality and enable progressive delivery. They allow features to be enabled, disabled, or gradually rolled out without a full application deployment.[…] | Objectives: Identify feature flags and kill-switches that control security-relevant functionality.[…]",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-IDNT-01",
+"name": "Role Definitions",
+"stages": [
+"03-Identity_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "Applications have several types of functionalities and services, and those require access permissions based on the needs of the user. That user could be: - An administrator, where they manage the application functionalities.[…] | Objectives: Identify and document roles used by the application. Attempt to switch, change, or access another role.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-IDNT-02",
+"name": "User Registration Process",
+"stages": [
+"03-Identity_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "Some websites offer a user registration process that automates (or semi-automates) the provisioning of system access to users.[…] | Objectives: Verify that the identity requirements for user registration are aligned with business and security requirements. Validate the registration process.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-IDNT-03",
+"name": "Account Provisioning Process",
+"stages": [
+"03-Identity_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "The provisioning of accounts presents an opportunity for an attacker to create a valid account without application of the proper identification and authorization process. | Objectives: Verify which accounts may provision other accounts and of what type.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-IDNT-04",
+"name": "Account Enumeration and Guessable User Account",
+"stages": [
+"03-Identity_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "The scope of this test is to verify if it is possible to collect a set of valid usernames by interacting with the authentication mechanism of the application.[…] | Objectives: Review processes that pertain to user identification (*e.g.* registration, login, etc.). Enumerate users where possible through response analysis.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-ATHN-02",
+"name": "Default Credentials",
+"stages": [
+"04-Authentication"
+],
+"platforms": [
+"web"
+],
+"summary": "Many web applications and hardware devices have default passwords for the built-in administrative account. Although in some cases these can be randomly generated, they are often static, meaning that they can be easily guessed or obtained by an attacker.[…] | Objectives: Determine whether the application has any user accounts with default passwords. Review whether new user accounts are created with weak or predictable passwords.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-ATHN-03",
+"name": "Weak Lock Out Mechanism",
+"stages": [
+"04-Authentication"
+],
+"platforms": [
+"web"
+],
+"summary": "Account lockout mechanisms are used to mitigate brute force attacks. Some of the attacks that can be defeated by using lockout mechanism: - Password guessing or brute-force attacks. - Security question guessing.[…] | Objectives: Evaluate the account lockout mechanism's ability to mitigate brute force password guessing. Evaluate the unlock mechanism's resistance to unauthorized account unlocking.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-ATHN-04",
+"name": "Bypassing Authentication Schema",
+"stages": [
+"04-Authentication"
+],
+"platforms": [
+"web"
+],
+"summary": "In computer security, authentication is the process of attempting to verify the digital identity of the sender of a communication. A common example of such a process is the log on process.[…] | Objectives: Ensure that authentication is applied across all services that require it.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-ATHN-05",
+"name": "Vulnerable Remember Password",
+"stages": [
+"04-Authentication"
+],
+"platforms": [
+"web"
+],
+"summary": "Credentials are the most widely used authentication technology. Due to such a wide usage of username-password pairs, users are no longer able to properly handle their credentials across the multitude of used applications.[…] | Objectives: Validate that the generated session is managed securely and do not put the user's credentials in danger.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-ATHN-06",
+"name": "Browser Cache Weaknesses",
+"stages": [
+"04-Authentication"
+],
+"platforms": [
+"web"
+],
+"summary": "In this phase the tester checks that the application correctly instructs the browser to not retain sensitive data. Browsers can store information for purposes of caching and history.[…] | Objectives: Review if the application stores sensitive information on the client-side. Review if access can occur without authorization.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-ATHN-07",
+"name": "Weak Authentication Methods",
+"stages": [
+"04-Authentication"
+],
+"platforms": [
+"web"
+],
+"summary": "The most prevalent and most easily administered authentication mechanism is a static password. The password represents the keys to the kingdom, but is often subverted by users in the name of usability.[…] | Objectives: Determine the resistance of the application against brute force password guessing using available password dictionaries by evaluating the length, complexity, reuse, and aging requirements of passwords.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-ATHN-08",
+"name": "Weak Security Question Answer",
+"stages": [
+"04-Authentication"
+],
+"platforms": [
+"web"
+],
+"summary": "Often called \"secret\" questions and answers, security questions and answers are often used to recover forgotten passwords (see weak password change or reset functionalities(09-Weak_Password_Change_or_Reset_Functionalities.md), or as extra security on top of th[…] | Objectives: Determine the complexity and how straight-forward the questions are. Assess possible user answers and brute force capabilities.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-ATHN-09",
+"name": "Weak Password Change or Reset Functionalities",
+"stages": [
+"04-Authentication"
+],
+"platforms": [
+"web"
+],
+"summary": "For any application that requires the user to authenticate with a password, there must be a mechanism by which the user can regain access to their account if they forget their password.[…] | Objectives: Determine whether the password change and reset functionality allows accounts to be compromised.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-ATHN-10",
+"name": "Weaker Authentication in Alternative Channel",
+"stages": [
+"04-Authentication"
+],
+"platforms": [
+"web"
+],
+"summary": "Even if the primary authentication mechanisms do not include any vulnerabilities, it may be that vulnerabilities exist in alternative legitimate authentication user channels for the same user accounts.[…] | Objectives: Identify alternative authentication channels. Assess the security measures used and if any bypasses exists on the alternative channels.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-ATHN-11",
+"name": "Multi-Factor Authentication (MFA)",
+"stages": [
+"04-Authentication"
+],
+"platforms": [
+"web"
+],
+"summary": "Many applications implement Multi-Factor Authentication (MFA) as an additional layer of security to protect the login process.[…] | Objectives: Identify the type of MFA used by the application. Determine whether the MFA implementation is robust and secure.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-ATHZ-01",
+"name": "Directory Traversal File Include",
+"stages": [
+"05-Authorization"
+],
+"platforms": [
+"web"
+],
+"summary": "Many web applications use and manage files as part of their daily operation. Using input validation methods that have not been well designed or deployed, an aggressor could exploit the system in order to read or write files that are not intended to be accessib[…] | Objectives: Identify injection points that pertain to path traversal. Assess bypassing techniques and identify the extent of path traversal.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-ATHZ-02",
+"name": "Bypassing Authorization Schema",
+"stages": [
+"05-Authorization"
+],
+"platforms": [
+"web"
+],
+"summary": "This test case focuses on identifying authorization weaknesses where an authenticated user is able to access resources or perform actions beyond their assigned permissions, including horizontal and vertical privilege escalation.[…] | Objectives: Assess if unauthenticated, horizontal, or vertical access is possible.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-ATHZ-03",
+"name": "Privilege Escalation",
+"stages": [
+"05-Authorization"
+],
+"platforms": [
+"web"
+],
+"summary": "This section describes the issue of escalating privileges from one stage to another.[…] | Objectives: Identify injection points related to privilege manipulation. Fuzz or otherwise attempt to bypass security measures.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-ATHZ-04",
+"name": "Insecure Direct Object References",
+"stages": [
+"05-Authorization"
+],
+"platforms": [
+"web"
+],
+"summary": "Insecure Direct Object References (IDOR) occur when an application provides direct access to objects based on user-supplied input.[…] | Objectives: Identify points where object references may occur. Assess the access control measures and if they're vulnerable to IDOR.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-ATHZ-05",
+"name": "OAuth Weaknesses",
+"stages": [
+"05-Authorization"
+],
+"platforms": [
+"web"
+],
+"summary": "OAuth2.0(https://oauth.net/2/) (hereinafter referred to as OAuth) is an authorization framework that allows a client to access resources on the behalf of its user.[…] | Objectives: Determine if OAuth2 implementation is vulnerable or using a deprecated or custom implementation.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-SESS-01",
+"name": "Session Management Schema",
+"stages": [
+"06-Session_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "One of the core components of any web-based application is the mechanism by which it controls and maintains the state for a user interacting with it.[…] | Objectives: Gather session tokens, for the same user and for different users where possible. Analyze and ensure that enough randomness exists to stop session forging attacks.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-SESS-02",
+"name": "Cookies Attributes",
+"stages": [
+"06-Session_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "Web Cookies (herein referred to as cookies) are often a key attack vector for malicious users (typically targeting other users) and the application should always take due diligence to protect cookies.[…] | Objectives: Ensure that the proper security configuration is set for cookies.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-SESS-03",
+"name": "Session Fixation",
+"stages": [
+"06-Session_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "Session fixation is enabled by the insecure practice of preserving the same value of the session cookies before and after authentication.[…] | Objectives: Analyze the authentication mechanism and its flow. Force cookies and assess the impact.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-SESS-04",
+"name": "Exposed Session Variables",
+"stages": [
+"06-Session_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "The Session Tokens (Cookie, SessionID, Hidden Field), if exposed, will usually enable an attacker to impersonate a victim and access the application illegitimately.[…] | Objectives: Ensure that proper encryption is implemented. Review the caching configuration.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-SESS-05",
+"name": "Cross Site Request Forgery",
+"stages": [
+"06-Session_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "Cross-Site Request Forgery (CSRF(https://owasp.org/www-community/attacks/csrf)) is an attack that forces an end user to execute unintended actions on a web application in which they are currently authenticated.[…] | Objectives: Determine whether it is possible to initiate requests on a user's behalf that are not initiated by the user.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-SESS-06",
+"name": "Logout Functionality",
+"stages": [
+"06-Session_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "Session termination is an important part of the session lifecycle. Reducing to a minimum the lifetime of the session tokens decreases the likelihood of a successful session hijacking attack.[…] | Objectives: Assess the logout UI. Analyze the session timeout and if the session is properly killed after logout.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-SESS-07",
+"name": "Session Timeout",
+"stages": [
+"06-Session_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "In this phase testers check that the application automatically logs out a user when that user has been idle for a certain amount of time, ensuring that it is not possible to \"reuse\" the same session and that no sensitive data remains stored in the browser cach[…] | Objectives: Validate that a hard session timeout exists.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-SESS-08",
+"name": "Session Puzzling",
+"stages": [
+"06-Session_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "Session Variable Overloading (also known as Session Puzzling) is an application level vulnerability which can enable an attacker to perform a variety of malicious actions, including but not limited to: - Bypass efficient authentication enforcement mechanisms,[…] | Objectives: Identify all session variables. Break the logical flow of session generation.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-SESS-09",
+"name": "Session Hijacking",
+"stages": [
+"06-Session_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "An attacker who gets access to user session cookies can impersonate them by presenting such cookies. This attack is known as session hijacking.[…] | Objectives: Identify vulnerable session cookies. Hijack vulnerable cookies and assess the risk level.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-SESS-10",
+"name": "JSON Web Tokens",
+"stages": [
+"06-Session_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "JSON Web Tokens (JWTs) are cryptographically signed JSON tokens, intended to share claims between systems. They are frequently used as authentication or session tokens, particularly on REST APIs.[…] | Objectives: Determine whether the JWTs expose sensitive information. Determine whether the JWTs can be tampered with or modified.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-SESS-11",
+"name": "Concurrent Sessions",
+"stages": [
+"06-Session_Management"
+],
+"platforms": [
+"web"
+],
+"summary": "Concurrent sessions are a common aspect of web applications that enable multiple simultaneous user interactions. This test case aims to evaluate the application's ability to handle multiple active sessions for a single user.[…] | Objectives: Evaluate the application's session management by assessing the handling of multiple active sessions for a single user account.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-01",
+"name": "Reflected Cross Site Scripting",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "Reflected Cross-site Scripting (XSS)(https://owasp.org/www-community/attacks/xss/) occurs when an attacker injects browser executable code within a single HTTP response.[…] | Objectives: Identify variables that are reflected in responses. Assess the input they accept and the encoding that gets applied on return (if any).",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-02",
+"name": "Stored Cross Site Scripting",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "Stored Cross-site Scripting (XSS)(https://owasp.org/www-community/attacks/xss/) is the most dangerous type of Cross Site Scripting. Web applications that allow users to store data are potentially exposed to this type of attack.[…] | Objectives: Identify stored input that is reflected on the client-side. Assess the input they accept and the encoding that gets applied on return (if any).",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-04",
+"name": "HTTP Parameter Pollution",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "HTTP Parameter Pollution tests the applications response to receiving multiple HTTP parameters with the same name; for example, if the parameter `username` is included in the GET or POST parameters twice.[…] | Objectives: Identify the back end and the parsing method used. Assess injection points and try bypassing input filters using HPP.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-05",
+"name": "SQL Injection",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "SQL injection testing checks if it is possible to inject data into an application/site so that it executes a user-controlled SQL query in the database.[…] | Objectives: Identify SQL injection points. Assess the severity of the injection and the level of access that can be achieved through it.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-06",
+"name": "LDAP Injection",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "The Lightweight Directory Access Protocol (LDAP) is used to store information about users, hosts, and many other objects.[…] | Objectives: Identify LDAP injection points. Assess the severity of the injection.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-07",
+"name": "XML Injection",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "XML Injection testing is when a tester tries to inject or manipulate an XML document within an application. If the XML parser fails to contextually validate data or is insecurely configured, the test will yield a positive result.[…] | Objectives: Identify XML injection points. Assess the types of exploits that can be attained and their severities.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-08",
+"name": "SSI Injection",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "Web servers usually give developers the ability to add small pieces of dynamic code inside static HTML pages, without having to deal with full-fledged server-side or client-side languages.[…] | Objectives: Identify SSI injection points. Assess the severity of the injection.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-09",
+"name": "XPath Injection",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "XPath is a language that has been designed and developed primarily to address parts of an XML document.[…] | Objectives: Identify XPATH injection points.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-10",
+"name": "IMAP SMTP Injection",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "This threat affects all applications that communicate with mail servers (IMAP/SMTP), generally webmail applications.[…] | Objectives: Identify IMAP/SMTP injection points. Understand the data flow and deployment structure of the system.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-11",
+"name": "Code Injection",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "This section describes how a tester can check if it is possible to enter code as input on a web page and have it executed by the web server.[…] | Objectives: Identify injection points where you can inject code into the application. Assess the injection severity.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-12",
+"name": "Command Injection",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "This article describes how to test an application for OS command injection. The tester will try to inject an OS command through an HTTP request to the application.[…] | Objectives: Identify and assess command injection points. Bypass special characters and OS commands filter.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-13",
+"name": "Format String Injection",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "A format string is a null-terminated character sequence that also contains conversion specifiers interpreted or converted at runtime.[…] | Objectives: Assess whether injecting format string conversion specifiers into user-controlled fields causes undesired behavior from the application.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-14",
+"name": "Incubated Vulnerability",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "Also often referred to as persistent attacks, incubated testing is a complex testing method that needs more than one data validation vulnerability to work.[…] | Objectives: Identify injections that are stored and require a recall step to the stored injection. Understand how a recall step could occur.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-15",
+"name": "HTTP Response Splitting",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "HTTP Response Splitting is a vulnerability that occurs when an application incorporates unsanitized user input into HTTP response headers, allowing an attacker to inject Carriage Return (CR) and Line Feed (LF) characters.[…] | Objectives: Identify user-controlled input that is reflected into HTTP response headers. Assess whether CR (`\\r`) and LF (`\\n`) characters can be injected into response headers.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-16",
+"name": "HTTP Request Smuggling",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "HTTP Request Smuggling is a class of vulnerabilities caused by inconsistencies in how HTTP requests are parsed by frontend and backend components.[…] | Objectives: Identify request boundary inconsistencies between frontend and backend components Detect classic CL/TE desynchronization vulnerabilities",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-17",
+"name": "Host Header Injection",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "A web server commonly hosts several web applications on the same IP address, referring to each application via the virtual host.[…] | Objectives: Assess if the Host header is being parsed dynamically in the application. Bypass security controls that rely on the header.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-18",
+"name": "Server-side Template Injection",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "Web applications commonly use server-side templating technologies (Jinja2, Twig, FreeMaker, etc.) to generate dynamic HTML responses.[…] | Objectives: Detect template injection vulnerability points. Identify the templating engine.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-19",
+"name": "Server-Side Request Forgery",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "Web applications often interact with internal or external resources. While you may expect that only the intended resource will be handling the data you send, improperly handled data may create a situation where injection attacks are possible.[…] | Objectives: Identify SSRF injection points. Test if the injection points are exploitable.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-20",
+"name": "Mass Assignment",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "Modern web applications are very often based on frameworks. Many of these web application frameworks allow automatic binding of user input (in the form of HTTP request parameters) to internal objects. This is often called autobinding.[…] | Objectives: Identify requests that modify objects Assess if it is possible to modify fields never intended to be modified from outside",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-21",
+"name": "CSV Injection",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "CSV Injection (also known as Formula Injection) occurs when an application embeds untrusted, user-controlled input into CSV (or other spreadsheet-compatible) exports and the resulting file is opened in a spreadsheet program (e.g., Microsoft Excel, LibreOffice[…] | Objectives: Identify CSV/spreadsheet export features that include untrusted input. Verify whether attacker-controlled values are interpreted as formulas when the export is opened in common spreadsheet applications.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-22",
+"name": "Prototype Pollution",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "JavaScript is a prototype-based language. Almost every object inherits from `Object.prototype`, and any property that is not found directly on an object is looked up through the prototype chain.[…] | Objectives: Identify functions and libraries that recursively merge, clone, or assign user-controlled properties. Determine whether user input can reach and modify `Object.prototype`.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-INJT-23",
+"name": "Insecure Deserialization",
+"stages": [
+"07-Injection"
+],
+"platforms": [
+"web"
+],
+"summary": "Data serialization is the process of converting an object into a format that can be stored (for example, in a file or database) or transmitted (for example, over a network) and reconstructed later.[…] | Objectives: Identify entry points where the application accepts serialized objects from untrusted Determine the serialization format used by the application.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-ERRH-01",
+"name": "Improper Error Handling",
+"stages": [
+"08-Error_Handling"
+],
+"platforms": [
+"web"
+],
+"summary": "All types of applications (web apps, web servers, databases, etc.) will generate errors for various reasons.[…] | Objectives: Identify existing error output. Analyze the different output returned.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CRYP-01",
+"name": "Weak Transport Layer Security",
+"stages": [
+"09-Weak_Cryptography"
+],
+"platforms": [
+"web"
+],
+"summary": "When information is sent between the client and the server, it must be encrypted and protected in order to prevent an attacker from being able to read or modify it.[…] | Objectives: Validate the service configuration. Review the digital certificate's cryptographic strength and validity.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CRYP-02",
+"name": "Padding Oracle",
+"stages": [
+"09-Weak_Cryptography"
+],
+"platforms": [
+"web"
+],
+"summary": "A padding oracle is a function of an application which decrypts encrypted data provided by the client, e.g. internal session state stored on the client, and leaks the state of the validity of the padding after decryption.[…] | Objectives: Identify encrypted messages that rely on padding. Attempt to break the padding of the encrypted messages and analyze the returned error messages for further analysis.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CRYP-03",
+"name": "Sensitive Information Sent via Unencrypted Channels",
+"stages": [
+"09-Weak_Cryptography"
+],
+"platforms": [
+"web"
+],
+"summary": "Sensitive data must be protected when it is transmitted through the network. If data is transmitted over HTTPS or encrypted in another way the protection mechanism must not have limitations or vulnerabilities, as explained in the broader article Weak Transport[…] | Objectives: Identify sensitive information transmitted through the various channels. Assess the privacy and security of the channels used.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CRYP-04",
+"name": "Weak Cryptographic Primitives",
+"stages": [
+"09-Weak_Cryptography"
+],
+"platforms": [
+"web"
+],
+"summary": "Incorrect uses of encryption algorithms may result in sensitive data exposure, key leakage, broken authentication, insecure session, and spoofing attacks.[…] | Objectives: Provide a guideline for the identification weak encryption or hashing uses and implementations.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-BUSL-01",
+"name": "Business Logic Data Validation",
+"stages": [
+"10-Business_Logic"
+],
+"platforms": [
+"web"
+],
+"summary": "The application must ensure that only logically valid data can be entered at the frontend as well as directly to the server-side of an application or system.[…] | Objectives: Identify data injection points. Validate that all checks are occurring on the backend and can't be bypassed.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-BUSL-02",
+"name": "Ability to Forge Requests",
+"stages": [
+"10-Business_Logic"
+],
+"platforms": [
+"web"
+],
+"summary": "Forging requests is a method that attackers use to circumvent the frontend GUI application to directly submit information for backend processing.[…] | Objectives: Review the project documentation looking for guessable, predictable, or hidden functionality of fields. Insert logically valid data in order to bypass normal business logic workflow.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-BUSL-03",
+"name": "Integrity Checks",
+"stages": [
+"10-Business_Logic"
+],
+"platforms": [
+"web"
+],
+"summary": "Many applications are designed to display different fields depending on the user or situation by leaving some inputs hidden. However, in many cases it is possible to submit hidden field values to the server using a proxy.[…] | Objectives: Review the project documentation for components of the system that move, store, or handle data. Determine what type of data is logically acceptable by the component and what types the system should guard against.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-BUSL-04",
+"name": "Process Timing",
+"stages": [
+"10-Business_Logic"
+],
+"platforms": [
+"web"
+],
+"summary": "It is possible that attackers can gather information on an application by monitoring the time it takes to complete a task or give a response.[…] | Objectives: Review the project documentation for system functionality that may be impacted by time. Develop and execute misuse cases.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-BUSL-05",
+"name": "Number of Times a Function Can Be Used Limits",
+"stages": [
+"10-Business_Logic"
+],
+"platforms": [
+"web"
+],
+"summary": "Many of the problems that applications are solving require limits to the number of times a function can be used or action can be executed.[…] | Objectives: Identify functions that must set limits to the times they can be called. Assess if there is a logical limit set on the functions and if it is properly validated.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-BUSL-06",
+"name": "Circumvention of Work Flows",
+"stages": [
+"10-Business_Logic"
+],
+"platforms": [
+"web"
+],
+"summary": "Workflow vulnerabilities involve any type of vulnerability that allows the attacker to misuse an application/system in a way that will allow them to circumvent (not follow) the designed/intended workflow.[…] | Objectives: Review the project documentation for methods to skip or go through steps in the application process in a different order from the intended business logic flow. Develop a misuse case and try to circumvent every logic flow identified.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-BUSL-07",
+"name": "Defenses Against Application Misuse",
+"stages": [
+"10-Business_Logic"
+],
+"platforms": [
+"web"
+],
+"summary": "The misuse and invalid use of valid functionality can identify attacks attempting to enumerate the web application, identify weaknesses, and exploit vulnerabilities.[…] | Objectives: Generate notes from all tests conducted against the system. Review which tests had a different functionality based on aggressive input.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-BUSL-08",
+"name": "Upload of Unexpected File Types",
+"stages": [
+"10-Business_Logic"
+],
+"platforms": [
+"web"
+],
+"summary": "Many applications' business processes allow for the upload and manipulation of data that is submitted via files. But the business process must check the files and only allow certain \"approved\" file types.[…] | Objectives: Review the project documentation for file types that are rejected by the system. Verify that the unwelcomed file types are rejected and handled safely.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-BUSL-09",
+"name": "Upload of Malicious Files",
+"stages": [
+"10-Business_Logic"
+],
+"platforms": [
+"web"
+],
+"summary": "Many application’s business processes allow users to upload data to them. Although input validation is widely understood for text-based input fields, it is more complicated to implement when files are accepted.[…] | Objectives: Identify the file upload functionality. Review the project documentation to identify what file types are considered acceptable, and what types would be considered dangerous or malicious.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-BUSL-10",
+"name": "Payment Functionality",
+"stages": [
+"10-Business_Logic"
+],
+"platforms": [
+"web"
+],
+"summary": "Many applications implement payment functionality, including e-commerce sites, subscriptions, charities, donation sites and currency exchanges.[…] | Objectives: Determine whether the business logic for the e-commerce functionality is robust. Understand how the payment functionality works.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CLNT-01",
+"name": "DOM-Based Cross Site Scripting",
+"stages": [
+"11-Client-side"
+],
+"platforms": [
+"web"
+],
+"summary": "DOM-based cross-site scripting(https://owasp.org/www-community/attacks/DOM_Based_XSS) is the de-facto name for XSS(https://owasp.org/www-community/attacks/xss/) bugs that are the result of active browser-side content on a page, typically JavaScript, obtaining[…] | Objectives: Identify DOM sinks. Build payloads that pertain to every sink type.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CLNT-02",
+"name": "JavaScript Execution",
+"stages": [
+"11-Client-side"
+],
+"platforms": [
+"web"
+],
+"summary": "A JavaScript injection vulnerability is a subtype of cross site scripting (XSS) that involves the ability to inject arbitrary JavaScript code that is executed by the application inside the victim's browser.[…] | Objectives: Identify sinks and possible JavaScript injection points.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CLNT-03",
+"name": "HTML Injection",
+"stages": [
+"11-Client-side"
+],
+"platforms": [
+"web"
+],
+"summary": "HTML injection is a type of injection vulnerability that occurs when a user is able to control an input point and is able to inject arbitrary HTML code into a vulnerable web page.[…] | Objectives: Identify HTML injection points and assess the severity of the injected content.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CLNT-04",
+"name": "Client-side URL Redirect",
+"stages": [
+"11-Client-side"
+],
+"platforms": [
+"web"
+],
+"summary": "This section describes how to check for client-side URL redirection, also known as open redirection.[…] | Objectives: Identify injection points that handle URLs or paths. Assess the locations that the system could redirect to.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CLNT-05",
+"name": "CSS Injection",
+"stages": [
+"11-Client-side"
+],
+"platforms": [
+"web"
+],
+"summary": "A CSS Injection vulnerability involves the ability to inject arbitrary CSS code in the context of a trusted site which is rendered inside a victim's browser. The impact of this type of vulnerability varies based on the supplied CSS payload.[…] | Objectives: Identify CSS injection points. Assess the impact of the injection.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CLNT-06",
+"name": "Client-side Resource Manipulation",
+"stages": [
+"11-Client-side"
+],
+"platforms": [
+"web"
+],
+"summary": "A client-side resource manipulation vulnerability is an input validation flaw. It occurs when an application accepts user-controlled input that specifies the path of a resource such as the source of an iframe, JavaScript, applet, or the handler of an XMLHttpRe[…] | Objectives: Identify sinks with weak input validation. Assess the impact of the resource manipulation.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CLNT-07",
+"name": "Cross Origin Resource Sharing",
+"stages": [
+"11-Client-side"
+],
+"platforms": [
+"web"
+],
+"summary": "Cross Origin Resource Sharing(https://en.wikipedia.org/wiki/Cross-origin_resource_sharing) (CORS) is a mechanism that enables a web browser to perform cross-domain requests using the XMLHttpRequest (XHR) Level 2 (L2) API in a controlled manner.[…] | Objectives: Identify endpoints that implement CORS. Ensure that the CORS configuration is secure or harmless.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CLNT-09",
+"name": "Clickjacking",
+"stages": [
+"11-Client-side"
+],
+"platforms": [
+"web"
+],
+"summary": "Clickjacking, a subset of UI redressing, is a malicious technique whereby a web user is deceived into interacting (in most cases by clicking) with something other than what the user believes they are interacting with.[…] | Objectives: Assess application vulnerability to clickjacking attacks.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CLNT-10",
+"name": "WebSockets",
+"stages": [
+"11-Client-side"
+],
+"platforms": [
+"web"
+],
+"summary": "Traditionally, the HTTP protocol only allows one request/response per TCP connection.[…] | Objectives: Identify the usage of WebSockets. Assess its implementation by using the same tests on normal HTTP channels.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CLNT-11",
+"name": "Web Messaging",
+"stages": [
+"11-Client-side"
+],
+"platforms": [
+"web"
+],
+"summary": "Web Messaging (also known as Cross Document Messaging(https://html.spec.whatwg.org/multipage/web-messaging.html#web-messaging)) allows applications running on different domains to communicate in a secure manner.[…] | Objectives: Assess the security of the message's origin. Validate that it's using safe methods and validating its input.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CLNT-12",
+"name": "Browser Storage",
+"stages": [
+"11-Client-side"
+],
+"platforms": [
+"web"
+],
+"summary": "Browsers provide the following client-side storage mechanisms for developers to store and retrieve data: - LocalStorage - SessionStorage - IndexedDB - Cookies These storage mechanisms can be viewed and edited using the browser's developer tools, such as Google[…] | Objectives: Determine whether the site is storing sensitive data in client-side storage. The code handling of the storage objects should be examined for possibilities of injection attacks, such as utilizing unvalidated input or vulnerable libraries.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CLNT-13",
+"name": "Cross Site Script Inclusion",
+"stages": [
+"11-Client-side"
+],
+"platforms": [
+"web"
+],
+"summary": "Cross Site Script Inclusion (XSSI) vulnerability allows sensitive data leakage across-origin or cross-domain boundaries.[…] | Objectives: Locate sensitive data across the system. Assess the leakage of sensitive data through various techniques.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CLNT-14",
+"name": "Reverse Tabnabbing",
+"stages": [
+"11-Client-side"
+],
+"platforms": [
+"web"
+],
+"summary": "Reverse Tabnabbing(https://owasp.org/www-community/attacks/Reverse_Tabnabbing) is an attack which can be used to redirect users to phishing pages.[…]",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-CLNT-15",
+"name": "Client-side Template Injection",
+"stages": [
+"11-Client-side"
+],
+"platforms": [
+"web"
+],
+"summary": "Client-Side Template Injection (CSTI), also known as DOM-based Template Injection, arises when applications using client-side frameworks (such as Angular, Vue.js, or Alpine.js) dynamically embed user input into the web page's DOM.[…] | Objectives: Identify the client-side framework and its version used by the application. Detect injection points where user input is reflected into the DOM and processed by the template engine.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-APIT-01",
+"name": "API Reconnaissance",
+"stages": [
+"12-API_Testing"
+],
+"platforms": [
+"web"
+],
+"summary": "Reconnaissance is an important step in any pentesting engagement. This includes API pentesting. | Objectives: Find all API endpoints supported by the backend server code, documented or undocumented. Find all parameters for each endpoint supported by the backend server, documented or undocumented.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-APIT-02",
+"name": "API Broken Object Level Authorization",
+"stages": [
+"12-API_Testing"
+],
+"platforms": [
+"web"
+],
+"summary": "Broken Object Level Authorization (BOLA) occurs when an API does not properly enforce authorization checks for each object accessed by the client.[…] | Objectives: The objective of this test is to identify whether the API enforces proper **object-level authorization** checks, ensuring that users can only access and manipulate objects they are authorized to interact with.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-APIT-03",
+"name": "Excessive Data Exposure",
+"stages": [
+"12-API_Testing"
+],
+"platforms": [
+"web"
+],
+"summary": "Excessive data exposure occurs when an API returns more information in its responses than the client needs to display or function.[…] | Objectives: Identify API responses that contain more data than what the client application displays or requires. Detect sensitive fields returned in API responses such as password hashes, authentication tokens, internal object IDs, PII, or infrastructure details.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-APIT-04",
+"name": "API Broken Function Level Authorization",
+"stages": [
+"12-API_Testing"
+],
+"platforms": [
+"web"
+],
+"summary": "Broken Function Level Authorization (BFLA) occurs when an API improperly enforces restrictions on users accessing certain functions or operations.[…] | Objectives: The goal of this test is to determine if the API enforces **role or privilege-based access control** to restrict users from accessing or executing functions they are not authorized to use.[…]",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-APIT-99",
+"name": "GraphQL",
+"stages": [
+"12-API_Testing"
+],
+"platforms": [
+"web"
+],
+"summary": "GraphQL has become very popular in modern APIs. It provides simplicity and nested objects, which facilitate faster development. While every technology has advantages, it can also expose the application to new attack surfaces.[…] | Objectives: Assess that a secure and production-ready configuration is deployed. Validate all input fields against generic attacks.",
+"source": "owasp-wstg"
+},
+{
+"id": "WSTG-WASM-01",
+"name": "WebAssembly Reconnaissance",
+"stages": [
+"13-WebAssembly_Testing"
+],
+"platforms": [
+"web"
+],
+"summary": "WebAssembly (Wasm) is a binary instruction format delivered to the browser as a compiled module. Because it is not human-readable at first glance, it is often treated as opaque and therefore safer than JavaScript.[…] | Objectives: Find all WebAssembly modules loaded by the target application, including those not named `.wasm`, compressed, lazy-loaded, loaded through `fetch`, and manual instantiation, or embedded in JavaScript.[…]",
+"source": "owasp-wstg"
+}
+]
+}

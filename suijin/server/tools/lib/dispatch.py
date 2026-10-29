@@ -1007,6 +1007,9 @@ def _build_routes(config):
         # CHAIN ENGINE (2026-10-29): curated chain templates — indicator
         # firing suggests them at observation time; the loom holds the plan.
         "chain_suggest": lambda a: _chain_fn().suggest(str(a.get("template", ""))),
+        "chain_lookup": lambda a: _chain_fn().lookup(
+            str(a.get("query", "")), stage=str(a.get("stage", "")), limit=int(a.get("limit", 8) or 8)
+        ),
         # chain_track is STATEFUL (advances the loom via the execute-node
         # branch, like request_auth's picker); this route is the catalog-
         # existence fallback for contexts without graph state.
