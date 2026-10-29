@@ -636,6 +636,13 @@ def _request_auth_fn():
     return request_auth
 
 
+def _inventory_fn():
+    """Lazily import tool_inventory (boundary rule: no circular imports)."""
+    from suijin.modules.tool_inventory.main import tool_inventory
+
+    return tool_inventory
+
+
 def _build_routes(config):
     from suijin.modules.knowledge.lib.kb_tools import (
         anonymize_report,
@@ -986,6 +993,10 @@ def _build_routes(config):
             credential_name=a.get("credential_name", ""),
             config=config,
         ),
+        # THE KIT VISIBILITY FIX (2026-10-29): the classic set was routed
+        # but INVISIBLE — no catalog entry, so the agent never reached for
+        # nmap/gobuster/katana/ffuf. tool_inventory shows everything.
+        "tool_inventory": lambda a: _inventory_fn()(),
         # POC-backed exploit catalog (v3) — the verifier TAKES OVER: it
         # writes the folder (finding.md + exploit.yaml), runs the yaml
         # commands sequentially, and only then hands the loop back.
