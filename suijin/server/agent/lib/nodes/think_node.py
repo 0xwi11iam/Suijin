@@ -149,27 +149,6 @@ def _queued_plan_block(state: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _extract_ask_question(decision: dict) -> str:
-    """TOLERANT QUESTION EXTRACTION (2026-10-29, live-proved in the trail):
-    the model sometimes nests the question inside tool_args/args instead
-    of the top level. The top-level-only read fell back to 'Need operator
-    guidance.' — the operator answered a GENERIC panel, their answer never
-    connected to the real question, and the ask loop spun (two asks 85s
-    apart, seq 67→71). Accept every shape the model emits."""
-    if not isinstance(decision, dict):
-        return "Need operator guidance."
-    q = decision.get("question")
-    if isinstance(q, str) and q.strip():
-        return q
-    for key in ("tool_args", "args"):
-        nested = decision.get(key)
-        if isinstance(nested, dict):
-            nq = nested.get("question") or nested.get("q")
-            if isinstance(nq, str) and nq.strip():
-                return nq
-    return "Need operator guidance."
-
-
 def _chain_loom_block(state: dict) -> str:
     """THE LOOM (2026-10-29): the chain re-renders into CURRENT_STATE
     every turn — the model's working memory can't hold it across tool
@@ -1285,6 +1264,14 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
 
         decision, parse_error = _try_parse_llm_decision(raw_response)
         if decision is not None:
+            # THE DECISION BOUNDARY (2026-10-30): normalize EXACTLY ONCE,
+            # here. Every downstream read (this function, execute_tool_node,
+            # the ask flow) consumes this normalized shape — no second
+            # tolerant parse anywhere else, ever. The ask-loop bug class
+            # (two sites, two fallbacks, two opinions) dies here.
+            from suijin.modules.agent.lib.decision import normalize_decision
+
+            decision = normalize_decision(decision)
             break
 
         # Provider error: no point retrying parse, provider already retried internally.
@@ -1660,7 +1647,9 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
             )
 
     elif action == "ask_operator":
-        question = _extract_ask_question(decision)
+        # question is guaranteed present by normalize_decision — the ONE
+        # parse happened at the boundary; there is no second extraction.
+        question = decision.get("question") or "Need operator guidance."
         updates["_current_step"] = {
             "tool_name": "ask_operator",
             "tool_args": {"question": question},

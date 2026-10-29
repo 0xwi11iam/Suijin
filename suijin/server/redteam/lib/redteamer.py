@@ -1407,17 +1407,17 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                         if not answer:
                             answer = "Continue as you see fit."
 
-                        # AUTH CHOICE PARSER (2026-10-26): when the ask came
-                        # from request_auth, the operator typed a choice:
-                        #   1 / 1 user:pass  → credentials
-                        #   2 / 2 <token>    → token/cookie
-                        #   3                → browser login (launch capture)
-                        #   4 / anything else → skip (unauthenticated)
+                        # AUTH CHOICE (2026-10-26): when the ask came from
+                        # request_auth, the operator typed a picker choice —
+                        # the PARSE lives in ask.py (one module, one
+                        # opinion); only the side effects (inline prompts,
+                        # browser launch) live here.
                         if ec == "ask_operator" and "AUTH NEEDED" in out:
-                            _choice = answer.strip().split()[0] if answer.strip() else "4"
-                            if _choice == "1":
-                                # credentials: "1 user:pass" or just "1" (prompt for them)
-                                _cred_part = answer.strip()[1:].strip()
+                            from suijin.modules.agent.lib.ask import parse_auth_choice
+
+                            _ch = parse_auth_choice(answer)
+                            if _ch.kind == "credentials":
+                                _cred_part = _ch.value
                                 if not _cred_part:
                                     # they just typed "1" — ask for the creds inline
                                     ui.stop()
@@ -1430,8 +1430,8 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                                     f"Store the session with creds_add after logging in."
                                 )
                                 console.print(f"[green]auth: credentials for {_user}[/green]")
-                            elif _choice == "2":
-                                _tok = answer.strip()[1:].strip()
+                            elif _ch.kind == "token":
+                                _tok = _ch.value
                                 if not _tok:
                                     ui.stop()
                                     _tok = _operator_input("Token/cookie value:")
@@ -1440,7 +1440,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                                     f"OPERATOR AUTH: token provided. Use it as a Bearer header or cookie: {_tok[:100]}"
                                 )
                                 console.print("[green]auth: token stored[/green]")
-                            elif _choice == "3":
+                            elif _ch.kind == "browser":
                                 # browser login: launch capture, grab the cookies
                                 console.print("[cyan]auth: launching browser for login...[/cyan]")
                                 try:
@@ -1476,17 +1476,10 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                                             f"Sign-in URL for browser login (credential '{_cred_name}'): "
                                         ).strip()
                                         ui.start()
-                                        # LENIENT URL REPAIR (2026-10-29, live complaint):
-                                        # the operator typed '127.0.0.1:6000' and it was
-                                        # rejected — bare hosts are FINE answers. Scheme it
-                                        # (private/localhost → http), keep any path given.
-                                        if _login_url and "://" not in _login_url:
-                                            import re as _re_ln
+                                        # lenient repair lives in ask.py (one module)
+                                        from suijin.modules.agent.lib.ask import repair_login_url
 
-                                            _priv = _re_ln.match(
-                                                r"(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|localhost)", _login_url
-                                            )
-                                            _login_url = ("http" if _priv else "https") + "://" + _login_url
+                                        _login_url = repair_login_url(_login_url)
                                     _cap = None
                                     if not _login_url.startswith(("http://", "https://")):
                                         answer = (
