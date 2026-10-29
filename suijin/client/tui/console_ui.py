@@ -942,11 +942,17 @@ class TypewriterStream:
         lexer falls back intelligently, monokai on default bg).
         IDENTICAL consecutive spans render ONCE — glm's reasoning stream
         often rehearses the exact decision JSON that arrives again as
-        content (the duplicate-box field bug)."""
+        content (the duplicate-box field bug).
+        JSON PRETTY-PRINTED (2026-10-29): the model streams compact JSON —
+        one unbreakable line in a panel. Parse + indent before rendering;
+        parse failure falls back to the raw text (never break a render)."""
         norm = " ".join(str(content).split())[:50_000]
         if norm and norm == getattr(self, "_last_box_norm", None):
             return
         self._last_box_norm = norm
+        if lang == "json":
+            with contextlib.suppress(Exception):
+                content = json.dumps(json.loads(content), indent=2, ensure_ascii=False)[:50_000]
         with contextlib.suppress(Exception):
             lexer = lang if lang not in ("", "bash", "sh") else "bash"
             if lexer in ("json", "javascript", "js", "python", "bash", "sh", "html", "xml"):

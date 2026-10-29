@@ -582,6 +582,10 @@ def _load_archive() -> None:
             _TEAM_ARCHIVE = (prior + _TEAM_ARCHIVE)[-_ARCHIVE_CAP:]
 
 
+with contextlib.suppress(Exception):
+    _load_archive()  # resume: prior teams return as history
+
+
 def _snapshot() -> dict:
     """Serializable registry snapshot: live teams + archived history."""
     teams = []
@@ -772,11 +776,13 @@ def fireteam_status() -> str:
 
 
 def _reset_fireteams() -> None:
-    """Test hook: cancel and forget everything."""
+    """Test hook: cancel and forget everything (live teams AND archive)."""
+    global _TEAM_ARCHIVE
     for team in _FIRETEAMS.values():
         for fut in team["futures"]:
             fut.cancel()
     _FIRETEAMS.clear()
+    _TEAM_ARCHIVE = []
     _persist_state()
     _RECENT_TASKS.clear()
     global _LAST_STATUS_SIG
