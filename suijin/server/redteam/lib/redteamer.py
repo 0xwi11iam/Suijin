@@ -1476,6 +1476,17 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                                             f"Sign-in URL for browser login (credential '{_cred_name}'): "
                                         ).strip()
                                         ui.start()
+                                        # LENIENT URL REPAIR (2026-10-29, live complaint):
+                                        # the operator typed '127.0.0.1:6000' and it was
+                                        # rejected — bare hosts are FINE answers. Scheme it
+                                        # (private/localhost → http), keep any path given.
+                                        if _login_url and "://" not in _login_url:
+                                            import re as _re_ln
+
+                                            _priv = _re_ln.match(
+                                                r"(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|localhost)", _login_url
+                                            )
+                                            _login_url = ("http" if _priv else "https") + "://" + _login_url
                                     _cap = None
                                     if not _login_url.startswith(("http://", "https://")):
                                         answer = (

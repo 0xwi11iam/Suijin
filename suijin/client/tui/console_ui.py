@@ -1995,8 +1995,13 @@ class EngagementUI:
         # SPEECH-grade styling (2026-09-17): supervisor guidance reads as
         # said, not thought — dim italic buried it under reasoning. Bright
         # cyan + slight bold, same voice tier as content.
-        if text:
-            self._note(Text.assemble(("Supervisor  ", "bold magenta"), (str(text), "bold bright_cyan")))
+        # DEDUPE (2026-10-29): graph replays can re-emit the same guidance
+        # event — identical consecutive lines render once.
+        text = str(text or "")
+        if not text or text == getattr(self, "_last_supervisor", None):
+            return
+        self._last_supervisor = text
+        self._note(Text.assemble(("Supervisor  ", "bold magenta"), (text, "bold bright_cyan")))
 
     def oracle(self, hypotheses) -> None:
         """hypotheses: list of dicts ({'id','hypothesis',...}) from the oracle,
