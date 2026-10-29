@@ -147,7 +147,13 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
 
     # ── Meta-action: ask operator a question ─────────────────────────
     if tool_name == "ask_operator":
-        question = tool_args.get("question", "Need guidance. Continue?")
+        # TOLERANT EXTRACTION (2026-10-29): the model nests the question
+        # under tool_args/args/q — read every shape before falling back.
+        question = (
+            tool_args.get("question") or tool_args.get("q") or (tool_args.get("args") or {}).get("question")
+            if isinstance(tool_args, dict)
+            else None
+        ) or "Need guidance. Continue?"
         # AUTH REDIRECT (2026-10-26): the agent gravitates to ask_operator
         # for credential requests even when request_auth exists. When the
         # question is about login/credentials/authentication, redirect to
@@ -229,8 +235,33 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
     # relays. The answer determines the credential handoff mode.
     if tool_name == "request_auth":
         target = tool_args.get("target", "")
+        # DERIVE THE TARGET (2026-10-29, live bug): the agent called
+        # request_auth BARE — the picker rendered the literal word 'target'
+        # and asked the operator for a sign-in URL the agent already knew.
+        # The engagement objective holds the host; derive it, and default
+        # the login URL so the operator never has to supply what the run
+        # already knows.
+        if not target:
+            with contextlib.suppress(Exception):
+                import re as _re_obj
+
+                _obj = str((state or {}).get("original_objective") or "")
+                m = _re_obj.search(
+                    r"https?://[^\s\"']+|(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?|[\w.-]+\.\w{2,}(?::\d+)?", _obj
+                )
+                if m:
+                    target = m.group(0)
         hint = tool_args.get("hint", "authentication required")
-        login_url = tool_args.get("login_url", f"https://{target}/login")
+        login_url = tool_args.get("login_url", "")
+        if not login_url and target:
+            import re as _re_scheme
+
+            _private = bool(_re_scheme.match(r"(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|localhost)", target))
+            _scheme = "http" if _private or ":6000" in target or ":80" in target else "https"
+            _base = target if "://" in target else f"{_scheme}://{target}"
+            login_url = f"{_base}/login"
+        if target and login_url and "://" not in login_url:
+            login_url = f"https://{login_url}"
         cred_name = tool_args.get("credential_name", target.replace(":", "_") if target else "auth")
         question = (
             f"AUTH NEEDED: {target} — {hint}\n"

@@ -103,7 +103,7 @@ def _detect_silent_teammate(trace: list, threshold: int = 12) -> Optional[str]:
 
 
 def _detect_repeating_tool(trace: list, threshold: int = 3) -> Optional[str]:
-    """Detect if the same tool+args has been used 3+ times in a row.
+    """Detect if the same tool+args SIGNATURE has been used 3+ times.
 
     Only SUCCESSFUL calls count. A tool that keeps ERRORING is not the agent
     being stuck in a rut — it is usually working around a harness/target
@@ -111,16 +111,36 @@ def _detect_repeating_tool(trace: list, threshold: int = 3) -> Optional[str]:
     detector). Nagging "try a DIFFERENT approach" while the agent correctly
     retries a broken call with different endpoints just adds noise on top
     of the failure.
-    """
+
+    SIGNATURE FIX (2026-10-29, live-run complaint): the old check fired on
+    the TOOL NAME alone — three http_requests to three DIFFERENT endpoints
+    read as 'same shape' and the nag appeared every few iterations. The
+    signature is now tool + canonical args (the same normalization the
+    dispatch repeat-guard uses): different endpoint/method/body = different
+    signature = no nag. Only genuinely IDENTICAL calls trigger it."""
     if len(trace) < threshold:
         return None
-    recent = [s for s in trace[-threshold:] if s.get("success", True)]
-    tools = [s.get("tool_name", "") for s in recent]
-    if len(tools) >= threshold and len(set(tools)) == 1 and tools[0]:
-        return (
-            f"OPPORTUNITY: '{tools[0]}' has answered {threshold} times with the same shape — "
-            "the next win is a different tool, endpoint, or vector, not another identical call."
-        )
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        import json as _json
+
+        def _sig(step: dict) -> str:
+            args = step.get("tool_args") or step.get("args") or {}
+            try:
+                canon = _json.dumps(args, sort_keys=True, default=str)[:400]
+            except Exception:  # noqa: BLE001 — unserializable args → repr
+                canon = repr(args)[:400]
+            return f"{step.get('tool_name', '')}|{canon}"
+
+        recent = [s for s in trace[-threshold:] if s.get("success", True)]
+        sigs = [_sig(s) for s in recent]
+        if len(sigs) >= threshold and len(set(sigs)) == 1 and sigs[0].split("|", 1)[0]:
+            tool = sigs[0].split("|", 1)[0]
+            return (
+                f"OPPORTUNITY: '{tool}' has answered {threshold} times with the same shape (identical arguments) — "
+                "the next win is a different tool, endpoint, or vector, not another identical call."
+            )
     return None
 
 
