@@ -73,8 +73,12 @@ class TestStateMirror:
         dep, msgs = asyncio.run(go())
         assert any("FIRETEAM RESULT" in m for m in msgs)
         state = json.loads((fireteam_env / "artifacts" / "fireteam" / "registry.json").read_text())
-        # fully drained -> the team is forgotten
-        assert all(t["team_id"] != dep["team_id"] for t in state["teams"])
+        # 2026-10-29 contract change: drained teams ARCHIVE (results stay
+        # readable — the empty-registry bug), they no longer vanish
+        drained = [t for t in state["teams"] if t["team_id"] == dep["team_id"]]
+        assert drained, "drained team must persist in the registry"
+        assert drained[0]["tasks"][0]["state"] == "done" and drained[0]["tasks"][0]["success"] is True
+        assert not drained[0]["running"]
 
     def test_reset_clears_file(self, fireteam_env):
         import asyncio
