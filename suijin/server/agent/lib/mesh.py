@@ -286,7 +286,7 @@ def peers(refresh_now: bool = False) -> list[dict]:
                         except (ProcessLookupError, PermissionError):
                             continue
                         live.append(rec)
-        live += [dict(r) for r in _remote_peers().values() if int(r.get("missed") or 0) < 3]
+        live += [dict(r) for r in _remote_peers().values() if int(r.get("missed") or 0) < 12]
         _peers["list"] = live
         _peers["at"] = now
     return _peers["list"]
@@ -514,11 +514,20 @@ def peer_registry_lines() -> list[str]:
             st = {}
             with contextlib.suppress(Exception):
                 st = _json.loads((mesh_dir() / f"{pid}-state.json").read_text())
-            out.append(
+            line = (
                 f"node-{pid} · {str(st.get('phase') or '?')} · iter {int(st.get('iteration') or 0)}"
                 f" · {len(st.get('findings') or [])} findings"
-                + (f" · last spoke {last_spoke[pid]}" if pid in last_spoke else " · SILENT (never spoke)")
             )
+            # LAST-SEEN HONESTY (2026-10-29): a silent node shows its age —
+            # 'dead for days' nodes were indistinguishable from fresh ones,
+            # so the agent kept messaging ghosts.
+            if pid in last_spoke:
+                line += f" · last spoke {last_spoke[pid]}"
+            else:
+                line += " · SILENT (never spoke)"
+            if p.get("suspect"):
+                line += f" · SUSPECT ({p.get('missed')} missed pings)"
+            out.append(line)
         return out[:8]
     except Exception:  # noqa: BLE001
         return out
@@ -729,18 +738,26 @@ def _drop_remote(peer_id: str) -> None:
 
 
 def _ping_remotes() -> None:
-    """One wire PING per remote peer per poll; 3 consecutive misses drops
-    the peer (tunnel died — /connect again to rejoin)."""
+    """One wire PING per remote peer per poll. GRADUATED LENCENCY
+    (2026-10-29): 3 misses (≈15s — one network blip) used to hard-drop a
+    healthy peer; the operator watched good nodes vanish as 'dead' and
+    the agent kept messaging ghosts. Now: 6 misses → SUSPECT (still
+    listed, tagged); 12 misses (≈60s consecutive silence) → dropped.
+    /connect again to rejoin either way."""
     from suijin.modules.agent.lib import mesh_wire
 
     for peer_id, rec in list(_remote_peers().items()):
         try:
             mesh_wire.request("127.0.0.1", int(rec.get("lp") or 0), mesh_key(), "PING", timeout_s=3.0)
             rec["missed"] = 0
+            rec.pop("suspect", None)
+            rec["last_seen"] = time.time()
         except Exception:  # noqa: BLE001 — a dead tunnel is data, not a crash
             rec["missed"] = int(rec.get("missed") or 0) + 1
-            if rec["missed"] >= 3:
+            if rec["missed"] >= 12:
                 _drop_remote(peer_id)
+            elif rec["missed"] >= 6:
+                rec["suspect"] = True
 
 
 # ── the join: /connect user@host ────────────────────────────────────────
