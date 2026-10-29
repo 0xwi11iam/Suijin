@@ -927,14 +927,23 @@ class TypewriterStream:
 
     def _emit_wrapped(self, kind: str, text: str) -> None:
         """Flush-time emission: one merged block — dim plain for the
-        reasoning monologue, per-line bright markdown for content."""
+        reasoning monologue, per-line bright markdown for content.
+        STATUS COLOR (2026-10-29): HTTP status lines and terminal result
+        prefixes carry their class color — human channel only; rich
+        strips it on non-terminals automatically."""
         with contextlib.suppress(Exception):
             if kind == "reasoning":
                 self._ui.console.print(Text(text, style="dim"))
             else:
+                from suijin.modules.tools.lib.formatters import stylize_http_line
+
                 for ln in str(text).split("\n"):
                     if ln.strip():
-                        self._ui.console.print(_md_line(ln.rstrip()))
+                        t, style = stylize_http_line(ln)
+                        if style:
+                            self._ui.console.print(Text(t, style=style))
+                        else:
+                            self._ui.console.print(_md_line(ln.rstrip()))
 
     def _emit_box(self, lang: str, content: str) -> None:
         """A complete command span: black box, syntax-highlighted (the
