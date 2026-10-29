@@ -229,13 +229,55 @@ def read_file(file_path):
     """Read a file — jail-symmetric with write_file: paths outside the
     engagement mirror under the agent's home/ (the same mapping the write
     used), relative paths resolve against home/. Operator surfaces
-    (skills/, prompts/) pass through."""
+    (skills/, prompts/) pass through.
+
+    HANG GUARD (2026-10-29, long-standing field bug): read_text() on a
+    FIFO/device/socket blocks FOREVER — no timeout exists for a blocking
+    open on a special file — and the operator had to interject to break
+    the loop. Non-regular files are refused with an honest error; huge
+    files read head+tail instead of loading entirely."""
+    import stat as _stat
+
     from suijin.server.confinement import jail_path
 
     target = jail_path(file_path)
     if not target.exists():
         return f"Error: File not found: {target}"
     try:
+        mode = target.stat().st_mode
+    except OSError as e:
+        return f"Error reading file: {e}"
+    if not _stat.S_ISREG(mode):
+        kind = (
+            "directory"
+            if _stat.S_ISDIR(mode)
+            else "FIFO/named pipe"
+            if _stat.S_ISFIFO(mode)
+            else "device"
+            if _stat.S_ISCHR(mode) or _stat.S_ISBLK(mode)
+            else "socket"
+            if _stat.S_ISSOCK(mode)
+            else "non-regular file"
+        )
+        return (
+            f"Error: {target} is a {kind} — reading it would block forever. "
+            "If a tool's stream output lands there, consume it with "
+            "execute_terminal (e.g. `cat <fifo> &`) instead of read_file."
+        )
+    try:
+        size = target.stat().st_size
+        if size > 2_000_000:  # 2MB — head+tail, never load it all
+            head_n, tail_n = 30_000, 15_000  # fits the 50k result cap
+            with open(target, encoding="utf-8", errors="ignore") as fh:
+                head = fh.read(head_n)
+            with open(target, "rb") as fh:
+                fh.seek(max(0, size - tail_n))
+                tail = fh.read().decode("utf-8", errors="ignore")
+            return _truncate(
+                head
+                + f"\n\n[… {size - head_n - tail_n} bytes omitted mid-file ({size} total) …]\n\n"
+                + tail
+            )
         return _truncate(target.read_text(encoding="utf-8", errors="ignore"))
     except Exception as e:
         return f"Error reading file: {e}"
@@ -257,8 +299,17 @@ def write_file(file_path, content):
         import shutil as _shutil
 
         literal = Path(str(file_path))
-        if literal.is_absolute() and literal.exists() and str(literal).startswith("/tmp/"):
-            with contextlib.suppress(OSError):
+        # HANG GUARD: copy2 from a FIFO/device blocks forever — only copy
+        # REGULAR files in the self-heal path.
+        import stat as _stat
+
+        with contextlib.suppress(OSError):
+            if (
+                literal.is_absolute()
+                and literal.exists()
+                and str(literal).startswith("/tmp/")
+                and _stat.S_ISREG(literal.stat().st_mode)
+            ):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 _shutil.copy2(str(literal), str(target))
     target.parent.mkdir(parents=True, exist_ok=True)
