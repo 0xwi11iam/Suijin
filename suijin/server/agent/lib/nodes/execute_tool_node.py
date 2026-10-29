@@ -342,6 +342,16 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
                 if _lines:
                     _msg += "\n" + _lines
                     _extra_state["_chain_fired"] = _fired_before + _new
+
+        # TUNNEL-VISION SIGNAL (2026-10-29, harness-level): one good tool
+        # used all day while coverage gaps sit untouched — the operator's
+        # core-AI-bug complaint. Third+ consecutive call to the SAME tool
+        # with no fresh finding in this result → the result carries the
+        # gaps + an alternative. Progress exempts (CONFIRMED/credential).
+        with contextlib.suppress(Exception):
+            _tv = _tunnel_vision_notice(state, tool_name, tool_args, str(output))
+            if _tv:
+                _msg = _tv + "\n" + _msg
         return {
             **_harvest_findings(state, tool_name, output),
             **_extra_state,
@@ -518,6 +528,57 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
             }
         ],
     }
+
+
+def _tunnel_vision_notice(state: dict, tool_name: str, tool_args: dict, output: str) -> str:
+    """Third+ consecutive same-tool call with no fresh finding → the result
+    itself names the untouched coverage gaps and an alternative tool.
+
+    The field bug: one good tool used all day ('AI gets a good result
+    from one tool and uses it all day' — the operator's core-AI-bug
+    complaint). Prompting alone didn't break it; the harness carries the
+    signal on the result the model MUST read next."""
+    try:
+        trace = [t for t in (state or {}).get("execution_trace", []) if isinstance(t, dict)]
+        tools = [str(t.get("tool", t.get("name", ""))) for t in trace[-3:]] + [tool_name]
+        if len(tools) < 4 or not all(t == tool_name for t in tools[-4:]):
+            return ""
+        if "CONFIRMED" in output[:300] or "credential" in output[:300].lower():
+            return ""  # progress exempts — matching the repeat-loop doctrine
+        # what's untouched? the ledger knows
+        assets = []
+        for k in ("url", "target", "host"):
+            v = str((tool_args or {}).get(k) or "").strip()
+            if v:
+                assets.append(v)
+                break
+        if not assets:
+            assets = [str((state or {}).get("original_objective") or "")]
+        gaps: list[dict] = []
+        with contextlib.suppress(Exception):
+            from suijin.modules.tools.lib.coverage import untested
+
+            gaps = [g for g in untested(assets, limit=4) if int(g.get("weight", 0)) >= 5][:2]
+        alt = ""
+        with contextlib.suppress(Exception):
+            from suijin.server.tools.lib.dispatch import _TOOL_ALTERNATIVES
+
+            alt = ", ".join(_TOOL_ALTERNATIVES.get(tool_name, ()))
+        lines = [
+            f"[TUNNEL VISION — {tool_name} four+ calls in a row with no new finding. "
+            "The tool is fine; the TARGET coverage isn't:"
+        ]
+        if gaps:
+            for g in gaps:
+                lines.append(f"  untested: {g['asset']} × {g['vuln_class']} (weight {g['weight']})")
+        else:
+            lines.append("  run coverage_check(action=list) for the priority gaps")
+        if alt:
+            lines.append(f"  alternative tools: {alt}")
+        lines.append("  A confirmed primitive should open chains, not repeat the same probe.]")
+        return "\n".join(lines)
+    except Exception:  # noqa: BLE001 — the notice never breaks execution
+        return ""
 
 
 def _state_result_message(tool_name, duration_ms, step_data, output, state) -> str:
