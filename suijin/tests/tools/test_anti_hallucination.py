@@ -130,7 +130,8 @@ class TestCatalogExploit:
             route_fn=self._fake_route,
         )
         assert "DRAFT" in out
-        assert "generic" in out.lower() or "too short" in out.lower() or "proves nothing" in out.lower()
+        # 2026-10-30 rule-ID format: every rejection names its rule
+        assert "rejected (rule" in out.lower() or "generic" in out.lower()
 
     def test_system_severity_in_output(self):
         """The system severity appears in the CONFIRMED/FAILED output."""

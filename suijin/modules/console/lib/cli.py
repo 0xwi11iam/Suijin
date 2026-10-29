@@ -2328,6 +2328,7 @@ def run_compliance(args) -> int:
 _KNOWN_VERBS = frozenset(
     {
         "doctor",
+        "debug",
         "selftest",
         "status",
         "version",

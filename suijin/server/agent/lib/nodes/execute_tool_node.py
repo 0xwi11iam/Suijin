@@ -147,48 +147,15 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
 
     # ── Meta-action: ask operator a question ─────────────────────────
     if tool_name == "ask_operator":
-        # TOLERANT EXTRACTION (2026-10-29): the model nests the question
-        # under tool_args/args/q — read every shape before falling back.
-        question = (
-            tool_args.get("question") or tool_args.get("q") or (tool_args.get("args") or {}).get("question")
-            if isinstance(tool_args, dict)
-            else None
-        ) or "Need guidance. Continue?"
-        # AUTH REDIRECT (2026-10-26): the agent gravitates to ask_operator
-        # for credential requests even when request_auth exists. When the
-        # question is about login/credentials/authentication, redirect to
-        # the auth picker instead — the operator gets numbered choices,
-        # not a free-text prompt they have to figure out.
-        _q = question.lower()
-        if any(
-            kw in _q
-            for kw in (
-                "credential",
-                "username",
-                "password",
-                "login",
-                "authenticated access",
-                "authentication",
-                "sign in",
-                "auth wall",
-                "session cookie",
-                "bearer token",
-                "api key",
-            )
-        ):
-            # extract target from the question (URL/host pattern)
-            import re as _re
+        # ONE MODULE OWNS ASKS (2026-10-30): extraction, auth detection,
+        # and the picker text all come from ask.py — this branch makes no
+        # parsing decisions of its own. (The live-proved ask loop was two
+        # sites disagreeing about where the question lives.)
+        from suijin.modules.agent.lib import ask as _ask
 
-            _url_m = _re.search(r"https?://[^\s,)+\"]+|[\w.-]+\.\w{2,}:\d+", question)
-            _target = _url_m.group(0) if _url_m else "target"
-            question = (
-                f"AUTH NEEDED: {_target} — authentication required\n\n"
-                f"[1] Provide credentials (type: 1 user:password)\n"
-                f"[2] Paste a token/cookie/API key (type: 2 <value>)\n"
-                f"[3] Browser login (a Chromium window opens, you log in)\n"
-                f"[4] Skip (test unauthenticated only)\n\n"
-                f"Type a number (1-4) in the input box. Anything else = skip."
-            )
+        question = _ask.question_of(tool_args) or "Need guidance. Continue?"
+        if _ask.looks_like_auth_question(question):
+            question = _ask.auth_picker_question(question)
         step_data.update({"tool_output": question, "success": True, "error_class": "ask_operator"})
         return {
             "_current_step": step_data,

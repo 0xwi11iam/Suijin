@@ -8,7 +8,10 @@ from pathlib import Path
 
 MODULES = Path(__file__).resolve().parents[3] / "suijin" / "modules"
 SERVER = Path(__file__).resolve().parents[3] / "suijin" / "server"
-BUDGET_TOKENS = 10_000
+BUDGET_TOKENS = 10_500  # 2026-10-30: 10k → 10.5k — the classic-tool visibility
+# fix + the chain engine added real catalog surface (the same deliberate
+# trade as the catalog's 18k→20k chars: toolkit growth costs context;
+# invisibility costs engagements). Shrink it when the catalog diets.
 
 
 def _boot():
