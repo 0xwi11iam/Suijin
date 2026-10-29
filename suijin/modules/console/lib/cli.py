@@ -2187,6 +2187,29 @@ def run_debug(args) -> int:
 
     act = getattr(args, "debug_action", "")
     if act == "job":
+        from rich.console import Console as _RC
+        from rich.table import Table as _RT
+
+        from suijin.modules.tools.lib.formatters import status_style
+
+        rc = _RC()
+        # DEGRADE GRACEFULLY (2026-10-29, read-my-own-output catch): rich
+        # keeps UNICODE box borders even when piped — mojibake in logs.
+        # Interactive ⇒ colored tables; piped ⇒ clean plain text lines.
+        pretty = rc.is_terminal
+
+        def _lines(title: str, rows: list[str]) -> None:
+            if pretty:
+                t = _RT(title=title, show_lines=False)
+                t.add_column(no_wrap=False)
+                for r in rows:
+                    t.add_row(r)
+                rc.print(t)
+            else:
+                print(f"== {title} ==")
+                for r in rows:
+                    print(r[:200].encode("ascii", "replace").decode())
+
         target = _P(args.path).expanduser()
         if target.is_dir():
             jobs = sorted(glob.glob(str(target / "toollogs" / "job_output_*.txt")))
@@ -2201,17 +2224,31 @@ def run_debug(args) -> int:
         for m in _re.finditer(r'[" ]status[" :]+(\d{3})', text):
             status_hits[m.group(1)] = status_hits.get(m.group(1), 0) + 1
         urls = sorted(set(_re.findall(r"https?://[^\s\"']+", text)))
-        if not args.extract_only:
-            print(f"== {target.name}: {len(text)} bytes, {len(nonprogress)} non-progress lines")
-            print("== status hits:", dict(sorted(status_hits.items())) or "(none)")
-            print(f"== {len(urls)} distinct URL(s)")
-        print("== non-progress (first 80) ==")
-        print("\n".join(nonprogress[:80]))
-        print("== result URLs (first 40) ==")
-        print("\n".join(urls[:40]))
+        header = f"== {target.name}: {len(text)} bytes, {len(nonprogress)} non-progress lines, {len(urls)} URL(s)"
+        if pretty:
+            rc.print(f"[bold]{header}[/bold]")
+            if status_hits:
+                st = _RT(title="status hits", show_header=True, header_style="bold")
+                st.add_column("code", justify="right")
+                st.add_column("count", justify="right")
+                for code in sorted(status_hits):
+                    st.add_row(code, str(status_hits[code]), style=status_style(int(code)))
+                rc.print(st)
+        else:
+            print(header)
+            if status_hits:
+                print("== status hits:", {k: status_hits[k] for k in sorted(status_hits)})
+        _lines(f"non-progress lines ({len(nonprogress)})", [ln[:160] for ln in nonprogress[:80]])
+        if urls:
+            _lines(f"result URLs ({len(urls)})", urls[:40])
         return 0
 
     if act == "trail":
+        from rich.console import Console as _RC
+        from rich.table import Table as _RT
+
+        rc = _RC()
+        pretty = rc.is_terminal
         eng = _resolve(args.engagement)
         steps_f = eng / "audit_trails" / "agent_steps.jsonl"
         if not steps_f.is_file():
@@ -2224,15 +2261,30 @@ def run_debug(args) -> int:
                 continue
             if str(rec.get("outcome", "")).startswith("ok"):
                 continue
-            key = f"{rec.get('name','?')} [{rec.get('outcome','?')}]"
+            key = f"{rec.get('name', '?')} [{rec.get('outcome', '?')}]"
             fails.setdefault(key, []).append(str(rec.get("detail", ""))[:100])
+        total = sum(len(v) for v in fails.values())
         if not fails:
-            print(f"== {eng.name}: zero failures in the trail — clean run")
+            (
+                rc.print(f"[green]== {eng.name}: zero failures — clean run[/green]")
+                if pretty
+                else print(f"== {eng.name}: zero failures — clean run")
+            )
             return 0
-        print(f"== {eng.name}: {sum(len(v) for v in fails.values())} non-ok step(s)")
-        for key, details in sorted(fails.items(), key=lambda kv: -len(kv[1])):
-            print(f"  {len(details):>4}× {key}")
-            print(f"        last: {details[-1]}")
+        if pretty:
+            rc.print(f"[bold]== {eng.name}[/bold]: {total} non-ok step(s)")
+            ft = _RT(title="failures by tool", show_header=True, header_style="bold")
+            ft.add_column("×", justify="right", style="red")
+            ft.add_column("tool [outcome]")
+            ft.add_column("last detail", overflow="fold")
+            for key, details in sorted(fails.items(), key=lambda kv: -len(kv[1])):
+                ft.add_row(str(len(details)), key, details[-1])
+            rc.print(ft)
+        else:
+            print(f"== {eng.name}: {total} non-ok step(s)")
+            for key, details in sorted(fails.items(), key=lambda kv: -len(kv[1])):
+                print(f"  {len(details):>4}x {key}")
+                print(f"        last: {details[-1]}")
         return 0
 
     if act == "logs":
@@ -2765,11 +2817,15 @@ def main(argv=None):
 
     debug = sub.add_parser("debug", help="operator debugging: job output, trail failures, logs")
     debug_sub = debug.add_subparsers(dest="debug_action")
-    dbg_job = debug_sub.add_parser("job", help="extract the signal from a job output file (status hits, result URLs, non-progress lines)")
+    dbg_job = debug_sub.add_parser(
+        "job", help="extract the signal from a job output file (status hits, result URLs, non-progress lines)"
+    )
     dbg_job.add_argument("path", help="path to the job_output_*.txt file (or an engagement dir to find the newest)")
     dbg_job.add_argument("--extract-only", action="store_true", help="skip the summary, print the extraction")
     dbg_job.set_defaults(func=run_debug)
-    dbg_trail = debug_sub.add_parser("trail", help="digest tool failures + gate refusals from an engagement's audit trail")
+    dbg_trail = debug_sub.add_parser(
+        "trail", help="digest tool failures + gate refusals from an engagement's audit trail"
+    )
     dbg_trail.add_argument("engagement", help="engagement dir (or 'latest')")
     dbg_trail.set_defaults(func=run_debug)
     dbg_logs = debug_sub.add_parser("logs", help="tail engagement + diag logs (latest unless named)")
