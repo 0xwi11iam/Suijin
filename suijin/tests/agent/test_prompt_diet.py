@@ -17,7 +17,10 @@ class TestCatalogDiet:
             c = build_tool_catalog_prompt(phase)
             # 2026-10-18: tool contracts add usage docs — the budget
             # expands to 18k to cover them (was 8k pre-contracts)
-            assert len(c) < 18_000, f"{phase}: catalog is {len(c)} chars (contracts included — budget 18k)"
+            # 2026-10-29: the classic-tool visibility fix + the chain
+            # engine add 12 catalog lines — budget 20k. Toolkit growth
+            # costs context; invisibility costs engagements.
+            assert len(c) < 20_000, f"{phase}: catalog is {len(c)} chars (contracts included — budget 20k)"
             assert "background" in c.lower()  # the long-running discipline still rides
 
     def test_every_tool_still_listed_after_diet(self):

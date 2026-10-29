@@ -643,6 +643,13 @@ def _inventory_fn():
     return tool_inventory
 
 
+def _chain_fn():
+    """Lazily import the chain engine (boundary rule: no circular imports)."""
+    from suijin.server.tools.lib import chain_engine
+
+    return chain_engine
+
+
 def _build_routes(config):
     from suijin.modules.knowledge.lib.kb_tools import (
         anonymize_report,
@@ -997,6 +1004,17 @@ def _build_routes(config):
         # but INVISIBLE — no catalog entry, so the agent never reached for
         # nmap/gobuster/katana/ffuf. tool_inventory shows everything.
         "tool_inventory": lambda a: _inventory_fn()(),
+        # CHAIN ENGINE (2026-10-29): curated chain templates — indicator
+        # firing suggests them at observation time; the loom holds the plan.
+        "chain_suggest": lambda a: _chain_fn().suggest(str(a.get("template", ""))),
+        # chain_track is STATEFUL (advances the loom via the execute-node
+        # branch, like request_auth's picker); this route is the catalog-
+        # existence fallback for contexts without graph state.
+        "chain_track": lambda a: (
+            "chain_track advances the chain loom and needs the live engagement state — "
+            "call it as a tool inside the engagement loop "
+            "(template=..., action=start|confirm|dead, node=..., note=...)."
+        ),
         # POC-backed exploit catalog (v3) — the verifier TAKES OVER: it
         # writes the folder (finding.md + exploit.yaml), runs the yaml
         # commands sequentially, and only then hands the loop back.
