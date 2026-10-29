@@ -149,6 +149,18 @@ def _queued_plan_block(state: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _chain_loom_block(state: dict) -> str:
+    """THE LOOM (2026-10-29): the chain re-renders into CURRENT_STATE
+    every turn — the model's working memory can't hold it across tool
+    results, so the harness carries it instead."""
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.chain_engine import loom_render
+
+        block = loom_render((state or {}).get("chain_plan"))
+        return ("\n" + block + "\n") if block else ""
+    return ""
+
+
 def _render_board(state: dict) -> str:
     """H1: the engagement board — accumulated target intel, tested-axes
     coverage, and running background jobs (previously: a raw JSON dump of a
@@ -719,6 +731,7 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
             + f"- **Attack Path**: {state.get('attack_path_type', 'recon')}\n"
             + _governor_lines
             + _queued_plan_block(state)
+            + _chain_loom_block(state)
         ),
         "YOU_HOLD": render_you_hold(state.get("_footholds") or [], iteration),
         "RECENT_ACTIONS": (action_log or "(none)"),

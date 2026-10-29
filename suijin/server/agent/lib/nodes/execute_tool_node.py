@@ -191,6 +191,38 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
             "messages": [{"role": "user", "content": f"AGENT QUESTION: {question}"}],
         }
 
+    # ── chain_track: advance THE LOOM (2026-10-29) ────────────────────
+    # The harness holds the chain so the model doesn't have to — confirm
+    # or kill nodes as primitives land; the loom re-renders every turn.
+    if tool_name == "chain_track":
+        from suijin.server.tools.lib.chain_engine import loom_render, suggest, template_ids, track
+
+        _tid = str(tool_args.get("template", "")).strip()
+        _action = str(tool_args.get("action", "")).strip().lower()
+        _node = str(tool_args.get("node", "")).strip()
+        _note = str(tool_args.get("note", "")).strip()
+        if _tid not in template_ids():
+            out = f"Unknown chain template '{_tid}'. Known: {', '.join(template_ids())}"
+        elif _action not in ("start", "confirm", "dead"):
+            out = "Error: action must be start | confirm | dead (node= and note= optional)"
+        else:
+            new_plan = track((state or {}).get("chain_plan"), _tid, _action, node=_node, note=_note)
+            out = f"chain loom updated ({_tid}: {_action}" + (f", node={_node}" if _node else "") + ")\n"
+            out += loom_render(new_plan)
+            if _action == "confirm":
+                # remind what this confirmation unlocks
+                with contextlib.suppress(Exception):
+                    unlocked = (new_plan.get(_tid) or {}).get("unlocked") or []
+                    if unlocked:
+                        out += "\nunlocked by this confirmation: " + ", ".join(unlocked)
+            return {
+                "chain_plan": new_plan,
+                "_current_step": step_data,
+                "execution_trace": [dict(step_data)],
+                "_tool_result": {"success": True, "output": out},
+                "messages": [{"role": "user", "content": out}],
+            }
+
     # ── request_auth: the AUTH PICKER (2026-10-26) ─────────────────
     # Routes through the ask mechanism with numbered choices so the
     # operator gets an interactive picker, not a text prompt the agent
@@ -295,15 +327,31 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
         step_data.update(
             {"tool_output": output, "success": success, "duration_ms": duration_ms, "error_class": "success"}
         )
+        # CHAIN INDICATOR FIRING (2026-10-29): scan every tool result for
+        # chain indicators — the association surfaces AT OBSERVATION TIME
+        # (the mechanized "organic" chain thinking). Fired-once per
+        # engagement, deduped in state.
+        _extra_state: dict = {}
+        _msg = _state_result_message(tool_name, duration_ms, step_data, output, state)
+        if tool_name not in ("chain_suggest", "chain_track"):
+            with contextlib.suppress(Exception):
+                from suijin.server.tools.lib.chain_engine import scan_indicators
+
+                _fired_before = list((state or {}).get("_chain_fired") or [])
+                _lines, _new = scan_indicators(str(output), _fired_before)
+                if _lines:
+                    _msg += "\n" + _lines
+                    _extra_state["_chain_fired"] = _fired_before + _new
         return {
             **_harvest_findings(state, tool_name, output),
+            **_extra_state,
             "_current_step": step_data,
             "execution_trace": [dict(step_data)],
             "_tool_result": {"success": success, "output": output},
             "messages": [
                 {
                     "role": "user",
-                    "content": _state_result_message(tool_name, duration_ms, step_data, output, state),
+                    "content": _msg,
                 }
             ],
         }

@@ -1,0 +1,200 @@
+[
+  {
+    "id": "api_openapi",
+    "name": "OpenAPI route map → object IDOR sweep",
+    "indicators": ["\"openapi\"\\s*:", "\"swagger\"\\s*:", "openapi\\.json", "\"paths\"\\s*:\\s*\\{"],
+    "trigger_hint": "API schema discovered — convert it into a route map, then IDOR lanes per object type",
+    "preconditions": [{"need": "api_schema_readable", "how": "GET /openapi.json with EACH captured credential (401-gated schemas often open with the bypass/admin token)"}],
+    "steps": [
+      {"tool": "http_request", "args": {"method": "GET", "url": "{base}/openapi.json"}, "note": "with every credential; the schema itself is an attack surface"},
+      {"tool": "plan", "note": "parse paths × methods; group by object (anything with an id-like field); list auth requirements per route"},
+      {"tool": "web_session", "args": {"action": "summary"}, "note": "the IDOR worklist: endpoint shapes reached by 2+ credentials"},
+      {"tool": "http_replay", "args": {"op": "swap-id"}, "note": "per object: replay A's IDs with B's session — differential gates the verdict"},
+      {"tool": "inject_probe", "args": {"vuln_class": "sqli"}, "note": "schema-typed params: integer/string/format fields get class-appropriate probes"}
+    ],
+    "exit": "schema parsed OR 2 fetch attempts fail on every credential",
+    "unlocks": ["idor_object_sweep", "schema_typed_fuzz"]
+  },
+  {
+    "id": "xss_token_steal",
+    "name": "XSS primitive → session/token theft",
+    "indicators": ["<iframe", "document\\.cookie", "localStorage\\[", "window\\.postMessage", "onmessage"],
+    "trigger_hint": "Script execution context reachable — turn it into token theft",
+    "preconditions": [{"need": "xss_reflected_or_stored", "how": "inject_probe vuln_class=xss — tag survival + sink context first"}],
+    "steps": [
+      {"tool": "inject_probe", "args": {"vuln_class": "xss"}, "note": "survival battery before crafting — know the sink (HTML/attr/JS)"},
+      {"tool": "code_harness", "note": "POC: read document.cookie + localStorage token keys, shape = alert(JSON.stringify(...)) — never exfil off-scope"},
+      {"tool": "catalog_exploit", "note": "confirm with the marker-from-stdout gate, not a screenshot of an alert"}
+    ],
+    "exit": "token readable in POC OR sink escapes every payload class",
+    "unlocks": ["session_replay"]
+  },
+  {
+    "id": "jwt_confusion",
+    "name": "JWT attack surface",
+    "indicators": ["eyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.", "Bearer\\s+eyJ", "\"alg\"\\s*:"],
+    "trigger_hint": "JWT in play — check the classic confusion family",
+    "preconditions": [{"need": "jwt_captured", "how": "any response/auth header carrying a JWT (creds are auto-stored)"}],
+    "steps": [
+      {"tool": "execute_terminal", "args": {"cmd": "python3 - <<'EOF'\nimport base64,json,sys\nt=sys.argv[1].split('.')\np=json.loads(base64.urlsafe_b64decode(t[0]+'=='))\nc=json.loads(base64.urlsafe_b64decode(t[1]+'=='))\nprint(json.dumps({'header':p,'claims':c},indent=1))\nEOF $SUIJIN_CRED_<name>"}, "note": "decode header+claims: alg, exp, role claims, kid presence"},
+      {"tool": "http_replay", "note": "alg:none replay; alg-confusion (HS256 with the public key) when jwk/jku/x5c in header; kid injection paths"},
+      {"tool": "http_replay", "note": "expired-token acceptance + role-claim escalation, one variable at a time"}
+    ],
+    "exit": "signature bypass OR claim escalation confirmed OR all confusion classes gated",
+    "unlocks": ["session_replay"]
+  },
+  {
+    "id": "idor_object_sweep",
+    "name": "Object-level IDOR sweep",
+    "indicators": ["\"id\"\\s*:\\s*[0-9]+", "/(?:users?|accounts?|orders?|notes?|docs?|objects?)/[0-9]+"],
+    "trigger_hint": "Object IDs in responses — cross-user access is the classic win",
+    "preconditions": [{"need": "second_credential", "how": "request_auth — two sessions make IDOR testable"}],
+    "steps": [
+      {"tool": "web_session", "args": {"action": "summary"}, "note": "the worklist is already built from your request history"},
+      {"tool": "http_replay", "args": {"op": "swap-id", "compare": true}, "note": "A's object IDs under B's session; the 3-gate diff decides"},
+      {"tool": "catalog_exploit", "note": "record with the differential evidence attached"}
+    ],
+    "exit": "worklist drained OR every lane gated",
+    "unlocks": []
+  },
+  {
+    "id": "bypass_403_chain",
+    "name": "403 → what's actually behind the door",
+    "indicators": ["\\b403\\b", "Forbidden"],
+    "trigger_hint": "A 403 is a locked door, not a wall — enumerate what opens it",
+    "preconditions": [{"need": "protected_path", "how": "any 401/403 on an interesting path"}],
+    "steps": [
+      {"tool": "bypass_403", "args": {"url": "{path}"}, "note": "~24 variants; the tool must list what was NOT tried if it fails"},
+      {"tool": "ffuf_fuzz", "note": "high-value routes BEHIND the gate: /v1/admin /v1/users /v1/tokens /internal — one quiet sweep"},
+      {"tool": "http_replay", "note": "any bypass token found replays against the schema/rotes it unlocks"}
+    ],
+    "exit": "bypass confirmed OR every variant + route sweep exhausted",
+    "unlocks": ["api_openapi"]
+  },
+  {
+    "id": "ssrf_internal",
+    "name": "SSRF → internal network map",
+    "indicators": ["url=.*https?://", "webhook", "fetch[^\"]*http", "proxy\\?", "callback\\s*="],
+    "trigger_hint": "Server-side fetch of a URL you control — map the internal network",
+    "preconditions": [{"need": "ssrf_primitive", "how": "a URL parameter the SERVER fetches (response diff or timing proves it)"}],
+    "steps": [
+      {"tool": "http_replay", "note": "collaborator-style canary first (if out of scope: internal-only targets — 127.0.0.1, metadata IPs) — NEVER cloud metadata outside authorized scope"},
+      {"tool": "http_replay", "note": "internal sweep: 127.0.0.1:PORT/ high-value ports; differential gates each claim"},
+      {"tool": "catalog_exploit", "note": "confirmed internal reach = a finding even without data return (response/time oracle counts)"}
+    ],
+    "exit": "internal service reached OR primitive disproven",
+    "unlocks": ["rce_to_internal"]
+  },
+  {
+    "id": "file_upload_rce",
+    "name": "Upload → code execution",
+    "indicators": ["type=\"file\"", "multipart/form-data", "upload", "\\.(php|jsp|aspx)\\b"],
+    "trigger_hint": "File upload surface — the path to webshell/RCE",
+    "preconditions": [{"need": "upload_endpoint", "how": "any multipart form observed"}],
+    "steps": [
+      {"tool": "http_replay", "note": "extension/content-type/magic-byte matrix — one variable per request; note which validation layer bites"},
+      {"tool": "http_request", "note": "locate the stored file (path traversal in the filename writes outside uploads/)"},
+      {"tool": "code_harness", "note": "the POC prints a marker AFTER server-side execution — echo-marker alone proves nothing"}
+    ],
+    "exit": "server-side execution OR every bypass class gated",
+    "unlocks": ["rce_to_internal"]
+  },
+  {
+    "id": "git_exposed",
+    "name": "Exposed .git → source + secrets",
+    "indicators": ["\\.git/HEAD", "ref: refs/"],
+    "trigger_hint": "Repository metadata readable — reconstruct the source",
+    "preconditions": [{"need": "git_dir_readable", "how": "GET /.git/HEAD returns a ref"}],
+    "steps": [
+      {"tool": "execute_terminal", "note": "reconstruct: fetch objects via the HTTP dumb protocol, or git-dumper if installed"},
+      {"tool": "execute_terminal", "note": "sweep the tree for secrets: history (git log -p), configs, keys — creds_add every live one"},
+      {"tool": "search_kb", "note": "source now guides EVERY other lane — read the auth code before the next auth attack"}
+    ],
+    "exit": "tree reconstructed OR objects 404",
+    "unlocks": []
+  },
+  {
+    "id": "graphql_introspection",
+    "name": "GraphQL map → field abuse",
+    "indicators": ["__schema", "__type\\(", "graphql"],
+    "trigger_hint": "GraphQL endpoint — introspection writes your attack map",
+    "preconditions": [{"need": "graphql_endpoint", "how": "POST {query:{__schema{types{name}}}} accepted"}],
+    "steps": [
+      {"tool": "http_replay", "note": "full introspection query; if disabled: clue-hunting via error messages and suggested fields"},
+      {"tool": "http_replay", "note": "field-level authz: query each object type as user B — field IDORs are the GraphQL classic"},
+      {"tool": "inject_probe", "note": "mutations take user input like anything else"}
+    ],
+    "exit": "schema mapped OR introspection fully gated",
+    "unlocks": []
+  },
+  {
+    "id": "rce_to_internal",
+    "name": "RCE/foothold → internal network access",
+    "indicators": ["uid=\\d+\\(", "www-data@", "whoami"],
+    "trigger_hint": "Command execution confirmed — pivot to the internal network",
+    "preconditions": [{"need": "rce_primitive", "how": "any confirmed command execution (catalog_exploit CONFIRMED)"}],
+    "steps": [
+      {"tool": "execute_terminal", "note": "recon INSIDE: hostname, ip, arp, /etc/hosts, listening services — read-only first"},
+      {"tool": "nmap_scan", "args": {"target": "{internal_cidr}", "flags": "-sn"}, "note": "internal hosts, then top ports on the interesting ones"},
+      {"tool": "record_finding", "note": "each internal service = evidence; lateral paths come from the map"}
+    ],
+    "exit": "internal map drawn OR egress fully blocked",
+    "unlocks": ["privesc_linux", "privesc_container"]
+  },
+  {
+    "id": "privesc_linux",
+    "name": "Linux privilege escalation",
+    "indicators": ["Linux\\s+\\d", "uid=\\d+\\([a-z]+\\)"],
+    "trigger_hint": "Linux foothold — enumerate the escalation surface",
+    "preconditions": [{"need": "internal_foothold", "how": "shell on a Linux host (from rce_to_internal)"}],
+    "steps": [
+      {"tool": "execute_terminal", "note": "the enumeration triad: sudo -l, SUID find, cron + writable paths — one command, read it all"},
+      {"tool": "search_kb", "note": "kernel version + search_cve for local privesc; sudo version for the classic CVEs"},
+      {"tool": "code_harness", "note": "POC marks root with `id` output AFTER the exploit runs"}
+    ],
+    "exit": "root OR surface fully enumerated and gated",
+    "unlocks": []
+  },
+  {
+    "id": "privesc_container",
+    "name": "Container escape",
+    "indicators": ["/\\.dockerenv", "docker.sock", "containerd", "kubectl\\s"],
+    "trigger_hint": "You're inside a container — the escape surface is specific",
+    "preconditions": [{"need": "container_shell", "how": "foothold inside a container (dockerenv/socket present)"}],
+    "steps": [
+      {"tool": "execute_terminal", "note": "mounts (privileged?), capabilities (capsh --print), socket exposure, hostPID"},
+      {"tool": "search_kb", "note": "runc/CVE family by version; socket mount = the direct path"},
+      {"tool": "code_harness", "note": "escape POC must prove HOST context (hostname change or /host file read)"}
+    ],
+    "exit": "host context reached OR container hardened",
+    "unlocks": []
+  },
+  {
+    "id": "session_replay",
+    "name": "Stolen token → account takeover proof",
+    "indicators": ["session=", "remember_token", "connect\\.sid"],
+    "trigger_hint": "A usable session token — prove the takeover end-to-end",
+    "preconditions": [{"need": "stolen_token", "how": "from xss_token_steal or jwt_confusion"}],
+    "steps": [
+      {"tool": "creds_add", "note": "store the token the moment you hold it (server-side; reference the env var, never the literal)"},
+      {"tool": "http_request", "args": {"credential": "{name}"}, "note": "read the victim's own profile/identity endpoint — access to someone ELSE'S data is the proof"},
+      {"tool": "catalog_exploit", "note": "record with the identity-response evidence"}
+    ],
+    "exit": "foreign identity accessed OR token rejected",
+    "unlocks": []
+  },
+  {
+    "id": "schema_typed_fuzz",
+    "name": "Schema-typed fuzz lanes",
+    "indicators": ["\"type\"\\s*:\\s*\"(integer|string|boolean)\""],
+    "trigger_hint": "Typed API params — fuzz with the RIGHT payload classes",
+    "preconditions": [{"need": "api_schema_readable", "how": "from api_openapi"}],
+    "steps": [
+      {"tool": "plan", "note": "integer fields → overflow/negative/string-where-int; string+format → injection classes by sink; boolean → type juggling"},
+      {"tool": "inject_probe", "note": "class-appropriate batteries only — no payload soup"},
+      {"tool": "diff_response", "note": "baseline vs probe — noise floors first"}
+    ],
+    "exit": "every typed field class-tested OR gates on all",
+    "unlocks": []
+  }
+]

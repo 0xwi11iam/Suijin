@@ -540,6 +540,25 @@ TOOL_REGISTRY = {
             "whatweb, feroxbuster, nuclei, ffuf, sqlmap, …) each with a one-line doctrine."
         ),
     },
+    "chain_suggest": {
+        "purpose": "Attack-chain template as an executable plan draft",
+        "when_to_use": "An INDICATOR line names a template — load it here.",
+        "args_format": '"template": "api_openapi"',
+        "description": (
+            "**chain_suggest** — precondition-graph chain templates (openapi→IDOR, XSS→token, "
+            "JWT confusion, SSRF→internal, RCE→privesc, …). Steps are tool-grounded; confirm "
+            "primitives and the loom tracks what unlocks."
+        ),
+    },
+    "chain_track": {
+        "purpose": "Advance the chain loom (start/confirm/dead)",
+        "when_to_use": "After each chain step: confirm the primitive or mark it dead.",
+        "args_format": '"template": "api_openapi", "action": "confirm", "node": "api_schema_readable", "note": "schema parsed, 43 routes"',
+        "description": (
+            "**chain_track** — the harness holds your chain (the LOOM in CURRENT_STATE) so "
+            "tool results can't evict it. confirm a node and its dependent templates unlock."
+        ),
+    },
     "memory_recall": {
         "purpose": "The engagement memory — every credential, leak, foothold, confirmed exploit and admin surface observed, plus the condensed digest",
         "when_to_use": "Before attacking a surface — check what the engagement already knows about it.",
@@ -619,6 +638,8 @@ _ALL_TOOLS = {
     "nuclei_scan",
     "ffuf_fuzz",
     "tool_inventory",
+    "chain_suggest",
+    "chain_track",
     "memory_recall",
     "http_replay",
     "inject_probe",
