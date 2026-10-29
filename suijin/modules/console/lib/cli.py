@@ -2159,6 +2159,100 @@ def run_notify(args) -> int:
     return 1
 
 
+def run_debug(args) -> int:
+    """Operator debugging, first-class (2026-10-29): the grep recipes the
+    operator ran BY HAND become subcommands. Everything non-interactive
+    and scriptable, like the rest of the console."""
+    import glob
+    import re as _re
+    import subprocess as _sp
+    from pathlib import Path as _P
+
+    home = _P.home() / ".suijin"
+    engs = home / "engagements"
+
+    def _resolve(name: str) -> _P:
+        p = _P(name).expanduser()
+        if p.is_dir() and (p / "audit_trails").exists():
+            return p
+        if name == "latest" or not name:
+            cands = sorted(c for c in glob.glob(str(engs / "*_*")) if _P(c).name[0].isdigit())
+            if not cands:
+                raise SystemExit("no engagements found")
+            return _P(cands[-1])
+        guess = engs / name
+        if guess.is_dir():
+            return guess
+        raise SystemExit(f"not an engagement dir: {name}")
+
+    act = getattr(args, "debug_action", "")
+    if act == "job":
+        target = _P(args.path).expanduser()
+        if target.is_dir():
+            jobs = sorted(glob.glob(str(target / "toollogs" / "job_output_*.txt")))
+            if not jobs:
+                raise SystemExit("no job_output files in that engagement")
+            target = _P(jobs[-1])
+        if not target.is_file():
+            raise SystemExit(f"no such file: {target}")
+        text = target.read_text(errors="replace")
+        nonprogress = [ln for ln in text.splitlines() if not _re.search(r"::.*::|^\s*$|^\d+/\d+\s*$", ln)]
+        status_hits: dict[str, int] = {}
+        for m in _re.finditer(r'[" ]status[" :]+(\d{3})', text):
+            status_hits[m.group(1)] = status_hits.get(m.group(1), 0) + 1
+        urls = sorted(set(_re.findall(r"https?://[^\s\"']+", text)))
+        if not args.extract_only:
+            print(f"== {target.name}: {len(text)} bytes, {len(nonprogress)} non-progress lines")
+            print("== status hits:", dict(sorted(status_hits.items())) or "(none)")
+            print(f"== {len(urls)} distinct URL(s)")
+        print("== non-progress (first 80) ==")
+        print("\n".join(nonprogress[:80]))
+        print("== result URLs (first 40) ==")
+        print("\n".join(urls[:40]))
+        return 0
+
+    if act == "trail":
+        eng = _resolve(args.engagement)
+        steps_f = eng / "audit_trails" / "agent_steps.jsonl"
+        if not steps_f.is_file():
+            raise SystemExit(f"no agent_steps.jsonl in {eng}")
+        fails: dict[str, list[str]] = {}
+        for ln in steps_f.read_text(errors="replace").splitlines():
+            try:
+                rec = json.loads(ln)
+            except Exception:
+                continue
+            if str(rec.get("outcome", "")).startswith("ok"):
+                continue
+            key = f"{rec.get('name','?')} [{rec.get('outcome','?')}]"
+            fails.setdefault(key, []).append(str(rec.get("detail", ""))[:100])
+        if not fails:
+            print(f"== {eng.name}: zero failures in the trail — clean run")
+            return 0
+        print(f"== {eng.name}: {sum(len(v) for v in fails.values())} non-ok step(s)")
+        for key, details in sorted(fails.items(), key=lambda kv: -len(kv[1])):
+            print(f"  {len(details):>4}× {key}")
+            print(f"        last: {details[-1]}")
+        return 0
+
+    if act == "logs":
+        eng = _resolve(args.engagement)
+        log = eng / "log"
+        print(f"== {eng.name} log (tail {args.n}) ==")
+        if log.is_file():
+            _sp.run(["tail", "-n", str(args.n), str(log)])
+        else:
+            print("(no engagement log file)")
+        diag = home / "logs" / "diag.log"
+        if diag.is_file():
+            print("== diag.log (tail 15) ==")
+            _sp.run(["tail", "-n", "15", str(diag)])
+        return 0
+
+    print("suijin debug {job|trail|logs} — run with -h for details")
+    return 0
+
+
 def run_panic(args) -> int:
     from suijin.modules.ops.lib.panic import panic
 
@@ -2668,6 +2762,21 @@ def main(argv=None):
     config_show.set_defaults(func=lambda _a: run_config_show())
     config_validate = config_sub.add_parser("validate", help="Pydantic-validate config.json + blue_config.json")
     config_validate.set_defaults(func=lambda _a: run_config_validate())
+
+    debug = sub.add_parser("debug", help="operator debugging: job output, trail failures, logs")
+    debug_sub = debug.add_subparsers(dest="debug_action")
+    dbg_job = debug_sub.add_parser("job", help="extract the signal from a job output file (status hits, result URLs, non-progress lines)")
+    dbg_job.add_argument("path", help="path to the job_output_*.txt file (or an engagement dir to find the newest)")
+    dbg_job.add_argument("--extract-only", action="store_true", help="skip the summary, print the extraction")
+    dbg_job.set_defaults(func=run_debug)
+    dbg_trail = debug_sub.add_parser("trail", help="digest tool failures + gate refusals from an engagement's audit trail")
+    dbg_trail.add_argument("engagement", help="engagement dir (or 'latest')")
+    dbg_trail.set_defaults(func=run_debug)
+    dbg_logs = debug_sub.add_parser("logs", help="tail engagement + diag logs (latest unless named)")
+    dbg_logs.add_argument("engagement", nargs="?", default="latest")
+    dbg_logs.add_argument("-n", type=int, default=40, help="lines to show")
+    dbg_logs.set_defaults(func=run_debug)
+    debug.set_defaults(func=lambda _a: 0)
 
     args = parser.parse_args(argv)
 
