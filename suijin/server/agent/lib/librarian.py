@@ -213,6 +213,31 @@ _PATTERNS: list[tuple[str, re.Pattern, int]] = [
     ),
 ]
 
+# 404 CATALOGUER (2026-10-29): the negative space is memory too — an
+# endpoint that answered 404 does not need retesting every wave. The
+# pattern fires on the RESULT line; the URL rides in from the tool args
+# (added by _extract below), so the entry reads
+# "absent: /v1/admin (404 @ iter 8)".
+_ABSENT_RE = re.compile(r"^Status:\s*404\b", re.M)
+
+
+def _absent_entries(args: dict, output: str, iteration: int, target: str, run_id: str, where: str) -> list[dict]:
+    url = str(args.get("url") or args.get("path") or "").strip()
+    if not url or not _ABSENT_RE.search(str(output or "")):
+        return []
+    path_only = re.sub(r"^[a-z]+://[^/]+", "", url) or url
+    return [
+        {
+            "kind": "absent endpoint",
+            "value": f"{path_only} (404 @ iter {iteration})",
+            "where": where,
+            "iter": iteration,
+            "ts": time.strftime("%H:%M:%S"),
+            "run": run_id,
+            "target": target,
+        }
+    ]
+
 _KIND_CAP = 40  # per-kind cap keeps one noisy pattern from starving the rest
 _LEDGER_CAP = 400
 
@@ -406,6 +431,15 @@ class Librarian:
                         "target": self._target,
                     }
                 )
+        # 404 CATALOGUER: negative space enters the ledger directly from
+        # args+status — memory_recall(query='absent') lists what NOT to retest
+        for entry in _absent_entries(args, text, iteration, self._target, self.run_id, where):
+            if (entry["kind"], entry["value"]) not in seen:
+                seen.add((entry["kind"], entry["value"]))
+                if kind_counts.get(entry["kind"], 0) < _KIND_CAP:
+                    kind_counts[entry["kind"]] = kind_counts.get(entry["kind"], 0) + 1
+                    entries.append(entry)
+
         # args themselves can carry the surface (a probe against /admin
         # IS the observation)
         with contextlib.suppress(Exception):

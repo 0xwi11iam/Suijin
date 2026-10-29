@@ -61,3 +61,41 @@ class TestLedgerDedupe:
         assert len(creds) == 1, "same token identity must count once"
         assert creds[0]["value"].startswith("JWT HS256")  # fingerprint, not raw
         assert "eyJ" not in creds[0]["value"]  # raw token never enters the ledger
+
+
+class TestAbsentCataloguer:
+    def test_404s_enter_the_ledger(self):
+        from suijin.server.agent.lib.librarian import Librarian
+
+        lb = Librarian.__new__(Librarian)
+        lb._ledger = {"entries": [], "digests": []}
+        lb._last_kind_counts = {}
+        lb.run_id = "t"
+        lb._target = "10.0.0.9"
+        lb._extract("http_request", {"url": "http://10.0.0.9/v1/admin"}, "Status: 404\nBody:\nnot found", 8)
+        absent = [e for e in lb._ledger["entries"] if e["kind"] == "absent endpoint"]
+        assert len(absent) == 1
+        assert absent[0]["value"] == "/v1/admin (404 @ iter 8)"
+
+    def test_same_404_counts_once(self):
+        from suijin.server.agent.lib.librarian import Librarian
+
+        lb = Librarian.__new__(Librarian)
+        lb._ledger = {"entries": [], "digests": []}
+        lb._last_kind_counts = {}
+        lb.run_id = "t"
+        lb._target = "10.0.0.9"
+        for _ in range(3):
+            lb._extract("http_request", {"url": "http://10.0.0.9/v1/admin"}, "Status: 404", 8)
+        assert len([e for e in lb._ledger["entries"] if e["kind"] == "absent endpoint"]) == 1
+
+    def test_200s_do_not(self):
+        from suijin.server.agent.lib.librarian import Librarian
+
+        lb = Librarian.__new__(Librarian)
+        lb._ledger = {"entries": [], "digests": []}
+        lb._last_kind_counts = {}
+        lb.run_id = "t"
+        lb._target = "10.0.0.9"
+        lb._extract("http_request", {"url": "http://10.0.0.9/api"}, "Status: 200\nBody:\nok", 9)
+        assert [e for e in lb._ledger["entries"] if e["kind"] == "absent endpoint"] == []
