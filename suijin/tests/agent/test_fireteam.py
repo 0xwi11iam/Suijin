@@ -292,3 +292,39 @@ class TestSubagentStreamIsolation:
 
         asyncio.run(go())
         assert seen.get("called") is True
+
+
+class TestDrainedTeamsPersist:
+    """2026-10-29: finished teams vanished from registry.json — the drain
+    path deleted the team BEFORE the mirror write ({"teams": []} after a
+    run that used lanes), and results never entered engagement memory."""
+
+    def test_drained_team_is_archived_not_deleted(self, tmp_path, monkeypatch):
+        import asyncio
+
+        import suijin.server.agent.lib.nodes.subagent_node as sn
+
+        monkeypatch.setattr(sn, "_state_path", lambda: tmp_path / "registry.json")
+        monkeypatch.setattr(sn, "_FIRETEAMS", {})
+        monkeypatch.setattr(sn, "_TEAM_ARCHIVE", [])
+
+        async def scenario():
+            # a team whose single future is already done
+            async def done_task():
+                return sn.SubagentResult(subagent_id="lane1", task="probe /admin", success=True, findings="found admin panel", steps=3)
+
+            fut = asyncio.get_running_loop().create_task(done_task())
+            await fut
+            sn._FIRETEAMS["team-x"] = {"tasks": ["probe /admin"], "futures": [fut], "started": "t", "results": []}
+            msgs = sn.collect_finished_teams()
+            assert any("FIRETEAM RESULT" in m for m in msgs)
+            return msgs
+
+        asyncio.run(scenario())
+        import json
+
+        reg = json.loads((tmp_path / "registry.json").read_text())
+        assert any(t["team_id"] == "team-x" for t in reg["teams"]), "drained team must survive in the registry"
+        done = [t for t in reg["teams"] if t["team_id"] == "team-x"][0]
+        assert done["tasks"][0]["state"] == "done" and done["tasks"][0]["success"] is True
+        assert "found admin panel" in done["tasks"][0]["findings"]
