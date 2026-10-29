@@ -195,7 +195,7 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
     # The harness holds the chain so the model doesn't have to — confirm
     # or kill nodes as primitives land; the loom re-renders every turn.
     if tool_name == "chain_track":
-        from suijin.server.tools.lib.chain_engine import loom_render, suggest, template_ids, track
+        from suijin.server.tools.lib.chain_engine import loom_render, template_ids, track
 
         _tid = str(tool_args.get("template", "")).strip()
         _action = str(tool_args.get("action", "")).strip().lower()
