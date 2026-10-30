@@ -189,3 +189,99 @@ def heal_command(cmd: str, home: str) -> tuple[str, list[str]]:
                     f"move it OUTSIDE the quotes; as written the redirect is part of the filename."
                 )
     return healed, notes
+
+
+_SIZE_RE = re.compile(r"\[Size:\s*(\d+)\]")
+_VERSION_RE = re.compile(r"(\d+(?:\.\d+)+[\w.-]*)")
+_NMAP_RE = re.compile(r"^(\d+)/(tcp|udp)\s+open(?:\|filtered)?\s+(\S+)[ \t]*(.*)$", re.MULTILINE)
+_DIR_RE = re.compile(r"^\s*(/[^\s]*)\s+(?:\(Status:\s*(\d+)|(\d+))", re.MULTILINE)
+
+# ── the ORIGINAL normalizer API (restored 2026-10-30) ────────────────
+# My ffuf/structured rewrite replaced this file wholesale and destroyed
+# the nmap/dirs parsers the safety-resilience suite pins. Both APIs now
+# live here: the original parse_nmap/parse_dirs/normalize_output(kind=)
+# plus the newer ffuf/structured functions. Merge, not replace.
+
+
+def _parse_nmap_impl(output: str) -> list[dict]:
+    """[{port, proto, service, product, version, banner}] per reachable service.
+
+    The full remainder after service is preserved in `banner` — script (NSE)
+    output and uncommon banners never get dropped."""
+    out = []
+    for m in _NMAP_RE.finditer(output or ""):
+        port, proto, service, rest = m.groups()
+        vm = _VERSION_RE.search(rest)
+        out.append(
+            {
+                "port": int(port),
+                "proto": proto,
+                "service": service,
+                "product": (rest[: vm.start()].strip() if vm else rest.strip())[:60],
+                "version": vm.group(1) if vm else "",
+                "banner": rest.strip()[:120],
+            }
+        )
+    return out
+
+
+
+
+def _parse_dirs_impl(output: str, min_status: int = 200, max_status: int = 399) -> list[dict]:
+    """[{path, status, size?}] for paths in the status window. Size kept
+    when the tool prints it (gobuster) — useful for spotting real pages."""
+    out = []
+    for m in _DIR_RE.finditer(output or ""):
+        path, s1, s2 = m.groups()
+        status = int(s1 or s2 or 0)
+        if min_status <= status <= max_status:
+            entry = {"path": path, "status": status}
+            sm = _SIZE_RE.search(output[m.start() : m.start() + 200])
+            if sm:
+                entry["size"] = int(sm.group(1))
+            out.append(entry)
+    return out
+
+
+
+
+def _normalize_output_impl(tool_output: str, kind: str = "auto") -> str:
+    """Agent-facing: compact JSON from a raw tool dump.
+
+    kind: 'nmap' | 'dirs' | 'auto' (sniffs which parser fits).
+    Returns a short JSON string (or a note when nothing matched) — never raises.
+    """
+    try:
+        text = tool_output or ""
+        if kind == "auto":
+            if _NMAP_RE.search(text):
+                kind = "nmap"
+            elif _DIR_RE.search(text):
+                kind = "dirs"
+            else:
+                return (
+                    "No structure recognized (nmap service table or dir-brute results). "
+                    "kind: nmap|dirs forces a parser."
+                )
+        if kind == "nmap":
+            rows = parse_nmap(text)
+            return json.dumps(rows) if rows else "[]"
+        if kind == "dirs":
+            rows = parse_dirs(text)
+            return json.dumps(rows) if rows else "[]"
+        return f"Unknown kind '{kind}' — use nmap, dirs, or auto."
+    except Exception as e:  # normalizing must never break a tool call
+        return f"normalize error: {e}"
+
+
+
+def parse_nmap(output: str) -> list[dict]:
+    return _parse_nmap_impl(output)
+
+
+def parse_dirs(output: str, min_status: int = 200, max_status: int = 399) -> list[dict]:
+    return _parse_dirs_impl(output, min_status, max_status)
+
+
+def normalize_output(tool_output: str, kind: str = "auto") -> str:
+    return _normalize_output_impl(tool_output, kind)

@@ -28,8 +28,15 @@ def context_path() -> Path:
     return state_dir() / "context.md"
 
 
-def write_guidance(line: str, mode: str = "") -> None:
-    """Append one operator guidance line. The think node consumes it."""
+def write_guidance(line: str, mode: str = "", origin: str = "console") -> None:
+    """Append one operator guidance line. The think node consumes it.
+
+    FORENSIC PERSISTENCE (2026-10-30, the fabricated-wrap-up incident):
+    the live file is consumed+truncated by design — when an agent quoted
+    'operator-requested wrap-up' the operator never sent, NO trace
+    existed to prove the source. Every write now also lands in the
+    append-only guidance_log.md WITH its origin, so the next fabrication
+    (or fat-fingered autocomplete) is provable."""
     import time
 
     try:
@@ -39,6 +46,9 @@ def write_guidance(line: str, mode: str = "") -> None:
         tag = f"[{mode.upper()}] " if mode else ""
         with p.open("a", encoding="utf-8") as fh:
             fh.write(f"- {stamp} {tag}{str(line).strip()}\n")
+        log = p.parent / "guidance_log.md"
+        with log.open("a", encoding="utf-8") as fh:
+            fh.write(f"- {time.strftime('%Y-%m-%d %H:%M:%S')} [{origin}] {tag}{str(line).strip()[:400]}\n")
     except OSError:
         pass  # guidance must never break the input loop
 

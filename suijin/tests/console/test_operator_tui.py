@@ -595,7 +595,7 @@ def test_report_tells_every_agent_to_wrap_up_and_end(demo):
     n = len(ui.agents)
     assert n >= 2
     ui._execute("/report")
-    assert ui.note == f"wrap-up + report + end queued to {n} agents"
+    assert ui.note.startswith(f"wrap-up + report + end queued to {n} agents")
     for a in ui.agents:
         g = (Path(a.engagement_dir) / "state" / "live_guidance.md").read_text()
         assert "[REPORT] OPERATOR:" in g
@@ -756,3 +756,26 @@ def test_scan_finds_audits_at_the_v72_engagements_root(tmp_path, monkeypatch):
     assert len(agents) == 1
     a = agents[0]
     assert a.iterations and a.iterations[0]["action"]["tool"] == "nmap_scan", "trail not matched at the base root"
+
+
+class TestGuidanceForensics:
+    def test_wrap_up_writes_the_permanent_log(self, tmp_path):
+        """2026-10-30 fabricated-wrap-up incident: the live file is consumed
+        by design and the evidence vanished. Every guidance write now lands
+        in the append-only guidance_log.md WITH its origin."""
+        mesh = tmp_path / "mesh"
+        mesh.mkdir()
+        eng = tmp_path / "eng" / "e1"
+        (eng / "state").mkdir(parents=True)
+        import time as _t
+
+        now = _t.time()
+        (mesh / "4242.json").write_text(json.dumps({"pid": 4242, "summary": "t", "phase": "r", "started": now, "beat": now}))
+        ui = ot.OperatorTUI(mesh, tmp_path, live=False)
+        ui.agents = ot.scan_agents(mesh, tmp_path, live=False)
+        ui.agents[0].engagement_dir = eng
+        assert ui._wrap_up_guidance(ui.agents[0], origin="operator-tui:/report")
+        log = (eng / "state" / "guidance_log.md").read_text()
+        assert "[operator-tui:/report:REPORT]" in log and "wrap up now" in log
+        live = (eng / "state" / "live_guidance.md").read_text()
+        assert "wrap up now" in live  # consumed later by design; log persists
