@@ -20,24 +20,24 @@ def _fmt(stdout: str, cmd: str = "ffuf -u http://t/FUZZ") -> str:
 class TestFfufUsageDump:
     def test_usage_dump_collapses_to_diagnosis(self):
         dump = "Fuzz Faster U Fool - 2.1.0\nHTTP OPTIONS: -u URL\nMATCHER OPTIONS: -mc 200"
-        out = normalize_output("ffuf -u x/FUZZ -w ~/wordlists/missing.txt", _fmt(dump))
+        out = normalize_terminal_output("ffuf -u x/FUZZ -w ~/wordlists/missing.txt", _fmt(dump))
         assert "Fuzz Faster U Fool" not in out
         assert "ARGUMENT FAILURE" in out
 
     def test_missing_wordlist_named(self, tmp_path):
         dump = "Fuzz Faster U Fool - 2.1.0\nHTTP OPTIONS:\nMATCHER OPTIONS:"
-        out = normalize_output(f"ffuf -u x/FUZZ -w {tmp_path}/nope.txt", _fmt(dump))
+        out = normalize_terminal_output(f"ffuf -u x/FUZZ -w {tmp_path}/nope.txt", _fmt(dump))
         assert "wordlist not found" in out
 
     def test_unwritable_output_dir_named(self, tmp_path):
         dump = "Fuzz Faster U Fool\nHTTP OPTIONS:\nMATCHER OPTIONS:"
         dead = tmp_path / "no" / "such" / "dir"
-        out = normalize_output(f"ffuf -u x/FUZZ -w ok.txt -o {dead}/r.json -of json", _fmt(dump))
+        out = normalize_terminal_output(f"ffuf -u x/FUZZ -w ok.txt -o {dead}/r.json -of json", _fmt(dump))
         assert "-o directory does not exist" in out
 
     def test_normal_ffuf_output_kept(self):
         body = "admin [Status: 200, Words: 12, Lines: 3]\napi [Status: 200]"
-        out = normalize_output("ffuf -u x/FUZZ -w w.txt", _fmt(body))
+        out = normalize_terminal_output("ffuf -u x/FUZZ -w w.txt", _fmt(body))
         assert "admin" in out and "ARGUMENT FAILURE" not in out
 
 
@@ -55,7 +55,7 @@ class TestFfufJsonExtraction:
             )
         )
         monkeypatch.chdir(tmp_path)
-        out = normalize_output("ffuf -u t/FUZZ -w w -o sweep.json -of json", _fmt("sweeping…"))
+        out = normalize_terminal_output("ffuf -u t/FUZZ -w w -o sweep.json -of json", _fmt("sweeping…"))
         assert "2 result(s)" in out
         assert "http://t/api" in out and "403" in out
 
@@ -63,7 +63,7 @@ class TestFfufJsonExtraction:
         f = tmp_path / "e.json"
         f.write_text(json.dumps({"results": []}))
         monkeypatch.chdir(tmp_path)
-        out = normalize_output("ffuf -u t/FUZZ -w w -o e.json -of json", _fmt("x"))
+        out = normalize_terminal_output("ffuf -u t/FUZZ -w w -o e.json -of json", _fmt("x"))
         assert "0 results matched" in out
 
     def test_over_40_results_truncated_with_pointer(self, tmp_path, monkeypatch):
@@ -72,14 +72,14 @@ class TestFfufJsonExtraction:
             json.dumps({"results": [{"url": f"http://t/r{i}", "status": 200, "length": i} for i in range(55)]})
         )
         monkeypatch.chdir(tmp_path)
-        out = normalize_output("ffuf -u t/FUZZ -w w -o big.json -of json", _fmt("x"))
+        out = normalize_terminal_output("ffuf -u t/FUZZ -w w -o big.json -of json", _fmt("x"))
         assert "55 result(s)" in out and "and 15 more" in out
 
 
 class TestProgressStrip:
     def test_progress_lines_removed(self):
         body = ":: Progress: [1200/2000] :: Job [1/1] :: 200 req/sec ::\nadmin [Status: 200]"
-        out = normalize_output("ffuf -u x/FUZZ -w w", _fmt(body))
+        out = normalize_terminal_output("ffuf -u x/FUZZ -w w", _fmt(body))
         assert "Progress" not in out and "admin" in out
 
 
