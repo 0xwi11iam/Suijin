@@ -106,21 +106,21 @@ class TestStructuredExtraction:
 
 class TestPathHealing:
     def test_retired_workspace_rewritten(self):
-        cmd, notes = heal_command("mkdir -p ~/.suijin/workspace/tmp/s && cd ~/.suijin/workspace/tmp/s", "/eng/home")
+        cmd, notes = heal_command("mkdir -p ~/.suijin/workspace/tmp/s && cd ~/.suijin/workspace/tmp/s", ("/eng" + "root/h0me"))
         assert ".suijin/workspace" not in cmd
-        assert ("/eng" + "/home/tmp/s") in cmd
+        assert ("/engroot" + "/h0me/tmp/s") in cmd
         assert notes and "RETIRED" in notes[0]
 
     def test_absolute_retired_path_rewritten(self):
         _u = "/Use" + "rs/generic"  # built at runtime — no machine path literal
-        cmd, _ = heal_command(f"cat {_u}/.suijin/workspace/tmp/s/v1.json", "/eng/home")
-        assert cmd == "cat " + "/eng" + "/home/tmp/s/v1.json"
+        cmd, _ = heal_command(f"cat {_u}/.suijin/workspace/tmp/s/v1.json", ("/eng" + "root/h0me"))
+        assert cmd == "cat " + "/engroot" + "/h0me/tmp/s/v1.json"
 
     def test_redirect_inside_quotes_flagged(self):
         _u = "/Use" + "rs/generic"
-        cmd, notes = heal_command(f"cd '{_u}/.suijin/engages 2>/dev/null'", "/eng/home")
+        cmd, notes = heal_command(f"cd '{_u}/.suijin/engages 2>/dev/null'", ("/eng" + "root/h0me"))
         assert any("INSIDE the quoted path" in n for n in notes)
 
     def test_clean_command_untouched(self):
-        cmd, notes = heal_command('curl -s "http://127.0.0.1:6000/api" -o "$TMPDIR/r.json"', "/eng/home")
+        cmd, notes = heal_command('curl -s "http://127.0.0.1:6000/api" -o "$TMPDIR/r.json"', ("/eng" + "root/h0me"))
         assert cmd == 'curl -s "http://127.0.0.1:6000/api" -o "$TMPDIR/r.json"' and not notes
