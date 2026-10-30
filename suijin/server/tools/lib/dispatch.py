@@ -783,7 +783,14 @@ def _build_routes(config):
         "mine_failures": lambda a: mine_failures(max_clusters=int(a.get("max_clusters", 5))),
         "anonymize_report": lambda a: anonymize_report(a.get("file_path", "")),
         "http_request": lambda a: _obs_wrap(
-            a, http_request(a.get("method", "GET"), a.get("url"), a.get("headers"), a.get("body"))
+            a,
+            http_request(
+                a.get("method", "GET"),
+                a.get("url"),
+                a.get("headers"),
+                a.get("body"),
+                credential=a.get("credential", ""),
+            ),
         ),
         "bypass_403": lambda a: _bypass_403(a.get("url", "")),
         "skill_search": lambda a: _skill_search(a.get("query", ""), limit=int(a.get("limit", 10))),

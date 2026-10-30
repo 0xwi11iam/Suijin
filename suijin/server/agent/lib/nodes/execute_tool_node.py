@@ -2,6 +2,7 @@
 
 import asyncio as _asyncio
 import contextlib
+import json
 import logging
 import threading
 import time as _time
@@ -350,6 +351,16 @@ async def execute_tool_node(state: dict, *, route_tool_fn) -> dict:
             _tv = _tunnel_vision_notice(state, tool_name, tool_args, str(output))
             if _tv:
                 _msg = _tv + "\n" + _msg
+
+        # TOOL DOCTRINE (2026-10-30): the model defaults to http_request for
+        # everything — payload probes, fuzzing, compares. When the args smell
+        # like a job a better tool owns, the result says so (advisory).
+        with contextlib.suppress(Exception):
+            from suijin.modules.agent.lib.tool_doctrine import upgrade_notice
+
+            _up = upgrade_notice(tool_name, tool_args)
+            if _up:
+                _msg = _up + "\n" + _msg
         return {
             **_harvest_findings(state, tool_name, output),
             **_extra_state,
@@ -588,8 +599,17 @@ def _state_result_message(tool_name, duration_ms, step_data, output, state) -> s
     - PIN-TAGGED (R2): findings/credentials enter with [PIN] so compaction
       carries them verbatim instead of compressing the crown jewels into
       an 80-char header line.
+    - REDACTED (2026-10-30): credential/flag literals in the COMMAND text
+      become references — the live run pasted Bearer FLAG{...} into every
+      call and the literal rode every transcript. The request already
+      went out; the record doesn't need the secret.
     """
     from suijin.modules.agent.lib.context_distill import distill_result
+
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.redaction import redact
+
+        output = redact(str(output))
 
     cfg = (state or {}).get("_run_config") or {}
     cap = int(cfg.get("context_result_cap") or 0) or None
@@ -615,15 +635,17 @@ def _audit_step(state, tool_name, tool_args, success, duration_ms):
     H6: iteration comes from the EXECUTING STEP first — current_iteration
     isn't set in state at execute time, so every row in every
     agent_steps.jsonl read 'iteration=?' (per-iteration forensics were
-    impossible)."""
+    impossible).
+    REDACTED (2026-10-30): credential literals in args become references."""
     try:
         from suijin.kernel.audit import ToolAudit
+        from suijin.modules.tools.lib.redaction import redact
 
         iteration = (state.get("_current_step") or {}).get("iteration") or state.get("current_iteration") or "?"
         ToolAudit(_artifact_dir("audit_trails"), "agent_steps.jsonl", flush_every=1).record(
             surface="agent",
             name=tool_name,
-            args=tool_args,
+            args=json.loads(redact(json.dumps(tool_args, default=str))) if isinstance(tool_args, dict) else tool_args,
             outcome="ok" if success else "tool-error",
             duration_ms=duration_ms,
             detail=f"iteration={iteration}",

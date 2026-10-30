@@ -962,6 +962,16 @@ class TypewriterStream:
         if lang == "json":
             with contextlib.suppress(Exception):
                 content = json.dumps(json.loads(content), indent=2, ensure_ascii=False)[:50_000]
+        else:
+            # JSON ANYWHERE (2026-10-30, operator rule: 'never omit
+            # prettification even inside reasoning'): fence spans without
+            # a lang tag still often carry JSON — parse-probe and indent
+            # when it parses; failures fall through untouched.
+            with contextlib.suppress(Exception):
+                stripped = str(content).lstrip()
+                if stripped[:1] in "{[":
+                    content = json.dumps(json.loads(content), indent=2, ensure_ascii=False)[:50_000]
+                    lang = "json"
         with contextlib.suppress(Exception):
             lexer = lang if lang not in ("", "bash", "sh") else "bash"
             if lexer in ("json", "javascript", "js", "python", "bash", "sh", "html", "xml"):
@@ -1591,10 +1601,26 @@ class EngagementUI:
         """Rebuild the strip renderable. refresh=True also paints NOW —
         reserved for operator-visible state flips (pause, waiting, typed
         input); the high-frequency paths stay update-only and the ~10Hz
-        painter lands them within 100ms."""
-        if self._live is not None:
+        painter lands them within 100ms.
+
+        RENDER BOUNDARY (2026-10-30, the reliability standard): a render
+        exception renders an in-TUI fault line instead of freezing the
+        strip or dying — the operator sees WHAT broke and the run
+        continues. Suppression is the opposite of resilience: it hides
+        the fault until it becomes a dead screen."""
+        if self._live is None:
+            return
+        try:
+            self._live.update(self._strip(), refresh=refresh)
+        except Exception as e:  # noqa: BLE001 — the boundary catches, never dies
+            self._render_faults = min(getattr(self, "_render_faults", 0) + 1, 99)
+            self._last_render_fault = f"{type(e).__name__}: {e}"[:120]
             with contextlib.suppress(Exception):
-                self._live.update(self._strip(), refresh=refresh)
+                degraded = Text.assemble(
+                    ("!render ", "bold red"),
+                    (f"x{self._render_faults} last: {self._last_render_fault} — strip degraded, run continues", "red"),
+                )
+                self._live.update(degraded, refresh=refresh)
 
     # ── streamed iteration block ───────────────────────────────────────
 

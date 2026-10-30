@@ -108,6 +108,7 @@ HOME_USERLAND = (
     ".config",
     ".local/share",
     ".ssh",  # keys the agent generates live WITH the engagement
+    "wordlists",  # the bundled sets land here (common.txt, api-endpoints.txt)
 )
 
 #: routed INSIDE the engagement on demand (modules that predate the
@@ -306,6 +307,22 @@ def home_dir() -> Path:
     for sub in HOME_USERLAND:
         with contextlib.suppress(OSError):
             (h / sub).mkdir(parents=True, exist_ok=True)
+    # BUNDLED WORDLISTS (2026-10-30): ~/wordlists/common.txt + api-endpoints.txt
+    # ship with every engagement — the live run referenced ~/wordlists/api-endpoints.txt
+    # that didn't exist. Idempotent seed: bundled versions only land when
+    # the file is ABSENT (operator-curated lists are never overwritten).
+    with contextlib.suppress(Exception):
+        _src = Path(__file__).resolve().parents[3] / "server" / "tools" / "lib" / "wordlists"
+        _dst = h / "wordlists"
+        if _src.is_dir():
+            for _name in ("common.txt", "api-endpoints.txt"):
+                _target = _dst / _name
+                if not _target.exists():
+                    _bundled = _src / _name
+                    if _bundled.is_file():
+                        import shutil as _shutil
+
+                        _shutil.copy2(_bundled, _target)
     return h
 
 

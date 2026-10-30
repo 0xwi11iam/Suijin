@@ -52,9 +52,39 @@ def _ws():
     return workspace
 
 
-def http_request(method, url, headers=None, body=""):
-    """Advanced Browser Mimicry Engine with session awareness and rate limiting."""
+def http_request(method, url, headers=None, body="", credential=""):
+    """Advanced Browser Mimicry Engine with session awareness and rate limiting.
+
+    credential="name" — THE documented handoff: loads the named credential
+    from the store and injects it (Authorization: Bearer for tokens, Cookie
+    for cookies, basic auth for user/pass). The guidance has referenced
+    this param since the auth rework; it didn't exist (lying-doc bug) and
+    the model pasted literal tokens into headers instead — the exact
+    FLAG{...}-in-every-call anti-pattern from the live run."""
     try:
+        req_headers = dict(headers) if headers else {}
+        _cred_note = ""
+        if str(credential or "").strip():
+            import json as _json
+
+            from suijin.modules.credential_store.main import creds_get
+
+            with contextlib.suppress(Exception):
+                rec = _json.loads(creds_get(str(credential).strip()))
+                val = str(rec.get("value", ""))
+                ctype = str(rec.get("type", "")).lower()
+                if val:
+                    if "cookie" in ctype or val.count("=") > 1 and val.count(";") >= 1 and " " not in val:
+                        req_headers.setdefault("Cookie", val)
+                    elif rec.get("username"):
+                        import base64 as _b64
+
+                        basic = _b64.b64encode(f"{rec.get('username')}:{val}".encode()).decode()
+                        req_headers.setdefault("Authorization", f"Basic {basic}")
+                    else:
+                        req_headers.setdefault("Authorization", f"Bearer {val}")
+                    _cred_note = f"\n[credential: {credential} ({ctype or 'token'}) injected]"
+
         # Rate limit check
         from suijin.modules.tools.lib.session_aware import get_session, is_rate_limited, record_response
 
@@ -115,7 +145,7 @@ def http_request(method, url, headers=None, body=""):
             out.append(
                 "Note: 403 Forbidden — the bypass_403 tool can battery-test path/header/method variants on this URL."
             )
-        return _truncate("\n".join(out))
+        return _truncate("\n".join(out) + _cred_note)
     except Exception as e:
         return f"HTTP Error: {str(e)}"
 
@@ -274,9 +304,7 @@ def read_file(file_path):
                 fh.seek(max(0, size - tail_n))
                 tail = fh.read().decode("utf-8", errors="ignore")
             return _truncate(
-                head
-                + f"\n\n[… {size - head_n - tail_n} bytes omitted mid-file ({size} total) …]\n\n"
-                + tail
+                head + f"\n\n[… {size - head_n - tail_n} bytes omitted mid-file ({size} total) …]\n\n" + tail
             )
         return _truncate(target.read_text(encoding="utf-8", errors="ignore"))
     except Exception as e:
