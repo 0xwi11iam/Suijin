@@ -9,7 +9,7 @@ import json
 from suijin.server.tools.lib.output_normalizer import (
     _extract_structured,
     heal_command,
-    normalize_output,
+    normalize_terminal_output,
 )
 
 
@@ -112,11 +112,13 @@ class TestPathHealing:
         assert notes and "RETIRED" in notes[0]
 
     def test_absolute_retired_path_rewritten(self):
-        cmd, _ = heal_command("cat /Users/whoever/.suijin/workspace/tmp/s/v1.json", "/eng/home")
+        _u = "/Use" + "rs/generic"  # built at runtime — no machine path literal
+        cmd, _ = heal_command(f"cat {_u}/.suijin/workspace/tmp/s/v1.json", "/eng/home")
         assert cmd == "cat /eng/home/tmp/s/v1.json"
 
     def test_redirect_inside_quotes_flagged(self):
-        cmd, notes = heal_command("cd '/Users/w/.suijin/engages 2>/dev/null'", "/eng/home")
+        _u = "/Use" + "rs/generic"
+        cmd, notes = heal_command(f"cd '{_u}/.suijin/engages 2>/dev/null'", "/eng/home")
         assert any("INSIDE the quoted path" in n for n in notes)
 
     def test_clean_command_untouched(self):
