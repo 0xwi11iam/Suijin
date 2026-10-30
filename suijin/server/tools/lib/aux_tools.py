@@ -9,6 +9,12 @@ def _web_search(query: str, max_results: int = 5) -> str:
     return web_search(query, max_results)
 
 
+def _fetch_resource(url: str, save_to: str = "") -> str:
+    from suijin.modules.tools.lib.web_search import fetch_resource
+
+    return fetch_resource(url, save_to)
+
+
 def _edit_skill(skill_name: str, new_content: str) -> str:
     from suijin.modules.tools.lib.self_improve import edit_skill
 

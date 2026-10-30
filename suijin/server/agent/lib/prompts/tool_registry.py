@@ -203,6 +203,16 @@ TOOL_REGISTRY = {
         "args_format": '"query": "search terms here", "max_results": 5',
         "description": "**web_search** — searches DuckDuckGo. Returns titles, snippets, URLs. Use for research.",
     },
+    "fetch_resource": {
+        "purpose": "Download an online resource to a REAL local path (ready to install)",
+        "when_to_use": "Found a tool/PoC/wordlist online — web_search finds it, this downloads it.",
+        "args_format": '"url": "https://…/tool.py", "save_to": "/real/path/tool.py"',
+        "description": (
+            "**fetch_resource** — URL → real local file, size + sha256 reported. "
+            "Online resources are installable: web_search → fetch_resource → pip_install / execute_terminal. "
+            "Verify the hash against the source before trusting."
+        ),
+    },
     "pip_install": {
         "purpose": "Install Python packages the agent needs",
         "when_to_use": "Install tools like pwntools, impacket, paramiko for exploitation.",
