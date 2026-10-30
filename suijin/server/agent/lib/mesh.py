@@ -795,9 +795,14 @@ def _ssh_mesh_port(
 
     repo = str(Path(__file__).resolve().parents[4])  # the PARENT of the suijin package (importable root)
     py = _sys.executable
-    ws = remote_workspace or "$HOME/.suijin/workspace"
+    # NO default SUIJIN_WORKSPACE export (2026-10-30 /connect debug): the
+    # old default '$HOME/.suijin/workspace' is the RETIRED v7.2 path — the
+    # remote read a ghost registry and every healthy join failed discovery.
+    # The remote resolves its own layout; only an EXPLICIT remote_workspace
+    # (hermetic tests, multi-install machines) is exported.
+    ws_prefix = f"export SUIJIN_WORKSPACE={remote_workspace}; " if remote_workspace else ""
     inner = (
-        f"export SUIJIN_WORKSPACE={ws}; "
+        f"{ws_prefix}"
         f"suijin mesh-port 2>/dev/null && exit 0; "
         f"~/.local/bin/suijin mesh-port 2>/dev/null && exit 0; "
         f"PYTHONPATH={repo} {py} -c 'from suijin.modules.console.lib.cli import run_mesh_port; run_mesh_port()'"
@@ -941,8 +946,14 @@ def connect_remote(
                     spec, port=port, identity=identity, kh_file=kh_file, remote_workspace=remote_workspace
                 )
                 lp, rp = _free_port(), _free_port()
-                cmd[-2] = f"127.0.0.1:{lp}:127.0.0.1:{int(theirs['port'])}"
-                cmd[-4] = f"127.0.0.1:{rp}:127.0.0.1:{srv.port}"
+                # SLOT ORDER FIX (2026-10-30 /connect debug): cmd ends
+                # [..., "-L", Lspec, "-R", Rspec, spec] — cmd[-2] is the
+                # -R SLOT and cmd[-4] the -L SLOT. The old code wrote the
+                # L string into -R and vice versa: the retry tunnel wired
+                # both forwards into loops, HELLOed OURSELVES, and
+                # registered the wrong peer silently.
+                cmd[-4] = f"127.0.0.1:{lp}:127.0.0.1:{int(theirs['port'])}"
+                cmd[-2] = f"127.0.0.1:{rp}:127.0.0.1:{srv.port}"
                 proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 _node["tunnels"].append(proc)
                 for _ in range(40):
@@ -958,6 +969,13 @@ def connect_remote(
         else:
             return f"Error: HELLO refused ({e}) — key mismatch? The remote's mesh key must match yours"
     their_me = reply.get("me") or {}
+    # WRONG-PEER GUARD (2026-10-30): a tunnel wired into a loop makes the
+    # HELLO hit OUR OWN server — registering ourselves as the remote peer
+    # (silent, corrosive). Impossible state: fail loudly instead.
+    if int(their_me.get("pid") or 0) == os.getpid():
+        with contextlib.suppress(Exception):
+            proc.terminate()
+        return "Error: HELLO was answered by THIS process — the tunnel wired into a loop (mesh bug; please report)"
     _register_remote(spec, {**their_me, "lp": lp})
     return (
         f"joined remote node {spec} (their node-{their_me.get('pid', '?')}: "

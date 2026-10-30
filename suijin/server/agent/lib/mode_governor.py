@@ -379,20 +379,24 @@ def govern(state: dict, cfg: dict | None) -> dict | None:
             pass  # no forced phase transitions for the QA profile
         elif str(state.get("current_phase") or "") == "exploitation" and state.get("_foothold_at"):
             if not state.get("_post_exploit_done"):
+                # MODEL-OWNED TRANSITIONS (2026-10-30, operator ruling):
+                # the governor used to FORCE current_phase=post_exploitation
+                # the moment a foothold existed. The model decides now —
+                # the governor recommends (once), the model pivots via
+                # its transition_phase action when IT judges the surface
+                # right. Advisory, not automatic.
                 return {
-                    "current_phase": "post_exploitation",
-                    "_just_transitioned_to": "post_exploitation",
-                    "attack_path_type": "post_exploit",
-                    "_post_exploit_done": True,
-                    "_post_exploit_since": int(state.get("current_iteration") or 0),
-                    "_last_finding_iter": int(state.get("current_iteration") or 0),
+                    "_post_exploit_done": True,  # recommendation delivered (once)
+                    "_post_exploit_recommended": True,
                     "messages": [
                         {
                             "role": "user",
                             "content": (
-                                "MODE CHANGE → post_exploitation (procedural: foothold established — credentials "
-                                "or shell access captured). Doctrine switched to: post_exploit. "
-                                "Consolidate: privesc checklist, loot inventory, pivot surface, cleanup."
+                                "FOOTHOLD ESTABLISHED — post-exploitation is now the highest-value doctrine "
+                                "(privesc checklist, loot inventory, pivot surface, cleanup). The phase choice is "
+                                "YOURS: emit {\"action\":\"transition_phase\",\"to_phase\":\"post_exploitation\","
+                                "\"reason\":\"...\"} when you pivot to it — or stay in exploitation while live "
+                                "chains remain. Do not idle on this decision."
                             ),
                         }
                     ],

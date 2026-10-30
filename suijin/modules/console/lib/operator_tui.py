@@ -488,25 +488,92 @@ def _rj_text(text: str):
     return None
 
 
-def scan_agents(mesh_dir: Path, workspace: Path, live: bool = True) -> list[Agent]:
-    agents: list[Agent] = []
-    if not mesh_dir.is_dir():
-        return agents
+def discover_sources() -> list[dict]:
+    """Every engagement source THIS operator can see (2026-10-30).
 
-    # index audit trails by started timestamp for matching. v7.2: the
-    # engagements root moved to base/ (~/.suijin/engagements) while the
-    # workspace param still points at config/ — search BOTH or every
-    # audit match fails and the detail pager shows numbered EMPTY rows
-    # (the 'still fucking empty lines' bug; trails were fine on disk).
+    ONE OPERATOR EVERYWHERE: host sees box engagements, box sees host,
+    configured extras (cloud mounts, second boxes) join by config:
+      operator.mesh_sources     — extra mesh registry dirs to scan
+      operator.engagement_roots — extra engagement roots (audits + dormant)
+    Foreign sources are READ-ONLY: no pid probes, no file cleanup (a box
+    pid is not a host pid — liveness there is beat-freshness only).
+    """
+    import contextlib
+
+    from suijin.modules.agent.lib.mesh import mesh_dir as _mesh_dir
+    from suijin.modules.platform.lib.workspace import engagements_root as _er
+
+    sources: list[dict] = [{"mesh": _mesh_dir(), "engagements": _er(), "local": True}]
+
+    cfg: dict = {}
+    with contextlib.suppress(Exception):
+        from suijin.modules.platform.lib.config_loader import load_config
+
+        cfg = load_config().get("operator", {}) or {}
+
+    seen = {str(sources[0]["mesh"]), str(sources[0]["engagements"])}
+
+    def _add(mesh_p, eng_p):
+        with contextlib.suppress(Exception):
+            mesh_p = Path(mesh_p)
+            eng_p = Path(eng_p)
+            if str(eng_p) not in seen and eng_p.is_dir() and (mesh_p.is_dir() or eng_p.is_dir()):
+                seen.add(str(eng_p))
+                sources.append({"mesh": mesh_p, "engagements": eng_p, "local": False})
+
+    # configured extras first (explicit operator intent)
+    for m in cfg.get("mesh_sources", []) or []:
+        _add(m, Path(m).parent / "engagements" if "mesh" in str(m) else Path(m) / "engagements")
+    for r in cfg.get("engagement_roots", []) or []:
+        _add(Path(r).parent / "mesh", r)
+
+    # auto-discovery: OrbStack machines (host→box), host mount (box→host)
+    with contextlib.suppress(Exception):
+        for orb in (Path.home() / "OrbStack").iterdir():
+            if not orb.is_dir():
+                continue
+            for ws in orb.rglob("suijin-ws"):
+                if ws.is_dir():
+                    _add(ws / "mesh", ws / "engagements")
+                    break
+    with contextlib.suppress(Exception):
+        host_ws = Path("/Users")  # box→host: the host FS is mounted
+        for u in host_ws.iterdir():
+            as_dir = u / "Library" / "Application Support" / "suijin"
+            eng = u / ".suijin" / "engagements"
+            if as_dir.is_dir() and eng.is_dir():
+                _add(as_dir / "mesh", eng)
+                break
+    return sources
+
+
+def scan_agents(mesh_dir: Path, workspace: Path, live: bool = True, sources: list[dict] | None = None) -> list[Agent]:
+    """sources=None scans EXACTLY the passed mesh_dir (legacy contract every
+    test pins). sources=discover_sources() gives the ONE-EVERYWHERE view
+    (local + box + configured) — the TUI passes it; FOREIGN sources are
+    read-only: no pid probes, no cleanup (a box pid is not a host pid)."""
+    agents: list[Agent] = []
+
+    if sources is None:
+        _er = None
+        with contextlib.suppress(Exception):
+            from suijin.modules.platform.lib.workspace import engagements_root as _er_fn
+
+            _er = _er_fn()
+        sources = [{"mesh": mesh_dir, "engagements": _er, "local": True}]
+    elif not any(s.get("local") for s in sources) and mesh_dir.is_dir():
+        sources.insert(0, {"mesh": mesh_dir, "engagements": None, "local": True})
+
+    # index audit trails by started timestamp for matching — across EVERY
+    # source's engagement root plus the workspace param (v7.2 back-compat).
     audits: list[tuple[float, dict, Path]] = []
     eng_roots: list[Path] = []
-    with contextlib.suppress(Exception):
-        from suijin.modules.platform.lib.workspace import engagements_root as _er
-
-        _er = _er()
-        if _er not in eng_roots:
-            eng_roots.append(_er)
-    eng_roots.append(workspace / "engagements")
+    for s in sources:
+        er = s.get("engagements")
+        if er and Path(er) not in eng_roots:
+            eng_roots.append(Path(er))
+    if mesh_dir.is_dir():
+        eng_roots.append(workspace / "engagements")
     for eng_root in eng_roots:
         if not eng_root.is_dir():
             continue
@@ -518,136 +585,147 @@ def scan_agents(mesh_dir: Path, workspace: Path, live: bool = True) -> list[Agen
                 if f.name.startswith("agent_steps"):
                     continue
                 data = _rj(f)
-                if data and data.get("started"):
+                if data and data.get("started") and not is_unreadable(data):
                     audits.append((_iso_ts(data["started"]), data, d))
     audits.sort(key=lambda x: -x[0])
 
-    for f in sorted(mesh_dir.glob("*.json")):
-        if f.name.endswith("-state.json") or f.name == "remote-peers.json":
+    for src in sources:
+        src_mesh = Path(src.get("mesh") or Path())
+        is_local = bool(src.get("local"))
+        if not src_mesh.is_dir():
             continue
-        rec = _rj(f)
-        pid = int(rec.get("pid") or 0)
-        if not pid or pid == os.getpid():
-            continue
-        started = float(rec.get("started") or 0)
-        gone = (live and not _pid_alive(pid)) or (started and time.time() - started > 86400)
-        if gone:
-            # the window closed (or the node outlived a day — pid recycling
-            # can fake liveness) — the node is gone, take its files too
-            with contextlib.suppress(OSError):
-                (mesh_dir / f"{pid}.json").unlink(missing_ok=True)
-                (mesh_dir / f"{pid}-state.json").unlink(missing_ok=True)
-            continue
-        beat = float(rec.get("beat") or 0)
-        # stale beats no longer DROP the agent — the info stays on screen
-        # (alive property flips to False at 30s: pulse goes ✗, numbers hang)
+        for f in sorted(src_mesh.glob("*.json")):
+            if f.name.endswith("-state.json") or f.name == "remote-peers.json":
+                continue
+            rec = _rj(f)
+            if is_unreadable(rec):
+                continue
+            pid = int(rec.get("pid") or 0)
+            if not pid or (is_local and pid == os.getpid()):
+                continue
+            started = float(rec.get("started") or 0)
+            # LIVENESS: pid probing ONLY for same-namespace (local) nodes —
+            # a foreign pid number means a different process entirely.
+            gone = (started and time.time() - started > 86400) or (is_local and live and not _pid_alive(pid))
+            if gone:
+                if is_local:
+                    # the window closed (or the node outlived a day — pid
+                    # recycling can fake liveness) — take its files too
+                    with contextlib.suppress(OSError):
+                        (src_mesh / f"{pid}.json").unlink(missing_ok=True)
+                        (src_mesh / f"{pid}-state.json").unlink(missing_ok=True)
+                continue
+            beat = float(rec.get("beat") or 0)
+            # stale beats no longer DROP the agent — the info stays on screen
+            # (alive property flips to False at 30s: pulse goes ✗, numbers hang)
 
-        state = _rj(mesh_dir / f"{pid}-state.json")
-        _degraded = is_unreadable(state)
-        a = Agent(
-            pid=pid,
-            target=str(rec.get("summary") or "?")[:50],
-            phase=str(state.get("phase") or rec.get("phase") or "?" if not _degraded else "state unreadable"),
-            iteration=int(state.get("iteration") or 0) if not _degraded else 0,
-            findings=state.get("findings") or [] if not _degraded else [],
-            system_one=state.get("system_one") or None if not _degraded else None,
-            runtime=state.get("runtime") or None if not _degraded else None,
-            footholds=state.get("footholds") or [] if not _degraded else [],
-            recent_actions=[str(x) for x in (state.get("recent_actions") or [])]
-            if not _degraded
-            else ["state file unreadable — showing registry only"],
-            beat=beat,
-            port=int(rec.get("port") or 0),
-            started=float(rec.get("started") or 0),
-        )
+            state = _rj(src_mesh / f"{pid}-state.json")
+            _degraded = is_unreadable(state)
+            a = Agent(
+                origin=("local" if is_local else (src_mesh.parent.name + "/" + src_mesh.name)),
+                pid=pid,
+                target=str(rec.get("summary") or "?")[:50],
+                phase=str(state.get("phase") or rec.get("phase") or "?" if not _degraded else "state unreadable"),
+                iteration=int(state.get("iteration") or 0) if not _degraded else 0,
+                findings=state.get("findings") or [] if not _degraded else [],
+                system_one=state.get("system_one") or None if not _degraded else None,
+                runtime=state.get("runtime") or None if not _degraded else None,
+                footholds=state.get("footholds") or [] if not _degraded else [],
+                recent_actions=[str(x) for x in (state.get("recent_actions") or [])]
+                if not _degraded
+                else ["state file unreadable — showing registry only"],
+                beat=beat,
+                port=int(rec.get("port") or 0),
+                started=float(rec.get("started") or 0),
+            )
 
-        # match audit EXACTLY by engagement dir when the digest carries it;
-        # fall back to closest-started (within 60s) only for old sessions
-        hint = str(state.get("engagement_dir") or "").rstrip("/")
-        if hint:
-            for ts, data, eng_dir in audits:
-                if str(eng_dir).rstrip("/") == hint:
-                    a.audit_data = data
-                    a.engagement_dir = eng_dir
-                    break
-        if a.audit_data is None:
-            best_gap = 999
-            for ts, data, eng_dir in audits:
-                gap = abs(ts - a.started)
-                if gap < min(best_gap, 60):
-                    best_gap = gap
-                    a.audit_data = data
-                    a.engagement_dir = eng_dir
-        # findings = machine-proven only (POC-confirmed catalog entries);
-        # digest titles and audit claims stay out of every count
-        a.findings = _confirmed_exploits(a.engagement_dir)
+            # match audit EXACTLY by engagement dir when the digest carries it;
+            # fall back to closest-started (within 60s) only for old sessions
+            hint = str(state.get("engagement_dir") or "").rstrip("/")
+            if hint:
+                for ts, data, eng_dir in audits:
+                    if str(eng_dir).rstrip("/") == hint:
+                        a.audit_data = data
+                        a.engagement_dir = eng_dir
+                        break
+            if a.audit_data is None:
+                best_gap = 999
+                for ts, data, eng_dir in audits:
+                    gap = abs(ts - a.started)
+                    if gap < min(best_gap, 60):
+                        best_gap = gap
+                        a.audit_data = data
+                        a.engagement_dir = eng_dir
+            # findings = machine-proven only (POC-confirmed catalog entries);
+            # digest titles and audit claims stay out of every count
+            a.findings = _confirmed_exploits(a.engagement_dir)
 
-        if a.audit_data:
-            d = a.audit_data
-            a.cost_usd = float(d.get("cost_usd") or 0)
-            a.total_actions = int(d.get("total_actions") or 0)
-            a.ok_actions = int(d.get("successful_actions") or 0)
-            a.fail_actions = int(d.get("failed_actions") or 0)
-            iters = d.get("iterations") or []
-            # DEDUPE by iteration number (2026-10-14, the 'iteration N,
-            # no content' bug): old trails carry think-side tool=none
-            # stubs STACKED with the real execute-side entry for the
-            # same iteration — the pager walked onto blank rows while
-            # the red window showed the data. Richest entry per number.
-            merged: list = []
-            for it in iters:
-                if merged and merged[-1].get("iteration") == it.get("iteration"):
-                    act = (it.get("action") or {}).get("tool") or ""
-                    if act and act != "none":
-                        merged[-1] = it  # the real entry supersedes the stub
-                else:
-                    merged.append(it)
-            a.iterations = merged[-20:]
-            if iters:
-                last = iters[-1]
-                a.last_thought = str(last.get("thought") or "")
-                a.last_reasoning = str(last.get("reasoning") or "")
-                act = last.get("action") or {}
-                a.last_tool = str(act.get("tool") or "?")
-                a.last_args = act.get("args") or {}
-                a.last_ok = bool(act.get("success", True))
-                a.last_obs = str(last.get("observation") or "")
-                a.last_chain = str(last.get("chain_context") or "")
-            # findings stay confirmed-exploits-only — audit claims
-            # (behavior notes, false positives) never backfill the count
+            if a.audit_data:
+                d = a.audit_data
+                a.cost_usd = float(d.get("cost_usd") or 0)
+                a.total_actions = int(d.get("total_actions") or 0)
+                a.ok_actions = int(d.get("successful_actions") or 0)
+                a.fail_actions = int(d.get("failed_actions") or 0)
+                iters = d.get("iterations") or []
+                # DEDUPE by iteration number (2026-10-14, the 'iteration N,
+                # no content' bug): old trails carry think-side tool=none
+                # stubs STACKED with the real execute-side entry for the
+                # same iteration — the pager walked onto blank rows while
+                # the red window showed the data. Richest entry per number.
+                merged: list = []
+                for it in iters:
+                    if merged and merged[-1].get("iteration") == it.get("iteration"):
+                        act = (it.get("action") or {}).get("tool") or ""
+                        if act and act != "none":
+                            merged[-1] = it  # the real entry supersedes the stub
+                    else:
+                        merged.append(it)
+                a.iterations = merged[-20:]
+                if iters:
+                    last = iters[-1]
+                    a.last_thought = str(last.get("thought") or "")
+                    a.last_reasoning = str(last.get("reasoning") or "")
+                    act = last.get("action") or {}
+                    a.last_tool = str(act.get("tool") or "?")
+                    a.last_args = act.get("args") or {}
+                    a.last_ok = bool(act.get("success", True))
+                    a.last_obs = str(last.get("observation") or "")
+                    a.last_chain = str(last.get("chain_context") or "")
+                # findings stay confirmed-exploits-only — audit claims
+                # (behavior notes, false positives) never backfill the count
 
-        # EVENTS FALLBACK (2026-10-14): no audit match yet (trail not
-        # flushed / unmatched) but the engagement dir is known — rebuild
-        # the pager rows from events.jsonl (flushed per RECORD, so it is
-        # the freshest iteration source that exists mid-run).
-        if not a.iterations and a.engagement_dir:
-            with contextlib.suppress(Exception):
-                from suijin.modules.agent.lib.event_log import replay as _replay
+            # EVENTS FALLBACK (2026-10-14): no audit match yet (trail not
+            # flushed / unmatched) but the engagement dir is known — rebuild
+            # the pager rows from events.jsonl (flushed per RECORD, so it is
+            # the freshest iteration source that exists mid-run).
+            if not a.iterations and a.engagement_dir:
+                with contextlib.suppress(Exception):
+                    from suijin.modules.agent.lib.event_log import replay as _replay
 
-                st = _replay(Path(a.engagement_dir) / "events.jsonl")
-                trace = st.get("execution_trace") or []
-                if trace:
-                    a.iterations = [
-                        {
-                            "iteration": t.get("iteration") or (n + 1),
-                            "phase": "",
-                            "thought": "",
-                            "action": {
-                                "tool": t.get("tool_name"),
-                                "args": t.get("tool_args") or {},
-                                "success": t.get("success", True),
-                            },
-                            "observation": t.get("tool_output") or "",
-                        }
-                        for n, t in enumerate(trace[-20:])
-                    ]
-                    last = trace[-1]
-                    a.last_tool = str(last.get("tool_name") or "?")
-                    a.last_args = last.get("tool_args") or {}
-                    a.last_obs = str(last.get("tool_output") or "")
-                    a.last_ok = bool(last.get("success", True))
+                    st = _replay(Path(a.engagement_dir) / "events.jsonl")
+                    trace = st.get("execution_trace") or []
+                    if trace:
+                        a.iterations = [
+                            {
+                                "iteration": t.get("iteration") or (n + 1),
+                                "phase": "",
+                                "thought": "",
+                                "action": {
+                                    "tool": t.get("tool_name"),
+                                    "args": t.get("tool_args") or {},
+                                    "success": t.get("success", True),
+                                },
+                                "observation": t.get("tool_output") or "",
+                            }
+                            for n, t in enumerate(trace[-20:])
+                        ]
+                        last = trace[-1]
+                        a.last_tool = str(last.get("tool_name") or "?")
+                        a.last_args = last.get("tool_args") or {}
+                        a.last_obs = str(last.get("tool_output") or "")
+                        a.last_ok = bool(last.get("success", True))
 
-        agents.append(a)
+            agents.append(a)
 
     agents.sort(key=lambda x: -x.iteration)
     return agents
@@ -1921,7 +1999,7 @@ class OperatorTUI:
     def _guidance_file(self, a) -> Path:
         return Path(getattr(a, "engagement_dir", None) or "") / "state" / "live_guidance.md"
 
-    def _write_agent_guidance(self, a, tag: str, text: str) -> bool:
+    def _write_agent_guidance(self, a, tag: str, text: str, origin: str = "operator-tui") -> bool:
         gp = self._guidance_file(a)
         if not getattr(a, "engagement_dir", None):
             return False
@@ -1929,11 +2007,17 @@ class OperatorTUI:
             gp.parent.mkdir(parents=True, exist_ok=True)
             with gp.open("a", encoding="utf-8") as fh:
                 fh.write(f"- {time.strftime('%H:%M:%S')} [{tag}] OPERATOR: {text[:400]}\n")
+            # FORENSIC PERSISTENCE (2026-10-30): the live file is consumed
+            # by design; the append-only log keeps every guidance write
+            # WITH its origin — fabricated/spurious wrap-ups are provable.
+            log = gp.parent / "guidance_log.md"
+            with log.open("a", encoding="utf-8") as fh:
+                fh.write(f"- {time.strftime('%Y-%m-%d %H:%M:%S')} [{origin}:{tag}] {text[:400]}\n")
             return True
         except OSError:
             return False
 
-    def _wrap_up_guidance(self, a, extra: str = "") -> bool:
+    def _wrap_up_guidance(self, a, extra: str = "", origin: str = "operator-tui") -> bool:
         """`/report`: the operator closes the engagement — wrap up, write
         the final report, then SELF-TERMINATE. The authorization is
         explicit: the agent ends its own run (complete action, honest
@@ -1948,7 +2032,7 @@ class OperatorTUI:
         )
         if extra:
             text += f" Operator note: {extra[:100]}"
-        return self._write_agent_guidance(a, "REPORT", text)
+        return self._write_agent_guidance(a, "REPORT", text, origin=origin)
 
     def _execute_agent(self, cmd: str, args: str, argv: list[str]) -> None:
         """Engagement commands while su'd into an agent — the same file
@@ -1998,7 +2082,7 @@ class OperatorTUI:
             else:
                 self._note("no engagement dir for this agent")
         elif cmd == "/report":
-            if self._wrap_up_guidance(a, args):
+            if self._wrap_up_guidance(a, args, origin="operator-tui:/report"):
                 self._note("wrap-up queued — report + end, the agent reads it next turn")
             else:
                 self._note("no engagement dir for this agent")
@@ -2129,9 +2213,10 @@ class OperatorTUI:
                 (self.mesh_dir / "pause-operator").unlink(missing_ok=True)
             self._note("agents resuming")
         elif cmd == "/report":
-            queued = sum(1 for a in self.agents if self._wrap_up_guidance(a, args))
+            queued = sum(1 for a in self.agents if self._wrap_up_guidance(a, args, origin="operator-tui:/report"))
             if queued:
-                self._note(f"wrap-up + report + end queued to {queued} agents")
+                names = ", ".join(_hex_id(a.pid) for a in self.agents[:4])
+                self._note(f"wrap-up + report + end queued to {queued} agents ({names}) — logged to guidance_log.md")
             else:
                 self._note("no engagement dirs — nothing running to wrap up")
         elif cmd == "/clear":

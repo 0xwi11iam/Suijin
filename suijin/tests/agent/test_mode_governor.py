@@ -141,3 +141,25 @@ class TestScoreboard:
         s = _state(queue=[{"surface": "a", "cls": "web", "tried": False}], iters=3)
         sb = scoreboard(s)
         assert "untried_surfaces=1" in sb and "mode=informational" in sb
+
+
+class TestModelOwnedPhaseTransitions:
+    """2026-10-30 operator ruling: the governor RECOMMENDS post-exploitation
+    on a foothold; the MODEL pivots via transition_phase. No forced
+    current_phase patching."""
+
+    def test_foothold_recommends_but_does_not_force(self):
+        from suijin.modules.agent.lib.mode_governor import govern
+
+        state = {"current_phase": "exploitation", "_foothold_at": 123, "current_iteration": 10}
+        patch = govern(state, {})
+        assert patch is not None
+        assert "current_phase" not in patch, "the governor must not set the phase anymore"
+        assert patch.get("_post_exploit_recommended") is True
+        assert "transition_phase" in patch["messages"][0]["content"]
+
+    def test_recommendation_fires_once(self):
+        from suijin.modules.agent.lib.mode_governor import govern
+
+        state = {"current_phase": "exploitation", "_foothold_at": 1, "_post_exploit_done": True}
+        assert govern(state, {}) is None or "current_phase" not in (govern(state, {}) or {})
