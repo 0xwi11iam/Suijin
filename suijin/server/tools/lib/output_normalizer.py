@@ -129,7 +129,7 @@ def _extract_structured(stdout: str, limit: int = 2000) -> str | None:
     return "\n".join(out)
 
 
-def normalize_output(cmd: str, out: str) -> str:
+def normalize_terminal_output(cmd: str, out: str) -> str:
     """Apply all normalizations to a formatted terminal result."""
     if not out:
         return out

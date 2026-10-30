@@ -228,9 +228,9 @@ def execute_terminal(cmd, timeout=30, cwd=None):
         # to a table, progress spam strips, giant JSON extracts to a
         # summary. Field evidence: 4 help dumps + 15/52 truncated steps.
         try:
-            from suijin.server.tools.lib.output_normalizer import normalize_output
+            from suijin.server.tools.lib.output_normalizer import normalize_terminal_output
 
-            out = normalize_output(cmd, out)
+            out = normalize_terminal_output(cmd, out)
         except Exception:  # noqa: BLE001 — normalization never kills a result
             pass
         for _note in _heal_notes:
