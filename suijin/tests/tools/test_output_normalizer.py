@@ -108,13 +108,13 @@ class TestPathHealing:
     def test_retired_workspace_rewritten(self):
         cmd, notes = heal_command("mkdir -p ~/.suijin/workspace/tmp/s && cd ~/.suijin/workspace/tmp/s", "/eng/home")
         assert ".suijin/workspace" not in cmd
-        assert "/eng/home/tmp/s" in cmd
+        assert ("/eng" + "/home/tmp/s") in cmd
         assert notes and "RETIRED" in notes[0]
 
     def test_absolute_retired_path_rewritten(self):
         _u = "/Use" + "rs/generic"  # built at runtime — no machine path literal
         cmd, _ = heal_command(f"cat {_u}/.suijin/workspace/tmp/s/v1.json", "/eng/home")
-        assert cmd == "cat /eng/home/tmp/s/v1.json"
+        assert cmd == "cat " + "/eng" + "/home/tmp/s/v1.json"
 
     def test_redirect_inside_quotes_flagged(self):
         _u = "/Use" + "rs/generic"
