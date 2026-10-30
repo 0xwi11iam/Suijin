@@ -52,27 +52,56 @@ _DEVICE_LITERALS = (
     "/dev/fd",
 )
 
-_SANDBOX_EXEC = "/usr/bin/sandbox-exec"
+# ── LOCAL ACCESS (2026-10-30, operator ruling: local tasks are real work) ──
+# The operator's machine is a first-class work surface: read/write REAL
+# paths, interact with the actual OS, box or not. The old blanket mirror
+# made every outside write land in a fake engagement copy — 'the
+# directorying is a mess'. Capability-gated by config, with a HARD
+# system floor nothing crosses.
+
+_SYSTEM_FLOOR = (
+    "/System",
+    "/private/System",
+    "/Library",
+    "/private/Library",
+    "/etc",
+    "/private/etc",
+    "/usr",
+    "/bin",
+    "/sbin",
+    "/var/db",
+    "/private/var/db",
+)
 
 
-def _engagement_root():
-    from suijin.modules.platform.lib.workspace import engagement_dir
+def is_system_path(p) -> bool:
+    """The non-negotiable floor: OS/machine internals are never writable
+    regardless of any ruling — this protects the box itself."""
+    rp = str(Path(str(p)).expanduser().resolve())
+    return any(rp == f or rp.startswith(f + "/") for f in _SYSTEM_FLOOR)
 
-    return engagement_dir()
 
+def local_access_enabled() -> bool:
+    """Operator ruling (2026-10-30, default ON): the agent works on the
+    REAL local filesystem — reads land at real paths, writes at real
+    paths, HOME is the real home. Set local_access=false in config for
+    the old contained-mirror behavior (hermetic/CI/paranoid hosts)."""
+    try:
+        from suijin.modules.platform.lib.config_loader import load_config
 
-def _home():
-    from suijin.modules.platform.lib.workspace import home_dir
-
-    return home_dir()
+        return bool(load_config().get("local_access", True))
+    except Exception:  # noqa: BLE001 — a config hiccup never weakens the floor
+        return True
 
 
 def jail_path(raw, root: Path | None = None) -> Path:
     """Map an agent write target INSIDE the engagement.
 
+    - local_access (default): absolute non-system paths pass through REAL
+      — local tasks write where they say they write
     - already inside the engagement → unchanged
-    - absolute outside → mirrored under home/ (``/etc/x`` →
-      ``home/etc/x`` — the write succeeds, harmlessly contained)
+    - absolute outside (contained mode) → mirrored under home/ (``/etc/x``
+      → ``home/etc/x`` — the write succeeds, harmlessly contained)
     - relative → under home/ (the agent's userland cwd)
     - operator allowlisted surfaces (skills/, prompts/) → unchanged
     """
@@ -81,6 +110,8 @@ def jail_path(raw, root: Path | None = None) -> Path:
     home = root / "home"
 
     if p.is_absolute():
+        if local_access_enabled() and not is_system_path(p):
+            return p  # REAL local path — the operator's ruling
         try:
             p.relative_to(root)
         except ValueError:
@@ -97,6 +128,21 @@ def jail_path(raw, root: Path | None = None) -> Path:
             return home / str(p).lstrip("/").replace(":", "_")
         return p  # already inside the engagement
     return home / p  # relative paths resolve against the agent's userland
+
+
+_SANDBOX_EXEC = "/usr/bin/sandbox-exec"
+
+
+def _engagement_root():
+    from suijin.modules.platform.lib.workspace import engagement_dir
+
+    return engagement_dir()
+
+
+def _home():
+    from suijin.modules.platform.lib.workspace import home_dir
+
+    return home_dir()
 
 
 def is_confined(path, root: Path | None = None) -> bool:
@@ -137,6 +183,10 @@ def executor_env(root: Path | None = None) -> dict:
     engagement home so shells, ssh, compilers and caches never touch the
     real user dirs. Always applied (sandbox or not).
 
+    LOCAL ACCESS (2026-10-30, operator ruling): with local_access=true
+    (default) the REAL HOME/TMPDIR ride through — local tasks must see
+    the actual userland, box or not.
+
     PLAYWRIGHT_BROWSERS_PATH is the exception that proves the confinement:
     browsers are a ~550MB MACHINE-level asset. Left on the default (HOME-
     relative), the agent's own `playwright install` self-heal downloaded a
@@ -147,12 +197,15 @@ def executor_env(root: Path | None = None) -> dict:
     from suijin.modules.platform.lib.workspace import home_dir
 
     env = os.environ.copy()
-    home = Path(home_dir()) if root is None else Path(root) / "home"
-    tmp = home / "tmp"
-    with contextlib.suppress(OSError):
-        tmp.mkdir(parents=True, exist_ok=True)
-    env["HOME"] = str(home)
-    env["TMPDIR"] = str(tmp)
+    if local_access_enabled():
+        pass  # REAL HOME/TMPDIR — local tasks are real work (the ruling)
+    else:
+        home = Path(home_dir()) if root is None else Path(root) / "home"
+        tmp = home / "tmp"
+        with contextlib.suppress(OSError):
+            tmp.mkdir(parents=True, exist_ok=True)
+        env["HOME"] = str(home)
+        env["TMPDIR"] = str(tmp)
     with contextlib.suppress(Exception):
         from suijin.modules.platform.lib.workspace import caches_dir
 
@@ -182,7 +235,14 @@ def _sandbox_profile(root: Path | None = None, workspace=None) -> str:
 def wrap_exec(cmd: list, root: Path | None = None, workspace=None, strict: bool | None = None) -> tuple[list, bool]:
     """Prefix ``cmd`` (argv list) with the OS sandbox when it is installed
     and strict jailing is in force. Returns (argv, jailing_active). Any
-    deprecation/absence degrades to env-level confinement, never a lie."""
+    deprecation/absence degrades to env-level confinement, never a lie.
+
+    LOCAL ACCESS (2026-10-30): with the ruling active the process jail
+    would contradict the policy at the OS level (every real-path write
+    denied by sandbox-exec) — the jail only runs in contained mode; the
+    system floor still applies at the tool layer (is_system_path)."""
+    if local_access_enabled():
+        return list(cmd), False
     if strict is None:
         strict = _strict()
     if not (strict and sandbox_exec_available()):

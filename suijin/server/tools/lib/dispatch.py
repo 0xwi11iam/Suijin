@@ -158,6 +158,7 @@ from suijin.modules.tools.lib import intel as _intel
 from suijin.modules.tools.lib import wordlist_mutator as _wordlist
 from suijin.modules.tools.lib.aux_tools import (
     _edit_skill,
+    _fetch_resource,
     _list_own_files,
     _list_skills,
     _pip_install,
@@ -615,6 +616,7 @@ __all__ = [
     "_list_skills",
     "_pip_install",
     "_web_search",
+    "_fetch_resource",
     "_write_tool",
     # routing
     "route_tool",
@@ -1061,6 +1063,7 @@ def _build_routes(config):
         ),
         # Web search & self-improvement
         "web_search": lambda a: _web_search(a.get("query", ""), int(a.get("max_results", 5))),
+        "fetch_resource": lambda a: _fetch_resource(a.get("url", ""), a.get("save_to", "")),
         "edit_skill": lambda a: _edit_skill(a.get("skill_name", ""), a.get("new_content", "")),
         "write_tool": lambda a: _write_tool(a.get("tool_name", ""), a.get("code", "")),
         "list_skills": lambda a: _list_skills(),

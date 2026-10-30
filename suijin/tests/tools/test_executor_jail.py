@@ -3,6 +3,10 @@
 Process-level enforcement for shell redirection the tool-layer jail
 cannot see: HOME/TMPDIR confinement always; OS-level write-deny via
 sandbox-exec when installed (macOS) and executor_sandbox enabled.
+
+2026-10-30: these tests pin CONTAINED mode — local_access (the operator
+ruling, default ON) keeps the real HOME and skips the jail; the fixture
+below pins the contained path this suite exercises.
 """
 
 from __future__ import annotations
@@ -18,6 +22,13 @@ from suijin.server.confinement import (
     sandbox_exec_available,
     wrap_exec,
 )
+
+
+@pytest.fixture(autouse=True)
+def _contained_mode(monkeypatch):
+    import suijin.server.confinement as conf
+
+    monkeypatch.setattr(conf, "local_access_enabled", lambda: False)
 
 
 @pytest.fixture
@@ -183,6 +194,7 @@ class TestExecuteTerminalWiring:
         from suijin.modules.tools.lib.terminal import execute_terminal
 
         probe = "/var/tmp/suijin_jail_probe"
+        Path(probe).unlink(missing_ok=True)  # a stale artifact from an old leak must not fail the jail
         out = execute_terminal(f"echo x > {probe}")
         assert not Path(probe).exists(), "jail failed: wrote outside workspace"
         assert "Operation not permitted" in out or "denied" in out.lower()

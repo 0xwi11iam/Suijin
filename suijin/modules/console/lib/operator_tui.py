@@ -547,6 +547,68 @@ def discover_sources() -> list[dict]:
     return sources
 
 
+def scan_dormant(sources: list[dict], claimed: set[str] | None = None, hours: float = 48.0) -> list[Agent]:
+    """Recent engagements with NO live node — yesterday's runs stay
+    visible (2026-10-30 operator rule: 'like from yesterday'). Rows are
+    read-only history: pid=0 (never probe-killed), origin='dormant',
+    details pager works via engagement_dir (audit + events fallback)."""
+    import time as _t
+
+    claimed = claimed or set()
+    out: list[Agent] = []
+    cutoff = _t.time() - hours * 3600
+    for s in sources:
+        er = s.get("engagements")
+        if not er:
+            continue
+        root = Path(er)
+        if not root.is_dir():
+            continue
+        with contextlib.suppress(OSError):
+            for d in root.iterdir():
+                ev = d / "events.jsonl"
+                if not ev.is_file():
+                    continue
+                try:
+                    if ev.stat().st_mtime < cutoff:
+                        continue
+                except OSError:
+                    continue
+                if str(d).rstrip("/") in claimed:
+                    continue  # a live agent owns it
+                name = d.name
+                # target from the dir slug: <stamp>_<slug…>
+                slug = name.split("_", 2)[-1] if name.count("_") >= 2 else name
+                a = Agent(
+                    origin=f"dormant:{root.name}",
+                    pid=0,
+                    target=slug.replace("_", " ")[:50] or name[:50],
+                    phase="ended",
+                    iteration=0,
+                    findings=[],
+                    recent_actions=[],
+                    beat=0.0,
+                    port=0,
+                    started=ev.stat().st_mtime,
+                    engagement_dir=d,
+                )
+                with contextlib.suppress(Exception):
+                    import json as _json
+
+                    for ln in reversed(ev.read_text(errors="replace").splitlines()[-40:]):
+                        with contextlib.suppress(Exception):
+                            rec = _json.loads(ln)
+                            if rec.get("kind") == "state.snapshot":
+                                a.iteration = int(
+                                    rec.get("state", {}).get("current_iteration", rec.get("iteration") or 0) or 0
+                                )
+                                break
+                a.findings = _confirmed_exploits(d)
+                out.append(a)
+    out.sort(key=lambda x: -x.started)
+    return out[:10]
+
+
 def scan_agents(mesh_dir: Path, workspace: Path, live: bool = True, sources: list[dict] | None = None) -> list[Agent]:
     """sources=None scans EXACTLY the passed mesh_dir (legacy contract every
     test pins). sources=discover_sources() gives the ONE-EVERYWHERE view
@@ -1316,11 +1378,17 @@ class OperatorTUI:
         threading.Thread(target=_poll, daemon=True, name="operator-poll").start()
 
     def _poll_once(self) -> None:
-        agents = scan_agents(self.mesh_dir, self.workspace, live=self.live)
+        # multi-source + dormant rows are LIVE-mode features — demo/test
+        # consoles must not discover the operator's real engagements
+        srcs = discover_sources() if self.live else None
+        agents = scan_agents(self.mesh_dir, self.workspace, live=self.live, sources=srcs)
         if self.live:  # demo/test mode never probes live engines — a
             with contextlib.suppress(Exception):  # fixture console must
                 agents = agents + _box_agents()  # not shell out (the
             # 7 hung operator tests; AGENTS.md 2026-10-26 rule)
+            with contextlib.suppress(Exception):
+                claimed = {str(a.engagement_dir).rstrip("/") for a in agents if getattr(a, "engagement_dir", None)}
+                agents = agents + scan_dormant(srcs or [], claimed, hours=48)
         agents = self._filter_agents(self._sort_agents(agents))
         chat, offset = read_chat(self.mesh_dir, skip_bytes=self._chat_offset)
         with self._lock:
@@ -1495,6 +1563,16 @@ class OperatorTUI:
             lines.append(f"  \u2039 iteration {shown}/{newest} \u203a", style=f"bold {CYAN}")
         else:
             lines.append(f"  iteration {a.iteration}", style=f"bold {CYAN}")
+        # STUCK INSPECTOR (2026-10-30, 'debug like opencode'): if this
+        # agent is alive but its events went quiet, say HOW LONG and what
+        # the last step was — the operator sees the stall at a glance.
+        if a.alive and getattr(a, "engagement_dir", None):
+            with contextlib.suppress(Exception):
+                ev = Path(a.engagement_dir) / "events.jsonl"
+                if ev.is_file():
+                    age = time.time() - ev.stat().st_mtime
+                    if age > 90:
+                        lines.append(f"  ⏸ quiet {int(age // 60)}m — checking its last step below", style="bold yellow")
         lines.append("\n")
 
         thought = _sanitize(((it or {}).get("thought")) or a.last_thought or "")

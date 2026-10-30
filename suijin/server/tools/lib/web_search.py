@@ -9,10 +9,60 @@ from __future__ import annotations
 
 import re
 import urllib.parse
+from pathlib import Path
 
 import requests
 
 _user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+
+
+def fetch_resource(url: str, save_to: str = "", max_bytes: int = 500_000_000) -> str:
+    """Download an online resource to a REAL local path (2026-10-30
+    ruling: online resources are installable). save_to defaults to the
+    engagement home with the URL's filename. System-floor paths are
+    refused; local_access passes real paths through. Integrity: size +
+    sha256 reported so the agent can verify before installing."""
+    import hashlib
+
+    if not url or not str(url).startswith(("http://", "https://")):
+        return "Error: url required (http(s)://…)"
+
+    from suijin.server.confinement import is_system_path, jail_path
+
+    if is_system_path(save_to or "x"):
+        return "Error: system paths are not writable (the floor)"
+    target = Path(str(jail_path(save_to or "")))
+    if not save_to:
+        name = str(url).rstrip("/").split("/")[-1].split("?")[0] or "download.bin"
+        from suijin.modules.platform.lib.workspace import home_dir
+
+        target = Path(home_dir()) / "Downloads" / name
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with requests.get(url, stream=True, timeout=60, headers={"User-Agent": _user_agent}) as r:
+            if r.status_code != 200:
+                return f"Download error: HTTP {r.status_code}"
+            h = hashlib.sha256()
+            size = 0
+            with open(target, "wb") as fh:
+                for chunk in r.iter_content(chunk_size=1 << 16):
+                    if not chunk:
+                        continue
+                    size += len(chunk)
+                    if size > max_bytes:
+                        fh.close()
+                        target.unlink(missing_ok=True)
+                        return f"Error: exceeded {max_bytes} bytes — refusing"
+                    h.update(chunk)
+                    fh.write(chunk)
+        return (
+            f"Downloaded {size:,} bytes → {target}\nsha256: {h.hexdigest()}\n"
+            f"Install as appropriate: pip_install (packages), execute_terminal (chmod +x / installer), "
+            f"and verify the hash matches the source's published value before trusting it."
+        )
+    except Exception as e:  # noqa: BLE001 — network errors are data
+        return f"Download error: {e}"
 
 
 def web_search(query: str, max_results: int = 5) -> str:

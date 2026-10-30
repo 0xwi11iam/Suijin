@@ -779,3 +779,34 @@ class TestGuidanceForensics:
         assert "[operator-tui:/report:REPORT]" in log and "wrap up now" in log
         live = (eng / "state" / "live_guidance.md").read_text()
         assert "wrap up now" in live  # consumed later by design; log persists
+
+
+class TestDormantRows:
+    def test_yesterdays_engagements_stay_visible(self, tmp_path):
+        """2026-10-30 operator rule: 'like from yesterday' — recent
+        engagements with no live node remain rows in the operator."""
+
+        eng_root = tmp_path / "engs"
+        d = eng_root / "20261029_120000_127.0.0.1_6000"
+        (d / "state").mkdir(parents=True)
+        (d / "events.jsonl").write_text('{"v":1,"seq":1,"kind":"state.snapshot","state":{"current_iteration":27}}\n')
+        rows = ot.scan_dormant([{"mesh": tmp_path / "mesh", "engagements": eng_root}], claimed=set())
+        assert len(rows) == 1
+        a = rows[0]
+        assert a.origin.startswith("dormant:") and a.phase == "ended" and a.pid == 0
+        assert a.iteration == 27 and "127" in a.target
+
+    def test_claimed_and_stale_excluded(self, tmp_path):
+        import time as _t
+
+        eng_root = tmp_path / "engs"
+        live_d = eng_root / "20261030_live_x"
+        old_d = eng_root / "20201030_old_x"
+        for dd in (live_d, old_d):
+            dd.mkdir(parents=True)
+            (dd / "events.jsonl").write_text("{}\n")
+        import os
+
+        os.utime(old_d / "events.jsonl", (_t.time() - 100 * 3600,) * 2)  # 100h stale
+        rows = ot.scan_dormant([{"engagements": eng_root}], claimed={str(live_d)}, hours=48)
+        assert rows == []

@@ -930,8 +930,11 @@ class TypewriterStream:
         reasoning monologue, per-line bright markdown for content.
         STATUS COLOR (2026-10-29): HTTP status lines and terminal result
         prefixes carry their class color — human channel only; rich
-        strips it on non-terminals automatically."""
+        strips it on non-terminals automatically.
+        RENDER BOUNDARY (2026-10-30): emission faults render as a fault
+        line instead of dying — the strip survives any render bug."""
         with contextlib.suppress(Exception):
+            self._render_guard("emit_wrapped")
             if kind == "reasoning":
                 self._ui.console.print(Text(text, style="dim"))
             else:
@@ -944,6 +947,15 @@ class TypewriterStream:
                             self._ui.console.print(Text(t, style=style))
                         else:
                             self._ui.console.print(_md_line(ln.rstrip()))
+            self._render_release()
+
+    def _render_guard(self, where: str) -> None:
+        """Boundary bookkeeping — call BEFORE rendering; _render_release
+        after. A fault between them is visible, not silent."""
+        self._render_where = where
+
+    def _render_release(self) -> None:
+        self._render_where = None
 
     def _emit_box(self, lang: str, content: str) -> None:
         """A complete command span: black box, syntax-highlighted (the
