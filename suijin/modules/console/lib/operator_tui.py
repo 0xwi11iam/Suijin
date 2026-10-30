@@ -332,11 +332,24 @@ class Agent:
         return len(self.findings or [])
 
 
+_UNREADABLE: dict = {"__unreadable__": True}
+
+
 def _rj(p: Path) -> dict:
+    """Read JSON safely. Malformed files return the UNREADABLE marker
+    (2026-10-30, operator rule: read like a client) — callers can show a
+    degraded chip instead of a silent blank row; a missing file is still
+    a plain {} (absence ≠ corruption)."""
     try:
         return json.loads(p.read_text())
-    except Exception:
+    except FileNotFoundError:
         return {}
+    except Exception:
+        return dict(_UNREADABLE)
+
+
+def is_unreadable(d: dict) -> bool:
+    return bool(isinstance(d, dict) and d.get("__unreadable__"))
 
 
 def _iso_ts(s: str) -> float:
@@ -530,16 +543,19 @@ def scan_agents(mesh_dir: Path, workspace: Path, live: bool = True) -> list[Agen
         # (alive property flips to False at 30s: pulse goes ✗, numbers hang)
 
         state = _rj(mesh_dir / f"{pid}-state.json")
+        _degraded = is_unreadable(state)
         a = Agent(
             pid=pid,
             target=str(rec.get("summary") or "?")[:50],
-            phase=str(state.get("phase") or rec.get("phase") or "?"),
-            iteration=int(state.get("iteration") or 0),
-            findings=state.get("findings") or [],
-            system_one=state.get("system_one") or None,
-            runtime=state.get("runtime") or None,
-            footholds=state.get("footholds") or [],
-            recent_actions=[str(x) for x in (state.get("recent_actions") or [])],
+            phase=str(state.get("phase") or rec.get("phase") or "?" if not _degraded else "state unreadable"),
+            iteration=int(state.get("iteration") or 0) if not _degraded else 0,
+            findings=state.get("findings") or [] if not _degraded else [],
+            system_one=state.get("system_one") or None if not _degraded else None,
+            runtime=state.get("runtime") or None if not _degraded else None,
+            footholds=state.get("footholds") or [] if not _degraded else [],
+            recent_actions=[str(x) for x in (state.get("recent_actions") or [])]
+            if not _degraded
+            else ["state file unreadable — showing registry only"],
             beat=beat,
             port=int(rec.get("port") or 0),
             started=float(rec.get("started") or 0),
