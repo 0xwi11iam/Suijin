@@ -15,6 +15,12 @@ def _fetch_resource(url: str, save_to: str = "") -> str:
     return fetch_resource(url, save_to)
 
 
+def _web_fetch(url: str, max_chars: int = 8000) -> str:
+    from suijin.modules.tools.lib.web_search import web_fetch
+
+    return web_fetch(url, max_chars)
+
+
 def _edit_skill(skill_name: str, new_content: str) -> str:
     from suijin.modules.tools.lib.self_improve import edit_skill
 

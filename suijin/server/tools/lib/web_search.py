@@ -16,6 +16,37 @@ import requests
 _user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 
 
+def web_fetch(url: str, max_chars: int = 8000) -> str:
+    """Fetch a page as READABLE text (2026-10-31, opencode-versatility):
+    scripts/styles/tags stripped, links kept as [text](href) — docs pages,
+    PoC writeups, and advisory notes arrive as research material instead
+    of HTML soup. Truncated at max_chars with a pointer."""
+    if not url or not str(url).startswith(("http://", "https://")):
+        return "Error: url required (http(s)://…)"
+    try:
+        resp = requests.get(url, timeout=20, headers={"User-Agent": _user_agent})
+        if resp.status_code != 200:
+            return f"Fetch error: HTTP {resp.status_code}"
+        html = resp.text
+        html = re.sub(r"(?is)<(script|style|noscript|svg|head)[^>]*>.*?</\1>", " ", html)
+        html = re.sub(r"(?is)<!--.*?-->", " ", html)
+        # links become [text](href) before tags drop
+        html = re.sub(
+            r"(?is)<a[^>]*href=['\"]([^'\"]+)['\"][^>]*>(.*?)</a>",
+            lambda m: f"[{re.sub(r'<[^>]+>', '', m.group(2)).strip() or m.group(1)[:40]}]({m.group(1)})",
+            html,
+        )
+        html = re.sub(r"(?i)<(br|/p|/div|/li|/h[1-6]|/tr)[^>]*>", "\n", html)
+        text = re.sub(r"<[^>]+>", " ", html)
+        text = re.sub(r"[ \t]+", " ", text)
+        text = re.sub(r"\n\s*\n+", "\n\n", text).strip()
+        if len(text) > max_chars:
+            text = text[:max_chars] + f"\n\n[… truncated at {max_chars} chars — fetch the full page for more]"
+        return f"[{resp.status_code}] {url}\n\n{text}"
+    except Exception as e:  # noqa: BLE001 — network errors are data
+        return f"Fetch error: {e}"
+
+
 def fetch_resource(url: str, save_to: str = "", max_bytes: int = 500_000_000) -> str:
     """Download an online resource to a REAL local path (2026-10-30
     ruling: online resources are installable). save_to defaults to the

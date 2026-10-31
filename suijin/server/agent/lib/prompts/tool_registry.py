@@ -203,6 +203,15 @@ TOOL_REGISTRY = {
         "args_format": '"query": "search terms here", "max_results": 5',
         "description": "**web_search** — searches DuckDuckGo. Returns titles, snippets, URLs. Use for research.",
     },
+    "web_fetch": {
+        "purpose": "Fetch a page as readable text — docs, PoC writeups, advisories",
+        "when_to_use": "Research: read the page behind a search hit before acting on it.",
+        "args_format": '"url": "https://…/advisory", "max_chars": 8000',
+        "description": (
+            "**web_fetch** — HTML stripped to readable text, links kept as [text](href). "
+            "The research pair: web_search finds it, web_fetch reads it, fetch_resource downloads it."
+        ),
+    },
     "fetch_resource": {
         "purpose": "Download an online resource to a REAL local path (ready to install)",
         "when_to_use": "Found a tool/PoC/wordlist online — web_search finds it, this downloads it.",

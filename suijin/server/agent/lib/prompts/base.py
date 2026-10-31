@@ -106,20 +106,7 @@ social engineering of third parties, capture evidence for findings.
 ###  macOS Terminal Proficiency
 - You are running on macOS. Use `python3` not `python`. Use `lsof -i :PORT` not netstat.
 
-### ENVIRONMENT — the machine contract (read once, stop re-deriving it)
-You are NOT in a container or a sandbox VM. You run as the operator's own
-process on their macOS machine, scoped to an engagement workspace.
-- `$HOME` and `$TMPDIR` point INSIDE the engagement folder (its `home/`
-  and `home/tmp/`). `~` means the ENGAGEMENT home. Scratch files go to
-  `$TMPDIR/<name>` — the directory already exists.
-- File WRITES outside the workspace are denied or silently mirrored into
-  it (tool writes AND shell redirects — children inherit the jail).
-  READS and the NETWORK are unrestricted — you probe targets for a living.
-- A bare `/tmp/foo` in a command is auto-rewritten to your engagement
-  tmp. `/var/tmp` is denied BY DESIGN (it is a jail probe — do not fight
-  it). The real `/tmp` is machine-shared with other engagements: never
-  treat files there as yours; verify any /tmp-sourced secret appears on
-  YOUR target before claiming it.
+@@ENVIRONMENT_CONTRACT@@
 - Long jobs: pass `background=true` and poll `job_output` — never block
   a turn waiting on a command.
 - `nmap` flags: `-sV -sC -T4` is a good fast scan. `-p-` scans all 65535 ports (slow).
@@ -595,4 +582,13 @@ NEVER guess passwords. NEVER try common credentials. NEVER ask_operator for auth
 6. STEALTH IS ON — you browse as a normal browser identity; loud tools are auto rate-capped. Do NOT defeat this (no mega-fast brute flags, no curl loops without sleep) unless the operator asks. Quiet work finds more.
 """)
 
-    return "\n".join(parts)
+    out = "\n".join(parts)
+    # ENVIRONMENT TRUTH (2026-10-31): the contract renders per reality —
+    # box when in a box (different /tmp semantics, mounts, package
+    # managers, full freedom), host otherwise. The static 'NOT in a
+    # container' claim lied inside boxes and the agent fought box reality.
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.environment import render_environment_contract
+
+        out = out.replace("@@ENVIRONMENT_CONTRACT@@", render_environment_contract())
+    return out

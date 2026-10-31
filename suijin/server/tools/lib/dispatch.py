@@ -162,6 +162,7 @@ from suijin.modules.tools.lib.aux_tools import (
     _list_own_files,
     _list_skills,
     _pip_install,
+    _web_fetch,
     _web_search,
     _write_tool,
 )
@@ -617,6 +618,7 @@ __all__ = [
     "_pip_install",
     "_web_search",
     "_fetch_resource",
+    "_web_fetch",
     "_write_tool",
     # routing
     "route_tool",
@@ -1064,6 +1066,7 @@ def _build_routes(config):
         # Web search & self-improvement
         "web_search": lambda a: _web_search(a.get("query", ""), int(a.get("max_results", 5))),
         "fetch_resource": lambda a: _fetch_resource(a.get("url", ""), a.get("save_to", "")),
+        "web_fetch": lambda a: _web_fetch(a.get("url", ""), int(a.get("max_chars", 8000) or 8000)),
         "edit_skill": lambda a: _edit_skill(a.get("skill_name", ""), a.get("new_content", "")),
         "write_tool": lambda a: _write_tool(a.get("tool_name", ""), a.get("code", "")),
         "list_skills": lambda a: _list_skills(),
