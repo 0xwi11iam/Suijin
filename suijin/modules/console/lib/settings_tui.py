@@ -1430,6 +1430,10 @@ def _picker_screen(stdscr, title: str, rows: list[tuple[str, str]], start: int =
             _put(stdscr, 3, 2, "no matches — Backspace to widen", "warn", w)
         count = f"{len(idxs)}/{len(rows)}" if typed else ""
         _put(stdscr, min(h - 2, 3 + max(len(visible), 1) + 1), 2, _fit(count, w - 4), "legend", w)
+        # park the hardware cursor ON the filter line (where typing goes) —
+        # left alone it blinks at the end of the last row drawn ('128k')
+        with contextlib.suppress(curses.error):
+            stdscr.move(1, min(w - 2, 2 + len("filter: ") + len(typed)))
         stdscr.refresh()
 
         ch = _get_key(stdscr)
