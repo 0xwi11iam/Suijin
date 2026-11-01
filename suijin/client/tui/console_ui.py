@@ -1169,7 +1169,9 @@ class EngagementUI:
         lb_seg = [(" | ", "dim"), (f"MEM {lb_n}", f"bold {GOLD}")] if lb_n else []
         pct = UI_STATE.get("ctx_pct")
         ctx_seg = None
-        if pct is not None:
+        if pct is None and UI_STATE.get("ctx_in_tok"):
+            pct = None  # unknown window → honest label, not a fake %
+        if pct is not None or UI_STATE.get("ctx_in_tok"):
             pf = float(pct)
             style = "green" if pf < 60 else ("yellow" if pf < 85 else "bold red")
             # ABSOLUTE fill beside the pct — 'ctx 2%' beside a cumulative
@@ -1178,7 +1180,7 @@ class EngagementUI:
             in_t = int(UI_STATE.get("ctx_in_tok") or 0)
             win = int(UI_STATE.get("ctx_window") or 0)
             frac = f" {_fmt_tok(in_t)}/{_fmt_tok(win)}" if win else ""
-            ctx_seg = [(" | ", "dim"), (f"ctx {pf:.0f}%{frac}", style)]
+            ctx_seg = [(" | ", "dim"), (f"ctx {pf:.0f}%{frac}" if pf is not None else "ctx window: unknown", style)]
         # verified-exploit severity ladder — light blue to red, every
         # color unique to its tier (nothing else in the strip uses these)
         ex = UI_STATE.get("exploits") or {}
