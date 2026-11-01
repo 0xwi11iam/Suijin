@@ -796,7 +796,7 @@ def _fit(text: str, width: int) -> str:
 
 
 def _legend(section: str | None = None) -> str:
-    return "↑↓/jk move · Enter edit · M model · P provider · E effort · s save · q save & quit"
+    return "↑↓/jk move · Enter edit · M model · P provider · F effort · s save · q save & quit"
 
 
 def _fmt_plain(key: str, value) -> str:
@@ -1380,6 +1380,164 @@ def _commit(config: dict, key: str, raw: str, note: str) -> tuple[str, bool]:
     return note + ("  (changed)" if changed else "  (unchanged)"), changed
 
 
+def _picker_screen(stdscr, title: str, rows: list[tuple[str, str]], start: int = 0) -> int | None:
+    """A FULL-FRAME picker (2026-11-01): the whole screen is the list —
+    no popup floating over the frame (the 'weird window' that smeared on
+    typing). rows = [(text, marker)] where marker rides right-aligned
+    (e.g. '[current]'). Type narrows live, ↑↓ move within what's left,
+    Enter returns the index, Esc returns None. Every keystroke = one
+    full-frame redraw: erase → border → title → filter → rows → legend."""
+    import curses
+
+    typed = ""
+    picked = start
+    stdscr.keypad(True)
+    h, w = stdscr.getmaxyx()
+
+    def matches() -> list[int]:
+        if not typed:
+            return list(range(len(rows)))
+        low = typed.lower()
+        return [i for i, (t, _m) in enumerate(rows) if low in t.lower()]
+
+    while True:
+        idxs = matches()
+        if not idxs:
+            idxs = []
+        picked = max(0, min(picked, len(idxs) - 1)) if idxs else 0
+
+        # ── one full frame ──
+        stdscr.erase()
+        with contextlib.suppress(curses.error):
+            sub = stdscr.subwin(min(h - 1, len(idxs) + 7), w, 0, 0)
+            sub.border()
+        _put(stdscr, 0, max(1, (w - len(title) - 2) // 2), f" {title} ", "title", w)
+        flt = f"filter: {typed}" if typed else "type to filter · ↑↓ move · Enter pick · Esc cancel"
+        _put(stdscr, 1, 2, _fit(flt, w - 4), "input", w)
+        _put(stdscr, 2, 2, "─" * max(4, w - 6), "rule", w)
+        visible = idxs[: max(3, h - 9)]
+        for vi, ii in enumerate(visible):
+            text, marker = rows[ii]
+            role = "cursor" if ii == (idxs[picked] if idxs else -1) else "row"
+            line = f"  {text}" if role == "row" else f"› {text}"
+            if marker:
+                pad = max(1, w - 6 - len(line) - len(marker))
+                line = line + " " * pad + marker
+            _put(stdscr, 3 + vi, 2, _fit(line, w - 4), role, w)
+        if len(idxs) > len(visible):
+            _put(stdscr, 3 + len(visible), 2, f"… {len(idxs) - len(visible)} more (filter narrows)", "legend", w)
+        if not idxs:
+            _put(stdscr, 3, 2, "no matches — Backspace to widen", "warn", w)
+        count = f"{len(idxs)}/{len(rows)}" if typed else ""
+        _put(stdscr, min(h - 2, 3 + max(len(visible), 1) + 1), 2, _fit(count, w - 4), "legend", w)
+        stdscr.refresh()
+
+        ch = _get_key(stdscr)
+        if ch in (curses.KEY_ENTER, 10, 13):
+            if not idxs:
+                continue
+            return idxs[picked]
+        if ch == 27:
+            return None
+        if ch in (curses.KEY_BACKSPACE, 127, 8):
+            if typed:
+                typed = typed[:-1]
+                picked = 0
+        elif ch in (curses.KEY_UP, ord("k")):
+            picked = max(0, picked - 1)
+        elif ch in (curses.KEY_DOWN, ord("j")):
+            picked = min(len(idxs) - 1, picked + 1)
+        elif ch == curses.KEY_RESIZE:
+            h, w = stdscr.getmaxyx()
+        elif 32 <= ch < 127:
+            typed += chr(ch)
+            picked = 0
+
+
+def pick_model_screen(stdscr, config: dict, key: str) -> str:
+    """The model picker as a full-frame screen with models.dev metadata
+    per row and the current model marked."""
+    provider = str(config.get("provider") or "")
+    if not provider:
+        return "no provider selected — set provider first"
+    ids, fetch_note = fetch_model_ids(provider, config)
+    if not ids:
+        return fetch_note
+    from suijin.modules.providers.lib import model_meta as _mm
+
+    current = str(config.get(key) or "")
+    shown = ids[:MODEL_LIST_CAP]
+    if current and current not in shown:
+        shown = [current] + shown
+    rows = []
+    for mid in shown:
+        meta = ""
+        with contextlib.suppress(Exception):
+            price = _mm.resolve_pricing(provider, mid, config)
+            win = _mm.resolve_context_window(provider, mid, config)
+            bits = []
+            if price:
+                bits.append(f"${price[0]:.2f}/${price[1]:.2f}")
+            if win:
+                bits.append(f"{win // 1_000_000}M" if win >= 1_000_000 else f"{win // 1000}k")
+            meta = " · ".join(bits)
+        marker = "[current]" if mid == current else ""
+        rows.append((f"{mid}  {meta}" if meta else mid, marker))
+    start = next((i for i, mid in enumerate(shown) if mid == current), 0)
+    picked = _picker_screen(stdscr, f"model for {provider}", rows, start=start)
+    if picked is None:
+        return "model unchanged"
+    raw = shown[picked]
+    changed = _apply(config, key, raw)
+    config["__dirty__"] = True
+    return f"model = {raw}" + ("  (changed)" if changed else "")
+
+
+def pick_provider_screen(stdscr, config: dict) -> str:
+    """The provider picker as a full-frame screen with key status."""
+    from suijin.modules.providers.lib.registry import PROVIDER_REGISTRY
+
+    cur = active_provider(config)
+    entries = list(PROVIDER_REGISTRY.items())
+    rows = []
+    for pid, spec in entries:
+        marker = "[active]" if pid == cur else ""
+        note = str(getattr(spec, "note", "") or "")[:48]
+        key_s = provider_key_status(pid, config)
+        rows.append((f"{pid:<14} {key_s}  {note}".rstrip(), marker))
+    start = next((i for i, (pid, _s) in enumerate(entries) if pid == cur), 0)
+    picked = _picker_screen(stdscr, "provider", rows, start=start)
+    if picked is None:
+        return "provider unchanged"
+    pid = entries[picked][0]
+    _apply(config, "provider", pid)
+    config["__dirty__"] = True
+    return f"provider = {pid}  (changed)"
+
+
+def pick_effort_screen(stdscr, config: dict) -> str:
+    """The effort picker — tiers filtered to what the current model
+    supports (falls back to the universal four)."""
+    prov = active_provider(config)
+    model = str(config.get(f"{prov}_model") or "")
+    tiers = ["low", "medium", "high", "max"]
+    with contextlib.suppress(Exception):
+        from suijin.modules.providers.lib.model_meta import supported_effort_levels
+
+        supported = [str(v).lower() for v in supported_effort_levels(prov, model) or []]
+        if supported:
+            tiers = supported
+    cur = str(config.get("intelligence") or "")
+    rows = [(t, "[current]" if t == cur else "") for t in tiers]
+    start = next((i for i, t in enumerate(tiers) if t == cur), 0)
+    picked = _picker_screen(stdscr, "effort", rows, start=start)
+    if picked is None:
+        return "effort unchanged"
+    _apply(config, "intelligence", tiers[picked])
+    config["__dirty__"] = True
+    return f"effort = {tiers[picked]}"
+
+
 def pick_model_curses(stdscr, config: dict, key: str) -> str:
     """Fetch the provider's LIVE model ids and pick one, on-screen."""
     if not is_model_field(key):
@@ -1537,8 +1695,13 @@ def _curses_loop(stdscr) -> int:
             cursor = (cursor + 1) % len(items)
         elif ch in (curses.KEY_ENTER, 10, 13, ord("e")):  # edit this field
             note, _ = edit_field_curses(stdscr, config, key)
-        elif ch in (ord("m"), ord("M")):  # fetch the live model ids
-            note = pick_model_curses(stdscr, config, key)
+        elif ch in (ord("m"), ord("M")):  # model picker — FULL-FRAME screen
+            mkey = key if is_model_field(key) else f"{active_provider(config)}{MODEL_KEY_SUFFIX}"
+            note = pick_model_screen(stdscr, config, mkey)
+        elif ch in (ord("p"), ord("P")):  # provider picker
+            note = pick_provider_screen(stdscr, config)
+        elif ch in (ord("f"), ord("F")):  # effort picker
+            note = pick_effort_screen(stdscr, config)
         elif ch in (ord("s"), ord("S")):
             ok = _save_line(stdscr, config, status)
             note, loop_status = ("saved — " + CONFIG_PATH, "ok") if ok else (f"save failed — {CONFIG_PATH}", "warn")
