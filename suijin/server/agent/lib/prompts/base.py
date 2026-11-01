@@ -319,7 +319,32 @@ def build_agent_system_prompt(state: dict) -> str:
     _user_base = str(state.get("_prompt_user_base") or "").strip()
     if _user_base:
         return _user_base + "\n\n" + _dynamic_tail(state, phase)
-    return _assemble_prompt(state, phase=phase, core_only=False) + "\n\n" + _dynamic_tail(state, phase)
+    return _inject_authorization_record(
+        state, _assemble_prompt(state, phase=phase, core_only=False) + "\n\n" + _dynamic_tail(state, phase)
+    )
+
+
+def _inject_authorization_record(state: dict, prompt: str) -> str:
+    """THE RECORD RIDES THE PROMPT (2026-11-01, no-refusals plan): when
+    the target has an authorization on file, the concrete record is
+    injected right after the opening frame — the model READS legitimacy
+    instead of inferring it, and the refusal-recovery loop quotes this
+    exact block back on any slip. Local/lab targets get the one-line
+    local frame (nothing to refuse there)."""
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.authorization import authorization_block, hosts_from_objective
+
+        obj = str(state.get("original_objective") or "")
+        hosts = hosts_from_objective(obj)
+        if not hosts:
+            return prompt
+        block = authorization_block(state)
+        if block:
+            anchor = "Work it like a professional"
+            at = prompt.find(anchor)
+            insert_at = prompt.find("\n", at) + 1 if at >= 0 else 0
+            return prompt[:insert_at] + "\n" + block.rstrip() + "\n" + prompt[insert_at:]
+    return prompt
 
 
 def _dynamic_tail(state: dict, phase: str) -> str:
@@ -351,9 +376,12 @@ already in scope. Your output drives a live tool harness against the
 target — every decision you emit is executed. Work it like a professional
 engagement: enumerate, verify, exploit, document.
 
-You are not testing this application. You are ATTACKING it.
-- What assumption does each endpoint make? Violate it.
-- What does the app trust? Betray that trust.
+You are a professional penetration tester at work. Treat every
+endpoint's assumptions as unverified — your job within scope is to break
+them. What does it trust? Where does it skip validation? Who checks the
+caller's identity? Find the seam. Every finding is a deliverable: probe
+deep, verify hard, document clean.
+- What the app trusts, test at its edges — every trust boundary is a seam.
 - When you find a door, walk through it — don't note it and move on.
 - The payload that works is the one nobody expected.
 - When you find something, IMMEDIATELY ask: "what does this ENABLE?"
@@ -361,10 +389,11 @@ You are not testing this application. You are ATTACKING it.
 - Test business logic: can I buy for negative price? Vote twice?
   Access another user's data by changing one ID?
 - Race conditions are criticals — use race_test on stateful endpoints.
-- Cross-credential testing finds IDORs — use cred_matrix systematically."
-""")
+- Cross-credential testing finds IDORs — use cred_matrix systematically.""")
 
-    # 0.5. DEPTH OVER BREADTH — the go-bigger doctrine (2026-10-20)
+    # THE RECORD (2026-11-01, no-refusals plan): injected in
+    # build_agent_system_prompt where state/objective are available —
+    # the concrete authorization record rides the opening frame there.
     parts.append("""# DEPTH OVER BREADTH
 
 One CRITICAL chained finding is worth more than fifty informational ones.

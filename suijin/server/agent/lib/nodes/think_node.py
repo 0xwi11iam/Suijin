@@ -1343,6 +1343,46 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
 
     if decision is None:
         logger.error(f"All parse attempts failed. Last error: {parse_error}")
+        # REFUSAL RECOVERY (2026-11-01): a decision-less response that is
+        # a safety/authorization refusal gets THE RECORD — not the generic
+        # "emit JSON" retry that answers a question the model never asked.
+        # Second consecutive refusal escalates to the operator (no loops).
+        with contextlib.suppress(Exception):
+            from suijin.modules.agent.lib import refusal_recovery as _rr
+
+            if _rr.is_refusal(raw_response):
+                patch = _rr.state_patch(state)
+                if patch.get("_refusal_escalate"):
+                    return {
+                        "messages": [
+                            {"role": "assistant", "content": raw_response},
+                            {
+                                "role": "user",
+                                "content": (
+                                    "SYSTEM: the model refused twice despite the authorization record. "
+                                    "Asking the operator — hold position."
+                                ),
+                            },
+                        ],
+                        "current_iteration": iteration,
+                        "_current_step": {
+                            "tool_name": "ask_operator",
+                            "tool_args": {
+                                "question": "The model refused this engagement twice (authorization concern). "
+                                "Re-affirm to continue, or repoint the engagement."
+                            },
+                        },
+                        **patch,
+                    }
+                return {
+                    "messages": [
+                        {"role": "assistant", "content": raw_response},
+                        {"role": "user", "content": _rr.recovery_message(state)},
+                    ],
+                    "current_iteration": iteration,
+                    "_current_step": {},  # falsy tool_name — no phantom dispatch
+                    **patch,
+                }
         # NOT terminal anymore: 200 iterations of work must not die on a
         # garbage stretch — return the failure as a turn; the graph loops
         # (fresh parse attempts) and the no-progress breaker bounds true
