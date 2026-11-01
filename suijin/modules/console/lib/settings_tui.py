@@ -31,14 +31,60 @@ from collections import OrderedDict
 from pathlib import Path
 
 from rich.console import Console
-from rich.prompt import Prompt
 from rich.table import Table
 
-# The package-level config (suijin/config.json) — resolved from this file's
-# location so it works from the dev symlink too.
-CONFIG_PATH = os.path.join(
+
+# The ONE config path (2026-11-01, the split fix): the loader's truth —
+# respects SUIJIN_CONFIG and profiles. The hand-rolled <repo>/config.json
+# path below is DEAD; the only thing it still does is the one-time
+# MIGRATION of stranded edits (see load_state).
+def _loader_config_path() -> str:
+    from suijin.modules.platform.lib.config_loader import CONFIG_PATH
+
+    return str(CONFIG_PATH)
+
+
+CONFIG_PATH = _loader_config_path()
+
+#: the DEAD tree file the old editor wrote to — kept ONLY for migration
+_LEGACY_TREE_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), "config.json"
 )
+
+
+def _migrate_stranded_edits(cfg: dict) -> str | None:
+    """One-time rescue of edits the old editor stranded in the tree file
+    (it wrote <repo>/config.json while the loader read the platform one —
+    the 'changes never apply' bug). Merges ONLY provider/model keys the
+    live config lacks; never overwrites, never deletes."""
+    try:
+        if os.path.realpath(_LEGACY_TREE_PATH) == os.path.realpath(CONFIG_PATH):
+            return None
+        if not os.path.isfile(_LEGACY_TREE_PATH):
+            return None
+        legacy = json.loads(Path(_LEGACY_TREE_PATH).read_text())
+        if not isinstance(legacy, dict):
+            return None
+        merged = []
+        # provider migrates ONLY when the live config has none — a differing
+        # live provider WINS (it may be newer, set by hand or another surface)
+        if not str(cfg.get("provider") or "").strip() and str(legacy.get("provider") or "").strip():
+            cfg["provider"] = legacy["provider"]
+            merged.append("provider")
+        prov = str(cfg.get("provider") or "")
+        mk = f"{prov}_model"
+        # the model rescues only when the live config never got one
+        if prov and str(legacy.get(mk) or "").strip() and not str(cfg.get(mk) or "").strip():
+            cfg[mk] = legacy[mk]
+            merged.append(mk)
+        return (
+            f"migrated stranded edits from the old settings file: {', '.join(merged)} (saved on your next 's')"
+            if merged
+            else None
+        )
+    except Exception:  # noqa: BLE001 — migration never blocks the editor
+        return None
+
 
 #: how long a live model fetch may take before we say so and move on
 MODEL_FETCH_TIMEOUT = 8.0
@@ -316,6 +362,9 @@ def load_state() -> tuple[dict, str]:
         if not isinstance(cfg, dict):
             raise ValueError("top level is not an object")
         _decision_unpack(cfg)
+        note = _migrate_stranded_edits(cfg)
+        if note:
+            cfg["__migration_note__"] = note
         return cfg, "ok"
     except Exception:  # noqa: BLE001
         return {}, "corrupt"
@@ -331,6 +380,8 @@ def save_config(config: dict) -> None:
 
     on_disk = _copy.deepcopy(config)
     _decision_pack(on_disk)
+    on_disk.pop("__migration_note__", None)
+    Path(CONFIG_PATH).parent.mkdir(parents=True, exist_ok=True)
     Path(CONFIG_PATH).write_text(json.dumps(on_disk, indent=4))
 
 
@@ -340,12 +391,21 @@ def _visible_fields(config: dict) -> "OrderedDict[str, tuple]":
     Bespoke providers have declared model fields; every OTHER provider
     (the 50-source registry, local boxes, custom:<name>) gets its
     `<provider>_model` field synthesized on the fly — so a provider added
-    to the registry is fully editable here with no code change."""
+    to the registry is fully editable here with no code change.
+
+    2026-11-01 REDESIGN: the main screen shows ONLY the ACTIVE provider's
+    model field (labeled plain 'model') — the old flat wall of every
+    provider's key was the 'still showed glm-5.3' confusion (you read a
+    zai row while running openrouter). Other providers' keys are still
+    editable in the raw JSON (R) / config file, just not clutter here."""
     provider = str(config.get("provider") or "deepseek")
     visible = OrderedDict()
     for key, field_def in ALL_FIELDS.items():
         filters = field_def[2] if len(field_def) > 2 else None
         if filters is not None and provider not in filters:
+            continue
+        # hide OTHER providers' model fields on the main screen
+        if is_model_field(key) and key != f"{provider}{MODEL_KEY_SUFFIX}":
             continue
         visible[key] = field_def
     # a provider with no declared model field: add its own
@@ -354,6 +414,15 @@ def _visible_fields(config: dict) -> "OrderedDict[str, tuple]":
         if mkey and mkey not in visible:
             visible[mkey] = ("model", None)
     return visible
+
+
+def model_display_label(key: str, config: dict) -> str:
+    """'<prov>_model' renders as plain 'model' — there is exactly one
+    visible model row now; naming it by provider invites the wrong-edit
+    bug the redesign killed."""
+    if is_model_field(key):
+        return "model"
+    return key
 
 
 def _default_model_hint(provider: str) -> str:
@@ -745,29 +814,90 @@ def _fmt_plain(key: str, value) -> str:
 def _render(console: Console, config: dict, visible, items, cursor: int, note: str = "") -> None:
     """Non-curses renderer (CI, piped output, and the `--dump` style paths).
     The interactive editor uses the curses screen instead — reprinting a
-    table per keystroke scrolls the terminal away."""
-    table = Table(
-        title="SUIJIN — Settings",
-        title_style="bold white",
-        header_style="dim",
-        expand=False,
-        pad_edge=False,
+    table per keystroke scrolls the terminal away.
+
+    2026-11-01 REDESIGN: header names THE FILE (the split can never hide
+    again); the model row carries price/window/source; key status sits in
+    the Provider block; the label is plain 'model'."""
+    from rich.panel import Panel as _Panel
+
+    prov = active_provider(config)
+    meta = model_meta_line(config)
+    dirty = "  [bold red]● unsaved changes[/bold red]" if config.get("__dirty__") else ""
+    console.print(
+        _Panel(
+            f"editing: [bold]{CONFIG_PATH}[/bold]{dirty}",
+            title=" SUIJIN — Settings ",
+            title_align="left",
+        )
     )
+    table = Table(header_style="dim", expand=False, pad_edge=False)
     table.add_column("field", style="cyan", no_wrap=True)
     table.add_column("value", overflow="fold")
     for idx, (_group, key) in enumerate(items):
         marker = "[bold #e6b47c]›[/] " if idx == cursor else "  "
-        name = f"{marker}{key}"
+        label = model_display_label(key, config)
+        name = f"{marker}{label}"
         if idx == cursor:
             name = f"[reverse]{name}[/reverse]"
         suffix = " [dim]· live ids (m)[/dim]" if is_model_field(key) else ""
         table.add_row(f"{name}{suffix}", _fmt(key, config.get(key, "")))
+        # metadata + key status ride DIRECTLY under the model row
+        if is_model_field(key):
+            if meta:
+                table.add_row("", f"[dim]{meta}[/dim]")
+            if prov:
+                table.add_row("", f"[dim]{prov} · {provider_key_status(prov, config)}[/dim]")
+        if key == "provider":
+            pass  # provider row: the picker hint rides in the legend
     console.print(table)
+    mig = config.get("__migration_note__")
+    if mig:
+        console.print(f"  [yellow]{mig}[/yellow]")
     if visible_provider_note(config):
         console.print(f"  [dim]{visible_provider_note(config)}[/dim]")
     if note:
         console.print(f"  [dim]{note}[/dim]")
-    console.print("  [dim]↑/↓ or j/k move · Enter edit · m fetch live model ids · s save · q quit[/dim]")
+    console.print(
+        "  [dim]↑/↓ or j/k move · Enter edit · M model picker · P provider picker · m live ids · s save · q quit[/dim]"
+    )
+
+
+def active_provider(config: dict) -> str:
+    """The provider the run actually uses."""
+    return str(config.get("provider") or "").strip()
+
+
+def model_meta_line(config: dict) -> str:
+    """The metadata line under the model row: price in/out per 1M, the
+    context window, and WHERE each came from (models.dev | config |
+    approx) — 'what will this cost / how much window' answered on sight
+    (2026-11-01 redesign)."""
+    prov = active_provider(config)
+    model = str(config.get(f"{prov}_model") or "").strip()
+    if not prov:
+        return ""
+    with contextlib.suppress(Exception):
+        from suijin.modules.providers.lib import model_meta as _mm
+
+        price = _mm.resolve_pricing(prov, model, config)
+        win = _mm.resolve_context_window(prov, model, config)
+        price_s = f"${price[0]:.2f}/${price[1]:.2f} per 1M" if price else "price unknown"
+        win_s = f"{(win or 0) // 1000}k ctx" if win else "ctx unknown"
+        src = "models.dev" if price else "approx"
+        note = f"(registry default: {model})" if not model else ""
+        parts = [p for p in (note, price_s, win_s) if p]
+        return f"{' '.join(parts)} · source: {src}"
+    return ""
+
+
+def provider_key_status(provider: str, config: dict) -> str:
+    """✓ key on file / ✗ no key — checked live (env + .env)."""
+    with contextlib.suppress(Exception):
+        from suijin.modules.providers.lib import get_provider_key
+
+        return "✓ key on file" if get_provider_key(provider) else "✗ no key"
+    return "key: unknown"
 
 
 def visible_provider_note(config: dict) -> str:
@@ -1427,6 +1557,70 @@ def run_editor(console: Console) -> int:
         return _run_line_mode(console)
 
 
+def pick_provider(console: Console, config: dict) -> str | None:
+    """The provider picker (2026-11-01): numbered, with live key status —
+    replacing free-text entry for the most consequential field. Returns
+    the chosen provider id or None."""
+    from suijin.modules.providers.lib.registry import PROVIDER_REGISTRY
+
+    entries = [(pid, spec) for pid, spec in PROVIDER_REGISTRY.items()]
+    lines = []
+    cur = active_provider(config)
+    for i, (pid, spec) in enumerate(entries, 1):
+        mark = " [active]" if pid == cur else ""
+        key_s = provider_key_status(pid, config)
+        lines.append(
+            f"  {i:>2}. {pid:<14} {spec.note[:52]:<52} {key_s}{mark}"
+            if spec.note
+            else f"  {i:>2}. {pid:<14} {key_s}{mark}"
+        )
+    console.print("[bold]provider[/bold] — pick a number (blank = cancel):")
+    console.print("\n".join(lines))
+    try:
+        raw = console.input("[dim]number[/dim] ").strip()
+    except (EOFError, KeyboardInterrupt):
+        return None
+    if raw.isdigit() and 1 <= int(raw) <= len(entries):
+        return entries[int(raw) - 1][0]
+    return None
+
+
+def pick_model(console: Console, config: dict, field_key: str) -> str | None:
+    """The model picker: live ids merged with models.dev metadata
+    (price/ctx), type-to-filter in curses; numbered here. Returns the
+    chosen model id or None."""
+    prov = active_provider(config)
+    ids, fetch_note = fetch_model_ids(prov, config)
+    if not ids:
+        console.print(f"[yellow]no live ids[/yellow] — {fetch_note}")
+        return None
+    from suijin.modules.providers.lib import model_meta as _mm
+
+    console.print(f"[bold]model for {prov}[/bold] — pick a number (blank = cancel):")
+    cur = str(config.get(field_key) or "")
+    shown = ids[:MODEL_LIST_CAP]
+    for i, mid in enumerate(shown, 1):
+        with contextlib.suppress(Exception):
+            price = _mm.resolve_pricing(prov, mid, config)
+            win = _mm.resolve_context_window(prov, mid, config)
+            meta = (
+                f"${price[0]:.2f}/${price[1]:.2f} · {(win or 0) // 1000}k"
+                if price
+                else f"{(win or 0) // 1000}k ctx"
+                if win
+                else ""
+            )
+        mark = " [current]" if mid == cur else ""
+        console.print(f"  {i:>2}. {mid:<48} {meta}{mark}")
+    try:
+        raw = console.input("[dim]number (or paste any id)[/dim] ").strip()
+    except (EOFError, KeyboardInterrupt):
+        return None
+    if raw.isdigit() and 1 <= int(raw) <= len(shown):
+        return shown[int(raw) - 1]
+    return raw or None
+
+
 def _run_line_mode(console: Console) -> int:
     """The no-curses fallback: a printed table + a command line. Used by CI
     and by terminals curses can't drive."""
@@ -1447,32 +1641,35 @@ def _run_line_mode(console: Console) -> int:
         if low in ("q", "quit", ""):
             return 0
         if low == "s":
+            config.pop("__dirty__", None)
             return _save(console, config, status)
-        if low.startswith("e "):
+        if low in ("p", "provider"):
+            picked = pick_provider(console, config)
+            if picked:
+                _apply(config, "provider", picked)
+                config["__dirty__"] = True
+                note = f"provider = {picked} — 's' to save"
+            else:
+                note = "provider unchanged"
+        elif low in ("m",) or low.startswith("m "):
+            mkey = f"{active_provider(config)}{MODEL_KEY_SUFFIX}"
+            picked = pick_model(console, config, mkey)
+            if picked:
+                _apply(config, mkey, picked)
+                config["__dirty__"] = True
+                note = f"{mkey} = {picked} — 's' to save"
+            else:
+                note = "model unchanged"
+        elif low.startswith("e "):
             parts = (line.split(" ", 2) + ["", ""])[:3]
             try:
                 _apply(config, parts[1].strip(), parts[2])
             except Exception as e:  # noqa: BLE001
                 note = f"{parts[1]}: {e}"
-        elif low.startswith("m "):
-            key = line.split(" ", 1)[1].strip()
-            ids, fetch_note = fetch_model_ids(str(config.get("provider") or ""), config)
-            if not ids:
-                note = fetch_note
-            else:
-                try:
-                    raw = Prompt.ask(
-                        f"{config.get('provider')} models ({len(ids)})", console=console, choices=ids[:MODEL_LIST_CAP]
-                    )
-                except (EOFError, KeyboardInterrupt):
-                    raw = None
-                if raw:
-                    _apply(config, key, raw)
-                    note = f"{key} = {raw}  (changed) — {fetch_note}"
         elif low == "n":
             cursor += 1
         else:
-            note = "unknown command — n / e <field> <value> / m <field> / s / q"
+            note = "unknown command — n / e <field> <value> / m model picker / p provider picker / s / q"
         if low == "n" and items:
             pass
     return 0

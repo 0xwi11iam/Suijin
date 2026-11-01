@@ -527,17 +527,22 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
         # system prompt + trace + scratchpad included); chars//4 estimate
         # as the pre-call fallback, cumulative diff as the last fallback.
         _is_primary = on_delta is None
-        _win = 1_000_000
+        _win = 0  # GAUGE TRUTH (2026-11-01): 0 = UNKNOWN — the old silent
+        # 1_000_000 default was the permanent 'ctx 1-2%' bug (10k real
+        # tokens ÷ fake 1M). Resolution happens FIRST; unknown windows
+        # render 'unknown', never a fabricated denominator.
         if _is_primary:
             with contextlib.suppress(Exception):
                 from suijin.modules.providers.lib.model_meta import resolve_context_window
 
                 _prov2 = str(cfg.get("provider") or "")
-                _win = resolve_context_window(_prov2, str(cfg.get(f"{_prov2}_model") or ""), cfg)
-                _est_tok = sum(len(str(m.get("content", ""))) for m in (messages or [])) // 4
-                _UI_STATE["ctx_pct"] = round(100.0 * _est_tok / max(1, _win), 1)
-                _UI_STATE["ctx_in_tok"] = _est_tok
-                _UI_STATE["ctx_window"] = _win
+                _win = resolve_context_window(_prov2, str(cfg.get(f"{_prov2}_model") or ""), cfg) or 0
+            from suijin.modules.providers.lib import estimate_tokens as _est_tokens_fn
+
+            _est_tok = _est_tokens_fn("\n".join(str(m.get("content", "")) for m in (messages or [])))
+            _UI_STATE["ctx_pct"] = round(100.0 * _est_tok / max(1, _win), 1) if _win else None
+            _UI_STATE["ctx_in_tok"] = _est_tok
+            _UI_STATE["ctx_window"] = _win
         _pre_in = 0
         if _is_primary:
             with contextlib.suppress(Exception):
@@ -561,7 +566,8 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                         _real_in = int(_u.get("last_request_input_tokens") or 0)
                     if _real_in > 0:
                         _UI_STATE["ctx_in_tok"] = _real_in
-                        _UI_STATE["ctx_pct"] = round(100.0 * _real_in / max(1, _win), 1)
+                        if _win:
+                            _UI_STATE["ctx_pct"] = round(100.0 * _real_in / max(1, _win), 1)
 
     agent = _agent_graph_cls()(
         generate_fn=_generate_with_stream,
