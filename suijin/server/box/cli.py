@@ -123,6 +123,13 @@ def cmd_enter(args=None) -> int:
     return bx.box_enter_interactive(action=action)
 
 
+def cmd_update(args=None) -> int:
+    """`suijin box update` — bring the box's suijin itself current."""
+    from suijin.server.box.update import cmd_update as _run
+
+    return _run(args)
+
+
 def cmd_refresh(args=None) -> int:
     from suijin.server.box import engine as bx
     from suijin.server.box.provision import stage_tools
@@ -351,6 +358,7 @@ VERBS = {
     "unadopt": cmd_unadopt,
     "status": cmd_status,
     "refresh": cmd_refresh,
+    "update": cmd_update,
     "destroy": cmd_destroy,
 }
 
