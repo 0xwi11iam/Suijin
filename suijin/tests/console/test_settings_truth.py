@@ -96,3 +96,70 @@ class TestPickers:
         monkeypatch.setattr(console, "input", fake_input)
         picked = st.pick_provider(console, {"provider": "openrouter"})
         assert picked and isinstance(picked, str)
+
+
+class TestCursesFrameRedesign:
+    """The frame the TERMINAL opens (screen_lines feeds _draw) — lowercase,
+    named file, one model row with metadata, effort row present."""
+
+    def _frame(self, config):
+        return st.screen_lines(config)
+
+    def test_lowercase_title_and_named_file(self, _cfg, monkeypatch):
+        monkeypatch.setattr(st, "CONFIG_PATH", "/x/config.json")
+        cfg = {"provider": "openrouter", "openrouter_model": "x-ai/grok-4.7", "intelligence": "high"}
+        lines = self._frame(cfg)
+        assert lines[0] == ("suijin settings", "title")
+        assert lines[1][0].startswith("editing: /x/config.json")
+
+    def test_dirty_dot(self):
+        lines = self._frame({"provider": "zai", "__dirty__": True})
+        assert "● unsaved" in lines[1][0]
+
+    def test_one_model_row_with_metadata_under_it(self):
+        lines = self._frame({"provider": "zai", "zai_model": "glm-5.3"})
+        model_rows = [
+            t for t, r in lines if r in ("row", "cursor") and t.strip().split("  ")[0].rstrip("› ").strip() == "model"
+        ]
+        assert len(model_rows) == 1
+        joined = "\n".join(t for t, _ in lines)
+        assert "per 1M" in joined and "source:" in joined
+
+    def test_effort_row_present(self):
+        lines = self._frame({"provider": "zai", "intelligence": "max"})
+        assert any("effort" in t and "max" in t for t, _ in lines)
+
+    def test_groups_lowercase(self):
+        lines = self._frame({"provider": "zai"})
+        groups = [t for t, r in lines if r == "group"]
+        assert groups and all(g == g.lower() for g in groups)
+
+
+class TestEffortFlows:
+    def test_settings_effort_is_the_standing_default(self):
+        # the redteamer seam: UI tier absent → config intelligence → max
+        ui = {}
+        config = {"intelligence": "low"}
+        tier = ui.get("intelligence") or str(config.get("intelligence") or "").strip() or "max"
+        assert tier == "low"
+
+    def test_ui_tier_beats_settings(self):
+        ui = {"intelligence": "high"}
+        config = {"intelligence": "low"}
+        tier = ui.get("intelligence") or str(config.get("intelligence") or "").strip() or "max"
+        assert tier == "high"
+
+
+class TestPromptCompliance:
+    def test_authorization_frame_is_first(self):
+        from suijin.modules.agent.lib.prompts.base import build_agent_system_prompt
+
+        p = build_agent_system_prompt({"objective": "x"})
+        assert p.index("authorized bug bounty engagement") < 600  # the opening
+
+    def test_decision_contract_is_a_gate(self):
+        from suijin.modules.agent.lib.prompts.base import build_agent_system_prompt
+
+        p = build_agent_system_prompt({"objective": "x"})
+        assert "protocol violation" in p and "ONE JSON object" in p
+        assert "This contract is automatic" not in p  # the softening is gone

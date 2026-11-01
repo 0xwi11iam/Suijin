@@ -163,6 +163,8 @@ ALL_FIELDS = OrderedDict(
     [
         # ---- Provider (choices resolved at render time) ----
         ("provider", ("provider", None)),
+        # ---- Effort tier: the standing reasoning-effort default ----
+        ("intelligence", ("choice", ["low", "medium", "high", "max"])),
         # ---- Model ids: freeform + live fetch. The field name doubles as
         # the config key ("zai_model" is the zai model). ----
         ("deepseek_model", ("model", None, ["deepseek"])),
@@ -246,6 +248,7 @@ _GROUPS = [
         "Provider",
         [
             "provider",
+            "intelligence",
             "deepseek_model",
             "zai_endpoint",
             "zai_model",
@@ -570,7 +573,12 @@ def _row_items(visible: "OrderedDict[str, tuple]"):
 #: what it may do, what it may spend, then the rest.
 FIELD_INFO = {
     # -- which model --
-    "provider": ("Provider", "which company serves the model", "model"),
+    "provider": ("provider", "which company serves the model", "model"),
+    "intelligence": (
+        "effort",
+        "reasoning effort tier — low · medium · high · max (filtered to what the model supports)",
+        "model",
+    ),
     "deepseek_model": ("Model", "the model DeepSeek serves", "model"),
     "zai_model": ("Model", "the model z.ai serves", "model"),
     "gemini_model": ("Model", "the model Gemini serves", "model"),
@@ -736,36 +744,45 @@ def screen_lines(
     """The whole screen as [(text, role)] — a PURE function of state, so it
     is asserted without a terminal.
 
-    One flat list, every field, grouped by heading. What a person needs
-    from the layout is: aligned columns, nothing cut off, and a visible
-    cursor — not a second menu level.
+    2026-11-01 REDESIGN (operator-approved concept): lowercase throughout,
+    the file being edited NAMED in the header with a dirty dot, ONE model
+    row for the active provider carrying its models.dev metadata, key
+    status beside it, and the effort picker row. The eight-provider wall
+    is gone; provenance is always visible.
 
-    roles: title | head | group | cursor | row | blank | status | warn | legend
+    roles: title | head | group | cursor | row | blank | status | warn | legend | path
     """
     visible = visible if visible is not None else _visible_fields(config)
     items = items if items is not None else _row_items(visible)
+    dirty = "  ● unsaved" if config.get("__dirty__") else ""
     lines: list[tuple[str, str]] = [
-        ("SUIJIN — Settings", "title"),
-        (f"config: {CONFIG_PATH}", "head"),
+        ("suijin settings", "title"),
+        (f"editing: {CONFIG_PATH}{dirty}", "path"),
         ("", "blank"),
     ]
-    # two aligned columns: the field on the left, its value on the right.
-    # A settings list where you can only see one value at a time is useless,
-    # so EVERY row shows its value.
-    width = max((len(k) for _g, k in items), default=10)
+    prov = active_provider(config)
+    meta = model_meta_line(config)
+    width = max((len(model_display_label(k, config)) if is_model_field(k) else len(k) for _g, k in items), default=10)
     for idx, (group, key) in enumerate(items):
         if idx == 0 or group != items[idx - 1][0]:
-            lines.append((group, "group"))
+            lines.append((group.lower(), "group"))
         marker = "› " if idx == cursor else "  "
-        # the key row is masked and lives in .env; everything else is a
-        # plain config value. Rows carry their HUMAN label (the operator
-        # reads "System One decisions", not "decision_enabled"); the raw
-        # key stays in the width alignment so muscle-memory still works.
-        label = key if key == API_KEY_ROW else human_label(key)
+        label = (
+            key if key == API_KEY_ROW else model_display_label(key, config) if is_model_field(key) else human_label(key)
+        )
         value = api_key_state(config) if key == API_KEY_ROW else _fmt_plain(key, config.get(key, ""))
-        suffix = "  · m: live ids" if is_model_field(key) else ""
+        suffix = "  · M: picker" if is_model_field(key) else ""
         lines.append((f"{marker}{label.ljust(width)}  {value}{suffix}", "cursor" if idx == cursor else "row"))
+        # metadata + key status ride DIRECTLY under the model row
+        if is_model_field(key):
+            if meta:
+                lines.append((f"{' ' * (width + 4)}{meta}", "path"))
+            if prov:
+                lines.append((f"{' ' * (width + 4)}{prov} · {provider_key_status(prov, config)}", "path"))
     lines.append(("", "blank"))
+    mig = config.get("__migration_note__")
+    if mig:
+        lines.append((mig, "warn"))
     lines.append((note or visible_provider_note(config), "warn" if status == "warn" else "status"))
     return lines
 
@@ -779,7 +796,7 @@ def _fit(text: str, width: int) -> str:
 
 
 def _legend(section: str | None = None) -> str:
-    return "↑↓/jk move · Enter edit · m live model ids · s save · q save & quit"
+    return "↑↓/jk move · Enter edit · M model · P provider · E effort · s save · q save & quit"
 
 
 def _fmt_plain(key: str, value) -> str:
@@ -883,7 +900,11 @@ def model_meta_line(config: dict) -> str:
         price = _mm.resolve_pricing(prov, model, config)
         win = _mm.resolve_context_window(prov, model, config)
         price_s = f"${price[0]:.2f}/${price[1]:.2f} per 1M" if price else "price unknown"
-        win_s = f"{(win or 0) // 1000}k ctx" if win else "ctx unknown"
+        win_s = (
+            (f"{(win or 0) // 1_000_000}M ctx" if win >= 1_000_000 else f"{(win or 0) // 1000}k ctx")
+            if win
+            else "ctx unknown"
+        )
         src = "models.dev" if price else "approx"
         note = f"(registry default: {model})" if not model else ""
         parts = [p for p in (note, price_s, win_s) if p]
@@ -1097,7 +1118,7 @@ def _draw(stdscr, config: dict, items, cursor: int, note: str, status: str, sect
     with contextlib.suppress(curses.error):
         sub = stdscr.subwin(min(box_h, h - 1), w, 0, 0)
         sub.border()
-        _put(stdscr, 0, max(1, (w - len(" SUIJIN — Settings ")) // 2), " SUIJIN — Settings ", "title", w)
+        _put(stdscr, 0, max(1, (w - len(" suijin settings ")) // 2), " suijin settings ", "title", w)
 
     for i, (text, role) in enumerate(window):
         if role == "title":

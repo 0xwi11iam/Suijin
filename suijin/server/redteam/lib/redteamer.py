@@ -516,7 +516,12 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
         # operator's Ctrl+Space contract is unchanged.
         if "intelligence" not in cfg:
             with contextlib.suppress(Exception):
-                cfg["intelligence"] = _UI_STATE.get("intelligence", "max")
+                # SETTINGS EFFORT (2026-11-01): the operator's settings row
+                # is the standing default; the TUI's Ctrl+Space tier still
+                # wins while set; absent both, max.
+                cfg["intelligence"] = (
+                    _UI_STATE.get("intelligence") or str(config.get("intelligence") or "").strip() or "max"
+                )
         # LIVE CONTEXT GAUGE — PRIMARY THINK ONLY (2026-09-17 hardening).
         # Bookkeeping calls (librarian digest, supervisor analysis, critique,
         # fireteam subagents) all pass on_delta=False — their small prompts
