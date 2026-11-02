@@ -76,8 +76,11 @@ PHASE_COLOR = {
 }
 PULSE_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
+# defaults only — _resolve_roots() below resolves the REAL dirs (the
+# platform mesh registry + the config workspace); these constants exist
+# solely as fallbacks for import-time references before resolution runs.
 MESH_DIR = Path.home() / ".suijin" / "mesh"
-WORKSPACE_DIR = Path.home() / ".suijin" / "workspace"
+WORKSPACE_DIR = Path.home() / ".suijin" / "config"
 
 
 def _resolve_roots() -> tuple[Path, Path]:
@@ -91,10 +94,13 @@ def _resolve_roots() -> tuple[Path, Path]:
     if env:
         ws = Path(env).expanduser()
         return ws / "mesh", ws
-    cfg = Path.home() / ".suijin" / "config"
-    if cfg.is_dir() or not (Path.home() / ".suijin" / "workspace").is_dir():
-        return (Path.home() / ".suijin" / "mesh"), cfg
-    return MESH_DIR, WORKSPACE_DIR
+    # 2026-11-02: the platform mesh dir (Application Support on macOS) is
+    # THE registry — the ~/.suijin/mesh default was the retired-path bug
+    # (the operator's mesh pane read a dead directory while gc.log filled
+    # the real one; cards survived only via multi-source discovery).
+    from suijin.modules.agent.lib.mesh import mesh_dir as _live_mesh_dir
+
+    return Path(_live_mesh_dir()), Path.home() / ".suijin" / "config"
 
 
 MESH_DIR, WORKSPACE_DIR = _resolve_roots()
@@ -301,6 +307,7 @@ class Agent:
         "system_one",
         "runtime",
         "engagement_dir",
+        "engagement",
         "audit_data",
         "origin",
     )
@@ -1386,9 +1393,18 @@ class OperatorTUI:
             with contextlib.suppress(Exception):  # fixture console must
                 agents = agents + _box_agents()  # not shell out (the
             # 7 hung operator tests; AGENTS.md 2026-10-26 rule)
-            with contextlib.suppress(Exception):
-                claimed = {str(a.engagement_dir).rstrip("/") for a in agents if getattr(a, "engagement_dir", None)}
-                agents = agents + scan_dormant(srcs or [], claimed, hours=48)
+        with contextlib.suppress(Exception):
+            # dedupe by engagement: BOTH the audit-matched engagement_dir
+            # AND the registry's engagement stamp (audit match can fail on
+            # live runs — the dormant scan then duplicated live agents as
+            # dead pid-0 rows, the 'multiple dead 0000 agents' report).
+            claimed = set()
+            for a in agents:
+                for attr in ("engagement_dir", "engagement"):
+                    v = str(getattr(a, attr, None) or "").rstrip("/")
+                    if v:
+                        claimed.add(v)
+            agents = agents + scan_dormant(srcs or [], claimed, hours=48)
         agents = self._filter_agents(self._sort_agents(agents))
         chat, offset = read_chat(self.mesh_dir, skip_bytes=self._chat_offset)
         with self._lock:

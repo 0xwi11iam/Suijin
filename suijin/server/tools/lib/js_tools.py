@@ -103,6 +103,40 @@ def js_bundle_analyze(url: str, max_len: int = 4_000_000) -> str:
     return "\n".join(lines)
 
 
+def _dead_keys_path():
+    """The engagement's dead-key registry (intel/dead_keys.json) — keys
+    proven dead are logged ONCE and never re-probed (2026-11-02: the agent
+    kept re-testing dead AIza keys it had already dismissed)."""
+    from suijin.modules.platform.lib.workspace import artifact_dir
+
+    p = artifact_dir("intel") / "dead_keys.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def _load_dead_keys() -> dict:
+    import contextlib
+    import json as _json
+
+    with contextlib.suppress(Exception):
+        return _json.loads(_dead_keys_path().read_text()) if _dead_keys_path().is_file() else {}
+    return {}
+
+
+def _log_dead_key(key: str, reason: str) -> None:
+    import contextlib
+    import json as _json
+    import time as _time
+
+    with contextlib.suppress(Exception):
+        reg = _load_dead_keys()
+        fp = f"{key[:10]}…{key[-4:]}"
+        if fp in reg:
+            return  # already logged — idempotent
+        reg[fp] = {"reason": reason[:120], "logged_at": _time.strftime("%H:%M:%S"), "prefix": key[:10]}
+        _dead_keys_path().write_text(_json.dumps(reg, indent=1))
+
+
 def google_key_probe(key: str) -> str:
     """Test a Google API key against common services (READ-ONLY probes).
 
@@ -110,7 +144,10 @@ def google_key_probe(key: str) -> str:
     AIza... key found in a bundle. Probes: Maps geocode, Timezone,
     Drive about (needs OAuth — marked as such), reCAPTCHA siteverify
     shape, Youtube (data API often enabled), Translate v2.
-    """
+
+    DEAD-KEY LOG (2026-11-02): a key refused everywhere is logged to
+    intel/dead_keys.json and never re-probed this engagement — the agent
+    kept re-testing keys it had already dismissed."""
     if not key or not key.startswith("AIza"):
         return "Error: expected a Google API key (AIza...)"
     probes = [
