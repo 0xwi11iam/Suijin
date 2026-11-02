@@ -301,7 +301,7 @@ st.CONFIG_PATH = {str(cfg_path)!r}
 from suijin.modules.platform.lib import config_loader as cl
 cl.ENV_PATH = Path({str(env_path)!r})
 # down to the model, down to the key row, Enter, type, Enter, quit
-SCRIPT = [curses.KEY_DOWN, curses.KEY_DOWN, 13] + [ord(c) for c in {secret!r}] + [13, ord("q")]
+SCRIPT = [curses.KEY_DOWN] * 3 + [13] + [ord(c) for c in {secret!r}] + [13, ord("q")]  # effort row added
 n = [0]
 class Proxy:
     def __init__(self, s): object.__setattr__(self, "_s", s)

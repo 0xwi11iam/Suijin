@@ -1311,7 +1311,7 @@ def run_selftest() -> int:
         from pathlib import Path as _P
 
         assert _P.home() / ".suijin" / "workspace" == WORKSPACE_DIR, (
-            f"workspace must be repo-local or ~/.suijin/workspace (got {WORKSPACE_DIR})"
+            f"workspace must be repo-local or ~/.suijin/config (got {WORKSPACE_DIR})"
         )
         return f"{WORKSPACE_DIR} (durable home — pip install mode)"
 

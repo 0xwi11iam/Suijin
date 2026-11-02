@@ -4,7 +4,7 @@ The agent's system prompt is generated from code (role, methodology,
 skills, tool catalog). This module makes it OPERATOR-EDITABLE with a
 safe layout:
 
-    ~/.suijin/workspace/prompt.md
+    ~/.suijin/config/prompt.md
     ┌ your prompt (edit freely — never touched by suijin)
     │ ...
     ├── <!-- suijin:dynamic-below (regenerated every engagement) -->

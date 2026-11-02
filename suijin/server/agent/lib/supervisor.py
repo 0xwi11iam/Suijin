@@ -208,6 +208,49 @@ def _detect_found_but_not_exploited(trace: list) -> Optional[str]:
     )
 
 
+#: The arsenal reminder thresholds (2026-11-02, the Arsenal Rule): the
+#: high-value tools that must not sit unused while matching work happens.
+#: Each entry: (tool, the job it does, the by-hand work it replaces).
+_ARSENAL_TOOLS = [
+    ("inject_probe", "injection batteries (tag survival, sinks, noise floors)", "hand-crafting payloads one at a time"),
+    ("http_replay", "compare mode — the 3-gate baseline/exploit diff", "manual baseline calls and eyeballing"),
+    ("ffuf_fuzz", "parallel content discovery with parsed result tables", "curl loops over wordlists"),
+    ("bypass_403", "the full 403-bypass variant battery", "hand-trying header/path tricks"),
+    ("nmap_scan", "port/service/version baseline", "guessing services from banner grabs"),
+    ("catalog_exploit", "POC-backed finding records with the verifier", "notes that claim without proof"),
+    ("chain_suggest", "curated attack-chain templates on indicators", "re-deriving chains from scratch"),
+    ("web_session", "cross-credential IDOR worklist", "manual credential swap attempts"),
+    ("race_test", "stateful-endpoint race detection", "manual parallel curl attempts"),
+    ("tool_inventory", "the full kit incl. installed binaries", "assuming what's available"),
+]
+
+
+def _detect_unused_arsenal(trace: list, iteration: int | None = None, **_kw) -> str | None:
+    """THE ARSENAL RULE (2026-11-02, operator ruling): if a tool exists,
+    the agent uses it — 'the AI didn't know it could' is a harness defect.
+    Fired at iterations {10, 25, 50}: names the high-value tools never
+    used, each with its one-line job, and the work already done that the
+    tool would have done better. Cooldown-gated by the shared ledger; at
+    most 3 fires per engagement."""
+    it = int(iteration or 0)
+    if it not in (10, 25, 50):
+        return None
+    used = set()
+    for step in trace or []:
+        used.add(str(step.get("tool_name") or step.get("name") or ""))
+    unused = [(t, job, alt) for t, job, alt in _ARSENAL_TOOLS if t not in used]
+    if not unused:
+        return None
+    lines = [
+        f"ARSENAL REMINDER (iteration {it}): these tools exist and haven't been "
+        "used this engagement — each does work you've likely been doing the hard way:",
+    ]
+    for t, job, alt in unused[:5]:
+        lines.append(f"  · {t} — {job} (instead of: {alt})")
+    lines.append("Check tool_inventory if unsure what's installed; the catalog lists every tool with its args.")
+    return "\n".join(lines)
+
+
 def _detect_bookkeeping_loop(trace: list, threshold: int = 4) -> Optional[str]:
     """Detect if the agent is stuck in a bookkeeping loop.
 
@@ -849,6 +892,7 @@ def analyze_trace(trace: list, iteration: float | None = None, **extra_kw) -> Op
         _detect_silent_teammate,
         _detect_phase_stall,
         _detect_repeating_tool,
+        _detect_unused_arsenal,
         _detect_bookkeeping_loop,
         _detect_found_but_not_exploited,
         _detect_uncataloged_finding,

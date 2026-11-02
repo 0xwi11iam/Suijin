@@ -1,7 +1,7 @@
 """skill_library — the searchable methodology library (Wave A).
 
 Imports the 125 WSTG + 16 attack-methodology SKILL.md files from the
-CyberStrike AGPL repo into ~/.suijin/workspace/skills/ (data, never the
+CyberStrike AGPL repo into the workspace skills/ directory (data, never the
 vendored tree). Inverted-index search (name/tag/owasp_id/category);
 skill_load returns one file's body lazily (context conservation).
 
