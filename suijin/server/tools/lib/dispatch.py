@@ -647,6 +647,25 @@ def _inventory_fn():
     return tool_inventory
 
 
+def _rows_fn():
+    """Lazily import the rows tools (boundary rule)."""
+    from suijin.server.agent.lib import rows_tools
+
+    return rows_tools
+
+
+def _traffic_fn():
+    from suijin.server.tools.lib import traffic_index
+
+    return traffic_index
+
+
+def _retest_fn():
+    from suijin.server.tools.lib import retest
+
+    return retest
+
+
 def _chain_fn():
     """Lazily import the chain engine (boundary rule: no circular imports)."""
     from suijin.server.tools.lib import chain_engine
@@ -862,6 +881,7 @@ def _build_routes(config):
             status=a.get("status", ""),
             evidence=a.get("evidence", ""),
             request_sent=a.get("request_sent", ""),
+            reason=a.get("reason", ""),  # contract drift fix (2026-11-03)
             kind=a.get("kind", ""),
             subject=a.get("subject", ""),
             text=a.get("text", ""),
@@ -872,6 +892,7 @@ def _build_routes(config):
         "surface_expand": lambda a: _surface_expand(
             url=a.get("url", ""),
             names=a.get("names"),
+            depth=int(a.get("depth", 1)),  # contract drift fix (2026-11-03)
             include_derived=bool(a.get("include_derived", True)),
             timeout=int(a.get("timeout", 15)),
             allow_internal=bool(a.get("allow_internal")),
@@ -883,6 +904,8 @@ def _build_routes(config):
             body=a.get("body", ""),
             vuln_class=a.get("vuln_class", "xss"),
             field=a.get("field", "q"),
+            payloads=a.get("payloads"),  # contract drift fix (2026-11-03)
+            sink_contexts=a.get("sink_contexts"),  # contract drift fix
             in_body=bool(a.get("in_body")),
             request_id=a.get("request_id", ""),
             timeout=int(a.get("timeout", 20)),
@@ -1015,6 +1038,22 @@ def _build_routes(config):
         # but INVISIBLE — no catalog entry, so the agent never reached for
         # nmap/gobuster/katana/ffuf. tool_inventory shows everything.
         "tool_inventory": lambda a: _inventory_fn()(),
+        # ROWS TOOLS (2026-11-03, wall-memo slice 2d): the model writes
+        # state that survives compaction — one fact per intent, not per curl
+        "record_fact": lambda a: _rows_fn().rows_record_fact(
+            a.get("summary", ""), a.get("evidence", ""), a.get("asset_id", ""), bool(a.get("observed", True)), float(a.get("confidence", 0.8))
+        ),
+        "insert_asset": lambda a: _rows_fn().rows_insert_asset(a.get("name", ""), a.get("atype", ""), a.get("parent", "")),
+        "add_intent": lambda a: _rows_fn().rows_add_intent(a.get("text", ""), a.get("parent_fact", "")),
+        "set_intent": lambda a: _rows_fn().rows_set_intent(a.get("iid", ""), a.get("state", ""), a.get("note", "")),
+        "rows_snapshot": lambda a: _rows_fn().rows_snapshot_tool(),
+        # TRAFFIC INDEX (slice 3): every request searchable
+        "traffic_search": lambda a: _traffic_fn().traffic_search(
+            a.get("host", ""), a.get("body", ""), int(a.get("status", 0) or 0), int(a.get("limit", 3) or 3)
+        ),
+        "traffic_get": lambda a: _traffic_fn().traffic_get(int(a.get("id", 0) or 0)),
+        # RETEST (slice 5): a finding's life after the run
+        "retest_finding": lambda a: _retest_fn().retest_finding(a.get("finding_id", ""), config=config),
         # CHAIN ENGINE (2026-10-29): curated chain templates — indicator
         # firing suggests them at observation time; the loom holds the plan.
         "chain_suggest": lambda a: _chain_fn().suggest(str(a.get("template", ""))),

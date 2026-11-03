@@ -231,6 +231,34 @@ def execute_terminal(cmd, timeout=30, cwd=None):
             from suijin.server.tools.lib.output_normalizer import normalize_terminal_output
 
             out = normalize_terminal_output(cmd, out)
+
+            # LARGE OUTPUT → FILE (wall memo 1e): the full text lands in
+            # outputs/<ts>.txt and the result names it. The model can read
+            # what it just did — 'output is cut at 8000 characters, the
+            # rest is not in a file' was the lie.
+            try:
+                if len(out) > 12_000:
+                    import re as _re_ts
+
+                    _ts = _re_ts.sub(r"[^\w]", "-", cmd[:24]).strip("-") or "output"
+                    _f = _ws().home_dir() / "outputs" / f"{int(_time.monotonic() * 1000):.0f}-{_ts}.txt"
+                    _f.parent.mkdir(parents=True, exist_ok=True)
+                    _f.write_text(out, encoding="utf-8")
+                    head = out[:4000]
+                    tail = out[-2000:]
+                    out = f"{head}\n\n[… {len(out):,} chars total — FULL OUTPUT SAVED: {_f} — read_file it]\n\n{tail}"
+            except Exception:  # noqa: BLE001 — the file never blocks the result
+                pass
+
+            # ALTERNATES (wall memo 1c): a not-installed error carries
+            # the exact command that works right now — the model's first
+            # failure teaches instead of dead-ending.
+            try:
+                from suijin.modules.tools.lib.alternates import annotate_missing_binary
+
+                out = annotate_missing_binary(out)
+            except Exception:  # noqa: BLE001
+                pass
         except Exception:  # noqa: BLE001 — normalization never kills a result
             pass
         for _note in _heal_notes:
