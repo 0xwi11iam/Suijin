@@ -16,8 +16,16 @@ def _rows_ws(tmp_path, monkeypatch):
     (tmp_path / "state").mkdir(parents=True)
     monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
     monkeypatch.setattr(ws, "state_dir", lambda: tmp_path / "state", raising=False)
-    # BOTH module objects — the shim namespace is a separate module
-    monkeypatch.setattr(rows_mod, "rows_dir", lambda: tmp_path / "state" / "rows", raising=False)
+    # the shim namespace re-exports a SEPARATE module object — patch
+    # rows_dir on the server-path module (the file's own object) and the
+    # shim re-export picks it up; mkdir because _append's OSError
+    # suppress would otherwise eat the missing dir silently
+    import suijin.server.agent.lib.rows as canonical
+
+    rows_dir = tmp_path / "state" / "rows"
+    rows_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(canonical, "rows_dir", lambda: rows_dir, raising=False)
+    monkeypatch.setattr(rows_mod, "rows_dir", lambda: rows_dir, raising=False)
     return tmp_path
 
 
@@ -63,7 +71,12 @@ class TestSlice2_Rows:
 class TestSlice3_Traffic:
     def test_record_and_search(self, _rows_ws, monkeypatch):
         import suijin.modules.tools.lib.traffic_index as ti
-        monkeypatch.setattr(ti, "traffic_db", lambda: _rows_ws / "state" / "traffic" / "index.db")
+        import suijin.server.tools.lib.traffic_index as canonical
+
+        _db = _rows_ws / "state" / "traffic" / "index.db"
+        _db.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(canonical, "traffic_db", lambda: _db, raising=False)
+        monkeypatch.setattr(ti, "traffic_db", lambda: _db, raising=False)
 
         tid = ti.record_exchange("GET", "https://api.example.com/v1/x", 200, res_body='{"ok":true}')
         assert tid > 0
@@ -72,7 +85,12 @@ class TestSlice3_Traffic:
 
     def test_body_fts(self, _rows_ws, monkeypatch):
         import suijin.modules.tools.lib.traffic_index as ti
-        monkeypatch.setattr(ti, "traffic_db", lambda: _rows_ws / "state" / "traffic" / "index.db")
+        import suijin.server.tools.lib.traffic_index as canonical
+
+        _db = _rows_ws / "state" / "traffic" / "index.db"
+        _db.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(canonical, "traffic_db", lambda: _db, raising=False)
+        monkeypatch.setattr(ti, "traffic_db", lambda: _db, raising=False)
 
         ti.record_exchange("GET", "https://a.example.com/x", 200, res_body="SECRET_MARKER_XYZ inside")
         out = ti.traffic_search(host="a.example.com", body="SECRET_MARKER_XYZ")
@@ -80,7 +98,12 @@ class TestSlice3_Traffic:
 
     def test_get_returns_exchange(self, _rows_ws, monkeypatch):
         import suijin.modules.tools.lib.traffic_index as ti
-        monkeypatch.setattr(ti, "traffic_db", lambda: _rows_ws / "state" / "traffic" / "index.db")
+        import suijin.server.tools.lib.traffic_index as canonical
+
+        _db = _rows_ws / "state" / "traffic" / "index.db"
+        _db.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(canonical, "traffic_db", lambda: _db, raising=False)
+        monkeypatch.setattr(ti, "traffic_db", lambda: _db, raising=False)
 
         tid = ti.record_exchange("POST", "https://b.example.com/login", 403, req_body="user=x")
         got = ti.traffic_get(tid)
@@ -88,7 +111,12 @@ class TestSlice3_Traffic:
 
     def test_host_required(self, _rows_ws, monkeypatch):
         import suijin.modules.tools.lib.traffic_index as ti
-        monkeypatch.setattr(ti, "traffic_db", lambda: _rows_ws / "state" / "traffic" / "index.db")
+        import suijin.server.tools.lib.traffic_index as canonical
+
+        _db = _rows_ws / "state" / "traffic" / "index.db"
+        _db.parent.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(canonical, "traffic_db", lambda: _db, raising=False)
+        monkeypatch.setattr(ti, "traffic_db", lambda: _db, raising=False)
 
         assert ti.traffic_search(host="").startswith("Error")
 
@@ -96,9 +124,11 @@ class TestSlice3_Traffic:
 class TestSlice4_Planner:
     def test_planner_prompt_has_no_execution(self, _rows_ws, monkeypatch):
         import suijin.modules.agent.lib.planner as planner
-        import suijin.modules.agent.lib.rows as rows_mod
+        import suijin.server.agent.lib.rows as canonical
 
-        monkeypatch.setattr(rows_mod, "rows_dir", lambda: _rows_ws / "state" / "rows")
+        _rd = _rows_ws / "state" / "rows"
+        _rd.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(canonical, "rows_dir", lambda: _rd, raising=False)
         p = planner.planner_system_prompt({})
         assert "do NOT execute" in p
         assert "emit_intents" in p
