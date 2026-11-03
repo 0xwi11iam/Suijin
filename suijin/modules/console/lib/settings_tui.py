@@ -1459,34 +1459,22 @@ def _picker_screen(stdscr, title: str, rows: list[tuple[str, str]], start: int =
 
 
 def pick_model_screen(stdscr, config: dict, key: str) -> str:
-    """The model picker as a full-frame screen with models.dev metadata
-    per row and the current model marked."""
+    """The model picker — SIMPLE (2026-11-03, operator ruling after the
+    malformed-mess report): plain model ids, type-to-filter, current
+    marked. NO live metadata columns, NO models.dev resolution, NO FTS
+    formatting — those made the screen a mess. A typed/pasted id is also
+    accepted (the filter line doubles as free entry)."""
     provider = str(config.get("provider") or "")
     if not provider:
         return "no provider selected — set provider first"
     ids, fetch_note = fetch_model_ids(provider, config)
     if not ids:
         return fetch_note
-    from suijin.modules.providers.lib import model_meta as _mm
-
     current = str(config.get(key) or "")
     shown = ids[:MODEL_LIST_CAP]
     if current and current not in shown:
         shown = [current] + shown
-    rows = []
-    for mid in shown:
-        meta = ""
-        with contextlib.suppress(Exception):
-            price = _mm.resolve_pricing(provider, mid, config)
-            win = _mm.resolve_context_window(provider, mid, config)
-            bits = []
-            if price:
-                bits.append(f"${price[0]:.2f}/${price[1]:.2f}")
-            if win:
-                bits.append(f"{win // 1_000_000}M" if win >= 1_000_000 else f"{win // 1000}k")
-            meta = " · ".join(bits)
-        marker = "[current]" if mid == current else ""
-        rows.append((f"{mid}  {meta}" if meta else mid, marker))
+    rows = [(mid, "[current]" if mid == current else "") for mid in shown]
     start = next((i for i, mid in enumerate(shown) if mid == current), 0)
     picked = _picker_screen(stdscr, f"model for {provider}", rows, start=start)
     if picked is None:

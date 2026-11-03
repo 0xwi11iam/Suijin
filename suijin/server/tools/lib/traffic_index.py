@@ -91,7 +91,12 @@ def traffic_search(host: str = "", body: str = "", status: int = 0, limit: int =
             "JOIN exchange_fts f ON e.id=f.rowid WHERE e.host LIKE ? AND exchange_fts MATCH ?"
         )
         params = (f"%{host}%", f'"{body}"')
-    q += f" ORDER BY e.id DESC LIMIT {max(1, min(int(limit or 3), 50))}"
+    # ORDER BY e.id requires the e alias — the no-body query has none
+    # (the error was suppressed into a silent 'no exchanges' lie)
+    if body:
+        q += f" ORDER BY e.id DESC LIMIT {max(1, min(int(limit or 3), 50))}"
+    else:
+        q += f" ORDER BY id DESC LIMIT {max(1, min(int(limit or 3), 50))}"
     found = []
     with contextlib.suppress(sqlite3.Error):
         with _conn() as c:
