@@ -1126,6 +1126,7 @@ class EngagementUI:
         self._streaming = False  # True between the first delta and stream_done
         self._last_box_norm = None  # duplicate-command-box guard
         self._waiting_since: float | None = None  # think-turn start → TTFT proof
+        self._wait_note = ""  # the real wait state on the strip (red errors, yellow notes)
         self._next_report_s: float = float(self._LLM_WAIT_REPORT_S)  # threshold-scheduled still-thinking
         self._last_cost = 0.0
 
@@ -1153,6 +1154,15 @@ class EngagementUI:
             g = Table.grid(padding=(0, 1))
             g.add_row(self._spinner, Text("thinking", style=f"bold {GOLD}"))
             left = g
+            # WAIT NOTE (2026-11-03): the real state rides the strip —
+            # provider errors/retries show RED, not the generic spinner
+            # swallowing what happened (the operator's 'useless bs' report)
+            wn = getattr(self, "_wait_note", "")
+            if wn:
+                if wn.startswith("!"):
+                    g.add_row(Text(" ", style=""), Text(wn[1:], style="bold red"))
+                else:
+                    g.add_row(Text(" ", style=""), Text(wn, style="yellow"))
         else:
             left = Text(f"suijin {self.phase} #{self.iteration}", style=f"bold {GOLD}")
         ft_live = _fireteam_live_count()
@@ -1521,9 +1531,17 @@ class EngagementUI:
                 self._live.stop()
             self._live = None
 
-    def waiting(self, on: bool) -> None:
-        """Between events: the strip shows the thinking spinner."""
+    def waiting(self, on: bool, note: str = "") -> None:
+        """Between events: the strip shows the thinking spinner.
+
+        2026-11-03 (operator: 'always swallowing important info and
+        showing useless bs'): the note rides the strip — provider
+        errors, retries, and long waits state WHAT is happening in
+        red/yellow, not the generic spinner forever. waiting(False)
+        clears it. Escalation is caller's choice: '' = clean thinking.
+        """
         self._waiting = bool(on)
+        self._wait_note = str(note or "")[:80] if on else ""
         if on and self._waiting_since is None:
             self._waiting_since = time.monotonic()  # TTFT clock starts
             self._next_report_s = float(self._LLM_WAIT_REPORT_S)  # fresh progress cadence

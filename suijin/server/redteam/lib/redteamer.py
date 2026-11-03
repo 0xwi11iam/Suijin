@@ -1809,8 +1809,17 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                         if _provider_restarts < _MAX_PROVIDER_RESTARTS:
                             _provider_restarts += 1
                             _wait_s = 30 * (2 ** (_provider_restarts - 1))  # 30, 60, 120
+                            # THE ACTUAL ERROR (2026-11-03, operator: 'make
+                            # it show error message'): the final_summary
+                            # carries the provider's real error — show it,
+                            # not just 'trouble'. The operator sees WHY.
+                            _err = str(node_output.get("final_summary") or "")[:180]
                             console.print(
-                                f"[yellow]provider trouble ({_cr}) — restart "
+                                f"[red]provider trouble ({_cr})[/red]"
+                                + (f": {_err}" if _err and _err != "None" else "")
+                            )
+                            console.print(
+                                f"[yellow]restart "
                                 f"{_provider_restarts}/{_MAX_PROVIDER_RESTARTS} in {_wait_s}s "
                                 f"(state carried, waiting out the blip)[/yellow]"
                             )
