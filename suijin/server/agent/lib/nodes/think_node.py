@@ -149,6 +149,19 @@ def _queued_plan_block(state: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _rows_snapshot(state: dict) -> str:
+    """The rows the next turn READS (wall-memo slice 2b): facts, assets,
+    intents, findings from <engagement>/state/rows/. Degrades to empty
+    when rows don't exist yet — the snapshot itself teaches the model
+    to write them."""
+    with contextlib.suppress(Exception):
+        from suijin.modules.agent.lib.rows import snapshot
+
+        s = snapshot()
+        return ("\n" + s + "\n") if s else ""
+    return ""
+
+
 def _chain_loom_block(state: dict) -> str:
     """THE LOOM (2026-10-29): the chain re-renders into CURRENT_STATE
     every turn — the model's working memory can't hold it across tool
@@ -729,7 +742,12 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
                 else ""
             )
             + f"- **Attack Path**: {state.get('attack_path_type', 'recon')}\n"
-            + _governor_lines
+            # ROWS SNAPSHOT (2026-11-03, the wall memo): the computed state
+        # opens CURRENT_STATE — counts, open intents, last facts,
+        # untested assets. Compaction cannot delete rows; the model stops
+        # re-deriving what it holds.
+        + _rows_snapshot(state)
+        + _governor_lines
             + _queued_plan_block(state)
             + _chain_loom_block(state)
         ),
