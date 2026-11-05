@@ -1517,12 +1517,16 @@ def run_policy(args) -> int:
     return 1
 
 
-def _run_swarm(action: str, coordinator: str = "", identity: str = "", agent_id: str = "", tui: bool = False, count: int = 1) -> int:
+def _run_swarm(action: str, coordinator: str = "", identity: str = "", agent_id: str = "", tui: bool = False, count: int = 1, intent_text: str = "") -> int:
     """Dispatch swarm subcommands."""
     if action == "init":
         from suijin.server.swarm.lifecycle import run_swarm_init
 
         return run_swarm_init()
+    if action == "intent":
+        from suijin.server.swarm.lifecycle import run_swarm_intent
+
+        return run_swarm_intent(intent_text)
     if action == "spawn":
         import types
 
@@ -2524,6 +2528,10 @@ def main(argv=None):
     spawn_p = swarm_sub.add_parser("spawn", help="spawn an agent (--tui = full TUI in this terminal)")
     spawn_p.add_argument("--tui", action="store_true", help="run with the engagement TUI in this terminal")
     spawn_p.set_defaults(func=lambda a: _run_swarm("spawn", tui=getattr(a, "tui", False), count=getattr(a, "count", 1)))
+
+    intent_p = swarm_sub.add_parser("intent", help="add work to the swarm queue")
+    intent_p.add_argument("text", nargs="+", help="what the agent should do (the verifiable result)")
+    intent_p.set_defaults(func=lambda a: _run_swarm("intent", intent_text=" ".join(a.text)))
     swarm_sub.add_parser("attach", help="attach to an agent (tail its output live)").set_defaults(
         func=lambda a: _run_swarm("attach", agent_id=getattr(a, "agent_id", ""))
     )

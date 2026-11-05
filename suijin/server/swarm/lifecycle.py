@@ -78,7 +78,7 @@ def run_swarm_init(args=None) -> int:
     console.print("[bold]starting swarm coordinator…[/bold]")
 
     coordinator_log = Path(tempfile.gettempdir()) / "suijin-swarm-coordinator.log"
-    proc = subprocess.Popen(
+    subprocess.Popen(
         [sys.executable, "-c", "from suijin.server.swarm.coordinator import run_swarm_start; run_swarm_start()"],
         stdout=open(coordinator_log, "w"),
         stderr=subprocess.STDOUT,
@@ -149,12 +149,26 @@ def run_swarm_spawn(args=None) -> int:
 
 
 def _spawn_tui(addr: tuple[str, int], console) -> int:
-    """Spawn an agent that runs the full engagement TUI in this terminal,
-    registered with the swarm. This is 'suijin engage' but connected."""
+    """Spawn an agent that runs the full engagement TUI in this terminal.
+    The OBJECTIVE comes from the swarm's intent queue — no manual input,
+    no menu, straight into the engagement. This is the operator's 'open
+    a new tab, type one command, agent starts working' flow."""
     identity = f"tui-{int(time.time()) % 10000}-{os.urandom(2).hex()}"
-    console.print(f"[cyan]swarm agent {identity}[/cyan] — opening TUI (Ctrl+C or /quit to exit)\n")
 
-    # connect to the bus, register, start heartbeats
+    # claim an intent FIRST — this IS the objective
+    intent = _claim_intent_for(identity)
+    if not intent:
+        console.print("[yellow]no open intents in the swarm queue.[/yellow]")
+        console.print("  add work first:")
+        console.print("    [cyan]suijin swarm intent \"test http://127.0.0.1:6000 for injection\"[/cyan]")
+        console.print("  or spawn without --tui (headless agents idle until work arrives)")
+        return 1
+
+    console.print(f"[cyan]swarm agent {identity}[/cyan]")
+    console.print(f"  intent: {intent['text'][:80]}")
+    console.print("  opening TUI…\n")
+
+    # connect to the bus, register, heartbeats
     from suijin.server.mesh.bus import BusClient
 
     bus = BusClient()
@@ -172,21 +186,52 @@ def _spawn_tui(addr: tuple[str, int], console) -> int:
             bus.publish("/swarm/status", {"event": "heartbeat", "agent": identity})
             time.sleep(5)
 
-    hb = threading.Thread(target=_heartbeat, daemon=True, name="swarm-hb")
-    hb.start()
+    threading.Thread(target=_heartbeat, daemon=True, name="swarm-hb").start()
 
-    # run the standard engagement TUI — the operator gets the full
-    # console (typewriter, tool output, findings panel, everything)
-    # but this agent is also visible in `suijin swarm status`
+    # run the engagement with the intent as the objective — NO MENU,
+    # NO OBJECTIVE PICKER, straight in
     try:
-        from suijin.server.redteam.lib.redteamer import main as redteamer_main
+        import asyncio
 
-        return redteamer_main() or 0
+        from suijin.server.redteam.lib.redteamer import run_red_team_async
+
+        config = {
+            "objective": intent["text"],
+            "target": intent.get("engagement", "swarm"),
+            "max_iterations": 100000,
+        }
+        asyncio.run(run_red_team_async(config, intent["text"]))
+        return 0
     except KeyboardInterrupt:
         console.print(f"\n[yellow]agent {identity} disconnected[/yellow]")
         return 0
     finally:
         bus.close()
+
+
+def _claim_intent_for(agent_id: str) -> dict | None:
+    """Claim the next open intent from the swarm database."""
+    with contextlib.suppress(Exception):
+
+        import sqlite3
+
+        db = sqlite3.connect(str(_swarm_db()), timeout=5)
+        db.execute("PRAGMA journal_mode=WAL")
+        row = db.execute(
+            "SELECT id, text, engagement FROM intents WHERE state = 'open' ORDER BY created_at LIMIT 1"
+        ).fetchone()
+        if not row:
+            db.close()
+            return None
+        iid, text, engagement = row
+        db.execute(
+            "UPDATE intents SET state = 'running', agent_id = ?, claimed_at = ? WHERE id = ? AND state = 'open'",
+            (agent_id, time.time(), iid),
+        )
+        db.commit()
+        db.close()
+        return {"id": iid, "text": text, "engagement": engagement}
+    return None
 
 
 def run_swarm_attach(args=None) -> int:
@@ -273,4 +318,34 @@ def run_swarm_stop_all(args=None) -> int:
         )
 
     console.print("[green]swarm stopped[/green]")
+    return 0
+
+
+def run_swarm_intent(text: str) -> int:
+    """`suijin swarm intent "do the thing"` — add work to the queue."""
+    from rich.console import Console
+
+    console = Console()
+    text = str(text or "").strip()
+    if not text:
+        console.print("[red]intent text required[/red]")
+        console.print('  example: suijin swarm intent "test http://127.0.0.1:6000 for injection"')
+        return 1
+
+    import hashlib
+    import sqlite3
+
+    iid = "in_" + hashlib.sha1(text.encode()).hexdigest()[:12]
+    db = sqlite3.connect(str(_swarm_db()), timeout=5)
+    db.execute("PRAGMA journal_mode=WAL")
+    db.execute(
+        "INSERT OR IGNORE INTO intents (id, text, state, engagement, created_at) VALUES (?, ?, 'open', ?, ?)",
+        (iid, text, "swarm", time.time()),
+    )
+    db.commit()
+    count = db.execute("SELECT COUNT(*) FROM intents WHERE state = 'open'").fetchone()[0]
+    db.close()
+
+    console.print(f"  [green]✓[/green] intent queued: {text[:80]}")
+    console.print(f"  {count} intent(s) waiting — [cyan]suijin swarm spawn --tui[/cyan] to work one")
     return 0
