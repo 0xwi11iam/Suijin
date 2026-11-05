@@ -248,7 +248,7 @@ def run_swarm_spawn(args=None) -> int:
     pid_file = Path(tempfile.gettempdir()) / f"suijin-agent-{identity}.pid"
 
     proc = subprocess.Popen(
-        [sys.executable, "-m", "suijin.server.swarm.agent", "--coordinator", f"127.0.0.1:{addr[1]}", "--identity", identity],
+        [sys.executable, "-u", "-m", "suijin.server.swarm.agent", "--coordinator", f"127.0.0.1:{addr[1]}", "--identity", identity],
         stdout=open(log_file, "w"),
         stderr=subprocess.STDOUT,
         stdin=subprocess.DEVNULL,
