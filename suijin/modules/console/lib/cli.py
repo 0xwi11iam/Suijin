@@ -1543,7 +1543,7 @@ def _run_swarm(
     if action == "spawn":
         from suijin.server.swarm.lifecycle import run_swarm_spawn
 
-        return run_swarm_spawn(types.SimpleNamespace(tui=tui, swarm=swarm_name))
+        return run_swarm_spawn(types.SimpleNamespace(tui=tui, swarm=swarm_name, count=count))
     if action == "attach":
         from suijin.server.swarm.lifecycle import run_swarm_attach
 
@@ -2552,10 +2552,11 @@ def main(argv=None):
     intent_p.add_argument("--swarm", default="", help="swarm name (default: most recent)")
     intent_p.set_defaults(func=lambda a: _run_swarm("intent", intent_text=" ".join(a.text), swarm_name=a.swarm))
 
-    spawn_p = swarm_sub.add_parser("spawn", help="spawn an agent (same agent either way — --tui just shows it in this terminal)")
+    spawn_p = swarm_sub.add_parser("spawn", help="spawn agent(s) — --tui shows in this terminal, -N for multiple")
     spawn_p.add_argument("--tui", action="store_true", help="full TUI in this terminal")
     spawn_p.add_argument("--swarm", default="", help="swarm name (default: first with open intents)")
-    spawn_p.set_defaults(func=lambda a: _run_swarm("spawn", tui=a.tui, swarm_name=a.swarm))
+    spawn_p.add_argument("--count", "-N", type=int, default=1, help="how many agents (local: share one process)")
+    spawn_p.set_defaults(func=lambda a: _run_swarm("spawn", tui=a.tui, swarm_name=a.swarm, count=a.count))
 
     attach_p = swarm_sub.add_parser("attach", aliases=["view"], help="view a live agent's output")
     attach_p.add_argument("agent_id", nargs="?", default="", help="agent id (default: latest)")

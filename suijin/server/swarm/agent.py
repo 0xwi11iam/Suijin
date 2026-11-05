@@ -37,7 +37,12 @@ def _swarm_db_path() -> Path:
 
 
 class SwarmAgent:
-    """A headless agent process — claims intents, executes tools, reports."""
+    """A worker — claims intents, executes them, reports.
+
+    LOCAL MODE: runs as an asyncio task inside the coordinator (shared
+    interpreter — 15 agents = ~200MB total, not 15 × 250MB = 3.75GB).
+    REMOTE MODE: runs as a separate process (bootstrap script).
+    """
 
     def __init__(self, coordinator_host: str, coordinator_port: int, identity: str = ""):
         self._host = coordinator_host
