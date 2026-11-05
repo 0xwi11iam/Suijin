@@ -1,15 +1,21 @@
-"""Swarm lifecycle — init, spawn, attach (2026-11-05).
+"""Swarm lifecycle — init with intents, named swarms, spawn/attach (2026-11-05).
 
-suijin swarm init   → start the coordinator, print the spawn command
-suijin swarm spawn  → spawn a background agent, print its ID
-suijin swarm attach → open the TUI for a specific agent (or the latest)
+suijin swarm init                    → start; if old intents exist, ask before wiping
+suijin swarm init "test X for Y"    → start + queue this intent immediately
+suijin swarm intent "do X"           → append to the intent list (never replaces)
+suijin swarm spawn [--swarm name]    → spawn an agent to the named swarm (default: first)
+suijin swarm spawn --tui             → same but with the full TUI in this terminal
+suijin swarm status                  → all swarms, all agents, all intents
+suijin swarm stop                    → stop everything
 """
 
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import os
 import signal
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -29,88 +35,150 @@ def _bus_addr() -> tuple[str, int] | None:
     return discover_bus()
 
 
-def _spawn_agent(port: int, identity: str = "") -> tuple[str, int]:
-    """Spawn a background agent process. Returns (identity, pid)."""
-    if not identity:
-        identity = f"agent-{int(time.time()) % 10000}-{os.urandom(2).hex()}"
+def _db():
+    """Open the swarm database."""
+    db = sqlite3.connect(str(_swarm_db()), timeout=5)
+    db.execute("PRAGMA journal_mode=WAL")
+    db.execute("PRAGMA busy_timeout=5000")
+    # ensure the swarm column exists (migration for old databases)
+    with contextlib.suppress(sqlite3.Error):
+        db.execute("ALTER TABLE intents ADD COLUMN swarm TEXT DEFAULT 'default'")
+    with contextlib.suppress(sqlite3.Error):
+        db.execute("ALTER TABLE agents ADD COLUMN swarm TEXT DEFAULT 'default'")
+    db.commit()
+    return db
 
-    # the agent runs headless in the background
-    pid_file = Path(tempfile.gettempdir()) / f"suijin-agent-{identity}.pid"
-    log_file = Path(tempfile.gettempdir()) / f"suijin-agent-{identity}.log"
 
-    proc = subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "suijin.server.swarm.agent",
-            "--coordinator",
-            f"127.0.0.1:{port}",
-            "--identity",
-            identity,
-        ],
-        stdout=open(log_file, "w"),
-        stderr=subprocess.STDOUT,
-        stdin=subprocess.DEVNULL,
-        start_new_session=True,  # survives the parent
+def _add_intent(text: str, swarm: str = "default") -> str:
+    """Add an intent to a swarm's queue. Returns the intent id."""
+    iid = "in_" + hashlib.sha1(f"{swarm}:{text}".encode()).hexdigest()[:12]
+    db = _db()
+    db.execute(
+        "INSERT OR IGNORE INTO intents (id, text, state, engagement, created_at, swarm) VALUES (?, ?, 'open', ?, ?, ?)",
+        (iid, text, swarm, time.time(), swarm),
     )
+    db.commit()
+    count = db.execute("SELECT COUNT(*) FROM intents WHERE state = 'open' AND swarm = ?", (swarm,)).fetchone()[0]
+    db.close()
+    return iid, count
 
-    pid_file.write_text(str(proc.pid))
-    return identity, proc.pid
+
+def _list_swarms() -> list[dict]:
+    """All named swarms with their intent counts."""
+    db = _db()
+    rows = db.execute(
+        "SELECT swarm, COUNT(*) as total, SUM(CASE WHEN state = 'open' THEN 1 ELSE 0 END) as open_count "
+        "FROM intents GROUP BY swarm ORDER BY swarm"
+    ).fetchall()
+    agents = db.execute(
+        "SELECT swarm, COUNT(*) FROM agents WHERE status = 'active' GROUP BY swarm"
+    ).fetchall()
+    agent_map = {r[0]: r[1] for r in agents}
+    db.close()
+    return [
+        {"name": r[0], "intents_total": r[1], "intents_open": r[2], "agents": agent_map.get(r[0], 0)}
+        for r in rows
+    ]
+
+
+def _first_swarm() -> str | None:
+    """The first swarm with open intents, or None."""
+    db = _db()
+    row = db.execute(
+        "SELECT swarm FROM intents WHERE state = 'open' ORDER BY created_at LIMIT 1"
+    ).fetchone()
+    db.close()
+    return row[0] if row else None
+
+
+# ── init ──────────────────────────────────────────────────────────────
 
 
 def run_swarm_init(args=None) -> int:
-    """`suijin swarm init` — start the coordinator and print the spawn command."""
+    """`suijin swarm init [intent text]` — start the coordinator.
+
+    With no args: if old intents exist, ask before wiping.
+    With text: start + queue that intent immediately.
+    With --name: create a named swarm.
+    """
     from rich.console import Console
     from rich.panel import Panel
+    from rich.prompt import Confirm
 
     console = Console()
+    intent_text = " ".join(getattr(args, "text", []) or []).strip()
+    swarm_name = str(getattr(args, "name", "") or "default").strip() or "default"
 
     # check if already running
     addr = _bus_addr()
-    if addr:
-        console.print(f"[green]swarm coordinator already running[/green] on port {addr[1]}")
-        console.print("\n  spawn an agent:  [cyan]suijin swarm spawn[/cyan]")
-        console.print("  attach to it:    [cyan]suijin swarm attach[/cyan]")
-        console.print("  status:          [cyan]suijin swarm status[/cyan]")
-        return 0
+    already_running = addr is not None
 
-    # start the coordinator in the background
-    console.print("[bold]starting swarm coordinator…[/bold]")
+    if not already_running:
+        console.print("[bold]starting swarm coordinator…[/bold]")
+        coordinator_log = Path(tempfile.gettempdir()) / "suijin-swarm-coordinator.log"
+        subprocess.Popen(
+            [sys.executable, "-c", "from suijin.server.swarm.coordinator import run_swarm_start; run_swarm_start()"],
+            stdout=open(coordinator_log, "w"),
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
 
-    coordinator_log = Path(tempfile.gettempdir()) / "suijin-swarm-coordinator.log"
-    subprocess.Popen(
-        [sys.executable, "-c", "from suijin.server.swarm.coordinator import run_swarm_start; run_swarm_start()"],
-        stdout=open(coordinator_log, "w"),
-        stderr=subprocess.STDOUT,
-        stdin=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+        for _ in range(20):
+            time.sleep(0.5)
+            addr = _bus_addr()
+            if addr:
+                break
+        if not addr:
+            console.print(f"[red]coordinator failed — check {coordinator_log}[/red]")
+            return 1
 
-    # wait for the bus port file
+    # check for existing intents (only wipe if operator confirms)
+    db = _db()
+    existing = db.execute("SELECT COUNT(*) FROM intents WHERE state IN ('open', 'running')").fetchone()[0]
+    db.close()
 
-    for _ in range(20):
-        time.sleep(0.5)
-        addr = _bus_addr()
-        if addr:
-            break
+    if existing > 0 and not intent_text:
+        console.print(f"\n[yellow]{existing} intent(s) already in the queue:[/yellow]")
+        db = _db()
+        for r in db.execute("SELECT text, state, swarm FROM intents WHERE state IN ('open','running') LIMIT 5").fetchall():
+            console.print(f"  [{r[1]}] {r[0][:60]}  [dim]({r[2]})[/dim]")
+        db.close()
+        if not Confirm.ask("  Wipe them and start fresh?", default=False):
+            console.print("[green]kept — adding to the existing queue[/green]")
+        else:
+            db = _db()
+            db.execute("DELETE FROM intents")
+            db.execute("DELETE FROM agents")
+            db.commit()
+            db.close()
+            console.print("[green]wiped — clean slate[/green]")
 
-    if not addr:
-        console.print("[red]coordinator failed to start — check:[/red]")
-        console.print(f"  cat {coordinator_log}")
-        return 1
+    # queue the intent if provided
+    if intent_text:
+        _, count = _add_intent(intent_text, swarm_name)
+        console.print(f"  [green]✓[/green] intent queued: {intent_text[:70]}")
+        console.print(f"  {count} intent(s) in '{swarm_name}' queue")
+
+    # print the summary
+    swarms = _list_swarms()
+    swarm_lines = "\n".join(
+        f"    {s['name']:<12} {s['intents_open']} open / {s['intents_total']} total · {s['agents']} agents"
+        for s in swarms
+    ) or "    (empty — add work: suijin swarm intent \"...\")"
 
     console.print(
         Panel(
-            f"[green]swarm coordinator running[/green]\n\n"
-            f"  bus:        tcp://127.0.0.1:{addr[1]}\n"
-            f"  database:   {_swarm_db()}\n"
-            f"  log:        {coordinator_log}\n\n"
-            f"[bold]spawn agents (run this as many times as you want):[/bold]\n"
-            f"  [cyan]suijin swarm spawn[/cyan]     ← spawns 1 background agent\n\n"
-            f"[bold]other commands:[/bold]\n"
-            f"  [cyan]suijin swarm attach[/cyan]   ← open the TUI for the latest agent\n"
-            f"  [cyan]suijin swarm status[/cyan]   ← agents, intents, findings\n"
-            f"  [cyan]suijin swarm stop[/cyan]     ← stop everything",
+            f"[green]swarm coordinator running[/green] on port {addr[1]}\n\n"
+            f"[bold]swarms:[/bold]\n{swarm_lines}\n\n"
+            f"[bold]spawn agents:[/bold]\n"
+            f"  [cyan]suijin swarm spawn[/cyan]          ← background agent (first swarm)\n"
+            f"  [cyan]suijin swarm spawn --tui[/cyan]    ← full TUI in this terminal\n"
+            f"  [cyan]suijin swarm spawn --swarm name[/cyan] ← specific swarm\n\n"
+            f"[bold]add work:[/bold]\n"
+            f"  [cyan]suijin swarm intent \"test X for Y\"[/cyan]\n\n"
+            f"[bold]other:[/bold]\n"
+            f"  [cyan]suijin swarm status[/cyan]  ·  [cyan]suijin swarm stop[/cyan]",
             title=" swarm ready ",
             border_style="green",
         )
@@ -118,108 +186,124 @@ def run_swarm_init(args=None) -> int:
     return 0
 
 
-def run_swarm_spawn(args=None) -> int:
-    """`suijin swarm spawn` — spawn a background agent.
-    `suijin swarm spawn --tui` — spawn an agent with the TUI in THIS terminal."""
+# ── intent ────────────────────────────────────────────────────────────
+
+
+def run_swarm_intent(text: str, swarm: str = "default") -> int:
+    """`suijin swarm intent "do X"` — append to the queue (never replaces)."""
     from rich.console import Console
 
     console = Console()
-
-    addr = _bus_addr()
-    if not addr:
-        console.print("[red]no swarm coordinator running — run [cyan]suijin swarm init[/cyan] first[/red]")
+    text = str(text or "").strip()
+    if not text:
+        console.print("[red]intent text required[/red]")
+        console.print('  example: suijin swarm intent "test http://127.0.0.1:6000 for injection"')
         return 1
 
-    # --tui flag: run the engagement TUI in this terminal, connected to the swarm
-    if getattr(args, "tui", False):
-        return _spawn_tui(addr, console)
-
-    count = int(getattr(args, "count", 1) or 1)
-    spawned = []
-    for _ in range(count):
-        identity, pid = _spawn_agent(addr[1])
-        spawned.append((identity, pid))
-        time.sleep(0.3)
-
-    for identity, pid in spawned:
-        console.print(f"  [green]✓[/green] agent [cyan]{identity}[/cyan] (pid {pid}) running in background")
-    console.print(f"\n  attach:  [cyan]suijin swarm attach {spawned[0][0]}[/cyan]")
-    console.print("  status:  [cyan]suijin swarm status[/cyan]")
+    _, count = _add_intent(text, swarm)
+    console.print(f"  [green]✓[/green] queued ({swarm}): {text[:70]}")
+    console.print(f"  {count} intent(s) waiting — [cyan]suijin swarm spawn --tui[/cyan]")
     return 0
 
 
-def _spawn_tui(addr: tuple[str, int], console) -> int:
-    """Spawn an agent that runs the full engagement TUI in this terminal.
-    The OBJECTIVE comes from the swarm's intent queue — no manual input,
-    no menu, straight into the engagement. This is the operator's 'open
-    a new tab, type one command, agent starts working' flow."""
-    identity = f"tui-{int(time.time()) % 10000}-{os.urandom(2).hex()}"
+# ── spawn ─────────────────────────────────────────────────────────────
 
-    # claim an intent FIRST — this IS the objective
-    intent = _claim_intent_for(identity)
-    if not intent:
-        console.print("[yellow]no open intents in the swarm queue.[/yellow]")
-        console.print("  add work first:")
-        console.print("    [cyan]suijin swarm intent \"test http://127.0.0.1:6000 for injection\"[/cyan]")
-        console.print("  or spawn without --tui (headless agents idle until work arrives)")
+
+def run_swarm_spawn(args=None) -> int:
+    """`suijin swarm spawn [--tui] [--swarm name]` — spawn an agent."""
+    from rich.console import Console
+
+    console = Console()
+    addr = _bus_addr()
+    if not addr:
+        console.print("[red]no coordinator — run [cyan]suijin swarm init[/cyan] first[/red]")
         return 1
 
-    console.print(f"[cyan]swarm agent {identity}[/cyan]")
-    console.print(f"  intent: {intent['text'][:80]}")
-    console.print("  opening TUI…\n")
+    swarm_name = str(getattr(args, "swarm", "") or "").strip()
+    use_tui = bool(getattr(args, "tui", False))
 
-    # connect to the bus, register, heartbeats
+    # default: first swarm with open intents
+    if not swarm_name:
+        swarm_name = _first_swarm() or "default"
+
+    if use_tui:
+        return _spawn_tui(addr, swarm_name, console)
+
+    # background agent
+    identity = f"agent-{int(time.time()) % 10000}-{os.urandom(2).hex()}"
+    log_file = Path(tempfile.gettempdir()) / f"suijin-agent-{identity}.log"
+    pid_file = Path(tempfile.gettempdir()) / f"suijin-agent-{identity}.pid"
+
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "suijin.server.swarm.agent", "--coordinator", f"127.0.0.1:{addr[1]}", "--identity", identity],
+        stdout=open(log_file, "w"),
+        stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    pid_file.write_text(str(proc.pid))
+    console.print(f"  [green]✓[/green] {identity} (pid {proc.pid}) → swarm '{swarm_name}' (background)")
+    console.print(f"  attach: [cyan]suijin swarm attach {identity}[/cyan]")
+    return 0
+
+
+def _spawn_tui(addr: tuple[str, int], swarm_name: str, console) -> int:
+    """Spawn with the full TUI — claims an intent and launches."""
+    identity = f"tui-{int(time.time()) % 10000}-{os.urandom(2).hex()}"
+
+    intent = _claim_intent_for(identity, swarm_name)
+    if not intent:
+        console.print(f"[yellow]no open intents in '{swarm_name}'[/yellow]")
+        console.print('  add work: [cyan]suijin swarm intent "test X for Y"[/cyan]')
+        return 1
+
+    console.print(f"[cyan]{identity}[/cyan] → {intent['text'][:70]}")
+    console.print("  launching…\n")
+
     from suijin.server.mesh.bus import BusClient
 
     bus = BusClient()
     if not bus.connect(addr[0], addr[1], identity):
-        console.print("[red]cannot connect to coordinator[/red]")
+        console.print("[red]cannot connect[/red]")
         return 1
-
     bus.publish("/swarm/status", {"event": "agent_joined", "agent": identity, "pid": os.getpid()})
-    bus.subscribe(f"/agent/{identity}/**")
 
     import threading
 
-    def _heartbeat():
+    def _hb():
         while True:
             bus.publish("/swarm/status", {"event": "heartbeat", "agent": identity})
             time.sleep(5)
 
-    threading.Thread(target=_heartbeat, daemon=True, name="swarm-hb").start()
+    threading.Thread(target=_hb, daemon=True).start()
 
-    # run the engagement with the intent as the objective — NO MENU,
-    # NO OBJECTIVE PICKER, straight in
     try:
         import asyncio
 
         from suijin.server.redteam.lib.redteamer import run_red_team_async
 
-        config = {
-            "objective": intent["text"],
-            "target": intent.get("engagement", "swarm"),
-            "max_iterations": 100000,
-        }
+        config = {"objective": intent["text"], "target": intent.get("engagement", swarm_name)}
         asyncio.run(run_red_team_async(config, intent["text"]))
         return 0
     except KeyboardInterrupt:
-        console.print(f"\n[yellow]agent {identity} disconnected[/yellow]")
         return 0
     finally:
         bus.close()
 
 
-def _claim_intent_for(agent_id: str) -> dict | None:
-    """Claim the next open intent from the swarm database."""
+def _claim_intent_for(agent_id: str, swarm: str = "") -> dict | None:
+    """Claim the next open intent, optionally filtered by swarm."""
     with contextlib.suppress(Exception):
-
-        import sqlite3
-
-        db = sqlite3.connect(str(_swarm_db()), timeout=5)
-        db.execute("PRAGMA journal_mode=WAL")
-        row = db.execute(
-            "SELECT id, text, engagement FROM intents WHERE state = 'open' ORDER BY created_at LIMIT 1"
-        ).fetchone()
+        db = _db()
+        if swarm:
+            row = db.execute(
+                "SELECT id, text, engagement FROM intents WHERE state = 'open' AND swarm = ? ORDER BY created_at LIMIT 1",
+                (swarm,),
+            ).fetchone()
+        else:
+            row = db.execute(
+                "SELECT id, text, engagement FROM intents WHERE state = 'open' ORDER BY created_at LIMIT 1"
+            ).fetchone()
         if not row:
             db.close()
             return None
@@ -234,53 +318,31 @@ def _claim_intent_for(agent_id: str) -> dict | None:
     return None
 
 
-def run_swarm_attach(args=None) -> int:
-    """`suijin swarm attach [agent-id]` — open the TUI for an agent.
+# ── attach / stop / status ────────────────────────────────────────────
 
-    Without an ID, attaches to the most recently spawned agent.
-    The TUI is the standard engagement console — but connected to the
-    swarm agent's state instead of a solo engagement."""
+
+def run_swarm_attach(args=None) -> int:
+    """`suijin swarm attach [agent-id]` — tail an agent's output."""
     from rich.console import Console
 
     console = Console()
     identity = str(getattr(args, "agent_id", "") or "").strip()
 
-    # find the agent's log or state
     if not identity:
-        # find the most recent agent
         pid_files = sorted(Path(tempfile.gettempdir()).glob("suijin-agent-*.pid"), key=lambda p: p.stat().st_mtime)
         if not pid_files:
-            console.print("[yellow]no background agents running — spawn one: [cyan]suijin swarm spawn[/cyan][/yellow]")
+            console.print("[yellow]no agents — [cyan]suijin swarm spawn[/cyan][/yellow]")
             return 1
         identity = pid_files[-1].stem.replace("suijin-agent-", "")
 
     log_file = Path(tempfile.gettempdir()) / f"suijin-agent-{identity}.log"
     if not log_file.is_file():
         console.print(f"[yellow]agent '{identity}' not found[/yellow]")
-        # list available agents
-        pid_files = sorted(Path(tempfile.gettempdir()).glob("suijin-agent-*.pid"))
-        if pid_files:
-            console.print("\n  running agents:")
-            for pf in pid_files[-5:]:
-                aid = pf.stem.replace("suijin-agent-", "")
-                pid = pf.read_text().strip()
-                alive = os.path.exists(f"/proc/{pid}") if os.path.exists("/proc") else True
-                try:
-                    os.kill(int(pid), 0)
-                except OSError:
-                    alive = False
-                status = "[green]alive[/green]" if alive else "[red]dead[/red]"
-                console.print(f"    {aid} (pid {pid}) {status}")
         return 1
 
-    # tail the agent's log live (this IS the attach for now —
-    # the full TUI integration is the next step)
     console.print(f"[bold]attached to {identity}[/bold] (Ctrl+C to detach)\n")
     try:
-        proc = subprocess.Popen(
-            ["tail", "-f", str(log_file)],
-            stdin=subprocess.DEVNULL,
-        )
+        proc = subprocess.Popen(["tail", "-f", str(log_file)], stdin=subprocess.DEVNULL)
         proc.wait()
     except KeyboardInterrupt:
         proc.terminate()
@@ -293,59 +355,18 @@ def run_swarm_stop_all(args=None) -> int:
     from rich.console import Console
 
     console = Console()
-
-    # kill all background agents
     pid_files = list(Path(tempfile.gettempdir()).glob("suijin-agent-*.pid"))
     for pf in pid_files:
         with contextlib.suppress(Exception):
-            pid = int(pf.read_text().strip())
-            os.kill(pid, signal.SIGTERM)
+            os.kill(int(pf.read_text().strip()), signal.SIGTERM)
             pf.unlink()
-            console.print(f"  [yellow]stopped agent {pf.stem.replace('suijin-agent-', '')}[/yellow]")
+            console.print(f"  [yellow]stopped {pf.stem.replace('suijin-agent-', '')}[/yellow]")
 
-    # stop the coordinator
     from suijin.server.mesh.bus import bus_port_file
 
     with contextlib.suppress(OSError):
         bus_port_file().unlink(missing_ok=True)
-
-    # kill the coordinator process
     with contextlib.suppress(Exception):
-        subprocess.run(
-            ["pkill", "-f", "suijin.server.swarm.coordinator"],
-            capture_output=True,
-            timeout=5,
-        )
-
+        subprocess.run(["pkill", "-f", "suijin.server.swarm.coordinator"], capture_output=True, timeout=5)
     console.print("[green]swarm stopped[/green]")
-    return 0
-
-
-def run_swarm_intent(text: str) -> int:
-    """`suijin swarm intent "do the thing"` — add work to the queue."""
-    from rich.console import Console
-
-    console = Console()
-    text = str(text or "").strip()
-    if not text:
-        console.print("[red]intent text required[/red]")
-        console.print('  example: suijin swarm intent "test http://127.0.0.1:6000 for injection"')
-        return 1
-
-    import hashlib
-    import sqlite3
-
-    iid = "in_" + hashlib.sha1(text.encode()).hexdigest()[:12]
-    db = sqlite3.connect(str(_swarm_db()), timeout=5)
-    db.execute("PRAGMA journal_mode=WAL")
-    db.execute(
-        "INSERT OR IGNORE INTO intents (id, text, state, engagement, created_at) VALUES (?, ?, 'open', ?, ?)",
-        (iid, text, "swarm", time.time()),
-    )
-    db.commit()
-    count = db.execute("SELECT COUNT(*) FROM intents WHERE state = 'open'").fetchone()[0]
-    db.close()
-
-    console.print(f"  [green]✓[/green] intent queued: {text[:80]}")
-    console.print(f"  {count} intent(s) waiting — [cyan]suijin swarm spawn --tui[/cyan] to work one")
     return 0

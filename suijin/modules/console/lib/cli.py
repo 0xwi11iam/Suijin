@@ -1517,26 +1517,37 @@ def run_policy(args) -> int:
     return 1
 
 
-def _run_swarm(action: str, coordinator: str = "", identity: str = "", agent_id: str = "", tui: bool = False, count: int = 1, intent_text: str = "") -> int:
+def _run_swarm(
+    action: str,
+    coordinator: str = "",
+    identity: str = "",
+    agent_id: str = "",
+    tui: bool = False,
+    count: int = 1,
+    intent_text: str = "",
+    swarm_name: str = "",
+) -> int:
     """Dispatch swarm subcommands."""
+    import types
+
     if action == "init":
         from suijin.server.swarm.lifecycle import run_swarm_init
 
-        return run_swarm_init()
+        return run_swarm_init(
+            types.SimpleNamespace(text=intent_text.split() if intent_text else [], name=swarm_name or "default")
+        )
     if action == "intent":
         from suijin.server.swarm.lifecycle import run_swarm_intent
 
-        return run_swarm_intent(intent_text)
+        return run_swarm_intent(intent_text, swarm_name or "default")
     if action == "spawn":
-        import types
-
         from suijin.server.swarm.lifecycle import run_swarm_spawn
 
-        return run_swarm_spawn(types.SimpleNamespace(tui=tui, count=count))
+        return run_swarm_spawn(types.SimpleNamespace(tui=tui, swarm=swarm_name))
     if action == "attach":
         from suijin.server.swarm.lifecycle import run_swarm_attach
 
-        return run_swarm_attach(agent_id=agent_id)
+        return run_swarm_attach(types.SimpleNamespace(agent_id=agent_id))
     if action == "start":
         from suijin.server.swarm.coordinator import run_swarm_start
 
@@ -2520,30 +2531,31 @@ def main(argv=None):
     # (orbstack first, docker fallback; `suijin box` with no verb opens
     # the manager tui)
     # the swarm — multi-agent coordination (2026-11-05)
-    swarm_cmd = sub.add_parser("swarm", help="multi-agent swarm: start the coordinator, launch agents")
+    swarm_cmd = sub.add_parser("swarm", help="multi-agent swarm: init, add work, spawn agents")
     swarm_sub = swarm_cmd.add_subparsers(dest="swarm_action")
-    swarm_sub.add_parser("init", help="start the coordinator, print the spawn command").set_defaults(
-        func=lambda a: _run_swarm("init")
-    )
-    spawn_p = swarm_sub.add_parser("spawn", help="spawn an agent (--tui = full TUI in this terminal)")
-    spawn_p.add_argument("--tui", action="store_true", help="run with the engagement TUI in this terminal")
-    spawn_p.set_defaults(func=lambda a: _run_swarm("spawn", tui=getattr(a, "tui", False), count=getattr(a, "count", 1)))
 
-    intent_p = swarm_sub.add_parser("intent", help="add work to the swarm queue")
-    intent_p.add_argument("text", nargs="+", help="what the agent should do (the verifiable result)")
-    intent_p.set_defaults(func=lambda a: _run_swarm("intent", intent_text=" ".join(a.text)))
-    swarm_sub.add_parser("attach", help="attach to an agent (tail its output live)").set_defaults(
-        func=lambda a: _run_swarm("attach", agent_id=getattr(a, "agent_id", ""))
-    )
-    swarm_sub.add_parser("start", help="start the swarm coordinator (bus + shared state + work assignment)").set_defaults(
-        func=lambda a: _run_swarm("start")
-    )
-    swarm_sub.add_parser("status", help="one-line snapshot: agents, intents, findings").set_defaults(
-        func=lambda a: _run_swarm("status")
-    )
-    swarm_sub.add_parser("stop", help="stop everything (agents + coordinator)").set_defaults(func=lambda a: _run_swarm("stop"))
-    swarm_cmd.add_argument("agent_id", nargs="?", default="", help="agent to attach to (default: latest)")
-    swarm_cmd.set_defaults(func=lambda a: _run_swarm("status", agent_id=getattr(a, "agent_id", "")))
+    init_p = swarm_sub.add_parser("init", help="start the coordinator (optionally queue an intent)")
+    init_p.add_argument("text", nargs="*", help="intent to queue on init")
+    init_p.add_argument("--name", default="default", help="swarm name")
+    init_p.set_defaults(func=lambda a: _run_swarm("init", intent_text=" ".join(a.text), swarm_name=a.name))
+
+    intent_p = swarm_sub.add_parser("intent", help="add work to the queue (appends, never replaces)")
+    intent_p.add_argument("text", nargs="+", help="what the agent should do")
+    intent_p.add_argument("--swarm", default="", help="swarm name (default: most recent)")
+    intent_p.set_defaults(func=lambda a: _run_swarm("intent", intent_text=" ".join(a.text), swarm_name=a.swarm))
+
+    spawn_p = swarm_sub.add_parser("spawn", help="spawn an agent")
+    spawn_p.add_argument("--tui", action="store_true", help="full TUI in this terminal")
+    spawn_p.add_argument("--swarm", default="", help="swarm name (default: first with open intents)")
+    spawn_p.set_defaults(func=lambda a: _run_swarm("spawn", tui=a.tui, swarm_name=a.swarm))
+
+    attach_p = swarm_sub.add_parser("attach", help="attach to an agent")
+    attach_p.add_argument("agent_id", nargs="?", default="", help="agent id (default: latest)")
+    attach_p.set_defaults(func=lambda a: _run_swarm("attach", agent_id=a.agent_id))
+
+    swarm_sub.add_parser("status", help="all swarms, agents, intents").set_defaults(func=lambda a: _run_swarm("status"))
+    swarm_sub.add_parser("stop", help="stop everything").set_defaults(func=lambda a: _run_swarm("stop"))
+    swarm_cmd.set_defaults(func=lambda a: _run_swarm("status"))
 
     agent_cmd = sub.add_parser("agent", help="headless swarm agent (connects to a coordinator)")
     agent_cmd.add_argument("--coordinator", required=True, help="host:port of the coordinator")
