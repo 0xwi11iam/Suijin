@@ -275,8 +275,11 @@ class SwarmAgent:
                 )
                 # CONFIRMED tool results promote to findings so `swarm
                 # status` and the report see them (the findings table is
-                # what the operator reads first)
-                if "CONFIRMED" in summary:
+                # what the operator reads first). Exploit-shaped facts
+                # only — "CONFIRMED —" is the catalog's verdict format;
+                # a bare CONFIRMED elsewhere (command output, sandbox
+                # banners) promoted noise on the first field run.
+                if "CONFIRMED —" in summary and summary.split(" confirmed:")[0] != "execute_terminal":
                     sev = "unknown"
                     for level in ("CRITICAL", "HIGH", "MEDIUM", "LOW"):
                         if level in summary.upper():
