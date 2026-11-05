@@ -268,12 +268,24 @@ class SwarmCoordinator:
                 # sweep dies at this line, silently (suppressed), and the
                 # requeue UPDATEs above roll back with the missing commit
                 cur = sweep_db.execute("DELETE FROM agents WHERE last_heartbeat < ?", (now - 300.0,))
+                # blocked intents get ONE automatic retry (fresh agent,
+                # fresh conversation) — poison intents stop at 2 attempts.
+                # Column added lazily: the schema predates this policy.
+                with contextlib.suppress(_sq.Error):
+                    sweep_db.execute("ALTER TABLE intents ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
+                retry = sweep_db.execute(
+                    "UPDATE intents SET state = 'open', agent_id = NULL, claimed_at = NULL, "
+                    "attempts = attempts + 1 WHERE state = 'blocked' AND attempts < 1 "
+                    "AND completed_at < ?",
+                    (now - 600,),
+                )
                 sweep_db.commit()
                 sweep_db.close()
-                if requeued or cur.rowcount:
+                if requeued or cur.rowcount or (retry.rowcount if retry else 0):
                     print(
                         f"[health] sweep: requeued {requeued} orphaned intent(s), "
-                        f"dropped {cur.rowcount} dead agent row(s)",
+                        f"dropped {cur.rowcount} dead agent row(s), "
+                        f"retried {retry.rowcount if retry else 0} blocked intent(s)",
                         flush=True,
                     )
             except Exception as sweep_exc:  # TEMP: expose the silent killer
