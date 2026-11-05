@@ -1,6 +1,5 @@
 """Wall-memo slices — the integrated tests (2026-11-03)."""
 
-import json
 
 import pytest
 
@@ -10,8 +9,8 @@ def _rows_ws(tmp_path, monkeypatch):
     """Rows live under <engagement>/state/rows/ — pin state_dir on BOTH
     module objects (the dual namespace creates two copies of every
     module; patching one leaves the other reading the real path)."""
-    import suijin.modules.platform.lib.workspace as ws
     import suijin.modules.agent.lib.rows as rows_mod
+    import suijin.modules.platform.lib.workspace as ws
 
     (tmp_path / "state").mkdir(parents=True)
     monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)
@@ -123,7 +122,7 @@ class TestSlice3_Traffic:
 
 class TestSlice4_Planner:
     def test_planner_prompt_has_no_execution(self, _rows_ws, monkeypatch):
-        import suijin.modules.agent.lib.planner as planner
+        import suijin.server.agent.lib.planner as planner
         import suijin.server.agent.lib.rows as canonical
 
         _rd = _rows_ws / "state" / "rows"

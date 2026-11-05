@@ -1687,7 +1687,7 @@ def _curses_loop(stdscr) -> int:
             cursor = (cursor + 1) % len(items)
         elif ch in (curses.KEY_ENTER, 10, 13, ord("e")):  # edit this field
             note, _ = edit_field_curses(stdscr, config, key)
-        elif ch in (ord("m"), ord("M")):  # model picker — FULL-FRAME screen
+        elif ch == ord("M"):  # model picker — uppercase M only (lowercase m is dead)
             mkey = key if is_model_field(key) else f"{active_provider(config)}{MODEL_KEY_SUFFIX}"
             note = pick_model_screen(stdscr, config, mkey)
         elif ch in (ord("p"), ord("P")):  # provider picker

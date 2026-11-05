@@ -62,9 +62,9 @@ class TestContractDrift:
     def test_enum_actions_implement(self):
         """Advertised enum values (actions, kinds) must appear in the
         implementation source — coverage_check's action drift class."""
-        from suijin.modules.tools.lib import dispatch
-
         import inspect
+
+        from suijin.modules.tools.lib import dispatch
 
         routes = dispatch._build_routes({})
         for name, schema in _schema_tools():

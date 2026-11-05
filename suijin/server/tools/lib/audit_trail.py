@@ -276,6 +276,16 @@ def end_audit(cost_usd: float = 0.0):
     _save(key, force=True)  # the end MUST land — this is the report of record
     path = _export_markdown(key)
 
+    # STRUCTURED REPORT (2026-11-05): the submission-ready report from
+    # the rows database, coverage ledger, and traffic index — not from
+    # the model's last message. Saved to <engagement>/report.md.
+    with contextlib.suppress(Exception):
+        from suijin.modules.console.lib.report import generate_report
+
+        eng_dir = Path(key) if Path(key).is_dir() else None
+        if eng_dir and eng_dir.exists():
+            generate_report(eng_dir)
+
     # AUTO-REPORT (v7.2): generate per-finding BBP submissions + the
     # system difficulties report from the trail. Best-effort — a report
     # failure never blocks engagement completion.

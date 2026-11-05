@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
-import json
 import sqlite3
 import time
 from pathlib import Path
@@ -98,9 +97,8 @@ def traffic_search(host: str = "", body: str = "", status: int = 0, limit: int =
     else:
         q += f" ORDER BY id DESC LIMIT {max(1, min(int(limit or 3), 50))}"
     found = []
-    with contextlib.suppress(sqlite3.Error):
-        with _conn() as c:
-            found = c.execute(q, params).fetchall()
+    with contextlib.suppress(sqlite3.Error), _conn() as c:
+        found = c.execute(q, params).fetchall()
     found = found or []
     if not found:
         return f"no exchanges for host={host}" + (f" body~{body!r}" if body else "")
@@ -113,12 +111,11 @@ def traffic_search(host: str = "", body: str = "", status: int = 0, limit: int =
 def traffic_get(exchange_id: int) -> str:
     """One full exchange: request headers, response headers, bodies
     (truncated when a blob holds the rest)."""
-    with contextlib.suppress(sqlite3.Error):
-        with _conn() as c:
-            r = c.execute(
-                "SELECT method,url,status,req_headers,res_headers,req_body,res_body,res_blob,size FROM exchange WHERE id=?",
-                (int(exchange_id),),
-            ).fetchone()
+    with contextlib.suppress(sqlite3.Error), _conn() as c:
+        r = c.execute(
+            "SELECT method,url,status,req_headers,res_headers,req_body,res_body,res_blob,size FROM exchange WHERE id=?",
+            (int(exchange_id),),
+        ).fetchone()
     if not r:
         return f"exchange #{exchange_id} not found"
     m, u, st, rh, sh, rb, sb, blob, sz = r

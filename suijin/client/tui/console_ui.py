@@ -1440,6 +1440,24 @@ class EngagementUI:
             # typewriter's own prints.
             self._live = Live(self._strip(), console=self.console, auto_refresh=False, transient=True)
             self._live.start()
+
+            # SIGWINCH (2026-11-05): terminal resize re-anchors the Live
+            # region — without this, resizing mid-engagement garbles
+            # everything until restart. The handler tears down and
+            # rebuilds the strip at the new size.
+            import signal as _signal
+
+            def _on_resize(signum, frame):
+                with contextlib.suppress(Exception):
+                    if self._live is not None:
+                        self._live.stop()
+                        self._live = None
+                    self._pad_sug = 0
+                    self._pad_tw = 0
+                    self.start()
+
+            with contextlib.suppress(Exception, ValueError):
+                _signal.signal(_signal.SIGWINCH, _on_resize)
         # a stopped thread may linger up to one 100ms wait before exiting —
         # treat a stop-REQUESTED thread as dead (the typewriter's start()
         # uses the same guard): the ask flow's stop→start could otherwise

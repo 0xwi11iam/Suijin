@@ -45,7 +45,6 @@ def annotate_missing_binary(tool_output: str, binary_hint: str = "") -> str:
     t = str(tool_output or "")
     if "not installed" not in t and "not found" not in t and "command not found" not in t:
         return t
-    import re
 
     for name in _ALTERNATES:
         if name in t or name in str(binary_hint or ""):

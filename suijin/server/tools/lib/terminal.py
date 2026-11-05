@@ -241,7 +241,9 @@ def execute_terminal(cmd, timeout=30, cwd=None):
                     import re as _re_ts
 
                     _ts = _re_ts.sub(r"[^\w]", "-", cmd[:24]).strip("-") or "output"
-                    _f = _ws().home_dir() / "outputs" / f"{int(_time.monotonic() * 1000):.0f}-{_ts}.txt"
+                    import time as _time_mod
+
+                    _f = _ws().home_dir() / "outputs" / f"{int(_time_mod.monotonic() * 1000):.0f}-{_ts}.txt"
                     _f.parent.mkdir(parents=True, exist_ok=True)
                     _f.write_text(out, encoding="utf-8")
                     head = out[:4000]
