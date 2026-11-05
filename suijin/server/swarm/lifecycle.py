@@ -424,54 +424,89 @@ def run_swarm_attach(args=None) -> int:
 
 
 def run_swarm_pause(args=None) -> int:
-    """`suijin swarm pause` — freeze all agents (SIGSTOP, they resume exactly where they were)."""
+    """`suijin swarm pause` — graceful pause: the agent's CURRENT tool call /
+    iteration finishes, then it holds. Not a SIGSTOP mid-stream (which
+    breaks TCP connections and loses in-flight LLM tokens).
+    Resume: suijin swarm resume — agents continue from the pause point."""
     from rich.console import Console
 
     console = Console()
-    stopped = 0
-    pid_files = list(Path(tempfile.gettempdir()).glob("suijin-agent-*.pid"))
-    for pf in pid_files:
-        with contextlib.suppress(Exception):
-            pid = int(pf.read_text().strip())
-            os.kill(pid, signal.SIGSTOP)
-            stopped += 1
-    console.print(f"[yellow]paused {stopped} agent(s)[/yellow] — [cyan]suijin swarm resume[/cyan] to wake them")
+
+    # write a pause flag to the mesh dir — agents' run loops check it
+    # before starting the next iteration (same mechanism as the
+    # engagement console's ESC ESC pause)
+    from suijin.server.mesh.bus import bus_port_file
+
+    flag = bus_port_file().parent / "pause-swarm"
+    flag.parent.mkdir(parents=True, exist_ok=True)
+    flag.write_text(str(time.time()))
+    console.print(f"[yellow]pause flag set[/yellow] — agents finish their current step, then hold")
+    console.print(f"  [cyan]suijin swarm resume[/cyan] to continue")
     return 0
 
 
 def run_swarm_resume(args=None) -> int:
-    """`suijin swarm resume` — wake all paused agents (SIGCONT)."""
+    """`suijin swarm resume` — clear the pause flag; agents continue."""
     from rich.console import Console
 
+    from suijin.server.mesh.bus import bus_port_file
+
     console = Console()
-    resumed = 0
-    pid_files = list(Path(tempfile.gettempdir()).glob("suijin-agent-*.pid"))
-    for pf in pid_files:
-        with contextlib.suppress(Exception):
-            pid = int(pf.read_text().strip())
-            os.kill(pid, signal.SIGCONT)
-            resumed += 1
-    console.print(f"[green]resumed {resumed} agent(s)[/green]")
+    flag = bus_port_file().parent / "pause-swarm"
+    with contextlib.suppress(OSError):
+        flag.unlink(missing_ok=True)
+    # broadcast resume on the bus
+    addr = _bus_addr()
+    if addr:
+        from suijin.server.mesh.bus import BusClient
+
+        bc = BusClient()
+        if bc.connect(addr[0], addr[1], "resume-broadcaster"):
+            bc.publish("/swarm/status", {"event": "resume"})
+            bc.close()
+    console.print("[green]resumed — agents continue from where they held[/green]")
     return 0
 
 
 def run_swarm_stop_all(args=None) -> int:
-    """`suijin swarm stop` — stop all agents and the coordinator."""
+    """`suijin swarm stop` — GRACEFUL shutdown: broadcast a stop event on
+    the bus, agents see it before their next step and exit clean (their
+    current tool call finishes), THEN kill stragglers, THEN stop the
+    coordinator. One command, no error messages."""
     from rich.console import Console
 
     console = Console()
+
+    # 1. broadcast graceful stop — agents exit their loops cleanly
+    addr = _bus_addr()
+    if addr:
+        from suijin.server.mesh.bus import BusClient
+
+        bc = BusClient()
+        if bc.connect(addr[0], addr[1], "stop-broadcaster"):
+            bc.publish("/swarm/status", {"event": "graceful_stop"})
+            bc.close()
+        console.print("[yellow]stop broadcast — agents finishing their current step…[/yellow]")
+        time.sleep(2)  # let them land
+
+    # 2. SIGTERM any stragglers (they should have exited in step 1)
     pid_files = list(Path(tempfile.gettempdir()).glob("suijin-agent-*.pid"))
+    stopped = 0
     for pf in pid_files:
         with contextlib.suppress(Exception):
-            os.kill(int(pf.read_text().strip()), signal.SIGTERM)
+            pid = int(pf.read_text().strip())
+            os.kill(pid, signal.SIGTERM)
             pf.unlink()
-            console.print(f"  [yellow]stopped {pf.stem.replace('suijin-agent-', '')}[/yellow]")
+            stopped += 1
+    if stopped:
+        console.print(f"[yellow]{stopped} agent(s) terminated[/yellow]")
 
+    # 3. stop the coordinator last (it hosts the bus)
     from suijin.server.mesh.bus import bus_port_file
 
     with contextlib.suppress(OSError):
         bus_port_file().unlink(missing_ok=True)
     with contextlib.suppress(Exception):
         subprocess.run(["pkill", "-f", "suijin.server.swarm.coordinator"], capture_output=True, timeout=5)
-    console.print("[green]swarm stopped[/green]")
+    console.print("[green]swarm stopped — clean[/green]")
     return 0

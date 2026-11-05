@@ -13,8 +13,27 @@ from __future__ import annotations
 import contextlib
 import os
 import time
+from pathlib import Path
 
 from suijin.server.mesh.bus import BusClient
+
+
+def _pause_flag_path() -> Path:
+    """The pause flag file — same mechanism as the engagement console's
+    pause-operator flag (checked before each step, not mid-stream)."""
+    from suijin.server.mesh.bus import bus_port_file
+
+    return bus_port_file().parent / "pause-swarm"
+
+
+def _pause_flag_set() -> bool:
+    return _pause_flag_path().is_file()
+
+
+def _swarm_db_path() -> Path:
+    from suijin.server.swarm.coordinator import swarm_db_path
+
+    return swarm_db_path()
 
 
 class SwarmAgent:
@@ -123,17 +142,47 @@ class SwarmAgent:
             time.sleep(5.0)
 
     def _handle_control(self):
-        """Process steering and kill messages."""
+        """Process steering, kill, and graceful-stop messages."""
         for msg in self._bus.drain(20):
             topic = str(msg.get("topic") or "")
+            payload = msg.get("payload") or {}
+            event = str(payload.get("event") or "")
+
+            # GRACEFUL STOP: finish the current step, exit clean
+            if event == "graceful_stop" or "graceful_stop" in str(payload):
+                print(f"[{self._identity}] graceful stop — finishing current step, exiting")
+                self._running = False
+                # release the current intent back to the queue (unpicked work)
+                if self._current_intent:
+                    with contextlib.suppress(Exception):
+                        import sqlite3
+
+                        db = sqlite3.connect(str(_swarm_db_path()), timeout=5)
+                        db.execute("PRAGMA journal_mode=WAL")
+                        db.execute(
+                            "UPDATE intents SET state = 'open', agent_id = NULL WHERE id = ?",
+                            (self._current_intent.get("id"),),
+                        )
+                        db.commit()
+                        db.close()
+                return
+
+            # PAUSE: hold before the next step (resume clears the flag)
+            if event == "pause" or _pause_flag_set():
+                print(f"[{self._identity}] paused — holding (resume to continue)")
+                while _pause_flag_set() and self._running:
+                    time.sleep(1)
+
+            # RESUME: the bus event clears it too
+            if event == "resume":
+                pass  # the pause loop above exits on flag clear
+
             if f"/agent/{self._identity}/kill" in topic:
                 print(f"[{self._identity}] killed by operator")
                 self._running = False
                 return
             if f"/agent/{self._identity}/steer" in topic:
-                payload = msg.get("payload") or {}
                 print(f"[{self._identity}] steering: {str(payload.get('message', ''))[:100]}")
-                # the steering message rides the next LLM call's context
 
     def _claim_intent(self) -> dict | None:
         """Request the next intent from the coordinator."""
