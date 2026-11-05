@@ -318,10 +318,19 @@ def _stamp() -> str:
 
 
 def broadcast(message: str, name: str = "") -> str:
-    """Append to the group chat (engagement-scoped readers see it)."""
+    """Append to the group chat (engagement-scoped readers see it).
+
+    BUS-FIRST (2026-11-05): the message ALSO publishes to the TCP bus —
+    agents connected via the bus receive it instantly without polling
+    the gc.log file. The file write continues for audit and for agents
+    not yet on the bus (write-behind, not the communication path)."""
     msg = str(message or "").strip().replace("\n", " ")[:400]
     if not msg:
         return "Error: empty message"
+
+    # publish to the bus (instant delivery to bus-connected agents)
+    _bus_publish(msg, name)
+
     with contextlib.suppress(OSError):
         mesh_dir().mkdir(parents=True, exist_ok=True)
         with _gc_log().open("a", encoding="utf-8") as f:
@@ -332,6 +341,30 @@ def broadcast(message: str, name: str = "") -> str:
         _node["last_outbound_gc"] = _gc_log().stat().st_size
         return f"broadcast to mesh ({len(peers())} peers)"
     return "Error: mesh unavailable"
+
+
+_bus_client = None
+
+
+def _bus_publish(msg: str, name: str = "") -> None:
+    """Publish to the TCP bus if one is discoverable. Never raises."""
+    global _bus_client
+    with contextlib.suppress(Exception):
+        if _bus_client is None or not _bus_client.connected:
+            from suijin.server.mesh.bus import BusClient, discover_bus
+
+            addr = discover_bus()
+            if not addr:
+                return  # no coordinator running — file-only mode
+            _bus_client = BusClient()
+            if not _bus_client.connect(addr[0], addr[1], f"mesh-{os.getpid()}"):
+                _bus_client = None
+                return
+
+        _bus_client.publish(
+            f"/engagement/{_engagement_tag()}/findings",
+            {"from": name or "agent", "pid": os.getpid(), "msg": msg},
+        )
 
 
 def dm(other_pid: int, message: str, name: str = "") -> str:

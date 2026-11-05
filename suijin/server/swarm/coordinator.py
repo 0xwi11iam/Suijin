@@ -90,15 +90,22 @@ class SwarmCoordinator:
         self._health_thread: threading.Thread | None = None
         self._heartbeat_timeout = 15.0  # seconds without heartbeat = dead
         self._agents: dict[str, dict] = {}  # id → {identity, last_hb, intent}
+        # RESOURCE GOVERNOR (2026-11-05): shared process pool + disk batcher
+        from suijin.server.swarm.governor import DiskBatcher, ProcessPool
+
+        self.pool = ProcessPool()
+        self.batcher = DiskBatcher()
 
     @property
     def port(self) -> int:
         return self.bus.port
 
     def start(self):
-        """Start the bus, open the database, begin health monitoring."""
+        """Start the bus, database, governor, and health monitoring."""
         self.bus.start()
         self._db = self._open_db()
+        self.pool.start()
+        self.batcher.start()
 
         # subscribe to swarm control topics
         self.bus._route("/swarm/status", {"event": "coordinator_started", "port": self.bus.port})
@@ -117,6 +124,8 @@ class SwarmCoordinator:
     def stop(self):
         self._running = False
         self.bus.stop()
+        self.pool.stop()
+        self.batcher.stop()
         with contextlib.suppress(Exception):
             if self._db:
                 self._db.close()
@@ -135,8 +144,7 @@ class SwarmCoordinator:
         """Give this agent the next open intent. Marks it running."""
         with contextlib.suppress(sqlite3.Error):
             row = self._db.execute(
-                "SELECT id, text, engagement, parent_fact FROM intents "
-                "WHERE state = 'open' ORDER BY created_at LIMIT 1"
+                "SELECT id, text, engagement, parent_fact FROM intents WHERE state = 'open' ORDER BY created_at LIMIT 1"
             ).fetchone()
             if not row:
                 return None
@@ -145,9 +153,7 @@ class SwarmCoordinator:
                 "UPDATE intents SET state = 'running', agent_id = ?, claimed_at = ? WHERE id = ? AND state = 'open'",
                 (agent_id, time.time(), iid),
             )
-            self._db.execute(
-                "UPDATE agents SET current_intent = ? WHERE id = ?", (iid, agent_id)
-            )
+            self._db.execute("UPDATE agents SET current_intent = ? WHERE id = ?", (iid, agent_id))
             self._db.commit()
             return {"id": iid, "text": text, "engagement": engagement, "parent_fact": parent_fact}
         return None
