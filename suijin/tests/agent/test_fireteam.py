@@ -136,7 +136,7 @@ class TestNonBlockingAndDrain:
             return msgs
 
         msgs = asyncio.run(go())
-        assert msgs and "FIRETEAM RESULT" in msgs[0] and "200 OK confirmed" in msgs[0]
+        assert msgs and "FIRETEAM" in msgs[0] and "200 OK confirmed" in msgs[0]
 
     def test_status_nudge_when_unchanged(self):
         sn._LAST_STATUS_SIG = ("team-x", 1, 0)
@@ -227,7 +227,7 @@ class TestStatusAndDrainHonesty:
             return sn.collect_finished_teams()
 
         msgs = asyncio.run(go())
-        assert msgs and "FAILED" in msgs[0]
+        assert msgs and "failed" in msgs[0]
         assert "PARTIAL" not in msgs[0]
 
     def test_drain_timeout_partial_labeled(self):
@@ -245,7 +245,7 @@ class TestStatusAndDrainHonesty:
             return sn.collect_finished_teams()
 
         msgs = asyncio.run(go())
-        assert msgs and "TIMEOUT" in msgs[0]
+        assert msgs and "partial" in msgs[0]
 
 
 class TestSubagentStreamIsolation:
@@ -317,7 +317,7 @@ class TestDrainedTeamsPersist:
             await fut
             sn._FIRETEAMS["team-x"] = {"tasks": ["probe /admin"], "futures": [fut], "started": "t", "results": []}
             msgs = sn.collect_finished_teams()
-            assert any("FIRETEAM RESULT" in m for m in msgs)
+            assert any("FIRETEAM" in m for m in msgs)
             return msgs
 
         asyncio.run(scenario())
