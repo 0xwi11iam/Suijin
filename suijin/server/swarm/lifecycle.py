@@ -8,10 +8,8 @@ suijin swarm attach → open the TUI for a specific agent (or the latest)
 from __future__ import annotations
 
 import contextlib
-import json
 import os
 import signal
-import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -71,9 +69,9 @@ def run_swarm_init(args=None) -> int:
     addr = _bus_addr()
     if addr:
         console.print(f"[green]swarm coordinator already running[/green] on port {addr[1]}")
-        console.print(f"\n  spawn an agent:  [cyan]suijin swarm spawn[/cyan]")
-        console.print(f"  attach to it:    [cyan]suijin swarm attach[/cyan]")
-        console.print(f"  status:          [cyan]suijin swarm status[/cyan]")
+        console.print("\n  spawn an agent:  [cyan]suijin swarm spawn[/cyan]")
+        console.print("  attach to it:    [cyan]suijin swarm attach[/cyan]")
+        console.print("  status:          [cyan]suijin swarm status[/cyan]")
         return 0
 
     # start the coordinator in the background
@@ -89,7 +87,6 @@ def run_swarm_init(args=None) -> int:
     )
 
     # wait for the bus port file
-    from suijin.server.mesh.bus import bus_port_file
 
     for _ in range(20):
         time.sleep(0.5)
@@ -122,7 +119,8 @@ def run_swarm_init(args=None) -> int:
 
 
 def run_swarm_spawn(args=None) -> int:
-    """`suijin swarm spawn` — spawn a background agent, print its ID."""
+    """`suijin swarm spawn` — spawn a background agent.
+    `suijin swarm spawn --tui` — spawn an agent with the TUI in THIS terminal."""
     from rich.console import Console
 
     console = Console()
@@ -132,19 +130,63 @@ def run_swarm_spawn(args=None) -> int:
         console.print("[red]no swarm coordinator running — run [cyan]suijin swarm init[/cyan] first[/red]")
         return 1
 
+    # --tui flag: run the engagement TUI in this terminal, connected to the swarm
+    if getattr(args, "tui", False):
+        return _spawn_tui(addr, console)
+
     count = int(getattr(args, "count", 1) or 1)
     spawned = []
     for _ in range(count):
         identity, pid = _spawn_agent(addr[1])
         spawned.append((identity, pid))
-        time.sleep(0.3)  # stagger starts
+        time.sleep(0.3)
 
     for identity, pid in spawned:
         console.print(f"  [green]✓[/green] agent [cyan]{identity}[/cyan] (pid {pid}) running in background")
-
     console.print(f"\n  attach:  [cyan]suijin swarm attach {spawned[0][0]}[/cyan]")
-    console.print(f"  status:  [cyan]suijin swarm status[/cyan]")
+    console.print("  status:  [cyan]suijin swarm status[/cyan]")
     return 0
+
+
+def _spawn_tui(addr: tuple[str, int], console) -> int:
+    """Spawn an agent that runs the full engagement TUI in this terminal,
+    registered with the swarm. This is 'suijin engage' but connected."""
+    identity = f"tui-{int(time.time()) % 10000}-{os.urandom(2).hex()}"
+    console.print(f"[cyan]swarm agent {identity}[/cyan] — opening TUI (Ctrl+C or /quit to exit)\n")
+
+    # connect to the bus, register, start heartbeats
+    from suijin.server.mesh.bus import BusClient
+
+    bus = BusClient()
+    if not bus.connect(addr[0], addr[1], identity):
+        console.print("[red]cannot connect to coordinator[/red]")
+        return 1
+
+    bus.publish("/swarm/status", {"event": "agent_joined", "agent": identity, "pid": os.getpid()})
+    bus.subscribe(f"/agent/{identity}/**")
+
+    import threading
+
+    def _heartbeat():
+        while True:
+            bus.publish("/swarm/status", {"event": "heartbeat", "agent": identity})
+            time.sleep(5)
+
+    hb = threading.Thread(target=_heartbeat, daemon=True, name="swarm-hb")
+    hb.start()
+
+    # run the standard engagement TUI — the operator gets the full
+    # console (typewriter, tool output, findings panel, everything)
+    # but this agent is also visible in `suijin swarm status`
+    try:
+        from suijin.server.redteam.lib.redteamer import main as redteamer_main
+
+        return redteamer_main() or 0
+    except KeyboardInterrupt:
+        console.print(f"\n[yellow]agent {identity} disconnected[/yellow]")
+        return 0
+    finally:
+        bus.close()
 
 
 def run_swarm_attach(args=None) -> int:
