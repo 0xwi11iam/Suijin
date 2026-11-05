@@ -178,7 +178,6 @@ class SwarmAgent:
 
         max_turns = 10  # lean cap per intent
         facts = []
-        state = "done"
 
         for turn in range(max_turns):
             try:
