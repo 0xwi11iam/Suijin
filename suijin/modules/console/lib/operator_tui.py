@@ -620,8 +620,26 @@ def scan_agents(mesh_dir: Path, workspace: Path, live: bool = True, sources: lis
     """sources=None scans EXACTLY the passed mesh_dir (legacy contract every
     test pins). sources=discover_sources() gives the ONE-EVERYWHERE view
     (local + box + configured) — the TUI passes it; FOREIGN sources are
-    read-only: no pid probes, no cleanup (a box pid is not a host pid)."""
+    read-only: no pid probes, no cleanup (a box pid is not a host pid).
+
+    DEAD-AGENT SWEEP (2026-11-05, operator: 'if it knows its dead why does
+    it show'): a SIGKILLed process leaves its registry file behind. The
+    scan proactively sweeps dead local registry files at startup — kill
+    the file, the agent disappears from the console immediately."""
     agents: list[Agent] = []
+
+    # SWEEP: dead local registry files are garbage — delete them now
+    if mesh_dir.is_dir() and live:
+        with contextlib.suppress(OSError):
+            for f in mesh_dir.glob("*.json"):
+                if f.name.endswith("-state.json") or f.name == "remote-peers.json":
+                    continue
+                with contextlib.suppress(Exception):
+                    rec = json.loads(f.read_text(errors="replace"))
+                    pid = int(rec.get("pid") or 0)
+                    if pid and pid != os.getpid() and not _pid_alive(pid):
+                        f.unlink(missing_ok=True)
+                        (mesh_dir / f"{pid}-state.json").unlink(missing_ok=True)
 
     if sources is None:
         _er = None
