@@ -243,8 +243,9 @@ class SwarmAgent:
         )
 
     def _complete_intent(self, intent: dict, result: dict):
-        """Mark the intent complete and publish any facts."""
+        """Mark the intent complete, persist note + facts, publish."""
         state = result.get("state", "done")
+        note = str(result.get("note") or "")
         with contextlib.suppress(Exception):
             import sqlite3
 
@@ -256,6 +257,20 @@ class SwarmAgent:
                 "UPDATE intents SET state = ?, completed_at = ? WHERE id = ?",
                 (state, time.time(), intent["id"]),
             )
+            # persist facts — the status metric and the report read these
+            for fact in result.get("facts", []):
+                db.execute(
+                    "INSERT INTO facts (id, summary, evidence, agent_id, engagement, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        f"fact-{os.urandom(4).hex()}",
+                        str(fact.get("summary", ""))[:300],
+                        str(fact.get("evidence", ""))[:200],
+                        self._identity,
+                        intent.get("engagement", ""),
+                        time.time(),
+                    ),
+                )
             db.commit()
             db.close()
 
@@ -280,7 +295,8 @@ class SwarmAgent:
                 },
             )
 
-        print(f"[{self._identity}] {state}: {intent['text'][:60]}")
+        tail = f" — {note[:120]}" if note else ""
+        print(f"[{self._identity}] {state}: {intent['text'][:60]}{tail}")
 
 
 def run_agent(args=None) -> int:

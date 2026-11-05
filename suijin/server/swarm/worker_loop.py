@@ -139,12 +139,14 @@ def execute_intent(
     identity: str,
     intent: dict,
     bus=None,
-    max_turns: int = 10,
+    max_turns: int = 25,
     on_event=None,
 ) -> dict:
     """Work one intent: LLM → decision → tool → result → repeat.
 
     Returns {"state": done|blocked|exhausted, "facts": [...], "note": str}.
+    25 turns: 10 proved too few for real probing lanes — five of eight
+    workers hit the cap mid-investigation on the first field run.
     """
     import time
 

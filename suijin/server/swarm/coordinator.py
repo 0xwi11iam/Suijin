@@ -233,6 +233,55 @@ class SwarmCoordinator:
                     self.bus._route("/swarm/status", {"event": "agent_dead", "agent": aid})
                     self._agents.pop(aid, None)
 
+            # db-level stale sweep — two classes the in-memory check misses:
+            #  (a) intents still 'running' under an agent from a PREVIOUS
+            #      coordinator run (killed with the old swarm; it never
+            #      registered here, so no heartbeat ever times it out)
+            #  (b) agent rows that stopped heartbeating (dead rows inflate
+            #      the status count — 38 shown, 8 alive)
+            # Own connection per cycle: self._db is shared with the bus
+            # listener thread, and concurrent cursor use on one sqlite3
+            # connection raises ProgrammingError — which the suppress
+            # below would swallow, silently killing the whole sweep.
+            try:
+                import sqlite3 as _sq
+
+                sweep_db = _sq.connect(str(swarm_db_path()), timeout=5)
+                sweep_db.execute("PRAGMA journal_mode=WAL")
+                stale_cutoff = now - 120  # 2 min: live agents heartbeat
+                # every few seconds; an unregistered claimant is orphaned
+                rows = sweep_db.execute(
+                    "SELECT id, agent_id, claimed_at FROM intents WHERE state = 'running'"
+                ).fetchall()
+                requeued = 0
+                for iid, aid, claimed in rows:
+                    if aid in self._agents:
+                        continue  # live agent — its intent, leave it
+                    if claimed and now - float(claimed) > stale_cutoff:
+                        sweep_db.execute(
+                            "UPDATE intents SET state = 'open', agent_id = NULL, claimed_at = NULL WHERE id = ?",
+                            (iid,),
+                        )
+                        requeued += 1
+                # NOTE: (now - 300.0,) — the trailing comma makes it a
+                # 1-tuple; without it sqlite3 sees a bare float and every
+                # sweep dies at this line, silently (suppressed), and the
+                # requeue UPDATEs above roll back with the missing commit
+                cur = sweep_db.execute("DELETE FROM agents WHERE last_heartbeat < ?", (now - 300.0,))
+                sweep_db.commit()
+                sweep_db.close()
+                if requeued or cur.rowcount:
+                    print(
+                        f"[health] sweep: requeued {requeued} orphaned intent(s), "
+                        f"dropped {cur.rowcount} dead agent row(s)",
+                        flush=True,
+                    )
+            except Exception as sweep_exc:  # TEMP: expose the silent killer
+                import traceback
+
+                traceback.print_exc()
+                print(f"[health] sweep failed: {sweep_exc!r}", flush=True)
+
     # ── rate limiting (per-target, across ALL agents) ───────────
 
     def check_rate(self, host: str) -> float:
@@ -346,13 +395,13 @@ class _BusEventListener:
                     import threading
 
                     t = threading.Thread(
-                        target=self._run_inline_agent,
+                        target=self._coord._run_inline_agent,
                         args=(identity, swarm),
                         daemon=True,
                         name=f"agent-{identity}",
                     )
                     t.start()
-                    self.register_agent(identity, identity)
+                    self._coord.register_agent(identity, identity)
 
         elif "/work" in topic:
             # an agent completed an intent — update the database
