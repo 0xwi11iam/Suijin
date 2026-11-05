@@ -190,7 +190,8 @@ def run_swarm_init(args=None) -> int:
 
 
 def run_swarm_intent(text: str, swarm: str = "default") -> int:
-    """`suijin swarm intent "do X"` — append to the queue (never replaces)."""
+    """`suijin swarm intent "do X"` — append to the queue (never replaces).
+    Broadcasts on the bus so idle agents pick it up immediately."""
     from rich.console import Console
 
     console = Console()
@@ -201,8 +202,19 @@ def run_swarm_intent(text: str, swarm: str = "default") -> int:
         return 1
 
     _, count = _add_intent(text, swarm)
+
+    # broadcast on the bus — idle agents see it instantly
+    addr = _bus_addr()
+    if addr:
+        from suijin.server.mesh.bus import BusClient
+
+        bc = BusClient()
+        if bc.connect(addr[0], addr[1], "intent-broadcaster"):
+            bc.publish(f"/engagement/{swarm}/work", {"event": "new_intent", "text": text, "swarm": swarm})
+            bc.close()
+
     console.print(f"  [green]✓[/green] queued ({swarm}): {text[:70]}")
-    console.print(f"  {count} intent(s) waiting — [cyan]suijin swarm spawn --tui[/cyan]")
+    console.print(f"  {count} intent(s) waiting — idle agents pick up automatically")
     return 0
 
 
@@ -253,9 +265,14 @@ def _spawn_tui(addr: tuple[str, int], swarm_name: str, console) -> int:
 
     intent = _claim_intent_for(identity, swarm_name)
     if not intent:
-        console.print(f"[yellow]no open intents in '{swarm_name}'[/yellow]")
-        console.print('  add work: [cyan]suijin swarm intent "test X for Y"[/cyan]')
-        return 1
+        # No open intents — but maybe one is RUNNING. Multiple agents on
+        # the same target is the whole point of a swarm. Create a parallel
+        # lane on the same work instead of erroring out.
+        intent = _parallel_lane(identity, swarm_name, console)
+        if not intent:
+            console.print("[yellow]no work in the queue[/yellow]")
+            console.print('  add work: [cyan]suijin swarm intent "test X for Y"[/cyan]')
+            return 1
 
     console.print(f"[cyan]{identity}[/cyan] → {intent['text'][:70]}")
     console.print("  launching…\n")
@@ -280,11 +297,10 @@ def _spawn_tui(addr: tuple[str, int], swarm_name: str, console) -> int:
     try:
         import asyncio
 
-        from suijin.server.redteam.lib.redteamer import run_red_team_async
-
         # LOAD THE OPERATOR'S ACTUAL CONFIG — the old bare dict fell back
         # to deepseek (the code default) instead of the operator's provider
         from suijin.modules.platform.lib.config_loader import load_config
+        from suijin.server.redteam.lib.redteamer import run_red_team_async
 
         config = load_config()
         config["objective"] = intent["text"]
@@ -295,6 +311,44 @@ def _spawn_tui(addr: tuple[str, int], swarm_name: str, console) -> int:
         return 0
     finally:
         bus.close()
+
+
+def _parallel_lane(agent_id: str, swarm: str, console) -> dict | None:
+    """No open intents but some are RUNNING — create a parallel lane on
+    the same target. Multiple agents working the same target from
+    different angles IS the swarm. The operator's complaint: 'why are
+    they hogging, they can share if there's nothing.'"""
+    with contextlib.suppress(Exception):
+        db = _db()
+        # find the most recent running intent in this swarm
+        if swarm:
+            row = db.execute(
+                "SELECT id, text, engagement FROM intents WHERE state = 'running' AND swarm = ? ORDER BY claimed_at DESC LIMIT 1",
+                (swarm,),
+            ).fetchone()
+        else:
+            row = db.execute(
+                "SELECT id, text, engagement FROM intents WHERE state = 'running' ORDER BY claimed_at DESC LIMIT 1"
+            ).fetchone()
+
+        if not row:
+            db.close()
+            return None
+
+        orig_id, orig_text, engagement = row
+        # create a parallel lane: same target, this agent's own copy
+        lane_text = f"{orig_text} (parallel lane — {agent_id})"
+        lane_id = "in_" + hashlib.sha1(f"{agent_id}:{orig_text}".encode()).hexdigest()[:12]
+        db.execute(
+            "INSERT OR IGNORE INTO intents (id, text, state, engagement, created_at, swarm, agent_id, claimed_at) "
+            "VALUES (?, ?, 'running', ?, ?, ?, ?, ?)",
+            (lane_id, lane_text, engagement, time.time(), swarm or "default", agent_id, time.time()),
+        )
+        db.commit()
+        db.close()
+        console.print(f"  [dim]joining running work: {orig_text[:50]}[/dim]")
+        return {"id": lane_id, "text": orig_text, "engagement": engagement}
+    return None
 
 
 def _claim_intent_for(agent_id: str, swarm: str = "") -> dict | None:
@@ -353,6 +407,38 @@ def run_swarm_attach(args=None) -> int:
     except KeyboardInterrupt:
         proc.terminate()
         console.print("\n[dim]detached[/dim]")
+    return 0
+
+
+def run_swarm_pause(args=None) -> int:
+    """`suijin swarm pause` — freeze all agents (SIGSTOP, they resume exactly where they were)."""
+    from rich.console import Console
+
+    console = Console()
+    stopped = 0
+    pid_files = list(Path(tempfile.gettempdir()).glob("suijin-agent-*.pid"))
+    for pf in pid_files:
+        with contextlib.suppress(Exception):
+            pid = int(pf.read_text().strip())
+            os.kill(pid, signal.SIGSTOP)
+            stopped += 1
+    console.print(f"[yellow]paused {stopped} agent(s)[/yellow] — [cyan]suijin swarm resume[/cyan] to wake them")
+    return 0
+
+
+def run_swarm_resume(args=None) -> int:
+    """`suijin swarm resume` — wake all paused agents (SIGCONT)."""
+    from rich.console import Console
+
+    console = Console()
+    resumed = 0
+    pid_files = list(Path(tempfile.gettempdir()).glob("suijin-agent-*.pid"))
+    for pf in pid_files:
+        with contextlib.suppress(Exception):
+            pid = int(pf.read_text().strip())
+            os.kill(pid, signal.SIGCONT)
+            resumed += 1
+    console.print(f"[green]resumed {resumed} agent(s)[/green]")
     return 0
 
 
