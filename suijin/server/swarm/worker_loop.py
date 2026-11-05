@@ -1,0 +1,235 @@
+"""The swarm worker loop — ONE implementation, used by every worker.
+
+The 2026-11-04 field failure class (three bugs, one root cause):
+  1. the model was never shown the tool catalog → it replied in prose
+  2. a prose reply (no JSON) was treated as {"action": "complete"} →
+     intents marked done with ZERO tool calls (7 burned in seconds)
+  3. `decision` was assigned inside `with contextlib.suppress(Exception)`
+     → any parse raise left it unbound → UnboundLocalError killed the agent
+
+The Decision boundary rule (suijin/server/agent/lib/decision.py) applies
+here too: parse exactly once, tolerate model drift in ONE place, and
+never let a parse failure masquerade as completion.
+"""
+
+from __future__ import annotations
+
+import contextlib
+
+SYSTEM_TEMPLATE = (
+    "You are a worker agent on an authorized bug bounty engagement. "
+    "Your ONLY task is the intent below. Work it to completion using the "
+    "available tools — really run them, do not describe what you would run.\n\n"
+    "{catalog}\n\n"
+    "Every reply must be ONE JSON object:\n"
+    '  {{"action": "use_tool", "tool_name": "<name from the catalog>", '
+    '"args": {{"...": "..."}}, "thought": "..."}}\n'
+    'or when the intent is fully worked:\n'
+    '  {{"action": "complete", "reason": "...", "facts": [...]}}\n'
+    "Prose-only replies are errors and will be rejected."
+)
+
+
+def _load_catalog() -> str:
+    """The full tool catalog (how-to-call header + every tool). The model
+    cannot call tools it cannot see — this is not optional context."""
+    try:
+        from suijin.modules.tools.lib import dispatch
+
+        return str(dispatch.get_tool_catalog())
+    except Exception:  # noqa: BLE001 — degrade to a hint, never crash the loop
+        return "(tool catalog unavailable — ask the operator if you need a tool)"
+
+
+def _balanced_objects(text: str) -> list[str]:
+    """Every top-level {...} block, brace-balanced and string-aware.
+
+    A regex cannot do this: a pattern like brace-class-nesting collapses
+    to an inner object when args nest two levels deep (e.g.
+    {"headers": {"a": {"b": 1}}}) — the model's real output shape.
+    """
+    objs: list[str] = []
+    depth = 0
+    start: int | None = None
+    in_str = False
+    esc = False
+    for i, ch in enumerate(text):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}" and depth:
+            depth -= 1
+            if depth == 0 and start is not None:
+                objs.append(text[start : i + 1])
+                start = None
+    return objs
+
+
+def _looks_like_decision(obj: dict) -> bool:
+    return any(k in obj for k in ("action", "tool_name", "tool"))
+
+
+def _parse_decision(response: str) -> dict | None:
+    """Extract the model's decision JSON.
+
+    Fenced ```json blocks win; otherwise the LAST balanced object that
+    parses AND looks like a decision (a prose preamble followed by a
+    decision object is common — an inline EXAMPLE earlier in the reply
+    must not win over the real decision at the end).
+    Returns None when nothing parses — the caller re-prompts, it NEVER
+    treats None as completion.
+    """
+    import json as _json
+    import re as _re
+
+    def _loads(s: str) -> dict | None:
+        try:
+            parsed = _json.loads(s)
+            return parsed if isinstance(parsed, dict) else None
+        except Exception:  # noqa: BLE001 — candidate screening, not control flow
+            return None
+
+    m = _re.search(r"```json\s*(.*?)\s*```", response, _re.S)
+    if m:
+        obj = _loads(m.group(1))
+        if obj is not None and _looks_like_decision(obj):
+            obj = _normalize(obj)
+            if obj is not None:
+                return obj
+
+    candidates = [_loads(c) for c in _balanced_objects(response)]
+    for obj in reversed(candidates):
+        if obj is not None and _looks_like_decision(obj):
+            return _normalize(obj)
+    for obj in reversed(candidates):
+        if obj is not None:
+            return _normalize(obj)
+    return None
+
+
+def _normalize(obj: dict) -> dict | None:
+    from suijin.server.agent.lib.decision import normalize_decision
+
+    try:
+        return normalize_decision(obj)
+    except Exception:  # noqa: BLE001 — normalize is drift-tolerant; belt and braces
+        return None
+
+
+REprompt_TOOL = (
+    "Your last reply was prose or had no parseable decision. Reply with ONE "
+    'JSON object only: {"action": "use_tool", "tool_name": "<name from the '
+    'catalog>", "args": {...}} — or {"action": "complete", "reason": "..."} '
+    "if the intent is genuinely finished."
+)
+
+
+def execute_intent(
+    identity: str,
+    intent: dict,
+    bus=None,
+    max_turns: int = 10,
+    on_event=None,
+) -> dict:
+    """Work one intent: LLM → decision → tool → result → repeat.
+
+    Returns {"state": done|blocked|exhausted, "facts": [...], "note": str}.
+    """
+    import time
+
+    messages = [
+        {"role": "system", "content": SYSTEM_TEMPLATE.format(catalog=_load_catalog())},
+        {"role": "user", "content": f"INTENT: {intent['text']}\n\nExecute this intent."},
+    ]
+
+    facts: list[dict] = []
+    parse_fails = 0
+
+    for turn in range(max_turns):
+        # --- model call -------------------------------------------------
+        try:
+            from suijin.modules.platform.lib.config_loader import load_config, load_env
+
+            load_env()  # pick up the operator's .env (API keys)
+            from suijin.modules.providers.lib import generate
+
+            cfg = load_config()
+            cfg.setdefault("max_tokens_per_request", 4000)
+            cfg["intelligence"] = "medium"  # workers don't need max thinking
+            response = generate(messages, cfg)
+        except Exception as e:  # noqa: BLE001 — provider errors become 'blocked'
+            return {"state": "blocked", "facts": facts, "note": f"provider error: {e}"}
+
+        if not isinstance(response, str) or response.startswith("Error:"):
+            return {"state": "blocked", "facts": facts, "note": str(response)[:200]}
+
+        # --- decision (parsed EXACTLY ONCE, failure ≠ completion) --------
+        decision = _parse_decision(response)
+        if decision is None:
+            parse_fails += 1
+            if parse_fails >= 3:
+                return {"state": "blocked", "facts": facts, "note": "model never emitted a JSON decision (3 strikes)"}
+            messages.append({"role": "assistant", "content": response})
+            messages.append({"role": "user", "content": REprompt_TOOL})
+            continue
+
+        action = str(decision.get("action") or "use_tool")
+
+        if action == "complete":
+            reason = str(decision.get("reason") or decision.get("completion_reason") or "done")
+            return {"state": "done", "facts": facts, "note": reason[:200]}
+
+        tool_name = str(decision.get("tool_name") or "").strip()
+        tool_args = decision.get("tool_args") or {}
+
+        if not tool_name:
+            parse_fails += 1
+            if parse_fails >= 3:
+                return {"state": "blocked", "facts": facts, "note": "decisions never carried a tool_name (3 strikes)"}
+            messages.append({"role": "assistant", "content": response})
+            messages.append({"role": "user", "content": REprompt_TOOL})
+            continue
+
+        # --- execute -----------------------------------------------------
+        try:
+            from suijin.modules.tools.lib import dispatch
+
+            result = dispatch.route_tool(tool_name, tool_args, config={})
+            result_str = str(result)[:2000]
+        except Exception as e:  # noqa: BLE001 — tool errors feed back to the LLM
+            result_str = f"Error: {e}"
+
+        if "CONFIRMED" in result_str:
+            facts.append(
+                {
+                    "summary": f"{tool_name} confirmed: {result_str[:150]}",
+                    "evidence": result_str[:200],
+                }
+            )
+
+        messages.append({"role": "assistant", "content": response})
+        messages.append({"role": "user", "content": f"RESULT: {result_str}"})
+
+        if bus is not None:
+            with contextlib.suppress(Exception):
+                bus.publish(
+                    f"/engagement/{intent.get('engagement', '?')}/work",
+                    {"agent": identity, "tool": tool_name, "turn": turn, "ts": time.time()},
+                )
+        if on_event is not None:
+            with contextlib.suppress(Exception):
+                on_event(turn, tool_name, result_str)
+
+    # hit the turn cap — exhausted (budget cut, not done)
+    return {"state": "exhausted", "facts": facts, "note": f"hit {max_turns} turn cap"}

@@ -219,108 +219,28 @@ class SwarmAgent:
         return None
 
     def _execute_intent(self, intent: dict) -> dict:
-        """Work one intent using the existing tool pipeline.
+        """Work one intent using the shared swarm worker loop.
 
-        Drives a simple LLM loop: send the intent as the objective,
-        receive a tool decision, execute it via dispatch, feed the result
-        back, repeat until the model says done or the iteration cap hits.
-        The REAL think→execute graph (LangGraph) is heavyweight for the
-        swarm agent — this is the lean version with the same tools.
+        One implementation for every worker (process agent, inline agent)
+        — see suijin/server/swarm/worker_loop.py for the failure class
+        this replaces: prose replies treated as completion, unbound
+        `decision` crashes, and a model that never saw the tool catalog.
         """
         self._iterations += 1
         print(f"[{self._identity}] working: {intent['text'][:60]}…")
 
-        # the conversation: system directive + intent as objective
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a worker agent on an authorized bug bounty engagement. "
-                    "Your ONLY task is the intent below. Work it to completion using "
-                    "the available tools. When done, respond with "
-                    '{"action": "complete", "reason": "..."} '
-                    "along with any findings as facts."
-                ),
-            },
-            {"role": "user", "content": f"INTENT: {intent['text']}\n\nExecute this intent."},
-        ]
+        from suijin.server.swarm.worker_loop import execute_intent
 
-        max_turns = 10  # lean cap per intent
-        facts = []
+        def _on_event(turn: int, tool_name: str, result_str: str):
+            mark = "CONFIRMED" if "CONFIRMED" in result_str else "result"
+            print(f"[{self._identity}] turn {turn}: {tool_name} → {mark} ({len(result_str)} chars)")
 
-        for turn in range(max_turns):
-            try:
-                from suijin.modules.platform.lib.config_loader import load_config, load_env
-
-                load_env()  # pick up the operator's .env (API keys)
-                from suijin.modules.providers.lib import generate
-
-                cfg = load_config()
-                cfg.setdefault("max_tokens_per_request", 4000)
-                cfg["intelligence"] = "medium"  # workers don't need max thinking
-                response = generate(messages, cfg)
-            except Exception as e:  # noqa: BLE001 — provider errors become 'blocked'
-                return {"state": "blocked", "facts": facts, "note": f"provider error: {e}"}
-
-            if not isinstance(response, str) or response.startswith("Error:"):
-                return {"state": "blocked", "facts": facts, "note": str(response)[:200]}
-
-            # parse the decision
-            from suijin.server.agent.lib.decision import normalize_decision
-
-            with contextlib.suppress(Exception):
-                import json as _json
-                import re as _re
-
-                m = _re.search(r"\{.*\}", response, _re.S)
-                if m:
-                    decision = normalize_decision(_json.loads(m.group(0)))
-                else:
-                    decision = {"action": "complete", "reason": response[:200]}
-            if not decision:
-                decision = {"action": "complete", "reason": "unparseable response"}
-
-            action = str(decision.get("action") or "complete")
-
-            # complete → we're done
-            if action == "complete":
-                reason = str(decision.get("reason") or decision.get("completion_reason") or "done")
-                return {"state": "done", "facts": facts, "note": reason}
-
-            # execute the tool
-            tool_name = str(decision.get("tool_name") or "")
-            tool_args = decision.get("tool_args") or {}
-
-            if tool_name:
-                try:
-                    from suijin.modules.tools.lib import dispatch
-
-                    result = dispatch.route_tool(tool_name, tool_args, config={})
-                    result_str = str(result)[:2000]
-                except Exception as e:  # noqa: BLE001 — tool errors feed back to the LLM
-                    result_str = f"Error: {e}"
-
-                # check for findings in the result
-                if "CONFIRMED" in result_str:
-                    facts.append(
-                        {
-                            "summary": f"{tool_name} confirmed: {result_str[:150]}",
-                            "evidence": result_str[:200],
-                        }
-                    )
-
-                # feed the result back
-                messages.append({"role": "assistant", "content": response})
-                messages.append({"role": "user", "content": f"RESULT: {result_str}"})
-
-                # publish the tool call on the bus
-                self._bus.publish(
-                    f"/engagement/{intent.get('engagement', '?')}/work",
-                    {"agent": self._identity, "tool": tool_name, "turn": turn},
-                )
-
-        # hit the turn cap — exhausted (budget cut, not done)
-        return {"state": "exhausted", "facts": facts, "note": f"hit {max_turns} turn cap"}
+        return execute_intent(
+            self._identity,
+            intent,
+            bus=self._bus,
+            on_event=_on_event,
+        )
 
     def _complete_intent(self, intent: dict, result: dict):
         """Mark the intent complete and publish any facts."""
