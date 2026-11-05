@@ -282,7 +282,13 @@ def _spawn_tui(addr: tuple[str, int], swarm_name: str, console) -> int:
 
         from suijin.server.redteam.lib.redteamer import run_red_team_async
 
-        config = {"objective": intent["text"], "target": intent.get("engagement", swarm_name)}
+        # LOAD THE OPERATOR'S ACTUAL CONFIG — the old bare dict fell back
+        # to deepseek (the code default) instead of the operator's provider
+        from suijin.modules.platform.lib.config_loader import load_config
+
+        config = load_config()
+        config["objective"] = intent["text"]
+        config["target"] = intent.get("engagement", swarm_name)
         asyncio.run(run_red_team_async(config, intent["text"]))
         return 0
     except KeyboardInterrupt:
