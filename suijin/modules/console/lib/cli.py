@@ -1517,6 +1517,31 @@ def run_policy(args) -> int:
     return 1
 
 
+def _run_swarm(action: str, coordinator: str = "", identity: str = "") -> int:
+    """Dispatch swarm subcommands."""
+    if action == "start":
+        from suijin.server.swarm.coordinator import run_swarm_start
+
+        return run_swarm_start()
+    if action == "status":
+        from suijin.server.swarm.coordinator import run_swarm_status
+
+        return run_swarm_status()
+    if action == "stop":
+
+        from suijin.server.mesh.bus import bus_port_file
+
+        bus_port_file().unlink(missing_ok=True)
+        print("swarm stopped")
+        return 0
+    if action == "agent":
+        from suijin.server.swarm.agent import run_agent
+
+        return run_agent(["--coordinator", coordinator, "--identity", identity])
+    print(f"unknown swarm action: {action}")
+    return 1
+
+
 def run_providers(args) -> int:
     # --test flag: the setup wizard's quick check (2026-11-05)
     if getattr(args, "test", False):
@@ -2344,6 +2369,8 @@ _KNOWN_VERBS = frozenset(
     {
         "doctor",
         "setup",
+        "swarm",
+        "agent",
         "debug",
         "selftest",
         "status",
@@ -2477,6 +2504,23 @@ def main(argv=None):
     # the box — a sealed linux environment that runs suijin and its tools
     # (orbstack first, docker fallback; `suijin box` with no verb opens
     # the manager tui)
+    # the swarm — multi-agent coordination (2026-11-05)
+    swarm_cmd = sub.add_parser("swarm", help="multi-agent swarm: start the coordinator, launch agents")
+    swarm_sub = swarm_cmd.add_subparsers(dest="swarm_action")
+    swarm_sub.add_parser("start", help="start the swarm coordinator (bus + shared state + work assignment)").set_defaults(
+        func=lambda a: _run_swarm("start")
+    )
+    swarm_sub.add_parser("status", help="one-line snapshot: agents, intents, findings").set_defaults(
+        func=lambda a: _run_swarm("status")
+    )
+    swarm_sub.add_parser("stop", help="stop the coordinator").set_defaults(func=lambda a: _run_swarm("stop"))
+    swarm_cmd.set_defaults(func=lambda a: _run_swarm("status"))
+
+    agent_cmd = sub.add_parser("agent", help="headless swarm agent (connects to a coordinator)")
+    agent_cmd.add_argument("--coordinator", required=True, help="host:port of the coordinator")
+    agent_cmd.add_argument("--identity", default="", help="agent identity")
+    agent_cmd.set_defaults(func=lambda a: _run_swarm("agent", coordinator=a.coordinator, identity=a.identity))
+
     boxp = sub.add_parser(
         "box", aliases=["container"], help="the box: build/start/enter a sealed linux environment for suijin"
     )

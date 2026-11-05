@@ -61,17 +61,16 @@ def record_exchange(
         bdir.mkdir(exist_ok=True)
         (bdir / h).write_text(res_body, encoding="utf-8", errors="replace")
         blob, res_body = h, ""
-    with contextlib.suppress(sqlite3.Error):
-        with _conn() as c:
-            cur = c.execute(
-                "INSERT INTO exchange (ts, method, url, host, path, status, req_headers, res_headers, req_body, res_body, res_blob, size) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                (
-                    time.time(), str(method)[:8], str(url)[:2000], u.netloc[:200], u.path[:500],
-                    int(status or 0), str(req_headers)[:4000], str(res_headers)[:4000],
-                    str(req_body)[:100_000], str(res_body)[:100_000], blob, len(str(res_body)),
-                ),
-            )
-            return int(cur.lastrowid or 0)
+    with contextlib.suppress(sqlite3.Error), _conn() as c:
+        cur = c.execute(
+            "INSERT INTO exchange (ts, method, url, host, path, status, req_headers, res_headers, req_body, res_body, res_blob, size) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                time.time(), str(method)[:8], str(url)[:2000], u.netloc[:200], u.path[:500],
+                int(status or 0), str(req_headers)[:4000], str(res_headers)[:4000],
+                str(req_body)[:100_000], str(res_body)[:100_000], blob, len(str(res_body)),
+            ),
+        )
+        return int(cur.lastrowid or 0)
     return 0
 
 
