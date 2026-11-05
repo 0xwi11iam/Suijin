@@ -13,7 +13,7 @@ def retest_finding(finding_id: str, route_fn=None, config=None) -> str:
     """Scoped retest: read the row's stored proof + exchanges, replay
     them, compare. Verdict: reproduced | fixed | inconclusive. A single
     miss is inconclusive (not fixed — one failed request is not a fix)."""
-    from suijin.modules.agent.lib.rows import _all, _rewrite
+    from suijin.modules.agent.lib.rows import _all
 
     rows = _all("finding")
     f = next((r for r in rows if r["id"] == finding_id), None)

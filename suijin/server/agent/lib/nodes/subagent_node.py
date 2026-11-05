@@ -706,15 +706,13 @@ def collect_finished_teams(max_messages: int = 6) -> list[str]:
             except Exception as e:  # noqa: BLE001
                 r = SubagentResult(subagent_id="error", task="?", success=False, findings=f"task crashed: {e}", steps=0)
             team["results"].append(r)
-            if r.success:
-                status = "OK"
-            elif r.partial:
-                status = "TIMEOUT (partial findings)"
-            else:
-                status = "FAILED"
+            status = "✓ done"
+            if r.partial:
+                status = "◐ partial (timeout — some findings)"
+            elif not r.success:
+                status = "✗ failed"
             messages.append(
-                f"FIRETEAM RESULT [{team_id}] {status} ({r.steps} steps)\n"
-                f"Task: {r.task[:200]}\nFindings:\n{r.findings[:2000]}"
+                f"FIRETEAM {status} [{team_id}] ({r.steps} steps)\nTask: {r.task[:200]}\nFindings:\n{r.findings[:2000]}"
             )
             # MEMORY RETURN (2026-10-29): lane findings enter the engagement
             # ledger like any tool output — the operator's question 'are the

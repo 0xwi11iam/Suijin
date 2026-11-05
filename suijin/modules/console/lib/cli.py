@@ -1518,6 +1518,21 @@ def run_policy(args) -> int:
 
 
 def run_providers(args) -> int:
+    # --test flag: the setup wizard's quick check (2026-11-05)
+    if getattr(args, "test", False):
+        from suijin.modules.console.lib.setup_wizard import run_providers_test
+
+        return run_providers_test()
+
+
+def _run_setup() -> int:
+    from suijin.modules.console.lib.setup_wizard import run_setup
+
+    return run_setup()
+
+
+def run_providers_full(args) -> int:
+
     from suijin.modules.providers.lib import generate
     from suijin.modules.redteam.lib.red.config_loader import load_config
 
@@ -2328,6 +2343,7 @@ def run_compliance(args) -> int:
 _KNOWN_VERBS = frozenset(
     {
         "doctor",
+        "setup",
         "debug",
         "selftest",
         "status",
@@ -2754,7 +2770,11 @@ def main(argv=None):
 
     providers_cmd = sub.add_parser("providers", help="probe configured providers (tiny live request)")
     providers_cmd.add_argument("--all", action="store_true", help="probe every provider with a key, not just the chain")
+    providers_cmd.add_argument("--test", action="store_true", help="quick alive check: one request per configured provider")
     providers_cmd.set_defaults(func=run_providers)
+
+    setup_cmd = sub.add_parser("setup", help="30-second setup wizard: provider, key, model, effort")
+    setup_cmd.set_defaults(func=lambda a: _run_setup())
 
     module = sub.add_parser("module", help="module manager (bare = TUI) + SDK")
     module_sub = module.add_subparsers(dest="module_action")

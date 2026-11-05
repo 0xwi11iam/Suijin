@@ -50,9 +50,8 @@ def _file(kind: str) -> Path:
 
 
 def _append(kind: str, row: dict) -> dict:
-    with contextlib.suppress(OSError):
-        with _file(kind).open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
+    with contextlib.suppress(OSError), _file(kind).open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
     return row
 
 
@@ -242,7 +241,7 @@ def snapshot() -> str:
     """The computed state the think context STARTS with: counts, last
     facts, open intents, untested assets. The model stops re-deriving
     what it holds and reads it. Compaction cannot delete these rows."""
-    facts, assets, intents = _all("fact"), _all("asset"), _all("intent")
+    facts, assets = _all("fact"), _all("asset")
     findings = [f for f in _all("finding") if f["status"] == "confirmed"]
     lines = [
         f"ROWS SNAPSHOT — {len(facts)} facts · {len(assets)} assets · "

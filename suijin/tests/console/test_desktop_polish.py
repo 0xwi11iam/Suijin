@@ -71,7 +71,7 @@ class TestStateMirror:
             return dep, msgs
 
         dep, msgs = asyncio.run(go())
-        assert any("FIRETEAM RESULT" in m for m in msgs)
+        assert any("FIRETEAM" in m and "done" in m for m in msgs)
         state = json.loads((fireteam_env / "artifacts" / "fireteam" / "registry.json").read_text())
         # 2026-10-29 contract change: drained teams ARCHIVE (results stay
         # readable — the empty-registry bug), they no longer vanish
