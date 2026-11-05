@@ -1517,8 +1517,20 @@ def run_policy(args) -> int:
     return 1
 
 
-def _run_swarm(action: str, coordinator: str = "", identity: str = "") -> int:
+def _run_swarm(action: str, coordinator: str = "", identity: str = "", agent_id: str = "") -> int:
     """Dispatch swarm subcommands."""
+    if action == "init":
+        from suijin.server.swarm.lifecycle import run_swarm_init
+
+        return run_swarm_init()
+    if action == "spawn":
+        from suijin.server.swarm.lifecycle import run_swarm_spawn
+
+        return run_swarm_spawn()
+    if action == "attach":
+        from suijin.server.swarm.lifecycle import run_swarm_attach
+
+        return run_swarm_attach(agent_id=agent_id)
     if action == "start":
         from suijin.server.swarm.coordinator import run_swarm_start
 
@@ -1528,12 +1540,9 @@ def _run_swarm(action: str, coordinator: str = "", identity: str = "") -> int:
 
         return run_swarm_status()
     if action == "stop":
+        from suijin.server.swarm.lifecycle import run_swarm_stop_all
 
-        from suijin.server.mesh.bus import bus_port_file
-
-        bus_port_file().unlink(missing_ok=True)
-        print("swarm stopped")
-        return 0
+        return run_swarm_stop_all()
     if action == "agent":
         from suijin.server.swarm.agent import run_agent
 
@@ -2507,14 +2516,22 @@ def main(argv=None):
     # the swarm — multi-agent coordination (2026-11-05)
     swarm_cmd = sub.add_parser("swarm", help="multi-agent swarm: start the coordinator, launch agents")
     swarm_sub = swarm_cmd.add_subparsers(dest="swarm_action")
+    swarm_sub.add_parser("init", help="start the coordinator, print the spawn command").set_defaults(
+        func=lambda a: _run_swarm("init")
+    )
+    swarm_sub.add_parser("spawn", help="spawn a background agent").set_defaults(func=lambda a: _run_swarm("spawn"))
+    swarm_sub.add_parser("attach", help="attach to an agent (tail its output live)").set_defaults(
+        func=lambda a: _run_swarm("attach", agent_id=getattr(a, "agent_id", ""))
+    )
     swarm_sub.add_parser("start", help="start the swarm coordinator (bus + shared state + work assignment)").set_defaults(
         func=lambda a: _run_swarm("start")
     )
     swarm_sub.add_parser("status", help="one-line snapshot: agents, intents, findings").set_defaults(
         func=lambda a: _run_swarm("status")
     )
-    swarm_sub.add_parser("stop", help="stop the coordinator").set_defaults(func=lambda a: _run_swarm("stop"))
-    swarm_cmd.set_defaults(func=lambda a: _run_swarm("status"))
+    swarm_sub.add_parser("stop", help="stop everything (agents + coordinator)").set_defaults(func=lambda a: _run_swarm("stop"))
+    swarm_cmd.add_argument("agent_id", nargs="?", default="", help="agent to attach to (default: latest)")
+    swarm_cmd.set_defaults(func=lambda a: _run_swarm("status", agent_id=getattr(a, "agent_id", "")))
 
     agent_cmd = sub.add_parser("agent", help="headless swarm agent (connects to a coordinator)")
     agent_cmd.add_argument("--coordinator", required=True, help="host:port of the coordinator")

@@ -182,7 +182,9 @@ class SwarmAgent:
 
         for turn in range(max_turns):
             try:
-                from suijin.modules.platform.lib.config_loader import load_config
+                from suijin.modules.platform.lib.config_loader import load_config, load_env
+
+                load_env()  # pick up the operator's .env (API keys)
                 from suijin.modules.providers.lib import generate
 
                 cfg = load_config()
@@ -313,3 +315,9 @@ def run_agent(args=None) -> int:
     except KeyboardInterrupt:
         agent.stop()
         return 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(run_agent(sys.argv[1:]))

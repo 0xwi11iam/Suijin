@@ -101,11 +101,18 @@ class SwarmCoordinator:
         return self.bus.port
 
     def start(self):
-        """Start the bus, database, governor, and health monitoring."""
+        """Start the bus, database, governor, and health monitoring.
+        Also subscribes to /swarm/status to auto-register agents."""
         self.bus.start()
         self._db = self._open_db()
         self.pool.start()
         self.batcher.start()
+
+        # AUTO-REGISTER: listen for agent_joined and heartbeat on the bus
+        # and keep the database in sync — this is what `suijin swarm status`
+        # reads. Without this, agents connect to the bus but never appear.
+        self._bus_listener = _BusEventListener(self)
+        self._bus_listener.start()
 
         # subscribe to swarm control topics
         self.bus._route("/swarm/status", {"event": "coordinator_started", "port": self.bus.port})
@@ -257,6 +264,96 @@ class SwarmCoordinator:
                 "bus_stats": self.bus.stats,
             }
         return {"agents": 0, "bus_port": self.bus.port, "bus_stats": self.bus.stats}
+
+
+class _BusEventListener:
+    """Listens on the bus for /swarm/status messages and keeps the
+    coordinator's database in sync. This is what makes `suijin swarm
+    status` show real agents."""
+
+    def __init__(self, coordinator: "SwarmCoordinator"):
+        self._coord = coordinator
+        self._client = None
+        self._running = False
+        self._thread: threading.Thread | None = None
+
+    def start(self):
+        from suijin.server.mesh.bus import BusClient
+
+        self._client = BusClient()
+        if self._client.connect("127.0.0.1", self._coord.bus.port, "coordinator-listener"):
+            self._client.subscribe("/swarm/**")
+            self._running = True
+            self._thread = threading.Thread(target=self._listen_loop, daemon=True, name="bus-listener")
+            self._thread.start()
+
+    def stop(self):
+        self._running = False
+        if self._client:
+            self._client.close()
+
+    def _listen_loop(self):
+        """Drain bus messages and sync the database."""
+        while self._running:
+            msgs = self._client.drain(50) if self._client else []
+            for msg in msgs:
+                self._handle(msg)
+            time.sleep(0.2)
+
+    def _handle(self, msg: dict):
+        topic = str(msg.get("topic") or "")
+        payload = msg.get("payload") or {}
+        event = str(payload.get("event") or "")
+
+        if "/swarm/status" in topic:
+            if event == "agent_joined":
+                agent_id = str(payload.get("agent") or "")
+                identity = agent_id
+                self._coord.register_agent(agent_id, identity)
+            elif event == "heartbeat":
+                agent_id = str(payload.get("agent") or "")
+                self._coord.heartbeat(agent_id)
+            elif event == "agent_dead":
+                pass  # handled by the health loop
+
+        elif "/work" in topic:
+            # an agent completed an intent — update the database
+            intent_id = str(payload.get("intent") or "")
+            agent_id = str(payload.get("agent") or "")
+            state = str(payload.get("state") or "")
+            if intent_id and agent_id:
+                self._coord.complete_intent(agent_id, intent_id, state)
+
+        elif "/findings" in topic:
+            # a finding landed — store it
+            agent_id = str(payload.get("agent") or payload.get("from") or "")
+            finding_text = str(payload.get("finding") or payload.get("msg") or "")
+            if finding_text:
+                import hashlib
+
+                fid = "fi_" + hashlib.sha1(finding_text.encode()).hexdigest()[:12]
+                with contextlib.suppress(sqlite3.Error):
+                    self._coord._db.execute(
+                        "INSERT OR REPLACE INTO findings (id, title, status, agent_id, created_at) VALUES (?, ?, 'confirmed', ?, ?)",
+                        (fid, finding_text[:300], agent_id, time.time()),
+                    )
+                    self._coord._db.commit()
+
+        elif "/facts" in topic:
+            # a fact was recorded — store it
+            agent_id = str(payload.get("agent") or payload.get("from") or "")
+            summary = str(payload.get("summary") or "")
+            evidence = str(payload.get("evidence") or "")
+            if summary:
+                import hashlib
+
+                fact_id = "fa_" + hashlib.sha1(summary.encode()).hexdigest()[:12]
+                with contextlib.suppress(sqlite3.Error):
+                    self._coord._db.execute(
+                        "INSERT OR IGNORE INTO facts (id, summary, evidence, agent_id, created_at) VALUES (?, ?, ?, ?, ?)",
+                        (fact_id, summary[:500], evidence[:300], agent_id, time.time()),
+                    )
+                    self._coord._db.commit()
 
 
 # ── the CLI entry point ───────────────────────────────────────────────
