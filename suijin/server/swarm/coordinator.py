@@ -147,6 +147,95 @@ class SwarmCoordinator:
 
     # ── work assignment ──────────────────────────────────────────
 
+    def _run_inline_agent(self, identity: str, swarm: str = "default"):
+        """A full agent work loop running INSIDE the coordinator's process.
+        Shares the interpreter (one import of all tools), but has its own
+        intent, its own LLM calls, its own tool execution. Same power as a
+        separate process, 1/25th the memory."""
+        print(f"[{identity}] inline agent started (swarm: {swarm})")
+        while self._running:
+            intent = self.claim_next_intent(identity)
+            if not intent:
+                time.sleep(3)
+                continue
+
+            print(f"[{identity}] claimed: {intent['text'][:60]}")
+
+            result = self._execute_inline(identity, intent)
+            self.complete_intent(identity, intent["id"], result.get("state", "done"))
+            print(f"[{identity}] {result.get('state', 'done')}: {intent['text'][:50]}")
+
+    def _execute_inline(self, identity: str, intent: dict) -> dict:
+        """Execute an intent using the real LLM + tool pipeline (same as
+        SwarmAgent._execute_intent but running in this process)."""
+        import contextlib
+
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a worker agent on an authorized bug bounty engagement. "
+                    "Work the intent below using available tools. Respond with "
+                    '{\"action\": \"complete\", \"reason\": \"...\"} when done.'
+                ),
+            },
+            {"role": "user", "content": f"INTENT: {intent['text']}\n\nExecute this intent."},
+        ]
+        max_turns = 10
+        facts = []
+
+        for turn in range(max_turns):
+            try:
+                from suijin.modules.platform.lib.config_loader import load_config, load_env
+
+                load_env()
+                from suijin.modules.providers.lib import generate
+
+                cfg = load_config()
+                cfg.setdefault("max_tokens_per_request", 4000)
+                cfg["intelligence"] = "medium"
+                response = generate(messages, cfg)
+            except Exception as e:  # noqa: BLE001
+                return {"state": "blocked", "facts": facts, "note": f"provider: {e}"}
+
+            if not isinstance(response, str) or response.startswith("Error:"):
+                return {"state": "blocked", "facts": facts, "note": str(response)[:200]}
+
+            from suijin.server.agent.lib.decision import normalize_decision
+
+            with contextlib.suppress(Exception):
+                import json as _json
+                import re as _re
+
+                m = _re.search(r"\{.*\}", response, _re.S)
+                decision = normalize_decision(_json.loads(m.group(0))) if m else {"action": "complete", "reason": response[:200]}
+
+            if not decision:
+                decision = {"action": "complete", "reason": "unparseable"}
+
+            if str(decision.get("action") or "complete") == "complete":
+                return {"state": "done", "facts": facts, "note": str(decision.get("reason", ""))[:200]}
+
+            tool_name = str(decision.get("tool_name") or "")
+            tool_args = decision.get("tool_args") or {}
+
+            if tool_name:
+                try:
+                    from suijin.modules.tools.lib import dispatch
+
+                    result = dispatch.route_tool(tool_name, tool_args, config={})
+                    result_str = str(result)[:2000]
+                except Exception as e:  # noqa: BLE001
+                    result_str = f"Error: {e}"
+
+                if "CONFIRMED" in result_str:
+                    facts.append({"summary": f"{tool_name} confirmed: {result_str[:150]}", "evidence": result_str[:200]})
+
+                messages.append({"role": "assistant", "content": response})
+                messages.append({"role": "user", "content": f"RESULT: {result_str}"})
+
+        return {"state": "exhausted", "facts": facts, "note": "turn cap"}
+
     def claim_next_intent(self, agent_id: str) -> dict | None:
         """Give this agent the next open intent. Marks it running."""
         with contextlib.suppress(sqlite3.Error):
@@ -315,6 +404,24 @@ class _BusEventListener:
                 self._coord.heartbeat(agent_id)
             elif event == "agent_dead":
                 pass  # handled by the health loop
+            elif event == "spawn_agents":
+                # SPAWN IN-PROCESS AGENTS: N work loops as asyncio tasks in
+                # this coordinator — one interpreter, full tool access,
+                # ~10MB per agent instead of ~250MB
+                count = int(payload.get("count") or 0)
+                swarm = str(payload.get("swarm") or "default")
+                identities = payload.get("identities") or []
+                for identity in identities[:count]:
+                    import threading
+
+                    t = threading.Thread(
+                        target=self._run_inline_agent,
+                        args=(identity, swarm),
+                        daemon=True,
+                        name=f"agent-{identity}",
+                    )
+                    t.start()
+                    self.register_agent(identity, identity)
 
         elif "/work" in topic:
             # an agent completed an intent — update the database

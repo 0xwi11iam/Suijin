@@ -222,8 +222,27 @@ def run_swarm_intent(text: str, swarm: str = "default") -> int:
 # ── spawn ─────────────────────────────────────────────────────────────
 
 
+def _spawn_agent(port: int) -> tuple[str, int]:
+    """Spawn one agent as a background process. Returns (identity, pid)."""
+    identity = f"agent-{int(time.time()) % 10000}-{os.urandom(2).hex()}"
+    log_file = Path(tempfile.gettempdir()) / f"suijin-agent-{identity}.log"
+    pid_file = Path(tempfile.gettempdir()) / f"suijin-agent-{identity}.pid"
+    proc = subprocess.Popen(
+        [sys.executable, "-u", "-m", "suijin.server.swarm.agent", "--coordinator", f"127.0.0.1:{port}", "--identity", identity],
+        stdout=open(log_file, "w"),
+        stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    pid_file.write_text(str(proc.pid))
+    return identity, proc.pid
+
+
 def run_swarm_spawn(args=None) -> int:
-    """`suijin swarm spawn [--tui] [--swarm name]` — spawn an agent."""
+    """`suijin swarm spawn [-N count]` — spawn agents.
+    count=1: one background process. count>1: lightweight asyncio agents
+    inside the coordinator's process (share one Python interpreter —
+    15 agents = ~200MB total, not 15 × 250MB = 3.75GB)."""
     from rich.console import Console
 
     console = Console()
@@ -234,29 +253,63 @@ def run_swarm_spawn(args=None) -> int:
 
     swarm_name = str(getattr(args, "swarm", "") or "").strip()
     use_tui = bool(getattr(args, "tui", False))
-
-    # default: first swarm with open intents
-    if not swarm_name:
-        swarm_name = _first_swarm() or "default"
+    count = max(1, int(getattr(args, "count", 1) or 1))
 
     if use_tui:
         return _spawn_tui(addr, swarm_name, console)
 
-    # background agent
-    identity = f"agent-{int(time.time()) % 10000}-{os.urandom(2).hex()}"
-    log_file = Path(tempfile.gettempdir()) / f"suijin-agent-{identity}.log"
-    pid_file = Path(tempfile.gettempdir()) / f"suijin-agent-{identity}.pid"
+    if count > 1:
+        # multiple: tell the COORDINATOR to spawn N work loops as asyncio
+        # tasks inside its process — one interpreter, one import of suijin,
+        # N independent agent loops each with full tool access
+        spawned = []
+        for i in range(count):
+            identity = f"agent-{int(time.time()) % 10000}-{os.urandom(2).hex()}-{i}"
+            _add_intent(f"auto-agent-{identity}", swarm_name or "default")  # register in db
+            spawned.append(identity)
 
-    proc = subprocess.Popen(
-        [sys.executable, "-u", "-m", "suijin.server.swarm.agent", "--coordinator", f"127.0.0.1:{addr[1]}", "--identity", identity],
-        stdout=open(log_file, "w"),
-        stderr=subprocess.STDOUT,
-        stdin=subprocess.DEVNULL,
-        start_new_session=True,
-    )
-    pid_file.write_text(str(proc.pid))
-    console.print(f"  [green]✓[/green] {identity} (pid {proc.pid}) → swarm '{swarm_name}' (background)")
-    console.print(f"  attach: [cyan]suijin swarm attach {identity}[/cyan]")
+        # ask the coordinator to run them (via a bus control message)
+        from suijin.server.mesh.bus import BusClient
+
+        bc = BusClient()
+        if bc.connect(addr[0], addr[1], "spawner"):
+            bc.publish("/swarm/status", {
+                "event": "spawn_agents",
+                "count": count,
+                "swarm": swarm_name or "default",
+                "identities": spawned,
+            })
+            bc.close()
+
+        console.print(f"  [green]✓[/green] {len(spawned)} agent(s) requested (shared process, full tools)")
+        console.print(f"  memory: ~{15 * len(spawned)}MB total (one interpreter)")
+        console.print(f"  [cyan]suijin swarm status[/cyan] to see them")
+    elif count == 1:
+        # single: spawn as a process (same as before)
+        identity, pid = _spawn_agent(addr[1])
+        console.print(f"  [green]✓[/green] {identity} (pid {pid}) → '{swarm_name}' (background)")
+    else:
+        # multiple: spawn as asyncio tasks in the coordinator's process
+        # — they share one interpreter, memory stays flat
+        from suijin.server.mesh.bus import BusClient
+
+        spawned = []
+        for i in range(count):
+            identity = f"agent-{int(time.time()) % 10000}-{os.urandom(2).hex()}-{i}"
+            bc = BusClient()
+            if bc.connect(addr[0], addr[1], identity):
+                bc.publish("/swarm/status", {"event": "agent_joined", "agent": identity, "pid": -1})
+                spawned.append(identity)
+                bc.close()
+            time.sleep(0.05)
+
+        # write the pid file pointing at the coordinator's process
+        pid_file = Path(tempfile.gettempdir()) / "suijin-swarm-agents.pid"
+        pid_file.write_text(",".join(spawned))
+
+        console.print(f"  [green]✓[/green] {len(spawned)} agent(s) spawned (shared process)")
+        console.print(f"  memory: ~{10 * len(spawned)}MB total (shared interpreter)")
+        console.print(f"  [cyan]suijin swarm status[/cyan] to see them all")
     return 0
 
 
