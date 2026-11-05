@@ -3,6 +3,15 @@
 import json as _json
 import warnings as _warnings
 
+# NAMESPACE UNIFIER (2026-11-05): one module object per file, forever.
+# Without this, suijin.modules.* and suijin.server.* are loaded as
+# SEPARATE objects (same file, two Python objects) — the root cause of
+# every "patch one, the other is live" bug and the order-dependent test
+# flakes. Must be installed BEFORE any suijin submodule import.
+from suijin.server.platform.lib.namespace_unifier import install as _install_unifier
+
+_install_unifier()
+
 # Third-party deprecation noise (langgraph serializer advisory) — must live
 # HERE, at package init: every entrypoint imports `suijin` before anything
 # can pull langgraph in, so this filter always wins the race. The filters
