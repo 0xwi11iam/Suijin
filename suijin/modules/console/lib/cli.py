@@ -1556,6 +1556,14 @@ def _run_swarm(
         from suijin.server.swarm.coordinator import run_swarm_status
 
         return run_swarm_status()
+    if action == "pause":
+        from suijin.server.swarm.lifecycle import run_swarm_pause
+
+        return run_swarm_pause()
+    if action == "resume":
+        from suijin.server.swarm.lifecycle import run_swarm_resume
+
+        return run_swarm_resume()
     if action == "stop":
         from suijin.server.swarm.lifecycle import run_swarm_stop_all
 
@@ -2554,7 +2562,11 @@ def main(argv=None):
     attach_p.set_defaults(func=lambda a: _run_swarm("attach", agent_id=a.agent_id))
 
     swarm_sub.add_parser("status", help="all swarms, agents, intents").set_defaults(func=lambda a: _run_swarm("status"))
-    swarm_sub.add_parser("stop", help="stop everything").set_defaults(func=lambda a: _run_swarm("stop"))
+    swarm_sub.add_parser("pause", help="freeze all agents (resume exactly where they were)").set_defaults(
+        func=lambda a: _run_swarm("pause")
+    )
+    swarm_sub.add_parser("resume", help="wake all paused agents").set_defaults(func=lambda a: _run_swarm("resume"))
+    swarm_sub.add_parser("stop", help="kill everything").set_defaults(func=lambda a: _run_swarm("stop"))
     swarm_cmd.set_defaults(func=lambda a: _run_swarm("status"))
 
     agent_cmd = sub.add_parser("agent", help="headless swarm agent (connects to a coordinator)")

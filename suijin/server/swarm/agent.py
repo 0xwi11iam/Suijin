@@ -70,7 +70,22 @@ class SwarmAgent:
             # claim the next intent
             intent = self._claim_intent()
             if not intent:
-                time.sleep(5)  # no work — idle
+                # check the bus for new work (the coordinator broadcasts
+                # new intents; agents pick them up immediately instead of
+                # sleeping 5s between polls)
+                self._handle_control()
+                for msg in self._bus.drain(10):
+                    topic = str(msg.get("topic") or "")
+                    if "/work" in topic or "/swarm/status" in topic:
+                        intent = self._claim_intent()
+                        if intent:
+                            self._current_intent = intent
+                            print(f"[{self._identity}] picked up: {intent['text'][:60]}")
+                            result = self._execute_intent(intent)
+                            self._complete_intent(intent, result)
+                            self._current_intent = None
+                            continue
+                time.sleep(1)  # brief idle between bus checks
                 continue
 
             self._current_intent = intent
