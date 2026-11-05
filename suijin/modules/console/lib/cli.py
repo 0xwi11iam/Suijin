@@ -2552,12 +2552,12 @@ def main(argv=None):
     intent_p.add_argument("--swarm", default="", help="swarm name (default: most recent)")
     intent_p.set_defaults(func=lambda a: _run_swarm("intent", intent_text=" ".join(a.text), swarm_name=a.swarm))
 
-    spawn_p = swarm_sub.add_parser("spawn", help="spawn an agent")
+    spawn_p = swarm_sub.add_parser("spawn", help="spawn an agent (same agent either way — --tui just shows it in this terminal)")
     spawn_p.add_argument("--tui", action="store_true", help="full TUI in this terminal")
     spawn_p.add_argument("--swarm", default="", help="swarm name (default: first with open intents)")
     spawn_p.set_defaults(func=lambda a: _run_swarm("spawn", tui=a.tui, swarm_name=a.swarm))
 
-    attach_p = swarm_sub.add_parser("attach", help="attach to an agent")
+    attach_p = swarm_sub.add_parser("attach", aliases=["view"], help="view a live agent's output")
     attach_p.add_argument("agent_id", nargs="?", default="", help="agent id (default: latest)")
     attach_p.set_defaults(func=lambda a: _run_swarm("attach", agent_id=a.agent_id))
 

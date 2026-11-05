@@ -3,7 +3,8 @@
 suijin swarm init                    → start; if old intents exist, ask before wiping
 suijin swarm init "test X for Y"    → start + queue this intent immediately
 suijin swarm intent "do X"           → append to the intent list (never replaces)
-suijin swarm spawn [--swarm name]    → spawn an agent to the named swarm (default: first)
+suijin swarm spawn [--swarm name]    → spawn an agent; --tui shows it in this terminal
+                                       (same agent either way — --tui is just a view)
 suijin swarm spawn --tui             → same but with the full TUI in this terminal
 suijin swarm status                  → all swarms, all agents, all intents
 suijin swarm stop                    → stop everything
@@ -172,8 +173,8 @@ def run_swarm_init(args=None) -> int:
             f"[green]swarm coordinator running[/green] on port {addr[1]}\n\n"
             f"[bold]swarms:[/bold]\n{swarm_lines}\n\n"
             f"[bold]spawn agents:[/bold]\n"
-            f"  [cyan]suijin swarm spawn[/cyan]          ← background agent (first swarm)\n"
-            f"  [cyan]suijin swarm spawn --tui[/cyan]    ← full TUI in this terminal\n"
+            f"  [cyan]suijin swarm spawn[/cyan]            ← run an agent (view it: swarm view)\n"
+            f"  [cyan]suijin swarm spawn --tui[/cyan]      ← same agent, shown in this terminal\n"
             f"  [cyan]suijin swarm spawn --swarm name[/cyan] ← specific swarm\n\n"
             f"[bold]add work:[/bold]\n"
             f"  [cyan]suijin swarm intent \"test X for Y\"[/cyan]\n\n"
@@ -261,7 +262,7 @@ def run_swarm_spawn(args=None) -> int:
 
 def _spawn_tui(addr: tuple[str, int], swarm_name: str, console) -> int:
     """Spawn with the full TUI — claims an intent and launches."""
-    identity = f"tui-{int(time.time()) % 10000}-{os.urandom(2).hex()}"
+    identity = f"agent-{int(time.time()) % 10000}-{os.urandom(2).hex()}"
 
     intent = _claim_intent_for(identity, swarm_name)
     if not intent:
@@ -382,27 +383,39 @@ def _claim_intent_for(agent_id: str, swarm: str = "") -> dict | None:
 
 
 def run_swarm_attach(args=None) -> int:
-    """`suijin swarm attach [agent-id]` — tail an agent's output."""
+    """`suijin swarm view [agent-id]` — watch a live agent.
+
+    Agents are agents — TUI-spawned or headless, same process, same
+    engagement, same output. view tails the agent's log live; if the
+    agent isn't running, lists the ones that are."""
     from rich.console import Console
 
     console = Console()
     identity = str(getattr(args, "agent_id", "") or "").strip()
 
-    if not identity:
-        pid_files = sorted(Path(tempfile.gettempdir()).glob("suijin-agent-*.pid"), key=lambda p: p.stat().st_mtime)
-        if not pid_files:
-            console.print("[yellow]no agents — [cyan]suijin swarm spawn[/cyan][/yellow]")
-            return 1
-        identity = pid_files[-1].stem.replace("suijin-agent-", "")
-
-    log_file = Path(tempfile.gettempdir()) / f"suijin-agent-{identity}.log"
-    if not log_file.is_file():
-        console.print(f"[yellow]agent '{identity}' not found[/yellow]")
+    pid_files = sorted(Path(tempfile.gettempdir()).glob("suijin-agent-*.pid"), key=lambda p: p.stat().st_mtime)
+    if not pid_files:
+        console.print("[yellow]no agents running — [cyan]suijin swarm spawn[/cyan][/yellow]")
         return 1
 
-    console.print(f"[bold]attached to {identity}[/bold] (Ctrl+C to detach)\n")
+    if not identity:
+        identity = pid_files[-1].stem.replace("suijin-agent-", "")
+
+    # list running agents if the requested one isn't found
+    log_file = Path(tempfile.gettempdir()) / f"suijin-agent-{identity}.log"
+    if not log_file.is_file():
+        console.print(f"[yellow]agent '{identity}' not found. Running:[/yellow]")
+        for pf in pid_files[-10:]:
+            aid = pf.stem.replace("suijin-agent-", "")
+            alive = True
+            with contextlib.suppress(Exception):
+                os.kill(int(pf.read_text().strip()), 0)
+            console.print(f"    [cyan]suijin swarm view {aid}[/cyan]")
+        return 1
+
+    console.print(f"[bold]viewing {identity}[/bold] (Ctrl+C to exit)\n")
     try:
-        proc = subprocess.Popen(["tail", "-f", str(log_file)], stdin=subprocess.DEVNULL)
+        proc = subprocess.Popen(["tail", "-n", "40", "-f", str(log_file)], stdin=subprocess.DEVNULL)
         proc.wait()
     except KeyboardInterrupt:
         proc.terminate()
