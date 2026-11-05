@@ -259,18 +259,41 @@ class SwarmAgent:
             )
             # persist facts — the status metric and the report read these
             for fact in result.get("facts", []):
+                summary = str(fact.get("summary", ""))[:300]
+                evidence = str(fact.get("evidence", ""))[:200]
                 db.execute(
                     "INSERT INTO facts (id, summary, evidence, agent_id, engagement, created_at) "
                     "VALUES (?, ?, ?, ?, ?, ?)",
                     (
                         f"fact-{os.urandom(4).hex()}",
-                        str(fact.get("summary", ""))[:300],
-                        str(fact.get("evidence", ""))[:200],
+                        summary,
+                        evidence,
                         self._identity,
                         intent.get("engagement", ""),
                         time.time(),
                     ),
                 )
+                # CONFIRMED tool results promote to findings so `swarm
+                # status` and the report see them (the findings table is
+                # what the operator reads first)
+                if "CONFIRMED" in summary:
+                    sev = "unknown"
+                    for level in ("CRITICAL", "HIGH", "MEDIUM", "LOW"):
+                        if level in summary.upper():
+                            sev = level.lower()
+                            break
+                    db.execute(
+                        "INSERT INTO findings (id, title, status, severity, agent_id, engagement, created_at) "
+                        "VALUES (?, ?, 'confirmed', ?, ?, ?, ?)",
+                        (
+                            f"find-{os.urandom(4).hex()}",
+                            summary[:120],
+                            sev,
+                            self._identity,
+                            intent.get("engagement", ""),
+                            time.time(),
+                        ),
+                    )
             db.commit()
             db.close()
 

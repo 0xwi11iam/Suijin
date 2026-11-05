@@ -134,6 +134,14 @@ REprompt_TOOL = (
     "if the intent is genuinely finished."
 )
 
+REprompt_TRUNCATED = (
+    "Your last reply was CUT OFF before the JSON closed (your command was too "
+    "long for one reply). Split the work: write long scripts/payloads to disk "
+    'with write_file first, then reply with a SHORT call — {"action": '
+    '"use_tool", "tool_name": "execute_terminal", "args": {"cmd": '
+    '"python3 script.py"}}. Keep every reply well under the length limit.'
+)
+
 
 def execute_intent(
     identity: str,
@@ -167,7 +175,10 @@ def execute_intent(
             from suijin.modules.providers.lib import generate
 
             cfg = load_config()
-            cfg.setdefault("max_tokens_per_request", 4000)
+            cfg["max_tokens_per_request"] = max(
+                int(cfg.get("max_tokens_per_request") or 0), 8000
+            )  # long shell payloads truncated mid-JSON = the dominant
+            # unparseable-reply cause; 4k cut real probes off
             cfg["intelligence"] = "medium"  # workers don't need max thinking
             response = generate(messages, cfg)
         except Exception as e:  # noqa: BLE001 — provider errors become 'blocked'
@@ -180,10 +191,20 @@ def execute_intent(
         decision = _parse_decision(response)
         if decision is None:
             parse_fails += 1
-            if parse_fails >= 3:
-                return {"state": "blocked", "facts": facts, "note": "model never emitted a JSON decision (3 strikes)"}
+            # truncation is the dominant failure: the model writes a long
+            # shell one-liner, the reply is cut mid-JSON, and every retry
+            # repeats it. The corrective teaches the split: file first,
+            # short command second.
+            truncated = ("tool_name" in response or response.lstrip().startswith("{")) and not response.rstrip().endswith("}")
+            print(
+                f"[{identity}] strike {parse_fails}: unparseable reply "
+                f"(truncated={truncated}, head: {response[:120]!r})",
+                flush=True,
+            )
+            if parse_fails >= 5:
+                return {"state": "blocked", "facts": facts, "note": "model never emitted a JSON decision (5 strikes)"}
             messages.append({"role": "assistant", "content": response})
-            messages.append({"role": "user", "content": REprompt_TOOL})
+            messages.append({"role": "user", "content": REprompt_TRUNCATED if truncated else REprompt_TOOL})
             continue
 
         action = str(decision.get("action") or "use_tool")
@@ -196,6 +217,26 @@ def execute_intent(
         tool_args = decision.get("tool_args") or {}
 
         if not tool_name:
+            # plan_tools / ask_operator / write_note-only are legitimate
+            # decision shapes — redirect them to execution instead of
+            # burning strikes (one intent died to 'never carried a
+            # tool_name' while the model was emitting valid plans)
+            if action in ("plan_tools", "write_note", "switch_skill", "deploy_subagent"):
+                messages.append({"role": "assistant", "content": response})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "Good plan. Now EXECUTE it: reply with ONE JSON object "
+                            '{"action": "use_tool", "tool_name": "<first tool from '
+                            'your plan>", "args": {...}}'
+                        ),
+                    }
+                )
+                continue
+            if action in ("ask_operator", "ask_user"):
+                q = str(decision.get("question") or decision.get("reason") or "")
+                return {"state": "blocked", "facts": facts, "note": f"asked operator: {q[:150]}"}
             parse_fails += 1
             if parse_fails >= 3:
                 return {"state": "blocked", "facts": facts, "note": "decisions never carried a tool_name (3 strikes)"}
