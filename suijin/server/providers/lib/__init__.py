@@ -139,7 +139,10 @@ def _apply_effort(
         if openai_style:
             if str(provider or "").lower() == "ollama" and not _model_declares_thinking(model):
                 return  # standard local models 400 on this field
-            payload["reasoning_effort"] = tier
+            # WIRE VOCABULARY (field run 2026-11-06): the internal ladder
+            # shortens medium→med, but endpoints expect the full word —
+            # bigmodel answered 1210 'reasoning_effort 参数值非法' on 'med'.
+            payload["reasoning_effort"] = {"med": "medium"}.get(tier, tier)
         else:
             payload["thinking"] = {"type": "disabled" if tier == "low" else "enabled"}
             budget_frac = {"low": 0.0, "med": 0.5, "high": 0.75, "xhigh": 0.9, "max": 1.0}.get(tier, 1.0)

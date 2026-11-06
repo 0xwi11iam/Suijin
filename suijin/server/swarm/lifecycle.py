@@ -94,6 +94,36 @@ def _first_swarm() -> str | None:
 # ── init ──────────────────────────────────────────────────────────────
 
 
+def _wait_for_schema(timeout: float = 15.0) -> bool:
+    """The coordinator creates the db schema shortly after the bus port
+    appears — proceeding before it is the 'no such table: intents' race
+    (field run, 2026-11-06). Poll until the intents table exists.
+
+    swarm_db_path is imported LAZILY: it is not a module-level name
+    here, and the bare reference NameError'd every poll — suppressed,
+    the wait 'timed out' while the schema sat ready (the cold-hunt
+    failure, found by instrumenting the INSTALLED copy)."""
+    import sqlite3
+
+    from suijin.server.swarm.coordinator import swarm_db_path
+
+    deadline = time.time() + timeout
+    _dbg = os.environ.get("SUIJIN_SCHEMA_DEBUG")
+    attempt = 0
+    while time.time() < deadline:
+        try:
+            db = sqlite3.connect(str(swarm_db_path()), timeout=3)
+            db.execute("SELECT COUNT(*) FROM intents").fetchone()
+            db.close()
+            return True
+        except Exception as e:
+            if _dbg and attempt < 5:
+                print(f"[schema-wait] {attempt}: {e.__class__.__name__}: {str(e)[:80]} path={swarm_db_path()}", flush=True)
+            attempt += 1
+        time.sleep(0.3)
+    return False
+
+
 def run_swarm_init(args=None) -> int:
     """`suijin swarm init [intent text]` — start the coordinator.
 
@@ -132,6 +162,9 @@ def run_swarm_init(args=None) -> int:
         if not addr:
             console.print(f"[red]coordinator failed — check {coordinator_log}[/red]")
             return 1
+    if not _wait_for_schema():
+        console.print("[red]coordinator up but the database never became ready[/red]")
+        return 1
 
     # check for existing intents (only wipe if operator confirms)
     db = _db()
@@ -233,13 +266,19 @@ def run_swarm_intent(text: str, swarm: str = "default", force: bool = False) -> 
 # ── spawn ─────────────────────────────────────────────────────────────
 
 
-def _spawn_agent(port: int) -> tuple[str, int]:
-    """Spawn one agent as a background process. Returns (identity, pid)."""
+def _spawn_agent(port: int, mission: str = "") -> tuple[str, int]:
+    """Spawn one agent as a background HOST process. Returns (identity, pid).
+    mission = the engagement title: worked when the queue runs dry
+    (title-following — agents just follow the title, no intents needed)."""
     identity = f"agent-{int(time.time()) % 10000}-{os.urandom(2).hex()}"
     log_file = Path(tempfile.gettempdir()) / f"suijin-agent-{identity}.log"
     pid_file = Path(tempfile.gettempdir()) / f"suijin-agent-{identity}.pid"
+    argv = [sys.executable, "-u", "-m", "suijin.server.swarm.agent",
+            "--coordinator", f"127.0.0.1:{port}", "--identity", identity]
+    if mission:
+        argv += ["--mission", mission]
     proc = subprocess.Popen(
-        [sys.executable, "-u", "-m", "suijin.server.swarm.agent", "--coordinator", f"127.0.0.1:{port}", "--identity", identity],
+        argv,
         stdout=open(log_file, "w"),
         stderr=subprocess.STDOUT,
         stdin=subprocess.DEVNULL,
@@ -286,7 +325,8 @@ def run_swarm_spawn(args=None) -> int:
         names = []
         for _ in range(sandbox_n):
             identity = f"agent-{int(time.time()) % 10000}-{os.urandom(2).hex()}-sbx"
-            name = hv.spawn_sandbox_agent(box_addr, identity, swarm_name or "default", on_log=console.print)
+            _mission = str(getattr(args, "mission", "") or "")
+            name = hv.spawn_sandbox_agent(box_addr, identity, swarm_name or "default", on_log=console.print, mission=_mission)
             if name:
                 names.append(name)
                 console.print(f"  [green]✓[/green] {identity} in box [cyan]{name}[/cyan]")
@@ -325,8 +365,8 @@ def run_swarm_spawn(args=None) -> int:
         console.print(f"  memory: ~{15 * len(spawned)}MB total (one interpreter)")
         console.print(f"  [cyan]suijin swarm status[/cyan] to see them")
     elif count == 1:
-        # single: spawn as a process (same as before)
-        identity, pid = _spawn_agent(addr[1])
+        # single: spawn as a host process (same as before)
+        identity, pid = _spawn_agent(addr[1], mission=str(getattr(args, "mission", "") or ""))
         console.print(f"  [green]✓[/green] {identity} (pid {pid}) → '{swarm_name}' (background)")
     else:
         # multiple: spawn as asyncio tasks in the coordinator's process
@@ -559,6 +599,61 @@ def run_swarm_resume(args=None) -> int:
             bc.close()
     console.print("[green]resumed — agents continue from where they held[/green]")
     return 0
+
+
+def run_swarm_hunt(title: str = "", host_n: int = 0, boxed_n: int = 0) -> int:
+    """`suijin swarm hunt "<title>"` — start a hunt by TITLE.
+
+    The title IS the work (operator design, 2026-11-06): the swarm is
+    named for the engagement title and agents follow it directly as
+    their standing mission — no intents required. Intents can still be
+    queued later for specific lanes; they take priority when present.
+    CLI twin of the TUI new-hunt flow."""
+    from rich.console import Console
+
+    console = Console()
+    title = str(title or "").strip()
+    if not title:
+        console.print('[red]usage: suijin swarm hunt "what to hunt" --host N --boxed N[/red]')
+        return 1
+    addr = _bus_addr()
+    if not addr:
+        console.print("[yellow]no coordinator — starting one…[/yellow]")
+        import subprocess as _sp
+
+        _sp.run(["suijin", "swarm", "init", title], timeout=120)
+        addr = _bus_addr()
+        if not addr or not _wait_for_schema():
+            console.print("[red]could not start the swarm[/red]")
+            return 1
+    host_n = max(0, int(host_n or 0))
+    boxed_n = max(0, int(boxed_n or 0))
+    if not host_n and not boxed_n:
+        host_n = 4  # sensible default: 4 host agents
+    console.print(f'  hunt: [bold]{title[:70]}[/bold]')
+    console.print(f"  agents: {host_n} host + {boxed_n} boxed — the title is their standing mission")
+    rc = 0
+    if boxed_n:
+        import types as _types
+
+        r = run_swarm_spawn(_types.SimpleNamespace(
+            tui=False, swarm="default", count=0, sandbox=boxed_n, mission=title))
+        rc = rc or r
+    for _ in range(host_n):
+        import types as _types
+
+        r = run_swarm_spawn(_types.SimpleNamespace(
+            tui=False, swarm="default", count=1, sandbox=0, mission=title))
+        rc = rc or r
+    console.print("  [cyan]suijin swarm console[/cyan] to watch · [cyan]suijin swarm say[/cyan] to steer")
+    return rc
+
+
+def run_swarm_control() -> int:
+    """`suijin swarm control` — the full-screen hub (state + actions)."""
+    from suijin.server.swarm.control import run_hub_cmd
+
+    return run_hub_cmd()
 
 
 def run_swarm_say(args=None) -> int:

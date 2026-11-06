@@ -195,6 +195,14 @@ ALL_FIELDS = OrderedDict(
         ("mode_deploy_subagent", ("bool",)),
         ("mode_audit_trail", ("bool",)),
         ("subagent_count", ("int", (1, 5))),
+        # ---- Swarm (operator section, 2026-11-06) ----
+        # turn cap: 0 = NO CAP (the default — agents run until done;
+        # strikes and provider errors still bound runaway loops)
+        ("swarm_turn_cap", ("int", (0, 100000))),
+        # autopilot: queue follow-up work from facts when everything idles
+        ("swarm_autopilot", ("bool",)),
+        # warm pile size: idle boxes kept ready for the next engagement
+        ("sandbox_pool_size", ("int", (0, 32))),
         # ---- Workspace & integrations ----
         ("metasploit_rpc_host", ("string",)),
         ("metasploit_rpc_port", ("int", (1, 65535))),
@@ -586,6 +594,10 @@ FIELD_INFO = {
     "final_model_id": ("Main model", "the HuggingFace model the agent runs on", "model"),
     "sentinel_model_id": ("Sentinel model", "the second opinion on every finding", "model"),
     "zai_endpoint": ("z.ai plan", "coding plan (monthly) or pay-per-token", "model"),
+    # -- swarm --
+    "swarm_turn_cap": ("swarm turn cap", "0 = no cap (agents run until done)", "swarm"),
+    "swarm_autopilot": ("swarm autopilot", "queue follow-up work when everything idles", "swarm"),
+    "sandbox_pool_size": ("warm pile size", "idle boxes kept ready for the next engagement", "swarm"),
     # -- how far it may run --
     "max_iterations": ("Iteration cap", "hard ceiling on think→act→respond cycles", "limits"),
     "max_tokens_per_request": ("Reply size", "max tokens per model response", "limits"),
