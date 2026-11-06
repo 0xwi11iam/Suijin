@@ -289,7 +289,9 @@ def run_auth_cmd(args) -> int:
     mode_paste = bool(getattr(args, "paste", False))
     mode_browser = bool(getattr(args, "browser", False))
     do_check = bool(getattr(args, "check", False))
-    do_list = bool(getattr(args, "list", False)) or not target
+    do_list = bool(getattr(args, "list", False))  # explicit ONLY — bare
+    # `suijin auth` must reach the live browser, not fall into the list
+    # branch (the bug the operator hit two minutes after shipping)
 
     if do_list:
         files = sorted(sessions_dir().glob("*.json"))
@@ -304,9 +306,15 @@ def run_auth_cmd(args) -> int:
             print(f"  {f.stem:40s} {n:3d} cookies  saved {age_h:.1f}h ago")
         return 0
 
-    if not mode_paste and not mode_browser and not do_check:
-        # bare `suijin auth` — the live cookie jar
+    if not target and not mode_paste and not mode_browser and not do_check:
+        # bare `suijin auth` — the live cookie jar (sessions persist in
+        # the profile; cookies stored locally, shared across engagements)
         return live_session_browser()
+
+    if not target:
+        print("usage: suijin auth <target> --paste | --browser | --check")
+        print("  (or bare `suijin auth` for the live cookie jar browser)")
+        return 1
 
     if do_check:
         print(check_session(target, name, str(getattr(args, "check_url", "") or "")))
