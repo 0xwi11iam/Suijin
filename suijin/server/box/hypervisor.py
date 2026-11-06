@@ -238,10 +238,21 @@ def _mac_home_suijin() -> Path:
     return Path(WORKSPACE_DIR).parent  # ~/.suijin
 
 
-def sandbox_spec(name: str, coordinator: str, identity: str, engagement: str = "default") -> dict:
+def sandbox_spec(name: str, coordinator: str, identity: str, engagement: str = "default", mission: str = "") -> dict:
     """Everything needed to `docker create` one agent sandbox."""
     home = _mac_home_suijin()
     (home / "engagements").mkdir(parents=True, exist_ok=True)
+    env = {
+        "SUIJIN_COORDINATOR": coordinator,
+        "SUIJIN_IDENTITY": identity,
+        "SUIJIN_ENGAGEMENT": engagement,
+        # config loader resolves ~/.suijin/config; HOME=/root in image
+        "HOME": "/root",
+    }
+    argv = ["--coordinator", coordinator, "--identity", identity]
+    if mission:
+        env["SUIJIN_MISSION"] = mission  # the engagement title — followed when the queue runs dry
+        argv += ["--mission", mission]
     return {
         "name": name,
         "image": image_tag(),
@@ -249,7 +260,7 @@ def sandbox_spec(name: str, coordinator: str, identity: str, engagement: str = "
             # config ro — credentials/sessions/settings live-update by
             # construction (same file through a window; no sync step)
             f"{home / 'config'}:/root/.suijin/config:ro",
-            # shared swarm db (coordinator on the mac + every agent)
+            # shared swarm db (coordinator on the host + every agent)
             f"{home / 'swarm'}:/root/.suijin/swarm:rw",
             # the engagements ROOT, not one slug — agents derive their
             # own engagement dir (e.g. _default) and every write must
@@ -258,14 +269,8 @@ def sandbox_spec(name: str, coordinator: str, identity: str, engagement: str = "
             # with the box (2026-11-06).
             f"{home / 'engagements'}:/root/.suijin/engagements:rw",
         ],
-        "env": {
-            "SUIJIN_COORDINATOR": coordinator,
-            "SUIJIN_IDENTITY": identity,
-            "SUIJIN_ENGAGEMENT": engagement,
-            # config loader resolves ~/.suijin/config; HOME=/root in image
-            "HOME": "/root",
-        },
-        "args": ["--coordinator", coordinator, "--identity", identity],
+        "env": env,
+        "args": argv,
     }
 
 
@@ -311,7 +316,8 @@ def pool_target() -> int:
     with contextlib.suppress(Exception):
         from suijin.modules.platform.lib.config_loader import load_config
 
-        return max(0, int((load_config() or {}).get("sandbox", {}).get("pool_size", 4)))
+        cfg = load_config() or {}
+        return max(0, int(cfg.get("sandbox_pool_size", cfg.get("sandbox", {}).get("pool_size", 4))))
     return 4
 
 
@@ -333,8 +339,36 @@ def pool_refill(on_log=None, coordinator: str = "", engagement: str = "default")
     return created
 
 
-def create_sandbox(name: str, coordinator: str, identity: str, engagement: str = "default") -> bool:
-    spec = sandbox_spec(name, coordinator, identity, engagement)
+def pool_refill_to(n: int, on_log=print, engagement: str = "default") -> int:
+    """SUMMON idle boxes into the warm pile — no intent, no agent, just
+    pre-created containers sleeping until the next engagement needs
+    them (operator design: 'summoned and used in the next engagement
+    if required')."""
+    n = max(0, min(32, int(n)))
+    have = len(pool_members())
+    created = 0
+    for _ in range(n - have):
+        name = f"{POOL_PREFIX}-{int(time.time())}-{os.urandom(2).hex()}"
+        if create_sandbox(name, "127.0.0.1:1", "pooled", engagement):
+            created += 1
+    on_log(f"  ✓ warm pile: {have} → {have + created} idle box(es) (target {n})")
+    return created
+
+
+def destroy_idle_boxes(on_log=print) -> int:
+    """DESTROY idle boxes — the warm pile and any stopped sandbox, never
+    a running agent box. The opposite of summon."""
+    doomed = pool_members() + [b["name"] for b in sandbox_ls() if "up" not in b["status"].lower()]
+    n = 0
+    for name in doomed:
+        if sandbox_stop(name):
+            n += 1
+    on_log(f"  ✓ destroyed {n} idle box(es) — running agents untouched")
+    return n
+
+
+def create_sandbox(name: str, coordinator: str, identity: str, engagement: str = "default", mission: str = "") -> bool:
+    spec = sandbox_spec(name, coordinator, identity, engagement, mission=mission)
     if not image_exists():
         return False
     argv = ["create", "--name", name]
@@ -349,15 +383,16 @@ def create_sandbox(name: str, coordinator: str, identity: str, engagement: str =
     return True
 
 
-def spawn_sandbox_agent(coordinator: str, identity: str, engagement: str = "default", on_log=print) -> str | None:
+def spawn_sandbox_agent(coordinator: str, identity: str, engagement: str = "default", on_log=print, mission: str = "") -> str | None:
     """One agent in a box, sub-second: pop a pooled (pre-created)
-    container or create fresh, re-point it, start it."""
+    container or create fresh, re-point it, start it. mission = the
+    engagement title (title-following when the queue runs dry)."""
     name = f"{SBX_PREFIX}-{engagement}-{identity}"
     pooled = pool_members()
     if pooled:
         # take one, re-create under its real name with the real env
         _docker("rm", "-f", pooled[0], timeout=30)
-    if not create_sandbox(name, coordinator, identity, engagement):
+    if not create_sandbox(name, coordinator, identity, engagement, mission=mission):
         on_log(f"  ✗ cannot create {name} (image missing? run: suijin box image build)")
         return None
     rc, out = _docker("start", name, timeout=60)

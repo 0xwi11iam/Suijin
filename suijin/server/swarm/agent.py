@@ -45,10 +45,11 @@ class SwarmAgent:
     REMOTE MODE: runs as a separate process (bootstrap script).
     """
 
-    def __init__(self, coordinator_host: str, coordinator_port: int, identity: str = ""):
+    def __init__(self, coordinator_host: str, coordinator_port: int, identity: str = "", mission: str = ""):
         self._host = coordinator_host
         self._port = coordinator_port
         self._identity = identity or f"agent-{os.getpid()}"
+        self._mission = str(mission or "").strip()  # title-following: worked when the queue runs dry
         self._bus = BusClient()
         self._running = False
         self._current_intent: dict | None = None
@@ -86,10 +87,16 @@ class SwarmAgent:
         self._bus.close()
 
     def run(self):
-        """The main work loop: claim → execute → report → repeat."""
+        """The main work loop: claim → execute → report → repeat.
+
+        TITLE-FOLLOWING (operator design, 2026-11-06): an agent with a
+        standing mission (the engagement title) works THE TITLE when the
+        queue runs dry — no intent mechanics required, the agent just
+        follows the title. Intents, when queued, take priority."""
         if not self._running and not self.start():
             return 1
 
+        mission_runs = 0
         while self._running:
             # check for steering/kill messages
             self._handle_control()
@@ -112,6 +119,15 @@ class SwarmAgent:
                             self._complete_intent(intent, result)
                             self._current_intent = None
                             continue
+                if self._mission and mission_runs < 3:
+                    # queue dry → follow the title (bounded: 3 mission
+                    # passes, then idle for new intents/steering)
+                    mission_runs += 1
+                    print(f"[{self._identity}] queue dry — following the title: {self._mission[:60]}")
+                    mi = {"id": f"mission-{mission_runs}", "text": self._mission, "engagement": "default"}
+                    result = self._execute_intent(mi)
+                    self._complete_intent(mi, result)
+                    continue
                 time.sleep(1)  # brief idle between bus checks
                 continue
 
@@ -347,6 +363,7 @@ def run_agent(args=None) -> int:
     ap = argparse.ArgumentParser(prog="suijin-agent", description="headless swarm agent")
     ap.add_argument("--coordinator", required=True, help="host:port of the coordinator")
     ap.add_argument("--identity", default="", help="agent identity (default: agent-<pid>)")
+    ap.add_argument("--mission", default="", help="standing mission (the engagement title) — worked when the queue is empty")
     parsed = ap.parse_args(args)
 
     host, _, port_s = parsed.coordinator.rpartition(":")
@@ -354,7 +371,7 @@ def run_agent(args=None) -> int:
         print(f"invalid coordinator: {parsed.coordinator} (expected host:port)")
         return 1
 
-    agent = SwarmAgent(host, int(port_s), parsed.identity)
+    agent = SwarmAgent(host, int(port_s), parsed.identity, mission=parsed.mission)
     try:
         return agent.run()
     except KeyboardInterrupt:

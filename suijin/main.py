@@ -40,8 +40,15 @@ def _run_cli(args):
 
 
 def _swarm_menu(console):
-    """SWARM CONTROL — the advanced module. Everything the swarm can do,
-    one screen, no verb memory required."""
+    """SWARM CONTROL — the advanced module. Opens the full-screen hub
+    (state block + every action); plain input screens stay behind it
+    for flows the hub delegates (new hunt, stop)."""
+    with contextlib.suppress(Exception):
+        from suijin.server.swarm.control import run_hub_cmd
+
+        run_hub_cmd()
+        return
+    # fallback (no tty): the original numbered menu
     while True:
         print(chr(27) + "[2J\033[H", end="")
         console.print(Panel.fit("[bold #bd93f9]SWARM[/] [dim]Control[/]", border_style="#30363d"))

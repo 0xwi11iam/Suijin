@@ -184,12 +184,10 @@ def execute_intent(
     INTERJECTION user message (this is how `suijin swarm say` reaches
     agents mid-intent instead of just printing to their log).
 
-    max_turns=0 → read `swarm_turn_cap` from config (default 40). The old
-    hardcoded caps (10, then 25) starved an overnight run: nine lanes hit
-    the cap mid-investigation, the queue emptied, and eight agents idled
-    for hours with tokens to burn. A cap still guards against runaway
-    loops — but it's the operator's knob now, and `exhausted` requeues
-    once via the health sweep instead of dying.
+    max_turns=0 → read `swarm_turn_cap` from config. DEFAULT: NO CAP
+    (operator ruling, 2026-11-06 — "by default no turn cap"; a cap is an
+    explicit setting, not an assumption). 0/absent = unlimited. The
+    strike rules and provider errors still bound runaway loops.
     """
     import time
 
@@ -197,9 +195,10 @@ def execute_intent(
         try:
             from suijin.modules.platform.lib.config_loader import load_config
 
-            max_turns = int(load_config().get("swarm_turn_cap") or 40)
+            cap = int(load_config().get("swarm_turn_cap") or 0)
+            max_turns = cap if cap > 0 else 100000  # no cap configured = effectively unlimited
         except Exception:  # noqa: BLE001 — config read must never kill the loop
-            max_turns = 40
+            max_turns = 100000
 
     messages = [
         {"role": "system", "content": SYSTEM_TEMPLATE.format(catalog=_load_catalog()) + _session_hint()},

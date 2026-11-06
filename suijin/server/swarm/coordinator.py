@@ -317,6 +317,11 @@ class SwarmCoordinator:
         exist, queue deepening intents from the latest facts. Hourly
         cap + duplicate-summary guard: it can never runaway-loop."""
         with contextlib.suppress(Exception):
+            from suijin.modules.platform.lib.config_loader import load_config
+
+            if str((load_config() or {}).get("swarm_autopilot", "true")).lower() in ("false", "0", "no", "off"):
+                return  # operator switched it off in settings
+        with contextlib.suppress(Exception):
             if not self._agents or now - self._last_work_ts <= 600 or now - self._autopilot_last <= 3600:
                 return
             open_n = self._db.execute("SELECT COUNT(*) FROM intents WHERE state='open'").fetchone()[0]
@@ -415,6 +420,11 @@ class _BusEventListener:
         self._client = BusClient()
         if self._client.connect("127.0.0.1", self._coord.bus.port, "coordinator-listener"):
             self._client.subscribe("/swarm/**")
+            # the DATA LAYER answers here (suijin.server.data) — boxes and
+            # remote clients query over the bus; without this subscription
+            # /data/query requests reached the broker but never the handler
+            # (field test from inside a container, 2026-11-06)
+            self._client.subscribe("/data/**")
             self._running = True
             self._thread = threading.Thread(target=self._listen_loop, daemon=True, name="bus-listener")
             self._thread.start()
@@ -465,6 +475,27 @@ class _BusEventListener:
                     )
                     t.start()
                     self._coord.register_agent(identity, identity)
+
+        elif "/data/query" in topic:
+            # THE DATA LAYER over the bus: one aggregator (suijin.server
+            # .data), same answers for local screens AND remote clients
+            # (boxes via host.docker.internal, future desktop/web UIs).
+            rid = str(payload.get("_rid") or "")
+            reply_to = str(payload.get("_reply_to") or "")
+            if rid and reply_to:
+                import threading as _th
+
+                from suijin.server.data import query as _data_query
+
+                q = str(payload.get("q") or "all")
+                eng = str(payload.get("engagement") or "_default")
+
+                def _answer():
+                    with contextlib.suppress(Exception):
+                        result = _data_query(q, engagement=eng)
+                        self._client.publish(reply_to, {"_rid": rid, "_result": result})
+
+                _th.Thread(target=_answer, daemon=True).start()  # async: never block the listener
 
         elif "/work" in topic:
             # an agent completed an intent — update the database

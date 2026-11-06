@@ -1101,6 +1101,14 @@ def run_sandbox_cmd(action: str, name: str = "", tail: int = 40) -> int:
         console.print(f"  [green]✓[/green] removed {res['count']} sandbox(es); warm pile cleared")
         return 0
 
+    if action == "summon":
+        hv.pool_refill_to(int(name or 4), on_log=console.print)
+        return 0
+
+    if action == "destroy-idle":
+        hv.destroy_idle_boxes(on_log=console.print)
+        return 0
+
     if action == "shell":
         return hv.sandbox_shell(name)
 
@@ -1639,6 +1647,7 @@ def _run_swarm(
     intent_text: str = "",
     swarm_name: str = "",
     force: bool = False,
+    mission: str = "",
 ) -> int:
     """Dispatch swarm subcommands."""
     import types
@@ -1653,6 +1662,14 @@ def _run_swarm(
         from suijin.server.swarm.lifecycle import run_swarm_intent
 
         return run_swarm_intent(intent_text, swarm_name or "default", force=force)
+    if action == "hunt":
+        from suijin.server.swarm.lifecycle import run_swarm_hunt
+
+        return run_swarm_hunt(intent_text, host_n=count, boxed_n=sandbox)
+    if action == "control":
+        from suijin.server.swarm.lifecycle import run_swarm_control
+
+        return run_swarm_control()
     if action == "console":
         from suijin.server.swarm.console import run_console_cmd
 
@@ -1664,7 +1681,7 @@ def _run_swarm(
     if action == "spawn":
         from suijin.server.swarm.lifecycle import run_swarm_spawn
 
-        return run_swarm_spawn(types.SimpleNamespace(tui=tui, swarm=swarm_name, count=count, sandbox=sandbox))
+        return run_swarm_spawn(types.SimpleNamespace(tui=tui, swarm=swarm_name, count=count, sandbox=sandbox, mission=mission))
     if action == "attach":
         from suijin.server.swarm.lifecycle import run_swarm_attach
 
@@ -2700,6 +2717,15 @@ def main(argv=None):
     say_p.add_argument("message", nargs="+", help="the message to interject into agent conversations")
     say_p.set_defaults(func=lambda a: _run_swarm("say", intent_text=" ".join(a.message)))
 
+    hunt_p = swarm_sub.add_parser("hunt", help="start a hunt by TITLE — agents follow it directly (no intents needed)")
+    hunt_p.add_argument("title", nargs="+", help="the engagement title; agents work it as their standing mission")
+    hunt_p.add_argument("--host", type=int, default=0, metavar="N", help="N host-process agents")
+    hunt_p.add_argument("--boxed", type=int, default=0, metavar="N", help="N boxed agents (disposable containers)")
+    hunt_p.set_defaults(func=lambda a: _run_swarm("hunt", intent_text=" ".join(a.title), count=a.host, sandbox=a.boxed))
+
+    ctrl_p = swarm_sub.add_parser("control", help="full-screen hub: swarm state + every action")
+    ctrl_p.set_defaults(func=lambda a: _run_swarm("control"))
+
     console_p = swarm_sub.add_parser("console", help="live dashboard: system / agents / intents / findings / details")
     console_p.add_argument("--poll", type=float, default=2.0, help="refresh seconds (default 2)")
     console_p.set_defaults(func=lambda a: _run_swarm("console", count=int(a.poll * 1000)))
@@ -2709,7 +2735,8 @@ def main(argv=None):
     spawn_p.add_argument("--swarm", default="", help="swarm name (default: first with open intents)")
     spawn_p.add_argument("--count", "-N", type=int, default=1, help="how many agents (local: share one process)")
     spawn_p.add_argument("--sandbox", type=int, default=0, metavar="N", help="N agents in disposable boxes (hypervisor)")
-    spawn_p.set_defaults(func=lambda a: _run_swarm("spawn", tui=a.tui, swarm_name=a.swarm, count=a.count, sandbox=a.sandbox))
+    spawn_p.add_argument("--mission", default="", metavar="TITLE", help="standing mission (the engagement title) — agents follow it when the queue is dry")
+    spawn_p.set_defaults(func=lambda a: _run_swarm("spawn", tui=a.tui, swarm_name=a.swarm, count=a.count, sandbox=a.sandbox, mission=a.mission))
 
     attach_p = swarm_sub.add_parser("attach", aliases=["view"], help="view a live agent's output")
     attach_p.add_argument("agent_id", nargs="?", default="", help="agent id (default: latest)")
@@ -2756,6 +2783,12 @@ def main(argv=None):
     stop_p.set_defaults(func=lambda a: run_sandbox_cmd("stop", a.name))
     sbx_sub.add_parser("gc", help="remove ALL sandboxes + the warm pile (engagement data survives)").set_defaults(
         func=lambda a: run_sandbox_cmd("gc")
+    )
+    summon_p = sbx_sub.add_parser("summon", help="pre-create N idle boxes (no agent, no intent — used by the next engagement)")
+    summon_p.add_argument("n", type=int, help="idle boxes to keep in the warm pile")
+    summon_p.set_defaults(func=lambda a: run_sandbox_cmd("summon", "", a.n))
+    sbx_sub.add_parser("destroy-idle", help="destroy idle boxes (warm pile + stopped; running agents untouched)").set_defaults(
+        func=lambda a: run_sandbox_cmd("destroy-idle")
     )
     shell_p = sbx_sub.add_parser("shell", help="shell into a sandbox (interactive)")
     shell_p.add_argument("name")

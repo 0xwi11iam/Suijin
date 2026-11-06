@@ -306,6 +306,26 @@ class BusClient:
     def publish(self, topic: str, payload: dict) -> bool:
         return self._send({"op": "PUB", "topic": topic, "payload": payload, "from": self._identity})
 
+    def request(self, topic: str, payload: dict, timeout: float = 10.0) -> dict | None:
+        """Request/reply over pub/sub: publish with a correlation id +
+        reply topic, subscribe, wait for THE matching reply. This is how
+        the data layer answers remote clients (boxes, future UIs) —
+        same answers as the in-process query(), no new daemon."""
+        import os as _os
+        import time as _time
+
+        rid = _os.urandom(4).hex()
+        reply_topic = f"{topic}/reply/{rid}"
+        self.subscribe(reply_topic)
+        deadline = _time.time() + timeout
+        self.publish(topic, {**payload, "_rid": rid, "_reply_to": reply_topic})
+        while _time.time() < deadline:
+            for msg in self.drain(20):
+                if str(msg.get("topic") or "") == reply_topic:
+                    return (msg.get("payload") or {}).get("_result")
+            _time.sleep(0.05)
+        return None
+
     def drain(self, max_msgs: int = 50) -> list[dict]:
         out = []
         while self._inbox and len(out) < max_msgs:
@@ -329,13 +349,27 @@ def bus_port_file() -> Path:
     return mesh_dir() / "bus.port"
 
 
-def discover_bus() -> tuple[str, int] | None:
-    """Find a running bus broker: read the port file."""
+def discover_bus(verify: bool = True) -> tuple[str, int] | None:
+    """Find a running bus broker: read the port file, then (by default)
+    VERIFY it answers. A stale port file after a crash made init think
+    a coordinator existed — it then waited forever on a schema that
+    would never come (the zombie class, field run 2026-11-06). A port
+    that doesn't accept connections gets its file removed."""
     with contextlib.suppress(Exception):
         p = bus_port_file()
         if p.is_file():
             port = int(p.read_text().strip())
-            return ("127.0.0.1", port)
+            if not verify:
+                return ("127.0.0.1", port)
+            import socket
+
+            with contextlib.suppress(OSError):
+                s = socket.create_connection(("127.0.0.1", port), timeout=1.5)
+                s.close()
+                return ("127.0.0.1", port)
+            # dead port — stale file, remove it so nobody trusts it again
+            with contextlib.suppress(OSError):
+                p.unlink(missing_ok=True)
     return None
 
 
