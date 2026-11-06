@@ -61,6 +61,61 @@ PLAYWRIGHT_MISSING = (
 BROWSER_MISSING = "The chromium browser is not downloaded. Fetch it once, then retry:\n  playwright install chromium\n"
 
 
+def _launch_chromium(pw):
+    """Launch with the standard args (shared by every attempt)."""
+    return pw.chromium.launch(
+        headless=True,
+        args=["--no-sandbox", "--disable-setuid-sandbox", "--no-proxy-server"],
+    )
+
+
+def _boot_browser():
+    """Browsers-path ladder, launch-probed: workspace cache → default.
+
+    Directory heuristics LIE — a stale workspace cache (old revisions,
+    missing the one this playwright wants) looks populated, every tool
+    then died with 'not downloaded' while perfectly good engines sat in
+    the default cache. The launch is the only honest capability check:
+    if the workspace attempt fails with a missing executable, restart
+    playwright WITHOUT the override and use the default cache. Boxes
+    that pre-populate the workspace cache keep it; hosts with default
+    installs work; neither takes the other down.
+
+    Returns (pw, browser) or raises."""
+    import os as _os
+
+    from playwright.sync_api import sync_playwright
+
+    override_set = False
+    with contextlib.suppress(Exception):
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR as _WS
+
+        _ws_cache = _WS / "caches" / "ms-playwright"
+        if _ws_cache.is_dir() and any(_ws_cache.iterdir()) and not _os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
+            _os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(_ws_cache)
+            override_set = True
+
+    pw = sync_playwright().start()
+    try:
+        return pw, _launch_chromium(pw)
+    except Exception as first_err:
+        if not override_set:
+            with contextlib.suppress(Exception):
+                pw.stop()
+            raise first_err
+        # stale workspace cache — fall back to playwright's default
+        with contextlib.suppress(Exception):
+            pw.stop()
+        del _os.environ["PLAYWRIGHT_BROWSERS_PATH"]
+        pw2 = sync_playwright().start()
+        try:
+            return pw2, _launch_chromium(pw2)
+        except Exception:
+            with contextlib.suppress(Exception):
+                pw2.stop()
+            raise
+
+
 def _browser_loop():
     """Boot the browser and serve commands. MUST always set _browser_ready."""
     global _browser_error
@@ -71,16 +126,8 @@ def _browser_loop():
         except ImportError:
             _browser_error = PLAYWRIGHT_MISSING
             return
-        with contextlib.suppress(Exception):
-            from suijin.modules.platform.lib.workspace import WORKSPACE_DIR as _WS
-
-            os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(_WS / "caches" / "ms-playwright"))
         try:
-            pw = sync_playwright().start()
-            browser = pw.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-setuid-sandbox", "--no-proxy-server"],
-            )
+            pw, browser = _boot_browser()
         except Exception as e:
             _browser_error = f"{BROWSER_MISSING}\nplaywright said: {str(e)[:300]}"
             return

@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import re
 import time
 from pathlib import Path
@@ -105,9 +106,22 @@ def state_to_cookie_string(state: dict) -> str:
     return "; ".join(f"{c['name']}={c['value']}" for c in state.get("cookies", []))
 
 
+def _write_private(path: Path, data: str) -> None:
+    """Atomic, owner-only write for anything credential-shaped.
+
+    Session files and the credential store hold live cookies and keys:
+    0644 defaults leak to every local user/process, and a crash
+    mid-write corrupts the jar. tmp + os.replace + explicit 0600."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(data)
+    tmp.chmod(0o600)
+    os.replace(tmp, path)
+
+
 def save_session(target: str, state: dict, name: str = "") -> Path:
     p = session_path(target, name)
-    p.write_text(json.dumps(state, indent=2))
+    _write_private(p, json.dumps(state, indent=2))
     return p
 
 
@@ -196,19 +210,43 @@ _AUTH_COOKIE_RX = re.compile(r"(^|_)(sid|sess|session|token|auth|login|sso|jwt|l
 
 
 def _registrable(host: str) -> str:
+    """Group cookies by the domain agents will address.
+
+    IPs group by the FULL host (last-two-labels would turn 192.168.1.33
+    into '1.33' — a jar group no one can request). Single-label hosts
+    (localhost, intranet names) pass through whole.
+    """
     host = (urlparse("//" + str(host)).hostname or str(host)).lower()
     host = host[4:] if host.startswith("www.") else host
     labels = host.split(".")
-    return ".".join(labels[-2:]) if len(labels) > 2 else host
+    if len(labels) == 4 and all(p.isdigit() for p in labels):  # IPv4
+        return host
+    if len(labels) > 2:
+        return ".".join(labels[-2:])
+    return host
 
 
-def snapshot_jars(ctx, last: dict) -> list[tuple[str, int, bool]]:
+def _jar_sig(jar: list) -> str:
+    """Stable signature (md5 of the sorted cookie pairs) — deterministic
+    across process restarts, so a re-opened live browser skips
+    rewriting unchanged jars. (hash() is per-process randomized.)"""
+    import hashlib
+
+    joined = "\n".join(sorted(f"{c.get('name')}={c.get('value')}" for c in jar))
+    return hashlib.md5(joined.encode()).hexdigest()
+
+
+def snapshot_jars(ctx, last: dict, announce=print) -> list[tuple[str, int, bool]]:
     """Read every cookie in the browser, group by registrable domain,
     save + register the jars that changed. Returns [(domain, n_cookies,
     registered)]. Live-refresh safe: register_or_replace semantics keep
-    creds_get serving the CURRENT jar after re-logins."""
-    out = []
-    with contextlib.suppress(Exception):
+    creds_get serving the CURRENT jar after re-logins.
+
+    Failures PRINT (rate-limited by the caller's announce) — a disk-full
+    or permission error must not silently stop capturing mid-engagement.
+    """
+    out: list[tuple[str, int, bool]] = []
+    try:
         cookies = ctx.cookies()  # playwright format == storage_state format
         by_dom: dict[str, list] = {}
         for c in cookies:
@@ -216,11 +254,10 @@ def snapshot_jars(ctx, last: dict) -> list[tuple[str, int, bool]]:
             if dom and "." in dom:
                 by_dom.setdefault(dom, []).append(c)
         for dom, jar in by_dom.items():
-            sig = sorted(f"{c['name']}={c['value']}" for c in jar)
-            key = hash(tuple(sig))
-            if last.get(dom) == key:
+            sig = _jar_sig(jar)
+            if last.get(dom) == sig:
                 continue
-            last[dom] = key
+            last[dom] = sig
             state = {"cookies": jar, "origins": []}
             save_session(dom, state)
             authish = len(jar) >= 4 or any(_AUTH_COOKIE_RX.search(c["name"]) for c in jar)
@@ -230,7 +267,50 @@ def snapshot_jars(ctx, last: dict) -> list[tuple[str, int, bool]]:
                 creds_add_replace(service=dom, cred_type="cookie",
                                   value=state_to_cookie_string(state))
             out.append((dom, len(jar), authish))
+    except Exception as e:  # noqa: BLE001 — visible, never silent
+        announce(f"  [jar snapshot failed: {e.__class__.__name__}: {str(e)[:80]}]")
     return out
+
+
+def _capture_localstorage(ctx, announce=print) -> int:
+    """localStorage for every open origin — SPA token jars live here
+    (cookies alone miss them). Called on final flush: cheap one-pass
+    over open pages, merged into that domain's session file."""
+    captured = 0
+    try:
+        origins: dict[str, dict] = {}
+        for page in ctx.pages:
+            url = page.url
+            if not url.startswith("http"):
+                continue
+            from urllib.parse import urlparse as _up
+
+            origin = f"{_up(url).scheme}://{_up(url).netloc}"
+            if origin in origins:
+                continue
+            try:
+                items = page.evaluate(
+                    "Object.entries(localStorage).map(([k,v])=>({name:k,value:String(v).slice(0,4096)}))"
+                )
+            except Exception:  # noqa: BLE001 — cross-origin pages, crashes
+                continue
+            if items:
+                origins[origin] = {"origin": origin, "localStorage": items}
+        for origin_rec in origins.values():
+            from urllib.parse import urlparse as _up2
+
+            dom = _registrable(_up2(origin_rec["origin"]).netloc)
+            state = load_session(dom) or {"cookies": [], "origins": []}
+            state.setdefault("origins", [])
+            state["origins"] = [o for o in state["origins"] if o.get("origin") != origin_rec["origin"]]
+            state["origins"].append(origin_rec)
+            save_session(dom, state)
+            captured += len(origin_rec["localStorage"])
+        if captured:
+            announce(f"  [localStorage captured] {captured} item(s) across {len(origins)} origin(s)")
+    except Exception as e:  # noqa: BLE001
+        announce(f"  [localStorage capture failed: {e.__class__.__name__}]")
+    return captured
 
 
 def _stealth_playwright():
@@ -320,7 +400,16 @@ def live_session_browser(start_url: str = "", poll_seconds: float = 4.0) -> int:
         with sync_playwright() as p:
             try:
                 ctx, engine = _launch_browser_context(p, profile)
-            except Exception as e:  # noqa: BLE001 — headless box, no engine
+            except Exception as e:  # noqa: BLE001
+                msg = str(e)
+                if "singleton" in msg.lower() or "ProcessSingleton" in msg or "already in use" in msg.lower():
+                    print("  another suijin auth browser is already running (profile is locked).")
+                    print("  use the existing window, or close it first.")
+                    return 1
+                if "display" in msg.lower() or "headless" in msg.lower():
+                    print("  cannot open a browser on this host (no display).")
+                    print("  use paste mode instead: suijin auth <target> --paste")
+                    return 1
                 print(f"  cannot open a browser on this host ({e.__class__.__name__}).")
                 print("  use paste mode instead: suijin auth <target> --paste")
                 return 1
@@ -346,7 +435,8 @@ def live_session_browser(start_url: str = "", poll_seconds: float = 4.0) -> int:
             except KeyboardInterrupt:
                 pass
             with contextlib.suppress(Exception):
-                snapshot_jars(ctx, last)  # final flush
+                snapshot_jars(ctx, last)  # final cookie flush
+                _capture_localstorage(ctx)  # SPA tokens live here
                 ctx.close()
     except KeyboardInterrupt:
         pass
@@ -376,9 +466,13 @@ def run_auth_cmd(args) -> int:
         print("sessions:")
         for f in files:
             age_h = (time.time() - f.stat().st_mtime) / 3600
-            state = json.loads(f.read_text()) if f.suffix == ".json" else {}
-            n = len(state.get("cookies", []))
-            print(f"  {f.stem:40s} {n:3d} cookies  saved {age_h:.1f}h ago")
+            try:
+                state = json.loads(f.read_text())
+                n = len(state.get("cookies", []))
+            except Exception:  # noqa: BLE001 — one corrupt file never kills the listing
+                n = -1
+            mark = f"{n:3d} cookies" if n >= 0 else "  UNREADABLE"
+            print(f"  {f.stem:40s} {mark}  saved {age_h:.1f}h ago")
         return 0
 
     if not target and not mode_paste and not mode_browser and not do_check:

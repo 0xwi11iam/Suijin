@@ -14,14 +14,34 @@ STORE_PATH = WORKSPACE_DIR / "credentials.json"
 
 
 def _load_store():
-    if not STORE_PATH.exists():
-        return {"_schema": "suijin-credentials-v1", "credentials": []}
-    return json.loads(STORE_PATH.read_text())
+    """Load the store, retrying once — concurrent writers (live jar
+    snapshots, agents registering creds) race the read, and a torn
+    read used to raise JSONDecodeError straight into callers."""
+    import time as _time
+
+    for attempt in range(2):
+        try:
+            if not STORE_PATH.exists():
+                return {"_schema": "suijin-credentials-v1", "credentials": []}
+            return json.loads(STORE_PATH.read_text())
+        except json.JSONDecodeError:
+            if attempt:
+                raise
+            _time.sleep(0.05)  # torn read — let the writer's rename land
+    return {"_schema": "suijin-credentials-v1", "credentials": []}
 
 
 def _save_store(data):
+    """Atomic, owner-only write. The store holds live session cookies
+    and API keys — 0644 defaults leak to every local user, and a crash
+    mid-write corrupts every credential at once (tmp + rename + 0600)."""
+    import os as _os
+
     STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    STORE_PATH.write_text(json.dumps(data, indent=2))
+    tmp = STORE_PATH.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, indent=2))
+    tmp.chmod(0o600)
+    _os.replace(tmp, STORE_PATH)
 
 
 def env_name_for(service: str) -> str:
