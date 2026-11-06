@@ -1055,6 +1055,13 @@ def run_replay(args) -> int:
     return 0
 
 
+def _run_auth_session(args) -> int:
+    """`suijin auth` — named browser sessions per target."""
+    from suijin.server.tools.lib.auth_session import run_auth_cmd
+
+    return run_auth_cmd(args)
+
+
 def run_authorize_cmd(args) -> int:
     """`suijin authorize` — operator attestation ledger."""
     from suijin.modules.ops.lib import authorizations as auth
@@ -2441,6 +2448,7 @@ _KNOWN_VERBS = frozenset(
         "container",
         "install",
         "authorize",
+        "auth",
         "bb-scope",
         "kb",
         "pull",
@@ -2802,6 +2810,19 @@ def main(argv=None):
     auth_p.add_argument("--list", action="store_true", help="list ledger entries")
     auth_p.add_argument("--remove", default="", help="remove the entry for this target")
     auth_p.set_defaults(func=run_authorize_cmd)
+
+    # auth: named browser sessions per target (paste cookies or log in
+    # through a visible browser; agents attach the session everywhere)
+    sess_p = sub.add_parser("auth", help="named browser session for a target (paste cookies or visible-browser login)")
+    sess_p.add_argument("target", nargs="?", default="", help="target host (sessions are per-target)")
+    sess_p.add_argument("--paste", action="store_true", help="read a cookie string from stdin")
+    sess_p.add_argument("--browser", action="store_true", help="open a visible browser; you log in, press Enter")
+    sess_p.add_argument("--check", action="store_true", help="heartbeat: is the saved session alive?")
+    sess_p.add_argument("--check-url", dest="check_url", default="", help="URL the heartbeat pings (default: https://target/)")
+    sess_p.add_argument("--name", default="", help="profile name (second account for differential testing)")
+    sess_p.add_argument("--domain", default="", help="cookie domain override (heuristic default: parent domain)")
+    sess_p.add_argument("--list", action="store_true", help="list saved sessions")
+    sess_p.set_defaults(func=_run_auth_session)
 
     # bb-scope: bind a bug-bounty program page's scope (advisory) via bugscope
     # ('scope' is taken by the Burp-style target-scope TUI)

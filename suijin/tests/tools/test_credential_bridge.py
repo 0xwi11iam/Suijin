@@ -24,6 +24,16 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
+import suijin.modules.credential_store.main as _credstore
+
+
+@pytest.fixture(autouse=True)
+def _isolated_store(tmp_path, monkeypatch):
+    """Never touch the operator's real credential store — tests write
+    their own, and leak into order-dependent console suites otherwise
+    (found the hard way: 7 downstream failures from store pollution)."""
+    monkeypatch.setattr(_credstore, "STORE_PATH", tmp_path / "credentials.json")
+
 
 class _Echo(BaseHTTPRequestHandler):
     def _echo(self):
