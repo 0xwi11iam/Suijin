@@ -1,9 +1,26 @@
 {
   "type": "object",
-  "required": ["url"],
+  "required": [
+    "url"
+  ],
   "properties": {
-    "url": {"type": "string", "description": "Target URL to probe"},
-    "payloads": {"type": "array", "description": "Custom payload list (default: built-in battery)"},
-    "sink_contexts": {"type": "boolean", "description": "Also test sink contexts (where output appears)"}
+    "url": {
+      "type": "string",
+      "description": "Target URL to probe"
+    },
+    "payloads": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "custom payloads for this class (optional \u2014 the builtin battery otherwise)"
+    },
+    "sink_contexts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "sink contexts to test (where output appears): html, attr, js, url"
+    }
   }
 }

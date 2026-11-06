@@ -135,10 +135,16 @@ def inject_probe(
     body: str = "",
     vuln_class: str = "xss",
     field: str = "q",
+    payloads: list | None = None,
+    sink_contexts: list | None = None,
     in_body: bool = False,
     request_id: str = "",
     timeout: int = 20,
     allow_internal: bool = False,
+    **_extra,  # the kwargs bug (agent-reported 2026-11-06): dispatch
+    # forwards payloads/sink_contexts and any contract-drift keys; a
+    # strict signature TypeError'd the whole call. Unknown keys are
+    # accepted and ignored — same class as the coverage_check fix.
 ) -> str:
     """Facts, never verdicts. One class per call against one injection
     point (query param `field`, or body field with in_body=true)."""
