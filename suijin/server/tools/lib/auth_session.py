@@ -30,6 +30,8 @@ import contextlib
 import json
 import os
 import re
+import sys
+import threading
 import time
 from pathlib import Path
 from urllib.parse import urlparse
@@ -424,25 +426,60 @@ def live_session_browser(start_url: str = "", poll_seconds: float = 4.0) -> int:
             if start:
                 with contextlib.suppress(Exception):
                     page.goto(start, timeout=15000)
-            try:
-                while True:
-                    time.sleep(poll_seconds)
-                    for dom, n, authish in snapshot_jars(ctx, last):
-                        tag = "credential registered" if authish else "session saved"
-                        fresh = "" if dom in announced else "  NEW "
-                        announced.add(dom)
+            print("  type [bold]done[/bold] here (or press Enter, or Ctrl+C) when finished —", flush=True)
+            print("  everything captured so far is ALREADY stored; finishing just closes cleanly.", flush=True)
+
+            done = threading.Event()
+
+            def _watch_stdin():
+                with contextlib.suppress(Exception):
+                    while not done.is_set():
+                        line = sys.stdin.readline()
+                        if not line or line.strip().lower() in ("", "d", "done", "q", "quit", "exit"):
+                            done.set()
+                            return
+
+            threading.Thread(target=_watch_stdin, daemon=True).start()
+
+            def _flush(final: bool = False):
+                for dom, n, authish in snapshot_jars(ctx, last):
+                    tag = "credential registered" if authish else "session saved"
+                    fresh = "" if dom in announced else "  NEW "
+                    announced.add(dom)
+                    latest[dom] = (n, authish)
+                    if not final or dom not in summary_shown:
                         print(f"  [{tag:>20}] {fresh}{dom} ({n} cookies)", flush=True)
+                        summary_shown.add(dom)
+
+            summary_shown: set = set()
+            latest: dict = {}
+            try:
+                while not done.wait(poll_seconds):
+                    _flush()
             except KeyboardInterrupt:
                 pass
             with contextlib.suppress(Exception):
-                snapshot_jars(ctx, last)  # final cookie flush
+                _flush(final=True)  # final cookie flush
                 _capture_localstorage(ctx)  # SPA tokens live here
                 ctx.close()
     except KeyboardInterrupt:
         pass
     except Exception as e:  # noqa: BLE001 — browser closed by operator etc.
         print(f"  browser closed ({e.__class__.__name__})")
-    print(f"\n  {len(announced)} domain jar(s) captured — suijin auth --list")
+    # the DONE summary: unique domains + final cookie counts + what agents see
+    try:
+        rows = []
+        for f in sorted(sessions_dir().glob("*.json")):
+            with contextlib.suppress(Exception):
+                state = json.loads(f.read_text())
+                rows.append((f.stem, len(state.get("cookies", []))))
+        if rows:
+            print("\n  stored — agents attach these automatically:", flush=True)
+            for name, n in rows:
+                print(f"    {name:34s} {n:3d} cookies", flush=True)
+        print("\n  suijin auth --list · suijin auth <domain> --check", flush=True)
+    except Exception:  # noqa: BLE001
+        pass
     return 0
 
 

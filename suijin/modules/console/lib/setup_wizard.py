@@ -85,7 +85,12 @@ def run_setup() -> int:
     if "✗" in key_status:
         console.print(f"\n[bold]{prov}[/bold] — no API key on file.")
         try:
-            key = console.input("  Paste your API key (hidden): ").strip()
+            import getpass
+
+            # getpass, not console.input — rich's input ECHOES; the prompt
+            # said "(hidden)" while the pasted key was plain on screen
+            # (operator report, 2026-11-06)
+            key = getpass.getpass("  Paste your API key (hidden): ").strip()
         except (EOFError, KeyboardInterrupt):
             key = ""
         if key:
