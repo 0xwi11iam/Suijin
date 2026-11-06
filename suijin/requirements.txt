@@ -23,6 +23,20 @@ fastapi>=0.115
 uvicorn>=0.30
 websockets>=13
 
+# Browser layer — NOT a base dep (headless boxes don't need it). Install
+# via the [browser] extra: pip install suijin[browser] — then download
+# engines once: playwright install chromium
+#   playwright  — DOM execution, the live cookie jar (`suijin auth`),
+#                 storage_state session capture, network perception
+#   patchright  — protocol-level stealth fork, drop-in API. Google-class
+#                 IdPs reject sign-ins from automation-flagged builds
+#                 ("this browser or app may not be secure"); patchright
+#                 patches the CDP leaks (Runtime.enable, webdriver flag).
+#                 Preferred automatically when present (capability check);
+#                 mac + linux, same browser cache as playwright.
+# Both are optional: without them, `suijin auth <target> --paste` and
+# every HTTP tool still work everywhere.
+
 # Optional providers (uncomment to enable)
 # google-genai>=1.0  # Gemini
 # anthropic>=0.30    # Anthropic

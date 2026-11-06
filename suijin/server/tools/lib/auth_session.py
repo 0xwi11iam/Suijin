@@ -233,11 +233,67 @@ def snapshot_jars(ctx, last: dict) -> list[tuple[str, int, bool]]:
     return out
 
 
-def live_session_browser(poll_seconds: float = 4.0) -> int:
+def _stealth_playwright():
+    """Prefer patchright (protocol-level stealth) over stock playwright.
+
+    Google-class IdPs reject sign-ins from automation-flagged browsers:
+    stock playwright leaks CDP signals (Runtime.enable, webdriver flag,
+    --enable-automation). patchright is a drop-in fork that patches the
+    protocol itself — same API, mac + linux, pip-only. Capability
+    check: absent → stock playwright, and paste mode is always the
+    universal fallback. Returns (sync_playwright, stack_name)."""
+    with contextlib.suppress(Exception):
+        from patchright.sync_api import sync_playwright as _pw
+
+        return _pw, "patchright"
+    from playwright.sync_api import sync_playwright as _pw
+
+    return _pw, "playwright"
+
+
+def _launch_browser_context(p, profile: Path, headless: bool = False, channels=("chrome", None)):
+    """Launch a login context the TARGET will trust, or the best
+    available fallback. Capability CHECK, not platform guess (the
+    cross-environment rule): 'chrome' resolves per-OS (app bundle on
+    macOS, PATH binary on Linux); Google-class IdPs reject sign-ins
+    from automation-flagged Chromium builds ('This browser or app may
+    not be secure'). Automation signals are stripped in BOTH branches.
+    Real Chrome absent (containers, boxes) → bundled Chromium; no
+    browser at all → the caller points at paste mode. Sessions,
+    credentials, and paste mode never depend on this choice.
+
+    Returns (context, engine_name)."""
+    common = dict(
+        headless=headless,
+        args=["--disable-blink-features=AutomationControlled"],
+        ignore_default_args=["--enable-automation"],
+    )
+    last_err: Exception | None = None
+    for channel in channels:
+        if channel is None:
+            try:
+                return p.chromium.launch_persistent_context(str(profile), **common), "chromium"
+            except Exception as e:  # noqa: BLE001
+                last_err = e
+        else:
+            try:
+                return p.chromium.launch_persistent_context(str(profile), channel=channel, **common), channel
+            except Exception as e:  # noqa: BLE001 — probe next engine
+                last_err = e
+    raise last_err or RuntimeError("no browser engine available")
+
+
+def live_session_browser(start_url: str = "", poll_seconds: float = 4.0) -> int:
     """`suijin auth` (bare) — THE live cookie jar.
 
-    Opens a persistent-profile Chromium (the profile lives in
+    Opens a persistent-profile browser (the profile lives in
     ~/.suijin/config/auth-profile, so logins survive between runs).
+    Prefers the operator's REAL Chrome when present — some providers
+    (Google among them) block sign-in from automation Chromium builds;
+    on hosts with no Chrome, degrades to bundled Chromium and says so.
+    Blank slate by default — navigate wherever you like; --start or the
+    auth_start_url config key sets a landing page (nothing hardcoded:
+    the first field run shipped with the then-current target baked in).
     Log in to as many things as you want — every poll, changed jars are
     snapshotted per-domain and auth-looking ones are (re)registered as
     credentials, LIVE: agents' next http_request(credential='<domain>')
@@ -245,10 +301,16 @@ def live_session_browser(poll_seconds: float = 4.0) -> int:
 
     Ctrl+C (or closing the browser) stops it; sessions stay saved.
     """
-    from playwright.sync_api import sync_playwright
+    sync_playwright, stack = _stealth_playwright()
 
     profile = _config_root() / "auth-profile"
     profile.mkdir(parents=True, exist_ok=True)
+    start = str(start_url or "").strip()
+    if not start:
+        with contextlib.suppress(Exception):
+            from suijin.modules.platform.lib.config_loader import load_config
+
+            start = str(load_config().get("auth_start_url") or "").strip()
     print("  opening browser — log in to whatever you like, as much as you like.")
     print(f"  profile persists at {profile} (re-open anytime; logins survive)")
     print("  jars snapshot automatically; agents pick them up live. Ctrl+C to stop.\n")
@@ -256,10 +318,23 @@ def live_session_browser(poll_seconds: float = 4.0) -> int:
     announced: set[str] = set()
     try:
         with sync_playwright() as p:
-            ctx = p.chromium.launch_persistent_context(str(profile), headless=False)
+            try:
+                ctx, engine = _launch_browser_context(p, profile)
+            except Exception as e:  # noqa: BLE001 — headless box, no engine
+                print(f"  cannot open a browser on this host ({e.__class__.__name__}).")
+                print("  use paste mode instead: suijin auth <target> --paste")
+                return 1
+            note = (
+                "your real Chrome — providers trust it for sign-ins"
+                if engine == "chrome"
+                else "bundled Chromium — some providers (e.g. Google) may block sign-in;"
+                " if that happens use: suijin auth <target> --paste"
+            )
+            print(f"  engine: {engine} via {stack} ({note})", flush=True)
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
-            with contextlib.suppress(Exception):
-                page.goto("https://www.google.com", timeout=15000)
+            if start:
+                with contextlib.suppress(Exception):
+                    page.goto(start, timeout=15000)
             try:
                 while True:
                     time.sleep(poll_seconds)

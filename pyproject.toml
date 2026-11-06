@@ -35,6 +35,15 @@ dependencies = [
 # Neo4j knowledge-graph backend (kg_backend=neo4j + a local server).
 # JSON stays the zero-dependency default; the extra makes the switch turnkey.
 kg = ["neo4j>=5,<7"]
+# Browser layer (live cookie jar / `suijin auth`, DOM execution). Base
+# installs stay browser-free — headless boxes don't pay for Chromium.
+# After installing: playwright install chromium  (engines are shared
+# with patchright). Without this extra, paste-mode auth and all HTTP
+# tools still work everywhere.
+browser = [
+    "playwright>=1.50",
+    "patchright>=1.50",  # stealth fork — Google-class IdPs block stock automation builds
+]
 
 [project.urls]
 Homepage = "https://github.com/0xwi11iam/Suijin"
