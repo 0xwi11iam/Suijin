@@ -123,6 +123,14 @@ class SwarmAgent:
                     # queue dry → follow the title (bounded: 3 mission
                     # passes, then idle for new intents/steering)
                     mission_runs += 1
+                    with contextlib.suppress(Exception):
+                        import sqlite3 as _sq3
+
+                        _db = _sq3.connect(str(_swarm_db_path()), timeout=5)
+                        _db.execute("UPDATE agents SET current_intent = ? WHERE id = ?",
+                                    (f"mission: {self._mission[:100]}", self._identity))
+                        _db.commit()
+                        _db.close()
                     print(f"[{self._identity}] queue dry — following the title: {self._mission[:60]}")
                     mi = {"id": f"mission-{mission_runs}", "text": self._mission, "engagement": "default"}
                     result = self._execute_intent(mi)
@@ -236,6 +244,10 @@ class SwarmAgent:
                 "UPDATE intents SET state = 'running', agent_id = ?, claimed_at = ? WHERE id = ? AND state = 'open'",
                 (self._identity, time.time(), iid),
             )
+            # the console's lane column reads this — an agent working an
+            # intent must not show 'idle' (operator field report)
+            db.execute("UPDATE agents SET current_intent = ? WHERE id = ?",
+                       (text[:120], self._identity))
             db.commit()
             db.close()
             return {"id": iid, "text": text, "engagement": engagement}
@@ -254,9 +266,22 @@ class SwarmAgent:
 
         from suijin.server.swarm.worker_loop import execute_intent
 
-        def _on_event(turn: int, tool_name: str, result_str: str):
-            mark = "CONFIRMED" if "CONFIRMED" in result_str else "result"
-            print(f"[{self._identity}] turn {turn}: {tool_name} → {mark} ({len(result_str)} chars)")
+        def _on_event(turn: int, tool_name: str, result_str: str, tool_args=None):
+            # THE ACTIVITY STREAM — an operator watching attach/console must
+            # see WHAT happened, not a char count (field report: "they are
+            # working quickly but I can't see what's actually going on").
+            # shape: turn N: > tool {key: arg-head} -> result-head
+            arg_hint = ""
+            try:
+                a = dict(tool_args or {})
+                if a:
+                    k = sorted(a.keys())[0]
+                    arg_hint = f" {{{k}: {str(a[k])[:40]}}}"
+            except Exception:  # noqa: BLE001
+                pass
+            head = " ".join(str(result_str or "").split())[:90]
+            mark = "CONFIRMED" if "CONFIRMED" in str(result_str) else ""
+            print(f"[{self._identity}] turn {turn}: > {tool_name}{arg_hint} -> {head}{(' [' + mark + ']') if mark else ''}")
 
         def _on_turn(turn: int) -> str | None:
             with self._notes_lock:
@@ -288,6 +313,7 @@ class SwarmAgent:
                 "UPDATE intents SET state = ?, completed_at = ? WHERE id = ?",
                 (state, time.time(), intent["id"]),
             )
+            db.execute("UPDATE agents SET current_intent = NULL WHERE id = ?", (self._identity,))
             # persist facts — the status metric and the report read these
             for fact in result.get("facts", []):
                 summary = str(fact.get("summary", ""))[:300]
