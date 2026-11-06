@@ -20,6 +20,7 @@ Design contract (learned from the field review + the CyberStrike study):
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import re
 import threading
@@ -251,6 +252,34 @@ def apply_mutation(req: dict, op: str, field: str = "", value=None) -> dict:
     return r
 
 
+def _shared_store_get(cred_name: str) -> dict | None:
+    """Read a credential from the file-backed shared store.
+
+    THE 2026-11-06 bridge bug: register_credential wrote to this module's
+    in-memory dict while http_request(credential=) read the file store —
+    two stores, zero overlap, cookies never reached the wire. Registered
+    creds also died with the process, so swarm agents (separate
+    processes!) could never share a login. Both lookups now read the
+    shared file first; the in-memory dict stays as a session cache.
+    """
+    with contextlib.suppress(Exception):
+        import json as _json
+
+        from suijin.modules.credential_store.main import creds_get
+
+        rec = _json.loads(creds_get(str(cred_name)))
+        if isinstance(rec, dict) and str(rec.get("value", "")).strip():
+            out: dict = {"headers": {}, "cookies": ""}
+            ctype = str(rec.get("type", "")).lower()
+            val = str(rec["value"])
+            if "cookie" in ctype or (val.count(";") >= 1 and "=" in val and " " not in val):
+                out["cookies"] = val
+            else:
+                out["headers"]["Authorization"] = f"Bearer {val}"
+            return out
+    return None
+
+
 def apply_credential(req: dict, cred_name: str | None) -> dict:
     """Strip ALL common auth headers (+cookie header), inject the named
     credential's. cred_name=None → unauthenticated. THE access-control
@@ -258,7 +287,7 @@ def apply_credential(req: dict, cred_name: str | None) -> dict:
     r = dict(req)
     headers = {k: v for k, v in dict(r.get("headers") or {}).items() if k.lower() not in COMMON_AUTH_HEADERS}
     if cred_name:
-        cred = _CREDENTIALS.get(str(cred_name))
+        cred = _CREDENTIALS.get(str(cred_name)) or _shared_store_get(str(cred_name))
         if cred is None:
             raise ValueError(
                 f"unknown credential '{cred_name}' — register_credential first; known: {sorted(_CREDENTIALS)}"
@@ -573,13 +602,28 @@ def http_replay_raw(host: str = "", port: int = 443, tls: bool = True, data: str
 
 def register_credential(name: str = "", headers: dict | None = None, cookies: str = "") -> str:
     """Register a named credential (auth headers + cookie string) for
-    credential-swap replay. Capture them from a login you already hold."""
+    credential-swap replay. Capture them from a login you already hold.
+
+    Persists to the shared file-backed store (survives restarts, visible
+    to every swarm agent process) in addition to the in-process cache —
+    see _shared_store_get for the two-stores bug this closes."""
     try:
         if not str(name).strip():
             return "Error: name required"
         _CREDENTIALS[str(name)] = {"headers": dict(headers or {}), "cookies": str(cookies or "")}
+        persisted = ""
+        with contextlib.suppress(Exception):
+            from suijin.modules.credential_store.main import creds_add
+
+            if str(cookies or "").strip() or dict(headers or {}):
+                creds_add(
+                    service=str(name),
+                    cred_type="cookie" if str(cookies or "").strip() else "token",
+                    value=str(cookies or "") or str(dict(headers or {}).get("Authorization", "")),
+                )
+                persisted = " (persisted to shared store)"
         return (
-            f"Credential '{name}' registered ({len(_CREDENTIALS)} total). Swap with http_replay(credential='{name}')."
+            f"Credential '{name}' registered ({len(_CREDENTIALS)} total). Swap with http_replay(credential='{name}').{persisted}"
         )
     except Exception as e:  # noqa: BLE001
         return f"Error: {e}"

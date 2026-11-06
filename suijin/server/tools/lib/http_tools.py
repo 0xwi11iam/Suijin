@@ -91,7 +91,14 @@ def http_request(method, url, headers=None, body="", credential=""):
         if is_rate_limited(url):
             return f"RATE LIMITED: Target {url} is throttling requests. Wait and retry with jitter."
 
-        req_headers = headers if headers else {}
+        # NOTE: do NOT re-assign req_headers from `headers` here. A prior
+        # version did (`req_headers = headers if headers else {}`) which
+        # wiped the credential block's Cookie/Authorization injection —
+        # every authenticated http_request went out bare while the
+        # docstring promised the handoff worked. req_headers is already
+        # dict(headers) + credential injection from above; the stealth
+        # block below uses setdefault and preserves it. (2026-11-06,
+        # caught by the local echo-server bridge test)
         # Stealth identity (v5.1): one sticky realistic browser per
         # process, full header set. Caller-supplied headers always win.
         try:
