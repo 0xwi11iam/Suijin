@@ -1623,6 +1623,10 @@ def _run_swarm(
         from suijin.server.swarm.lifecycle import run_swarm_intent
 
         return run_swarm_intent(intent_text, swarm_name or "default")
+    if action == "console":
+        from suijin.server.swarm.console import run_console_cmd
+
+        return run_console_cmd()
     if action == "say":
         from suijin.server.swarm.lifecycle import run_swarm_say
 
@@ -2588,6 +2592,20 @@ def main(argv=None):
     _runtime.init_runtime()
     warnings.filterwarnings("ignore", category=CostCapWarning)  # one red line in engagements instead
     warnings.filterwarnings("ignore", message=".*allowed_objects.*")  # any category — langchain uses its own base class
+
+    # FIRST BOOT: no config at all → the wizard runs before anything
+    # else (once; config.json existing means bootstrapped). Every real
+    # verb needs a provider configured — better asked on first touch.
+    with contextlib.suppress(Exception):
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR as _wsd
+
+        if not (_wsd / "config.json").exists() and not (Path.home() / ".suijin" / "config" / "config.json").exists():
+            argv_list = list(argv if argv is not None else sys.argv[1:])
+            if not argv_list or argv_list[0] in ("setup", "tui"):
+                from suijin.modules.console.lib.setup_wizard import run_setup
+
+                return run_setup()
+
     parser = argparse.ArgumentParser(
         prog="suijin",
         description="Suijin — autonomous red teaming. Run bare to launch the TUI; subcommands are non-interactive.",
@@ -2649,6 +2667,10 @@ def main(argv=None):
     say_p = swarm_sub.add_parser("say", help='message every live agent mid-engagement ("what to say")')
     say_p.add_argument("message", nargs="+", help="the message to interject into agent conversations")
     say_p.set_defaults(func=lambda a: _run_swarm("say", intent_text=" ".join(a.message)))
+
+    console_p = swarm_sub.add_parser("console", help="live dashboard: system / agents / intents / findings / details")
+    console_p.add_argument("--poll", type=float, default=2.0, help="refresh seconds (default 2)")
+    console_p.set_defaults(func=lambda a: _run_swarm("console", count=int(a.poll * 1000)))
 
     spawn_p = swarm_sub.add_parser("spawn", help="spawn agent(s) — --tui shows in this terminal, -N for multiple, --sandbox N for boxed agents")
     spawn_p.add_argument("--tui", action="store_true", help="full TUI in this terminal")
@@ -3085,6 +3107,19 @@ def main(argv=None):
     debug.set_defaults(func=lambda _a: 0)
 
     args = parser.parse_args(argv)
+
+    # BASIC MODE gate: swarm/sandbox tooling is advanced-mode. The hint
+    # tells the operator exactly where the switch is; nothing hidden
+    # permanently, nothing surprising.
+    if getattr(args, "command", None) in ("swarm", "sandbox"):
+        with contextlib.suppress(Exception):
+            from suijin.modules.platform.lib.config_loader import load_config
+
+            if str((load_config() or {}).get("operator_mode") or "basic").strip().lower() != "advanced":
+                print("basic mode — swarm tooling is switched off.")
+                print("  enable it:  suijin settings  →  operator_mode: advanced")
+                print("  (or:        suijin auth, sessions, engage — all still work)")
+                return 0
 
     if args.command is None:
         # Default: launch the classic Rich TUI
