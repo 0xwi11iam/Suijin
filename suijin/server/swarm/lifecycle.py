@@ -515,43 +515,89 @@ def _claim_intent_for(agent_id: str, swarm: str = "") -> dict | None:
 # ── attach / stop / status ────────────────────────────────────────────
 
 
-def run_swarm_attach(args=None) -> int:
-    """`suijin swarm view [agent-id]` — watch a live agent.
+def _resolve_agent_fragment(fragment: str) -> tuple[str, str] | None:
+    """Any natural fragment → ('host', agent-id) or ('box', box-name).
 
-    Agents are agents — TUI-spawned or headless, same process, same
-    engagement, same output. view tails the agent's log live; if the
-    agent isn't running, lists the ones that are."""
+    Accepts: full agent id, agent fragment ('5476-f85a'), box name
+    ('suijin-sbx-default-agent-5476-f85a-sbx'), box fragment. Host
+    agents resolve via pid files; boxed agents via docker ps."""
+    frag = str(fragment or "").strip().lower()
+    if not frag:
+        return None
+
+    # host agents: pid files
+    for pf in sorted(Path(tempfile.gettempdir()).glob("suijin-agent-*.pid"),
+                     key=lambda p: p.stat().st_mtime, reverse=True):
+        aid = pf.stem.replace("suijin-agent-", "")
+        if frag in aid.lower():
+            with contextlib.suppress(Exception):
+                os.kill(int(pf.read_text().strip()), 0)  # alive check
+                return ("host", aid)
+
+    # boxed agents: docker containers
+    with contextlib.suppress(Exception):
+        r = subprocess.run(["docker", "ps", "--filter", "name=suijin-sbx", "--format",
+                            "{{.Names}}"], capture_output=True, text=True, timeout=10)
+        for name in (r.stdout or "").split():
+            if frag in name.lower():
+                return ("box", name)
+
+    # bare fragment like '5476-f85a' → try as agent-<frag> against boxes
+    with contextlib.suppress(Exception):
+        r = subprocess.run(["docker", "ps", "--filter", "name=suijin-sbx", "--format",
+                            "{{.Names}}"], capture_output=True, text=True, timeout=10)
+        for name in (r.stdout or "").split():
+            if "agent-" + frag in name:
+                return ("box", name)
+    return None
+
+
+def run_swarm_attach(args=None) -> int:
+    """`suijin swarm attach <anything>` — watch a live agent.
+
+    Accepts any natural fragment: full agent id, '5476-f85a', or a box
+    name from `sandbox ls`. Host agents follow their log file; boxed
+    agents follow `docker logs -f` (the first cut only knew host files —
+    boxed agents were unviewable, the 'kind of broken' report)."""
     from rich.console import Console
 
     console = Console()
-    identity = str(getattr(args, "agent_id", "") or "").strip()
+    frag = str(getattr(args, "agent_id", "") or "").strip()
 
-    pid_files = sorted(Path(tempfile.gettempdir()).glob("suijin-agent-*.pid"), key=lambda p: p.stat().st_mtime)
-    if not pid_files:
-        console.print("[yellow]no agents running — [cyan]suijin swarm spawn[/cyan][/yellow]")
-        return 1
-
-    if not identity:
-        identity = pid_files[-1].stem.replace("suijin-agent-", "")
-
-    # list running agents if the requested one isn't found
-    log_file = Path(tempfile.gettempdir()) / f"suijin-agent-{identity}.log"
-    if not log_file.is_file():
-        console.print(f"[yellow]agent '{identity}' not found. Running:[/yellow]")
-        for pf in pid_files[-10:]:
+    hit = _resolve_agent_fragment(frag) if frag else None
+    if not hit:
+        # nothing matched (or nothing given) — list every watchable agent
+        console.print("[yellow]watchable agents (any fragment works):[/yellow]")
+        for pf in sorted(Path(tempfile.gettempdir()).glob("suijin-agent-*.pid"),
+                         key=lambda p: p.stat().st_mtime, reverse=True)[:10]:
             aid = pf.stem.replace("suijin-agent-", "")
-            alive = True
+            alive = "  "
             with contextlib.suppress(Exception):
                 os.kill(int(pf.read_text().strip()), 0)
-            console.print(f"    [cyan]suijin swarm view {aid}[/cyan]")
+                alive = "●"
+            console.print(f"  host {alive} {aid}")
+        with contextlib.suppress(Exception):
+            r = subprocess.run(["docker", "ps", "--filter", "name=suijin-sbx", "--format",
+                                "{{.Names}}"], capture_output=True, text=True, timeout=10)
+            for name in (r.stdout or "").split():
+                if "pool" not in name:
+                    console.print(f"  box  ● {name}")
         return 1
 
-    console.print(f"[bold]viewing {identity}[/bold] (Ctrl+C to exit)\n")
+    kind, ref = hit
+    console.print(f"[bold]viewing {ref}[/bold] ({kind}) — Ctrl+C to detach\n")
     try:
-        proc = subprocess.Popen(["tail", "-n", "40", "-f", str(log_file)], stdin=subprocess.DEVNULL)
+        if kind == "host":
+            log_file = Path(tempfile.gettempdir()) / f"suijin-agent-{ref}.log"
+            proc = subprocess.Popen(["tail", "-n", "40", "-f", str(log_file)],
+                                    stdin=subprocess.DEVNULL)
+        else:
+            proc = subprocess.Popen(["docker", "logs", "-f", "--tail", "40", ref],
+                                    stdin=subprocess.DEVNULL)
         proc.wait()
     except KeyboardInterrupt:
-        proc.terminate()
+        with contextlib.suppress(Exception):
+            proc.terminate()
         console.print("\n[dim]detached[/dim]")
     return 0
 
