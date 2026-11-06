@@ -30,6 +30,30 @@ SYSTEM_TEMPLATE = (
 )
 
 
+def _session_hint() -> str:
+    """One line telling workers which authenticated sessions exist.
+
+    The operator logs in via `suijin auth` (or the live jar); agents
+    never see values — names only, and the model passes the name to
+    http_request/http_replay via credential='<name>'. Without this
+    hint the sessions sat unused because no prompt mentioned them."""
+    with contextlib.suppress(Exception):
+        import json as _json
+
+        from suijin.modules.credential_store.main import creds_list
+
+        raw = str(creds_list())
+        data = _json.loads(raw) if raw.strip().startswith("{") else {}
+        names = [n for n in (data.keys() if isinstance(data, dict) else [])]
+        if names:
+            shown = ", ".join(sorted(names)[:8])
+            return (
+                f"\n\nAUTHENTICATED SESSIONS available (pass credential='<name>' "
+                f"to http_request / http_replay): {shown}"
+            )
+    return ""
+
+
 def _load_catalog() -> str:
     """The full tool catalog (how-to-call header + every tool). The model
     cannot call tools it cannot see — this is not optional context."""
@@ -178,7 +202,7 @@ def execute_intent(
             max_turns = 40
 
     messages = [
-        {"role": "system", "content": SYSTEM_TEMPLATE.format(catalog=_load_catalog())},
+        {"role": "system", "content": SYSTEM_TEMPLATE.format(catalog=_load_catalog()) + _session_hint()},
         {"role": "user", "content": f"INTENT: {intent['text']}\n\nExecute this intent."},
     ]
 
@@ -211,6 +235,9 @@ def execute_intent(
             )  # long shell payloads truncated mid-JSON = the dominant
             # unparseable-reply cause; 4k cut real probes off
             cfg["intelligence"] = "medium"  # workers don't need max thinking
+            cfg["response_format_json"] = True  # proven accepted by z.ai
+            # (2026-11-06 probe) — worker replies are always ONE JSON
+            # decision; enforcement kills the strike class at the source
             response = generate(messages, cfg)
         except Exception as e:  # noqa: BLE001 — provider errors become 'blocked'
             return {"state": "blocked", "facts": facts, "note": f"provider error: {e}"}

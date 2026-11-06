@@ -535,6 +535,27 @@ def run_swarm_status(args=None) -> int:
             table.add_row(label, str(val))
 
     console.print(table)
+
+    # THE HONEST BOARD — every finding with its true status. reported
+    # (unverified) / verified / confirmed / duplicate / false_positive
+    # all show; nothing is hidden behind an aggregate count.
+    with contextlib.suppress(sqlite3.Error):
+        rows = db.execute(
+            "SELECT severity, status, title FROM findings ORDER BY created_at DESC LIMIT 10"
+        ).fetchall()
+        if rows:
+            board = Table(title="findings — the honest board", show_header=True)
+            board.add_column("severity", style="bold")
+            board.add_column("status", style="dim")
+            board.add_column("title")
+            style = {"critical": "red", "high": "red", "medium": "yellow", "low": "cyan", "info": "dim"}
+            for sev, st, title in rows:
+                board.add_row(sev, st, (title or "")[:70], style=style.get(str(sev).lower(), ""))
+            console.print(board)
+            extra = db.execute("SELECT COUNT(*) FROM findings").fetchone()[0] - len(rows)
+            if extra > 0:
+                console.print(f"[dim]…and {extra} older finding(s)[/dim]")
+
     db.close()
     client.close()
     return 0
