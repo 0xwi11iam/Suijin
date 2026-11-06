@@ -329,7 +329,7 @@ def execute_intent(
                 )
         if on_event is not None:
             with contextlib.suppress(Exception):
-                on_event(turn, tool_name, result_str)
+                on_event(turn, tool_name, result_str, tool_args)
 
     # hit the turn cap — exhausted (budget cut, not done)
     return {"state": "exhausted", "facts": facts, "note": f"hit {max_turns} turn cap"}

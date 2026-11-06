@@ -51,10 +51,20 @@ def _db_rows():
         db = sqlite3.connect(str(swarm_db_path()), timeout=3)
         db.execute("PRAGMA journal_mode=DELETE")  # mode rides the file; harmless read-side noop
         now = time.time()
+        # THE LANE TRUTH: running intents first (immediate — no agent
+        # restart needed), then the agent's own current_intent (mission
+        # mode). Never 'idle' for a live agent (operator field report).
+        lanes = {}
+        for r in db.execute(
+            "SELECT agent_id, text FROM intents WHERE state = 'running'"
+        ).fetchall():
+            if r[0]:
+                lanes[r[0]] = (r[1] or "")[:110]
         for r in db.execute(
             "SELECT id, current_intent, last_heartbeat FROM agents ORDER BY last_heartbeat DESC"
         ).fetchall():
-            agents.append({"id": r[0], "intent": r[1] or "", "hb_age": int(now - (r[2] or 0))})
+            lane = lanes.get(r[0]) or r[1] or ""
+            agents.append({"id": r[0], "intent": lane, "hb_age": int(now - (r[2] or 0))})
         for r in db.execute(
             "SELECT state, COUNT(*) FROM intents GROUP BY state"
         ).fetchall():
@@ -229,6 +239,16 @@ def run_console(stdscr, poll: float = REFRESH_S) -> int:
                 _steer(cur_id, stdscr, msg)
         elif key in (ord("k"), ord("K")) and agents:
             _kill(cur_id)
+        elif key in (curses.KEY_ENTER, 10, ord("v"), ord("V"), ord("o"), ord("O")) and agents:
+            # OPEN THE AGENT'S LIVE VIEW (attach) from inside the console
+            with contextlib.suppress(Exception):
+                curses.endwin()
+                aid = agents[min(sel, len(agents) - 1)]["id"]
+                subprocess.call(["suijin", "swarm", "attach", aid], stdin=None)
+                curses.doupdate()
+                stdscr.refresh()
+                curses.curs_set(0)
+                stdscr.nodelay(True)
         elif key in (ord("c"), ord("C")) and agents:
             _copy_osc52("\n".join(details_cache))
             last_copy_msg = f"details of {cur_id} copied"
@@ -262,7 +282,7 @@ def run_console(stdscr, poll: float = REFRESH_S) -> int:
         line(y + 1, 2, f"cpu  {sysd['cpu']}")
         line(y + 2, 2, f"mem  {sysd['mem']}")
         line(y + 3, 2, f"engine  {sysd['engine']}")
-        line(y + 4, 2, f"pool  {pool} ready")
+        line(y + 4, 2, f"warm pile  {pool} box(es), no agents")
         line(y + 5, 2, f"facts  {facts_n}")
 
         # agents pane (right of system) — ALL visible, dead = red
@@ -274,9 +294,11 @@ def run_console(stdscr, poll: float = REFRESH_S) -> int:
             dead = a["hb_age"] > HB_DEAD_S
             color = curses.color_pair(3) if dead else curses.color_pair(1)
             attr = color | (curses.A_BOLD if i == sel else 0)
-            lane = (a["intent"] or "idle")[:18]
-            line(cur_y, ax, f"{sel_mark}{a['id'][:28]:28s} {lane}", attr)
-            line(cur_y, ax + 48, f"hb {a['hb_age']}s", curses.color_pair(3) if dead else curses.A_DIM)
+            # THE TITLE, BOLD — the lane is the story, not decoration
+            lane = (a["intent"] or "live")[:24]
+            line(cur_y, ax, f"{sel_mark}{a['id'][:26]:26s}", attr)
+            line(cur_y, ax + 28, lane, curses.A_BOLD)
+            line(cur_y, ax + 54, f"hb {a['hb_age']}s", curses.color_pair(3) if dead else curses.A_DIM)
 
         # intents row
         iy = max(y + 8, len(agents) + 3)
