@@ -126,6 +126,17 @@ class SwarmCoordinator:
         self._bus_listener = _BusEventListener(self)
         self._bus_listener.start()
 
+        # THE MESH BRIDGE — one group chat across EVERY node type
+        # (operator directive: local, boxed, swarm, swarm-boxed). The
+        # mesh is file-based (gc.log) + loopback wires: boxes cannot see
+        # it natively. The bridge carries gc.log lines onto /mesh/chat
+        # (bus-connected agents: host, boxed, remote) and lands bus
+        # publishes back into gc.log (engagement agents + audit) — with
+        # a source tag so the two directions never loop.
+        with contextlib.suppress(Exception):
+            self._mesh_bridge = _MeshBridge(self)
+            self._mesh_bridge.start()
+
         # subscribe to swarm control topics
         self.bus._route("/swarm/status", {"event": "coordinator_started", "port": self.bus.port})
 
@@ -411,6 +422,101 @@ class SwarmCoordinator:
                 "bus_stats": self.bus.stats,
             }
         return {"agents": 0, "bus_port": self.bus.port, "bus_stats": self.bus.stats}
+
+
+class _MeshBridge:
+    """gc.log <-> /mesh/chat. A BRIDGED line is tagged '[bus]' in the
+    file and skipped when read back; bus publishes from the bridge carry
+    _bridge=True so the bus side never echoes twice."""
+
+    def __init__(self, coord):
+        self._coord = coord
+        self._client = None
+        self._running = True
+        self._seen_bytes = 0
+
+    def _gc_log(self):
+        from suijin.server.agent.lib.mesh import _gc_log
+
+        return _gc_log()
+
+    def _connect(self):
+        if self._client is not None and self._client.connected:
+            return True
+        from suijin.server.mesh.bus import BusClient
+
+        with contextlib.suppress(Exception):
+            self._client = BusClient()
+            if self._client.connect("127.0.0.1", self._coord.bus.port, "mesh-bridge"):
+                self._client.subscribe("/mesh/**")
+                return True
+            self._client = None
+        return False
+
+    def start(self):
+        threading.Thread(target=self._run, daemon=True, name="mesh-bridge").start()
+
+    def _run(self):
+        import time as _t
+
+        _spammed = {"n": 0}
+        while self._running:
+            try:
+                if not self._connect():
+                    _t.sleep(2)
+                    continue
+                # 1. file -> bus: new gc.log lines
+                p = self._gc_log()
+                if p.exists():
+                    size = p.stat().st_size
+                    if self._seen_bytes == 0:
+                        # FIRST CYCLE: baseline at the current size — never
+                        # replay gc.log history onto the bus (the first proof
+                        # flooded subscribers with 85KB of old lines and the
+                        # assertion drained only the first 30)
+                        self._seen_bytes = size
+                    elif size > self._seen_bytes:
+                        with p.open("r", encoding="utf-8", errors="replace") as f:
+                            if self._seen_bytes:
+                                f.seek(self._seen_bytes)
+                            for ln in f:
+                                ln = ln.strip()
+                                if ln and "[bus]" not in ln:
+                                    parts = ln.split("|", 4)
+                                    msg = parts[-1] if parts else ln
+                                    self._client.publish("/mesh/chat", {
+                                        "line": ln[:400], "src": "file",
+                                        "msg": str(msg)[:300]})
+                        self._seen_bytes = size
+                    elif size < self._seen_bytes:
+                        self._seen_bytes = 0  # truncated/rotated
+                # 2. bus -> file: peer publishes land in gc.log tagged
+                for m in self._client.drain(40):
+                    with contextlib.suppress(Exception):
+                        pl = m.get("payload") or {}
+                        if pl.get("_bridge") or pl.get("src") == "file":
+                            continue
+                        msg = str(pl.get("msg") or pl.get("line") or "").strip()
+                        if not msg:
+                            continue
+                        from suijin.server.agent.lib.mesh import mesh_dir
+
+                        mesh_dir().mkdir(parents=True, exist_ok=True)
+                        with self._gc_log().open("a", encoding="utf-8") as f:
+                            stamp = time.strftime("%H:%M:%S")
+                            f.write(f"{stamp}|bridge|mesh-bridge[bus]|{pl.get('engagement', '')}|{msg[:380]}\n")
+                        self._seen_bytes = self._gc_log().stat().st_size
+            except Exception as e:  # noqa: BLE001 — log once, keep bridging
+                if _spammed["n"] < 3:
+                    _spammed["n"] += 1
+                    print(f"[mesh-bridge] cycle error: {e.__class__.__name__}: {str(e)[:120]}", flush=True)
+            _t.sleep(1)
+
+    def stop(self):
+        self._running = False
+        with contextlib.suppress(Exception):
+            if self._client:
+                self._client.close()
 
 
 class _BusEventListener:
