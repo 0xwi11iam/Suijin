@@ -147,16 +147,29 @@ def execute_intent(
     identity: str,
     intent: dict,
     bus=None,
-    max_turns: int = 25,
+    max_turns: int = 0,
     on_event=None,
 ) -> dict:
     """Work one intent: LLM → decision → tool → result → repeat.
 
     Returns {"state": done|blocked|exhausted, "facts": [...], "note": str}.
-    25 turns: 10 proved too few for real probing lanes — five of eight
-    workers hit the cap mid-investigation on the first field run.
+
+    max_turns=0 → read `swarm_turn_cap` from config (default 40). The old
+    hardcoded caps (10, then 25) starved an overnight run: nine lanes hit
+    the cap mid-investigation, the queue emptied, and eight agents idled
+    for hours with tokens to burn. A cap still guards against runaway
+    loops — but it's the operator's knob now, and `exhausted` requeues
+    once via the health sweep instead of dying.
     """
     import time
+
+    if max_turns <= 0:
+        try:
+            from suijin.modules.platform.lib.config_loader import load_config
+
+            max_turns = int(load_config().get("swarm_turn_cap") or 40)
+        except Exception:  # noqa: BLE001 — config read must never kill the loop
+            max_turns = 40
 
     messages = [
         {"role": "system", "content": SYSTEM_TEMPLATE.format(catalog=_load_catalog())},

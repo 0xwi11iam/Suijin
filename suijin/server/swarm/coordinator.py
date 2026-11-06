@@ -248,8 +248,7 @@ class SwarmCoordinator:
 
                 sweep_db = _sq.connect(str(swarm_db_path()), timeout=5)
                 sweep_db.execute("PRAGMA journal_mode=WAL")
-                stale_cutoff = now - 120  # 2 min: live agents heartbeat
-                # every few seconds; an unregistered claimant is orphaned
+                stale_after = 120.0  # seconds without a live claimant
                 rows = sweep_db.execute(
                     "SELECT id, agent_id, claimed_at FROM intents WHERE state = 'running'"
                 ).fetchall()
@@ -257,7 +256,12 @@ class SwarmCoordinator:
                 for iid, aid, claimed in rows:
                     if aid in self._agents:
                         continue  # live agent — its intent, leave it
-                    if claimed and now - float(claimed) > stale_cutoff:
+                    # BUG FIX 2026-11-06: this was `now - claimed > now - 120`
+                    # — comparing an AGE to a TIMESTAMP, true only for claims
+                    # from 1970. The sweep could never requeue anything;
+                    # 5 orphaned intents sat 'running' under dead agents
+                    # for 11 hours while this printed "requeued 0".
+                    if claimed and (now - float(claimed)) > stale_after:
                         sweep_db.execute(
                             "UPDATE intents SET state = 'open', agent_id = NULL, claimed_at = NULL WHERE id = ?",
                             (iid,),
@@ -268,15 +272,17 @@ class SwarmCoordinator:
                 # sweep dies at this line, silently (suppressed), and the
                 # requeue UPDATEs above roll back with the missing commit
                 cur = sweep_db.execute("DELETE FROM agents WHERE last_heartbeat < ?", (now - 300.0,))
-                # blocked intents get ONE automatic retry (fresh agent,
-                # fresh conversation) — poison intents stop at 2 attempts.
-                # Column added lazily: the schema predates this policy.
+                # blocked AND exhausted intents get ONE automatic retry —
+                # exhausted means the worker hit the turn cap mid-hunt
+                # (real work done, lane not finished); a fresh conversation
+                # continues it from the notes. Poison intents stop at 2
+                # attempts. Column added lazily: the schema predates this.
                 with contextlib.suppress(_sq.Error):
                     sweep_db.execute("ALTER TABLE intents ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0")
                 retry = sweep_db.execute(
                     "UPDATE intents SET state = 'open', agent_id = NULL, claimed_at = NULL, "
-                    "attempts = attempts + 1 WHERE state = 'blocked' AND attempts < 1 "
-                    "AND completed_at < ?",
+                    "attempts = attempts + 1 WHERE state IN ('blocked', 'exhausted') "
+                    "AND attempts < 1 AND completed_at < ?",
                     (now - 600,),
                 )
                 sweep_db.commit()
