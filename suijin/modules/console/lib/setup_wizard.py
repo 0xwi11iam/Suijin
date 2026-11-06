@@ -11,6 +11,8 @@ are alive (1-token live request through each).
 from __future__ import annotations
 
 import contextlib
+import subprocess
+import sys
 
 
 def run_setup() -> int:
@@ -155,14 +157,70 @@ def run_setup() -> int:
             console.print(f"  [green]→ {effort}[/green]")
     console.print(f"  effort: [bold]{config.get('intelligence', 'max')}[/bold]")
 
-    # ── 5. Save ──
+    # ── 5. Mode ── (basic vs advanced — plain language, no jargon)
+    current_mode = str(config.get("operator_mode") or "basic")
+    console.print("\n[bold]How do you want to work?[/bold]")
+    console.print("  [cyan]1.[/cyan] basic     one agent, the box, normal testing. no swarm.")
+    console.print("  [cyan]2.[/cyan] advanced  swarms of agents, sandboxes, live steering.")
+    try:
+        raw = console.input(f"\n[dim]1-2 (Enter = keep {current_mode}):[/dim] ").strip()
+    except (EOFError, KeyboardInterrupt):
+        raw = ""
+    if raw in ("1", "2"):
+        mode = "basic" if raw == "1" else "advanced"
+        if mode != current_mode:
+            config["operator_mode"] = mode
+            changed = True
+            console.print(f"  [green]→ {mode}[/green]")
+    console.print(f"  mode: [bold]{config.get('operator_mode', 'basic')}[/bold]")
+    if config.get("operator_mode") == "advanced":
+        console.print("  [dim]swarm tools unlocked: suijin swarm … · suijin sandbox …[/dim]")
+
+    # ── 6. Engine probe ── (sandboxes need a container engine; optional)
+    engine = "none"
+    with contextlib.suppress(Exception):
+        from suijin.server.box.engine import detect_engine
+
+        engine = detect_engine(interactive=False)
+    console.print(f"\n[bold]Container engine[/bold] — needed only for sandboxed agents: [bold]{engine}[/bold]")
+    if engine == "none":
+        console.print("  [dim]optional: install OrbStack (mac) or docker to enable sandboxes[/dim]")
+
+    # ── 7. Browser layer offer ── (cookie jar / DOM testing; optional)
+    have_browser = False
+    with contextlib.suppress(Exception):
+        import importlib.util
+
+        have_browser = importlib.util.find_spec("playwright") is not None
+    if not have_browser:
+        console.print("\n[bold]Browser layer[/bold] — live cookie jar + page testing (optional).")
+        try:
+            raw = console.input("  install now? [y/N]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            raw = ""
+        if raw == "y":
+            console.print("  installing suijin[browser] (playwright + patchright)…")
+            r = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "playwright", "patchright"],
+                capture_output=True, text=True, timeout=600,
+            )
+            if r.returncode == 0:
+                console.print("  [green]✓ installed[/green] — fetch engines: playwright install chromium")
+            else:
+                console.print(f"  [red]install failed: {r.stderr[-120:]}[/red]")
+        else:
+            console.print("  [dim]skipped — add later: pip install suijin[browser][/dim]")
+    else:
+        console.print("\n[bold]Browser layer[/bold]: [green]installed ✓[/green] — [dim]suijin auth to capture sessions[/dim]")
+
+    # ── 8. Save ──
     if changed:
         st.save_config(config)
         console.print(f"\n[green]✓ saved[/green] → {st.CONFIG_PATH}")
     else:
         console.print("\n[dim]no changes[/dim]")
 
-    # ── 6. Live test ──
+    # ── 9. Live test ──
     console.print("\n[bold]Testing provider…[/bold]")
     result = _test_one_provider(prov, config)
     console.print(f"  {result}")
@@ -173,10 +231,17 @@ def run_setup() -> int:
             f"  provider:  [bold]{prov}[/bold]\n"
             f"  model:     [bold]{config.get(f'{prov}_model', '—')}[/bold]\n"
             f"  effort:    [bold]{config.get('intelligence', 'max')}[/bold]\n"
+            f"  mode:      [bold]{config.get('operator_mode', 'basic')}[/bold]\n"
+            f"  engine:    [bold]{engine}[/bold]\n"
             f"  api key:   {st.provider_key_status(prov, config)}\n"
             f"  config:    {st.CONFIG_PATH}\n\n"
-            f'  Try it:    [cyan]suijin engage "test http://example.com"[/cyan]\n'
-            f'  Lab:       [cyan]suijin lab up && suijin engage "test http://127.0.0.1:6000"[/cyan]',
+            f"  Hunt:      [cyan]suijin engage \"test http://example.com\"[/cyan]\n"
+            f"  Sessions:  [cyan]suijin auth[/cyan]  (live cookie jar)\n"
+            + (
+                f"  Swarms:    [cyan]suijin swarm console[/cyan] · [cyan]suijin swarm spawn --sandbox N[/cyan]\n"
+                if config.get("operator_mode") == "advanced"
+                else ""
+            ),
             title=" ready ",
             border_style="green",
         )
