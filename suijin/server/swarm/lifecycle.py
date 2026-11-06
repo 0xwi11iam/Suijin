@@ -748,5 +748,18 @@ def run_swarm_stop_all(args=None) -> int:
         bus_port_file().unlink(missing_ok=True)
     with contextlib.suppress(Exception):
         subprocess.run(["pkill", "-f", "suijin.server.swarm.coordinator"], capture_output=True, timeout=5)
+    # 4. remove engagement boxes — their agents exited via /cmd/stop;
+    # the containers themselves die here (data survives: mounted).
+    # The 5-of-10 field bug: pid files only ever knew host agents.
+    with contextlib.suppress(Exception):
+        from suijin.server.box import hypervisor as _hv
+
+        n_boxes = 0
+        for b in _hv.sandbox_ls():
+            if "pool" not in b["name"]:
+                if _hv.sandbox_stop(b["name"]):
+                    n_boxes += 1
+        if n_boxes:
+            console.print(f"[yellow]{n_boxes} agent box(es) removed[/yellow]")
     console.print("[green]swarm stopped — clean[/green]")
     return 0

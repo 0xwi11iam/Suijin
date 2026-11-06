@@ -78,6 +78,84 @@ def _db_rows():
     return agents, intents, findings, facts_n
 
 
+def _detail_events(agent_id: str, limit: int = 3) -> list[dict]:
+    """The selected agent's recent turns from events.jsonl — NATIVE
+    event_log records (tool.call/tool.result paired by id, assistant
+    .message for thought), filtered by the agent field. Same file for
+    host and boxed agents (boxed agents write into the mounted
+    engagement dir)."""
+    with contextlib.suppress(Exception):
+        from suijin.server.platform.lib.workspace import WORKSPACE_DIR
+
+        ev = Path(WORKSPACE_DIR).parent / "engagements" / "_default" / "events.jsonl"
+        if not ev.exists():
+            return []
+        calls: dict = {}
+        thought_by_seq: dict = {}
+        order: list = []
+        for ln in ev.read_text(errors="replace").splitlines()[-200:]:
+            with contextlib.suppress(Exception):
+                import json as _json
+
+                e = _json.loads(ln)
+                if e.get("agent") != agent_id:
+                    continue
+                k = e.get("kind")
+                if k == "assistant.message":
+                    thought_by_seq[int(e.get("seq") or 0)] = str(e.get("content") or "")
+                elif k == "tool.call":
+                    tid = str(e.get("id"))
+                    calls[tid] = {"tool": e.get("name"), "args": e.get("args") or {},
+                                  "seq": int(e.get("seq") or 0), "obs": ""}
+                    order.append(tid)
+                elif k == "tool.result":
+                    c = calls.get(str(e.get("id")))
+                    if c is not None:
+                        c["obs"] = str(e.get("output") or "")
+        out = []
+        for tid in order[-limit:]:
+            c = calls[tid]
+            out.append({"tool": c["tool"], "args": c["args"], "obs": c["obs"],
+                        "thought": thought_by_seq.get(c["seq"], "")})
+        return out
+    return []
+
+
+def _render_detail_pane(stdscr, y: int, maxx: int, agent_id: str, events: list[dict], log_lines: list[str]) -> None:
+    """THE OPERATOR CONSOLE'S DETAILS PANEL, ported: thought → tool+args
+    (values capped) → observation (capped, separated). Falls back to the
+    log lines when the agent hasn't emitted events yet."""
+    row = y
+    if events:
+        for e in events:
+            thought = str(e.get("thought") or "")
+            act = e.get("action") or {}
+            tool = str(act.get("tool") or "?")
+            args = act.get("args") or {}
+            obs = str(e.get("observation") or "")
+            if thought:
+                _line(stdscr, row, 2, f"  | thought: {' '.join(thought.split())[:76]}", curses.color_pair(4))
+                row += 1
+            _line(stdscr, row, 2, f"  > {tool}", curses.color_pair(1) | curses.A_BOLD)
+            row += 1
+            for k in sorted(args.keys())[:4]:
+                v = str(args[k])
+                if len(v) > 56:
+                    v = v[:53] + "…"
+                _line(stdscr, row, 6, f"{k}: {v}", curses.A_DIM)
+                row += 1
+            if obs:
+                _line(stdscr, row, 2, "  " + "-" * min(40, maxx - 6), curses.A_DIM)
+                row += 1
+                _line(stdscr, row, 2, f"  {obs[:150]}", curses.A_DIM)
+                row += 1
+            row += 1
+    else:
+        for ln in log_lines:
+            _line(stdscr, row, 2, f"  {ln[:76]}", curses.A_DIM)
+            row += 1
+
+
 def _tool_log(agent_id: str, limit: int = 12) -> list[str]:
     """The selected agent's recent tool calls. Process agents log to
     tmp files; boxed agents log to `docker logs` — both are honest
@@ -256,6 +334,7 @@ def run_console(stdscr, poll: float = REFRESH_S) -> int:
 
         if cur_id != details_for:
             details_for = cur_id
+            details_events = _detail_events(cur_id)
             details_cache = _tool_log(cur_id)
 
         h, w = stdscr.getch, stdscr.getmaxyx
@@ -318,11 +397,8 @@ def run_console(stdscr, poll: float = REFRESH_S) -> int:
         # details pane (bottom): selected agent's recent calls
         dy = max(maxy - (len(details_cache) + 3), fy + len(findings) + 3)
         line(dy - 1, 2, "-" * max(10, maxx - 4), curses.A_DIM)
-        line(dy, 2, f"details — {details_for}   [c] copy  [s] steer  [k] kill", curses.A_UNDERLINE)
-        for i, d in enumerate(details_cache):
-            if dy + 1 + i >= maxy - 1:
-                break
-            line(dy + 1 + i, 2, f"  {d}", curses.A_DIM)
+        line(dy, 2, f"details — {details_for}   [Enter] attach  [c] copy  [s] steer  [k] kill", curses.A_UNDERLINE)
+        _render_detail_pane(stdscr, dy + 1, maxx, details_for, details_events, details_cache)
 
         # footer
         msg = ""

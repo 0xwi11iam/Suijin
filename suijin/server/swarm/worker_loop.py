@@ -30,6 +30,33 @@ SYSTEM_TEMPLATE = (
 )
 
 
+def _hunt_policy() -> str:
+    """The operator's standing hunt policy — ~/.suijin/config/hunt-
+    policy.md rides EVERY agent's instructions by default (no per-
+    engagement repeating: 'I have to tell the agents myself' — never
+    again). Boxed agents see the same file through the mounted config
+    dir. Missing/empty file → only the built-in defaults below."""
+    builtin = (
+        "\n\nSTANDING HUNT POLICY (defaults):\n"
+        "- impact over noise — pursue findings the program would PAY for; "
+        "cosmetic/unpayable findings get one note, then move on\n"
+        "- drop dead surface fast — no real attack surface? one note, leave\n"
+        "- NO iteration budget in swarm mode — work until the mission is "
+        "genuinely done; do not invent caps\n"
+    )
+    with contextlib.suppress(Exception):
+        from pathlib import Path as _P
+
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+        f = _P(WORKSPACE_DIR) / "hunt-policy.md"
+        if f.exists():
+            custom = f.read_text(errors="replace").strip()
+            if custom:
+                return "\n\nSTANDING HUNT POLICY (operator):\n" + custom[:4000]
+    return builtin
+
+
 def _session_hint() -> str:
     """One line telling workers which authenticated sessions exist.
 
@@ -48,8 +75,13 @@ def _session_hint() -> str:
         if names:
             shown = ", ".join(sorted(names)[:8])
             return (
-                f"\n\nAUTHENTICATED SESSIONS available (pass credential='<name>' "
-                f"to http_request / http_replay): {shown}"
+                f"\n\nAUTHENTICATED SESSIONS — jars on file: {shown}\n"
+                "AUTHENTICATED BY DEFAULT (operator standing rule): for ANY target "
+                "domain in that list, test AS the logged-in user — pass "
+                "credential='<domain>' to http_request / http_replay / auth_diff. "
+                "Authenticated surface is the priority; unauthenticated probing is "
+                "for comparison (auth_diff) or when no jar exists for the domain. "
+                "Never probe a jarred domain blind."
             )
     return ""
 
@@ -201,7 +233,9 @@ def execute_intent(
             max_turns = 100000
 
     messages = [
-        {"role": "system", "content": SYSTEM_TEMPLATE.format(catalog=_load_catalog()) + _session_hint()},
+        {"role": "system",
+         "content": (SYSTEM_TEMPLATE.format(catalog=_load_catalog())
+                     + _session_hint() + _hunt_policy())},
         {"role": "user", "content": f"INTENT: {intent['text']}\n\nExecute this intent."},
     ]
 
@@ -329,7 +363,8 @@ def execute_intent(
                 )
         if on_event is not None:
             with contextlib.suppress(Exception):
-                on_event(turn, tool_name, result_str, tool_args)
+                on_event(turn, tool_name, result_str, tool_args,
+                         thought=str(decision.get("thought") or decision.get("reasoning") or ""))
 
     # hit the turn cap — exhausted (budget cut, not done)
     return {"state": "exhausted", "facts": facts, "note": f"hit {max_turns} turn cap"}

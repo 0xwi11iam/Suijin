@@ -371,7 +371,11 @@ def create_sandbox(name: str, coordinator: str, identity: str, engagement: str =
     spec = sandbox_spec(name, coordinator, identity, engagement, mission=mission)
     if not image_exists():
         return False
-    argv = ["create", "--name", name]
+    # --rm: the box DESTROYS ITSELF the moment its agent exits — engaged
+    # boxes are temporary by contract (operator directive: destroyed on
+    # stop, never kept/paused). Data survives: the engagement dir is
+    # mounted on the host.
+    argv = ["create", "--rm", "--name", name]
     for m in spec["mounts"]:
         argv += ["-v", m]
     for k, v in spec["env"].items():

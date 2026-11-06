@@ -67,8 +67,14 @@ class SwarmAgent:
             print(f"cannot connect to coordinator at {self._host}:{self._port}")
             return False
 
-        self._bus.subscribe(f"/agent/{self._identity}/**")  # steering, kill
+        self._bus.subscribe(f"/agent/{self._identity}/**")  # targeted steering, kill
         self._bus.subscribe("/engagement/**/findings")  # other agents' findings
+        # THE COMMAND BUS — control-plane commands reach EVERY agent
+        # (host, boxed, future cloud nodes) on one topic tree. The first
+        # field bug: graceful_stop went to /swarm/status which agents
+        # never subscribed to — host agents died via pid files, boxed
+        # agents survived a `swarm stop` (5 of 10 stopped, 2026-11-06).
+        self._bus.subscribe("/cmd/**")
         self._register()
 
         self._running = True
@@ -212,6 +218,38 @@ class SwarmAgent:
                 print(f"[{self._identity}] killed by operator")
                 self._running = False
                 return
+            # ── the command bus (broadcast control) ─────────────────
+            if "/cmd/" in topic:
+                cmd = topic.rsplit("/", 1)[-1].lower()
+                if cmd in ("stop", "graceful_stop", "shutdown"):
+                    print(f"[{self._identity}] command: stop — finishing current step")
+                    self._running = False
+                    return
+                elif cmd == "pause":
+                    print(f"[{self._identity}] command: pause — holding")
+                    while self._running:
+                        time.sleep(1)
+                        for m in self._bus.drain(20):
+                            t2 = str(m.get("topic") or "")
+                            if t2.endswith("/resume"):
+                                break
+                        else:
+                            continue
+                        break
+                elif cmd == "resume":
+                    pass  # the pause loop exits on this message
+                elif cmd == "steer":
+                    msg = str((payload or {}).get("message") or "")[:500]
+                    if msg:
+                        print(f"[{self._identity}] command steer: {msg[:80]}")
+                        with self._notes_lock:
+                            self._operator_notes.append(msg)
+                elif cmd == "mission":
+                    new_mission = str((payload or {}).get("mission") or "")[:500]
+                    if new_mission:
+                        self._mission = new_mission
+                        print(f"[{self._identity}] command: mission updated → {new_mission[:60]}")
+
             if f"/agent/{self._identity}/steer" in topic:
                 msg = str(payload.get("message", ""))[:500]
                 print(f"[{self._identity}] steering: {msg[:100]}")
@@ -266,7 +304,45 @@ class SwarmAgent:
 
         from suijin.server.swarm.worker_loop import execute_intent
 
-        def _on_event(turn: int, tool_name: str, result_str: str, tool_args=None):
+        def _on_event(turn: int, tool_name: str, result_str: str, tool_args=None, thought: str = ""):
+            # EMIT the operator console's events.jsonl format — the swarm
+            # console's details pane renders the SAME panel (thought →
+            # tool+args → observation). Written into the engagement dir,
+            # which is MOUNTED for boxed agents: one file, host and boxed
+            # alike, exactly like the operator console reads.
+            # NATIVE event_log records (suijin/server/agent/lib/event_log
+            # schema) — the operator console's pane renders these natively
+            # (thought→tool+args→observation, prettified, correct colors);
+            # the ad-hoc format rendered as raw JSON (operator field
+            # report). Also published on the bus: /engagement/<eng>/events
+            # (centralized flow — host, boxed, cloud clients alike).
+            with contextlib.suppress(Exception):
+                import json as _json
+
+                from suijin.server.platform.lib.workspace import WORKSPACE_DIR
+
+                _eng = str(intent.get("engagement") or "default")
+                if _eng in ("default", ""):
+                    _eng = "_default"  # the workspace's default engagement slug
+                ev_dir = Path(WORKSPACE_DIR).parent / "engagements" / _eng
+                ev_dir.mkdir(parents=True, exist_ok=True)
+                tid = f"{self._identity[:14]}-{turn}-{str(tool_name)[:10]}"
+                ok = "error" not in str(result_str or "").lower()[:60]
+                recs = [
+                    {"kind": "tool.call", "id": tid, "name": str(tool_name), "args": tool_args or {},
+                     "agent": self._identity, "seq": turn, "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
+                    {"kind": "tool.result", "id": tid, "output": " ".join(str(result_str or "").split())[:600],
+                     "ok": ok, "agent": self._identity, "seq": turn, "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
+                ]
+                if thought:
+                    recs.insert(0, {"kind": "assistant.message", "content": str(thought)[:400],
+                                    "agent": self._identity, "seq": turn,
+                                    "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+                with (ev_dir / "events.jsonl").open("a") as f:
+                    for r in recs:
+                        f.write(_json.dumps(r) + "\n")
+                for r in recs:
+                    self._bus.publish(f"/engagement/{_eng}/events", r)
             # THE ACTIVITY STREAM — an operator watching attach/console must
             # see WHAT happened, not a char count (field report: "they are
             # working quickly but I can't see what's actually going on").
