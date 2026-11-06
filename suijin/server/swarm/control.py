@@ -168,8 +168,7 @@ def _new_hunt() -> None:
         # show what was captured, then continue
         ses2 = _data("sessions").get("sessions", [])
         if ses2:
-            console.print("
-  [green]captured:[/green]")
+            console.print("\n  [green]captured:[/green]")
             for s in ses2[:8]:
                 console.print(f"    {s['name'][:34]:34s} {s['cookies']} cookies")
 
