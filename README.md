@@ -238,6 +238,110 @@ Suijin (tools and all) in one command.
 
 </details>
 
+## The Swarm
+
+Suijin runs one focused agent — or a whole swarm of them, on your host
+or in disposable sandboxes, hunting one objective in parallel lanes.
+
+```bash
+suijin swarm hunt "find auth bugs in the image-sharing api" --host 4 --boxed 4
+```
+
+That single command: starts the coordinator, names the hunt after the
+title, and spawns agents that **follow the title as their standing
+mission** — no intents required. Queue specific lanes later; they take
+priority when present.
+
+### The pieces
+
+**Coordinator** — hands out work, watches health, requeues stuck
+intents, and never lets a dead agent's work vanish (orphan sweep).
+**Agents** — identical whether they run as host processes or inside
+boxes; one protocol, one identity model. **The bus** — one TCP fabric
+every node type speaks: host agents over loopback, boxed agents via
+`host.docker.internal`, remote suijins via `bus.listen` (config; loopback
+by default).
+
+**Boxes (the hypervisor)** — `suijin swarm spawn --sandbox N` runs N
+agents in disposable containers, spawned from a warm pile of
+pre-created boxes in about a second. Everything on the host — auth
+sessions, settings, credentials, engagement data — is *mounted* into
+every box: same files, live, no sync step, no rebuild on settings
+changes. Destroying a box destroys nothing: data lives on the host by
+construction.
+
+```bash
+suijin sandbox ls          # every box, state, agent
+suijin sandbox summon 4    # keep 4 idle boxes warm for the next hunt
+suijin sandbox destroy-idle
+suijin box image build     # rebuild the template (once per code change)
+```
+
+### Communication
+
+- **`/cmd/**` — the command bus.** `stop`, `pause`, `resume`, `steer`,
+  `mission` reach every agent on every node type. `suijin swarm say
+  "drop the redirect lane"` steers the whole swarm mid-flight; the
+  message lands inside each agent's conversation as an operator
+  interjection.
+- **The data layer.** One aggregator (`suijin.server.data`), two
+  transports: in-process for screens and verbs, over the bus for boxes
+  and remote clients (`query("swarm" | "boxes" | "sessions" |
+  "engagement" | "system" | "all")`).
+- **The mesh bridge.** The classic file-based group chat (gc.log) and
+  the bus are bridged in the coordinator — one chat across local,
+  boxed, swarm, and remote nodes.
+- **Events.** Every tool call/result/thought lands in the engagement's
+  `events.jsonl` (native event-log format) *and* on the bus — the
+  operator console renders its details pane from the same records.
+
+### The intelligence that stops wasted work
+
+- **Prior-work gate** — `suijin swarm intent` refuses work that
+  re-derives an ABANDONED/REPORTED finding from past engagement
+  catalogs (`--force` overrides with a note).
+- **The tested ledger** — `mark_dead(region, reason)` broadcasts a
+  dead surface to every peer (file + bus); peers see it in their next
+  prompt and skip it. Verdicts age: older than `ledger_retest_days`
+  (default 90, in settings) they flip to *consider retesting* — sites
+  change, a year-old dead verdict is not gospel. `suijin ledger
+  [target]` shows the book.
+- **Fixation guard** — if an agent hammers a ledger-dead region 4+ of
+  its last 6 turns, the worker injects its own drop-it corrective. No
+  operator steering needed.
+- **Idle autopilot** — empty queue, idle agents, facts on file →
+  follow-up intents queued from what's been found (hourly cap).
+
+### Watching and steering
+
+```bash
+suijin swarm control    # the hub: state, new hunt, boxes, hypervisor, stop
+suijin swarm console    # live dashboard — bold lanes, honest board,
+                        # per-agent details; Enter opens an agent's live view
+suijin swarm say "..."  # steer everyone
+suijin swarm stop       # graceful: agents finish their step, boxes die,
+                        # data survives (the stop screen proves it)
+```
+
+The findings board is honest by design: `reported` (a rumor until its
+control test passes) · `verified` · `duplicate` · `false_positive`.
+`report_finding` quotes the control-test rule at the agent —
+reproduction is not verification.
+
+### Sessions: authenticated by default
+
+`suijin auth` opens a live browser with a persistent profile — log in
+to anything, any number of sites; the jar snapshots automatically and
+every agent tests as the logged-in user from its next request. Type
+`done` to finish. `suijin auth <target> --paste` for cookie strings;
+`--check` heartbeats a session.
+
+### Settings
+
+`operator_mode` basic/advanced gates the swarm verbs. Swarm settings
+(turn cap — **no cap by default**, autopilot, warm-pile size, ledger
+retest days) live in `suijin settings` under the swarm section.
+
 ## The Box
 
 ```bash
