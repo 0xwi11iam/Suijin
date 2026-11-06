@@ -286,6 +286,11 @@ def apply_credential(req: dict, cred_name: str | None) -> dict:
     primitive: one argument, byte-exact."""
     r = dict(req)
     headers = {k: v for k, v in dict(r.get("headers") or {}).items() if k.lower() not in COMMON_AUTH_HEADERS}
+    # 'none'/'null'/'' mean NO credential — the unauthenticated shot —
+    # never a lookup failure (live engagement: credential:'none' rejected,
+    # the whole battery died, agent retried twice. Audit 2026-11-06.)
+    if str(cred_name or "").strip().lower() in ("none", "null", "unauthenticated", "anon"):
+        cred_name = None
     if cred_name:
         cred = _CREDENTIALS.get(str(cred_name)) or _shared_store_get(str(cred_name))
         if cred is None:

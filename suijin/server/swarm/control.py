@@ -87,9 +87,10 @@ def run_hub() -> int:
             "  [bold #bd93f9]2.[/] console         live dashboard (agents · findings · steer)\n"
             "  [bold #bd93f9]3.[/] boxes           box manager: state · logs · shell · kill\n"
             "  [bold #bd93f9]4.[/] hypervisor      summon/destroy idle boxes · image\n"
-            "  [bold #bd93f9]5.[/] add work        queue an intent for idle agents\n"
-            "  [bold #bd93f9]6.[/] message swarm   steer every agent, one line\n"
-            "  [bold #bd93f9]7.[/] stop            graceful — data survives (proof shown)\n"
+            "  [bold #bd93f9]5.[/] open agent      attach a specific agent's live view by id\n"
+            "  [bold #bd93f9]6.[/] add work        queue an intent for idle agents\n"
+            "  [bold #bd93f9]7.[/] message swarm   steer every agent, one line\n"
+            "  [bold #bd93f9]8.[/] stop            graceful — data survives (proof shown)\n"
             "  [bold white]b.[/] [dim]back[/]"
         )
         c = _input("  > ")
@@ -110,16 +111,31 @@ def run_hub() -> int:
         elif c == "4":
             _hypervisor()
         elif c == "5":
+            # OPEN AGENT BY ID — fuzzy: any substring of a live agent id
+            agents = d.get("swarm", {}).get("agents", [])
+            if agents:
+                for a in agents[:15]:
+                    mark = "[red]✗[/red]" if a.get("dead") else "[green]●[/green]"
+                    console.print(f"  {mark} {a['id']}")
+            frag = _input("  agent id (any part): ")
+            if frag and not _cancelled(frag):
+                match = next((a["id"] for a in agents if frag.lower() in a["id"].lower()), "")
+                if match:
+                    subprocess.run(["suijin", "swarm", "attach", match], timeout=3600)
+                else:
+                    console.print(f"  [red]no agent matches '{frag}'[/red]")
+                    _pause()
+        elif c == "6":
             intent = _input("  intent: ")
             if intent and not _cancelled(intent):
                 subprocess.run(["suijin", "swarm", "intent", intent], timeout=60)
                 _pause()
-        elif c == "6":
+        elif c == "7":
             msg = _input("  say: ")
             if msg and not _cancelled(msg):
                 subprocess.run(["suijin", "swarm", "say", msg], timeout=60)
                 _pause()
-        elif c == "7":
+        elif c == "8":
             if _stop_flow():
                 return 0
 

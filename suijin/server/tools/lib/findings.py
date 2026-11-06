@@ -86,6 +86,21 @@ def report_vuln_finding(
         db.close()
         wrote = True
 
+    # THE BUS: findings flow to every node (host, boxed, remote) — the
+    # centralized-data directive. Live peers + any subscribed client hear it.
+    with contextlib.suppress(Exception):
+        from suijin.server.mesh.bus import BusClient
+        from suijin.server.swarm.lifecycle import _bus_addr
+
+        addr = _bus_addr()
+        if addr:
+            bc = BusClient()
+            if bc.connect(addr[0], addr[1], f"finder-{os.urandom(2).hex()}"):
+                bc.publish(f"/engagement/{target}/findings",
+                           {"severity": severity, "vuln_type": vuln_type,
+                            "title": title[:200], "url": url, "agent": agent})
+                bc.close()
+
     if not wrote:
         # no swarm db (single-agent runs) — the fact store still wants it
         with contextlib.suppress(Exception):

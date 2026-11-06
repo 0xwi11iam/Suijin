@@ -84,7 +84,17 @@ class SwarmCoordinator:
     """The coordinator process — `suijin swarm start`."""
 
     def __init__(self, bus_port: int = 0):
-        self.bus = BusBroker(port=bus_port)
+        # bus.listen (config): default 127.0.0.1 — safe. Set "0.0.0.0" or a
+        # LAN ip to let REMOTE suijins join the swarm's bus (operator
+        # directive: box, local, and remote all move data through the bus
+        # to the host). Remote agents then spawn with
+        # --coordinator <this-host-ip>:<port>.
+        _listen = "127.0.0.1"
+        with contextlib.suppress(Exception):
+            from suijin.modules.platform.lib.config_loader import load_config
+
+            _listen = str((load_config() or {}).get("bus", {}).get("listen") or "127.0.0.1")
+        self.bus = BusBroker(port=bus_port, host=_listen)
         self._db: sqlite3.Connection | None = None
         self._running = False
         self._health_thread: threading.Thread | None = None
