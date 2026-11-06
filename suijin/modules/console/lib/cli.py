@@ -1115,6 +1115,35 @@ def run_sandbox_cmd(action: str, name: str = "", tail: int = 40) -> int:
     return 1
 
 
+def run_complexity_cmd(mode: str = "") -> int:
+    """`suijin complexity [basic|advanced]` — the mode switch, no settings
+    dive needed."""
+    import json as _json
+    from pathlib import Path as _P
+    from rich.console import Console
+
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+    console = Console()
+    cfg_p = _P(WORKSPACE_DIR) / "config.json"
+    cfg = {}
+    with contextlib.suppress(Exception):
+        cfg = _json.loads(cfg_p.read_text())
+    cur = str(cfg.get("operator_mode") or "basic")
+    m = str(mode or "").strip().lower()
+    if m not in ("basic", "advanced", ""):
+        console.print(f"[red]unknown mode '{mode}' — basic or advanced[/red]")
+        return 1
+    if not m:
+        console.print(f"  mode: [bold]{cur}[/bold]" + ("  · swarm tooling on" if cur == "advanced" else "  · swarm tooling off (advanced unlocks it)"))
+        return 0
+    cfg["operator_mode"] = m
+    with contextlib.suppress(Exception):
+        cfg_p.write_text(_json.dumps(cfg, indent=2))
+    console.print(f"  [green]→[/green] {m}" + ("  · swarm tooling unlocked" if m == "advanced" else "  · swarm tooling hidden (basic mode)"))
+    return 0
+
+
 def run_ledger_cmd(target: str = "") -> int:
     """`suijin ledger [target]` — the tested book: what's been declared
     dead, where, how long ago; stale verdicts say RETEST (sites change)."""
@@ -2607,6 +2636,7 @@ _KNOWN_VERBS = frozenset(
         "sandbox",
         "browser",
         "ledger",
+        "complexity",
         "bb-scope",
         "kb",
         "pull",
@@ -2819,6 +2849,10 @@ def main(argv=None):
     shell_p.add_argument("name")
     shell_p.set_defaults(func=lambda a: run_sandbox_cmd("shell", a.name))
     sbx.set_defaults(func=lambda a: run_sandbox_cmd("ls"))
+
+    cx = sub.add_parser("complexity", help="switch operator mode (basic · advanced) — gates the swarm tooling")
+    cx.add_argument("mode", nargs="?", default="", help="basic | advanced (no arg = show current)")
+    cx.set_defaults(func=lambda a: run_complexity_cmd(a.mode))
 
     led = sub.add_parser("ledger", help="tested ledger — dead regions per target, with age (stale = retest)")
     led.add_argument("target", nargs="?", default="", help="filter by target domain (default: all)")
