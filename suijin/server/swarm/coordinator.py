@@ -139,7 +139,13 @@ class SwarmCoordinator:
 
     def _open_db(self) -> sqlite3.Connection:
         db = sqlite3.connect(str(swarm_db_path()), timeout=10, check_same_thread=False)
-        db.execute("PRAGMA journal_mode=WAL")
+        # journal mode is PERSISTENT — set once here, guarded (a busy db
+        # at restart must never crash the boot). DELETE, not WAL: the WAL
+        # index (-shm) needs shared memory that BREAKS across the
+        # container mount boundary (disk I/O error under concurrent
+        # host+box writes, proven by the hammer test, 2026-11-06).
+        with contextlib.suppress(sqlite3.OperationalError):
+            db.execute("PRAGMA journal_mode=DELETE")
         db.execute("PRAGMA synchronous=NORMAL")
         db.executescript(SWARM_SCHEMA)
         db.commit()
@@ -247,7 +253,6 @@ class SwarmCoordinator:
                 import sqlite3 as _sq
 
                 sweep_db = _sq.connect(str(swarm_db_path()), timeout=5)
-                sweep_db.execute("PRAGMA journal_mode=WAL")
                 stale_after = 120.0  # seconds without a live claimant
                 rows = sweep_db.execute(
                     "SELECT id, agent_id, claimed_at FROM intents WHERE state = 'running'"
@@ -513,7 +518,6 @@ def run_swarm_status(args=None) -> int:
     # TODO: when the coordinator handles a STATUS op, query it
     # For now read the database directly
     db = sqlite3.connect(str(swarm_db_path()), timeout=5)
-    db.execute("PRAGMA journal_mode=WAL")
 
     table = Table(title="swarm status", show_header=True)
     table.add_column("metric", style="cyan")

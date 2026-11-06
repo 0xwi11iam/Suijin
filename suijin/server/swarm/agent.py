@@ -166,7 +166,6 @@ class SwarmAgent:
                         import sqlite3
 
                         db = sqlite3.connect(str(_swarm_db_path()), timeout=5)
-                        db.execute("PRAGMA journal_mode=WAL")
                         db.execute(
                             "UPDATE intents SET state = 'open', agent_id = NULL WHERE id = ?",
                             (self._current_intent.get("id"),),
@@ -208,7 +207,6 @@ class SwarmAgent:
             from suijin.server.swarm.coordinator import swarm_db_path
 
             db = sqlite3.connect(str(swarm_db_path()), timeout=5)
-            db.execute("PRAGMA journal_mode=WAL")
 
             row = db.execute(
                 "SELECT id, text, engagement FROM intents WHERE state = 'open' ORDER BY created_at LIMIT 1"
@@ -270,7 +268,6 @@ class SwarmAgent:
             from suijin.server.swarm.coordinator import swarm_db_path
 
             db = sqlite3.connect(str(swarm_db_path()), timeout=5)
-            db.execute("PRAGMA journal_mode=WAL")
             db.execute(
                 "UPDATE intents SET state = ?, completed_at = ? WHERE id = ?",
                 (state, time.time(), intent["id"]),

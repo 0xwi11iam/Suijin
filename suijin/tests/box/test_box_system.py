@@ -225,6 +225,7 @@ class TestCliRouting:
 
         assert set(VERBS) == {
             "build",
+            "image",
             "start",
             "stop",
             "enter",
@@ -233,6 +234,7 @@ class TestCliRouting:
             "unadopt",
             "status",
             "refresh",
+            "update",
             "destroy",
         }
 

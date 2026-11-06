@@ -350,6 +350,7 @@ def _persist_container_key(key: str, value: str) -> None:
 
 VERBS = {
     "build": cmd_build,
+    "image": lambda args=None: _cmd_image(args),
     "start": cmd_start,
     "stop": cmd_stop,
     "enter": cmd_enter,
@@ -361,6 +362,21 @@ VERBS = {
     "update": cmd_update,
     "destroy": cmd_destroy,
 }
+
+
+def _cmd_image(args=None):
+    """`box image build|status` — the sandbox template (hypervisor).
+    Interposed at the console layer too; this keeps the box CLI surface
+    honest when invoked directly."""
+    from suijin.server.box.hypervisor import build_image, image_fingerprint, image_is_fresh, image_tag
+
+    verb = (args or [])[0] if args else "status"
+    if verb == "build":
+        build_image(on_log=print)
+        return 0
+    print(f"  image: {image_tag()}")
+    print(f"  fingerprint: {image_fingerprint()} ({'fresh' if image_is_fresh() else 'stale'})")
+    return 0
 
 
 def run_box_cli(argv: list) -> int:

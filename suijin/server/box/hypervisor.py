@@ -1,0 +1,342 @@
+"""Suijin hypervisor — on-demand agent sandboxes, like a hypervisor.
+
+Measured on OrbStack (2026-11-06): container start from a cached image
+0.32s; start of a pre-created container 0.07s. The ONLY slow path is
+building the template image — which happens once per suijin change,
+never on the engagement path.
+
+Design (plan: agent-vault/plans/2026-11-06-hypervisor.md):
+  image     linux + python + suijin + tools  (baked, rare rebuilds)
+  mounts    config/credentials/sessions/engagements  (live, never
+            rebuilt — settings edits on the mac are visible to every
+            box instantly because it's the SAME file through a window)
+
+Mount layout inside the box (HOME=/root, so the stock config loader
+resolves everything with ZERO path translation):
+  /root/.suijin/config        ← ~/.suijin/config          (ro)
+  /root/.suijin/swarm         ← ~/.suijin/swarm           (rw, shared db)
+  /root/.suijin/engagements   ← ~/.suijin/engagements     (rw, the data)
+
+Networking: containers are not localhost — agents get the coordinator
+at host.docker.internal:<port> (OrbStack/docker-desktop) or the docker
+bridge gateway IP (raw linux docker), probed at spawn, never guessed.
+
+Engine selection goes through the box engine (orb first on macOS,
+docker everywhere else) — capability checks, no platform guesses.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import hashlib
+import json
+import os
+import re
+import subprocess
+import threading
+import time
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+DOCKERFILE = REPO_ROOT / "suijin" / "server" / "box" / "sandbox.Dockerfile"
+
+IMAGE_NAME = "suijin/sandbox-base"
+POOL_PREFIX = "suijin-sbx-pool"
+SBX_PREFIX = "suijin-sbx"
+
+# ── engine passthrough (the box engine owns detection) ──────────
+
+
+def _engine_bin() -> str:
+    """Containers speak DOCKER; OrbStack IS a docker daemon.
+
+    The box engine's 'orb' binary drives OrbStack MACHINES (a different
+    model, used by `suijin box`). For containers the docker CLI is the
+    interface — OrbStack's daemon answers on the orbstack context. Probe
+    docker first (works for OrbStack AND Docker AND raw linux), fall
+    back to the box engine's pick."""
+    with contextlib.suppress(FileNotFoundError):
+        r = subprocess.run(["docker", "ps"],
+                           capture_output=True, text=True, timeout=10, stdin=subprocess.DEVNULL)
+        if r.returncode == 0:
+            return "docker"
+    from suijin.server.box.engine import detect_engine, _engine_binary
+
+    return _engine_binary(detect_engine(interactive=False))
+
+
+def _docker(*args: str, timeout: int = 900, check: bool = False) -> tuple[int, str]:
+    cmd = [_engine_bin(), *args]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
+        out = (r.stdout or "") + (r.stderr or "")
+        if check and r.returncode != 0:
+            raise RuntimeError(f"{cmd} failed: {out[:300]}")
+        return r.returncode, out.strip()
+    except subprocess.TimeoutExpired:
+        return 124, f"timeout: {cmd}"
+
+
+def engine_available() -> bool:
+    rc, _ = _docker("ps", timeout=10)
+    return rc == 0
+
+
+# ── image fingerprint: what legitimately invalidates the cache ──
+
+
+def _pyproject_version() -> str:
+    with contextlib.suppress(Exception):
+        txt = (REPO_ROOT / "pyproject.toml").read_text()
+        m = re.search(r'^version\s*=\s*"([^"]+)"', txt, re.M)
+        if m:
+            return m.group(1)
+    return "0"
+
+
+def image_fingerprint() -> str:
+    """Hash of everything baked into the image: version, Dockerfile,
+    requirements, and the python source tree. Two builds with the same
+    fingerprint are interchangeable — no rebuild. Settings/credentials
+    are NOT part of this (they're mounted, not baked)."""
+    h = hashlib.sha256()
+    h.update(_pyproject_version().encode())
+    for p in (DOCKERFILE, REPO_ROOT / "suijin" / "requirements.txt"):
+        with contextlib.suppress(Exception):
+            h.update(p.read_bytes())
+    src = REPO_ROOT / "suijin"
+    for f in sorted(src.rglob("*.py")):
+        h.update(str(f.relative_to(REPO_ROOT)).encode())
+        h.update(f.read_bytes())
+    return h.hexdigest()[:16]
+
+
+def image_tag() -> str:
+    return f"{IMAGE_NAME}:v{_pyproject_version()}"
+
+
+def image_labels(tag: str | None = None) -> dict:
+    rc, out = _docker("image", "inspect", tag or image_tag(), "--format", "{{json .Config.Labels}}", timeout=15)
+    if rc != 0:
+        return {}
+    with contextlib.suppress(Exception):
+        return json.loads(out) or {}
+    return {}
+
+
+def image_exists(tag: str | None = None) -> bool:
+    rc, _ = _docker("image", "inspect", tag or image_tag(), timeout=15)
+    return rc == 0
+
+
+def image_is_fresh() -> bool:
+    """True when the local image matches what the current tree would
+    build (fingerprint label matches). Stale → rebuild in background,
+    running boxes keep running, new spawns get the new image."""
+    return image_labels().get("suijin.fingerprint") == image_fingerprint()
+
+
+def build_image(force: bool = False, on_log=print) -> str:
+    """Build the template image. Slow ONCE; identical fingerprints skip
+    instantly unless forced."""
+    tag = image_tag()
+    fp = image_fingerprint()
+    if not force and image_labels().get("suijin.fingerprint") == fp:
+        on_log(f"  ✓ {tag} already built and fresh (fingerprint {fp}) — nothing to do")
+        return tag
+    on_log(f"  building {tag} (fingerprint {fp})… one-time, cached afterwards")
+    rc, out = _docker(
+        "build",
+        "-f", str(DOCKERFILE),
+        "-t", tag,
+        "--label", f"suijin.fingerprint={fp}",
+        "--label", f"suijin.built_at={int(time.time())}",
+        str(REPO_ROOT),
+        timeout=1800,
+    )
+    if rc != 0:
+        raise RuntimeError(f"image build failed: {out[-500:]}")
+    on_log(f"  ✓ {tag} built")
+    return tag
+
+
+# ── host-side paths the boxes see ───────────────────────────────
+
+
+def _mac_home_suijin() -> Path:
+    from suijin.server.platform.lib.workspace import WORKSPACE_DIR
+
+    return Path(WORKSPACE_DIR).parent  # ~/.suijin
+
+
+def sandbox_spec(name: str, coordinator: str, identity: str, engagement: str = "default") -> dict:
+    """Everything needed to `docker create` one agent sandbox."""
+    home = _mac_home_suijin()
+    (home / "engagements").mkdir(parents=True, exist_ok=True)
+    return {
+        "name": name,
+        "image": image_tag(),
+        "mounts": [
+            # config ro — credentials/sessions/settings live-update by
+            # construction (same file through a window; no sync step)
+            f"{home / 'config'}:/root/.suijin/config:ro",
+            # shared swarm db (coordinator on the mac + every agent)
+            f"{home / 'swarm'}:/root/.suijin/swarm:rw",
+            # the engagements ROOT, not one slug — agents derive their
+            # own engagement dir (e.g. _default) and every write must
+            # land on the host regardless of slug. First field run
+            # mounted a single slug, agent wrote to _default, data died
+            # with the box (2026-11-06).
+            f"{home / 'engagements'}:/root/.suijin/engagements:rw",
+        ],
+        "env": {
+            "SUIJIN_COORDINATOR": coordinator,
+            "SUIJIN_IDENTITY": identity,
+            "SUIJIN_ENGAGEMENT": engagement,
+            # config loader resolves ~/.suijin/config; HOME=/root in image
+            "HOME": "/root",
+        },
+        "args": ["--coordinator", coordinator, "--identity", identity],
+    }
+
+
+def _host_gateway_addr() -> str:
+    """Where a container finds the host's coordinator.
+
+    Capability check on the DAEMON (not the OS): OrbStack and Docker
+    Desktop proxy host.docker.internal into the host network namespace
+    — even services bound to 127.0.0.1 are reachable (proven by the
+    connectivity matrix, 2026-11-06; the bus keeps its loopback bind
+    and stays LAN-invisible). Raw linux docker usually lacks the alias
+    — fall back to the bridge gateway there (requires the bus to bind
+    it; see SUIJIN_BUS_BIND)."""
+    rc, out = _docker("context", "show", timeout=10)
+    ctx = (out or "").strip().lower()
+    if rc == 0 and ("orbstack" in ctx or "desktop" in ctx):
+        return "host.docker.internal"
+    rc, out = _docker(
+        "run", "--rm", "--entrypoint", "python3", image_tag(), "-c",
+        "import socket;\n"
+        "try:\n"
+        "    socket.gethostbyname('host.docker.internal'); print('YES')\n"
+        "except Exception:\n"
+        "    print('NO')",
+        timeout=60,
+    )
+    if rc == 0 and out.strip().endswith("YES"):
+        return "host.docker.internal"
+    rc, out = _docker("network", "inspect", "bridge", "--format", "{{(index .IPAM.Config 0).Gateway}}", timeout=15)
+    if rc == 0 and re.match(r"\d+\.\d+\.\d+\.\d+", out.strip()):
+        return out.strip()
+    return "host.docker.internal"
+
+
+def coordinator_addr_for_boxes(port: int) -> str:
+    return f"{_host_gateway_addr()}:{port}"
+
+
+# ── warm pool: pre-CREATED (sleeping) containers ────────────────
+
+
+def pool_target() -> int:
+    with contextlib.suppress(Exception):
+        from suijin.modules.platform.lib.config_loader import load_config
+
+        return max(0, int((load_config() or {}).get("sandbox", {}).get("pool_size", 4)))
+    return 4
+
+
+def pool_members() -> list[str]:
+    rc, out = _docker("ps", "-a", "--filter", f"name={POOL_PREFIX}", "--format", "{{.Names}}", timeout=15)
+    return out.split() if rc == 0 else []
+
+
+def pool_refill(on_log=None, coordinator: str = "", engagement: str = "default") -> int:
+    """Top the pile back up (called after every spawn — no daemon)."""
+    created = 0
+    need = pool_target() - len(pool_members())
+    for i in range(max(0, need)):
+        name = f"{POOL_PREFIX}-{int(time.time())}-{os.urandom(2).hex()}"
+        if create_sandbox(name, coordinator or "127.0.0.1:1", "pooled", engagement):
+            created += 1
+    if created and on_log:
+        on_log(f"  pool refilled: +{created} (target {pool_target()})")
+    return created
+
+
+def create_sandbox(name: str, coordinator: str, identity: str, engagement: str = "default") -> bool:
+    spec = sandbox_spec(name, coordinator, identity, engagement)
+    if not image_exists():
+        return False
+    argv = ["create", "--name", name]
+    for m in spec["mounts"]:
+        argv += ["-v", m]
+    for k, v in spec["env"].items():
+        argv += ["-e", f"{k}={v}"]
+    argv += [spec["image"]] + spec["args"]
+    rc, out = _docker(*argv, timeout=60)
+    if rc != 0:
+        return False
+    return True
+
+
+def spawn_sandbox_agent(coordinator: str, identity: str, engagement: str = "default", on_log=print) -> str | None:
+    """One agent in a box, sub-second: pop a pooled (pre-created)
+    container or create fresh, re-point it, start it."""
+    name = f"{SBX_PREFIX}-{engagement}-{identity}"
+    pooled = pool_members()
+    if pooled:
+        # take one, re-create under its real name with the real env
+        _docker("rm", "-f", pooled[0], timeout=30)
+    if not create_sandbox(name, coordinator, identity, engagement):
+        on_log(f"  ✗ cannot create {name} (image missing? run: suijin box image build)")
+        return None
+    rc, out = _docker("start", name, timeout=60)
+    if rc != 0:
+        on_log(f"  ✗ start failed: {out[:150]}")
+        return None
+    # refill lazily in the background — spawn stays sub-second
+    threading.Thread(target=pool_refill, kwargs={"coordinator": coordinator}, daemon=True).start()
+    return name
+
+
+# ── verbs ───────────────────────────────────────────────────────
+
+
+def sandbox_ls() -> list[dict]:
+    rc, out = _docker(
+        "ps", "-a", "--filter", f"name={SBX_PREFIX}",
+        "--format", "{{.Names}}\t{{.Status}}\t{{.RunningFor}}", timeout=15,
+    )
+    rows = []
+    if rc == 0:
+        for line in out.splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 2:
+                rows.append({"name": parts[0], "status": parts[1], "age": parts[2] if len(parts) > 2 else ""})
+    return rows
+
+
+def sandbox_logs(name: str, tail: int = 40) -> str:
+    rc, out = _docker("logs", "--tail", str(tail), name, timeout=30)
+    return out if rc == 0 else f"(no logs: {out[:120]})"
+
+
+def sandbox_stop(name: str) -> bool:
+    return _docker("rm", "-f", name, timeout=60)[0] == 0
+
+
+def sandbox_gc() -> dict:
+    """Remove every sandbox (named + pool). Engagement data survives —
+    it lives on the host by construction."""
+    removed = []
+    for name in pool_members() + [r["name"] for r in sandbox_ls()]:
+        if sandbox_stop(name):
+            removed.append(name)
+    return {"removed": removed, "count": len(removed)}
+
+
+def sandbox_shell(name: str) -> int:
+    """Interactive shell — must inherit the terminal, so this one runs
+    in the foreground on purpose (everything else never does)."""
+    return subprocess.call([_engine_bin(), "exec", "-it", name, "bash"], stdin=None)

@@ -1062,6 +1062,81 @@ def _run_auth_session(args) -> int:
     return run_auth_cmd(args)
 
 
+def run_sandbox_cmd(action: str, name: str = "", tail: int = 40) -> int:
+    """`suijin sandbox …` — the hypervisor verbs."""
+    from rich.console import Console
+
+    from suijin.server.box import hypervisor as hv
+
+    console = Console()
+    if not hv.engine_available():
+        console.print("[red]no container engine — install OrbStack (mac) or docker[/red]")
+        return 1
+
+    if action == "ls":
+        rows = hv.sandbox_ls()
+        pool = hv.pool_members()
+        if not rows and not pool:
+            console.print("no sandboxes — [cyan]suijin swarm spawn --sandbox N[/cyan]")
+            return 0
+        if rows:
+            console.print("[bold]agent sandboxes:[/bold]")
+            for r in rows:
+                console.print(f"  {r['name'][:52]:52s} {r['status']}")
+        console.print(f"[dim]warm pile: {len(pool)} ready (target {hv.pool_target()})[/dim]")
+        return 0
+
+    if action == "logs":
+        console.print(hv.sandbox_logs(name, tail))
+        return 0
+
+    if action == "stop":
+        ok = hv.sandbox_stop(name)
+        console.print(f"  {'[green]✓[/green] removed' if ok else '[red]✗ failed[/red]'} {name}")
+        console.print("[dim]engagement data survives — it lives on the host[/dim]")
+        return 0 if ok else 1
+
+    if action == "gc":
+        res = hv.sandbox_gc()
+        console.print(f"  [green]✓[/green] removed {res['count']} sandbox(es); warm pile cleared")
+        return 0
+
+    if action == "shell":
+        return hv.sandbox_shell(name)
+
+    return 1
+
+
+def run_box_image_cmd(action: str) -> int:
+    """`suijin box image build|status` — the sandbox template."""
+    from rich.console import Console
+
+    from suijin.server.box import hypervisor as hv
+
+    console = Console()
+    if action == "build":
+        try:
+            hv.build_image(on_log=console.print)
+            hv.pool_refill(on_log=console.print)
+            return 0
+        except Exception as e:  # noqa: BLE001
+            console.print(f"[red]build failed: {e}[/red]")
+            return 1
+    if action == "status":
+        if not hv.engine_available():
+            console.print("[red]no container engine[/red]")
+            return 1
+        tag = hv.image_tag()
+        exists = hv.image_exists()
+        fresh = hv.image_is_fresh() if exists else False
+        console.print(f"  image: {tag}")
+        console.print(f"  built: {'yes' if exists else 'no — run: suijin box image build'}")
+        console.print(f"  fingerprint: {hv.image_fingerprint()} ({'✓ fresh' if fresh else '⚠ stale — rebuild on next build'})")
+        console.print(f"  warm pile: {len(hv.pool_members())} ready (target {hv.pool_target()})")
+        return 0
+    return 1
+
+
 def run_authorize_cmd(args) -> int:
     """`suijin authorize` — operator attestation ledger."""
     from suijin.modules.ops.lib import authorizations as auth
@@ -1531,6 +1606,7 @@ def _run_swarm(
     agent_id: str = "",
     tui: bool = False,
     count: int = 1,
+    sandbox: int = 0,
     intent_text: str = "",
     swarm_name: str = "",
 ) -> int:
@@ -1554,7 +1630,7 @@ def _run_swarm(
     if action == "spawn":
         from suijin.server.swarm.lifecycle import run_swarm_spawn
 
-        return run_swarm_spawn(types.SimpleNamespace(tui=tui, swarm=swarm_name, count=count))
+        return run_swarm_spawn(types.SimpleNamespace(tui=tui, swarm=swarm_name, count=count, sandbox=sandbox))
     if action == "attach":
         from suijin.server.swarm.lifecycle import run_swarm_attach
 
@@ -2453,6 +2529,7 @@ _KNOWN_VERBS = frozenset(
         "install",
         "authorize",
         "auth",
+        "sandbox",
         "bb-scope",
         "kb",
         "pull",
@@ -2486,9 +2563,14 @@ def is_known_verb(word: str) -> bool:
 
 
 def _run_box_cli(argv: list) -> int:
+    # `box image …` — the sandbox TEMPLATE (hypervisor), intercepted
+    # before the box engine's machine verbs
+    vals = [str(v) for v in (argv or [])]
+    if vals and vals[0] == "image":
+        return run_box_image_cmd(vals[1] if len(vals) > 1 else "status")
     from suijin.server.box.cli import run_box_cli
 
-    return run_box_cli([str(v) for v in (argv or [])])
+    return run_box_cli(vals)
 
 
 def main(argv=None):
@@ -2568,11 +2650,12 @@ def main(argv=None):
     say_p.add_argument("message", nargs="+", help="the message to interject into agent conversations")
     say_p.set_defaults(func=lambda a: _run_swarm("say", intent_text=" ".join(a.message)))
 
-    spawn_p = swarm_sub.add_parser("spawn", help="spawn agent(s) — --tui shows in this terminal, -N for multiple")
+    spawn_p = swarm_sub.add_parser("spawn", help="spawn agent(s) — --tui shows in this terminal, -N for multiple, --sandbox N for boxed agents")
     spawn_p.add_argument("--tui", action="store_true", help="full TUI in this terminal")
     spawn_p.add_argument("--swarm", default="", help="swarm name (default: first with open intents)")
     spawn_p.add_argument("--count", "-N", type=int, default=1, help="how many agents (local: share one process)")
-    spawn_p.set_defaults(func=lambda a: _run_swarm("spawn", tui=a.tui, swarm_name=a.swarm, count=a.count))
+    spawn_p.add_argument("--sandbox", type=int, default=0, metavar="N", help="N agents in disposable boxes (hypervisor)")
+    spawn_p.set_defaults(func=lambda a: _run_swarm("spawn", tui=a.tui, swarm_name=a.swarm, count=a.count, sandbox=a.sandbox))
 
     attach_p = swarm_sub.add_parser("attach", aliases=["view"], help="view a live agent's output")
     attach_p.add_argument("agent_id", nargs="?", default="", help="agent id (default: latest)")
@@ -2605,6 +2688,25 @@ def main(argv=None):
             (getattr(a, "verb", None) or []) + (["--no-archive"] if getattr(a, "no_archive", False) else [])
         )
     )
+
+    # sandbox: the hypervisor — disposable agent boxes (advanced)
+    sbx = sub.add_parser("sandbox", help="agent sandboxes — disposable boxes from the cached template image")
+    sbx_sub = sbx.add_subparsers(dest="sbx_action")
+    sbx_sub.add_parser("ls", help="every sandbox: name, state, age").set_defaults(func=lambda a: run_sandbox_cmd("ls"))
+    logs_p = sbx_sub.add_parser("logs", help="an agent box's recent output")
+    logs_p.add_argument("name", help="sandbox name from `sandbox ls`")
+    logs_p.add_argument("--tail", type=int, default=40)
+    logs_p.set_defaults(func=lambda a: run_sandbox_cmd("logs", a.name, a.tail))
+    stop_p = sbx_sub.add_parser("stop", help="remove one sandbox (data survives — it lives on the host)")
+    stop_p.add_argument("name")
+    stop_p.set_defaults(func=lambda a: run_sandbox_cmd("stop", a.name))
+    sbx_sub.add_parser("gc", help="remove ALL sandboxes + the warm pile (engagement data survives)").set_defaults(
+        func=lambda a: run_sandbox_cmd("gc")
+    )
+    shell_p = sbx_sub.add_parser("shell", help="shell into a sandbox (interactive)")
+    shell_p.add_argument("name")
+    shell_p.set_defaults(func=lambda a: run_sandbox_cmd("shell", a.name))
+    sbx.set_defaults(func=lambda a: run_sandbox_cmd("ls"))
 
     mp = sub.add_parser("mesh-port", help="print this session's mesh wire port (used by remote /connect)")
     mp.set_defaults(func=lambda _a: run_mesh_port())

@@ -39,7 +39,6 @@ def _bus_addr() -> tuple[str, int] | None:
 def _db():
     """Open the swarm database."""
     db = sqlite3.connect(str(_swarm_db()), timeout=5)
-    db.execute("PRAGMA journal_mode=WAL")
     db.execute("PRAGMA busy_timeout=5000")
     # ensure the swarm column exists (migration for old databases)
     with contextlib.suppress(sqlite3.Error):
@@ -254,9 +253,38 @@ def run_swarm_spawn(args=None) -> int:
     swarm_name = str(getattr(args, "swarm", "") or "").strip()
     use_tui = bool(getattr(args, "tui", False))
     count = max(1, int(getattr(args, "count", 1) or 1))
+    sandbox_n = max(0, int(getattr(args, "sandbox", 0) or 0))
 
     if use_tui:
         return _spawn_tui(addr, swarm_name, console)
+
+    if sandbox_n:
+        # agents IN BOXES — the hypervisor path. Everything configured
+        # on the mac (auth, settings, model) is mounted in: same files,
+        # live. Sub-second per agent from the warm pile.
+        from suijin.server.box import hypervisor as hv
+
+        if not hv.engine_available():
+            console.print("[red]no container engine — sandbox spawn needs orbstack or docker[/red]")
+            return 1
+        if not hv.image_exists():
+            console.print("[yellow]sandbox image missing — building it now (one-time)…[/yellow]")
+            hv.build_image(on_log=console.print)
+        box_addr = hv.coordinator_addr_for_boxes(addr[1])
+        names = []
+        for _ in range(sandbox_n):
+            identity = f"agent-{int(time.time()) % 10000}-{os.urandom(2).hex()}-sbx"
+            name = hv.spawn_sandbox_agent(box_addr, identity, swarm_name or "default", on_log=console.print)
+            if name:
+                names.append(name)
+                console.print(f"  [green]✓[/green] {identity} in box [cyan]{name}[/cyan]")
+        console.print(f"  [green]{len(names)}/{sandbox_n}[/green] boxed agent(s) live at {box_addr}")
+        if names:
+            console.print("  [cyan]suijin sandbox ls[/cyan] · [cyan]suijin swarm status[/cyan]")
+            import threading as _th
+
+            _th.Thread(target=hv.pool_refill, kwargs={"coordinator": box_addr}, daemon=True).start()
+        return 0 if names else 1
 
     if count > 1:
         # multiple: tell the COORDINATOR to spawn N work loops as asyncio
@@ -548,7 +576,6 @@ def run_swarm_say(args=None) -> int:
     agents = []
     with contextlib.suppress(Exception):
         db = sqlite3.connect(str(swarm_db_path()), timeout=5)
-        db.execute("PRAGMA journal_mode=WAL")
         cutoff = time.time() - 30
         agents = [r[0] for r in db.execute(
             "SELECT id FROM agents WHERE last_heartbeat > ? ORDER BY id", (cutoff,)
