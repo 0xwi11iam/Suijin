@@ -174,14 +174,25 @@ PROVIDER_REGISTRY: dict[str, ProviderSpec] = {
         "kimi-k2.7-code, minimax-m3, big-pickle (+ free tiers). gpt/claude ids need /responses or /messages",
     ),
     # ---- Chinese platforms (endpoint-only: activates on key presence) ----
+    "zai": _spec(
+        "zai",
+        "Zhipu AI — Coding Plan (api.z.ai)",
+        "https://api.z.ai/api/coding/paas/v4",
+        "ZAI_API_KEY",
+        "glm-5.3",
+        None,
+        note="the GLM coding plan (monthly subscription tokens) — glm-5.3, "
+        "deepseek-v4-flash, kimi-k2.7-code; the key from z.ai's coding page",
+    ),
     "zhipu": _spec(
         "zhipu",
-        "Zhipu AI (GLM open platform)",
+        "Zhipu AI — PAYG API (bigmodel.cn)",
         "https://open.bigmodel.cn/api/paas/v4",
         "ZHIPU_API_KEY",
         "glm-5.2",
         None,
-        note="Zhipu GLM open platform (bigmodel.cn) — separate from the zai coding endpoint",
+        note="pay-as-you-go open platform (bigmodel.cn) — separate from the "
+        "zai coding endpoint; needs its own bigmodel key",
     ),
     "moonshot": _spec(
         "moonshot",

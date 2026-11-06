@@ -39,6 +39,102 @@ def _run_cli(args):
     subprocess.run([sys.executable, CLI, *args])
 
 
+def _swarm_menu(console):
+    """SWARM CONTROL — the advanced module. Everything the swarm can do,
+    one screen, no verb memory required."""
+    while True:
+        print(chr(27) + "[2J\033[H", end="")
+        console.print(Panel.fit("[bold #bd93f9]SWARM[/] [dim]Control[/]", border_style="#30363d"))
+        live = False
+        n_agents = 0
+        with contextlib.suppress(Exception):
+            from suijin.server.mesh.bus import discover_bus
+
+            if discover_bus():
+                live = True
+                import sqlite3
+
+                from suijin.server.swarm.coordinator import swarm_db_path
+
+                db = sqlite3.connect(str(swarm_db_path()), timeout=3)
+                n_agents = db.execute("SELECT COUNT(*) FROM agents WHERE last_heartbeat > ?", (time.time() - 30,)).fetchone()[0]
+                db.close()
+        status = f"[green]live · {n_agents} agent(s)[/green]" if live else "[dim]not running[/dim]"
+        console.print(f"\n  swarm: {status}\n")
+        console.print("  [bold #bd93f9]1.[/] [white]live console[/] [dim]— dashboard: agents · findings · steer · kill[/]")
+        console.print("  [bold #bd93f9]2.[/] [white]new swarm[/] [dim]— objective + spawn (local or boxed agents)[/]")
+        console.print("  [bold #bd93f9]3.[/] [white]status[/] [dim]— snapshot + the honest findings board[/]")
+        console.print("  [bold #bd93f9]4.[/] [white]add work[/] [dim]— queue an intent for idle agents[/]")
+        console.print("  [bold #bd93f9]5.[/] [white]message swarm[/] [dim]— steer every agent mid-flight[/]")
+        console.print("  [bold #ff5555]6.[/] [white]stop[/] [dim]— graceful; all data survives[/]")
+        console.print("  [bold white]7.[/] [dim]back[/]\n")
+        try:
+            c = input(" ").strip()
+        except (KeyboardInterrupt, EOFError):
+            return
+        if c == "1":
+            with contextlib.suppress(Exception):
+                from suijin.server.swarm.console import run_console_cmd
+
+                run_console_cmd()
+        elif c == "2":
+            try:
+                objective = input("  objective: ").strip()
+                if not objective:
+                    continue
+                where = input("  agents — (l)ocal or (b)oxed, how many [l8]: ").strip().lower() or "l8"
+                n = max(1, min(32, int("".join(ch for ch in where if ch.isdigit()) or 8)))
+                boxed = where.startswith("b")
+                import subprocess as _sp
+
+                _sp.run(["suijin", "swarm", "init", objective])
+                _sp.run(["suijin", "swarm", "intent", objective])
+                cmd = ["suijin", "swarm", "spawn"]
+                cmd += ["--sandbox", str(n)] if boxed else ["-N", str(n)]
+                _sp.run(cmd)
+                input("\n  [dim]press Enter to open the console…[/dim]")
+                with contextlib.suppress(Exception):
+                    from suijin.server.swarm.console import run_console_cmd
+
+                    run_console_cmd()
+            except (KeyboardInterrupt, EOFError):
+                continue
+        elif c == "3":
+            with contextlib.suppress(Exception):
+                import subprocess as _sp
+
+                _sp.run(["suijin", "swarm", "status"])
+                input("\n  [dim]Enter to continue…[/dim]")
+        elif c == "4":
+            try:
+                intent = input("  intent: ").strip()
+                if intent:
+                    import subprocess as _sp
+
+                    _sp.run(["suijin", "swarm", "intent", intent])
+            except (KeyboardInterrupt, EOFError):
+                continue
+        elif c == "5":
+            try:
+                msg = input("  message: ").strip()
+                if msg:
+                    import subprocess as _sp
+
+                    _sp.run(["suijin", "swarm", "say", msg])
+            except (KeyboardInterrupt, EOFError):
+                continue
+        elif c == "6":
+            try:
+                import subprocess as _sp
+
+                _sp.run(["suijin", "swarm", "stop"])
+                input("\n  [dim]Enter to continue…[/dim]")
+            except (KeyboardInterrupt, EOFError):
+                continue
+        elif c == "7":
+            return
+
+
 def operator_menu():
     while True:
         print(chr(27) + "[2J\033[H", end="")
@@ -112,27 +208,59 @@ def main():
             from suijin.modules.platform.lib.banner import render_boot_banner
 
             render_boot_banner(console)
+        # MODE-ADAPTIVE SPINE (2026-11-06 operator design): basic keeps
+        # the classic 4; advanced adds SWARM CONTROL as a first-class
+        # module — suijin is meant to be advanced.
+        advanced = False
+        with contextlib.suppress(Exception):
+            from suijin.modules.platform.lib.config_loader import load_config
+
+            advanced = str((load_config() or {}).get("operator_mode") or "basic").lower() == "advanced"
+
         console.print(Panel.fit("[bold white]SUIJIN[/] [dim]Mode Selector[/]", border_style="#30363d"))
-
         console.print("\n")
+        if advanced:
+            console.print("[bold white]Select Operational Module:[/] [dim]advanced[/]")
+            console.print("  [bold #ff5555]1.[/] [white]Red Team[/] [dim]— one agent, one engagement, deep[/]")
+            console.print("  [bold #bd93f9]2.[/] [white]Swarm Control[/] [dim]— many agents: console · spawn · steer[/]")
+            console.print("  [bold yellow]3.[/] [white]Settings[/]")
+            console.print("  [bold #e6b47c]4.[/] [white]Operator Tools[/] [dim](resume, replay, clean)[/]")
+            console.print("  [bold white]5.[/] [dim]Exit[/]")
+            # live swarm hint — one glance, no digging
+            with contextlib.suppress(Exception):
+                from suijin.server.mesh.bus import discover_bus
 
-        console.print("[bold white]Select Operational Module:[/]")
-        console.print("  [bold #ff5555]1.[/] [white]Red Team (Autonomous Agent)[/]")
-        console.print("  [bold yellow]2.[/] [white]Settings[/]")
-        console.print("  [bold #e6b47c]3.[/] [white]Operator Tools (resume, replay, clean)[/]")
-        console.print("  [bold white]4.[/] [dim]Exit[/]\n")
+                if discover_bus():
+                    console.print("\n  [green]●[/] swarm live — [cyan]2[/] opens the console")
+                else:
+                    console.print("\n  [dim]○ no swarm running — 2 to init one[/]")
+        else:
+            console.print("[bold white]Select Operational Module:[/]")
+            console.print("  [bold #ff5555]1.[/] [white]Red Team (Autonomous Agent)[/]")
+            console.print("  [bold yellow]2.[/] [white]Settings[/]")
+            console.print("  [bold #e6b47c]3.[/] [white]Operator Tools (resume, replay, clean)[/]")
+            console.print("  [bold white]4.[/] [dim]Exit[/]")
+        console.print("")
 
         try:
             c = input(" ").strip()
             if c == "1":
                 redteamer_main()
+            elif c == "2" and advanced:
+                _swarm_menu(console)
             elif c == "2":
+                from suijin.modules.console.lib import settings_tui
+
+                settings_tui.main()
+            elif c == "3" and advanced:
                 from suijin.modules.console.lib import settings_tui
 
                 settings_tui.main()
             elif c == "3":
                 operator_menu()
-            else:
+            elif (c == "4" and advanced):
+                operator_menu()
+            elif (c == "4" and not advanced) or (c == "5" and advanced):
                 sys.exit(0)
         except (KeyboardInterrupt, EOFError):
             # Ctrl+C / Ctrl+D at the menu: leave quietly. Return, don't
