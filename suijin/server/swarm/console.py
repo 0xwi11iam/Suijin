@@ -85,7 +85,7 @@ def _detail_events(agent_id: str, limit: int = 3) -> list[dict]:
     host and boxed agents (boxed agents write into the mounted
     engagement dir)."""
     with contextlib.suppress(Exception):
-        from suijin.server.platform.lib.workspace import WORKSPACE_DIR
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
         ev = Path(WORKSPACE_DIR).parent / "engagements" / "_default" / "events.jsonl"
         if not ev.exists():
@@ -121,6 +121,23 @@ def _detail_events(agent_id: str, limit: int = 3) -> list[dict]:
     return []
 
 
+def _prettify_jsonish(text: str, width: int = 74) -> str:
+    """JSON prettification is ALWAYS present (operator directive): any
+    embedded {...} in displayed text gets re-indented instead of riding
+    raw on one line. Non-JSON text passes through untouched."""
+    import json as _json
+    import re as _re
+
+    def _fmt(m):
+        with contextlib.suppress(Exception):
+            obj = _json.loads(m.group(0))
+            pretty = _json.dumps(obj, indent=1, ensure_ascii=False)
+            return pretty[: 3 * width]
+        return m.group(0)
+
+    return _re.sub(r"\{.*\}", _fmt, str(text or ""))[: 3 * width]
+
+
 def _render_detail_pane(stdscr, y: int, maxx: int, agent_id: str, events: list[dict], log_lines: list[str]) -> None:
     """THE OPERATOR CONSOLE'S DETAILS PANEL, ported: thought → tool+args
     (values capped) → observation (capped, separated). Falls back to the
@@ -134,7 +151,7 @@ def _render_detail_pane(stdscr, y: int, maxx: int, agent_id: str, events: list[d
             args = act.get("args") or {}
             obs = str(e.get("observation") or "")
             if thought:
-                _line(stdscr, row, 2, f"  | thought: {' '.join(thought.split())[:76]}", curses.color_pair(4))
+                _line(stdscr, row, 2, f"  | thought: {_prettify_jsonish(' '.join(thought.split()))[:76]}", curses.color_pair(4))
                 row += 1
             _line(stdscr, row, 2, f"  > {tool}", curses.color_pair(1) | curses.A_BOLD)
             row += 1
@@ -147,7 +164,7 @@ def _render_detail_pane(stdscr, y: int, maxx: int, agent_id: str, events: list[d
             if obs:
                 _line(stdscr, row, 2, "  " + "-" * min(40, maxx - 6), curses.A_DIM)
                 row += 1
-                _line(stdscr, row, 2, f"  {obs[:150]}", curses.A_DIM)
+                _line(stdscr, row, 2, f"  {_prettify_jsonish(obs)[:150]}", curses.A_DIM)
                 row += 1
             row += 1
     else:

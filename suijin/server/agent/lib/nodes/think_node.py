@@ -1696,8 +1696,9 @@ async def think_node(state: dict, *, generate_fn, config: dict = None, route_too
                     from suijin.modules.agent.lib.mode_governor import best_skill_for
 
                     _skill = best_skill_for(state)
-                    updates["attack_path_type"] = _skill
-                    _skill_note = f"\nDoctrine auto-switched to: {_skill} (best fit for the surfaces found)."
+                    if _skill:  # "" = nothing earned a doctrine — stand down
+                        updates["attack_path_type"] = _skill
+                        _skill_note = f"\nDoctrine auto-switched to: {_skill} (best fit for the surfaces found)."
                 except Exception:  # noqa: BLE001 — best-effort doctrine swap
                     pass
             updates["messages"].append(

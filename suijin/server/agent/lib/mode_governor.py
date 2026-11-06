@@ -479,7 +479,11 @@ def best_skill_for(state: dict) -> str:
     if "cve" in " ".join(s.get("cls", "") for s in (state.get("_attack_queue") or [])):
         counts["cve_exploit"] = counts.get("cve_exploit", 0) + 2
     if not counts:
-        return "rce"
+        # NO hardcoded fallback doctrine (operator directive 2026-11-06:
+        # a google.com engagement got 'Attack Path: sql_injection' from a
+        # default). Empty = honest: the model names the doctrine, or
+        # targeting continues. The caller stands down on "".
+        return ""
     return max(counts.items(), key=lambda kv: kv[1])[0]
 
 

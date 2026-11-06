@@ -4,7 +4,10 @@
 
 `agent-vault/` (gitignored, never committed) is the durable decision/session
 memory — read it FIRST on a fresh session, and record substantive decisions
-there as they're made. Its engagement notes are exempt from the rule below
+there as they're made. Read order: `operator-directives.md` (every standing
+operator rule, cached the moment it was said), `task-stack.md` (open work,
+top-down), `bugs-ledger.md`, `sessions.md`. Context compaction is NOT an
+excuse to drop a rule or a task — they live here, not in the context. Its engagement notes are exempt from the rule below
 *only because* the folder never reaches git; the exemption dies with the
 gitignore entry.
 

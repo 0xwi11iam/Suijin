@@ -77,8 +77,11 @@ def check_prior_work(intent_text: str, target: str = "") -> dict | None:
     for e in _catalog_entries():
         if e["status"].lower() in ("", "done", "fresh"):
             continue
+        # class words SPLIT on underscores — 'open_redirect' must match
+        # intents that say 'open redirect' (found by the regression test:
+        # the underscore-joined token never matched plain English)
         class_hit = bool(e["class"]) and any(
-            c in tok_intent for c in re.findall(r"[a-z_]+", e["class"].lower())
+            c in tok_intent for c in re.findall(r"[a-z]+", e["class"].lower()) if len(c) > 3
         )
         title_tok = _tokens(e["title"])
         shared = tok_intent & title_tok

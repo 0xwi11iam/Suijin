@@ -147,7 +147,7 @@ def _new_hunt() -> None:
 
     # step 2 — target + session (SKIPPABLE: authenticated testing is optional)
     _clear()
-    console.print(Panel.fit("", title="[bold]new hunt — 2/4 · session (optional)[]", border_style="cyan"))
+    console.print(Panel.fit("", title="[bold]new hunt — 2/5 · session (optional)]", border_style="cyan"))
     ses = _data("sessions").get("sessions", [])
     if ses:
         for s in ses[:8]:
@@ -173,9 +173,36 @@ def _new_hunt() -> None:
                 console.print(f"    {s['name'][:34]:34s} {s['cookies']} cookies")
 
 
-# step 3 — agents
+    # step 3 — lanes (typed, rendered as rows — the approved design)
     _clear()
-    console.print(Panel.fit("", title="[bold]new hunt — 3/4 · agents[/]", border_style="cyan"))
+    lanes = []
+    while True:
+        console.print(Panel.fit(
+            "lanes split the hunt. add as many as you want by typing them;\n"
+            "they render as rows below. empty lanes = agents just follow the title.",
+            title="[bold]new hunt — 3/5 · lanes (optional)[/]", border_style="cyan"))
+        if lanes:
+            for i, ln in enumerate(lanes, 1):
+                console.print(f"  {i}. {ln[:74]}")
+        console.print("\n  [bold]a[/] add lane · [bold]d[/] delete last · [bold]Enter[/] done")
+        c = _input("  > ")
+        if _cancelled(c) or c == "":
+            break
+        if c == "a":
+            ln = _input("  lane: ")
+            if ln and not _cancelled(ln):
+                lanes.append(ln)
+                _clear()
+                continue
+        elif c == "d" and lanes:
+            lanes.pop()
+            _clear()
+            continue
+        _clear()
+
+    # step 4 — agents
+    _clear()
+    console.print(Panel.fit("", title="[bold]new hunt — 4/5 · agents[/]", border_style="cyan"))
     bx = _data("boxes")
     pool = bx.get("pool_n", 0)
     console.print(
@@ -195,25 +222,28 @@ def _new_hunt() -> None:
     else:
         host_n = int(_input("  how many host: ", default="6") or 6)
 
-    # step 4 — confirm + launch
+    # step 5 — confirm + launch
     _clear()
     sysd = _data("system")
     cap = sysd.get("turn_cap", 0)
     console.print(Panel.fit(
         f"  title   : [bold]{title[:66]}[/bold]\n"
         f"  agents  : {host_n} host + {boxed_n} boxed\n"
+        f"  lanes   : {len(lanes)} — {lanes[0][:40] + '…' if lanes else 'none, agents follow the title'}\n"
         f"  brain   : {sysd.get('provider', '—')} / {sysd.get('model', '—')}\n"
         f"  turn cap: {'no cap (runs until done)' if not cap else cap}\n"
         f"  autopilot: on — when the queue runs dry and agents idle,\n"
         f"              follow-up work is queued from what's been found\n\n"
         f"  [green]Enter[/green] LAUNCH (opens the console) · [dim]Esc/Ctrl-C cancel[/dim]",
-        title="[bold]new hunt — 4/4 · confirm[/]", border_style="green"))
+        title="[bold]new hunt — 5/5 · confirm[/]", border_style="green"))
     c = _input("  > ")
     if _cancelled(c):
         return
 
     subprocess.run(["suijin", "swarm", "hunt", title,
                     "--host", str(host_n), "--boxed", str(boxed_n)], timeout=600)
+    for ln in lanes:  # lanes queue as intents — they take priority over the title
+        subprocess.run(["suijin", "swarm", "intent", ln], timeout=60)
     _pause()
 
 
