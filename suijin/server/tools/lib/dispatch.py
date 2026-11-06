@@ -23,6 +23,9 @@ from __future__ import annotations
 import contextlib
 import time
 
+# report_finding writer, resolved lazily in route_tool (boundary rule)
+_vuln_report = None
+
 # Cross-module re-export surface: delegated lazily (boundary rule — no
 # module-level cross-module imports; delegation is also patch-transparent
 # for consumers importing these names from dispatch).
@@ -281,8 +284,7 @@ from suijin.modules.tools.lib.intel import (
     check_knowledge,
     record_finding,
     search_cve,
-    search_kb,
-    write_note,
+    search_kb,    write_note,
 )
 from suijin.modules.tools.lib.jobs import (
     _job_cancel,
@@ -573,6 +575,7 @@ __all__ = [
     "http_request",
     "read_file",
     "write_file",
+    "report_finding",  # the vulnerability path — swarm honest board
     # metasploit
     "_msf_console_fallback",
     "_msf_rpc_connect",
@@ -1019,6 +1022,14 @@ def _build_routes(config):
         "record_finding": lambda a: record_finding(
             a.get("target"), a.get("finding_type"), a.get("rule"), evidence=a.get("evidence", ""), config=config
         ),
+        # the vulnerability path — record_finding's enum is DEFENSIVE
+        # intel (waf/rate_limit/blocks); real vulns died in rejection
+        # loops (72 calls one night). Lands on the swarm honest board.
+        "report_finding": lambda a: _vuln_report(
+            a.get("target", ""), a.get("title", ""), a.get("severity", "low"),
+            a.get("vuln_type", a.get("type", "other")), evidence=a.get("evidence", ""),
+            url=a.get("url", ""), config=config,
+        ),
         # Worklist clearing (2026-09-15): the mechanism the worklist
         # contract always promised — mark a probed-and-clean surface DONE
         # by naming the concrete defense. Consumed by mode_governor.
@@ -1392,6 +1403,14 @@ def _with_error_hints(tool_name: str, result: str) -> str:
 
 
 def route_tool(tool_name, args, config):
+    # the vulnerability-reporting tool (see the dispatch table) —
+    # imported lazily so the intel graph import above stays untouched
+    global _vuln_report
+    if _vuln_report is None:
+        from suijin.server.tools.lib.findings import report_vuln_finding as _vr
+
+        _vuln_report = _vr
+
     # TOOL CONTRACTS (2026-10-18): validate args against the schema
     # before routing — the model gets a CLEAR error ("Argument 'compare'
     # must be an object/dict") instead of a deep AttributeError three

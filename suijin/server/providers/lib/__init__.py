@@ -1221,6 +1221,12 @@ def generate(
         }
         # MODEL EFFORT: the shared applier (zai thinking-toggle dialect)
         _apply_effort(payload, zai_model, config, mtokens, provider="zai")
+        # JSON MODE (2026-11-06, proven by probe): z.ai accepts
+        # response_format json_object and returns clean valid JSON —
+        # the worker loop's unparseable-reply strike class dies at the
+        # source. Caller opts in via config["response_format_json"].
+        if str(config.get("response_format_json") or "").lower() in ("1", "true", "yes"):
+            payload["response_format"] = {"type": "json_object"}
         zai_url = f"{base_url}/chat/completions"
         _diag_llm_start("zai", zai_model, len(messages))
         _zai_t0 = time.monotonic()
