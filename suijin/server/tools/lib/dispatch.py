@@ -25,6 +25,8 @@ import time
 
 # report_finding writer, resolved lazily in route_tool (boundary rule)
 _vuln_report = None
+_auth_diff_fn = None
+_browser_client = None
 
 # Cross-module re-export surface: delegated lazily (boundary rule — no
 # module-level cross-module imports; delegation is also patch-transparent
@@ -576,6 +578,10 @@ __all__ = [
     "read_file",
     "write_file",
     "report_finding",  # the vulnerability path — swarm honest board
+    "auth_diff",  # differential authorization — the IDOR method, one call
+    "browser_open",  # shared browser daemon (one chromium, agent contexts)
+    "browser_eval",
+    "browser_network",
     # metasploit
     "_msf_console_fallback",
     "_msf_rpc_connect",
@@ -1030,6 +1036,28 @@ def _build_routes(config):
             a.get("vuln_type", a.get("type", "other")), evidence=a.get("evidence", ""),
             url=a.get("url", ""), config=config,
         ),
+        # SHARED browser daemon — one chromium, per-agent contexts.
+        # Auto-starts on first call; contexts carry the suijin-auth jar
+        # for the target when a session file exists (browser=<session>).
+        "browser_open": lambda a: _browser_client().call(
+            {"agent": str(a.get("agent") or os.environ.get("SUIJIN_IDENTITY") or "anon"),
+             "session": str(a.get("browser", "") or ""),
+             "op": "goto", "url": str(a.get("url", ""))}),
+        "browser_eval": lambda a: _browser_client().call(
+            {"agent": str(a.get("agent") or os.environ.get("SUIJIN_IDENTITY") or "anon"),
+             "session": str(a.get("browser", "") or ""),
+             "op": "eval", "js": str(a.get("js", ""))}),
+        "browser_network": lambda a: _browser_client().call(
+            {"agent": str(a.get("agent") or os.environ.get("SUIJIN_IDENTITY") or "anon"),
+             "session": str(a.get("browser", "") or ""),
+             "op": "requests"}),
+        # differential authorization — the IDOR method as ONE call
+        "auth_diff": lambda a: _auth_diff_fn(
+            a.get("url_template", ""), a.get("object_refs", ""),
+            session_a=a.get("session_a", ""), session_b=a.get("session_b", ""),
+            method=a.get("method", "GET"), body_template=a.get("body_template", ""),
+            extra_headers=a.get("extra_headers", ""), config=config,
+        ),
         # Worklist clearing (2026-09-15): the mechanism the worklist
         # contract always promised — mark a probed-and-clean surface DONE
         # by naming the concrete defense. Consumed by mode_governor.
@@ -1405,11 +1433,19 @@ def _with_error_hints(tool_name: str, result: str) -> str:
 def route_tool(tool_name, args, config):
     # the vulnerability-reporting tool (see the dispatch table) —
     # imported lazily so the intel graph import above stays untouched
-    global _vuln_report
+    global _vuln_report, _auth_diff_fn, _browser_client
+    if _browser_client is None:
+        from suijin.server.browser_daemon import BrowserClient as _BC
+
+        _browser_client = _BC
     if _vuln_report is None:
         from suijin.server.tools.lib.findings import report_vuln_finding as _vr
 
         _vuln_report = _vr
+    if _auth_diff_fn is None:
+        from suijin.server.tools.lib.auth_diff import auth_diff as _ad
+
+        _auth_diff_fn = _ad
 
     # TOOL CONTRACTS (2026-10-18): validate args against the schema
     # before routing — the model gets a CLEAR error ("Argument 'compare'

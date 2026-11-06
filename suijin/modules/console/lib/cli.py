@@ -1107,6 +1107,35 @@ def run_sandbox_cmd(action: str, name: str = "", tail: int = 40) -> int:
     return 1
 
 
+def run_browser_cmd(action: str) -> int:
+    """`suijin browser daemon …` — process controls + status."""
+    from rich.console import Console
+
+    from suijin.server.browser_daemon import _alive, ensure_daemon, read_port, stop_daemon
+
+    console = Console()
+    if action == "start":
+        port = ensure_daemon()
+        console.print(f"  [green]✓[/green] browser daemon on 127.0.0.1:{port}" if port
+                      else "[red]daemon failed to start[/red]")
+        return 0 if port else 1
+    if action == "stop":
+        stop_daemon()
+        console.print("  [green]✓[/green] stopped")
+        return 0
+    port = read_port()
+    up = bool(port and _alive(port))
+    if up:
+        from suijin.server.browser_daemon import BrowserClient
+
+        info = BrowserClient(timeout=30).call({"op": "info"})
+        console.print(f"  [green]up[/green] on {port} — {info.get('engine', '?')} · "
+                      f"{info.get('contexts', 0)} context(s) (max {info.get('max')})")
+    else:
+        console.print("  down — starts on demand when an agent uses it")
+    return 0
+
+
 def run_box_image_cmd(action: str) -> int:
     """`suijin box image build|status` — the sandbox template."""
     from rich.console import Console
@@ -1609,6 +1638,7 @@ def _run_swarm(
     sandbox: int = 0,
     intent_text: str = "",
     swarm_name: str = "",
+    force: bool = False,
 ) -> int:
     """Dispatch swarm subcommands."""
     import types
@@ -1622,7 +1652,7 @@ def _run_swarm(
     if action == "intent":
         from suijin.server.swarm.lifecycle import run_swarm_intent
 
-        return run_swarm_intent(intent_text, swarm_name or "default")
+        return run_swarm_intent(intent_text, swarm_name or "default", force=force)
     if action == "console":
         from suijin.server.swarm.console import run_console_cmd
 
@@ -2534,6 +2564,7 @@ _KNOWN_VERBS = frozenset(
         "authorize",
         "auth",
         "sandbox",
+        "browser",
         "bb-scope",
         "kb",
         "pull",
@@ -2662,7 +2693,8 @@ def main(argv=None):
     intent_p = swarm_sub.add_parser("intent", help="add work to the queue (appends, never replaces)")
     intent_p.add_argument("text", nargs="+", help="what the agent should do")
     intent_p.add_argument("--swarm", default="", help="swarm name (default: most recent)")
-    intent_p.set_defaults(func=lambda a: _run_swarm("intent", intent_text=" ".join(a.text), swarm_name=a.swarm))
+    intent_p.add_argument("--force", action="store_true", help="skip the prior-work gate (genuinely new work)")
+    intent_p.set_defaults(func=lambda a: _run_swarm("intent", intent_text=" ".join(a.text), swarm_name=a.swarm, force=a.force))
 
     say_p = swarm_sub.add_parser("say", help='message every live agent mid-engagement ("what to say")')
     say_p.add_argument("message", nargs="+", help="the message to interject into agent conversations")
@@ -2729,6 +2761,15 @@ def main(argv=None):
     shell_p.add_argument("name")
     shell_p.set_defaults(func=lambda a: run_sandbox_cmd("shell", a.name))
     sbx.set_defaults(func=lambda a: run_sandbox_cmd("ls"))
+
+    brw = sub.add_parser("browser", help="the shared browser daemon — one chromium, per-agent sessions")
+    brw_sub = brw.add_subparsers(dest="brw_action")
+    brw_sub.add_parser("start", help="start the daemon in the background").set_defaults(
+        func=lambda a: run_browser_cmd("start"))
+    brw_sub.add_parser("stop", help="stop the daemon").set_defaults(func=lambda a: run_browser_cmd("stop"))
+    brw_sub.add_parser("status", help="is it up? which engine? contexts?").set_defaults(
+        func=lambda a: run_browser_cmd("status"))
+    brw.set_defaults(func=lambda a: run_browser_cmd("status"))
 
     mp = sub.add_parser("mesh-port", help="print this session's mesh wire port (used by remote /connect)")
     mp.set_defaults(func=lambda _a: run_mesh_port())
@@ -3107,6 +3148,23 @@ def main(argv=None):
     debug.set_defaults(func=lambda _a: 0)
 
     args = parser.parse_args(argv)
+
+    # FIRST-RUN WIZARD for every provider-needing variant — not just
+    # bare `suijin`. Local/tooling verbs (doctor, auth, box, sandbox,
+    # tokens, providers…) stay out of the way. After the wizard saves,
+    # the ORIGINAL command continues — you don't retype anything.
+    with contextlib.suppress(Exception):
+        from suijin.modules.platform.lib.config_loader import load_config
+
+        _has_provider_cfg = bool((load_config() or {}).get("provider"))
+        if not _has_provider_cfg and getattr(args, "command", None) in (
+            "engage", "exploit", "plan", "think", "tui", "setup", None,
+        ):
+            from suijin.modules.console.lib.setup_wizard import run_setup
+
+            run_setup()
+            if getattr(args, "command", None) in (None, "setup", "tui"):
+                return 0  # bare/tui/setup: wizard WAS the command
 
     # BASIC MODE gate: swarm/sandbox tooling is advanced-mode. The hint
     # tells the operator exactly where the switch is; nothing hidden
