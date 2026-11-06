@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import threading
 import time
 from pathlib import Path
 
@@ -52,6 +53,8 @@ class SwarmAgent:
         self._running = False
         self._current_intent: dict | None = None
         self._iterations = 0
+        self._operator_notes: list[str] = []  # `suijin swarm say` landings
+        self._notes_lock = threading.Lock()
 
     @property
     def identity(self) -> str:
@@ -187,7 +190,13 @@ class SwarmAgent:
                 self._running = False
                 return
             if f"/agent/{self._identity}/steer" in topic:
-                print(f"[{self._identity}] steering: {str(payload.get('message', ''))[:100]}")
+                msg = str(payload.get("message", ""))[:500]
+                print(f"[{self._identity}] steering: {msg[:100]}")
+                # the interjection lands in the worker loop at the next
+                # turn boundary (`suijin swarm say` — printing alone
+                # never reached the LLM)
+                with self._notes_lock:
+                    self._operator_notes.append(msg)
 
     def _claim_intent(self) -> dict | None:
         """Request the next intent from the coordinator."""
@@ -235,11 +244,20 @@ class SwarmAgent:
             mark = "CONFIRMED" if "CONFIRMED" in result_str else "result"
             print(f"[{self._identity}] turn {turn}: {tool_name} → {mark} ({len(result_str)} chars)")
 
+        def _on_turn(turn: int) -> str | None:
+            with self._notes_lock:
+                if not self._operator_notes:
+                    return None
+                notes = list(self._operator_notes)
+                self._operator_notes.clear()
+                return "; ".join(notes)
+
         return execute_intent(
             self._identity,
             intent,
             bus=self._bus,
             on_event=_on_event,
+            on_turn=_on_turn,
         )
 
     def _complete_intent(self, intent: dict, result: dict):
