@@ -3150,14 +3150,18 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     # FIRST-RUN WIZARD for every provider-needing variant — not just
-    # bare `suijin`. Local/tooling verbs (doctor, auth, box, sandbox,
-    # tokens, providers…) stay out of the way. After the wizard saves,
-    # the ORIGINAL command continues — you don't retype anything.
+    # bare `suijin`. The signal is the explicit .setup-complete MARKER
+    # the wizard writes: init_runtime() pre-creates config.json with a
+    # DEFAULT provider before this check, so config/provider existence
+    # can never detect a true first boot (found during the pip-install
+    # field test, 2026-11-06). Local/tooling verbs (doctor, auth, box,
+    # sandbox, tokens, providers…) stay out of the way. After the
+    # wizard saves, the ORIGINAL command continues — no retyping.
     with contextlib.suppress(Exception):
-        from suijin.modules.platform.lib.config_loader import load_config
+        from suijin.modules.console.lib.setup_wizard import setup_complete_marker
 
-        _has_provider_cfg = bool((load_config() or {}).get("provider"))
-        if not _has_provider_cfg and getattr(args, "command", None) in (
+        _first_boot = not setup_complete_marker().exists()
+        if _first_boot and getattr(args, "command", None) in (
             "engage", "exploit", "plan", "think", "tui", "setup", None,
         ):
             from suijin.modules.console.lib.setup_wizard import run_setup

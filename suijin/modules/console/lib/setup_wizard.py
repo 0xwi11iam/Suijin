@@ -13,6 +13,19 @@ from __future__ import annotations
 import contextlib
 import subprocess
 import sys
+import time
+
+
+def setup_complete_marker():
+    """The explicit 'operator finished setup' signal. config.json is
+    pre-created with defaults by init_runtime BEFORE the first-boot
+    gate can look at it — only this marker proves a human completed
+    the wizard."""
+    from pathlib import Path
+
+    from suijin.modules.console.lib import settings_tui as _st
+
+    return _st.CONFIG_PATH.parent / ".setup-complete"
 
 
 def run_setup() -> int:
@@ -246,6 +259,8 @@ def run_setup() -> int:
             border_style="green",
         )
     )
+    with contextlib.suppress(Exception):
+        setup_complete_marker().write_text(time.strftime("%Y-%m-%d %H:%M:%S"))
     return 0
 
 
