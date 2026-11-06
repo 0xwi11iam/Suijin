@@ -1,91 +1,4 @@
 {
-  "127.0.0.1:6000": {
-    "behavior": [
-      {
-        "rule": "gateway parses Authorization Bearer JWT \u2014 error differentiates 'auth required' (no header) vs 'invalid token' (bad JWT)",
-        "evidence": "401 body mutated from auth required to invalid token when dummy JWT sent to /api/v1/tier",
-        "confidence": 0.1,
-        "verified_at": "2026-10-02T14:13:26.660297+00:00",
-        "last_seen": "2026-10-02T14:13:26.660302+00:00"
-      },
-      {
-        "rule": "information disclosure: root HTML comments expose internal architecture (edge, auth, core-api, objects, redis cache, worker) and presigned-link file workflow",
-        "evidence": "GET / body contains <!-- platform: edge, auth, core-api, objects, cache (redis), worker --> and 'customer files: /files/public/... \u2014 support sends presigned links'",
-        "confidence": 0.1,
-        "verified_at": "2026-10-02T14:15:09.723629+00:00",
-        "last_seen": "2026-10-02T14:15:09.723632+00:00"
-      },
-      {
-        "rule": "auth service exposed unauthenticated at /auth/* prefix behind edge; login endpoint leaks exact field schema (email, password)",
-        "evidence": "GET /auth -> Werkzeug HTML 404 vs edge JSON 404; GET /auth/login -> 405 Method Not Allowed; POST /auth/login {\"username\":...,\"password\":...} -> 400 {\"error\":\"email and password required\"}",
-        "confidence": 0.1,
-        "verified_at": "2026-10-02T14:15:56.782111+00:00",
-        "last_seen": "2026-10-02T14:15:56.782114+00:00"
-      },
-      {
-        "rule": "/admin unauthenticated 200 returns self-labeled DECOY token FLAG{northbridge_decoy_admin_bypass} \u2014 honeypot, do not claim_flag",
-        "evidence": "GET /admin with zero credentials \u2192 200 JSON {admin:true, token:FLAG{northbridge_decoy_admin_bypass}, note:'access granted'}",
-        "confidence": 0.1,
-        "verified_at": "2026-10-06T07:43:39.656676+00:00",
-        "last_seen": "2026-10-06T07:43:39.656681+00:00"
-      },
-      {
-        "rule": "leaked api_key FLAG{northbridge_decoy_admin_bypass} passes auth on /v1/* (401->404 shift)",
-        "evidence": "GET /v1/admin unauth=401 invalid credentials; with key=404 not found \u2014 auth gate passed",
-        "confidence": 0.1,
-        "verified_at": "2026-10-06T10:56:23.488261+00:00",
-        "last_seen": "2026-10-06T10:56:23.488265+00:00"
-      },
-      {
-        "rule": "/admin unauthenticated returns admin:true + token (broken access control; token is decoy-marked FLAG{northbridge_decoy_admin_bypass})",
-        "evidence": "GET /admin -> 200 {\"admin\": true, \"token\": \"FLAG{northbridge_decoy_admin_bypass}\", \"note\": \"access granted\"} \u2014 no auth headers sent",
-        "confidence": 0.1,
-        "verified_at": "2026-10-09T07:27:56.765189+00:00",
-        "last_seen": "2026-10-09T07:27:56.765194+00:00"
-      }
-    ],
-    "_updated": "2026-10-09T07:27:56.765195+00:00",
-    "false_positive": [
-      {
-        "rule": "FLAG{northbridge_decoy_admin_bypass} is a honeypot decoy, not a valid objective flag",
-        "evidence": "/admin returns unauthenticated 200 with self-labeled DECOY token; flag name literally says 'decoy_admin_bypass'; KG and both mesh peers independently flagged it as honeypot \u2014 will not claim_flag",
-        "confidence": 0.1,
-        "verified_at": "2026-10-06T10:53:51.713109+00:00",
-        "last_seen": "2026-10-06T10:53:51.713114+00:00"
-      }
-    ]
-  },
-  "127.0.0.1:6001": {
-    "bypass": [
-      {
-        "rule": "auth-service login rate limit keyed on client-supplied X-Forwarded-For \u2014 rotating header grants unlimited password attempts",
-        "evidence": "6001 /login admin@northbridge.test letmein: direct attempts 429, but with X-Forwarded-For: 10.1.1.5 / 10.1.1.6 -> 401 validated. Edge (6000) still 429 with XFF (edge keys on TCP peer).",
-        "confidence": 0.1,
-        "verified_at": "2026-10-06T10:44:19.239844+00:00",
-        "last_seen": "2026-10-06T10:44:19.239849+00:00"
-      }
-    ],
-    "_updated": "2026-10-06T10:44:19.239850+00:00"
-  },
-  "http://www.example.com": {
-    "verified": [
-      {
-        "rule": "open_redirect: probe: unit chain (EXP-001)",
-        "evidence": "POC verified by catalog_exploit (EXP-001)",
-        "confidence": 1.0,
-        "verified_at": "2026-10-17T05:47:00.991651+00:00",
-        "last_seen": "2026-10-17T05:47:29.063408+00:00"
-      },
-      {
-        "rule": "open_redirect: probe unit chain (EXP-001)",
-        "evidence": "POC verified by catalog_exploit (EXP-001)",
-        "confidence": 1.0,
-        "verified_at": "2026-10-17T05:47:51.895740+00:00",
-        "last_seen": "2026-10-17T05:48:04.276998+00:00"
-      }
-    ],
-    "_updated": "2026-10-17T05:48:04.277004+00:00"
-  },
   "methodology": {
     "behavior": [
       {
@@ -269,15 +182,6 @@
       ":",
       "0",
       "0"
-    ]
-  },
-  "tool:api_key_probe": {
-    "behavior": [
-      {
-        "rule": "API-key probes that read HTTP status alone lie when the provider answers 200 with an error body \u2014 always confirm the JSON status/error field before calling a key ACTIVE",
-        "evidence": "probe labeled a key ACTIVE/200 while direct request and verifier both returned a REQUEST_DENIED body for the identical URL",
-        "confidence": 0.9
-      }
     ]
   }
 }
