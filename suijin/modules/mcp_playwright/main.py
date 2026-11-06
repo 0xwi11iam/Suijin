@@ -116,6 +116,42 @@ def _boot_browser():
             raise
 
 
+def _inject_session_jar(page, url: str) -> bool:
+    """Load the saved suijin-auth session for url's domain into the live
+    browser context (cookies from ~/.suijin/config/sessions/<dom>.json).
+    Domain matching is parent-aware: accounts.google.com matches the
+    google.com jar. Returns True when cookies were injected."""
+    import json as _json
+    from pathlib import Path as _P
+    from urllib.parse import urlparse as _up
+
+    u = str(url)
+    # full URL or bare host — the "//" prefix trick only works for bare
+    # hosts; on a full URL it parsed the hostname as the SCHEME
+    # ('https') and every inject silently failed (stack #1, 2026-11-06)
+    host = (_up(u).hostname if "://" in u else _up("//" + u).hostname or "").lower()
+    if not host:
+        return False
+    labels = host.split(".")
+    candidates = {".".join(labels[-2:])} if len(labels) >= 2 else {host}
+    with contextlib.suppress(Exception):
+        from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+
+        sess_dir = _P(WORKSPACE_DIR) / "sessions"
+        for dom in candidates:
+            f = sess_dir / f"{dom}.json"
+            if not f.exists():
+                continue
+            state = _json.loads(f.read_text())
+            cookies = state.get("cookies") or []
+            if not cookies:
+                continue
+            # playwright-format cookies ride straight in
+            page.context.add_cookies(cookies)
+            return True
+    return False
+
+
 def _browser_loop():
     """Boot the browser and serve commands. MUST always set _browser_ready."""
     global _browser_error
@@ -284,6 +320,13 @@ def _dispatch(cmd, kw):
         return "No browser page — call mcp_browser_goto first"
 
     if cmd == "goto":
+        # SESSION JAR AUTO-INJECT (operator directive 2026-11-06: "the
+        # cookie jar is full? why is it signed out"): this browser used to
+        # boot a BLANK context — the jar existed but was never loaded, and
+        # authenticated targets showed signed out. Now every goto injects
+        # the saved session for the target's domain first.
+        with contextlib.suppress(Exception):
+            _inject_session_jar(page, kw["url"])
         page.goto(kw["url"], wait_until=kw.get("wait_until", "domcontentloaded"), timeout=kw.get("timeout", 20000))
         return f"Loaded: {page.title()}\nURL: {page.url}"
 
