@@ -1115,6 +1115,19 @@ def run_sandbox_cmd(action: str, name: str = "", tail: int = 40) -> int:
     return 1
 
 
+def run_system_cmd() -> int:
+    """`suijin system` — measured system stats (deltas over a real
+    interval; honest n/a where the platform can't answer)."""
+    from rich.console import Console
+
+    from suijin.server.tools.lib.system_stats import collect, render
+
+    console = Console()
+    console.print("[dim]measuring (1s sample)...[/dim]")
+    console.print(render(collect(interval=1.0)))
+    return 0
+
+
 def run_complexity_cmd(mode: str = "") -> int:
     """`suijin complexity [basic|advanced]` — the mode switch, no settings
     dive needed."""
@@ -2637,6 +2650,7 @@ _KNOWN_VERBS = frozenset(
         "browser",
         "ledger",
         "complexity",
+        "system",
         "bb-scope",
         "kb",
         "pull",
@@ -2849,6 +2863,9 @@ def main(argv=None):
     shell_p.add_argument("name")
     shell_p.set_defaults(func=lambda a: run_sandbox_cmd("shell", a.name))
     sbx.set_defaults(func=lambda a: run_sandbox_cmd("ls"))
+
+    sysp = sub.add_parser("system", help="system stats — cpu, memory pressure, ssd load, network (measured)")
+    sysp.set_defaults(func=lambda a: run_system_cmd())
 
     cx = sub.add_parser("complexity", help="switch operator mode (basic · advanced) — gates the swarm tooling")
     cx.add_argument("mode", nargs="?", default="", help="basic | advanced (no arg = show current)")
