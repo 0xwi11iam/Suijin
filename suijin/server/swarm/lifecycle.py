@@ -647,7 +647,43 @@ def run_swarm_resume(args=None) -> int:
     return 0
 
 
-def run_swarm_hunt(title: str = "", host_n: int = 0, boxed_n: int = 0) -> int:
+HOST_AGENT_MB = 220   # measured: a host agent's python + tool tree
+BOX_AGENT_MB = 160    # measured: a boxed agent container
+
+
+def spawn_capacity_check(host_n: int, boxed_n: int) -> tuple[bool, str]:
+    """Pre-flight: does this spawn plan fit in memory?
+
+    The 50-agent field run: 25 host + 25 boxed ≈ 9.5GB on a machine
+    already using 8 of 16 → silent system-wide OOM, everything died at
+    load 16. This guard refuses plans that exceed 85% of RAM and names
+    the largest safe count."""
+    with contextlib.suppress(Exception):
+        import psutil
+
+        vm = psutil.virtual_memory()
+        avail_mb = vm.available / 1e6
+        need_mb = host_n * HOST_AGENT_MB + boxed_n * BOX_AGENT_MB
+        budget_mb = vm.total / 1e6 * 0.85 - (vm.total - vm.available) / 1e6
+        if need_mb > budget_mb:
+            # largest safe combo preserving the host:boxed ratio
+            per_pair = HOST_AGENT_MB + BOX_AGENT_MB
+            if host_n and boxed_n:
+                pairs = max(0, int(budget_mb // per_pair))
+                suggestion = f"~{pairs} host + {pairs} boxed"
+            elif host_n:
+                suggestion = f"~{max(0, int(budget_mb // HOST_AGENT_MB))} host"
+            else:
+                suggestion = f"~{max(0, int(budget_mb // BOX_AGENT_MB))} boxed"
+            return False, (
+                f"needs ~{need_mb:.0f}MB but only ~{budget_mb:.0f}MB safe budget "
+                f"({avail_mb:.0f}MB free of {vm.total/1e9:.0f}GB). Suggestion: {suggestion}. "
+                "Override with --force if you really mean it."
+            )
+    return True, ""
+
+
+def run_swarm_hunt(title: str = "", host_n: int = 0, boxed_n: int = 0, force: bool = False) -> int:
     """`suijin swarm hunt "<title>"` — start a hunt by TITLE.
 
     The title IS the work (operator design, 2026-11-06): the swarm is
@@ -676,6 +712,10 @@ def run_swarm_hunt(title: str = "", host_n: int = 0, boxed_n: int = 0) -> int:
     boxed_n = max(0, int(boxed_n or 0))
     if not host_n and not boxed_n:
         host_n = 4  # sensible default: 4 host agents
+    ok, why = spawn_capacity_check(host_n, boxed_n)
+    if not ok and not force:
+        console.print(f"[red]✗ too many agents for this host:[/red] {why}")
+        return 1
     console.print(f'  hunt: [bold]{title[:70]}[/bold]')
     console.print(f"  agents: {host_n} host + {boxed_n} boxed — the title is their standing mission")
     rc = 0

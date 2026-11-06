@@ -1710,9 +1710,9 @@ def _run_swarm(
     tui: bool = False,
     count: int = 1,
     sandbox: int = 0,
+    force: bool = False,
     intent_text: str = "",
     swarm_name: str = "",
-    force: bool = False,
     mission: str = "",
 ) -> int:
     """Dispatch swarm subcommands."""
@@ -1731,7 +1731,7 @@ def _run_swarm(
     if action == "hunt":
         from suijin.server.swarm.lifecycle import run_swarm_hunt
 
-        return run_swarm_hunt(intent_text, host_n=count, boxed_n=sandbox)
+        return run_swarm_hunt(intent_text, host_n=count, boxed_n=sandbox, force=force)
     if action == "control":
         from suijin.server.swarm.lifecycle import run_swarm_control
 
@@ -2790,7 +2790,8 @@ def main(argv=None):
     hunt_p.add_argument("title", nargs="+", help="the engagement title; agents work it as their standing mission")
     hunt_p.add_argument("--host", type=int, default=0, metavar="N", help="N host-process agents")
     hunt_p.add_argument("--boxed", type=int, default=0, metavar="N", help="N boxed agents (disposable containers)")
-    hunt_p.set_defaults(func=lambda a: _run_swarm("hunt", intent_text=" ".join(a.title), count=a.host, sandbox=a.boxed))
+    hunt_p.add_argument("--force", action="store_true", help="override the memory pre-flight guard")
+    hunt_p.set_defaults(func=lambda a: _run_swarm("hunt", intent_text=" ".join(a.title), count=a.host, sandbox=a.boxed, force=a.force))
 
     ctrl_p = swarm_sub.add_parser("control", help="full-screen hub: swarm state + every action")
     ctrl_p.set_defaults(func=lambda a: _run_swarm("control"))

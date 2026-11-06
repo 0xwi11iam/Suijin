@@ -158,6 +158,15 @@ def _pause():
 # ── new hunt (guided launch, Rich) ──────────────────────────────
 
 
+def _capacity_ok(host_n: int, boxed_n: int) -> bool:
+    with contextlib.suppress(Exception):
+        from suijin.server.swarm.lifecycle import spawn_capacity_check
+
+        ok, _ = spawn_capacity_check(host_n, boxed_n)
+        return ok
+    return True
+
+
 def _new_hunt() -> None:
     _clear()
     console.print(Panel.fit(
@@ -250,9 +259,16 @@ def _new_hunt() -> None:
     _clear()
     sysd = _data("system")
     cap = sysd.get("turn_cap", 0)
+    est_mb = host_n * 220 + boxed_n * 160
+    mem_line = (
+        f"  memory  : ~{est_mb}MB estimated\n"
+        if _capacity_ok(host_n, boxed_n)
+        else f"  memory  : ~{est_mb}MB — EXCEEDS this host's safe budget, launch will refuse\n"
+    )
     console.print(Panel.fit(
         f"  title   : [bold]{title[:66]}[/bold]\n"
         f"  agents  : {host_n} host + {boxed_n} boxed\n"
+        f"{mem_line}"
         f"  lanes   : {len(lanes)} — {lanes[0][:40] + '…' if lanes else 'none, agents follow the title'}\n"
         f"  brain   : {sysd.get('provider', '—')} / {sysd.get('model', '—')}\n"
         f"  turn cap: {'no cap (runs until done)' if not cap else cap}\n"
@@ -262,6 +278,10 @@ def _new_hunt() -> None:
         title="[bold]new hunt — 5/5 · confirm[/]", border_style="green"))
     c = _input("  > ")
     if _cancelled(c):
+        return
+    if not _capacity_ok(host_n, boxed_n):
+        console.print("  [red]✗ refused — too many agents for this host (see memory line above)[/red]")
+        _pause()
         return
 
     subprocess.run(["suijin", "swarm", "hunt", title,
