@@ -189,7 +189,7 @@ def run_swarm_init(args=None) -> int:
 # ── intent ────────────────────────────────────────────────────────────
 
 
-def run_swarm_intent(text: str, swarm: str = "default") -> int:
+def run_swarm_intent(text: str, swarm: str = "default", force: bool = False) -> int:
     """`suijin swarm intent "do X"` — append to the queue (never replaces).
     Broadcasts on the bus so idle agents pick it up immediately."""
     from rich.console import Console
@@ -200,6 +200,18 @@ def run_swarm_intent(text: str, swarm: str = "default") -> int:
         console.print("[red]intent text required[/red]")
         console.print('  example: suijin swarm intent "test http://127.0.0.1:6000 for injection"')
         return 1
+
+    # PRIOR-WORK GATE: refuse intents that re-derive buried findings
+    # (the 2026-11-05 corpse class). --force overrides with a note.
+    with contextlib.suppress(Exception):
+        from suijin.server.swarm.prior_work import gate_intent
+
+        allowed, note = gate_intent(text, swarm, force=force)
+        if not allowed:
+            console.print(f"[red]{note}[/red]")
+            return 1
+        if note:
+            console.print(f"[yellow]{note}[/yellow]")
 
     _, count = _add_intent(text, swarm)
 

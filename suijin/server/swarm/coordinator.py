@@ -88,6 +88,8 @@ class SwarmCoordinator:
         self._db: sqlite3.Connection | None = None
         self._running = False
         self._health_thread: threading.Thread | None = None
+        self._last_work_ts = time.time()
+        self._autopilot_last = 0.0
         self._heartbeat_timeout = 15.0  # seconds without heartbeat = dead
         self._agents: dict[str, dict] = {}  # id → {identity, last_hb, intent}
         # RESOURCE GOVERNOR (2026-11-05): shared process pool + disk batcher
@@ -174,6 +176,7 @@ class SwarmCoordinator:
             print(f"[{identity}] {result.get('state', 'done')}: {intent['text'][:50]}", flush=True)
 
     def claim_next_intent(self, agent_id: str) -> dict | None:
+        self._last_work_ts = time.time()
         """Give this agent the next open intent. Marks it running."""
         with contextlib.suppress(sqlite3.Error):
             row = self._db.execute(
@@ -213,6 +216,7 @@ class SwarmCoordinator:
             )
             self._db.commit()
         self._agents[agent_id] = {"identity": identity, "last_hb": time.time(), "intent": None}
+        self._last_work_ts = time.time()
 
     def heartbeat(self, agent_id: str):
         with contextlib.suppress(sqlite3.Error):
@@ -292,6 +296,7 @@ class SwarmCoordinator:
                 )
                 sweep_db.commit()
                 sweep_db.close()
+                self._autopilot_check(now)
                 if requeued or cur.rowcount or (retry.rowcount if retry else 0):
                     print(
                         f"[health] sweep: requeued {requeued} orphaned intent(s), "
@@ -304,6 +309,41 @@ class SwarmCoordinator:
 
                 traceback.print_exc()
                 print(f"[health] sweep failed: {sweep_exc!r}", flush=True)
+
+    def _autopilot_check(self, now: float) -> None:
+        """IDLE AUTOPILOT — the 2026-11-05 overnight lesson: eight agents
+        sat idle for 8 HOURS on an empty queue while facts existed. When
+        nothing is open/running, all agents idle >10 min, and facts
+        exist, queue deepening intents from the latest facts. Hourly
+        cap + duplicate-summary guard: it can never runaway-loop."""
+        with contextlib.suppress(Exception):
+            if not self._agents or now - self._last_work_ts <= 600 or now - self._autopilot_last <= 3600:
+                return
+            open_n = self._db.execute("SELECT COUNT(*) FROM intents WHERE state='open'").fetchone()[0]
+            run_n = self._db.execute("SELECT COUNT(*) FROM intents WHERE state='running'").fetchone()[0]
+            if open_n or run_n:
+                return
+            added = 0
+            for (summary,) in self._db.execute(
+                "SELECT summary FROM facts ORDER BY created_at DESC LIMIT 3"
+            ).fetchall():
+                text = f"continue investigation: {str(summary)[:180]}"
+                dup = self._db.execute(
+                    "SELECT COUNT(*) FROM intents WHERE text LIKE ?", (f"%{str(summary)[:60]}%",)
+                ).fetchone()[0]
+                if dup:
+                    continue
+                self._db.execute(
+                    "INSERT INTO intents (id, text, state, engagement, created_at, swarm) "
+                    "VALUES (?, ?, 'open', ?, ?, 'default')",
+                    (f"in_{os.urandom(6).hex()}", text, "", now),
+                )
+                added += 1
+            self._db.commit()
+            if added:
+                self._last_work_ts = now
+                print(f"[autopilot] idle swarm → queued {added} follow-up intent(s) from facts", flush=True)
+            self._autopilot_last = now
 
     # ── rate limiting (per-target, across ALL agents) ───────────
 
