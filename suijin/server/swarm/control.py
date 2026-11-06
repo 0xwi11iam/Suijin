@@ -88,9 +88,10 @@ def run_hub() -> int:
             "  [bold #bd93f9]3.[/] boxes           box manager: state · logs · shell · kill\n"
             "  [bold #bd93f9]4.[/] hypervisor      summon/destroy idle boxes · image\n"
             "  [bold #bd93f9]5.[/] open agent      attach a specific agent's live view by id\n"
-            "  [bold #bd93f9]6.[/] add work        queue an intent for idle agents\n"
-            "  [bold #bd93f9]7.[/] message swarm   steer every agent, one line\n"
-            "  [bold #bd93f9]8.[/] stop            graceful — data survives (proof shown)\n"
+            "  [bold #bd93f9]6.[/] system stats    cpu · memory pressure · ssd load · network\n"
+            "  [bold #bd93f9]7.[/] add work        queue an intent for idle agents\n"
+            "  [bold #bd93f9]8.[/] message swarm   steer every agent, one line\n"
+            "  [bold #bd93f9]9.[/] stop            graceful — data survives (proof shown)\n"
             "  [bold white]b.[/] [dim]back[/]"
         )
         c = _input("  > ")
@@ -126,16 +127,23 @@ def run_hub() -> int:
                     console.print(f"  [red]no agent matches '{frag}'[/red]")
                     _pause()
         elif c == "6":
+            with contextlib.suppress(Exception):
+                from suijin.server.tools.lib.system_stats import collect as _collect, render as _render
+
+                console.print("[dim]measuring (1s sample)...[/dim]")
+                console.print(_render(_collect(interval=1.0)))
+            _pause()
+        elif c == "7":
             intent = _input("  intent: ")
             if intent and not _cancelled(intent):
                 subprocess.run(["suijin", "swarm", "intent", intent], timeout=60)
                 _pause()
-        elif c == "7":
+        elif c == "8":
             msg = _input("  say: ")
             if msg and not _cancelled(msg):
                 subprocess.run(["suijin", "swarm", "say", msg], timeout=60)
                 _pause()
-        elif c == "8":
+        elif c == "9":
             if _stop_flow():
                 return 0
 
