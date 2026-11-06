@@ -496,3 +496,55 @@ destructive cleanup; the tarball's `suijin/suijin_agent` symlink
 stale residue was removed (runtime `ensure_workspace_layout` owns
 that path). Engagement data under the old workspace did not survive;
 code and config did.
+
+## 2026-11-06 — auth sessions, live cookie jar, swarm comms (worker round)
+
+1. **`suijin auth`** (`server/tools/lib/auth_session.py`): named browser
+   sessions per target. Bare invocation = THE LIVE COOKIE JAR — a
+   persistent-profile browser (~/.suijin/config/auth-profile, logins
+   survive runs) that snapshots every cookie jar per registrable domain
+   every 4s and registers auth-looking jars as credentials LIVE
+   (replace-by-service; append-dedupe served stale jars after
+   re-login). `--paste` (stdin cookie string, __Secure-/__Host- prefix
+   handling — Chromium rejects them otherwise), `--check` heartbeat
+   (alive / EXPIRED on login-redirect or 401/403 / redirect-loop),
+   `--name` second accounts, `--list`. Sessions are local-only
+   (config/sessions/, gitignored by location) and shared across ALL
+   engagements.
+2. **Engine ladder** (`_launch_browser_context` + `_stealth_playwright`):
+   real Chrome by launch-probe (channel="chrome" resolves per-OS: app
+   bundle on macOS, PATH binary on Linux) → bundled Chromium → "use
+   paste mode" on engine-less hosts. patchright (protocol-level stealth
+   fork, drop-in, pip-only, mac+linux, shares the playwright browser
+   cache) is preferred when installed — Google-class IdPs reject
+   sign-ins from automation-flagged builds ("this browser or app may
+   not be secure"); automation signals stripped in every branch.
+   Capability checks throughout, never platform guesses.
+3. **`suijin swarm say "msg"`**: publishes to every live agent's steer
+   topic; agents queue the message and the worker loop injects it as an
+   OPERATOR INTERJECTION user message at the next turn boundary
+   (worker_loop's on_turn hook). Printing alone never reached the LLM.
+4. **Worker loop is one implementation** (`server/swarm/worker_loop.py`):
+   process agents and coordinator inline agents both call it. Tool
+   catalog rides the system prompt; truncation-aware correctives
+   (write_file-then-run for long payloads); parse failure re-prompts
+   (5 strikes → blocked, NEVER silently complete). swarm_turn_cap
+   config key (default 40; operator set 60); `exhausted` intents requeue
+   once via the health sweep.
+5. **Credential bridge fixed** (tests/tools/test_credential_bridge.py):
+   http_request wiped injected credentials mid-function; TWO stores
+   never talked (http_replay memory dict vs file-backed
+   credential_store); persist path raised NameError swallowed as an
+   error-string return. One store now; register persists; apply falls
+   back to the shared store. creds_add_replace for live jars.
+6. **Browser extra**: `pip install suijin[browser]` (playwright +
+   patchright, both optional). Base installs stay browser-free;
+   paste-mode auth and all HTTP tools work everywhere. Declared in
+   pyproject [browser] extra + requirements.txt notes.
+7. **Health sweep fixed** (age-vs-timestamp arithmetic — the sweep could
+   never requeue anything; see vault bugs-ledger 2026-11-06). Dead-row
+   cleanup keeps `swarm status` counts honest.
+8. Suite at this commit: swarm 27 + mesh 9 + auth/bridge 14 green;
+   console 203 green. The combined tools+console run remains
+   order-dependent flaky (41 failures without the new files, 7 with —
+   pre-existing, known).
