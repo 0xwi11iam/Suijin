@@ -27,6 +27,7 @@ import time
 _vuln_report = None
 _auth_diff_fn = None
 _browser_client = None
+_mark_dead_fn = None
 
 # Cross-module re-export surface: delegated lazily (boundary rule — no
 # module-level cross-module imports; delegation is also patch-transparent
@@ -579,6 +580,7 @@ __all__ = [
     "write_file",
     "report_finding",  # the vulnerability path — swarm honest board
     "auth_diff",  # differential authorization — the IDOR method, one call
+    "mark_dead",  # broadcast a tested-and-dead region — peers skip it
     "browser_open",  # shared browser daemon (one chromium, agent contexts)
     "browser_eval",
     "browser_network",
@@ -1039,6 +1041,9 @@ def _build_routes(config):
         # SHARED browser daemon — one chromium, per-agent contexts.
         # Auto-starts on first call; contexts carry the suijin-auth jar
         # for the target when a session file exists (browser=<session>).
+        # dead-region broadcast — the swarm never retraces a corpse
+        "mark_dead": lambda a: _mark_dead_fn(
+            a.get("region", ""), reason=a.get("reason", ""), engagement=a.get("engagement", "_default")),
         "browser_open": lambda a: _browser_client().call(
             {"agent": str(a.get("agent") or os.environ.get("SUIJIN_IDENTITY") or "anon"),
              "session": str(a.get("browser", "") or ""),
@@ -1433,7 +1438,11 @@ def _with_error_hints(tool_name: str, result: str) -> str:
 def route_tool(tool_name, args, config):
     # the vulnerability-reporting tool (see the dispatch table) —
     # imported lazily so the intel graph import above stays untouched
-    global _vuln_report, _auth_diff_fn, _browser_client
+    global _vuln_report, _auth_diff_fn, _browser_client, _mark_dead_fn
+    if _mark_dead_fn is None:
+        from suijin.server.tools.lib.dead_regions import record_dead_region as _md
+
+        _mark_dead_fn = _md
     if _browser_client is None:
         from suijin.server.browser_daemon import BrowserClient as _BC
 

@@ -64,7 +64,7 @@ def http_request(method, url, headers=None, body="", credential=""):
     try:
         req_headers = dict(headers) if headers else {}
         _cred_note = ""
-        if str(credential or "").strip():
+        if str(credential or "").strip() and str(credential).strip().lower() not in ("none", "null", "unauthenticated", "anon"):
             import json as _json
 
             from suijin.modules.credential_store.main import creds_get

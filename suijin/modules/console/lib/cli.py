@@ -1115,6 +1115,30 @@ def run_sandbox_cmd(action: str, name: str = "", tail: int = 40) -> int:
     return 1
 
 
+def run_ledger_cmd(target: str = "") -> int:
+    """`suijin ledger [target]` — the tested book: what's been declared
+    dead, where, how long ago; stale verdicts say RETEST (sites change)."""
+    from rich.console import Console
+    from rich.table import Table
+
+    from suijin.server.tools.lib.dead_regions import _retest_days, ledger_rows
+
+    console = Console()
+    rows = ledger_rows(target.strip().lower())
+    if not rows:
+        console.print(f"  ledger empty{f' for {target}' if target else ''} — mark_dead(region, reason) fills it")
+        return 0
+    t = Table(title=f"tested ledger (verdicts older than {_retest_days()}d invite retest)")
+    t.add_column("target"); t.add_column("region"); t.add_column("age"); t.add_column("verdict")
+    t.add_column("reason")
+    for r in rows[:30]:
+        style = "dim" if r["verdict"].startswith("fresh") else "bold yellow"
+        t.add_row(r["target"], r["region"][:46], f"{r['age_days']}d", r["verdict"],
+                  r["reason"][:34], style=style)
+    console.print(t)
+    return 0
+
+
 def run_browser_cmd(action: str) -> int:
     """`suijin browser daemon …` — process controls + status."""
     from rich.console import Console
@@ -2582,6 +2606,7 @@ _KNOWN_VERBS = frozenset(
         "auth",
         "sandbox",
         "browser",
+        "ledger",
         "bb-scope",
         "kb",
         "pull",
@@ -2794,6 +2819,10 @@ def main(argv=None):
     shell_p.add_argument("name")
     shell_p.set_defaults(func=lambda a: run_sandbox_cmd("shell", a.name))
     sbx.set_defaults(func=lambda a: run_sandbox_cmd("ls"))
+
+    led = sub.add_parser("ledger", help="tested ledger — dead regions per target, with age (stale = retest)")
+    led.add_argument("target", nargs="?", default="", help="filter by target domain (default: all)")
+    led.set_defaults(func=lambda a: run_ledger_cmd(a.target))
 
     brw = sub.add_parser("browser", help="the shared browser daemon — one chromium, per-agent sessions")
     brw_sub = brw.add_subparsers(dest="brw_action")

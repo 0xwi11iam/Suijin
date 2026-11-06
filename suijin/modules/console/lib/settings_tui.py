@@ -203,6 +203,8 @@ ALL_FIELDS = OrderedDict(
         ("swarm_autopilot", ("bool",)),
         # warm pile size: idle boxes kept ready for the next engagement
         ("sandbox_pool_size", ("int", (0, 32))),
+        # tested-ledger staleness: days before a dead verdict invites retest
+        ("ledger_retest_days", ("int", (1, 3650))),
         # ---- Workspace & integrations ----
         ("metasploit_rpc_host", ("string",)),
         ("metasploit_rpc_port", ("int", (1, 65535))),
@@ -598,6 +600,7 @@ FIELD_INFO = {
     "swarm_turn_cap": ("swarm turn cap", "0 = no cap (agents run until done)", "swarm"),
     "swarm_autopilot": ("swarm autopilot", "queue follow-up work when everything idles", "swarm"),
     "sandbox_pool_size": ("warm pile size", "idle boxes kept ready for the next engagement", "swarm"),
+    "ledger_retest_days": ("ledger retest days", "dead verdicts older than this invite retesting", "swarm"),
     # -- how far it may run --
     "max_iterations": ("Iteration cap", "hard ceiling on think→act→respond cycles", "limits"),
     "max_tokens_per_request": ("Reply size", "max tokens per model response", "limits"),

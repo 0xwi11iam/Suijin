@@ -30,6 +30,29 @@ SYSTEM_TEMPLATE = (
 )
 
 
+def _dead_regions_hint(engagement: str = "_default") -> str:
+    """Recent DEAD REGIONS from peers — riding every worker's prompt so
+    the swarm never retraces a corpse (operator directive 2026-11-06)."""
+    with contextlib.suppress(Exception):
+        from suijin.server.tools.lib.dead_regions import ledger_rows
+
+        rows = ledger_rows(engagement=engagement)
+        fresh = [r for r in rows if r["verdict"].startswith("fresh")][-6:]
+        stale = [r for r in rows if r["verdict"].startswith("stale")][-3:]
+        if not fresh and not stale:
+            return ""
+        parts = ["\n\nTESTED LEDGER (peers' verdicts, with age — sites change):"]
+        if fresh:
+            listed = "; ".join(f"{r['region'][:40]} ({int(r['age_days'])}d ago)" for r in fresh)
+            parts.append(f"  do NOT retest (fresh): {listed}")
+        if stale:
+            listed = "; ".join(f"{r['region'][:40]} ({int(r['age_days'])}d ago)" for r in stale)
+            parts.append(f"  STALE verdicts — the site may have changed, consider retesting: {listed}")
+        parts.append("  add your own via mark_dead(region, reason).")
+        return "\n".join(parts)
+    return ""
+
+
 def _hunt_policy() -> str:
     """The operator's standing hunt policy — ~/.suijin/config/hunt-
     policy.md rides EVERY agent's instructions by default (no per-
@@ -235,18 +258,47 @@ def execute_intent(
     messages = [
         {"role": "system",
          "content": (SYSTEM_TEMPLATE.format(catalog=_load_catalog())
-                     + _session_hint() + _hunt_policy())},
+                     + _session_hint() + _hunt_policy()
+                     + _dead_regions_hint(intent.get("engagement") or "_default"))},
         {"role": "user", "content": f"INTENT: {intent['text']}\n\nExecute this intent."},
     ]
 
     facts: list[dict] = []
     parse_fails = 0
+    recent_results: list[str] = []  # fixation guard input
+    fixated: set[str] = set()       # already-corrected regions
+
+    def _fixation_check() -> str | None:
+        """THE FIXATION GUARD: if 4+ of the last 6 results touch a region
+        the ledger marks dead-fresh, the worker corrects ITSELF — the
+        open-redirect fixation class (operator: 'agent keeps pushing on
+        it when it's not the most efficient direction')."""
+        if len(recent_results) < 6:
+            return None
+        with contextlib.suppress(Exception):
+            from suijin.server.tools.lib.dead_regions import ledger_rows
+
+            for row in ledger_rows(engagement=intent.get("engagement") or "_default"):
+                if not row["verdict"].startswith("fresh"):
+                    continue
+                key = row["region"][:40]
+                if key in fixated:
+                    continue
+                hits = sum(1 for r in recent_results[-6:] if key.lower()[:24] in r.lower())
+                if hits >= 4:
+                    fixated.add(key)
+                    return (
+                        f"you have probed '{row['region'][:60]}' {hits}/6 recent turns — the "
+                        f"tested ledger marks it DEAD ({row['reason'][:50]}). DROP IT and move "
+                        "to a different surface; retesting it wastes the engagement."
+                    )
+        return None
 
     for turn in range(max_turns):
         # operator interjection (swarm say) — lands mid-conversation
         if on_turn is not None:
             with contextlib.suppress(Exception):
-                interjection = on_turn(turn)
+                interjection = on_turn(turn) or _fixation_check()
                 if interjection:
                     messages.append(
                         {
@@ -344,6 +396,7 @@ def execute_intent(
         except Exception as e:  # noqa: BLE001 — tool errors feed back to the LLM
             result_str = f"Error: {e}"
 
+        recent_results.append(result_str[:300])
         if "CONFIRMED" in result_str:
             facts.append(
                 {
