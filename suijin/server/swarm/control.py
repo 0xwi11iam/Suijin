@@ -164,7 +164,14 @@ def _new_hunt() -> None:
     if _cancelled(c):
         return
     if c == "l":
-        subprocess.run(["suijin", "auth"], timeout=3600)  # returns when the operator closes it
+        subprocess.run(["suijin", "auth"], timeout=3600)  # returns on done/Ctrl+C/close
+        # show what was captured, then continue
+        ses2 = _data("sessions").get("sessions", [])
+        if ses2:
+            console.print("
+  [green]captured:[/green]")
+            for s in ses2[:8]:
+                console.print(f"    {s['name'][:34]:34s} {s['cookies']} cookies")
 
 
 # step 3 — agents
