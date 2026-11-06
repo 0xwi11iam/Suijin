@@ -192,6 +192,95 @@ def check_session(target: str, name: str = "", check_url: str = "") -> str:
     return f"alive — {r.status_code}, final: {final[:90]} ({len(jar)} cookies)"
 
 
+_AUTH_COOKIE_RX = re.compile(r"(^|_)(sid|sess|session|token|auth|login|sso|jwt|lsid|osid|sapisid)", re.I)
+
+
+def _registrable(host: str) -> str:
+    host = (urlparse("//" + str(host)).hostname or str(host)).lower()
+    host = host[4:] if host.startswith("www.") else host
+    labels = host.split(".")
+    return ".".join(labels[-2:]) if len(labels) > 2 else host
+
+
+def snapshot_jars(ctx, last: dict) -> list[tuple[str, int, bool]]:
+    """Read every cookie in the browser, group by registrable domain,
+    save + register the jars that changed. Returns [(domain, n_cookies,
+    registered)]. Live-refresh safe: register_or_replace semantics keep
+    creds_get serving the CURRENT jar after re-logins."""
+    out = []
+    with contextlib.suppress(Exception):
+        cookies = ctx.cookies()  # playwright format == storage_state format
+        by_dom: dict[str, list] = {}
+        for c in cookies:
+            dom = _registrable(c.get("domain") or "")
+            if dom and "." in dom:
+                by_dom.setdefault(dom, []).append(c)
+        for dom, jar in by_dom.items():
+            sig = sorted(f"{c['name']}={c['value']}" for c in jar)
+            key = hash(tuple(sig))
+            if last.get(dom) == key:
+                continue
+            last[dom] = key
+            state = {"cookies": jar, "origins": []}
+            save_session(dom, state)
+            authish = len(jar) >= 4 or any(_AUTH_COOKIE_RX.search(c["name"]) for c in jar)
+            if authish:
+                from suijin.modules.credential_store.main import creds_add_replace
+
+                creds_add_replace(service=dom, cred_type="cookie",
+                                  value=state_to_cookie_string(state))
+            out.append((dom, len(jar), authish))
+    return out
+
+
+def live_session_browser(poll_seconds: float = 4.0) -> int:
+    """`suijin auth` (bare) — THE live cookie jar.
+
+    Opens a persistent-profile Chromium (the profile lives in
+    ~/.suijin/config/auth-profile, so logins survive between runs).
+    Log in to as many things as you want — every poll, changed jars are
+    snapshotted per-domain and auth-looking ones are (re)registered as
+    credentials, LIVE: agents' next http_request(credential='<domain>')
+    picks up the fresh jar with no restart. Works mid-engagement.
+
+    Ctrl+C (or closing the browser) stops it; sessions stay saved.
+    """
+    from playwright.sync_api import sync_playwright
+
+    profile = _config_root() / "auth-profile"
+    profile.mkdir(parents=True, exist_ok=True)
+    print("  opening browser — log in to whatever you like, as much as you like.")
+    print(f"  profile persists at {profile} (re-open anytime; logins survive)")
+    print("  jars snapshot automatically; agents pick them up live. Ctrl+C to stop.\n")
+    last: dict = {}
+    announced: set[str] = set()
+    try:
+        with sync_playwright() as p:
+            ctx = p.chromium.launch_persistent_context(str(profile), headless=False)
+            page = ctx.pages[0] if ctx.pages else ctx.new_page()
+            with contextlib.suppress(Exception):
+                page.goto("https://www.google.com", timeout=15000)
+            try:
+                while True:
+                    time.sleep(poll_seconds)
+                    for dom, n, authish in snapshot_jars(ctx, last):
+                        tag = "credential registered" if authish else "session saved"
+                        fresh = "" if dom in announced else "  NEW "
+                        announced.add(dom)
+                        print(f"  [{tag:>20}] {fresh}{dom} ({n} cookies)", flush=True)
+            except KeyboardInterrupt:
+                pass
+            with contextlib.suppress(Exception):
+                snapshot_jars(ctx, last)  # final flush
+                ctx.close()
+    except KeyboardInterrupt:
+        pass
+    except Exception as e:  # noqa: BLE001 — browser closed by operator etc.
+        print(f"  browser closed ({e.__class__.__name__})")
+    print(f"\n  {len(announced)} domain jar(s) captured — suijin auth --list")
+    return 0
+
+
 def run_auth_cmd(args) -> int:
     """Entry behind `suijin auth`."""
     target = str(getattr(args, "target", "") or "").strip()
@@ -205,7 +294,7 @@ def run_auth_cmd(args) -> int:
     if do_list:
         files = sorted(sessions_dir().glob("*.json"))
         if not files:
-            print("no sessions on file — suijin auth <target> --paste | --browser")
+            print("no sessions on file — suijin auth (live browser) | <target> --paste")
             return 0
         print("sessions:")
         for f in files:
@@ -214,6 +303,10 @@ def run_auth_cmd(args) -> int:
             n = len(state.get("cookies", []))
             print(f"  {f.stem:40s} {n:3d} cookies  saved {age_h:.1f}h ago")
         return 0
+
+    if not mode_paste and not mode_browser and not do_check:
+        # bare `suijin auth` — the live cookie jar
+        return live_session_browser()
 
     if do_check:
         print(check_session(target, name, str(getattr(args, "check_url", "") or "")))

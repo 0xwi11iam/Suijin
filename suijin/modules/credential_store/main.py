@@ -1,5 +1,6 @@
 """Credential store — persist discovered credentials."""
 
+import contextlib
 import json
 import time
 from pathlib import Path
@@ -43,6 +44,27 @@ def cred_env() -> dict:
         if c.get("service") and val:
             out[env_name_for(c["service"])] = val
     return out
+
+
+def creds_add_replace(service="", cred_type="", value=""):
+    """Register-or-REPLACE by service name. Live session jars refresh
+    constantly — append-dedupe (creds_add's rule) would pile up entries
+    and creds_get's first-match would keep serving the STALE jar after
+    every re-login."""
+    with contextlib.suppress(Exception):
+        store = _load_store()
+        entry = {
+            "service": str(service),
+            "type": str(cred_type or ""),
+            "value": str(value or ""),
+            "username": "",
+            "notes": "",
+            "discovered_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        store["credentials"] = [c for c in store.get("credentials", []) if c.get("service") != service]
+        store["credentials"].append(entry)
+        _save_store(store)
+        return f"credential '{service}' updated"
 
 
 def creds_add(service="", cred_type="", value="", username="", notes="", **aliases):

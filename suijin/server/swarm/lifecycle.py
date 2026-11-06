@@ -521,6 +521,59 @@ def run_swarm_resume(args=None) -> int:
     return 0
 
 
+def run_swarm_say(args=None) -> int:
+    """`suijin swarm say "message"` — message every live agent.
+
+    The message lands as an OPERATOR INTERJECTION inside each agent's
+    current conversation at the next turn boundary (not just a log
+    line) — steer the swarm mid-engagement.
+    """
+    from rich.console import Console
+
+    console = Console()
+    message = str(getattr(args, "message", "") or "").strip()
+    if not message:
+        console.print("[red]usage: suijin swarm say \"what to say\"[/red]")
+        return 1
+    addr = _bus_addr()
+    if not addr:
+        console.print("[red]no swarm — run [cyan]suijin swarm init[/cyan] first[/red]")
+        return 1
+
+    # live agents: heartbeat in the last 30s
+    import sqlite3
+
+    from suijin.server.swarm.coordinator import swarm_db_path
+
+    agents = []
+    with contextlib.suppress(Exception):
+        db = sqlite3.connect(str(swarm_db_path()), timeout=5)
+        db.execute("PRAGMA journal_mode=WAL")
+        cutoff = time.time() - 30
+        agents = [r[0] for r in db.execute(
+            "SELECT id FROM agents WHERE last_heartbeat > ? ORDER BY id", (cutoff,)
+        ).fetchall()]
+        db.close()
+
+    if not agents:
+        console.print("[yellow]no live agents to message[/yellow]")
+        return 1
+
+    from suijin.server.mesh.bus import BusClient
+
+    bc = BusClient()
+    if not bc.connect(addr[0], addr[1], f"operator-{os.urandom(2).hex()}"):
+        console.print("[red]cannot reach the swarm bus[/red]")
+        return 1
+    for identity in agents:
+        bc.publish(f"/agent/{identity}/steer", {"message": message})
+    bc.close()
+
+    console.print(f"[green]✓ messaged {len(agents)} agent(s):[/green] {message}")
+    console.print("[dim]agents receive it as an operator interjection on their next turn[/dim]")
+    return 0
+
+
 def run_swarm_stop_all(args=None) -> int:
     """`suijin swarm stop` — GRACEFUL shutdown: broadcast a stop event on
     the bus, agents see it before their next step and exit clean (their

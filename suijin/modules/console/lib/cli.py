@@ -1547,6 +1547,10 @@ def _run_swarm(
         from suijin.server.swarm.lifecycle import run_swarm_intent
 
         return run_swarm_intent(intent_text, swarm_name or "default")
+    if action == "say":
+        from suijin.server.swarm.lifecycle import run_swarm_say
+
+        return run_swarm_say(types.SimpleNamespace(message=intent_text))
     if action == "spawn":
         from suijin.server.swarm.lifecycle import run_swarm_spawn
 
@@ -2559,6 +2563,10 @@ def main(argv=None):
     intent_p.add_argument("text", nargs="+", help="what the agent should do")
     intent_p.add_argument("--swarm", default="", help="swarm name (default: most recent)")
     intent_p.set_defaults(func=lambda a: _run_swarm("intent", intent_text=" ".join(a.text), swarm_name=a.swarm))
+
+    say_p = swarm_sub.add_parser("say", help='message every live agent mid-engagement ("what to say")')
+    say_p.add_argument("message", nargs="+", help="the message to interject into agent conversations")
+    say_p.set_defaults(func=lambda a: _run_swarm("say", intent_text=" ".join(a.message)))
 
     spawn_p = swarm_sub.add_parser("spawn", help="spawn agent(s) — --tui shows in this terminal, -N for multiple")
     spawn_p.add_argument("--tui", action="store_true", help="full TUI in this terminal")

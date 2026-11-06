@@ -149,10 +149,16 @@ def execute_intent(
     bus=None,
     max_turns: int = 0,
     on_event=None,
+    on_turn=None,
 ) -> dict:
     """Work one intent: LLM → decision → tool → result → repeat.
 
     Returns {"state": done|blocked|exhausted, "facts": [...], "note": str}.
+
+    on_turn(turn) → optional str: called at the TOP of every turn; a
+    non-None return is injected into the conversation as an OPERATOR
+    INTERJECTION user message (this is how `suijin swarm say` reaches
+    agents mid-intent instead of just printing to their log).
 
     max_turns=0 → read `swarm_turn_cap` from config (default 40). The old
     hardcoded caps (10, then 25) starved an overnight run: nine lanes hit
@@ -180,6 +186,18 @@ def execute_intent(
     parse_fails = 0
 
     for turn in range(max_turns):
+        # operator interjection (swarm say) — lands mid-conversation
+        if on_turn is not None:
+            with contextlib.suppress(Exception):
+                interjection = on_turn(turn)
+                if interjection:
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": f"OPERATOR INTERJECTION: {interjection} — incorporate this into your current work.",
+                        }
+                    )
+
         # --- model call -------------------------------------------------
         try:
             from suijin.modules.platform.lib.config_loader import load_config, load_env
