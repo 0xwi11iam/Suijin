@@ -189,15 +189,39 @@ def run_setup() -> int:
     if config.get("operator_mode") == "advanced":
         console.print("  [dim]swarm tools unlocked: suijin swarm … · suijin sandbox …[/dim]")
 
-    # ── 6. Engine probe ── (sandboxes need a container engine; optional)
-    engine = "none"
-    with contextlib.suppress(Exception):
-        from suijin.server.box.engine import detect_engine
+    # ── 6. Engine pick ── (sandboxes need a container engine; ASK, with
+    # detection as the default — never silently assume. Field feedback
+    # 2026-11-06: "it assumed orb, should ask me.")
+    engines = []
+    import shutil as _sh
 
-        engine = detect_engine(interactive=False)
-    console.print(f"\n[bold]Container engine[/bold] — needed only for sandboxed agents: [bold]{engine}[/bold]")
+    if _sh.which("orbctl") or _sh.which("orb"):
+        engines.append(("orbstack", "orbstack (detected) — fastest on mac"))
+    if _sh.which("docker"):
+        engines.append(("docker", "docker (detected)"))
+    engines.append(("none", "none — skip sandboxed agents for now"))
+    current_engine = str(config.get("container", {}).get("engine") or "")
+    console.print("\n[bold]Container engine[/bold] — for sandboxed agents (disposable boxes):")
+    for i, (eng, desc) in enumerate(engines, 1):
+        mark = " [green]← current[/green]" if eng == current_engine else ""
+        console.print(f"  [cyan]{i}.[/cyan] {desc}{mark}")
+    try:
+        raw = console.input(f"\n[dim]1-{len(engines)} (Enter = {engines[0][0]}):[/dim] ").strip()
+    except (EOFError, KeyboardInterrupt):
+        raw = ""
+    if raw.isdigit() and 1 <= int(raw) <= len(engines):
+        engine = engines[int(raw) - 1][0]
+    else:
+        engine = engines[0][0]
+    if engine != current_engine:
+        config.setdefault("container", {})["engine"] = engine
+        changed = True
+        console.print(f"  [green]→ {engine}[/green]")
+    else:
+        engine = current_engine or engine
+    console.print(f"  engine: [bold]{engine}[/bold]")
     if engine == "none":
-        console.print("  [dim]optional: install OrbStack (mac) or docker to enable sandboxes[/dim]")
+        console.print("  [dim]sandboxed agents unavailable; local agents still work[/dim]")
 
     # ── 7. Browser layer offer ── (cookie jar / DOM testing; optional)
     have_browser = False
