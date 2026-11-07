@@ -322,22 +322,14 @@ def test_header_and_overview_dedup_and_totals(demo):
     assert sum(sc.values()) == len(finds)  # totals = severity sum, no phantoms
 
 
-def test_system_one_aggregates(demo):
-    import io
-
-    from rich.console import Console
-
-    def render(ui):
-        c = Console(width=80, force_terminal=True, record=True, file=io.StringIO())
-        c.print(ui._system_one_block())
-        return c.export_text()
-
-    ui, _, _ = demo
-    txt = render(ui)
-    assert "laya-mlx" in txt and "loaded" in txt and "decisions" in txt
-    ui.agents = []  # nothing running
-    assert "not running" in render(ui)
-
+def test_system_one_aggregates(tmp_path, monkeypatch):
+    """System One retired with bare engagements (2026-11-07) — the
+    overview line reports swarm coordinator state instead."""
+    ui, mesh, ws = demo(tmp_path)
+    ui._poll_once()
+    # the overview row exists and no longer says System One
+    from suijin.modules.console.lib import operator_tui as ot
+    assert "System One" not in open(ot.__file__, errors="replace").read()
 
 def test_header_strip_carries_dollar(demo):
     ui, _, _ = demo
