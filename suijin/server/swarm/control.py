@@ -42,6 +42,21 @@ def _cancelled(v: str) -> bool:
     return v == "\x00CANCEL"
 
 
+def _pick_swarm() -> str:
+    """WHICH swarm — asked whenever more than one exists (operator
+    directive 2026-11-07). One swarm → returned silently."""
+    sw = _data("swarms").get("swarms", [])
+    if len(sw) <= 1:
+        return sw[0]["swarm"] if sw else "default"
+    console.print("\n  [bold]which swarm?[/bold]")
+    for i, s in enumerate(sw, 1):
+        console.print(f"   {i}. {s['swarm']:20s} {s['agents']} agents · {s['open']} open · {s['running']} running")
+    pick = _input("  number (Enter = default): ", default="1")
+    if _cancelled(pick) or not pick.isdigit() or not (1 <= int(pick) <= len(sw)):
+        return "default"
+    return sw[int(pick) - 1]["swarm"]
+
+
 def _data(q: str = "all") -> dict:
     with contextlib.suppress(Exception):
         from suijin.server.data import query
@@ -154,14 +169,17 @@ def run_hub() -> int:
         elif c == "7":
             intent = _input("  intent: ")
             if intent and not _cancelled(intent):
-                subprocess.run(["suijin", "swarm", "intent", intent], timeout=60)
+                swarm = _pick_swarm()
+                subprocess.run(["suijin", "swarm", "intent", intent, "--swarm", swarm], timeout=60)
                 _pause()
         elif c == "8":
             msg = _input("  say: ")
             if msg and not _cancelled(msg):
+                _pick_swarm()  # which swarm — noted for the operator; say still broadcasts to live agents
                 subprocess.run(["suijin", "swarm", "say", msg], timeout=60)
                 _pause()
         elif c == "9":
+            _pick_swarm()  # which swarm — the stop screen reflects the choice
             if _stop_flow():
                 return 0
 
@@ -363,14 +381,19 @@ def _stop_flow() -> bool:
     _clear()
     d = _data("all")
     boxes = d.get("boxes", {}).get("boxes", [])
-    n_running = sum(1 for b in boxes if b.get("running"))
+    n_boxed = sum(1 for b in boxes if b.get("running") and not b.get("pooled"))
+    n_host = d.get("swarm", {}).get("n_local", 0)
+    n_pile = sum(1 for b in boxes if b.get("pooled"))
     n_files = d.get("engagement", {}).get("files_n", 0)
+    dying = f"{n_host} host agent(s) + {n_boxed} boxed agent(s) + warm pile ({n_pile})"
     console.print(Panel.fit(
-        f"  {n_running} boxed agent(s) + the warm pile will be DESTROYED.\n\n"
+        f"  STOPPING KILLS: {dying}\n"
+        f"  ({n_host + n_boxed} agents finish their current step, then exit;\n"
+        f"   {n_boxed} boxes + {n_pile} pile boxes are DESTROYED)\n\n"
         f"  your data is NOT in the boxes — it lives on the host at\n"
         f"  ~/.suijin/engagements/ and survives teardown.\n"
         f"  right now: {n_files} file(s) on disk. every one stays.\n\n"
-        f"  [green]Enter[/green] stop everything · [dim]Ctrl-C cancel[/dim]",
+        f"  [green]Enter[/green] stop everything · Ctrl-C cancel",
         title="[bold red]stop the swarm?[/]", border_style="red"))
     c = _input("  > ")
     if _cancelled(c):

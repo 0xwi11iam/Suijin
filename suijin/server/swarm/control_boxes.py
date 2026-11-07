@@ -48,16 +48,18 @@ def _box_manager(stdscr) -> None:
 
         _line(stdscr, 0, 2, " boxes — the hypervisor view ", curses.A_REVERSE | curses.A_BOLD)
         mark = "fresh" if fresh else ("stale — [i] rebuild" if fresh is False else "not built")
-        _line(stdscr, 2, 2, f"image {hv.image_tag()}  [{mark}]  ·  warm pile {pool_n} idle", curses.color_pair(2) if fresh is False else curses.A_DIM)
-        _line(stdscr, 3, 2, f"{'NAME':46s} {'STATE':8s} {'AGENT':24s} UP", curses.A_UNDERLINE)
-        for i, b in enumerate(boxes[: max(1, maxy - 10)]):
+        _line(stdscr, 2, 2, f"image {hv.image_tag()}  [{mark}]", curses.color_pair(2) if fresh is False else curses.A_DIM)
+        _line(stdscr, 3, 2, f"warm pile: {pool_n} idle box(es) — EMPTY containers, no agent, no intent;", curses.A_DIM)
+        _line(stdscr, 4, 2, "the next spawn turns one into an agent in ~0.1s", curses.A_DIM)
+        _line(stdscr, 5, 2, f"{'NAME':46s} {'STATE':8s} {'AGENT':24s} UP", curses.A_UNDERLINE)
+        for i, b in enumerate(boxes[: max(1, maxy - 12)]):
             m = ">" if i == sel else " "
             state = "up" if "up" in b["status"].lower() else b["status"].split()[0].lower()
             pooled = "pool" in b["name"]
-            agent = "(idle)" if pooled else re.sub(r"^suijin-sbx-[^-]+-", "", b["name"])[:20]
+            agent = "(warm — empty)" if pooled else re.sub(r"^suijin-sbx-[^-]+-", "", b["name"])[:20]
             color = curses.color_pair(1) if state == "up" else curses.A_DIM
             attr = color | (curses.A_BOLD if i == sel else 0)
-            _line(stdscr, 4 + i, 2,
+            _line(stdscr, 6 + i, 2,
                   f"{m}{b['name'][:44]:44s} {state:8s} {agent:24s} {b['age'][:14]}", attr)
 
         name = boxes[sel]["name"] if boxes else ""

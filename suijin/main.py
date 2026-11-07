@@ -251,6 +251,14 @@ def main():
 
         try:
             c = input(" ").strip()
+            # discard typeahead BEFORE dispatching: a stale newline from
+            # this input() lands in the next screen's first key-read and
+            # makes it flash-exit (settings/box-menu flash, field report)
+            with contextlib.suppress(Exception):
+                import termios as _termios
+
+                _termios.tcdrain(0)
+                _termios.tcflush(0, _termios.TCIFLUSH)
             if c == "1":
                 redteamer_main()
             elif c == "2" and advanced:
