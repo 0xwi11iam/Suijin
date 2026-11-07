@@ -844,10 +844,22 @@ def run_swarm_stop_all(args=None) -> int:
 
         n_boxes = 0
         for b in _hv.sandbox_ls():
-            if "pool" not in b["name"]:
-                if _hv.sandbox_stop(b["name"]):
-                    n_boxes += 1
+            if _hv.sandbox_stop(b["name"]):  # agent boxes AND the pile —
+                n_boxes += 1                 # stop means everything dies
+        n_pool = len(_hv.pool_members())
+        for name in _hv.pool_members():
+            with contextlib.suppress(Exception):
+                _hv.sandbox_stop(name)
+                n_pool -= 1
         if n_boxes:
             console.print(f"[yellow]{n_boxes} agent box(es) removed[/yellow]")
+        if n_pool < len(_hv.pool_members()) or n_boxes:
+            pass  # counts above already said it
+    # belt for the braces: anything suijin-sbx left standing dies now
+    with contextlib.suppress(Exception):
+        subprocess.run(["docker", "rm", "-f"] + [
+            n for n in subprocess.run(["docker", "ps", "-aq", "--filter", "name=suijin-sbx"],
+                                      capture_output=True, text=True, timeout=15).stdout.split()
+        ], capture_output=True, timeout=60)
     console.print("[green]swarm stopped — clean[/green]")
     return 0
