@@ -78,6 +78,15 @@ def _db_rows():
     return agents, intents, findings, facts_n
 
 
+def _line(stdscr, y: int, x: int, txt: str, attr=0):
+    """Safe curses write. Module-level because _render_detail_pane uses
+    it — it was a closure inside run_console, module-level panes couldn't
+    see it → NameError → the console flash-crash whenever an agent had
+    events (traceback caught by the hub's crash-visibility fix)."""
+    with contextlib.suppress(Exception):
+        stdscr.addstr(y, x, txt[: max(1, stdscr.getmaxyx()[1] - x - 1)], attr)
+
+
 def _detail_events(agent_id: str, limit: int = 3) -> list[dict]:
     """The selected agent's recent turns from events.jsonl — NATIVE
     event_log records (tool.call/tool.result paired by id, assistant
