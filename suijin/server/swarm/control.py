@@ -115,10 +115,10 @@ def run_hub() -> int:
         if c == "1":
             _new_hunt()
         elif c == "2":
-            from suijin.server.swarm.console import run_console_cmd
+            from suijin.modules.console.lib.operator_tui import main as _opmain
 
             try:
-                run_console_cmd()
+                _opmain()
             except Exception as e:  # noqa: BLE001 — a crash must SHOW, not flash
                 import traceback
 

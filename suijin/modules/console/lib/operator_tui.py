@@ -256,21 +256,7 @@ AGENT_COMMANDS = {
 }
 
 COMMANDS = {
-    "/next": "select next agent",
-    "/prev": "select previous agent",
-    "/agent <hex>": "select agent by hex id",
-    "/focus <area>": "focus cards|details|overview|mesh|input",
-    "/say <msg>": "broadcast to the mesh as the operator",
-    "/exploits": "list confirmed exploits in Details",
-    "/tail <hex>": "select agent and follow its live detail",
-    "/sort <field>": "cards by iter|cost|finds|uptime",
-    "/filter <phase>": "cards by phase; all clears",
-    "/pause [msg]": "pause all agents; optional message they read on resume",
-    "/resume": "release paused agents",
-    "/report [note]": "every agent wraps up, reports, and ENDS its engagement",
-    "/su <hex>": "operate as an agent (root returns)",
-    "/clear": "clear the chat display",
-    "/refresh": "force an immediate rescan",
+    "/say <msg>": "speak to the mesh — what you type reaches every agent",
     "/quit": "exit the console",
 }
 
@@ -310,6 +296,7 @@ class Agent:
         "engagement",
         "audit_data",
         "origin",
+        "node_class",  # host | box | remote — the card badge
     )
 
     def __init__(self, **kw):
@@ -637,6 +624,9 @@ def scan_agents(mesh_dir: Path, workspace: Path, live: bool = True, sources: lis
                 with contextlib.suppress(Exception):
                     rec = json.loads(f.read_text(errors="replace"))
                     pid = int(rec.get("pid") or 0)
+                    if not str(rec.get("summary") or "").strip():
+                        f.unlink(missing_ok=True)  # junk registration (empty summary)
+                        continue
                     if pid and pid != os.getpid() and not _pid_alive(pid):
                         f.unlink(missing_ok=True)
                         (mesh_dir / f"{pid}-state.json").unlink(missing_ok=True)
@@ -815,6 +805,91 @@ def scan_agents(mesh_dir: Path, workspace: Path, live: bool = True, sources: lis
             agents.append(a)
 
     agents.sort(key=lambda x: -x.iteration)
+
+    # ── THE SWARM SOURCE (2026-11-07: the console belongs to the swarm) ──
+    # swarm.db gives the roster (identity, heartbeat, lane); events.jsonl
+    # at engagements/_default gives each agent's detail stream (boxed
+    # agents write through the mount). Existing agents (same id) merge;
+    # new swarm agents join with node_class badges.
+    with contextlib.suppress(Exception):
+        import sqlite3 as _sq
+
+        from suijin.server.platform.lib.workspace import WORKSPACE_DIR as _ws
+
+        dbp = Path(_ws).parent / "swarm" / "swarm.db"
+        if dbp.exists():
+            db = _sq.connect(str(dbp), timeout=3)
+            now = time.time()
+            rows = db.execute(
+                "SELECT id, current_intent, last_heartbeat FROM agents WHERE last_heartbeat > ?",
+                (now - 90,),
+            ).fetchall()
+            db.close()
+            by_id = {a.pid: a for a in agents if isinstance(a.pid, str)}
+            for aid, lane, hb in rows:
+                nclass = "box" if "-sbx" in str(aid) else "host"
+                if aid in by_id:
+                    by_id[aid].node_class = nclass
+                    continue
+                a = Agent(origin="swarm")
+                a.pid = aid
+                a.target = str(lane or "swarm agent")[:40]
+                a.phase = "swarm"
+                a.iteration = 0
+                a.findings, a.footholds, a.recent_actions = [], [], []
+                a.beat, a.port, a.started = float(hb or 0), 0, float(hb or 0)
+                a.cost_usd = a.total_actions = a.ok_actions = a.fail_actions = 0
+                a.last_thought = a.last_reasoning = a.last_tool = ""
+                a.last_args, a.last_ok, a.last_chain, a.last_obs = {}, True, "", ""
+                a.iterations = []
+                a.system_one, a.runtime = "", {}
+                a.engagement_dir = str(Path(_ws).parent / "engagements" / "_default")
+                a.engagement = "_default"
+                a.audit_data = {}
+                a.node_class = nclass
+                agents.append(a)
+            # events replay fills iterations for swarm agents (the SAME
+            # native records the details pane renders)
+            _evp = Path(_ws).parent / "engagements" / "_default" / "events.jsonl"
+            if _evp.exists():
+                import json as _j
+
+                calls: dict = {}
+                thought: dict = {}
+                order: dict = {}
+                for ln in _evp.read_text(errors="replace").splitlines()[-800:]:
+                    with contextlib.suppress(Exception):
+                        e = _j.loads(ln)
+                        who = e.get("agent")
+                        sa = next((x for x in agents if x.pid == who), None)
+                        if sa is None:
+                            continue
+                        k = e.get("kind")
+                        if k == "assistant.message":
+                            thought[(who, e.get("seq"))] = str(e.get("content") or "")[:400]
+                        elif k == "tool.call":
+                            calls[(who, e.get("id"))] = {"tool": e.get("name"), "args": e.get("args") or {}}
+                            order.setdefault(who, []).append(e.get("id"))
+                        elif k == "tool.result":
+                            c = calls.get((who, e.get("id")))
+                            if c is None:
+                                continue
+                            obs = str(e.get("output") or "")[:600]
+                            seq = 0
+                            sa.iterations.append({
+                                "iteration": len(sa.iterations) + 1,
+                                "phase": sa.phase,
+                                "thought": thought.get((who, seq), ""),
+                                "action": {"tool": c["tool"], "args": c["args"], "success": "error" not in obs.lower()[:60]},
+                                "observation": obs,
+                            })
+                            sa.iteration = len(sa.iterations)
+                            sa.last_tool = c["tool"]
+                            sa.last_args = c["args"]
+                            sa.last_obs = obs
+                for a in agents:
+                    if getattr(a, "node_class", None) and not a.iterations:
+                        a.iterations = []
     return agents
 
 
@@ -1287,8 +1362,16 @@ def _card(a: Agent, selected: bool, height: int) -> Panel:
     body = Text()
     body.append(f" {_pulse() if a.alive else '✗'} ", style=f"bold {GREEN if a.alive else RED}")
     body.append(f"Agent {_hex_id(a.pid)}", style=f"bold {CYAN}")
+    # NODE CLASS BADGE (operator 2026-11-07): every card says where it runs
+    ncls = getattr(a, "node_class", "") or ("box" if getattr(a, "origin", "") == "box" else "host")
+    if ncls == "box":
+        body.append("  [box]", style=f"bold {GOLD}")
+    elif ncls == "remote":
+        body.append("  [remote]", style=f"bold {CYAN}")
+    else:
+        body.append("  [host]", style=f"dim {WHITE}")
     if getattr(a, "origin", "local") == "box":
-        body.append(" ·box", style=f"dim {CYAN}")  # runs inside the box
+        pass  # the badge above covers it
 
     body.append(f"\n {_fmt_dur(a.uptime)}", style=f"italic {GREEN}")
     body.append(f"\n {a.iteration} iters", style=f"bold {C_HIGH}")
@@ -1497,6 +1580,19 @@ class OperatorTUI:
         left.append("  |  ", style=DIM)
         left.append(f"{n}", style=f"bold {WHITE}")
         left.append(" agents", style=GRAY)
+        # NODE CLASSES (operator 2026-11-07): | 5 boxed | 5 host | 0 remote
+        n_box = sum(1 for a in self.agents if getattr(a, "node_class", "") == "box")
+        n_host = sum(1 for a in self.agents if getattr(a, "node_class", "") in ("host", ""))
+        n_remote = sum(1 for a in self.agents if getattr(a, "node_class", "") == "remote")
+        left.append("  |  ", style=DIM)
+        left.append(f"{n_box}", style=f"bold {GOLD}")
+        left.append(" boxed", style=GRAY)
+        left.append("  |  ", style=DIM)
+        left.append(f"{n_host}", style=f"bold {WHITE}")
+        left.append(" host", style=GRAY)
+        left.append("  |  ", style=DIM)
+        left.append(f"{n_remote}", style=f"bold {CYAN}")
+        left.append(" remote", style=GRAY)
         left.append("  |  ", style=DIM)
         left.append(f"${cost:.2f}", style=_cost_color(cost))
         left.append(" | ", style=DIM)
@@ -1970,11 +2066,13 @@ class OperatorTUI:
         # the input row: single-line with inline hint. A long buffer
         # wraps inside the fixed region; the box's borders stay put.
         prompt = Text()
-        who = "root" if self.su_pid is None else _hex_id(self.su_pid)
-        prompt.append(f" {who} » ", style=f"bold {GOLD}")
+        # no root/su prompt (operator ruling: what you type goes to the
+        # mesh; /say + /quit are the only commands, and they're not
+        # advertised as a command system)
+        prompt.append(" mesh » ", style=f"bold {GOLD}")
         prompt.append(self.input_buf, style=f"bold {WHITE}")
         prompt.append("█", style=f"bold {CYAN}")
-        prompt.append("  tab focus · j/k cards · ←→ hist · / cmds", style=DIM)
+        prompt.append("  tab focus · j/k cards · ←→ hist", style=DIM)
 
         # single-row boxed input — a MINIMAL border (top + bottom only,
         # not the 3-row SQUARE) so it reads as an input field without
@@ -2210,6 +2308,11 @@ class OperatorTUI:
             self._note(f"unknown (agent ctx): {cmd}")
 
     def _execute(self, line: str) -> None:
+        """THE INPUT CONTRACT (operator ruling 2026-11-07): what you type
+        goes to the MESH. No /su, no agent-command mode, no root prompt —
+        free text is operator speech on the group chat; /say and /quit
+        are the only commands. The old engagement commands are retired
+        for the swarm console."""
         line = line.strip()
         if not line:
             return
@@ -2220,23 +2323,29 @@ class OperatorTUI:
         args = parts[1].strip() if len(parts) > 1 else ""
         argv = args.split()
 
-        if cmd == "/su":
-            target = argv[0] if argv else ""
-            if target.lower() == "root":
-                self.su_pid = None
-                self._note("root operator")
-            elif not target:
-                self._note("usage: /su <hex> | /su root")
+        if cmd == "/say":
+            if args:
+                self._say(args)
             else:
-                for a in self.agents:
-                    if _hex_id(a.pid).startswith(target.lower()):
-                        self.su_pid = a.pid
-                        self.exploits_view = False
-                        self.focus = self.AREAS.index("input")
-                        self._note(f"su {_hex_id(a.pid)} — engagement commands active")
-                        return
-                self._note(f"no agent matches {target}")
+                self._note("usage: /say <message>")
             return
+        if cmd in ("/quit", "/q"):
+            self.running = False
+            return
+        if cmd.startswith("/"):
+            self._note(f"'{cmd}' is retired — type to speak to the mesh; /say and /quit only")
+            return
+        # free text = operator speech on the mesh
+        self._say(line)
+
+    def _execute_legacy(self, line: str) -> None:
+        line = line.strip()
+        if not line:
+            return
+        parts = line.split(maxsplit=1)
+        cmd = parts[0].lower()
+        args = parts[1].strip() if len(parts) > 1 else ""
+        argv = args.split()
 
         if self.su_pid is not None:
             self._execute_agent(cmd, args, argv)
@@ -2379,12 +2488,29 @@ class OperatorTUI:
                 with gp.open("a", encoding="utf-8") as fh:
                     fh.write(f"- {time.strftime('%H:%M:%S')} [OPERATOR] {msg[:400]}\n")
                 queued += 1
+            # SWARM DELIVERY: boxed/swarm agents live on the bus, not the
+            # guidance files — /cmd/steer lands in every worker's
+            # interjection queue (agent.py subscribes /cmd/**)
+            swarmed = 0
+            with contextlib.suppress(Exception):
+                import subprocess as _sp
+
+                r = _sp.run(["pgrep", "-f", "suijin.server.swarm.coordinator"], capture_output=True, text=True)
+                if r.stdout.strip():  # a swarm is running
+                    from suijin.server.mesh.bus import BusClient, discover_bus
+
+                    addr = discover_bus()
+                    if addr:
+                        bc = BusClient()
+                        if bc.connect(addr[0], addr[1], "operator-say"):
+                            bc.publish("/cmd/steer", {"message": msg[:500]})
+                            bc.close()
+                            swarmed = 1
             self._poll_once()
-            self._note(
-                f"broadcast to mesh · guidance queued to {queued} agents"
-                if queued
-                else "broadcast to mesh (no engagements to guide)"
-            )
+            note = f"broadcast to mesh · guidance queued to {queued} agents" if queued else "broadcast to mesh"
+            if swarmed:
+                note += " · swarm steered"
+            self._note(note)
         except OSError as e:
             self._note(f"mesh unavailable: {e}")
 

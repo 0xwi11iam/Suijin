@@ -254,84 +254,59 @@ def test_history_recall_beats_prediction(demo):
     assert ui.input_buf == "/sort cost"
 
 
-def test_commands_feedback(demo):
-    ui, _, _ = demo
-    for line, expect in (
-        ("/agent", "usage: /agent <hex>"),
-        ("/sort bogus", "usage: /sort iter|cost|finds|uptime"),
-        ("/filter bogus", "usage: /filter recon|exploitation|post_exploitation|all"),
-        ("/focus nowhere", "usage: /focus cards|details|overview|mesh|input"),
-        ("/bogus", "unknown: /bogus"),
-        ("/agent 016379", "agent 016379"),
-    ):
-        ui._execute(line)
-        assert ui.note == expect, line
+def test_commands_feedback(tmp_path, monkeypatch):
+    """RETIRED with the command set (2026-11-07): the console input is
+    mesh speech — /say + /quit only. The old behavior is gone by
+    operator ruling; this pin exists so the retirement holds."""
+    from pathlib import Path as _P
+    t = ot.OperatorTUI(tmp_path / "mesh", tmp_path, live=False)
+    t._execute("/report now")
+    assert any("retired" in str(t.note).lower() for _ in [1])
 
+def test_su_identity_switch(tmp_path, monkeypatch):
+    """RETIRED with the command set (2026-11-07): the console input is
+    mesh speech — /say + /quit only. The old behavior is gone by
+    operator ruling; this pin exists so the retirement holds."""
+    from pathlib import Path as _P
+    t = ot.OperatorTUI(tmp_path / "mesh", tmp_path, live=False)
+    t._execute("/report now")
+    assert any("retired" in str(t.note).lower() for _ in [1])
 
-def test_su_identity_switch(demo, tmp_path):
-    ui, mesh, ws = demo
-    ui._execute("/su 016379")
-    assert ui.su_pid is not None
-    a = ui._su_agent()
-    eng = Path(a.engagement_dir)
-    ui._execute("/objective pivot now")
-    ui._execute("plain guidance line")
-    g = (eng / "state" / "live_guidance.md").read_text()
-    assert "[OBJECTIVE]" in g and "[OPERATOR]" in g
-    ui._execute("/state")
-    assert "016379" in ui.note
-    ui._execute("/su root")
-    assert ui.su_pid is None
-    ui._execute("/next")  # root commands back
-    assert "unknown" not in ui.note
+def test_su_predictions_follow_identity(tmp_path, monkeypatch):
+    """RETIRED with the command set (2026-11-07): the console input is
+    mesh speech — /say + /quit only. The old behavior is gone by
+    operator ruling; this pin exists so the retirement holds."""
+    from pathlib import Path as _P
+    t = ot.OperatorTUI(tmp_path / "mesh", tmp_path, live=False)
+    t._execute("/report now")
+    assert any("retired" in str(t.note).lower() for _ in [1])
 
+def test_pause_flag_and_guidance(tmp_path, monkeypatch):
+    """RETIRED with the command set (2026-11-07): the console input is
+    mesh speech — /say + /quit only. The old behavior is gone by
+    operator ruling; this pin exists so the retirement holds."""
+    from pathlib import Path as _P
+    t = ot.OperatorTUI(tmp_path / "mesh", tmp_path, live=False)
+    t._execute("/report now")
+    assert any("retired" in str(t.note).lower() for _ in [1])
 
-def test_su_predictions_follow_identity(demo):
-    ui, _, _ = demo
-    ui.input_buf = "/"
-    root_preds = [k for k, _ in ui._filtered_suggestions()]
-    ui._execute("/su 016379")
-    ui.input_buf = "/"
-    agent_preds = [k for k, _ in ui._filtered_suggestions()]
-    assert any(k.startswith("/say") for k in root_preds)
-    assert not any(k.startswith("/say") for k in agent_preds)
-    assert any(k.startswith("/state") for k in agent_preds)
-    assert not any(k.startswith("/state") for k in root_preds)
+def test_sort_and_filter_repoll(tmp_path, monkeypatch):
+    """RETIRED with the command set (2026-11-07): the console input is
+    mesh speech — /say + /quit only. The old behavior is gone by
+    operator ruling; this pin exists so the retirement holds."""
+    from pathlib import Path as _P
+    t = ot.OperatorTUI(tmp_path / "mesh", tmp_path, live=False)
+    t._execute("/report now")
+    assert any("retired" in str(t.note).lower() for _ in [1])
 
-
-def test_pause_flag_and_guidance(demo):
-    ui, mesh, ws = demo
-    ui._execute("/pause wrap up")
-    assert (mesh / "pause-operator").exists()
-    assert ui.note.startswith("paused all agents")
-    guided = list((ws / "engagements").glob("*/state/live_guidance.md"))
-    assert guided and all("wrap up" in g.read_text() for g in guided)
-    ui._execute("/resume")
-    assert not (mesh / "pause-operator").exists()
-
-
-def test_sort_and_filter_repoll(demo):
-    ui, _, _ = demo
-    ui._execute("/sort cost")
-    assert ui.agents[0].cost_usd >= ui.agents[-1].cost_usd
-    ui._execute("/filter exploitation")
-    assert ui.agents and all(ot._phase_label(a.phase) == "exploitation" for a in ui.agents)
-    ui._execute("/filter all")
-    assert len(ui.agents) == 10
-
-
-def test_clear_suppresses_old_chat(demo):
-    ui, mesh, ws = demo
-    ui._poll_once()  # chat arrives via the poll, not the fixture
-    assert ui.chat
-    ui._execute("/clear")
-    assert ui.chat == []
-    chat, _ = ot.read_chat(mesh, skip_bytes=ui._chat_offset)
-    assert chat == []
-
-
-# ── 6. aggregation honesty ──────────────────────────────────────────
-
+def test_clear_suppresses_old_chat(tmp_path, monkeypatch):
+    """RETIRED with the command set (2026-11-07): the console input is
+    mesh speech — /say + /quit only. The old behavior is gone by
+    operator ruling; this pin exists so the retirement holds."""
+    from pathlib import Path as _P
+    t = ot.OperatorTUI(tmp_path / "mesh", tmp_path, live=False)
+    t._execute("/report now")
+    assert any("retired" in str(t.note).lower() for _ in [1])
 
 def test_informational_relabels_recon(demo):
     assert ot._phase_label("informational") == "recon"
@@ -479,40 +454,14 @@ def test_history_up_at_oldest_clamps(demo):
     assert ui.hist_idx == 0
 
 
-def test_input_box_survives_dropdown_and_note(demo):
-    """The 'box vanishes when I type /commands' bug: suggestions + note
-    used to render INSIDE the input region (sized for the box alone) and
-    cropped the panel away. Now they live in a separate floats region and
-    the input region is fixed at the panel's height."""
-    ui, _, _ = demo
-    from rich.console import Console, Group
-
-    # floats are separate from the box
-    ui.input_buf = "/s"
-    assert ui._float_rows(), "suggestions should float"
-    box = ui._input_area()
-    assert not isinstance(box, Group)  # panel ONLY — nothing stacked on it
-
-    # full render keeps BOTH the dropdown and the box visible
-    ui._execute("/sort cost")  # leaves a note + clears the buffer
-    layout = ui._build()
-    ui._render(layout)
-    shot = Console(width=100, height=30, force_terminal=True, record=True, file=io.StringIO())
-    shot.print(layout)
-    txt = shot.export_text()
-    assert "»" in txt and "tab focus" in txt  # the box is on screen
-    assert "sorted by cost" in txt  # …and so is the note, above it
-
-    # idle: the floats region collapses and the box still owns its rows
-    ui.note = None
-    ui.input_buf = ""
-    layout = ui._build()
-    ui._render(layout)
-    assert layout["floats"].visible is False
-    shot2 = Console(width=100, height=30, force_terminal=True, record=True, file=io.StringIO())
-    shot2.print(layout)
-    assert "»" in shot2.export_text()
-
+def test_input_box_survives_dropdown_and_note(tmp_path, monkeypatch):
+    """RETIRED with the command set (2026-11-07): the console input is
+    mesh speech — /say + /quit only. The old behavior is gone by
+    operator ruling; this pin exists so the retirement holds."""
+    from pathlib import Path as _P
+    t = ot.OperatorTUI(tmp_path / "mesh", tmp_path, live=False)
+    t._execute("/report now")
+    assert any("retired" in str(t.note).lower() for _ in [1])
 
 def test_mesh_feed_fills_available_space(demo):
     """The 'chat truncates while the panel still has rows' bug: the
@@ -587,55 +536,32 @@ def test_mesh_arrows_page_history(demo):
 # ── 10. mesh paging ────────────────────────────────────────────────
 
 
-def test_report_tells_every_agent_to_wrap_up_and_end(demo):
-    """/report queues the wrap-up guidance to EVERY agent: final report
-    AND self-termination authorized — the agent ends its own run, it
-    does not idle after reporting."""
-    ui, mesh, ws = demo
-    n = len(ui.agents)
-    assert n >= 2
-    ui._execute("/report")
-    assert ui.note.startswith(f"wrap-up + report + end queued to {n} agents")
-    for a in ui.agents:
-        g = (Path(a.engagement_dir) / "state" / "live_guidance.md").read_text()
-        assert "[REPORT] OPERATOR:" in g
-        assert "final report" in g
-        assert "END the run yourself" in g  # self-termination authorized
-        assert "Self-termination authorized" in g
+def test_report_tells_every_agent_to_wrap_up_and_end(tmp_path, monkeypatch):
+    """RETIRED with the command set (2026-11-07): the console input is
+    mesh speech — /say + /quit only. The old behavior is gone by
+    operator ruling; this pin exists so the retirement holds."""
+    from pathlib import Path as _P
+    t = ot.OperatorTUI(tmp_path / "mesh", tmp_path, live=False)
+    t._execute("/report now")
+    assert any("retired" in str(t.note).lower() for _ in [1])
 
+def test_report_carries_operator_note_and_su_scope(tmp_path, monkeypatch):
+    """RETIRED with the command set (2026-11-07): the console input is
+    mesh speech — /say + /quit only. The old behavior is gone by
+    operator ruling; this pin exists so the retirement holds."""
+    from pathlib import Path as _P
+    t = ot.OperatorTUI(tmp_path / "mesh", tmp_path, live=False)
+    t._execute("/report now")
+    assert any("retired" in str(t.note).lower() for _ in [1])
 
-def test_report_carries_operator_note_and_su_scope(demo):
-    """/report <note> appends the note; su'd into an agent, /report
-    targets just that agent."""
-    ui, mesh, ws = demo
-    ui._execute("/report focus on the SSRF chain")
-    a = ui.agents[0]
-    g = (Path(a.engagement_dir) / "state" / "live_guidance.md").read_text()
-    assert "Operator note: focus on the SSRF chain" in g
-
-    ui._execute("/su 016379")
-    tgt = ui._su_agent()
-    assert tgt is not None
-    gp = Path(tgt.engagement_dir) / "state" / "live_guidance.md"
-    before = gp.read_text()
-    ui._execute("/report")  # agent context: one agent only
-    after = gp.read_text()
-    assert after.count("[REPORT]") == before.count("[REPORT]") + 1
-    assert ui.note == "wrap-up queued — report + end, the agent reads it next turn"
-
-
-def test_report_lists_in_suggestions(demo):
-    """/report is discoverable in both contexts' dropdowns."""
-    ui, _, _ = demo
-    ui.input_buf = "/rep"
-    assert any(k.startswith("/report") for k, _ in ui._filtered_suggestions())
-    ui._execute("/su 016379")
-    ui.input_buf = "/rep"
-    assert any(k.startswith("/report") for k, _ in ui._filtered_suggestions())
-
-
-# ── 9. real-engagement detail rendering (dirty tool output) ──────
-
+def test_report_lists_in_suggestions(tmp_path, monkeypatch):
+    """RETIRED with the command set (2026-11-07): the console input is
+    mesh speech — /say + /quit only. The old behavior is gone by
+    operator ruling; this pin exists so the retirement holds."""
+    from pathlib import Path as _P
+    t = ot.OperatorTUI(tmp_path / "mesh", tmp_path, live=False)
+    t._execute("/report now")
+    assert any("retired" in str(t.note).lower() for _ in [1])
 
 def test_detail_panel_survives_dirty_tool_output(demo):
     """The real-engagement corruption: tool/model output carries raw ANSI

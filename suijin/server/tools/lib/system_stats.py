@@ -62,12 +62,12 @@ def collect(interval: float = 1.0) -> dict:
         out["cpu_per_core"] = [round(p) for p in psutil.cpu_percent(interval=0, percpu=True)]
         out["load_avg"] = [round(x, 2) for x in psutil.getloadavg()]
         vm = psutil.virtual_memory()
-        out["mem_used_gib"] = round(vm.used / (1024**3), 1)
-        out["mem_total_gib"] = round(vm.total / (1024**3), 1)
+        out["mem_used_gb"] = round(vm.used / (1024**3), 1)
+        out["mem_total_gb"] = round(vm.total / (1024**3), 1)
         out["mem_percent"] = vm.percent
         sw = psutil.swap_memory()
-        out["swap_used_gib"] = round(sw.used / (1024**3), 1)
-        out["swap_total_gib"] = round(sw.total / (1024**3), 1)
+        out["swap_used_gb"] = round(sw.used / (1024**3), 1)
+        out["swap_total_gb"] = round(sw.total / (1024**3), 1)
 
         # DISK I/O — delta over the interval
         d1 = psutil.disk_io_counters()
@@ -91,8 +91,8 @@ def collect(interval: float = 1.0) -> dict:
         for p in psutil.disk_partitions(all=False):
             with contextlib.suppress(Exception):
                 u = psutil.disk_usage(p.mountpoint)
-                mnts.append({"mount": p.mountpoint, "used_gib": round(u.used / (1024**3), 1),
-                             "total_gib": round(u.total / (1024**3), 1), "pct": u.percent})
+                mnts.append({"mount": p.mountpoint, "used_gb": round(u.used / (1024**3), 1),
+                             "total_gb": round(u.total / (1024**3), 1), "pct": u.percent})
         out["mounts"] = mnts
         out["procs"] = psutil.Process().pid and len(psutil.pids())
 

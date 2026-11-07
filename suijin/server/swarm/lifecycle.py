@@ -333,9 +333,8 @@ def run_swarm_spawn(args=None) -> int:
         console.print(f"  [green]{len(names)}/{sandbox_n}[/green] boxed agent(s) live at {box_addr}")
         if names:
             console.print("  [cyan]suijin sandbox ls[/cyan] · [cyan]suijin swarm status[/cyan]")
-            import threading as _th
-
-            _th.Thread(target=hv.pool_refill, kwargs={"coordinator": box_addr}, daemon=True).start()
+            # no post-spawn refill: pool target defaults to 0 (summon to
+            # keep idle boxes warm; spawns create on demand in ~0.3s)
         return 0 if names else 1
 
     if count > 1:
