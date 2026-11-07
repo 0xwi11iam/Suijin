@@ -1651,7 +1651,8 @@ def _curses_loop(stdscr):
     # frame painted for an instant before this screen drew)
     with contextlib.suppress(Exception):
         stdscr.erase()
-        stdscr.refresh() -> int:
+        stdscr.refresh()
+
     import curses
 
     config, status = load_state()
