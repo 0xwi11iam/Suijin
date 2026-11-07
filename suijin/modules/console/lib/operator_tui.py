@@ -1919,7 +1919,7 @@ class OperatorTUI:
         row1.add_column(ratio=1)
         row1.add_column(justify="right")
         left = Text()
-        # THE SWARM replaces "System One" (retired with bare engagements,
+        # THE SWARM replaces the legacy label (retired with bare engagements,
         # operator 2026-11-07): this line answers "is the swarm alive"
         left.append("swarm: ", style=GRAY)
         with contextlib.suppress(Exception):
