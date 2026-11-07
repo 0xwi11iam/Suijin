@@ -1220,7 +1220,9 @@ def run_box_image_cmd(action: str) -> int:
     if action == "build":
         try:
             hv.build_image(on_log=console.print)
-            hv.pool_refill(on_log=console.print)
+            # NO auto-refill (operator 2026-11-07: rebuilding the image
+            # spawned 4 idle boxes unasked). Summon explicitly:
+            # suijin sandbox summon N
             return 0
         except Exception as e:  # noqa: BLE001
             console.print(f"[red]build failed: {e}[/red]")
@@ -1741,9 +1743,11 @@ def _run_swarm(
 
         return run_swarm_control()
     if action == "console":
-        from suijin.server.swarm.console import run_console_cmd
+        # THE OPERATOR CONSOLE is the swarm console now (operator ruling
+        # 2026-11-07) — the hand-rolled curses console is retired.
+        from suijin.modules.console.lib.operator_tui import main as _opmain
 
-        return run_console_cmd()
+        return _opmain()
     if action == "say":
         from suijin.server.swarm.lifecycle import run_swarm_say
 

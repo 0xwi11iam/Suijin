@@ -313,12 +313,16 @@ def coordinator_addr_for_boxes(port: int) -> str:
 
 
 def pool_target() -> int:
+    """The warm-pile size. DEFAULT ZERO (operator 2026-11-07: 'why is
+    there fucking 4 pool agents running, I didn't ask for 4 idle') —
+    idle boxes exist ONLY when summoned (sandbox summon N) or configured
+    (sandbox_pool_size). Spawns create what they need on demand."""
     with contextlib.suppress(Exception):
         from suijin.modules.platform.lib.config_loader import load_config
 
         cfg = load_config() or {}
-        return max(0, int(cfg.get("sandbox_pool_size", cfg.get("sandbox", {}).get("pool_size", 4))))
-    return 4
+        return max(0, int(cfg.get("sandbox_pool_size", cfg.get("sandbox", {}).get("pool_size", 0))))
+    return 0
 
 
 def pool_members() -> list[str]:

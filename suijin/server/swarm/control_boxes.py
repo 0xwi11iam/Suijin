@@ -129,6 +129,16 @@ def _box_manager(stdscr) -> None:
             stdscr.nodelay(True)
             while stdscr.getch() == -1:
                 curses.napms(100)
+        elif key in (ord("i"), ord("I")):
+            # REBUILD IMAGE — advertised as [i], was never wired. Runs
+            # with a live progress line; any key returns.
+            with contextlib.suppress(Exception):
+                curses.endwin()
+                print("rebuilding the sandbox image — one-time, cached afterwards...")
+                hv.build_image(on_log=print)
+                _refresh_cache(force=True)
+                input("Enter to return…")
+                curses.doupdate()
         elif key in (ord("s"), ord("S")) and boxes:
             curses.endwin()
             subprocess.call(["docker", "exec", "-it", name, "bash"], stdin=None)
