@@ -100,32 +100,50 @@ def run_hub() -> int:
         if c == "1":
             _new_hunt()
         elif c == "2":
-            with contextlib.suppress(Exception):
-                from suijin.server.swarm.console import run_console_cmd
+            from suijin.server.swarm.console import run_console_cmd
 
+            try:
                 run_console_cmd()
-        elif c == "3":
-            with contextlib.suppress(Exception):
-                from suijin.server.swarm.control_boxes import run_box_manager_cmd
+            except Exception as e:  # noqa: BLE001 — a crash must SHOW, not flash
+                import traceback
 
+                console.print(f"[red]console crashed: {e.__class__.__name__}: {e}[/red]")
+                console.print(f"[dim]{traceback.format_exc()[-400:]}[/dim]")
+                _pause()
+        elif c == "3":
+            from suijin.server.swarm.control_boxes import run_box_manager_cmd
+
+            try:
                 run_box_manager_cmd()
+            except Exception as e:  # noqa: BLE001
+                console.print(f"[red]box manager crashed: {e.__class__.__name__}: {e}[/red]")
+                _pause()
         elif c == "4":
             _hypervisor()
         elif c == "5":
-            # OPEN AGENT BY ID — fuzzy: any substring of a live agent id
-            agents = d.get("swarm", {}).get("agents", [])
-            if agents:
-                for a in agents[:15]:
-                    mark = "[red]✗[/red]" if a.get("dead") else "[green]●[/green]"
-                    console.print(f"  {mark} {a['id']}")
-            frag = _input("  agent id (any part): ")
-            if frag and not _cancelled(frag):
-                match = next((a["id"] for a in agents if frag.lower() in a["id"].lower()), "")
-                if match:
-                    subprocess.run(["suijin", "swarm", "attach", match], timeout=3600)
-                else:
-                    console.print(f"  [red]no agent matches '{frag}'[/red]")
-                    _pause()
+            # OPEN AGENT — numbered list; enter the NUMBER (easiest) or
+            # any part of the id. This replaced the bare-id prompt the
+            # operator couldn't read.
+            agents = [a for a in d.get("swarm", {}).get("agents", []) if not a.get("dead")][:15]
+            if not agents:
+                console.print("  [dim]no live agents[/dim]")
+                _pause()
+            else:
+                for i, a in enumerate(agents, 1):
+                    lane = (a.get("intent") or "live")[:34]
+                    console.print(f"  {i:>2}. {a['id'][:30]:30s} [dim]{lane}[/dim]")
+                pick = _input("  number (or any part of the id): ")
+                if pick and not _cancelled(pick):
+                    match = ""
+                    if pick.isdigit() and 1 <= int(pick) <= len(agents):
+                        match = agents[int(pick) - 1]["id"]
+                    else:
+                        match = next((a["id"] for a in agents if pick.lower() in a["id"].lower()), "")
+                    if match:
+                        subprocess.run(["suijin", "swarm", "attach", match], timeout=3600)
+                    else:
+                        console.print(f"  [red]no agent matches '{pick}'[/red]")
+                        _pause()
         elif c == "6":
             with contextlib.suppress(Exception):
                 from suijin.server.tools.lib.system_stats import collect as _collect, render as _render
@@ -150,7 +168,7 @@ def run_hub() -> int:
 
 def _pause():
     try:
-        input("\n  [dim]Enter to continue…[/dim] ")
+        input("\n  Enter to continue…")
     except (KeyboardInterrupt, EOFError):
         pass
 
