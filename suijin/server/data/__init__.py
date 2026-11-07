@@ -165,6 +165,22 @@ def query(q: str, engagement: str = "_default") -> dict:
     """One organized pull for any client. Unknown query → honest error
     dict, never an exception."""
     try:
+        if q == "swarms":
+            rows = []
+            with contextlib.suppress(Exception):
+                db = sqlite3.connect(str(_ws_root() / "swarm" / "swarm.db"), timeout=3)
+                now = time.time()
+                names = {r[0] or "default" for r in db.execute("SELECT swarm FROM intents").fetchall()}
+                for s in sorted(names):
+                    live = db.execute(
+                        "SELECT COUNT(*) FROM agents WHERE last_heartbeat > ? AND (swarm = ? OR swarm IS NULL OR swarm = '')",
+                        (now - HB_DEAD_S, s),
+                    ).fetchone()[0]
+                    open_n = db.execute("SELECT COUNT(*) FROM intents WHERE state='open' AND swarm = ?", (s,)).fetchone()[0]
+                    run_n = db.execute("SELECT COUNT(*) FROM intents WHERE state='running' AND swarm = ?", (s,)).fetchone()[0]
+                    rows.append({"swarm": s, "agents": live, "open": open_n, "running": run_n})
+                db.close()
+            return {"ok": True, "q": "swarms", "swarms": rows}
         if q == "swarm":
             return {"ok": True, "q": q, **_q_swarm()}
         if q == "boxes":

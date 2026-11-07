@@ -1644,7 +1644,14 @@ def _provider_onboarding_curses(stdscr) -> str:
     return "local mode: ollama serve + ollama pull <model>"
 
 
-def _curses_loop(stdscr) -> int:
+def _curses_loop(stdscr):
+    # blank the alternate screen IMMEDIATELY on entry — terminals restore
+    # the PREVIOUS curses session's frame when re-entering the alt screen
+    # (the 'box menu flashes before settings' report: stale box-manager
+    # frame painted for an instant before this screen drew)
+    with contextlib.suppress(Exception):
+        stdscr.erase()
+        stdscr.refresh() -> int:
     import curses
 
     config, status = load_state()
