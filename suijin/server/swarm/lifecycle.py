@@ -676,9 +676,11 @@ def spawn_capacity_check(host_n: int, boxed_n: int) -> tuple[bool, str]:
             else:
                 suggestion = f"~{max(0, int(budget_mb // BOX_AGENT_MB))} boxed"
             return False, (
-                f"needs ~{need_mb:.0f}MB but only ~{budget_mb:.0f}MB safe budget "
-                f"({avail_mb:.0f}MB free of {vm.total/1e9:.0f}GB). Suggestion: {suggestion}. "
-                "Override with --force if you really mean it."
+                f"this plan needs ~{need_mb:.0f}MB of memory.\n"
+                f"    your machine: {vm.total/1e9:.0f}GB total · {(vm.total - vm.available)/1e9:.1f}GB "
+                f"already in use · 0.85 safety ceiling\n"
+                f"    → ~{budget_mb:.0f}MB left for agents ≈ {suggestion}.\n"
+                "    free memory (close apps / stop other swarms) or override with --force."
             )
     return True, ""
 
