@@ -348,7 +348,7 @@ def run_console(stdscr, poll: float = REFRESH_S) -> int:
             with contextlib.suppress(Exception):
                 curses.endwin()
                 aid = agents[min(sel, len(agents) - 1)]["id"]
-                subprocess.call(["suijin", "swarm", "attach", aid], stdin=None)
+                subprocess.call(["suijin", "swarm", "tui", aid], stdin=None)
                 curses.doupdate()
                 stdscr.refresh()
                 curses.curs_set(0)

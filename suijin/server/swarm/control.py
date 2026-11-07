@@ -155,7 +155,7 @@ def run_hub() -> int:
                     else:
                         match = next((a["id"] for a in agents if pick.lower() in a["id"].lower()), "")
                     if match:
-                        subprocess.run(["suijin", "swarm", "attach", match], timeout=3600)
+                        subprocess.run(["suijin", "swarm", "tui", match], timeout=3600)
                     else:
                         console.print(f"  [red]no agent matches '{pick}'[/red]")
                         _pause()
