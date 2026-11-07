@@ -17,10 +17,12 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import threading
 import time
 from pathlib import Path
 
+_EVENT_BUS = None  # module-level bus client (file-mode when False)
 EVENT_VERSION = 1
 TOOL_OUTPUT_CAP = 64_000
 
@@ -66,7 +68,13 @@ class EventLog:
 
     # ── write ────────────────────────────────────────────────────────
     def append(self, kind: str, **fields) -> int:
-        """One record. Returns the seq (0 when the log is closed/failed)."""
+        """One record. Returns the seq (0 when the log is closed/failed).
+
+        BUS-FIRST (2026-11-07): every record ALSO publishes to the
+        engagement's events topic — the red-team TUI is now a bus
+        SUBSCRIBER (any agent renders in the same TUI: red team's own
+        run, swarm host agents, boxed agents). File write stays for
+        audit + resume."""
         if kind not in _KNOWN_KINDS:
             return 0
         with self._lock:
@@ -80,12 +88,35 @@ class EventLog:
                 "kind": kind,
             }
             rec.update({k: v for k, v in fields.items() if v is not None})
+            with contextlib.suppress(Exception):
+                self._bus_publish(rec)
             try:
                 self._fh.write(json.dumps(rec, default=str) + "\n")
                 self._fh.flush()
                 return self._seq
             except OSError:
                 return 0
+
+    def _bus_publish(self, rec: dict) -> None:
+        """Fire-and-forget to the bus (never blocks, never raises)."""
+        with contextlib.suppress(Exception):
+            global _EVENT_BUS
+            if _EVENT_BUS is None:
+                from suijin.server.mesh.bus import BusClient, discover_bus
+
+                addr = discover_bus()
+                if not addr:
+                    _EVENT_BUS = False  # no bus: file-only mode
+                    return
+                c = BusClient()
+                if not c.connect(addr[0], addr[1], f"eventlog-{os.getpid()}"):
+                    _EVENT_BUS = False
+                    return
+                _EVENT_BUS = c
+            if _EVENT_BUS is False:
+                return
+            eng = str(self._path.parent.name)
+            _EVENT_BUS.publish(f"/engagement/{eng}/events", rec)
 
     def close(self) -> None:
         with self._lock:

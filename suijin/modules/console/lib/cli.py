@@ -1732,6 +1732,10 @@ def _run_swarm(
         from suijin.server.swarm.lifecycle import run_swarm_hunt
 
         return run_swarm_hunt(intent_text, host_n=count, boxed_n=sandbox, force=force)
+    if action == "tui":
+        from suijin.server.swarm.agent_tui import run_agent_tui
+
+        return run_agent_tui(agent_id, swarm_name or "_default")
     if action == "control":
         from suijin.server.swarm.lifecycle import run_swarm_control
 
@@ -2781,6 +2785,11 @@ def main(argv=None):
     intent_p.add_argument("--swarm", default="", help="swarm name (default: most recent)")
     intent_p.add_argument("--force", action="store_true", help="skip the prior-work gate (genuinely new work)")
     intent_p.set_defaults(func=lambda a: _run_swarm("intent", intent_text=" ".join(a.text), swarm_name=a.swarm, force=a.force))
+
+    tui_p = swarm_sub.add_parser("tui", aliases=["watch"], help="the engagement TUI on one agent — thought/❯tool/result, live from the bus")
+    tui_p.add_argument("agent", help="agent id or any fragment")
+    tui_p.add_argument("--engagement", default="_default", help="engagement dir (default _default)")
+    tui_p.set_defaults(func=lambda a: _run_swarm("tui", agent_id=a.agent, swarm_name=a.engagement))
 
     say_p = swarm_sub.add_parser("say", help='message every live agent mid-engagement ("what to say")')
     say_p.add_argument("message", nargs="+", help="the message to interject into agent conversations")
