@@ -1733,9 +1733,9 @@ def _run_swarm(
 
         return run_swarm_hunt(intent_text, host_n=count, boxed_n=sandbox, force=force)
     if action == "tui":
-        from suijin.server.swarm.agent_tui import run_agent_tui
+        from suijin.server.swarm.tui_client import run as run_tui_client
 
-        return run_agent_tui(agent_id, swarm_name or "_default")
+        return run_tui_client(agent_id, swarm_name or "_default")
     if action == "control":
         from suijin.server.swarm.lifecycle import run_swarm_control
 
