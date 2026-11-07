@@ -323,11 +323,8 @@ def test_header_and_overview_dedup_and_totals(demo):
 
 
 def test_system_one_aggregates(tmp_path, monkeypatch):
-    """System One retired with bare engagements (2026-11-07) — the
-    overview line reports swarm coordinator state instead."""
-    ui, mesh, ws = demo(tmp_path)
-    ui._poll_once()
-    # the overview row exists and no longer says System One
+    """The legacy 'System One' label retired with bare engagements
+    (2026-11-07) — the overview line reports swarm state instead."""
     from suijin.modules.console.lib import operator_tui as ot
     assert "System One" not in open(ot.__file__, errors="replace").read()
 
