@@ -227,7 +227,7 @@ def _sys_info():
         cpu = psutil.cpu_percent(interval=None)
         vm = psutil.virtual_memory()
         cpu_s = f"{cpu:.0f}%"
-        mem_s = f"{vm.used / 1e9:.1f} / {vm.total / 1e9:.1f} gb"
+        mem_s = f"{vm.used / (1024**3):.1f} / {vm.total / (1024**3):.1f} gib"
     except Exception:  # noqa: BLE001
         pass
     with contextlib.suppress(Exception):

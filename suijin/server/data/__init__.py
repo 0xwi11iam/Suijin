@@ -140,7 +140,7 @@ def _q_system() -> dict:
 
         out["cpu"] = f"{psutil.cpu_percent(interval=None):.0f}%"
         vm = psutil.virtual_memory()
-        out["mem"] = f"{vm.used / 1e9:.1f}/{vm.total / 1e9:.1f} gb"
+        out["mem"] = f"{vm.used / (1024**3):.1f}/{vm.total / (1024**3):.1f} gb"
     with contextlib.suppress(Exception):
         from suijin.modules.platform.lib.config_loader import load_config
 
