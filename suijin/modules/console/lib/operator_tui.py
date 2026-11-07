@@ -1314,8 +1314,13 @@ def _phase_label(phase: str) -> str:
     return "recon" if str(phase).lower() == "informational" else str(phase)
 
 
-def _hex_id(pid: int) -> str:
-    return f"{pid:06x}"
+def _hex_id(pid) -> str:
+    """Swarm agent ids are STRINGS (agent-1321-54a4) — pass through;
+    classic mesh pids are ints — hex them. The crash this replaces:
+    format code 'x' on a str killed the first card render."""
+    with contextlib.suppress(Exception):
+        return f"{int(pid):06x}"
+    return str(pid)[:14]
 
 
 def _cost_color(cost: float) -> str:
@@ -1890,7 +1895,7 @@ class OperatorTUI:
         )
 
     def _system_one_block(self):
-        """System One + runtime — modelinfo.png: two rows, justified
+        """Swarm state + runtime — two rows, justified
         left/right then left/center/right; every value digest-fed."""
         blocks = [a.system_one for a in self.agents if getattr(a, "system_one", None)]
         rt = None
@@ -1914,13 +1919,17 @@ class OperatorTUI:
         row1.add_column(ratio=1)
         row1.add_column(justify="right")
         left = Text()
-        left.append("System One: ", style=GRAY)
-        if blocks:
-            left.append(str(blocks[0].get("engine") or "?"), style=f"bold {WHITE}")
-            left.append(": ", style=DIM)
-            status = str(blocks[0].get("status") or "?")
-            left.append(status, style=f"bold {GREEN}" if status == "loaded" else f"bold {C_MED}")
-        else:
+        # THE SWARM replaces "System One" (retired with bare engagements,
+        # operator 2026-11-07): this line answers "is the swarm alive"
+        left.append("swarm: ", style=GRAY)
+        with contextlib.suppress(Exception):
+            from suijin.server.mesh.bus import discover_bus as _db
+
+            if _db():
+                left.append("coordinator up", style=f"bold {GREEN}")
+            else:
+                left.append("not running", style=DIM)
+        if not left._text[-1].startswith(("coordinator", "not")):
             left.append("not running", style=DIM)
         right = Text()
         if blocks:
@@ -2138,6 +2147,12 @@ class OperatorTUI:
     # ── main loop ────────────────────────────────────────────────────
 
     def run(self) -> None:
+        # FIRST FRAME CARRIES REAL AGENTS (the '0 agents' empty-console
+        # report: the poll thread's first cycle is slow/suppressed and
+        # the first paint showed zeros for seconds). One synchronous poll
+        # before the Live loop.
+        with contextlib.suppress(Exception):
+            self._poll_once()
         self.start_poll()
         time.sleep(0.5)
 
