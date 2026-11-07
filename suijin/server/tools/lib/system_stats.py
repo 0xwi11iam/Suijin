@@ -62,12 +62,12 @@ def collect(interval: float = 1.0) -> dict:
         out["cpu_per_core"] = [round(p) for p in psutil.cpu_percent(interval=0, percpu=True)]
         out["load_avg"] = [round(x, 2) for x in psutil.getloadavg()]
         vm = psutil.virtual_memory()
-        out["mem_used_gb"] = round(vm.used / 1e9, 1)
-        out["mem_total_gb"] = round(vm.total / 1e9, 1)
+        out["mem_used_gib"] = round(vm.used / (1024**3), 1)
+        out["mem_total_gib"] = round(vm.total / (1024**3), 1)
         out["mem_percent"] = vm.percent
         sw = psutil.swap_memory()
-        out["swap_used_gb"] = round(sw.used / 1e9, 1)
-        out["swap_total_gb"] = round(sw.total / 1e9, 1)
+        out["swap_used_gib"] = round(sw.used / (1024**3), 1)
+        out["swap_total_gib"] = round(sw.total / (1024**3), 1)
 
         # DISK I/O — delta over the interval
         d1 = psutil.disk_io_counters()
@@ -91,8 +91,8 @@ def collect(interval: float = 1.0) -> dict:
         for p in psutil.disk_partitions(all=False):
             with contextlib.suppress(Exception):
                 u = psutil.disk_usage(p.mountpoint)
-                mnts.append({"mount": p.mountpoint, "used_gb": round(u.used / 1e9, 1),
-                             "total_gb": round(u.total / 1e9, 1), "pct": u.percent})
+                mnts.append({"mount": p.mountpoint, "used_gib": round(u.used / (1024**3), 1),
+                             "total_gib": round(u.total / (1024**3), 1), "pct": u.percent})
         out["mounts"] = mnts
         out["procs"] = psutil.Process().pid and len(psutil.pids())
 
@@ -112,13 +112,13 @@ def render(d: dict) -> str:
         cores = " ".join(f"{p:>3}" for p in d.get("cpu_per_core", [])[:10])
         la = " ".join(str(x) for x in d.get("load_avg", []))
         L.append(f"  cpu       {d['cpu_percent']:.0f}%  [{cores}]  load {la}")
-    if "mem_used_gb" in d:
+    if "mem_used_gib" in d:
         m = f"  memory    {d['mem_used_gb']}/{d['mem_total_gb']} gb ({d['mem_percent']:.0f}%)"
         if d.get("mem_pressure"):
             m += f"  pressure: {d['mem_pressure']}"
         L.append(m)
-    if "swap_total_gb" in d and d["swap_total_gb"]:
-        L.append(f"  swap      {d['swap_used_gb']}/{d['swap_total_gb']} gb")
+    if "swap_total_gib" in d and d["swap_total_gib"]:
+        L.append(f"  swap      {d['swap_used_gb']}/{d['swap_total_gb']} gib")
     if "disk_read_mbs" in d:
         L.append(f"  disk      ▼{d['disk_read_mbs']} MB/s ▲{d['disk_write_mbs']} MB/s  {d.get('disk_iops', 0)} iops")
     if "net_rx_mbs" in d:

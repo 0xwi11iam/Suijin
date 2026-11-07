@@ -36,15 +36,32 @@ def _box_manager(stdscr) -> None:
     sel = 0
     detail: list = []
     detail_for = ""
+    # CACHE, not docker-per-keypress: every arrow key was paying 4-6
+    # docker subprocesses (ps + pool + image inspect + inspect + logs,
+    # 0.5-2s on OrbStack) — the '5000 ping' lag. Data refreshes on a
+    # 2.5s cadence; keys render instantly from cache.
+    from suijin.server.box import hypervisor as hv
+
+    cache = {"t": 0.0, "boxes": [], "pool_n": 0, "fresh": None}
+
+    def _refresh_cache(force=False):
+        now = time.time()
+        if not force and now - cache["t"] < 2.5:
+            return
+        with contextlib.suppress(Exception):
+            cache["boxes"] = hv.sandbox_ls()
+            cache["pool_n"] = len(hv.pool_members())
+            cache["fresh"] = hv.image_is_fresh() if hv.image_exists() else None
+            cache["t"] = now
+
     while True:
         stdscr.erase()
         maxy, maxx = stdscr.getmaxyx()
-        from suijin.server.box import hypervisor as hv
-
-        boxes = _boxes()
-        pool_n = len(hv.pool_members())
+        _refresh_cache()
+        boxes = cache["boxes"]
+        pool_n = cache["pool_n"]
+        fresh = cache["fresh"]
         sel = min(sel, max(0, len(boxes) - 1))
-        fresh = hv.image_is_fresh() if hv.image_exists() else None
 
         _line(stdscr, 0, 2, " boxes — the hypervisor view ", curses.A_REVERSE | curses.A_BOLD)
         mark = "fresh" if fresh else ("stale — [i] rebuild" if fresh is False else "not built")
@@ -81,7 +98,7 @@ def _box_manager(stdscr) -> None:
         for i, d in enumerate(detail):
             if dy + 1 + i < maxy - 1:
                 _line(stdscr, dy + 1 + i, 2, f"  {d}", curses.A_DIM)
-        _line(stdscr, maxy - 1, 2, " up/down select · b back ", curses.A_REVERSE)
+        _line(stdscr, maxy - 1, 2, " up/down · Enter logs · s shell · k kill · r refresh · b back ", curses.A_REVERSE)
         stdscr.refresh()
 
         key = stdscr.getch()
@@ -89,11 +106,17 @@ def _box_manager(stdscr) -> None:
             return
         if key == curses.KEY_DOWN:
             sel = min(sel + 1, max(0, len(boxes) - 1))
+            continue  # instant: cache renders, no docker round-trip
         elif key == curses.KEY_UP:
             sel = max(sel - 1, 0)
+            continue
+        elif key in (ord("r"), ord("R")):
+            _refresh_cache(force=True)
+            continue
         elif key in (ord("k"), ord("K")) and boxes:
             with contextlib.suppress(Exception):
                 subprocess.run(["docker", "rm", "-f", name], capture_output=True, timeout=30)
+            _refresh_cache(force=True)
         elif key in (ord("l"), ord("L"), curses.KEY_ENTER, 10) and boxes:
             with contextlib.suppress(Exception):
                 logs = subprocess.run(["docker", "logs", "--tail", "30", name],
@@ -110,7 +133,7 @@ def _box_manager(stdscr) -> None:
             curses.endwin()
             subprocess.call(["docker", "exec", "-it", name, "bash"], stdin=None)
             curses.doupdate()
-        curses.napms(150)
+        curses.napms(20)
 
 
 def run_box_manager_cmd() -> int:
