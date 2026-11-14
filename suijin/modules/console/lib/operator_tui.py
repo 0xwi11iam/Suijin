@@ -1447,6 +1447,11 @@ def _sanitize(s: str) -> str:
     return _ANSI_RE.sub(" ", str(s or ""))
 
 
+class _noop:
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+
+
 class OperatorTUI:
     # focus ring follows the screen perimeter: cards (top-left) down the
     # left side (detail, input), up the right side (mesh, overview), wrap
@@ -1464,6 +1469,7 @@ class OperatorTUI:
         self.scroll = 0
         self.focus = self.AREAS.index("input")
         self.running = True
+        self._pending_tui = ""  # agent id → open its TUI outside the Live screen
         self.note = ""
         self.note_at = 0.0
         self.sort_key = "iter"
@@ -2169,9 +2175,25 @@ class OperatorTUI:
             tty.setcbreak(sys.stdin.fileno())
             self._boot_t0 = time.time()
             layout = self._build()
-            with Live(layout, console=self.console, refresh_per_second=20, screen=True):
+            _live_obj = Live(layout, console=self.console, refresh_per_second=20, screen=True)
+            self._live = _live_obj
+            with _live_obj:
                 while self.running:
                     self._render(layout)
+                    if self._pending_tui:
+                        # Enter-on-card: stop the Live, run the agent TUI
+                        # OUTSIDE the alternate screen, then resume
+                        aid, self._pending_tui = self._pending_tui, ""
+                        live_ref = self._live
+                        self._live = None
+                        live_ref.stop()
+                        import subprocess as _sp
+
+                        with contextlib.suppress(Exception):
+                            _sp.run(["suijin", "swarm", "tui", aid], timeout=3600)
+                        live_ref.start()
+                        self._live = live_ref
+                        continue
                     r, _, _ = select.select([sys.stdin], [], [], 0.05)
                     if r:
                         ch = sys.stdin.read(1)
@@ -2614,6 +2636,12 @@ class OperatorTUI:
             return
         if ch == "q":
             self.running = False
+        elif ch in ("\r", "\n", "o") and self.agents:
+            # ENTER ON CARD → the agent's full engagement TUI (the operator
+            # ask from day one; never wired). Drop the Live screen, run
+            # swarm tui, restore.
+            a = self.agents[self.selected % len(self.agents)]
+            self._pending_tui = str(a.pid)  # the run-loop runs it outside Live
         elif ch == "\x1b[A":  # ↑ previous focus
             self.focus = (self.focus - 1) % len(self.AREAS)
         elif ch == "\x1b[B":  # ↓ next focus

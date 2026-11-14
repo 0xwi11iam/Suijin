@@ -1612,6 +1612,25 @@ def get_tool_catalog():
 
     catalog = ""
 
+    # PHANTOM TOOL MARKING (operator 2026-11-07: "why does AI think it
+    # has tools that it doesn't"): tools whose binary deps are missing
+    # on THIS host are listed as unavailable with their deps — the model
+    # sees them and skips them instead of calling and getting the NOT
+    # FOUND lecture. Inside a kali sandbox these same tools list as
+    # available: the check is host-context-aware.
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.availability import missing_binaries
+
+        miss = missing_binaries()
+        if miss:
+            lines = [f"- **{t}** — unavailable (missing: {', '.join(d[:3])})" for t, d in sorted(miss.items())[:25]]
+            catalog += (
+                "## UNAVAILABLE ON THIS HOST (do NOT call these — deps missing)\n"
+                + "\n".join(lines)
+                + "\n\nIf you need one of these capabilities, build it yourself with "
+                "code_harness/execute_terminal, or note the gap and move on.\n\n"
+            )
+
     # ── MUST-USE TOOLS (these are NOT optional) ─────────────────────
     # Catalog diet: per-tool ```json blocks are kept ONLY for the four
     # mandatory doctrine tools — every other tool's args are already in
