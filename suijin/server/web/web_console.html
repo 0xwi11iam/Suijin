@@ -3,318 +3,256 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>suijin · web console</title>
+<title>suijin</title>
 <style>
 :root {
-  --bg: #0d1117; --panel: #161b22; --border: #30363d;
-  --text: #c9d1d9; --dim: #8b949e; --green: #3fb950; --gold: #d29922;
+  --bg: #0d1117; --surface: #161b22; --surface2: #1c2129; --border: #30363d;
+  --text: #e6edf3; --dim: #8b949e; --green: #3fb950; --gold: #d29922;
   --cyan: #58a6ff; --red: #f85149; --purple: #bc8cff;
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, 'SF Mono', Menlo, monospace; }
-a { color: var(--cyan); }
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,'Inter',system-ui,sans-serif;overflow:hidden}
 
-#strip {
-  display: flex; align-items: center; gap: 16px;
-  padding: 8px 16px; border-bottom: 1px solid var(--border);
-  background: var(--panel); position: sticky; top: 0; z-index: 10;
-}
-#strip .logo { color: var(--gold); font-weight: bold; font-size: 16px; }
-#strip .metric { color: var(--dim); }
-#strip .metric b { color: var(--text); }
-#strip .spacer { flex: 1; }
+/* ── top strip ── */
+.strip{display:flex;align-items:center;gap:16px;padding:8px 20px;background:var(--surface);border-bottom:1px solid var(--border)}
+.strip .logo{color:var(--gold);font-weight:700;font-size:15px}
+.strip .m{color:var(--dim);font-size:13px}
+.strip .m b{color:var(--text);font-weight:600}
+.strip .sep{color:var(--border);margin:0 -4px}
+.strip .spacer{flex:1}
+.strip .pulse{width:8px;height:8px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{50%{opacity:.5}}
 
-#layout { display: flex; height: calc(100vh - 42px); }
-#left { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-#right { width: 380px; border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+/* ── layout ── */
+#layout{display:flex;height:calc(100vh - 36px)}
 
-.section { padding: 10px 14px; border-bottom: 1px solid var(--border); }
-.section h3 { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+/* left: agent list */
+#sidebar{width:280px;border-right:1px solid var(--border);display:flex;flex-direction:column}
+#sidebar h3{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:1px;padding:14px 16px 8px}
+.agent-card{padding:10px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+.agent-card:hover{background:var(--surface)}
+.agent-card.selected{background:var(--surface2);border-left:2px solid var(--cyan)}
+.agent-card .id{font-weight:600;font-size:13px;color:var(--cyan)}
+.agent-card .lane{color:var(--dim);font-size:12px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agent-card .meta{display:flex;gap:8px;margin-top:4px;font-size:11px;color:var(--dim)}
+.agent-card .badge{padding:0 5px;border-radius:2px;font-size:10px}
+.badge-box{color:var(--gold);border:1px solid var(--gold)}
+.badge-host{color:var(--dim);border:1px solid var(--dim)}
+.pile-section{padding:10px 16px;margin-top:auto;border-top:1px solid var(--border)}
+.pile-section .count{font-size:12px;color:var(--dim)}
 
-/* agent cards */
-#agents { flex: 0 0 auto; max-height: 320px; overflow-y: auto; }
-.card {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 12px; margin: 4px 0; border-radius: 6px;
-  background: var(--panel); cursor: pointer; border: 1px solid transparent;
-}
-.card:hover { border-color: var(--border); }
-.card.selected { border-color: var(--cyan); }
-.card .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.card .badge { font-size: 11px; padding: 1px 6px; border-radius: 3px; }
-.badge.box { color: var(--gold); border: 1px solid var(--gold); }
-.badge.host { color: var(--dim); border: 1px solid var(--dim); }
-.badge.remote { color: var(--cyan); border: 1px solid var(--cyan); }
-.card .hb { color: var(--dim); font-size: 11px; }
-.card .alive { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
-.card .dead { background: var(--red); }
+/* center: detail stream */
+#center{flex:1;display:flex;flex-direction:column;min-width:0}
+#detail-header{padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface)}
+#detail-header .id{color:var(--text);font-weight:600;font-size:14px}
+#detail-header .mission{color:var(--dim);font-size:12px;margin-top:2px}
+#detail-stream{flex:1;overflow-y:auto;padding:12px 16px}
 
-/* detail stream */
-#detail { flex: 1; overflow-y: auto; padding: 10px 14px; }
-.turn { margin-bottom: 12px; padding: 8px 10px; background: var(--panel); border-radius: 6px; border-left: 3px solid var(--border); }
-.turn .thought { color: var(--dim); font-style: italic; margin-bottom: 4px; }
-.turn .tool { color: var(--green); font-weight: bold; }
-.turn .args { color: var(--dim); font-size: 12px; margin: 4px 0 4px 12px; }
-.turn .obs { margin-top: 6px; padding: 6px 8px; background: var(--bg); border-radius: 4px; font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; }
-.turn .obs.confirmed { color: var(--gold); border-left: 2px solid var(--gold); }
+/* turn blocks */
+.turn{margin-bottom:14px;border-radius:6px;overflow:hidden;background:var(--surface)}
+.turn .thought{padding:6px 12px;color:var(--dim);font-size:12px;font-style:italic;border-left:2px solid var(--cyan);margin-bottom:4px}
+.turn .tool{padding:4px 12px;color:var(--green);font-weight:600;font-size:13px;font-family:monospace}
+.turn .args{padding:2px 12px 6px;color:var(--dim);font-size:11px;font-family:monospace;white-space:pre-wrap;word-break:break-all;max-height:60px;overflow:hidden}
+.turn .obs{padding:6px 12px;color:var(--text);font-size:12px;white-space:pre-wrap;word-break:break-all;max-height:150px;overflow-y:auto;border-top:1px solid var(--border)}
+.turn .obs.confirmed{color:var(--gold)}
+.turn.confirmed{border-left:2px solid var(--gold)}
+.turn .ts{color:var(--dim);font-size:10px;padding:0 12px}
 
 /* findings */
-#findings .finding { display: flex; gap: 8px; padding: 4px 0; }
-#findings .sev { font-weight: bold; width: 50px; }
-.sev.critical { color: var(--red); } .sev.high { color: var(--red); }
-.sev.medium { color: var(--gold); } .sev.low { color: var(--cyan); }
+#findings-panel{width:280px;border-left:1px solid var(--border);display:flex;flex-direction:column}
+#findings-panel h3{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:1px;padding:14px 16px 8px}
+.finding{padding:8px 14px;border-bottom:1px solid var(--border)}
+.finding .sev{font-weight:700;font-size:12px;text-transform:uppercase}
+.finding .sev.high,.finding .sev.critical{color:var(--red)}
+.finding .sev.medium{color:var(--gold)}
+.finding .sev.low{color:var(--cyan)}
+.finding .title{font-size:12px;color:var(--text);margin-top:2px}
+.finding .status{font-size:10px;color:var(--dim);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+.status.reported{color:var(--gold)}
+.status.verified{color:var(--green)}
+.status.false_positive{color:var(--red)}
+.status.duplicate{color:var(--dim)}
 
-/* mesh chat */
-#mesh { flex: 1; overflow-y: auto; padding: 10px 14px; }
-.chat-line { margin-bottom: 6px; }
-.chat-line .who { color: var(--purple); }
-.chat-line .msg { color: var(--text); }
-.chat-line .ts { color: var(--dim); font-size: 11px; }
-
-#chat-input {
-  display: flex; padding: 10px; border-top: 1px solid var(--border); gap: 8px;
-}
-#chat-input input {
-  flex: 1; background: var(--bg); border: 1px solid var(--border);
-  color: var(--text); padding: 8px 12px; border-radius: 6px;
-  font: inherit; outline: none;
-}
-#chat-input input:focus { border-color: var(--cyan); }
-#chat-input button {
-  background: var(--gold); color: var(--bg); border: none;
-  padding: 8px 16px; border-radius: 6px; font: inherit; font-weight: bold; cursor: pointer;
-}
-
-/* graph */
-#graph { height: 200px; position: relative; }
-#graph svg { width: 100%; height: 100%; }
-.node { fill: var(--panel); stroke: var(--cyan); stroke-width: 1.5; }
-.node.agent { stroke: var(--green); }
-.node.finding { stroke: var(--gold); }
-.edge { stroke: var(--border); stroke-width: 1; }
-.node-label { fill: var(--dim); font-size: 10px; text-anchor: middle; }
+/* bottom: mesh chat + input */
+#bottom{border-top:1px solid var(--border);padding:8px 14px;background:var(--surface)}
+#bottom h3{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+#mesh-feed{max-height:120px;overflow-y:auto;margin-bottom:8px}
+.chat-line{font-size:12px;margin-bottom:4px}
+.chat-line .who{color:var(--purple);font-weight:600}
+.chat-line .msg{color:var(--text)}
+#say{display:flex;gap:6px}
+#say input{flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:5px;font:inherit;font-size:12px;outline:none}
+#say input:focus{border-color:var(--cyan)}
+#say button{background:var(--gold);color:var(--bg);border:none;padding:6px 12px;border-radius:4px;font:inherit;font-weight:600;cursor:pointer}
 </style>
 </head>
 <body>
 
-<div id="strip">
+<div class="strip">
   <span class="logo">suijin</span>
-  <span class="metric"><b id="n-agents">0</b> agents</span>
-  <span class="metric"><b id="n-boxed">0</b> boxed</span>
-  <span class="metric"><b id="n-host">0</b> host</span>
-  <span class="metric"><b id="n-remote">0</b> remote</span>
-  <span class="metric"><b id="n-findings">0</b> findings</span>
-  <span class="metric">swarm: <b id="swarm-state">—</b></span>
+  <span class="sep">│</span>
+  <span class="m">agents <b id="n-agents">0</b></span>
+  <span class="sep">│</span>
+  <span class="m">boxed <b id="n-boxed">0</b></span>
+  <span class="sep">│</span>
+  <span class="m">host <b id="n-host">0</b></span>
+  <span class="sep">│</span>
+  <span class="m">remote <b id="n-remote">0</b></span>
+  <span class="sep">│</span>
+  <span class="m">findings <b id="n-findings">0</b></span>
   <span class="spacer"></span>
-  <span class="metric" id="clock"></span>
+  <span class="m">spend <b id="n-spend">$0.00</b></span>
+  <span class="pulse"></span>
 </div>
 
 <div id="layout">
-  <div id="left">
-    <div class="section" id="agents">
-      <h3>agents <span id="agent-hint" style="float:right;color:var(--dim)"></span></h3>
-      <div id="agent-list"></div>
-    </div>
-    <div id="detail">
-      <h3 style="color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px" id="detail-title">detail — select an agent</h3>
-      <div id="detail-stream"><div style="color:var(--dim);padding:20px;text-align:center">click an agent above</div></div>
+  <div id="sidebar">
+    <h3>agents</h3>
+    <div id="agent-list"></div>
+    <div class="pile-section">
+      <div class="count" id="pile-count">warm pile: 0</div>
     </div>
   </div>
-  <div id="right">
-    <div class="section" id="findings">
-      <h3>findings — the honest board</h3>
-      <div id="finding-list"><div style="color:var(--dim)">none yet</div></div>
+
+  <div id="center">
+    <div id="detail-header">
+      <div class="id" id="d-id">select an agent</div>
+      <div class="mission" id="d-mission"></div>
     </div>
-    <div class="section" id="graph-section">
-      <h3>asset graph</h3>
-      <div id="graph"><svg></svg></div>
-    </div>
-    <div id="mesh">
-      <h3 style="color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;padding:0 14px">mesh</h3>
-      <div id="mesh-feed"></div>
-    </div>
-    <div id="chat-input">
-      <input id="msg" placeholder="speak to the mesh…" autocomplete="off">
-      <button onclick="send()">say</button>
-    </div>
+    <div id="detail-stream"></div>
+  </div>
+
+  <div id="findings-panel">
+    <h3>findings — honest board</h3>
+    <div id="finding-list"></div>
+  </div>
+</div>
+
+<div id="bottom">
+  <h3>mesh</h3>
+  <div id="mesh-feed"></div>
+  <div id="say">
+    <input id="msg" placeholder="speak to the mesh…" autocomplete="off">
+    <button onclick="say()">say</button>
   </div>
 </div>
 
 <script>
-let state = { swarm: { agents: [], findings: [] }, boxes: {}, sessions: {}, system: {} };
+// ── state ──
+let data = {swarm:{agents:[],findings:[],live:false}, sessions:{sessions:[]}};
 let selected = null;
-let ws = null;
-let eventsByAgent = {};
+const $ = id => document.getElementById(id);
 
-// ── state pull + render ─────────────────────────────────────────
+// ── fetch + render ──
 async function refresh() {
   try {
     const r = await fetch('/api/state');
-    state = await r.json();
-    render();
-  } catch (e) { /* server gone */ }
+    data = await r.json();
+    renderStrip(); renderAgents(); renderFindings();
+    if (selected) renderDetail(selected);
+  } catch(e) {}
 }
 
-function render() {
-  const sw = state.swarm || {};
+function renderStrip() {
+  const sw = data.swarm || {};
   const agents = sw.agents || [];
-  document.getElementById('n-agents').textContent = agents.length;
-  document.getElementById('n-boxed').textContent = (sw.n_boxed || 0);
-  document.getElementById('n-host').textContent = (sw.n_local || 0);
-  document.getElementById('n-remote').textContent = 0;
-  document.getElementById('swarm-state').textContent = sw.live ? 'up' : 'down';
+  const live = agents.filter(a => !a.dead);
+  const boxed = agents.filter(a => a.boxed);
+  $('n-agents').textContent = agents.length;
+  $('n-boxed').textContent = boxed.length;
+  $('n-host').textContent = agents.length - boxed.length;
+  $('n-remote').textContent = 0;
   const findings = sw.findings || [];
-  document.getElementById('n-findings').textContent = findings.length;
+  $('n-findings').textContent = findings.length;
+}
 
-  const list = document.getElementById('agent-list');
+function renderAgents() {
+  const sw = data.swarm || {};
+  const agents = sw.agents || [];
+  const list = $('agent-list');
   list.innerHTML = '';
   for (const a of agents) {
     const cls = a.boxed ? 'box' : 'host';
     const card = document.createElement('div');
-    card.className = 'card' + (selected === a.id ? ' selected' : '');
-    card.onclick = () => { selected = a.id; render(); loadAgentDetail(a.id); };
+    card.className = 'agent-card' + (selected === a.id ? ' selected' : '');
+    card.onclick = () => { selected = a.id; renderAgents(); renderDetail(a.id); };
     card.innerHTML = `
-      <div class="${a.dead ? 'alive dead' : 'alive'}"></div>
-      <span class="name">${a.id}</span>
-      <span class="badge ${cls}">${cls}</span>
-      <span class="hb">${a.lane || 'live'}</span>`;
+      <div class="id">${a.id}</div>
+      <div class="lane">${a.lane || 'idle'}</div>
+      <div class="meta"><span class="badge ${cls}">${cls}</span><span>${a.hb_age || 0}s</span></div>`;
     list.appendChild(card);
   }
-
-  const fl = document.getElementById('finding-list');
-  if (findings.length) {
-    fl.innerHTML = '';
-    for (const f of findings.slice(0, 10)) {
-      const d = document.createElement('div');
-      d.className = 'finding';
-      d.innerHTML = `<span class="sev ${f.severity}">${f.severity}</span><span>${f.title}</span>`;
-      fl.appendChild(d);
-    }
-  }
-  renderGraph();
-}
-
-function renderGraph() {
-  const svg = document.querySelector('#graph svg');
-  const agents = (state.swarm || {}).agents || [];
-  const findings = (state.swarm || {}).findings || [];
-  if (!agents.length) { svg.innerHTML = ''; return; }
-  const w = 350, h = 170;
-  const nodes = [];
-  agents.slice(0, 8).forEach((a, i) => {
-    nodes.push({ x: 40 + (i % 4) * 80, y: 30 + Math.floor(i / 4) * 60, label: a.id.slice(6, 14), cls: 'agent' });
-  });
-  findings.slice(0, 4).forEach((f, i) => {
-    nodes.push({ x: 60 + i * 80, y: 140, label: f.severity, cls: 'finding' });
-  });
-  svg.innerHTML = nodes.map((n, i) =>
-    `<line class="edge" x1="175" y1="85" x2="${n.x}" y2="${n.y}"/>`
-  ).join('') + nodes.map(n =>
-    `<circle class="node ${n.cls}" cx="${n.x}" cy="${n.y}" r="8"/>` +
-    `<text class="node-label" x="${n.x}" y="${n.y - 12}">${n.label}</text>`
-  ).join('');
-}
-
-// ── live bus feed ────────────────────────────────────────────────
-function connect() {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  ws = new WebSocket(`${proto}://${location.host}/ws`);
-  ws.onmessage = (ev) => {
-    try {
-      const m = JSON.parse(ev.data);
-      const topic = m.topic || '';
-      const p = m.payload || {};
-      if (topic.includes('/events')) {
-        handleEvent(p);
-      } else if (topic.includes('/mesh/chat')) {
-        addChatLine(p);
-      } else if (topic.includes('/findings')) {
-        refresh(); // cheap: the board re-pulls
-      }
-    } catch (e) {}
-  };
-  ws.onclose = () => setTimeout(connect, 2000);
-}
-
-function handleEvent(e) {
-  if (!e.agent) return;
-  if (!eventsByAgent[e.agent]) eventsByAgent[e.agent] = [];
-  const arr = eventsByAgent[e.agent];
-  if (e.kind === 'tool.call') {
-    arr.push({ tool: e.name, args: e.args || {}, obs: '', thought: '' });
-  } else if (e.kind === 'tool.result') {
-    for (let i = arr.length - 1; i >= 0; i--) {
-      if (arr[i].tool && !arr[i].obs) { arr[i].obs = e.output || ''; break; }
-    }
-  } else if (e.kind === 'assistant.message') {
-    if (arr.length) arr[arr.length - 1].thought = e.content || '';
-  }
-  if (selected === e.agent) renderDetail(e.agent);
 }
 
 function renderDetail(aid) {
-  const el = document.getElementById('detail-stream');
-  document.getElementById('detail-title').textContent = `detail — ${aid}`;
-  const turns = (eventsByAgent[aid] || []).slice(-8);
+  const el = $('detail-stream');
+  const turns = (window._eventsByAgent || {})[aid] || [];
   el.innerHTML = turns.map(t => `
-    <div class="turn">
-      ${t.thought ? `<div class="thought">${esc(t.thought)}</div>` : ''}
-      <div class="tool">❯ ${esc(t.tool)}</div>
-      ${Object.keys(t.args || {}).length ? `<div class="args">${esc(JSON.stringify(t.args, null, 1))}</div>` : ''}
-      ${t.obs ? `<div class="obs${t.obs.includes('CONFIRMED') ? ' confirmed' : ''}">${esc(t.obs)}</div>` : ''}
-    </div>`).join('') || '<div style="color:var(--dim);padding:20px;text-align:center">no events yet</div>';
+    <div class="turn${t.obs && t.obs.includes('CONFIRMED') ? ' confirmed' : ''}">
+      ${t.thought ? `<div class="thought">${t.thought}</div>` : ''}
+      <div class="tool">❯ ${t.tool}</div>
+      ${t.args ? `<div class="args">${t.args}</div>` : ''}
+      ${t.obs ? `<div class="obs">${t.obs}</div>` : ''}
+      <div class="ts">${t.ts || ''}</div>
+    </div>`).join('') || '<div style="color:var(--dim);padding:20px">no events</div>';
   el.scrollTop = el.scrollHeight;
 }
 
-async function loadAgentDetail(aid) {
-  renderDetail(aid);
+function renderFindings() {
+  const fl = $('finding-list');
+  const findings = (data.swarm || {}).findings || [];
+  if (!findings.length) { fl.innerHTML = '<div style="color:var(--dim);padding:8px">none</div>'; return; }
+  fl.innerHTML = findings.map(f => `
+    <div class="finding">
+      <div class="sev ${f.severity}">${f.severity}</div>
+      <div class="title">${f.title}</div>
+      <div class="status">${f.status || ''}</div>
+    </div>`).join('');
 }
 
+// ── detail from events ──
+window._eventsByAgent = {};
+function setEvents(agent, events) {
+  window._eventsByAgent[agent] = events;
+  if (selected === agent) renderDetail(agent);
+}
+
+// ── live fetch loop ──
+async function poll() {
+  try {
+    const r = await fetch('/api/state');
+    const d = await r.json();
+    renderStrip(); renderAgents(); renderFindings();
+    if (selected) renderDetail(selected);
+  } catch(e) {}
+}
+setInterval(poll, 3000);
+
+// ── say ──
+async function say() {
+  const msg = $('msg').value.trim();
+  if (!msg) return;
+  $('msg').value = '';
+  try {
+    await fetch('/api/say', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({msg})});
+  } catch(e) {}
+  addChatLine({from:'operator', msg});
+}
 function addChatLine(p) {
-  const feed = document.getElementById('mesh-feed');
+  const feed = $('mesh-feed');
   const d = document.createElement('div');
   d.className = 'chat-line';
-  const who = p.from || p.agent || 'peer';
-  const msg = p.msg || p.message || p.line || '';
-  d.innerHTML = `<span class="ts">${new Date().toLocaleTimeString()}</span> <span class="who">${esc(who)}:</span> <span class="msg">${esc(msg)}</span>`;
+  d.innerHTML = `<span class="who">${p.from || 'peer'}:</span> <span class="msg">${p.msg || ''}</span>`;
   feed.appendChild(d);
   feed.scrollTop = feed.scrollHeight;
-  while (feed.children.length > 50) feed.removeChild(feed.firstChild);
+  while (feed.children.length > 30) feed.removeChild(feed.firstChild);
 }
 
-async function send() {
-  const input = document.getElementById('msg');
-  const msg = input.value.trim();
-  if (!msg) return;
-  input.value = '';
-  addChatLine({ from: 'operator', msg });
-  // deliver via the bus
-  try {
-    await fetch('/api/say', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ msg }) });
-  } catch (e) {}
-  try { ws.send(JSON.stringify({ type: 'say', msg })); } catch (e) {}
-}
-
-function esc(s) {
-  const d = document.createElement('div');
-  d.textContent = String(s || '');
-  return d.innerHTML;
-}
-
-// keyboard: enter sends
-document.getElementById('msg').addEventListener('keydown', e => {
-  if (e.key === 'Enter') send();
-});
-
-// clock
-setInterval(() => {
-  document.getElementById('clock').textContent = new Date().toLocaleTimeString();
-}, 1000);
+$('msg').addEventListener('keydown', e => { if (e.key === 'Enter') say(); });
 
 // boot
-refresh();
-connect();
-setInterval(refresh, 5000);
+refresh(); poll();
+setInterval(poll, 3000);
 </script>
 </body>
 </html>
