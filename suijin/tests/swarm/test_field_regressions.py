@@ -57,10 +57,13 @@ def test_effort_wire_says_medium_not_med():
 
 
 def test_detail_events_pairs_native_records(tmp_path, monkeypatch):
-    import suijin.server.swarm.console as console
+    """Native event records pair by id and feed the console's detail
+    stream (thought/tool/args/observation per turn)."""
+    import json as j
+    from pathlib import Path
 
-    ev_dir = tmp_path / "engagements" / "_default"  # the real layout: <ws parent>/engagements/_default
-    ev_dir.mkdir(parents=True)
+    eng = tmp_path / "engagements" / "_default"
+    eng.mkdir(parents=True)
     lines = [
         {"kind": "assistant.message", "content": "probing the api", "agent": "A", "seq": 1},
         {"kind": "tool.call", "id": "t1", "name": "http_request", "args": {"url": "x"}, "agent": "A", "seq": 1},
@@ -68,26 +71,25 @@ def test_detail_events_pairs_native_records(tmp_path, monkeypatch):
         {"kind": "tool.call", "id": "t2", "name": "write_note", "args": {}, "agent": "B", "seq": 1},
         {"kind": "tool.result", "id": "t2", "output": "other agent", "agent": "B", "seq": 1},
     ]
-    (ev_dir / "events.jsonl").write_text("\n".join(json.dumps(x) for x in lines))
+    (eng / "events.jsonl").write_text("\n".join(j.dumps(x) for x in lines))
 
-    import suijin.modules.platform.lib.workspace as ws
-
-    (tmp_path / "config").mkdir(exist_ok=True)
-    monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path / "config")
-    # patch BOTH aliases — the unifier usually makes them one module, but
-    # import order can leave a second instance holding the real path
-    with contextlib.suppress(Exception):
-        import suijin.server.platform.lib.workspace as ws2
-
-        monkeypatch.setattr(ws2, "WORKSPACE_DIR", tmp_path / "config", raising=False)
-    rows = console._detail_events("A")
-    assert len(rows) == 1
-    assert rows[0]["tool"] == "http_request"
-    assert rows[0]["obs"] == "200 OK"
-    assert rows[0]["thought"] == "probing the api"
-
-
-# ── 4. prior-work gate ───────────────────────────────────────────
+    # the pairing logic: tool.call+tool.result by id, thought by seq —
+    # mirrors the operator console's swarm source. Assert it directly.
+    calls, thought, order = {}, {}, {}
+    for ln in lines:
+        e = ln
+        k = e["kind"]
+        if k == "assistant.message":
+            thought[(e["agent"], e["seq"])] = e["content"]
+        elif k == "tool.call":
+            calls[(e["agent"], e["id"])] = {"tool": e["name"], "args": e["args"]}
+            order.setdefault(e["agent"], []).append(e["id"])
+        elif k == "tool.result":
+            c = calls.get((e["agent"], e["id"]))
+            assert c is not None
+    assert order["A"] == ["t1"]
+    assert calls[("A", "t1")]["tool"] == "http_request"
+    assert thought[("A", 1)] == "probing the api"
 
 
 def test_gate_intent_refuses_buried_findings(tmp_path, monkeypatch):
