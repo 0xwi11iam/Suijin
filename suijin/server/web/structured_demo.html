@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>suijin · structured</title>
+<style>
+:root {
+  --bg:#0d1117; --panel:#161b22; --panel2:#1c2129; --border:#30363d;
+  --text:#c9d1d9; --dim:#8b949e; --green:#3fb950; --gold:#d29922;
+  --cyan:#58a6ff; --red:#f85149; --purple:#bc8cff; --orange:#e6b47c;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font:13px/1.45 -apple-system,'SF Mono',Menlo,monospace;overflow:hidden}
+
+/* ── strip ── */
+#strip{display:flex;align-items:center;gap:14px;padding:6px 16px;border-bottom:1px solid var(--border);background:var(--panel);position:sticky;top:0;z-index:10;height:36px}
+#strip .logo{color:var(--gold);font-weight:700;font-size:14px}
+#strip .m{color:var(--dim);font-size:12px}
+#strip .m b{color:var(--text)}
+.spacer{flex:1}
+
+/* ── layout ── */
+#layout{display:flex;height:calc(100vh - 36px)}
+
+/* ── tree (left) ── */
+#tree{width:300px;border-right:1px solid var(--border);overflow-y:auto;padding:10px 0;background:var(--panel)}
+#tree h3{color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:1px;padding:4px 14px 8px}
+.tnode{display:flex;align-items:center;gap:6px;padding:4px 14px;cursor:pointer;border-left:2px solid transparent}
+.tnode:hover{background:var(--panel2)}
+.tnode.sel{background:var(--panel2);border-left-color:var(--cyan)}
+.tnode .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.tnode .dot.live{background:var(--green)} .tnode .dot.dead{background:var(--red)}
+.tnode .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.tnode .tag{font-size:9px;padding:0 4px;border-radius:2px;flex-shrink:0}
+.tag.leader{color:var(--gold);border:1px solid var(--gold)}
+.tag.sup{color:var(--purple);border:1px solid var(--purple)}
+.tag.worker{color:var(--dim);border:1px solid var(--dim)}
+.tag.cat{color:var(--cyan);font-size:9px}
+.tnode .turns{color:var(--dim);font-size:10px;flex-shrink:0}
+.t-indent-1{padding-left:28px} .t-indent-2{padding-left:48px}
+
+/* ── main (center) ── */
+#main{flex:1;display:flex;flex-direction:column;min-width:0}
+
+/* leader panel */
+#leader{border-bottom:1px solid var(--border);padding:12px 16px;background:var(--panel)}
+#leader .title{color:var(--gold);font-weight:700;font-size:13px;margin-bottom:6px}
+#leader .reports{display:flex;gap:10px;margin:8px 0}
+.report{flex:1;background:var(--bg);border-radius:6px;padding:8px 10px;border-top:2px solid var(--dim)}
+.report.recon{border-top-color:var(--cyan)} .report.exploit{border-top-color:var(--red)} .report.coder{border-top-color:var(--green)}
+.report .cat{font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.report.recon .cat{color:var(--cyan)} .report.exploit .cat{color:var(--red)} .report.coder .cat{color:var(--green)}
+.report .msg{font-size:11px;color:var(--dim);line-height:1.4}
+#leader .directive{background:var(--panel2);border-radius:4px;padding:6px 10px;margin-top:6px;font-size:11px;border-left:2px solid var(--gold)}
+
+/* detail stream */
+#detail{flex:1;overflow-y:auto;padding:12px 16px}
+#detail h3{color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+.turn{margin-bottom:10px;padding:6px 10px;background:var(--panel);border-radius:5px;border-left:2px solid var(--border)}
+.turn .thought{color:var(--dim);font-style:italic;font-size:11px;margin-bottom:3px}
+.turn .tool{color:var(--green);font-weight:600;font-size:12px}
+.turn .args{color:var(--dim);font-size:10px;margin:3px 0 3px 10px}
+.turn .obs{margin-top:5px;padding:5px 8px;background:var(--bg);border-radius:3px;font-size:10px;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow-y:auto}
+.turn .obs.confirmed{color:var(--gold);border-left:2px solid var(--gold)}
+
+/* ── right column ── */
+#right{width:320px;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--panel)}
+
+/* findings */
+#findings{padding:10px 14px;border-bottom:1px solid var(--border)}
+#findings h3{color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.finding{display:flex;gap:6px;padding:2px 0;font-size:11px;align-items:center}
+.sev{font-weight:700;width:42px;flex-shrink:0}
+.sev.critical{color:var(--red)} .sev.high{color:var(--red)} .sev.medium{color:var(--gold)} .sev.low{color:var(--cyan)}
+.ft{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim)}
+
+/* graph */
+#graph{padding:10px 14px;border-bottom:1px solid var(--border);height:180px}
+#graph h3{color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}
+#graph svg{width:100%;height:140px}
+
+/* mesh */
+#mesh{flex:1;overflow-y:auto;padding:8px 14px;display:flex;flex-direction:column}
+#mesh h3{color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;flex-shrink:0}
+.mline{margin-bottom:4px;font-size:11px;line-height:1.35}
+.mline .who{color:var(--purple)} .mline .ts{color:var(--dim);font-size:9px}
+.mline.leader .who{color:var(--gold)}
+.mline.sup .who{color:var(--purple)}
+.mline.sys{color:var(--dim);font-style:italic}
+
+/* input */
+#input{display:flex;padding:10px;border-top:1px solid var(--border);gap:6px}
+#input input{flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:5px;font:inherit;outline:none;font-size:12px}
+#input input:focus{border-color:var(--cyan)}
+#input button{background:var(--gold);color:var(--bg);border:none;padding:7px 14px;border-radius:5px;font:inherit;font-weight:700;cursor:pointer;font-size:12px}
+
+/* DM badge */
+.dm{background:var(--purple);color:var(--bg);border-radius:2px;font-size:9px;padding:0 3px;margin-left:4px}
+</style>
+</head>
+<body>
+
+<div id="strip">
+  <span class="logo">suijin</span>
+  <span class="m"><b id="s-agents">7</b> agents</span>
+  <span class="m"><b id="s-boxed">4</b> box</span>
+  <span class="m"><b id="s-host">3</b> host</span>
+  <span class="m">M1 <b id="s-m1">glm-5.3</b></span>
+  <span class="m">M2 <b id="s-m2">glm-5.3</b></span>
+  <span class="m">M3 <b id="s-m3">glm-5.3-flash</b></span>
+  <span class="m"><b id="s-findings">2</b> findings</span>
+  <span class="spacer"></span>
+  <span class="m" id="s-spend">$0.08</span>
+  <span class="m" id="clock"></span>
+</div>
+
+<div id="layout">
+
+  <!-- tree -->
+  <div id="tree">
+    <h3>hierarchy</h3>
+    <div class="tnode" data-tier="leader" onclick="sel(this,'leader')">
+      <div class="dot live"></div><span class="name">leader</span>
+      <span class="tag leader">M1</span>
+    </div>
+    <div class="tnode t-indent-1" data-tier="supervisor" data-cat="recon" onclick="sel(this,'sup-recon')">
+      <div class="dot live"></div><span class="name">recon sup</span>
+      <span class="tag sup">M2</span>
+    </div>
+    <div class="tnode t-indent-2" onclick="sel(this,'w1')">
+      <div class="dot live"></div><span class="name">worker-1</span>
+      <span class="tag cat">recon</span><span class="turns">12t</span>
+    </div>
+    <div class="tnode t-indent-2" onclick="sel(this,'w2')">
+      <div class="dot live"></div><span class="name">worker-2</span>
+      <span class="tag cat">recon</span><span class="turns">8t</span>
+    </div>
+    <div class="tnode t-indent-2" onclick="sel(this,'w3')">
+      <div class="dot dead"></div><span class="name">worker-3</span>
+      <span class="tag cat">recon</span><span class="turns">✗</span>
+    </div>
+    <div class="tnode t-indent-1" data-tier="supervisor" data-cat="exploit" onclick="sel(this,'sup-exploit')">
+      <div class="dot live"></div><span class="name">exploit sup</span>
+      <span class="tag sup">M2</span>
+    </div>
+    <div class="tnode t-indent-2" onclick="sel(this,'w4')">
+      <div class="dot live"></div><span class="name">worker-4</span>
+      <span class="tag cat">exploit</span><span class="turns">15t</span>
+    </div>
+    <div class="tnode t-indent-2" onclick="sel(this,'w5')">
+      <div class="dot live"></div><span class="name">worker-5</span>
+      <span class="tag cat">exploit</span><span class="turns">9t</span>
+    </div>
+    <div class="tnode t-indent-1" data-tier="supervisor" data-cat="coder" onclick="sel(this,'sup-coder')">
+      <div class="dot live"></div><span class="name">coder sup</span>
+      <span class="tag sup">M2</span>
+    </div>
+    <div class="tnode t-indent-2" onclick="sel(this,'w6')">
+      <div class="dot live"></div><span class="name">worker-6</span>
+      <span class="tag cat">coder</span><span class="turns">3t</span>
+    </div>
+  </div>
+
+  <!-- main -->
+  <div id="main">
+    <div id="leader">
+      <div class="title">◉ leader — glm-5.3 · thinking…</div>
+      <div class="reports">
+        <div class="report recon">
+          <div class="cat">recon</div>
+          <div class="msg">"3 workers, 47 subdomains mapped, 2 API routes found. worker-3 stuck on dead endpoint — killed."</div>
+        </div>
+        <div class="report exploit">
+          <div class="cat">exploitation</div>
+          <div class="msg">"worker-4 found auth bypass on /api/v2/users — parameter `role` accepts `admin`. escalating."</div>
+        </div>
+        <div class="report coder">
+          <div class="cat">coder</div>
+          <div class="msg">"built JWT decoder from leaked response tokens, testing for algorithm confusion."</div>
+        </div>
+      </div>
+      <div class="directive">⬐ directive: exploitation — focus on the /api/v2 auth bypass. recon — hand the JWT tokens to coder. coder — analyze the algorithm confusion vector next.</div>
+    </div>
+    <div id="detail">
+      <h3 id="detail-title">detail — worker-4 [exploit]</h3>
+      <div class="turn">
+        <div class="thought">The recon team found /api/v2/users returns role-based data. Testing if the `role` parameter can be manipulated.</div>
+        <div class="tool">❯ http_replay</div>
+        <div class="args">{"url": "https://target.example/api/v2/users?role=admin", "compare": true, "credential": "session-A"}</div>
+        <div class="obs confirmed">EXPLOIT DIFF: session-A (role=user) returns 3 records; role=admin returns 47 records — AUTH BYPASS CONFIRMED</div>
+      </div>
+      <div class="turn">
+        <div class="thought">Documenting the finding with evidence for the report.</div>
+        <div class="tool">❯ report_finding</div>
+        <div class="args">{"target": "target.example", "title": "role param auth bypass on /api/v2/users", "severity": "high", "vuln_type": "auth_bypass"}</div>
+        <div class="obs">FINDING RECORDED [find-84f2] high/auth_bypass — status REPORTED. control test required.</div>
+      </div>
+      <div class="turn">
+        <div class="thought">Running the control test — same request with role=user to prove the differential.</div>
+        <div class="tool">❯ auth_diff</div>
+        <div class="args">{"url_template": "https://target.example/api/v2/users?role={ID}", "object_refs": "admin,user,moderator", "session_a": "session-A", "session_b": "session-B"}</div>
+        <div class="obs">admin: both-200-identical (47 records) · user: a=200(3) b=200(47) → role-based access control failure</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- right -->
+  <div id="right">
+    <div id="findings">
+      <h3>findings</h3>
+      <div class="finding"><span class="sev high">high</span><span class="ft">role param auth bypass /api/v2/users</span></div>
+      <div class="finding"><span class="sev medium">med</span><span class="ft">JWT alg confusion on /auth/token</span></div>
+      <div class="finding"><span class="sev low">low</span><span class="ft">directory listing on /backup</span></div>
+    </div>
+    <div id="graph">
+      <h3>asset graph</h3>
+      <svg viewBox="0 0 290 140">
+        <line x1="145" y1="70" x2="50" y2="25" stroke="#30363d"/>
+        <line x1="145" y1="70" x2="145" y2="25" stroke="#30363d"/>
+        <line x1="145" y1="70" x2="240" y2="25" stroke="#30363d"/>
+        <line x1="50" y1="25" x2="30" y2="115" stroke="#30363d"/>
+        <line x1="145" y1="70" x2="75" y2="115" stroke="#30363d"/>
+        <line x1="240" y1="25" x2="215" y2="115" stroke="#30363d"/>
+        <circle cx="145" cy="70" r="10" fill="#161b22" stroke="#d29922" stroke-width="1.5"/>
+        <text x="145" y="74" fill="#d29922" font-size="7" text-anchor="middle">L</text>
+        <circle cx="50" cy="25" r="8" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+        <circle cx="145" cy="25" r="8" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+        <circle cx="240" cy="25" r="8" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
+        <circle cx="30" cy="115" r="6" fill="#161b22" stroke="#3fb950" stroke-width="1"/>
+        <circle cx="75" cy="115" r="6" fill="#161b22" stroke="#f85149" stroke-width="1.5"/>
+        <circle cx="215" cy="115" r="6" fill="#161b22" stroke="#d29922" stroke-width="1.5"/>
+        <text x="30" y="132" fill="#8b949e" font-size="6" text-anchor="middle">api/v1</text>
+        <text x="75" y="132" fill="#8b949e" font-size="6" text-anchor="middle">auth bypass</text>
+        <text x="215" y="132" fill="#8b949e" font-size="6" text-anchor="middle">JWT</text>
+        <text x="50" y="15" fill="#8b949e" font-size="6" text-anchor="middle">recon</text>
+        <text x="145" y="15" fill="#8b949e" font-size="6" text-anchor="middle">exploit</text>
+        <text x="240" y="15" fill="#8b949e" font-size="6" text-anchor="middle">coder</text>
+      </svg>
+    </div>
+    <div id="mesh">
+      <h3>mesh</h3>
+      <div class="mline sys"><span class="ts">14:32:01</span> structured mode engaged — 1 leader, 3 supervisors, 6 workers</div>
+      <div class="mline sup"><span class="ts">14:32:15</span> <span class="who">recon-sup:</span> workers deployed, beginning subdomain sweep</div>
+      <div class="mline sys"><span class="ts">14:33:12</span> worker-3 killed by recon-sup (dead endpoint, 15 min)</div>
+      <div class="mline sup"><span class="ts">14:34:01</span> <span class="who">exploit-sup:</span> worker-4 confirmed auth bypass on /api/v2 — escalating to leader</div>
+      <div class="mline leader"><span class="ts">14:34:08</span> <span class="who">leader:</span> directive — exploitation focus /api/v2 auth bypass; recon hand JWTs to coder</div>
+      <div class="mline sup"><span class="ts">14:34:10</span> <span class="who">coder-sup:</span> received directive, workers pivoting to JWT analysis</div>
+      <div class="mline"><span class="ts">14:35:00</span> <span class="who">worker-4:</span> <span class="dm">DM from exploit-sup</span> "control test passed — finding verified"</div>
+    </div>
+    <div id="input">
+      <input id="msg" placeholder="speak to the mesh…" autocomplete="off">
+      <button onclick="send()">say</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// demo interactivity
+let selected = null;
+
+function sel(el, id) {
+  document.querySelectorAll('.tnode').forEach(n => n.classList.remove('sel'));
+  el.classList.add('sel');
+  selected = id;
+  const title = document.getElementById('detail-title');
+  if (id === 'leader') title.textContent = 'detail — leader (M1)';
+  else if (id.startsWith('sup-')) title.textContent = `detail — ${id.slice(4)} supervisor (M2)`;
+  else title.textContent = `detail — worker (M3)`;
+}
+
+function send() {
+  const input = document.getElementById('msg');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  const mesh = document.getElementById('mesh');
+  const d = document.createElement('div');
+  d.className = 'mline';
+  d.innerHTML = `<span class="ts">${new Date().toLocaleTimeString()}</span> <span class="who" style="color:var(--gold)">operator:</span> ${msg}`;
+  mesh.appendChild(d);
+  mesh.scrollTop = mesh.scrollHeight;
+  // simulated leader response
+  setTimeout(() => {
+    const r = document.createElement('div');
+    r.className = 'mline leader';
+    r.innerHTML = `<span class="ts">${new Date().toLocaleTimeString()}</span> <span class="who">leader:</span> acknowledged — relaying to supervisors`;
+    mesh.appendChild(r);
+    mesh.scrollTop = mesh.scrollHeight;
+  }, 800);
+}
+
+document.getElementById('msg').addEventListener('keydown', e => {
+  if (e.key === 'Enter') send();
+});
+
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString();
+}, 1000);
+
+// select worker-4 by default (the interesting one)
+document.querySelectorAll('.tnode')[7]?.classList.add('sel');
+</script>
+</body>
+</html>
