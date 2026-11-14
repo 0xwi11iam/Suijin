@@ -13,6 +13,9 @@ The loader discovers all modules via discover_modules() and makes their tools
 available via get_module_tools() and their skills via get_module_skills().
 """
 
+_loaded_modules: dict = {}
+_module_tools: dict = {}
+_module_skills: list = []
 import importlib.util
 import json
 import sys

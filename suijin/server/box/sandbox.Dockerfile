@@ -1,30 +1,43 @@
-# suijin sandbox base image — the TEMPLATE for agent boxes.
+# suijin sandbox base image — KALI, the full toolchain.
 #
-# Build:  suijin box image build   (or: docker build -f suijin/server/box/sandbox.Dockerfile .)
+# Build:  suijin box image build
 # Slow ONCE (cached); every sandbox spawn just starts a container from
 # this image (sub-second). NEVER build on the engagement path.
 #
-# Keep this lean: the toolchain, not the configuration. Config,
-# credentials, sessions, engagement data are MOUNTED at spawn time —
-# settings changes never trigger rebuilds (the plan, 2026-11-06).
-FROM ubuntu:24.04
+# Matches the box provisioner's toolset (tool_manifest, kali plans) so
+# agents have the same tools inside a sandbox as inside the box.
+FROM kalilinux/kali-rolling
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    HOME=/root
+    HOME=/root \
+    GOBIN=/usr/local/bin
 
-# core toolchain — enough for every HTTP/DNS/JS-probing lane; heavier
-# tooling ships in the -full tag later
+# ── the toolchain (mirrors the box's kali install plans) ────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 python3-pip python3-venv \
-        ca-certificates curl git jq \
+        ca-certificates curl wget git jq unzip xz-utils sudo \
         dnsutils iputils-ping net-tools \
         sqlite3 libsqlite3-0 \
-        unzip xz-utils \
+        nmap sqlmap nuclei httpx subfinder katana ffuf \
+        whatweb nikto masscan dirb gobuster \
+        whois theHarvester dnsrecon \
+        exploitdb metasploit-framework \
+        openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
-# suijin itself (the whole tree — agents run the real tool dispatch)
+# go tools not in kali's apt (kept current enough)
+RUN curl -sL https://go.dev/dl/go1.23.4.linux-amd64.tar.gz | tar -C /usr/local -xz \
+    && export PATH=$PATH:/usr/local/go/bin \
+    && go install github.com/projectdiscovery/httpx/cmd/httpx@latest \
+    && go install github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest \
+    && go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest \
+    && go install github.com/projectdiscovery/katana/cmd/katana@latest \
+    && go install github.com/ffuf/ffuf/v2@ffuf@latest \
+    && rm -rf /root/go /usr/local/go
+
+# ── suijin itself (the whole tree — agents run the real tool dispatch) ──
 WORKDIR /app
 COPY . /app
 RUN pip3 install --break-system-packages --no-cache-dir .
