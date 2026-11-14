@@ -205,6 +205,15 @@ ALL_FIELDS = OrderedDict(
         ("sandbox_pool_size", ("int", (0, 32))),
         # tested-ledger staleness: days before a dead verdict invites retest
         ("ledger_retest_days", ("int", (1, 3650))),
+        # ---- Model routing (tiered: frontier for findings, cheap for volume) ----
+        ("routing_worker_model", ("model", None)),
+        ("routing_planner_model", ("model", None)),
+        ("routing_escalate_chars", ("int", (100, 50000))),
+        # ---- Transport guardrails (network-layer, not prompt) ----
+        ("guardrail_rate_per_sec", ("float", (0.0, 100.0))),
+        # ---- Ingest ----
+        ("ingest_port", ("int", (1024, 65535))),
+        ("ingest_upstream", ("string",)),
         # ---- Workspace & integrations ----
         ("metasploit_rpc_host", ("string",)),
         ("metasploit_rpc_port", ("int", (1, 65535))),
@@ -601,6 +610,12 @@ FIELD_INFO = {
     "swarm_autopilot": ("swarm autopilot", "queue follow-up work when everything idles", "swarm"),
     "sandbox_pool_size": ("warm pile size", "idle boxes kept ready for the next engagement", "swarm"),
     "ledger_retest_days": ("ledger retest days", "dead verdicts older than this invite retesting", "swarm"),
+    "routing_worker_model": ("worker model", "cheap model for recon/parsing volume (blank = same as main)", "model"),
+    "routing_planner_model": ("planner model", "frontier model for finding analysis (blank = same as main)", "model"),
+    "routing_escalate_chars": ("escalate at chars", "observations longer than this go to the planner model", "model"),
+    "guardrail_rate_per_sec": ("max req/s per host", "network-layer rate cap (0 = off)", "limits"),
+    "ingest_port": ("ingest port", "the suijin ingest proxy port", "integrations"),
+    "ingest_upstream": ("ingest upstream", "chain ingest through a proxy (host:port, blank = direct)", "integrations"),
     # -- how far it may run --
     "max_iterations": ("Iteration cap", "hard ceiling on think→act→respond cycles", "limits"),
     "max_tokens_per_request": ("Reply size", "max tokens per model response", "limits"),

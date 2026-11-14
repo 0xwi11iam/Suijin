@@ -318,6 +318,22 @@ class SwarmCoordinator:
                 sweep_db.commit()
                 sweep_db.close()
                 self._autopilot_check(now)
+                # LEDGER ON THE BUS: the tested-ledger snapshot flows to
+                # every node (web console renders it; remote suijins see
+                # what's dead without reading the file)
+                with contextlib.suppress(Exception):
+                    from suijin.server.tools.lib.dead_regions import ledger_rows
+
+                    rows = ledger_rows(engagement="_default", ) if False else []
+                with contextlib.suppress(Exception):
+                    from suijin.server.agent.lib.mesh import mesh_dir
+
+                    eng_dir = Path(_ws_root_str()) / "engagements" / "_default"
+                    # publish via the bus client (lightweight, no file read)
+                    from suijin.server.tools.lib.dead_regions import recent_dead_regions
+
+                    for r in recent_dead_regions("_default", limit=5):
+                        self._client.publish("/engagement/_default/ledger", r)
                 if requeued or cur.rowcount or (retry.rowcount if retry else 0):
                     print(
                         f"[health] sweep: requeued {requeued} orphaned intent(s), "
@@ -422,6 +438,14 @@ class SwarmCoordinator:
                 "bus_stats": self.bus.stats,
             }
         return {"agents": 0, "bus_port": self.bus.port, "bus_stats": self.bus.stats}
+
+
+def _ws_root_str() -> str:
+    with contextlib.suppress(Exception):
+        from suijin.server.platform.lib.workspace import WORKSPACE_DIR
+
+        return str(WORKSPACE_DIR.parent)
+    return str(Path.home() / ".suijin")
 
 
 class _MeshBridge:

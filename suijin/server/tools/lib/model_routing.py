@@ -23,10 +23,22 @@ import contextlib
 
 
 def _routing_config() -> dict:
+    """Model routing config — reads BOTH the nested dict (power users)
+    and the flat settings keys (the settings TUI writes):
+      routing_worker_model / routing_planner_model /
+      routing_escalate_chars → model_routing.{worker,planner,classify_threshold}"""
     with contextlib.suppress(Exception):
         from suijin.modules.platform.lib.config_loader import load_config
 
-        return (load_config() or {}).get("model_routing") or {}
+        cfg = load_config() or {}
+        nested = dict(cfg.get("model_routing") or {})
+        if cfg.get("routing_worker_model"):
+            nested.setdefault("worker", str(cfg["routing_worker_model"]))
+        if cfg.get("routing_planner_model"):
+            nested.setdefault("planner", str(cfg["routing_planner_model"]))
+        if cfg.get("routing_escalate_chars"):
+            nested.setdefault("classify_threshold", int(cfg["routing_escalate_chars"]))
+        return nested
     return {}
 
 

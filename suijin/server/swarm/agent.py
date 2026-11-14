@@ -305,6 +305,18 @@ class SwarmAgent:
         from suijin.server.swarm.worker_loop import execute_intent
 
         def _on_event(turn: int, tool_name: str, result_str: str, tool_args=None, thought: str = ""):
+            # USAGE ON THE BUS: token spend flows to every node (web
+            # console, remote suijins) — the data layer reads the same
+            # tally locally; this is the wire version
+            with contextlib.suppress(Exception):
+                from suijin.modules.providers.lib import get_usage
+
+                u = get_usage()
+                self._bus.publish(
+                    f"/engagement/{intent.get('engagement') or 'default'}/usage",
+                    {"agent": self._identity, "turn": turn, "calls": u.get("calls", 0),
+                     "input_tokens": u.get("input_tokens", 0), "output_tokens": u.get("output_tokens", 0)},
+                )
             # EMIT the operator console's events.jsonl format — the swarm
             # console's details pane renders the SAME panel (thought →
             # tool+args → observation). Written into the engagement dir,

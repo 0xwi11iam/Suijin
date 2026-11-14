@@ -27,12 +27,36 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 app = FastAPI(title="suijin web console")
 
-PAGE = Path(__file__).parent / "web_console.html"
+# the console page: embedded as a Python string (wheels only ship .py —
+# a separate .html file went missing from the pip install, the
+# 'page missing' report)
+from suijin.server.web.console_page import CONSOLE_HTML as _PAGE_HTML
+
+PAGE = None  # marker; index() serves _PAGE_HTML directly
 
 # ── state: bus listener feeds a broadcast list ───────────────────
 
 _listeners: list = []
 _lock = threading.Lock()
+
+
+def _stats_publisher():
+    """System stats → /system/stats every 5s (the web console's system
+    pane renders cpu/memory/disk without pulling)."""
+    with contextlib.suppress(Exception):
+        while True:
+            from suijin.server.mesh.bus import BusClient, discover_bus
+
+            addr = discover_bus()
+            if addr:
+                from suijin.server.tools.lib.system_stats import collect
+
+                d = collect(interval=0.5)
+                bc = BusClient()
+                if bc.connect(addr[0], addr[1], "web-stats"):
+                    bc.publish("/system/stats", d)
+                    bc.close()
+            time.sleep(5)
 
 
 def _bus_listener():
@@ -49,9 +73,10 @@ def _bus_listener():
             if not bc.connect(addr[0], addr[1], "web-console"):
                 time.sleep(2)
                 continue
-            bc.subscribe("/engagement/**")
-            bc.subscribe("/swarm/**")
+            bc.subscribe("/engagement/**")  # events, findings, usage, ledger, dead
+            bc.subscribe("/swarm/**")       # heartbeats, control
             bc.subscribe("/mesh/**")
+            bc.subscribe("/system/**")        # chat
             while True:
                 for msg in bc.drain(50):
                     with _lock:
@@ -68,11 +93,12 @@ def _bus_listener():
 
 
 threading.Thread(target=_bus_listener, daemon=True, name="web-bus").start()
+threading.Thread(target=_stats_publisher, daemon=True, name="web-stats").start()
 
 
 @app.get("/")
 async def index():
-    return HTMLResponse(PAGE.read_text() if PAGE.exists() else "<h1>suijin web</h1><p>page missing</p>")
+    return HTMLResponse(_PAGE_HTML)
 
 
 @app.get("/api/state")
@@ -120,6 +146,17 @@ async def say(body: dict):
                 bc.close()
                 steered = True
     return JSONResponse({"ok": True, "mesh": delivered, "swarm": steered})
+
+
+@app.post("/api/ingest")
+async def start_ingest():
+    """Start the ingest proxy from the web console (background thread)."""
+    import threading
+
+    from suijin.server.tools.lib.ingest import run_ingest
+
+    threading.Thread(target=run_ingest, kwargs={"port": 8080}, daemon=True).start()
+    return JSONResponse({"ok": True, "port": 8080, "hint": "browser proxy → localhost:8080"})
 
 
 @app.websocket("/ws")

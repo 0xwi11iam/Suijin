@@ -1,0 +1,330 @@
+"""The web console page — embedded so wheels ship it (a separate
+.html file went missing from the pip install)."""
+
+CONSOLE_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>suijin · web console</title>
+<style>
+:root {
+  --bg: #0d1117; --panel: #161b22; --border: #30363d;
+  --text: #c9d1d9; --dim: #8b949e; --green: #3fb950; --gold: #d29922;
+  --cyan: #58a6ff; --red: #f85149; --purple: #bc8cff;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, 'SF Mono', Menlo, monospace; }
+a { color: var(--cyan); }
+
+#strip {
+  display: flex; align-items: center; gap: 16px;
+  padding: 8px 16px; border-bottom: 1px solid var(--border);
+  background: var(--panel); position: sticky; top: 0; z-index: 10;
+}
+#strip .logo { color: var(--gold); font-weight: bold; font-size: 16px; }
+#strip .metric { color: var(--dim); }
+#strip .metric b { color: var(--text); }
+#strip .spacer { flex: 1; }
+
+#layout { display: flex; height: calc(100vh - 42px); }
+#left { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+#right { width: 380px; border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+
+.section { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.section h3 { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+
+/* agent cards */
+#agents { flex: 0 0 auto; max-height: 320px; overflow-y: auto; }
+.card {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; margin: 4px 0; border-radius: 6px;
+  background: var(--panel); cursor: pointer; border: 1px solid transparent;
+}
+.card:hover { border-color: var(--border); }
+.card.selected { border-color: var(--cyan); }
+.card .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card .badge { font-size: 11px; padding: 1px 6px; border-radius: 3px; }
+.badge.box { color: var(--gold); border: 1px solid var(--gold); }
+.badge.host { color: var(--dim); border: 1px solid var(--dim); }
+.badge.remote { color: var(--cyan); border: 1px solid var(--cyan); }
+.card .hb { color: var(--dim); font-size: 11px; }
+.card .alive { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+.card .dead { background: var(--red); }
+
+/* detail stream */
+#detail { flex: 1; overflow-y: auto; padding: 10px 14px; }
+.turn { margin-bottom: 12px; padding: 8px 10px; background: var(--panel); border-radius: 6px; border-left: 3px solid var(--border); }
+.turn .thought { color: var(--dim); font-style: italic; margin-bottom: 4px; }
+.turn .tool { color: var(--green); font-weight: bold; }
+.turn .args { color: var(--dim); font-size: 12px; margin: 4px 0 4px 12px; }
+.turn .obs { margin-top: 6px; padding: 6px 8px; background: var(--bg); border-radius: 4px; font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; }
+.turn .obs.confirmed { color: var(--gold); border-left: 2px solid var(--gold); }
+
+/* findings */
+#findings .finding { display: flex; gap: 8px; padding: 4px 0; }
+#findings .sev { font-weight: bold; width: 50px; }
+.sev.critical { color: var(--red); } .sev.high { color: var(--red); }
+.sev.medium { color: var(--gold); } .sev.low { color: var(--cyan); }
+
+/* mesh chat */
+#mesh { flex: 1; overflow-y: auto; padding: 10px 14px; }
+.chat-line { margin-bottom: 6px; }
+.chat-line .who { color: var(--purple); }
+.chat-line .msg { color: var(--text); }
+.chat-line .ts { color: var(--dim); font-size: 11px; }
+
+#chat-input {
+  display: flex; padding: 10px; border-top: 1px solid var(--border); gap: 8px;
+}
+#chat-input input {
+  flex: 1; background: var(--bg); border: 1px solid var(--border);
+  color: var(--text); padding: 8px 12px; border-radius: 6px;
+  font: inherit; outline: none;
+}
+#chat-input input:focus { border-color: var(--cyan); }
+#chat-input button {
+  background: var(--gold); color: var(--bg); border: none;
+  padding: 8px 16px; border-radius: 6px; font: inherit; font-weight: bold; cursor: pointer;
+}
+
+/* graph */
+#graph { height: 200px; position: relative; }
+#graph svg { width: 100%; height: 100%; }
+.node { fill: var(--panel); stroke: var(--cyan); stroke-width: 1.5; }
+.node.agent { stroke: var(--green); }
+.node.finding { stroke: var(--gold); }
+.edge { stroke: var(--border); stroke-width: 1; }
+.node-label { fill: var(--dim); font-size: 10px; text-anchor: middle; }
+</style>
+</head>
+<body>
+
+<div id="strip">
+  <span class="logo">suijin</span>
+  <span class="metric"><b id="n-agents">0</b> agents</span>
+  <span class="metric"><b id="n-boxed">0</b> boxed</span>
+  <span class="metric"><b id="n-host">0</b> host</span>
+  <span class="metric"><b id="n-remote">0</b> remote</span>
+  <span class="metric"><b id="n-findings">0</b> findings</span>
+  <span class="metric">swarm: <b id="swarm-state">—</b></span>\n  <span class="metric"><b id="spend">0M in</b></span>
+  <span class="spacer"></span>
+  <span class="metric"><a href="#" onclick="fetch('/api/ingest').then(()=>{addChatLine({from:'system',msg:'ingest proxy started'})});return false">ingest</a></span>
+  <span class="metric" id="clock"></span>
+</div>
+
+<div id="layout">
+  <div id="left">
+    <div class="section" id="agents">
+      <h3>agents <span id="agent-hint" style="float:right;color:var(--dim)"></span></h3>
+      <div id="agent-list"></div>
+    </div>
+    <div id="detail">
+      <h3 style="color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px" id="detail-title">detail — select an agent</h3>
+      <div id="detail-stream"><div style="color:var(--dim);padding:20px;text-align:center">click an agent above</div></div>
+    </div>
+  </div>
+  <div id="right">
+    <div class="section" id="findings">
+      <h3>findings — the honest board</h3>
+      <div id="finding-list"><div style="color:var(--dim)">none yet</div></div>
+    </div>
+    <div class="section" id="graph-section">
+      <h3>asset graph</h3>
+      <div id="graph"><svg></svg></div>
+    </div>
+    <div id="mesh">
+      <h3 style="color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;padding:0 14px">mesh</h3>
+      <div id="mesh-feed"></div>
+    </div>
+    <div id="chat-input">
+      <input id="msg" placeholder="speak to the mesh…" autocomplete="off">
+      <button onclick="send()">say</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let state = { swarm: { agents: [], findings: [] }, boxes: {}, sessions: {}, system: {} };
+let selected = null;
+let ws = null;
+let eventsByAgent = {};
+
+// ── state pull + render ─────────────────────────────────────────
+async function refresh() {
+  try {
+    const r = await fetch('/api/state');
+    state = await r.json();
+    render();
+  } catch (e) { /* server gone */ }
+}
+
+function render() {
+  const sw = state.swarm || {};
+  const agents = sw.agents || [];
+  document.getElementById('n-agents').textContent = agents.length;
+  document.getElementById('n-boxed').textContent = (sw.n_boxed || 0);
+  document.getElementById('n-host').textContent = (sw.n_local || 0);
+  document.getElementById('n-remote').textContent = 0;
+  document.getElementById('swarm-state').textContent = sw.live ? 'up' : 'down';
+  const findings = sw.findings || [];
+  document.getElementById('n-findings').textContent = findings.length;
+
+  const list = document.getElementById('agent-list');
+  list.innerHTML = '';
+  for (const a of agents) {
+    const cls = a.boxed ? 'box' : 'host';
+    const card = document.createElement('div');
+    card.className = 'card' + (selected === a.id ? ' selected' : '');
+    card.onclick = () => { selected = a.id; render(); loadAgentDetail(a.id); };
+    card.innerHTML = `
+      <div class="${a.dead ? 'alive dead' : 'alive'}"></div>
+      <span class="name">${a.id}</span>
+      <span class="badge ${cls}">${cls}</span>
+      <span class="hb">${a.lane || 'live'}</span>`;
+    list.appendChild(card);
+  }
+
+  const fl = document.getElementById('finding-list');
+  if (findings.length) {
+    fl.innerHTML = '';
+    for (const f of findings.slice(0, 10)) {
+      const d = document.createElement('div');
+      d.className = 'finding';
+      d.innerHTML = `<span class="sev ${f.severity}">${f.severity}</span><span>${f.title}</span>`;
+      fl.appendChild(d);
+    }
+  }
+  renderGraph();
+}
+
+function renderGraph() {
+  const svg = document.querySelector('#graph svg');
+  const agents = (state.swarm || {}).agents || [];
+  const findings = (state.swarm || {}).findings || [];
+  if (!agents.length) { svg.innerHTML = ''; return; }
+  const w = 350, h = 170;
+  const nodes = [];
+  agents.slice(0, 8).forEach((a, i) => {
+    nodes.push({ x: 40 + (i % 4) * 80, y: 30 + Math.floor(i / 4) * 60, label: a.id.slice(6, 14), cls: 'agent' });
+  });
+  findings.slice(0, 4).forEach((f, i) => {
+    nodes.push({ x: 60 + i * 80, y: 140, label: f.severity, cls: 'finding' });
+  });
+  svg.innerHTML = nodes.map((n, i) =>
+    `<line class="edge" x1="175" y1="85" x2="${n.x}" y2="${n.y}"/>`
+  ).join('') + nodes.map(n =>
+    `<circle class="node ${n.cls}" cx="${n.x}" cy="${n.y}" r="8"/>` +
+    `<text class="node-label" x="${n.x}" y="${n.y - 12}">${n.label}</text>`
+  ).join('');
+}
+
+// ── live bus feed ────────────────────────────────────────────────
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onmessage = (ev) => {
+    try {
+      const m = JSON.parse(ev.data);
+      const topic = m.topic || '';
+      const p = m.payload || {};
+      if (topic.includes('/events')) {
+        handleEvent(p);
+      } else if (topic.includes('/usage')) {
+        // token spend per turn — show it in the strip
+        if (p.calls) document.getElementById('spend')?.textContent = `${(p.input_tokens/1e6).toFixed(1)}M in`;
+      } else if (topic.includes('/ledger')) {
+        refresh(); // the board re-pulls (ledger affects findings context)
+      } else if (topic.includes('/mesh/chat')) {
+        addChatLine(p);
+      } else if (topic.includes('/findings')) {
+        refresh(); // cheap: the board re-pulls
+      }
+    } catch (e) {}
+  };
+  ws.onclose = () => setTimeout(connect, 2000);
+}
+
+function handleEvent(e) {
+  if (!e.agent) return;
+  if (!eventsByAgent[e.agent]) eventsByAgent[e.agent] = [];
+  const arr = eventsByAgent[e.agent];
+  if (e.kind === 'tool.call') {
+    arr.push({ tool: e.name, args: e.args || {}, obs: '', thought: '' });
+  } else if (e.kind === 'tool.result') {
+    for (let i = arr.length - 1; i >= 0; i--) {
+      if (arr[i].tool && !arr[i].obs) { arr[i].obs = e.output || ''; break; }
+    }
+  } else if (e.kind === 'assistant.message') {
+    if (arr.length) arr[arr.length - 1].thought = e.content || '';
+  }
+  if (selected === e.agent) renderDetail(e.agent);
+}
+
+function renderDetail(aid) {
+  const el = document.getElementById('detail-stream');
+  document.getElementById('detail-title').textContent = `detail — ${aid}`;
+  const turns = (eventsByAgent[aid] || []).slice(-8);
+  el.innerHTML = turns.map(t => `
+    <div class="turn">
+      ${t.thought ? `<div class="thought">${esc(t.thought)}</div>` : ''}
+      <div class="tool">❯ ${esc(t.tool)}</div>
+      ${Object.keys(t.args || {}).length ? `<div class="args">${esc(JSON.stringify(t.args, null, 1))}</div>` : ''}
+      ${t.obs ? `<div class="obs${t.obs.includes('CONFIRMED') ? ' confirmed' : ''}">${esc(t.obs)}</div>` : ''}
+    </div>`).join('') || '<div style="color:var(--dim);padding:20px;text-align:center">no events yet</div>';
+  el.scrollTop = el.scrollHeight;
+}
+
+async function loadAgentDetail(aid) {
+  renderDetail(aid);
+}
+
+function addChatLine(p) {
+  const feed = document.getElementById('mesh-feed');
+  const d = document.createElement('div');
+  d.className = 'chat-line';
+  const who = p.from || p.agent || 'peer';
+  const msg = p.msg || p.message || p.line || '';
+  d.innerHTML = `<span class="ts">${new Date().toLocaleTimeString()}</span> <span class="who">${esc(who)}:</span> <span class="msg">${esc(msg)}</span>`;
+  feed.appendChild(d);
+  feed.scrollTop = feed.scrollHeight;
+  while (feed.children.length > 50) feed.removeChild(feed.firstChild);
+}
+
+async function send() {
+  const input = document.getElementById('msg');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  addChatLine({ from: 'operator', msg });
+  // deliver via the bus
+  try {
+    await fetch('/api/say', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ msg }) });
+  } catch (e) {}
+  try { ws.send(JSON.stringify({ type: 'say', msg })); } catch (e) {}
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s || '');
+  return d.innerHTML;
+}
+
+// keyboard: enter sends
+document.getElementById('msg').addEventListener('keydown', e => {
+  if (e.key === 'Enter') send();
+});
+
+// clock
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString();
+}, 1000);
+
+// boot
+refresh();
+connect();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
+"""

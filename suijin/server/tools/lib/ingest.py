@@ -66,16 +66,43 @@ def record_traffic(method: str, url: str, status: int, req_headers: dict,
             f.write(json.dumps(entry) + "\n")
 
 
+UPSTREAM = {"host": "", "port": 0}  # set by run_ingest --upstream
+
+
+def _connect_upstream(host: str, port: int) -> socket.socket:
+    """Connect to the target — directly, or through the configured
+    upstream proxy (Burp, Caido, a corporate proxy)."""
+    if UPSTREAM["host"]:
+        s = socket.create_connection((UPSTREAM["host"], UPSTREAM["port"]), timeout=10)
+        s.sendall(f"CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\n\r\n".encode())
+        # read the CONNECT response
+        import select as _sel
+
+        data = b""
+        while b"\r\n\r\n" not in data:
+            r, _, _ = _sel.select([s], [], [], 10)
+            if not r:
+                raise ConnectionError("upstream proxy timeout")
+            chunk = s.recv(4096)
+            if not chunk:
+                raise ConnectionError("upstream closed")
+            data += chunk
+        if b" 200 " not in data.split(b"\r\n")[0]:
+            raise ConnectionError(f"upstream refused: {data[:80]}")
+        return s
+    return socket.create_connection((host, port), timeout=10)
+
+
 class _ProxyHandler(BaseHTTPRequestHandler):
     """CONNECT-tunnel proxy: intercepts HTTP; passes HTTPS through with
     SNI visible (headers not decrypted without a CA — mitmproxy addon
-    for that)."""
+    for that). Supports an upstream proxy chain (--upstream)."""
 
     def do_CONNECT(self):
         host, _, port = self.path.rpartition(":")
         port = int(port or 443)
         try:
-            upstream = socket.create_connection((host, port), timeout=10)
+            upstream = _connect_upstream(host, port)
         except Exception:
             self.send_error(502, f"cannot reach {self.path}")
             return
@@ -111,7 +138,10 @@ class _ProxyHandler(BaseHTTPRequestHandler):
         import http.client
 
         try:
-            conn = http.client.HTTPConnection(host, port, timeout=15)
+            if UPSTREAM["host"]:
+                conn = http.client.HTTPConnection(UPSTREAM["host"], UPSTREAM["port"], timeout=15)
+            else:
+                conn = http.client.HTTPConnection(host, port, timeout=15)
             body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
             conn.request(self.command, self.path, body=body, headers=dict(self.headers))
             resp = conn.getresponse()
@@ -137,14 +167,24 @@ class _ProxyHandler(BaseHTTPRequestHandler):
         pass  # quiet — the traffic index IS the log
 
 
-def run_ingest(port: int = 8080) -> int:
+def run_ingest(port: int = 8080, upstream: str = "") -> int:
     from rich.console import Console
 
     console = Console()
-    console.print(f"  [green]suijin ingest[/green] — proxy on :{port}")
+    if upstream:
+        uh, _, up = upstream.rpartition(":")
+        if not uh or not up.isdigit():
+            console.print(f"[red]--upstream expects host:port, got '{upstream}'[/red]")
+            return 1
+        UPSTREAM["host"], UPSTREAM["port"] = uh, int(up)
+        console.print(f"  [green]suijin ingest[/green] — proxy on :{port} → upstream {upstream}")
+    else:
+        console.print(f"  [green]suijin ingest[/green] — proxy on :{port}")
     console.print(f"  point your browser/system proxy at [cyan]localhost:{port}[/cyan]")
     console.print("  every request lands in the traffic index + asset graph")
-    console.print("  for HTTPS interception: [dim]mitmdump -s suijin/server/tools/lib/ingest_addon.py[/dim]")
+    if not upstream:
+        console.print("  chain through Burp/Caido: [dim]--upstream 127.0.0.1:8080[/dim]")
+    console.print("  full HTTPS: [dim]mitmdump -s ingest_addon.py[/dim]")
     console.print("  Ctrl+C to stop\n")
     try:
         server = ThreadingHTTPServer(("127.0.0.1", port), _ProxyHandler)
