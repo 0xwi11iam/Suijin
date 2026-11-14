@@ -315,6 +315,13 @@ def execute_intent(
             from suijin.modules.providers.lib import generate
 
             cfg = load_config()
+            # TIERED ROUTING: workers are volume (recon, triage, parsing)
+            # → the cheap model when routing is configured; frontier
+            # stays for the planner. No config = unchanged behavior.
+            with contextlib.suppress(Exception):
+                from suijin.server.tools.lib.model_routing import apply_routing
+
+                apply_routing(cfg, task="worker")
             cfg["max_tokens_per_request"] = max(
                 int(cfg.get("max_tokens_per_request") or 0), 8000
             )  # long shell payloads truncated mid-JSON = the dominant

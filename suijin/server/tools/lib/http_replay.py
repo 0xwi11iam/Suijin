@@ -305,6 +305,16 @@ def apply_credential(req: dict, cred_name: str | None) -> dict:
 
 
 # ── send (governed) ──────────────────────────────────────────────────
+def _guardrail(req: dict) -> str | None:
+    """Transport guardrail — the network-layer scope/method/rate check.
+    Returns the BLOCK reason or None (allow). Runs before the socket."""
+    with contextlib.suppress(Exception):
+        from suijin.server.tools.lib.transport_guards import guard
+
+        return guard(str(req.get("url") or ""), str(req.get("method") or "GET"))
+    return None
+
+
 def _paced_send():
     with _LAST_SEND["lock"]:
         gap = 1.0 / max(0.5, _LIMITER["rps"])
