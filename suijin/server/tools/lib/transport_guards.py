@@ -34,8 +34,15 @@ def _config() -> dict:
 def scope_patterns() -> list[str]:
     """Host allowlist regexes. Empty = no scope restriction (the
     engagement's own authorization gate still applies at the policy
-    layer — this is the network-level belt on top)."""
-    return [str(x) for x in _config().get("guardrails", {}).get("scope_hosts", [])]
+    layer — this is the network-level belt on top). Reads both
+    guardrails.scope_hosts (nested) and guardrail_scope_hosts (flat
+    settings key, comma-separated)."""
+    cfg = _config()
+    nested = [str(x) for x in (cfg.get("guardrails") or {}).get("scope_hosts", [])]
+    flat = str(cfg.get("guardrail_scope_hosts") or "").strip()
+    if flat:
+        nested.extend(p.strip() for p in flat.split(",") if p.strip())
+    return nested
 
 
 def mutation_allow_patterns() -> list[str]:
@@ -51,8 +58,12 @@ _bucket_lock = threading.Lock()
 
 
 def _check_rate(host: str) -> float:
-    """Seconds to wait (0 = go). Default 5 req/s per host."""
-    cfg = _config().get("guardrails", {}).get("rate_per_host_per_sec", 5.0)
+    """Seconds to wait (0 = go). Reads guardrail_rate_per_sec (flat
+    settings key) or guardrails.rate_per_host_per_sec (nested). Default 5."""
+    cfg = _config()
+    rate = cfg.get("guardrail_rate_per_sec")
+    if rate is None:
+        rate = (cfg.get("guardrails") or {}).get("rate_per_host_per_sec", 5.0)
     if cfg <= 0:
         return 0.0
     with _bucket_lock:

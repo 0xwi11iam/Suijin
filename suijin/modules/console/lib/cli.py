@@ -1164,11 +1164,20 @@ def run_web_cmd(port: int = 8790) -> int:
     return run_web(port)
 
 
-def run_ingest_cmd(port: int = 8080) -> int:
-    """`suijin ingest` — browse → the agent's asset graph."""
+def run_ingest_cmd(port: int = 0, upstream: str = "") -> int:
+    """`suijin ingest` — browse → the agent's asset graph. Port and
+    upstream read the settings keys when not given on the CLI."""
+    with contextlib.suppress(Exception):
+        from suijin.modules.platform.lib.config_loader import load_config
+
+        cfg = load_config() or {}
+        if not port:
+            port = int(cfg.get("ingest_port") or 8080)
+        if not upstream:
+            upstream = str(cfg.get("ingest_upstream") or "").strip()
     from suijin.server.tools.lib.ingest import run_ingest
 
-    return run_ingest(port)
+    return run_ingest(port, upstream)
 
 
 def run_ledger_cmd(target: str = "") -> int:
@@ -2906,8 +2915,9 @@ def main(argv=None):
     web_p.set_defaults(func=lambda a: run_web_cmd(a.port))
 
     ing = sub.add_parser("ingest", help="proxy your browsing into the traffic index — human traffic becomes the asset graph")
-    ing.add_argument("--port", type=int, default=8080)
-    ing.set_defaults(func=lambda a: run_ingest_cmd(a.port))
+    ing.add_argument("--port", type=int, default=0, help="proxy port (default: settings ingest_port or 8080)")
+    ing.add_argument("--upstream", default="", help="chain through another proxy (host:port — Burp, Caido, corporate)")
+    ing.set_defaults(func=lambda a: run_ingest_cmd(a.port, a.upstream))
 
     led = sub.add_parser("ledger", help="tested ledger — dead regions per target, with age (stale = retest)")
     led.add_argument("target", nargs="?", default="", help="filter by target domain (default: all)")

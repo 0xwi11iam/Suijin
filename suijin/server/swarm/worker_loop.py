@@ -267,6 +267,7 @@ def execute_intent(
     parse_fails = 0
     recent_results: list[str] = []  # fixation guard input
     fixated: set[str] = set()       # already-corrected regions
+    escalate = False  # tiered routing: CONFIRMED/long results → planner model on the next call
 
     def _fixation_check() -> str | None:
         """THE FIXATION GUARD: if 4+ of the last 6 results touch a region
@@ -315,13 +316,15 @@ def execute_intent(
             from suijin.modules.providers.lib import generate
 
             cfg = load_config()
-            # TIERED ROUTING: workers are volume (recon, triage, parsing)
-            # → the cheap model when routing is configured; frontier
-            # stays for the planner. No config = unchanged behavior.
+            # TIERED ROUTING (fully wired): volume work → the cheap
+            # model; CONFIRMED results or long observations escalate the
+            # next call to the frontier model (finding analysis deserves
+            # the planner brain). No config = unchanged.
             with contextlib.suppress(Exception):
-                from suijin.server.tools.lib.model_routing import apply_routing
+                from suijin.server.tools.lib.model_routing import apply_routing, should_escalate
 
-                apply_routing(cfg, task="worker")
+                tier = "planner" if escalate else "worker"
+                apply_routing(cfg, task=tier)
             cfg["max_tokens_per_request"] = max(
                 int(cfg.get("max_tokens_per_request") or 0), 8000
             )  # long shell payloads truncated mid-JSON = the dominant
@@ -404,6 +407,10 @@ def execute_intent(
             result_str = f"Error: {e}"
 
         recent_results.append(result_str[:300])
+        with contextlib.suppress(Exception):
+            from suijin.server.tools.lib.model_routing import should_escalate
+
+            escalate = should_escalate(len(result_str), has_confirmed="CONFIRMED" in result_str)
         if "CONFIRMED" in result_str:
             facts.append(
                 {
