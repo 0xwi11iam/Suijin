@@ -1157,6 +1157,20 @@ def run_complexity_cmd(mode: str = "") -> int:
     return 0
 
 
+def run_web_cmd(port: int = 8790) -> int:
+    """`suijin web` — the web console."""
+    from suijin.server.web.server import run_web
+
+    return run_web(port)
+
+
+def run_ingest_cmd(port: int = 8080) -> int:
+    """`suijin ingest` — browse → the agent's asset graph."""
+    from suijin.server.tools.lib.ingest import run_ingest
+
+    return run_ingest(port)
+
+
 def run_ledger_cmd(target: str = "") -> int:
     """`suijin ledger [target]` — the tested book: what's been declared
     dead, where, how long ago; stale verdicts say RETEST (sites change)."""
@@ -2659,6 +2673,8 @@ _KNOWN_VERBS = frozenset(
         "ledger",
         "complexity",
         "system",
+        "web",
+        "ingest",
         "bb-scope",
         "kb",
         "pull",
@@ -2884,6 +2900,14 @@ def main(argv=None):
     cx = sub.add_parser("complexity", help="switch operator mode (basic · advanced) — gates the swarm tooling")
     cx.add_argument("mode", nargs="?", default="", help="basic | advanced (no arg = show current)")
     cx.set_defaults(func=lambda a: run_complexity_cmd(a.mode))
+
+    web_p = sub.add_parser("web", help="the web console — agents, traffic, findings, graph, mesh chat (localhost)")
+    web_p.add_argument("--port", type=int, default=8790)
+    web_p.set_defaults(func=lambda a: run_web_cmd(a.port))
+
+    ing = sub.add_parser("ingest", help="proxy your browsing into the traffic index — human traffic becomes the asset graph")
+    ing.add_argument("--port", type=int, default=8080)
+    ing.set_defaults(func=lambda a: run_ingest_cmd(a.port))
 
     led = sub.add_parser("ledger", help="tested ledger — dead regions per target, with age (stale = retest)")
     led.add_argument("target", nargs="?", default="", help="filter by target domain (default: all)")

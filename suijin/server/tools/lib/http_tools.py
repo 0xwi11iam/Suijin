@@ -85,6 +85,17 @@ def http_request(method, url, headers=None, body="", credential=""):
                         req_headers.setdefault("Authorization", f"Bearer {val}")
                     _cred_note = f"\n[credential: {credential} ({ctype or 'token'}) injected]"
 
+        # TRANSPORT GUARDRAILS (network-layer, not prompt-layer — the
+        # review's point: scope and destructiveness enforced at the
+        # socket, not the system prompt). Runs before anything else.
+        with contextlib.suppress(Exception):
+            from suijin.server.tools.lib.transport_guards import guard
+
+            blocked = guard(url, method)
+            if blocked and blocked.startswith("BLOCKED"):
+                return blocked
+            # THROTTLED absorbs inline (the guard already slept)
+
         # Rate limit check
         from suijin.modules.tools.lib.session_aware import get_session, is_rate_limited, record_response
 

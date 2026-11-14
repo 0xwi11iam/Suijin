@@ -229,7 +229,7 @@ class TestRouteTool:
         """
         import suijin.modules.tools.lib.dispatch as d
 
-        def mock_http(method, url, headers=None, body=""):
+        def mock_http(method, url, headers=None, body="", credential=""):
             return "Mocked response"
 
         monkeypatch.setattr(d, "get_module_tools", lambda: {})
