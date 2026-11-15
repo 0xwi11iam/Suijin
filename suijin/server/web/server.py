@@ -27,12 +27,41 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 app = FastAPI(title="suijin web console")
 
-# the console page: embedded as a Python string (wheels only ship .py —
-# a separate .html file went missing from the pip install, the
-# 'page missing' report)
+# the console UI: the vendored build (server/web/console-ui/dist). The old
+# embedded page stays as fallback when the UI hasn't been built yet.
+from suijin.server.web.console_api import router as _console_router
+
+app.include_router(_console_router)
+
+_UI_DIST = Path(__file__).resolve().parents[3] / "server" / "web" / "console-ui" / "dist"
+
 from suijin.server.web.console_page import CONSOLE_HTML as _PAGE_HTML
 
-PAGE = None  # marker; index() serves _PAGE_HTML directly
+PAGE = None  # marker; index() serves the built UI (fallback: _PAGE_HTML)
+
+
+@app.get("/")
+async def index():
+    idx = _UI_DIST / "index.html"
+    if idx.exists():
+        return HTMLResponse(idx.read_text())
+    return HTMLResponse(_PAGE_HTML)
+
+
+@app.get("/{spa_path:path}")
+async def spa(spa_path: str):
+    """SPA catch-all — client routes (/chats, /settings…) serve the shell."""
+    if spa_path.startswith("api/") or spa_path.startswith("ws"):
+        return JSONResponse({"error": "not found"}, status_code=404)
+    candidate = _UI_DIST / spa_path
+    if candidate.is_file():
+        from fastapi.responses import FileResponse
+
+        return FileResponse(candidate)
+    idx = _UI_DIST / "index.html"
+    if idx.exists():
+        return HTMLResponse(idx.read_text())
+    return HTMLResponse(_PAGE_HTML)
 
 # ── state: bus listener feeds a broadcast list ───────────────────
 
@@ -96,9 +125,39 @@ threading.Thread(target=_bus_listener, daemon=True, name="web-bus").start()
 threading.Thread(target=_stats_publisher, daemon=True, name="web-stats").start()
 
 
-@app.get("/")
-async def index():
-    return HTMLResponse(_PAGE_HTML)
+def _cleanup_orphan_agents():
+    """Kill agents orphaned by a previous web-server restart (PPID 1,
+    still hunting against a dead coordinator). Runs at web boot."""
+    with contextlib.suppress(Exception):
+        from suijin.server.web.console_api import _root
+
+        p = _root() / "swarm" / "console-agents.pids"
+        if not p.exists():
+            return
+        import signal
+
+        pids = [int(x) for x in p.read_text().split() if x.strip().isdigit()]
+        killed = 0
+        for pid in pids:
+            with contextlib.suppress(ProcessLookupError, PermissionError):
+                os.kill(pid, signal.SIGKILL)
+                killed += 1
+        p.write_text("")
+        if killed:
+            print(f"  [console] killed {killed} orphaned agent(s) from the previous session")
+
+
+def _resume_structured():
+    """Re-arm structured-mode watchdogs after a server restart."""
+    time.sleep(6)
+    with contextlib.suppress(Exception):
+        from suijin.server.swarm.structured import resume_watchdogs
+
+        resume_watchdogs()
+
+
+threading.Thread(target=_resume_structured, daemon=True, name="web-structured").start()
+threading.Thread(target=_cleanup_orphan_agents, daemon=True, name="web-orphan-cleanup").start()
 
 
 @app.get("/api/state")

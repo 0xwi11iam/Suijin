@@ -35,7 +35,7 @@ class TestLocalAccess:
         assert is_system_path("/etc/hosts")
         assert is_system_path("/usr/local/bin/x")
         assert not is_system_path(str(tmp_path / "mine.txt"))
-        assert not is_system_path("/Users/whoever/projects/x")
+        assert not is_system_path(str(Path.home() / "whoever/projects/x"))
 
     def test_contained_mode_mirrors(self, _eng, monkeypatch):
         monkeypatch.setattr("suijin.server.confinement.local_access_enabled", lambda: False)

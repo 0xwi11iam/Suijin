@@ -229,11 +229,18 @@ class SwarmCoordinator:
 
     # ── health monitoring ────────────────────────────────────────
 
-    def register_agent(self, agent_id: str, identity: str):
+    def register_agent(self, agent_id: str, identity: str, swarm: str = ""):
         with contextlib.suppress(sqlite3.Error):
+            # ON CONFLICT UPDATE (not REPLACE): a replace wipes columns a
+            # pre-registration set (swarm, current_intent — structured mode
+            # registers the hierarchy before the agents connect).
             self._db.execute(
-                "INSERT OR REPLACE INTO agents (id, identity, joined_at, last_heartbeat, status) VALUES (?, ?, ?, ?, 'active')",
-                (agent_id, identity, time.time(), time.time()),
+                "INSERT INTO agents (id, identity, joined_at, last_heartbeat, status, swarm) "
+                "VALUES (?, ?, ?, ?, 'active', ?) "
+                "ON CONFLICT(id) DO UPDATE SET identity=excluded.identity, "
+                "last_heartbeat=excluded.last_heartbeat, status='active', "
+                "swarm=COALESCE(NULLIF(excluded.swarm, ''), agents.swarm)",
+                (agent_id, identity, time.time(), time.time(), swarm),
             )
             self._db.commit()
         self._agents[agent_id] = {"identity": identity, "last_hb": time.time(), "intent": None}
@@ -560,6 +567,10 @@ class _BusEventListener:
         self._client = BusClient()
         if self._client.connect("127.0.0.1", self._coord.bus.port, "coordinator-listener"):
             self._client.subscribe("/swarm/**")
+            # operator commands from the web console (/cmd/stop …): mark
+            # agents stopped in the db — inline agents check the flag at
+            # each turn boundary (process agents get /cmd/** directly)
+            self._client.subscribe("/cmd/**")
             # the DATA LAYER answers here (suijin.server.data) — boxes and
             # remote clients query over the bus; without this subscription
             # /data/query requests reached the broker but never the handler
@@ -579,7 +590,10 @@ class _BusEventListener:
         while self._running:
             msgs = self._client.drain(50) if self._client else []
             for msg in msgs:
-                self._handle(msg)
+                # one bad handler must NEVER kill the listener — the whole
+                # swarm board (registrations, heartbeats) dies with it
+                with contextlib.suppress(Exception):
+                    self._handle(msg)
             time.sleep(0.2)
 
     def _handle(self, msg: dict):
@@ -587,11 +601,24 @@ class _BusEventListener:
         payload = msg.get("payload") or {}
         event = str(payload.get("event") or "")
 
+        if "/cmd/" in topic:
+            cmd = topic.rsplit("/", 1)[-1].lower()
+            if cmd in ("stop", "graceful_stop", "shutdown"):
+                with contextlib.suppress(sqlite3.Error):
+                    swarm = str((payload or {}).get("swarm") or "")
+                    if swarm:
+                        self._coord._db.execute(
+                            "UPDATE agents SET status = 'stopped' WHERE swarm = ? AND status != 'dead'",
+                            (swarm,))
+                    else:
+                        self._coord._db.execute("UPDATE agents SET status = 'stopped' WHERE status != 'dead'")
+                    self._coord._db.commit()
+            # /cmd/steer lands in gc.log via the web adapter; nothing here
         if "/swarm/status" in topic:
             if event == "agent_joined":
                 agent_id = str(payload.get("agent") or "")
                 identity = agent_id
-                self._coord.register_agent(agent_id, identity)
+                self._coord.register_agent(agent_id, identity, swarm=str(payload.get("swarm") or ""))
             elif event == "heartbeat":
                 agent_id = str(payload.get("agent") or "")
                 self._coord.heartbeat(agent_id)
