@@ -40,12 +40,12 @@ def cmd_update(args=None) -> int:
 
     # 1. the box's view of the repo + its version stamp
     code, out = bx.run_in_box(
-        "python3 -c \"import json;print(json.load(open('/Users/williamjiang/suijin/suijin/version.json'))['version'])\" 2>/dev/null || echo unknown",
+        "python3 -c \"import json;print(json.load(open('version.json'))['version'])\" 2>/dev/null || echo unknown",
         timeout=60,
     )
     box_ver = out.strip().splitlines()[-1] if out.strip() else "unknown"
     try:
-        with open("/Users/williamjiang/suijin/suijin/version.json") as fh:
+        with open("version.json") as fh:
             host_ver = json.load(fh).get("version", "?")
     except Exception:  # noqa: BLE001
         host_ver = "?"

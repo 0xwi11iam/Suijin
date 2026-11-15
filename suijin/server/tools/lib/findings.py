@@ -73,7 +73,7 @@ def report_vuln_finding(
         db.execute(
             "INSERT INTO findings (id, title, status, severity, agent_id, engagement, created_at) "
             "VALUES (?, ?, 'reported', ?, ?, ?, ?)",
-            (fid, f"[{vuln_type}] {title}"[:200], severity, agent, target, now),
+            (fid, f"[{vuln_type}] {title}"[:1000], severity, agent, target, now),
         )
         db.execute(
             "INSERT INTO facts (id, summary, evidence, agent_id, engagement, created_at) "

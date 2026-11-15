@@ -20,6 +20,7 @@ ITSELF per task type. Config:
 from __future__ import annotations
 
 import contextlib
+import os
 
 
 def _routing_config() -> dict:
@@ -46,12 +47,34 @@ def model_for(task: str, provider: str = "") -> str | None:
     """The model id for a task type. None = keep the configured default.
 
     task: 'planner' | 'worker' | 'triage' (alias for worker)
+          | 'tier:leader' | 'tier:supervisor' | 'tier:worker'
+          (structured mode — cascade m3→m2→m1, env override wins)
     """
+    if task.startswith("tier:"):
+        return _tier_model(task.split(":", 1)[1])
     cfg = _routing_config()
     if not cfg:
         return None
     key = "worker" if task in ("worker", "triage") else "planner"
     return str(cfg.get(key) or "") or None
+
+
+def _tier_model(tier: str) -> str | None:
+    """Structured-mode tier model: env override (set at spawn) wins,
+    then config model_1/2/3 with the fallback cascade m3→m2→m1."""
+    with contextlib.suppress(Exception):
+        env_model = os.environ.get("SUIJIN_TIER_MODEL")
+        if env_model:
+            return env_model
+    with contextlib.suppress(Exception):
+        from suijin.modules.platform.lib.config_loader import load_config
+
+        cfg = load_config() or {}
+        m1 = str(cfg.get("model_1") or "")
+        m2 = str(cfg.get("model_2") or m1)
+        m3 = str(cfg.get("model_3") or m2)
+        return {"leader": m1, "supervisor": m2, "worker": m3}.get(tier) or None
+    return None
 
 
 def should_escalate(response_length: int, has_confirmed: bool = False) -> bool:

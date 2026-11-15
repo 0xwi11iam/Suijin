@@ -1,0 +1,27 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+/**
+ * Per-user engine state directory (`~/.0`): scan DB, journals, kernel and
+ * intel caches, cloud credentials.
+ */
+export function homeStateDir(home: string = process.env.HOME || homedir()): string {
+  return join(home, ".0");
+}
+
+/** Keep development Cloud credentials separate without changing other user state. */
+export function cloudStateDir(home: string = process.env.HOME || homedir(), env: NodeJS.ProcessEnv = process.env): string {
+  const state = homeStateDir(home);
+  return env["ZERO_DEV_SOURCE_ROOT"]?.trim() ? join(state, "dev") : state;
+}
+
+/**
+ * Private mutable state for one engine execution. Every fresh run owns this
+ * directory; only an explicit resume may reuse it.
+ */
+export function runStateDir(runId: string, home?: string): string {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(runId)) {
+    throw new Error(`Invalid 0 run id ${JSON.stringify(runId)}.`);
+  }
+  return join(homeStateDir(home), "runs", runId);
+}

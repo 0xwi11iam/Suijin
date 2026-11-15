@@ -45,11 +45,12 @@ class SwarmAgent:
     REMOTE MODE: runs as a separate process (bootstrap script).
     """
 
-    def __init__(self, coordinator_host: str, coordinator_port: int, identity: str = "", mission: str = ""):
+    def __init__(self, coordinator_host: str, coordinator_port: int, identity: str = "", mission: str = "", swarm: str = ""):
         self._host = coordinator_host
         self._port = coordinator_port
         self._identity = identity or f"agent-{os.getpid()}"
         self._mission = str(mission or "").strip()  # title-following: worked when the queue runs dry
+        self._swarm = str(swarm or "default")  # the console session this agent belongs to
         self._bus = BusClient()
         self._running = False
         self._current_intent: dict | None = None
@@ -165,18 +166,30 @@ class SwarmAgent:
                 "event": "agent_joined",
                 "agent": self._identity,
                 "pid": os.getpid(),
+                "swarm": self._swarm,
             },
         )
 
     def _heartbeat_loop(self):
+        # COORDINATOR-DEAD DETECTION (2026-11-15): if the bus publish fails
+        # repeatedly, the coordinator is gone and nobody can steer or stop
+        # this agent — exit instead of hunting forever as an orphan.
+        failed = 0
         while self._running:
-            self._bus.publish(
+            ok = self._bus.publish(
                 "/swarm/status",
                 {
                     "event": "heartbeat",
                     "agent": self._identity,
                 },
             )
+            failed = 0 if ok else failed + 1
+            if failed >= 6:
+                print(f"[{self._identity}] coordinator unreachable — exiting (orphan guard)")
+                self._running = False
+                with contextlib.suppress(OSError):
+                    os._exit(0)
+
             time.sleep(5.0)
 
     def _handle_control(self):
@@ -478,6 +491,7 @@ def run_agent(args=None) -> int:
     ap.add_argument("--coordinator", required=True, help="host:port of the coordinator")
     ap.add_argument("--identity", default="", help="agent identity (default: agent-<pid>)")
     ap.add_argument("--mission", default="", help="standing mission (the engagement title) — worked when the queue is empty")
+    ap.add_argument("--swarm", default="", help="the swarm/session this agent belongs to (console mapping)")
     parsed = ap.parse_args(args)
 
     host, _, port_s = parsed.coordinator.rpartition(":")
@@ -485,7 +499,7 @@ def run_agent(args=None) -> int:
         print(f"invalid coordinator: {parsed.coordinator} (expected host:port)")
         return 1
 
-    agent = SwarmAgent(host, int(port_s), parsed.identity, mission=parsed.mission)
+    agent = SwarmAgent(host, int(port_s), parsed.identity, mission=parsed.mission, swarm=parsed.swarm)
     try:
         return agent.run()
     except KeyboardInterrupt:

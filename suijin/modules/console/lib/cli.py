@@ -1164,6 +1164,12 @@ def run_web_cmd(port: int = 8790) -> int:
     return run_web(port)
 
 
+def _run_api(port: int) -> int:
+    from suijin.server.api.server import run_api
+
+    return run_api(port)
+
+
 def run_ingest_cmd(port: int = 0, upstream: str = "") -> int:
     """`suijin ingest` — browse → the agent's asset graph. Port and
     upstream read the settings keys when not given on the CLI."""
@@ -1739,6 +1745,9 @@ def _run_swarm(
     intent_text: str = "",
     swarm_name: str = "",
     mission: str = "",
+    structured: bool = False,
+    workers: int = 2,
+    node: str = "host",
 ) -> int:
     """Dispatch swarm subcommands."""
     import types
@@ -1756,6 +1765,30 @@ def _run_swarm(
     if action == "hunt":
         from suijin.server.swarm.lifecycle import run_swarm_hunt
 
+        structured = bool(getattr(a, "structured", False))
+        if structured:
+            from suijin.server.swarm.structured import start_structured
+
+            t = start_structured(intent_text,
+                                 workers_per_cat=int(getattr(a, "workers", 2) or 2),
+                                 node=str(getattr(a, "node", "host") or "host"))
+            if not t.get("ok"):
+                from rich.console import Console
+
+                Console().print(f"[red]✗ structured start failed:[/red] {t.get('error')}")
+                return 1
+            from rich.console import Console
+
+            Console().print(
+                f"  [bold]structured swarm:[/bold] {t['title'][:60]}\n"
+                f"  leader: [cyan]{t['leader']}[/cyan]\n"
+                f"  supervisors: {sum(len(v) for v in t['supervisors'].values())} "
+                f"(recon, exploitation, coder)\n"
+                f"  workers: {sum(len(v) for v in t['workers'].values())} "
+                f"(m3 cascade: {t['tiers']['m3'] or 'm2' or 'm1'})\n"
+                f"  tiers: m1={t['tiers']['m1'] or 'unset'} m2={t['tiers']['m2'] or '→m1'} "
+                f"m3={t['tiers']['m3'] or '→m2'}")
+            return 0
         return run_swarm_hunt(intent_text, host_n=count, boxed_n=sandbox, force=force)
     if action == "tui":
         from suijin.server.swarm.tui_client import run as run_tui_client
@@ -2829,7 +2862,10 @@ def main(argv=None):
     hunt_p.add_argument("--host", type=int, default=0, metavar="N", help="N host-process agents")
     hunt_p.add_argument("--boxed", type=int, default=0, metavar="N", help="N boxed agents (disposable containers)")
     hunt_p.add_argument("--force", action="store_true", help="override the memory pre-flight guard")
-    hunt_p.set_defaults(func=lambda a: _run_swarm("hunt", intent_text=" ".join(a.title), count=a.host, sandbox=a.boxed, force=a.force))
+    hunt_p.add_argument("--structured", action="store_true", help="M1 leader → M2 supervisors → M3 workers hierarchy (model_1 required)")
+    hunt_p.add_argument("--workers", type=int, default=2, metavar="N", help="structured: M3 workers per category (default 2)")
+    hunt_p.add_argument("--node", choices=["host", "box"], default="host", help="structured: single node type (default host)")
+    hunt_p.set_defaults(func=lambda a: _run_swarm("hunt", intent_text=" ".join(a.title), count=a.host, sandbox=a.boxed, force=a.force, structured=a.structured, workers=a.workers, node=a.node))
 
     ctrl_p = swarm_sub.add_parser("control", help="full-screen hub: swarm state + every action")
     ctrl_p.set_defaults(func=lambda a: _run_swarm("control"))
@@ -2913,6 +2949,13 @@ def main(argv=None):
     web_p = sub.add_parser("web", help="the web console — agents, traffic, findings, graph, mesh chat (localhost)")
     web_p.add_argument("--port", type=int, default=8790)
     web_p.set_defaults(func=lambda a: run_web_cmd(a.port))
+
+    api_p = sub.add_parser("api", help="the keyed read-only API — explicit start, port 8741, key on every route")
+    api_sub = api_p.add_subparsers(dest="api_cmd", required=True)
+    api_start = api_sub.add_parser("start", help="start the API server")
+    api_start.add_argument("--port", type=int, default=8741)
+    api_start.add_argument("--show-key", action="store_true", help="print the API key after start")
+    api_p.set_defaults(func=lambda a: _run_api(a.port if a.api_cmd == "start" else 8741))
 
     ing = sub.add_parser("ingest", help="proxy your browsing into the traffic index — human traffic becomes the asset graph")
     ing.add_argument("--port", type=int, default=0, help="proxy port (default: settings ingest_port or 8080)")

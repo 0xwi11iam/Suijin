@@ -62,7 +62,7 @@ def session_path(target: str, name: str = "") -> Path:
 def _default_cookie_domain(target: str) -> str:
     """Best-effort registrable domain for the pasted jar.
 
-    accounts.google.com → .google.com (auth cookies ride the parent).
+    accounts.example.com → .example.com (auth cookies ride the parent).
     The --domain flag overrides for hosts the heuristic gets wrong
     (ccTLDs, multi-label TLDs like .co.uk).
     """

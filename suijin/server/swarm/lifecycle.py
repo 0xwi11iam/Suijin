@@ -266,7 +266,7 @@ def run_swarm_intent(text: str, swarm: str = "default", force: bool = False) -> 
 # ── spawn ─────────────────────────────────────────────────────────────
 
 
-def _spawn_agent(port: int, mission: str = "") -> tuple[str, int]:
+def _spawn_agent(port: int, mission: str = "", swarm: str = "") -> tuple[str, int]:
     """Spawn one agent as a background HOST process. Returns (identity, pid).
     mission = the engagement title: worked when the queue runs dry
     (title-following — agents just follow the title, no intents needed)."""
@@ -277,6 +277,8 @@ def _spawn_agent(port: int, mission: str = "") -> tuple[str, int]:
             "--coordinator", f"127.0.0.1:{port}", "--identity", identity]
     if mission:
         argv += ["--mission", mission]
+    if swarm:
+        argv += ["--swarm", swarm]
     proc = subprocess.Popen(
         argv,
         stdout=open(log_file, "w"),
@@ -285,6 +287,11 @@ def _spawn_agent(port: int, mission: str = "") -> tuple[str, int]:
         start_new_session=True,
     )
     pid_file.write_text(str(proc.pid))
+    # track for the console's orphan cleanup (web restart leaves PPID-1 agents)
+    with contextlib.suppress(OSError):
+        from suijin.server.swarm.structured import _track_hunt_pid
+
+        _track_hunt_pid(proc.pid)
     return identity, proc.pid
 
 
@@ -365,7 +372,7 @@ def run_swarm_spawn(args=None) -> int:
         console.print(f"  [cyan]suijin swarm status[/cyan] to see them")
     elif count == 1:
         # single: spawn as a host process (same as before)
-        identity, pid = _spawn_agent(addr[1], mission=str(getattr(args, "mission", "") or ""))
+        identity, pid = _spawn_agent(addr[1], mission=str(getattr(args, "mission", "") or ""), swarm=swarm_name)
         console.print(f"  [green]✓[/green] {identity} (pid {pid}) → '{swarm_name}' (background)")
     else:
         # multiple: spawn as asyncio tasks in the coordinator's process
@@ -717,6 +724,11 @@ def run_swarm_hunt(title: str = "", host_n: int = 0, boxed_n: int = 0, force: bo
     if not ok and not force:
         console.print(f"[red]✗ too many agents for this host:[/red] {why}")
         return 1
+    # the swarm name follows the title slug — the console maps sessions
+    # (chats) to swarms by this name, so stop/delete/list stay coherent
+    from suijin.server.swarm.structured import _slug as _title_slug
+
+    swarm_name = _title_slug(title)
     console.print(f'  hunt: [bold]{title[:70]}[/bold]')
     console.print(f"  agents: {host_n} host + {boxed_n} boxed — the title is their standing mission")
     rc = 0
@@ -724,13 +736,13 @@ def run_swarm_hunt(title: str = "", host_n: int = 0, boxed_n: int = 0, force: bo
         import types as _types
 
         r = run_swarm_spawn(_types.SimpleNamespace(
-            tui=False, swarm="default", count=0, sandbox=boxed_n, mission=title))
+            tui=False, swarm=swarm_name, count=0, sandbox=boxed_n, mission=title))
         rc = rc or r
     for _ in range(host_n):
         import types as _types
 
         r = run_swarm_spawn(_types.SimpleNamespace(
-            tui=False, swarm="default", count=1, sandbox=0, mission=title))
+            tui=False, swarm=swarm_name, count=1, sandbox=0, mission=title))
         rc = rc or r
     console.print("  [cyan]suijin swarm console[/cyan] to watch · [cyan]suijin swarm say[/cyan] to steer")
     return rc

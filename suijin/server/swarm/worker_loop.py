@@ -15,6 +15,7 @@ never let a parse failure masquerade as completion.
 from __future__ import annotations
 
 import contextlib
+import os
 
 SYSTEM_TEMPLATE = (
     "You are a worker agent on an authorized bug bounty engagement. "
@@ -296,6 +297,22 @@ def execute_intent(
         return None
 
     for turn in range(max_turns):
+        # OPERATOR STOP (2026-11-15): the console's stop sets agents.status
+        # = 'stopped' — honor it at every turn boundary. Process agents get
+        # /cmd/**; in-process (inline) agents only see the db.
+        if turn % 1 == 0:
+            with contextlib.suppress(Exception):
+                import sqlite3 as _sq3
+                from suijin.server.swarm.coordinator import swarm_db_path
+
+                _stop_db = _sq3.connect(str(swarm_db_path()), timeout=2)
+                _row = _stop_db.execute(
+                    "SELECT status FROM agents WHERE id = ?", (identity,)
+                ).fetchone()
+                _stop_db.close()
+                if _row and str(_row[0] or "").lower() == "stopped":
+                    return {"state": "stopped", "facts": facts,
+                            "note": "stopped by operator"}
         # operator interjection (swarm say) — lands mid-conversation
         if on_turn is not None:
             with contextlib.suppress(Exception):
@@ -323,7 +340,13 @@ def execute_intent(
             with contextlib.suppress(Exception):
                 from suijin.server.tools.lib.model_routing import apply_routing, should_escalate
 
-                tier = "planner" if escalate else "worker"
+                tier_env = os.environ.get("SUIJIN_TIER")
+                if tier_env:
+                    # structured mode: this agent is a leader/supervisor/
+                    # worker — the tier cascade picks its model
+                    tier = f"tier:{tier_env}"
+                else:
+                    tier = "planner" if escalate else "worker"
                 apply_routing(cfg, task=tier)
             cfg["max_tokens_per_request"] = max(
                 int(cfg.get("max_tokens_per_request") or 0), 8000

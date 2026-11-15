@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Match web-theme.ts before styles or the application bundle can paint.
+      (() => {
+        let theme = "dark";
+        try { if (localStorage.getItem("zero-web-theme") === "light") theme = "light"; } catch {}
+        const root = document.documentElement;
+        root.classList.toggle("dark", theme === "dark");
+        root.dataset.mode = theme;
+        root.style.colorScheme = theme;
+      })();
+    </script>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+    <title>suijin</title>
+    <script type="module" src="/src/main.tsx"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+  </html>

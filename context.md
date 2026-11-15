@@ -548,3 +548,26 @@ code and config did.
    console 203 green. The combined tools+console run remains
    order-dependent flaky (41 failures without the new files, 7 with —
    pre-existing, known).
+
+## Web console (2026-11-14 night build)
+- Vendored 0 frontend → `server/web/console-ui/` (Suijin-branded, engine shim
+  vendored at vendor/engine). Build: `npx vite build` → served by `suijin web`
+  (FastAPI, SPA catch-all, adapter included). Dev: vite :5174.
+- `suijin/server/web/console_api.py` — the API adapter (40+ routes) between
+  the dashboard contract and Suijin's real state (swarm.db, engagement tree,
+  bus, config.json, tool registry). Sessions = swarms; "New swarm" starts a
+  real hunt; composer steering = /cmd/steer; settings pills = real config keys.
+- STRUCTURED MODE `suijin/server/swarm/structured.py`: M1 leader → M2
+  supervisors (recon/exploitation/coder, +1 per 4 workers) → M3 workers.
+  Model cascade m3→m2→m1 (config model_1/2/3; model_1 required). Watchdog
+  forces supervisor reports every ~3 min. CLI: `suijin swarm hunt "<t>"
+  --structured --workers N --node host|box`. Comms over the existing mesh
+  tools (mesh_dm/mesh_read/mesh_broadcast).
+- `suijin/server/api/server.py` — `suijin api start` (port 8741): API key on
+  every route (401 without; key file ~/.suijin/config/api_key.json), read-only
+  data layer.
+- UI journey test: `tests/ui/ui_journey.py` (Playwright, 16 checks) +
+  `tests/fixtures/demo_target.py` (local-only fixture, 127.0.0.1:8099).
+- Swarm workspace root is ~/.suijin (NOT ~/.suijin/config); findings.created_at
+  is SECONDS. sqlite: WAL forbidden (container-mount proven); one coordinator
+  only. Details: agent-vault/bugs-ledger.md (2026-11-14 night).
