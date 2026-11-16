@@ -237,6 +237,7 @@ def coverage_check(
     status: str = "",
     evidence: str = "",
     request_sent: str = "",
+    reason: str = "",
     kind: str = "",
     subject: str = "",
     text: str = "",

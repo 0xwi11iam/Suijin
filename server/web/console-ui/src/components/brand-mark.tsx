@@ -18,14 +18,14 @@ export function BrandMark({
         src={suiUrl}
         alt="Suijin"
         data-brand-mark="compact"
-        className={cn("size-9 rounded-lg object-cover", className)}
+        className={cn("size-8 shrink-0", className)}
       />
     );
   }
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      <img src={suiUrl} alt="" aria-hidden="true" className="size-6 shrink-0 rounded-md object-cover" />
+      <img src={suiUrl} alt="" aria-hidden="true" className="size-7 shrink-0" />
       <span className="font-heading text-lg font-semibold tracking-tight text-foreground">Suijin</span>
     </div>
   );

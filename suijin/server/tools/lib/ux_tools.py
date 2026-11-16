@@ -540,9 +540,19 @@ def _cache_key(tool: str, args: dict) -> str:
     return hashlib.sha256(blob.encode()).hexdigest()[:16]
 
 
+# LIVE-STATE READS: the browser page changes between calls — a repeat
+# read returns FRESH traffic/cookies/storage, so the dedup guard must
+# never hand back a stale cached result for these (field bug 2026-11-15:
+# the guard buried the API traffic the agent was actively hunting).
+_LIVE_READ_TOOLS = {"mcp_browser_requests", "mcp_browser_cookies",
+                    "mcp_browser_storage"}
+
+
 def cache_check(tool: str, args: dict) -> str | None:
     """Check if this exact action was already performed. Returns the
     cached result or None if not seen."""
+    if tool in _LIVE_READ_TOOLS:
+        return None
     key = _cache_key(tool, args)
     entry = _action_cache.get(key)
     if entry and time.time() - entry["at"] < 600:  # 10 min TTL

@@ -347,7 +347,8 @@ def _launch_browser_context(p, profile: Path, headless: bool = False, channels=(
     Returns (context, engine_name)."""
     common = dict(
         headless=headless,
-        args=["--disable-blink-features=AutomationControlled"],
+        locale="en-US",
+        args=["--disable-blink-features=AutomationControlled", "--lang=en-US"],
         ignore_default_args=["--enable-automation"],
     )
     last_err: Exception | None = None

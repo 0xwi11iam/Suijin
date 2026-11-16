@@ -241,7 +241,7 @@ def _findings(session: str | None = None) -> list[dict]:
             with contextlib.suppress(Exception):
                 out.append({
                     "id": str(r[5] or ""), "severity": r[0] or "info", "status": r[1] or "new",
-                    "title": (r[2] or "")[:200], "agent": r[3] or "",
+                    "title": (r[2] or "")[:1000], "agent": r[3] or "",
                     # findings.created_at is SECONDS; the frontend renders ms
                     "ts": float(r[4] or time.time()) * 1000.0,
                 })
