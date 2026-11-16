@@ -1424,10 +1424,34 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                         # opinion); only the side effects (inline prompts,
                         # browser launch) live here.
                         if ec == "ask_operator" and "AUTH NEEDED" in out:
-                            from suijin.modules.agent.lib.ask import parse_auth_choice
+                            from suijin.server.agent.lib.ask import parse_auth_choice
 
-                            _ch = parse_auth_choice(answer)
-                            if _ch.kind == "credentials":
+                            try:
+                                _ch = parse_auth_choice(answer)
+                            except Exception as _auth_err:  # noqa: BLE001 — an auth
+                                # hiccup degrades the run to unauthenticated; it
+                                # must never abort the engagement (field bug
+                                # 2026-11-15: a stale import aborted whole runs)
+                                out += "\n\n[AUTH] operator answer couldn't be parsed — continuing without credentials.\n"
+                                _ch = None
+                            # A NON-PICK LINE IS A REDIRECT, NOT A SKIP: when
+                            # the operator types anything that isn't 1-4 ("do
+                            # something that doesn't require auth first", "skip
+                            # this target"), DELIVER it to the agent as an
+                            # operator message and continue unauthenticated —
+                            # never discard operator intent (field bug
+                            # 2026-11-15: redirects were silently swallowed).
+                            if _ch is None:
+                                answer = (
+                                    f"OPERATOR: {str(answer or '').strip()[:400]} — "
+                                    "continuing without credentials for now."
+                                )
+                            elif _ch.kind == "skip" and answer.strip() and answer.strip() != "4":
+                                answer = (
+                                    f"OPERATOR: {str(answer).strip()[:400]} — "
+                                    "continuing without credentials for now."
+                                )
+                            if _ch is not None and _ch.kind == "credentials":
                                 _cred_part = _ch.value
                                 if not _cred_part:
                                     # they just typed "1" — ask for the creds inline
@@ -1441,7 +1465,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                                     f"Store the session with creds_add after logging in."
                                 )
                                 console.print(f"[green]auth: credentials for {_user}[/green]")
-                            elif _ch.kind == "token":
+                            elif _ch is not None and _ch.kind == "token":
                                 _tok = _ch.value
                                 if not _tok:
                                     ui.stop()
@@ -1451,7 +1475,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                                     f"OPERATOR AUTH: token provided. Use it as a Bearer header or cookie: {_tok[:100]}"
                                 )
                                 console.print("[green]auth: token stored[/green]")
-                            elif _ch.kind == "browser":
+                            elif _ch is not None and _ch.kind == "browser":
                                 # browser login: launch capture, grab the cookies
                                 console.print("[cyan]auth: launching browser for login...[/cyan]")
                                 try:
@@ -1488,7 +1512,7 @@ async def run_red_team_async(config, objective, api_key=None, resume_state=None,
                                         ).strip()
                                         ui.start()
                                         # lenient repair lives in ask.py (one module)
-                                        from suijin.modules.agent.lib.ask import repair_login_url
+                                        from suijin.server.agent.lib.ask import repair_login_url
 
                                         _login_url = repair_login_url(_login_url)
                                     _cap = None

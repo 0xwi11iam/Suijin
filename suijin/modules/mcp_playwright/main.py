@@ -65,7 +65,7 @@ def _launch_chromium(pw):
     """Launch with the standard args (shared by every attempt)."""
     return pw.chromium.launch(
         headless=True,
-        args=["--no-sandbox", "--disable-setuid-sandbox", "--no-proxy-server"],
+        args=["--no-sandbox", "--disable-setuid-sandbox", "--no-proxy-server", "--lang=en-US"],
     )
 
 
@@ -171,6 +171,7 @@ def _browser_loop():
 
         ident = browser_identity()
         ctx = browser.new_context(
+            locale="en-US",
             viewport={"width": 1280, "height": 800}, user_agent=ident.get("User-Agent", "Mozilla/5.0")
         )
         page = ctx.new_page()
@@ -769,9 +770,38 @@ def mcp_browser_close():
 # ── NEW public tools ────────────────────────────────────────────────
 
 
-def mcp_browser_requests(offset=0, limit=20, filter=""):
-    """Captured network traffic — requests AND responses with bodies."""
-    return _call("net_get", offset=int(offset), limit=int(limit), filter=str(filter or ""))
+_AD_HOSTS = ("doubleclick", "openx.net", "ladsp", "googleads", "googlesyndication",
+             "googletagmanager", "google-analytics", "analytics", "adservice",
+             "adsystem", "adnxs", "adsrvr", "criteo", "taboola", "outbrain",
+             "scorecardresearch", "quantserve", "hotjar", "mixpanel", "segment.io")
+
+
+def mcp_browser_requests(offset=0, limit=20, filter="", include_ads=False):
+    """Captured network traffic — requests AND responses with bodies.
+
+    Ad/tracker hosts are FILTERED OUT by default (a SPA fires hundreds of
+    them; they bury the API traffic that matters). Pass include_ads=True
+    or filter='<substring>' to change that."""
+    raw = _call("net_get", offset=int(offset), limit=max(int(limit) * 4, 80),
+                filter=str(filter or ""))
+    if include_ads:
+        return raw
+    try:
+        data = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:  # noqa: BLE001 — pass the raw output through on any parse miss
+        return raw
+    entries = data.get("entries", data if isinstance(data, list) else [])
+    if not isinstance(entries, list):
+        return raw
+    kept = [e for e in entries if not any(h in json.dumps(e)[:400] for h in _AD_HOSTS)]
+    total = data.get("total", len(entries))
+    if isinstance(data, dict):
+        data["entries"] = kept
+        data["total"] = total
+        data["note"] = (f"showing {len(kept)} of {total} captured — "
+                        "ad/tracker hosts filtered; use include_ads=true to see them")
+        return json.dumps(data)
+    return kept
 
 
 def mcp_browser_net_start():

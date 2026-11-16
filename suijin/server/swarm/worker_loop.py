@@ -89,17 +89,36 @@ def _session_hint() -> str:
     http_request/http_replay via credential='<name>'. Without this
     hint the sessions sat unused because no prompt mentioned them."""
     with contextlib.suppress(Exception):
-        import json as _json
+        from suijin.modules.credential_store.main import _load_store
 
-        from suijin.modules.credential_store.main import creds_list
+        store = _load_store() or {}
+        entries = list(store.get("credentials", [])) if isinstance(store, dict) else []
 
-        raw = str(creds_list())
-        data = _json.loads(raw) if raw.strip().startswith("{") else {}
-        names = [n for n in (data.keys() if isinstance(data, dict) else [])]
-        if names:
-            shown = ", ".join(sorted(names)[:8])
-            return (
-                f"\n\nAUTHENTICATED SESSIONS — jars on file: {shown}\n"
+        import re as _re
+
+        cf_only = re.compile(
+            r"^(__cf_bm|__cfuvid|__cfruid|cf_clearance|__cf_chl\S*|__cfhostassets)$", _re.I
+        )
+
+        def _split(value: str) -> list[str]:
+            return [p.split("=", 1)[0].strip() for p in str(value or "").replace("; ", ";").split(";") if p.strip()]
+
+        logged_in, bot_only = [], []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            name = str(entry.get("service") or entry.get("name") or "")
+            cookies = _split(entry.get("value", ""))
+            if any(not cf_only.match(c) for c in cookies):
+                logged_in.append(name)
+            elif cookies:
+                bot_only.append(name)
+
+        parts = []
+        if logged_in:
+            shown = ", ".join(sorted(set(logged_in))[:8])
+            parts.append(
+                f"\n\nAUTHENTICATED SESSIONS — logged-in jars on file: {shown}\n"
                 "AUTHENTICATED BY DEFAULT (operator standing rule): for ANY target "
                 "domain in that list, test AS the logged-in user — pass "
                 "credential='<domain>' to http_request / http_replay / auth_diff. "
@@ -107,6 +126,26 @@ def _session_hint() -> str:
                 "for comparison (auth_diff) or when no jar exists for the domain. "
                 "Never probe a jarred domain blind."
             )
+        if bot_only:
+            shown = ", ".join(sorted(set(bot_only))[:8])
+            parts.append(
+                f"\n\nJARS WITHOUT A LOGIN (bot cookies only — do NOT treat these "
+                f"as authenticated): {shown}. Cloudflare sets __cf_bm/__cfuvid on "
+                "every site you touch; they are bot-allowlist cookies, not a "
+                "session. To get a real session, fire request_auth."
+            )
+        mechanics = (
+            "\n\nHOW COOKIES WORK FOR YOU (mechanics): every http_request you make "
+            "automatically sends the jar's cookies for that domain — you never "
+            "read, set, or paste cookie values yourself. Cloudflare bot cookies "
+            "ride along on every request and are normal, not a login. When the "
+            "operator completes a request_auth, the session lands IN YOUR JAR — "
+            "your next request to that domain is simply authenticated. Verify a "
+            "session by requesting an endpoint that returns personal data: 200 "
+            "+ user data = live session; a guest page or 401 = still anonymous."
+        )
+        parts.append(mechanics)
+        return "\n".join(parts)
     return ""
 
 
@@ -260,6 +299,10 @@ def execute_intent(
         {"role": "system",
          "content": (SYSTEM_TEMPLATE.format(catalog=_load_catalog())
                      + _session_hint() + _hunt_policy()
+                     + "\n\nLANGUAGE (operator standing rule): write every note, finding, "
+                       "report, and response in ENGLISH — regardless of the language "
+                       "the target site renders in. Translate anything you read "
+                       "before storing or broadcasting it."
                      + _dead_regions_hint(intent.get("engagement") or "_default"))},
         {"role": "user", "content": f"INTENT: {intent['text']}\n\nExecute this intent."},
     ]

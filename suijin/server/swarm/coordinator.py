@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS agents (
     joined_at REAL,
     last_heartbeat REAL,
     current_intent TEXT,
-    status TEXT DEFAULT 'active'
+    status TEXT DEFAULT 'active',
+    swarm TEXT DEFAULT 'default'
 );
 CREATE TABLE IF NOT EXISTS intents (
     id TEXT PRIMARY KEY,
@@ -171,6 +172,10 @@ class SwarmCoordinator:
             db.execute("PRAGMA journal_mode=DELETE")
         db.execute("PRAGMA synchronous=NORMAL")
         db.executescript(SWARM_SCHEMA)
+        # migrate: the swarm column is read everywhere but was historically
+        # added out-of-tree — create it for dbs born without it
+        with contextlib.suppress(sqlite3.Error):
+            db.execute("ALTER TABLE agents ADD COLUMN swarm TEXT DEFAULT 'default'")
         db.commit()
         return db
 

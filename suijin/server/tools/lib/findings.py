@@ -52,6 +52,25 @@ def report_vuln_finding(
             "report_finding(target='host', title='what is broken', severity='high', "
             "vuln_type='idor', evidence='request/response proof', url='the vulnerable endpoint')"
         )
+    # TARGET-IDENTITY GATE (2026-11-16, the false-positive lesson): a
+    # finding against localhost/private space is a TEST result, never a
+    # submittable finding — refuse it unless the engagement explicitly
+    # opted into local-target testing (guardrail_allow_local_target).
+    import os as _os
+    import re as _re
+
+    _t = str(target or "")
+    _is_local = _re.match(r"^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|localhost\[?)", _t, _re.I) or "localhost" in _t.lower()
+    if _is_local and not (_os.environ.get("SUIJIN_ALLOW_LOCAL_TARGET") or "").lower() in ("1", "true", "yes"):
+        return (
+            "REFUSED: this looks like a LOCAL/PRIVATE target (" + _t[:40] + "). "
+            "Local targets are test fixtures, not reportable findings — a "
+            "CONFIRMED result against one is a false positive by definition "
+            "(the 2026-11-15 overnight sweep burned a night on exactly this). "
+            "Set SUIJIN_ALLOW_LOCAL_TARGET=1 only for dedicated local-test "
+            "engagements, and never submit these findings anywhere."
+        )
+
     if severity not in SEVERITIES:
         return f"Error: severity must be one of {', '.join(SEVERITIES)}"
     if vuln_type not in VULN_TYPES:

@@ -1765,13 +1765,13 @@ def _run_swarm(
     if action == "hunt":
         from suijin.server.swarm.lifecycle import run_swarm_hunt
 
-        structured = bool(getattr(a, "structured", False))
+        structured = bool(structured)
         if structured:
             from suijin.server.swarm.structured import start_structured
 
             t = start_structured(intent_text,
-                                 workers_per_cat=int(getattr(a, "workers", 2) or 2),
-                                 node=str(getattr(a, "node", "host") or "host"))
+                                 workers_per_cat=int(workers or 2),
+                                 node=str(node or "host"))
             if not t.get("ok"):
                 from rich.console import Console
 
