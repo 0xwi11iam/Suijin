@@ -110,8 +110,8 @@ def mark(asset: str, vuln_class: str, status: str, evidence: str = "", request_s
         if vc not in CLASSES:
             return f"Error: class '{vc}' not in the lanes ({', '.join(CLASSES)})"
         st = str(status).lower().strip()
-        if st not in ("tested_vulnerable", "tested_not_vulnerable", "not_applicable"):
-            return "Error: status must be tested_vulnerable | tested_not_vulnerable | not_applicable"
+        if st not in ("tested_vulnerable", "tested_not_vulnerable", "tested_blocked", "not_applicable"):
+            return "Error: status must be tested_vulnerable | tested_not_vulnerable | tested_blocked | not_applicable"
         if st == "tested_not_vulnerable":
             if not str(evidence).strip() or len(str(evidence).strip()) < 30:
                 return (

@@ -61,7 +61,7 @@ export function ConsoleNavigationRail({ settingsHref, onHistorySlot }: { setting
     {collapsed && hovered && <div aria-hidden="true" className="absolute inset-y-0 left-0 z-20 w-64" />}
     <nav ref={rail} aria-label="Command Center navigation" data-collapsed={compact} data-floating={collapsed && expanded} onFocus={event => setFocusWithin(event.target.matches(":focus-visible"))} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocusWithin(false); }} className="console-navigation-rail hidden h-full min-h-0 shrink-0 flex-col overflow-x-hidden overflow-y-auto bg-background p-2 lg:flex [scrollbar-width:thin]">
       <div className="relative mb-3 h-10 w-60 shrink-0">
-        <a href={newChatHref} aria-label="Suijin new swarm" className={cn("absolute flex h-8 items-center rounded-[var(--radius-control,8px)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40", compact ? "left-0 top-0 w-8" : "left-1 top-1 w-36")}>
+        <a href={newChatHref} aria-label="Suijin new engagement" className={cn("absolute flex h-8 items-center rounded-[var(--radius-control,8px)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40", compact ? "left-0 top-0 w-8" : "left-1 top-1 w-36")}>
           <span aria-hidden={!compact} className={cn("console-navigation-brand-compact pointer-events-none absolute left-1.5 top-1.5 transition-opacity duration-150 motion-reduce:transition-none",compact ? "opacity-100" : "opacity-0")}><BrandMark compact className="size-5" /></span>
           <span aria-hidden={compact} className="console-navigation-label pointer-events-none absolute left-1 w-36"><BrandMark className="w-36" /></span>
         </a>

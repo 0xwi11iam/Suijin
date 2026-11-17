@@ -17,6 +17,19 @@ function TurnWorkStatus({ turn }: { turn: ReducedTurn }) {
   return <div data-turn-work-status className="flex items-center gap-2 border-b border-border/60 pb-2 text-xs text-muted-foreground">{turn.isWorking && <ActivityMark compact />}<span className={turn.isWorking ? "console-working-label" : undefined}>{label}{duration}</span></div>;
 }
 
+/** Cheap content signature — polls rebuild turn OBJECTS every ~2s; without
+ * this comparator every turn re-rendered (DOM churn) and mouse clicks died
+ * while agents streamed (field 2026-11-17: "can't click open when agents
+ * are thinking"). Equal signature = skip re-render, DOM stays clickable. */
+function turnSignature(turn: ReducedTurn, streaming: boolean): string {
+  return JSON.stringify([
+    turn.id, turn.isWorking, turn.startedAt, turn.endedAt, turn.stopReason, turn.error, streaming,
+    turn.assistantText?.length ?? 0, turn.reasoningText?.length ?? 0,
+    (turn.segments ?? []).map(seg => [seg.type, seg.type === "assistant" || seg.type === "reasoning" ? seg.text.length : (seg.toolIds ?? []).length]),
+    turn.toolCalls.map(call => [call.id, call.name, call.isRunning === true, (call.result ?? "").length, JSON.stringify(call.arguments ?? {}).length]),
+  ]);
+}
+
 /** Render each tool batch beside the commentary that introduced it. */
 export const TurnTimeline = memo(function TurnTimeline({ turn, streaming }: { turn: ReducedTurn; streaming: boolean }) {
   const segments = turn.segments?.length ? turn.segments : [
@@ -38,4 +51,4 @@ export const TurnTimeline = memo(function TurnTimeline({ turn, streaming }: { tu
       </Fragment>;
     })}
   </div>;
-});
+}, (prev, next) => turnSignature(prev.turn, prev.streaming) === turnSignature(next.turn, next.streaming));

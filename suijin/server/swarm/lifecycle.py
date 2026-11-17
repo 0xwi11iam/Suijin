@@ -279,12 +279,40 @@ def _spawn_agent(port: int, mission: str = "", swarm: str = "") -> tuple[str, in
         argv += ["--mission", mission]
     if swarm:
         argv += ["--swarm", swarm]
+    # SANDBOX HOME (2026-11-17: agents wrote files all over the operator's
+    # home because $HOME pointed to the real home). Override HOME to the
+    # engagement sandbox so cd ~/tmp, npm install, etc. stay contained.
+    from suijin.server.platform.lib.workspace import WORKSPACE_DIR as _WS
+    agent_home = Path(_WS).parent / "engagements" / "_default" / "home"
+    agent_home.mkdir(parents=True, exist_ok=True)
+    (agent_home / "tmp").mkdir(parents=True, exist_ok=True)
+    env = dict(os.environ)
+    env["HOME"] = str(agent_home)
+    env["TMPDIR"] = str(agent_home / "tmp")
+    # The config loader resolves ~/.suijin/config via Path.home() — with the
+    # sandbox HOME it would miss the operator's real config and silently boot
+    # on the PACKAGE defaults (field 2026-11-17: agents called OpenRouter's
+    # aion-labs/aion-3.0 with 403s because provider=zai never loaded).
+    # Pin the real config/env paths explicitly (loader honors SUIJIN_CONFIG /
+    # SUIJIN_ENV), computed from the PARENT's env before the HOME override.
+    _real_home = os.environ.get("HOME") or str(Path.home())
+    _real_cfg = Path(_real_home) / ".suijin" / "config"
+    if (_real_cfg / "config.json").is_file():
+        env["SUIJIN_CONFIG"] = str(_real_cfg / "config.json")
+    if (_real_cfg / ".env").is_file():
+        env["SUIJIN_ENV"] = str(_real_cfg / ".env")
+    # Same class of bug via workspace.py: Path.home()-resolved WORKSPACE_DIR
+    # landed the agents' tool events inside the sandbox (console never saw
+    # them). Pin the real workspace — boxed agents (no pin) keep their jail.
+    env["SUIJIN_WORKSPACE"] = str(_real_cfg)
+
     proc = subprocess.Popen(
         argv,
         stdout=open(log_file, "w"),
         stderr=subprocess.STDOUT,
         stdin=subprocess.DEVNULL,
         start_new_session=True,
+        env=env,
     )
     pid_file.write_text(str(proc.pid))
     # track for the console's orphan cleanup (web restart leaves PPID-1 agents)
@@ -691,7 +719,19 @@ def spawn_capacity_check(host_n: int, boxed_n: int) -> tuple[bool, str]:
     return True, ""
 
 
-def run_swarm_hunt(title: str = "", host_n: int = 0, boxed_n: int = 0, force: bool = False) -> int:
+def run_swarm_hunt(title: str = "", host_n: int = 0, boxed_n: int = 0, force: bool = False, swarm: str = "") -> int:
+    """`suijin swarm hunt "<title>"` — start a hunt by TITLE.
+
+    The title IS the work (operator design, 2026-11-06): the swarm is
+    named for the engagement title and agents follow it directly as
+    their standing mission — no intents required. Intents can still be
+    queued later for specific lanes; they take priority when present.
+    swarm: explicit swarm name — the console passes its (uniquified)
+    session id here; the default re-slugs the title. Field 2026-11-17:
+    when the session uniquifier appended -2, agents registered under the
+    BASE slug while the console read the -2 session — the session looked
+    idle forever, no stop button, no steering.
+    CLI twin of the TUI new-hunt flow."""
     """`suijin swarm hunt "<title>"` — start a hunt by TITLE.
 
     The title IS the work (operator design, 2026-11-06): the swarm is
@@ -728,7 +768,7 @@ def run_swarm_hunt(title: str = "", host_n: int = 0, boxed_n: int = 0, force: bo
     # (chats) to swarms by this name, so stop/delete/list stay coherent
     from suijin.server.swarm.structured import _slug as _title_slug
 
-    swarm_name = _title_slug(title)
+    swarm_name = str(swarm).strip() or _title_slug(title)
     console.print(f'  hunt: [bold]{title[:70]}[/bold]')
     console.print(f"  agents: {host_n} host + {boxed_n} boxed — the title is their standing mission")
     rc = 0

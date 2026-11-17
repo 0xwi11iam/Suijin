@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 const PROMPTS = [
   "What would you like to hack today?",
   "Where are we hunting tonight?",
-  "Pick a target. The swarm is warm.",
-  "What should the swarm break first?",
+  "Pick a target. The engagement is warm.",
+  "What should the engagement break first?",
   "Which surface are we probing today?",
   "Got scope? Let's hunt.",
   "Another box, another bounty?",
