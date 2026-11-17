@@ -35,6 +35,14 @@ def api_discover(url: str, click_interactive: bool = True, max_clicks: int = 8) 
     exploration, False if the page has destructive actions (delete,
     logout, payment).
     """
+    try:
+        from suijin.server.tools.lib.transport_guards import guard as _scope_guard
+        _blk = _scope_guard(url)
+        if _blk and _blk.startswith("BLOCKED"):
+            return _blk
+    except Exception:  # noqa: BLE001
+        pass
+
     from suijin.modules.mcp_playwright.main import (
         mcp_browser_exec,
         mcp_browser_goto,

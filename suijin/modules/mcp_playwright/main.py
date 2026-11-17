@@ -389,6 +389,11 @@ def _dispatch(cmd, kw):
         # the saved session for the target's domain first.
         with contextlib.suppress(Exception):
             _inject_session_jar(page, kw["url"])
+        with contextlib.suppress(Exception):
+            from suijin.server.tools.lib.transport_guards import guard as _scope_guard
+            _blk = _scope_guard(kw["url"])
+            if _blk and _blk.startswith("BLOCKED"):
+                return _blk
         page.goto(kw["url"], wait_until=kw.get("wait_until", "domcontentloaded"), timeout=kw.get("timeout", 20000))
         return f"Loaded: {page.title()}\nURL: {page.url}"
 

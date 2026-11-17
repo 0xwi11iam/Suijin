@@ -244,6 +244,9 @@ async def ws(websocket: WebSocket):
 
 
 def run_web(port: int = 8790) -> int:
+    from suijin.server.platform.lib.memory_guard import start_guard as _memory_guard
+
+    _memory_guard("web", enforce=False)  # monitor-only: never kill the console
     import uvicorn
 
     print(f"  suijin web console → http://localhost:{port}")

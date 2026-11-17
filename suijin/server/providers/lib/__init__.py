@@ -136,6 +136,14 @@ def _apply_effort(
         tier = _resolve_effort_tier(str(model or ""), intel, provider=provider)
         if not tier:
             return
+        # Numes free-tier models expose a reasoning TOGGLE, not effort —
+        # the gateway 400s on reasoning.effort for glm-5.3:free (field
+        # 2026-11-17: worker_loop forces intelligence=medium, so every
+        # agent turn carried reasoning_effort and blocked). Strip it;
+        # the model reasons by default.
+        if str(provider or "").lower() == "numes":
+            payload.pop("reasoning_effort", None)
+            return
         if openai_style:
             if str(provider or "").lower() == "ollama" and not _model_declares_thinking(model):
                 return  # standard local models 400 on this field

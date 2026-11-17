@@ -566,6 +566,9 @@ def run_agent(args=None) -> int:
         print(f"invalid coordinator: {parsed.coordinator} (expected host:port)")
         return 1
 
+    from suijin.server.platform.lib.memory_guard import start_guard as _memory_guard
+
+    _memory_guard("agent")  # overnight guardrail: RSS ceiling per agent
     agent = SwarmAgent(host, int(port_s), parsed.identity, mission=parsed.mission, swarm=parsed.swarm)
     _install_signal_cleanup()
     try:
