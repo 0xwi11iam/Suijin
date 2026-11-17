@@ -153,3 +153,6 @@ agent-vault/
 # private operator vault (never shared, never committed)
 private-vault/
 ._*
+
+# local-only mission log (engagement names — never committed)
+ACTIVE_TASK.md

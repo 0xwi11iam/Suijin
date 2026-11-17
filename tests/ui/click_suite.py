@@ -16,7 +16,7 @@ from playwright.sync_api import sync_playwright
 BASE = "http://127.0.0.1:8790"
 SHOTS = Path("/tmp/ui-tests/click-suite")
 SHOTS.mkdir(parents=True, exist_ok=True)
-SWARM_DB = "/Users/williamjiang/.suijin/swarm/swarm.db"
+SWARM_DB = str(Path.home() / ".suijin/swarm/swarm.db")
 results = []
 PAGE_ERRORS: list[str] = []
 
@@ -187,7 +187,7 @@ def main():
             inp.fill("click suite engagement")
             page.locator("button:has-text('Create engagement')").click()
             page.wait_for_timeout(5000)
-            d = Path("/Users/williamjiang/.suijin/engagements/click-suite-engagement")
+            d = Path.home() / ".suijin/engagements/click-suite-engagement"
             check("engagement: dir created", d.exists())
             page.reload(wait_until="domcontentloaded")
             page.wait_for_timeout(6000)
@@ -268,7 +268,7 @@ def main():
             check("settings: Suijin pills render", "Turn cap" in body and "Autopilot" in body)
             page.screenshot(path=str(SHOTS / "12-settings.png"))
             # flip Autopilot off (boolean pill) — find its switch
-            cfg_path = Path("/Users/williamjiang/.suijin/config/config.json")
+            cfg_path = Path.home() / ".suijin/config/config.json"
             before_cfg = cfg_path.read_text()
             row_switch = page.locator("[role='switch']").first
             if row_switch.count() > 0:
@@ -292,9 +292,9 @@ def main():
             body = page.inner_text("body")
             check("connections: no coding-agent card", "Use Claude Code" not in body)
             check("connections: no GitHub errors", "not found" not in body.lower())
-            env_lines = Path("/Users/williamjiang/.suijin/config/.env").read_text().splitlines()
+            env_lines = Path.home() / ".suijin/config/.env".read_text().splitlines()
             orig = [ln.split("=", 1)[1] for ln in env_lines if ln.startswith("ZAI_API_KEY=")]
-            Path("/Users/williamjiang/.suijin/config/.env").write_text(
+            Path.home() / ".suijin/config/.env".write_text(
                 "\n".join(ln for ln in env_lines if not ln.startswith("ZAI_API_KEY_ORG="))
                 + (f"\nZAI_API_KEY_ORG={orig[0]}" if orig else ""))
             pg_zai = page.locator("text=Z.ai").first
@@ -318,7 +318,7 @@ def main():
             page.wait_for_timeout(5000)
             body = page.inner_text("body")
             check("connections: connect succeeds", "405" not in body and "401" not in body)
-            env = Path("/Users/williamjiang/.suijin/config/.env").read_text()
+            env = Path.home() / ".suijin/config/.env".read_text()
             check("connections: key persisted", "ZAI_API_KEY=sk-click-suite-key" in env)
             # RESTORE the operator's real key — never leave a test key behind
             import urllib.request

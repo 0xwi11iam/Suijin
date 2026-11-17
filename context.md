@@ -571,3 +571,12 @@ code and config did.
 - Swarm workspace root is ~/.suijin (NOT ~/.suijin/config); findings.created_at
   is SECONDS. sqlite: WAL forbidden (container-mount proven); one coordinator
   only. Details: agent-vault/bugs-ledger.md (2026-11-14 night).
+
+- Models page + hero (2026-11-17): `/models` is the one provider surface
+  (`/connections` redirects). Catalog = registry + native entries merged
+  by key; logos served from `/api/console/provider-icon/{domain}` (server
+  fetch + workspace cache, letter fallback); live model list from
+  `/api/console/providers/{key}/models` with the .env key; effort options
+  come from models.dev `reasoning_options` per model; the request JSON is
+  the stored override at `~/.suijin/config/providers.json`. Hero composer
+  shows runtime logo + model + effort and rotates 20 prompts per load.

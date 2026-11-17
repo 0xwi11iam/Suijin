@@ -42,19 +42,24 @@ export function ModelsPage() {
   const [model, setModel] = useState("");
   const [providerSearch, setProviderSearch] = useState("");
   const [modelSearch, setModelSearch] = useState("");
-  // switching provider invalidates the old model/effort/fetch state
-  useEffect(() => { setModel(""); setFetched(null); setEffort("medium"); }, [selected]);
   const [effort, setEffort] = useState("medium");
   const [overrideJson, setOverrideJson] = useState<string | null>(null);
   const [jsonDirty, setJsonDirty] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
   const [testResult, setTestResult] = useState<string>("");
 
-  const catalog = useQuery<CatalogResponse>({ queryKey: ["provider-catalog"], queryFn: () => webFetchJson("/api/console/provider-catalog") });
+  const catalog = useQuery<CatalogResponse>({ queryKey: ["provider-catalog"], queryFn: () => webFetchJson("/api/console/provider-catalog"), staleTime: Infinity });
   const providersDev = useQuery({ queryKey: ["models-dev"], queryFn: () => webFetchJson("/api/console/models-dev"), staleTime: 600_000, retry: 1 });
   const status = useQuery({ queryKey: ["providers-status"], queryFn: () => webFetchJson("/api/console/providers"), refetchInterval: 15000 });
 
   const spec = useMemo(() => (catalog.data?.providers ?? []).find(p => p.key === selected), [catalog.data, selected]);
+  // switching provider invalidates the old model/effort/fetch state and
+  // pre-fills the provider's default model (the effort picker needs a model)
+  useEffect(() => {
+    setFetched(null);
+    setEffort("medium");
+    setModel(spec?.defaultModel ?? "");
+  }, [selected, spec]);
   const devEntry = useMemo(() => {
     const d = providersDev.data as Record<string, { api?: string; env?: string[]; models?: Record<string, { limit?: { context?: number }; reasoning?: boolean | { options?: unknown[] }; cost?: unknown }> }> | undefined;
     if (!d) return undefined;
@@ -91,7 +96,7 @@ export function ModelsPage() {
     if (ro.some(opt => opt.type === "toggle")) return ["on", "off"];
     return [];
   }, [modelMeta]);
-  useEffect(() => { if (effortOptions.length && !effortOptions.includes(effort)) setEffort(effortOptions.includes("medium") ? "medium" : effortOptions[effortOptions.length - 1]); }, [effortOptions]);
+  useEffect(() => { if (effortOptions.length && !effortOptions.includes(effort)) setEffort(effortOptions.includes("medium") ? "medium" : effortOptions.includes("high") ? "high" : effortOptions[0]); }, [effortOptions]);
 
   const buildOverride = (): Record<string, unknown> => {
     const base = {

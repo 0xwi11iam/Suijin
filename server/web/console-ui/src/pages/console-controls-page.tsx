@@ -64,7 +64,7 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
   return <PageContent className="console-controls">
     {!focused && <div ref={headingRef} tabIndex={-1} className="outline-none"><PageHeader title={mode === "settings" ? "Settings" : page.label} summary={page.description || undefined} actions={<Button asChild variant="ghost" size="sm"><Link to={returnTo}><ArrowLeft className="size-4" />Back to chat</Link></Button>} /></div>}
     {mode === "settings" && <nav aria-label="Account and diagnostics" className="flex flex-wrap gap-2">
-      {[{ path: "/connections", label: "Connections", icon: KeyRound }, { path: "/models", label: "Models", icon: Sparkles }, { path: "/doctor", label: "Diagnostics", icon: HeartPulse }].map(item => <Button key={item.path} variant="outline" size="sm" asChild><Link to={`${item.path}${suffix}`}><item.icon className="size-4" />{item.label}</Link></Button>)}
+      {[{ path: "/models", label: "Models", icon: Sparkles }, { path: "/doctor", label: "Diagnostics", icon: HeartPulse }].map(item => <Button key={item.path} variant="outline" size="sm" asChild><Link to={`${item.path}${suffix}`}><item.icon className="size-4" />{item.label}</Link></Button>)}
     </nav>}
     <section className="min-w-0 space-y-6" aria-label={mode === "settings" ? "Preferences" : page.label}>
       {content}

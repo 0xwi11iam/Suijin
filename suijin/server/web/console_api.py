@@ -1595,7 +1595,7 @@ def provider_catalog():
 
     def _add(key: str, entry: dict) -> None:
         entry["domain"] = domains.get(key, "")
-        entry["icon"] = f"https://logo.clearbit.com/{entry['domain']}" if entry["domain"] else ""
+        entry["icon"] = f"/api/console/provider-icon/{entry['domain']}" if entry["domain"] else ""
         if key in merged:
             merged[key].update({k: v for k, v in entry.items() if v})
         else:
@@ -1663,6 +1663,11 @@ def provider_catalog():
     # configured first, then zai, then the rest alphabetically by label
     out.sort(key=lambda p: (not p["configured"], p["key"] not in ("zai", "z-ai"), p["label"].lower()))
     return {"providers": out}
+
+
+# models.dev catalog cache — provider/model metadata (context windows,
+# pricing, and the per-model reasoning_options the effort picker reads).
+_models_dev_cache: dict = {"data": None, "at": 0.0}
 
 
 @router.get("/api/console/models-dev")
@@ -1770,6 +1775,50 @@ def _models_dev_models_for(key: str) -> list[str]:
     alias = {"z-ai": "zai", "zhipu": "zai"}
     entry = data.get(key) or data.get(alias.get(key, "")) or {}
     return sorted((entry.get("models") or {}).keys())
+
+
+@router.get("/api/console/provider-icon/{domain}")
+def provider_icon(domain: str):
+    """Provider logo from a cached local copy.
+
+    Field 2026-11-17: logo.clearbit.com is unreachable on this network
+    (000) and browser-side favicon fetches were flaky — so the server
+    fetches once, caches to the workspace, and serves the bytes. Any
+    failure is a 404 and the UI falls back to a letter avatar.
+    """
+    import re as _re
+    import urllib.request
+
+    from fastapi import Response
+
+    dom = str(domain or "").strip().lower()
+    if not _re.fullmatch(r"[a-z0-9.-]{2,80}", dom):
+        return Response(status_code=404)
+    cache_dir = _ws() / "cache" / "provider-icons"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    headers = {"Cache-Control": "public, max-age=604800"}
+    for ext, media in ((".png", "image/png"), (".ico", "image/vnd.microsoft.icon")):
+        cached = cache_dir / f"{dom}{ext}"
+        if cached.exists() and cached.stat().st_size > 100:
+            return Response(cached.read_bytes(), media_type=media, headers=headers)
+    sources = (
+        f"https://unavatar.io/{dom}",
+        f"https://www.google.com/s2/favicons?domain={dom}&sz=64",
+        f"https://icons.duckduckgo.com/ip3/{dom}.ico",
+    )
+    for src in sources:
+        try:
+            req = urllib.request.Request(src, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                data = r.read()
+                ctype = r.headers.get_content_type() or "image/png"
+            if len(data) > 100:
+                ext = ".ico" if "icon" in ctype else ".png"
+                (cache_dir / f"{dom}{ext}").write_bytes(data)
+                return Response(data, media_type=ctype, headers=headers)
+        except Exception:  # noqa: BLE001
+            continue
+    return Response(status_code=404)
 
 
 @router.get("/api/console/runtime")
