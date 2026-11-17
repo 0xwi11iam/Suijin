@@ -283,7 +283,12 @@ def _spawn_agent(port: int, mission: str = "", swarm: str = "") -> tuple[str, in
     # home because $HOME pointed to the real home). Override HOME to the
     # engagement sandbox so cd ~/tmp, npm install, etc. stay contained.
     from suijin.server.platform.lib.workspace import WORKSPACE_DIR as _WS
-    agent_home = Path(_WS).parent / "engagements" / "_default" / "home"
+    # PER-ENGAGEMENT SANDBOX (field 2026-11-17 night): every agent used
+    # `_default/home`, so three concurrent engagements shared one
+    # workspace — the Webflow agent found the PostHog source clone and
+    # started reviewing the wrong target. The session id is the home.
+    sandbox = swarm or "_default"
+    agent_home = Path(_WS).parent / "engagements" / sandbox / "home"
     agent_home.mkdir(parents=True, exist_ok=True)
     (agent_home / "tmp").mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
