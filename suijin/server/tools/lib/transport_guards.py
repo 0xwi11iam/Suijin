@@ -63,19 +63,24 @@ def _check_rate(host: str) -> float:
     cfg = _config()
     rate = cfg.get("guardrail_rate_per_sec")
     if rate is None:
-        rate = (cfg.get("guardrails") or {}).get("rate_per_host_per_sec", 5.0)
-    if cfg <= 0:
+        rate = (cfg.get("guardrails") or {}).get("rate_per_host_per_sec", 0.5)
+    try:
+        rate = float(rate)
+    except (TypeError, ValueError):
+        rate = 0.5
+    if rate <= 0:
         return 0.0
+    capacity = max(1.0, rate)  # one request may go immediately
     with _bucket_lock:
         now = time.time()
-        b = _buckets.setdefault(host, {"tokens": cfg, "last": now})
-        refill = (now - b["last"]) * cfg
-        b["tokens"] = min(cfg, b["tokens"] + refill)
+        b = _buckets.setdefault(host, {"tokens": capacity, "last": now})
+        refill = (now - b["last"]) * rate
+        b["tokens"] = min(capacity, b["tokens"] + refill)
         b["last"] = now
         if b["tokens"] >= 1.0:
             b["tokens"] -= 1.0
             return 0.0
-        return (1.0 - b["tokens"]) / cfg
+        return (1.0 - b["tokens"]) / rate
 
 
 def guard(url: str, method: str = "GET") -> str | None:

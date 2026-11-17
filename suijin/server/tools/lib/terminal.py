@@ -43,6 +43,127 @@ def _extract_cd(cmd: str) -> str | None:
     return d or None
 
 
+
+# ── TERMINAL EGRESS GUARD (field 2026-11-17) ─────────────────────────
+# The transport guard covers http_request, but agents also shell out to
+# curl/wget/python-requests — which bypassed the socket rails entirely
+# and reached out-of-scope hosts (canvas/nexus subdomains). This is the
+# same scope allowlist + 1-request-per-2-seconds, enforced on the shell
+# command string BEFORE anything runs.
+_AUX_HOSTS = {
+    "bugcrowd.com", "www.bugcrowd.com",
+    "crt.sh", "certspotter.com", "api.certspotter.com",
+    "github.com", "api.github.com", "raw.githubusercontent.com",
+    "codeload.github.com", "objects.githubusercontent.com",
+    "pypi.org", "files.pythonhosted.org",
+    "localhost", "127.0.0.1", "::1",
+}
+_SCANNER_RE = re.compile(
+    r"(?<![A-Za-z0-9_-])(nmap|masscan|rustscan|naabu|ffuf|gobuster|dirb|dirsearch|"
+    r"nikto|sqlmap|hydra|wfuzz|zap|nuclei|subfinder|amass|dnsx|shuffledns)"
+    r"(?![A-Za-z0-9_-])",
+    re.IGNORECASE,
+)
+_URL_RE = re.compile(r"https?://[^\s'\"<>()\[\]]+", re.IGNORECASE)
+_LOOP_RE = re.compile(r"(^|[;&|]\s*)(for|while|xargs|parallel|seq)\b|\$\(", re.IGNORECASE)
+_NET_RE = re.compile(r"curl|wget|https?://", re.IGNORECASE)
+_SCRIPT_NET_RE = re.compile(r"\b(socket|urllib|requests|http\.client|aiohttp|httpx|fetch)\b")
+_SCRIPT_LOOP_RE = re.compile(r"\b(ThreadPool|concurrent\.futures|asyncio\.gather|for\s+\w+\s+in|while\s+)")
+_SCRIPT_RE = re.compile(r"(?:^|[;&|]\s*)(?:python3?|node|bash|sh|zsh)\s+(?:-c\s+)?([^\s;&|]+\.(?:py|js|sh))")
+
+
+def _egress_guard(cmd: str) -> str | None:
+    """None = allowed; a string = the refusal the agent sees."""
+    import time
+    from pathlib import Path as _P
+    from urllib.parse import urlparse
+
+    if not cmd:
+        return None
+    hit = _SCANNER_RE.search(cmd)
+    if hit:
+        return (
+            f"BLOCKED: {hit.group(1)} is a bulk scanner — the program rules allow single, "
+            "rate-limited requests only (no DoS, no bulk scanning). Use http_request or a "
+            "single curl against one in-scope URL."
+        )
+    # loops / parallel / backgrounded fetchers are bulk by construction
+    if _NET_RE.search(cmd) and (_LOOP_RE.search(cmd) or re.search(r"&\s*\)", cmd) or re.search(r"-P\s|--parallel|-Z\b", cmd)):
+        return (
+            "BLOCKED: network calls inside loops/background/parallel constructs are bulk traffic. "
+            "Send ONE request per command, at most 1 per 2s per host."
+        )
+    # scripted network sweeps: inspect the referenced script before running it
+    for script in _SCRIPT_RE.findall(cmd):
+        candidates = []
+        raw = script.strip("'\"")
+        if raw.startswith("/"):
+            candidates.append(_P(raw))
+        else:
+            candidates.extend([_P.cwd() / raw, _P.home() / raw])
+        for cand in candidates:
+            try:
+                if cand.is_file():
+                    body = cand.read_text(errors="replace")[:20000]
+                    if _SCRIPT_NET_RE.search(body) and _SCRIPT_LOOP_RE.search(body):
+                        return (
+                            f"BLOCKED: {cand.name} performs scripted network iteration "
+                            "(network client + loop/concurrency). Program rules forbid bulk "
+                            "requests; rewrite as single, rate-limited requests."
+                        )
+            except Exception:  # noqa: BLE001
+                continue
+    # inline network iteration (python -c / node -e / shell)
+    if _NET_RE.search(cmd) and _SCRIPT_NET_RE.search(cmd) and _SCRIPT_LOOP_RE.search(cmd):
+        return (
+            "BLOCKED: inline script combines a network client with a loop/concurrency — "
+            "that is bulk traffic. Use one request per call."
+        )
+    try:
+        from suijin.server.tools.lib.transport_guards import scope_patterns
+
+        patterns = scope_patterns()
+    except Exception:  # noqa: BLE001
+        patterns = []
+    if not patterns:
+        return None  # no allowlist configured => no scope opinion here
+    urls = _URL_RE.findall(cmd)
+    for raw in urls:
+        host = (urlparse(raw).hostname or "").lower()
+        if not host:
+            continue
+        if host in _AUX_HOSTS or any(host.endswith("." + a) for a in _AUX_HOSTS if a[0].isalpha()):
+            continue
+        in_scope = False
+        for pat in patterns:
+            try:
+                if re.match(pat, host):
+                    in_scope = True
+                    break
+            except re.error:
+                continue
+        if not in_scope:
+            return (
+                f"BLOCKED: {host} is outside the engagement scope (terminal egress guard). "
+                "Only the program's in-scope assets may be contacted; passive OSINT and "
+                "public source clones are separate allowed paths."
+            )
+        # per-host pacing shared through the workspace (1 request / 2s)
+        try:
+            stamp_dir = _P.home() / ".suijin" / "tmp"
+            stamp_dir.mkdir(parents=True, exist_ok=True)
+            stamp = stamp_dir / ("egress-" + re.sub(r"[^a-z0-9.-]", "_", host) + ".stamp")
+            now = time.time()
+            if stamp.is_file():
+                wait = 2.0 - (now - stamp.stat().st_mtime)
+                if wait > 0:
+                    time.sleep(min(wait, 2.0))
+            stamp.write_text(str(now))
+        except Exception:  # noqa: BLE001
+            pass
+    return None
+
+
 def execute_terminal(cmd, timeout=30, cwd=None):
     """Shell execution gateway — scoped to suijin_agent/ workspace.
 
@@ -55,6 +176,10 @@ def execute_terminal(cmd, timeout=30, cwd=None):
     try:
         if not cmd:
             return "Error: No command provided."
+        # scope + rate + scanner guard, BEFORE the shell sees the string
+        refusal = _egress_guard(str(cmd))
+        if refusal:
+            return refusal
 
         # CWD PERSISTENCE (2026-10-17): 62% of the google run's terminal
         # calls re-typed `cd /engagement/... && …` because each call

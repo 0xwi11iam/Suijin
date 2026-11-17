@@ -580,3 +580,14 @@ code and config did.
   come from models.dev `reasoning_options` per model; the request JSON is
   the stored override at `~/.suijin/config/providers.json`. Hero composer
   shows runtime logo + model + effort and rotates 20 prompts per load.
+
+- Autonomous-hunt guardrails (2026-11-17): provider registry gained a
+  `numes` OpenAI-compatible spec (api.numes.ai/api/v1, NUMES_API_KEY in the
+  local .env); the engine strips `reasoning_effort` for numes (its free
+  models expose a reasoning toggle, not effort). Transport rails now
+  enforce scope + 1 request/2s at both `http_request` and `execute_terminal`
+  (the rate bucket had a dict-vs-float bug and never throttled), scanners
+  and scripted network loops are refused, and browser navigation shares the
+  scope rail. In-process `memory_guard` (agent/coordinator/web) plus a
+  host watchdog cap RSS, dedupe one agent per engagement, and stop hunts at
+  a deadline. Tests: `test_memory_guard.py`.

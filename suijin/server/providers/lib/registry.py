@@ -154,6 +154,15 @@ PROVIDER_REGISTRY: dict[str, ProviderSpec] = {
         (0.25, 0.85),
     ),
     # ---- aggregator: one key → every vendor model ----
+    "numes": _spec(
+        "numes",
+        "Numes",
+        "https://api.numes.ai/api/v1",
+        "NUMES_API_KEY",
+        "z-ai/glm-5.3:free",
+        None,
+        note="OpenAI-compatible free tier (tools + 262k context on glm-5.3)",
+    ),
     "openrouter": _spec(
         "openrouter",
         "OpenRouter",

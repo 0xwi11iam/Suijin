@@ -763,6 +763,9 @@ def run_swarm_start(args=None) -> int:
     # the swarm starts from a clean process table.
     _sweep_orphans()
 
+    from suijin.server.platform.lib.memory_guard import start_guard as _memory_guard
+
+    _memory_guard("coordinator")
     console = Console()
     coord = SwarmCoordinator()
     coord.start()
