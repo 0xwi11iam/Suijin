@@ -23,7 +23,7 @@ def check(name: str, ok: bool, detail: str = ""):
 
 def main():
     with sync_playwright() as p:
-        browser = p.chromium.launch()
+        browser = p.chromium.launch(headless=True)
         page = browser.new_page(viewport={"width": 1600, "height": 1000})
         errors = []
         page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)

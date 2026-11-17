@@ -164,7 +164,6 @@ export function CommandPalette({
       },
       ...[
         ["onboarding", "Onboarding", "Connect a model and pick a project"],
-        ["connections", "Connections", "API keys and accounts"],
         ["models", "Models", "Choose which models 0 uses"],
         ["engagements", "Reports", "Assessment reports and handoff notes"],
         ["doctor", "Diagnostics", "Check that everything works"],

@@ -13,6 +13,7 @@ This is the brain that lets 100 agents work as one system.
 from __future__ import annotations
 
 import contextlib
+import os
 import sqlite3
 import threading
 import time
@@ -712,9 +713,55 @@ class _BusEventListener:
 # ── the CLI entry point ───────────────────────────────────────────────
 
 
+def _sweep_orphans() -> None:
+    """Kill processes orphaned by a dead coordinator: browser shells with
+    no living parent, and agent processes from the tracked pid file
+    (structured._track_hunt_pid and the console both write
+    swarm/console-agents.pids — one file, swept once)."""
+    import subprocess as _sp
+
+    killed = 0
+    # 1. browser shells whose parent is init (PPID <= 1)
+    try:
+        out = _sp.run(["pgrep", "-f", "chrome-headless-shell|chromium"],
+                      capture_output=True, text=True, timeout=5)
+        for pid_s in out.stdout.split():
+            with contextlib.suppress(ValueError):
+                pid = int(pid_s)
+                ppid_out = _sp.run(["ps", "-o", "ppid=", "-p", str(pid)],
+                                   capture_output=True, text=True, timeout=3)
+                if int(ppid_out.stdout.strip() or 0) <= 1:
+                    with contextlib.suppress(ProcessLookupError, OSError):
+                        os.kill(pid, 9)
+                        killed += 1
+    except Exception:
+        pass
+    # 2. tracked agent pids — the coordinator is (re)starting, any agent
+    # from a previous run is a stray
+    with contextlib.suppress(Exception):
+        from suijin.server.swarm.coordinator import swarm_db_path
+
+        pids_file = swarm_db_path().parent / "console-agents.pids"
+        if pids_file.is_file():
+            for pid_s in pids_file.read_text().split():
+                with contextlib.suppress(ValueError, ProcessLookupError, OSError):
+                    os.kill(int(pid_s), 9)
+                    killed += 1
+            with contextlib.suppress(OSError):
+                pids_file.unlink()
+    if killed:
+        print(f"[sweep] killed {killed} orphaned process(es) from the previous run")
+
+
 def run_swarm_start(args=None) -> int:
     """`suijin swarm start` — start the coordinator in the foreground."""
     from rich.console import Console
+
+    # NO ORPHANS SWEEP (operator ruling 2026-11-17): a coordinator restart
+    # inherits whatever its dead predecessor left behind — PPID-1 chrome
+    # shells, agents still registered as active. Kill them before boot so
+    # the swarm starts from a clean process table.
+    _sweep_orphans()
 
     console = Console()
     coord = SwarmCoordinator()

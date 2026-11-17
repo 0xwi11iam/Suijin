@@ -105,6 +105,25 @@ def _spawn_tiered(port: int, identity: str, mission: str, tier: str, model: str)
     env["SUIJIN_TIER"] = tier
     if model:
         env["SUIJIN_TIER_MODEL"] = model
+    # SANDBOX HOME — same containment as lifecycle._spawn_agent (field
+    # 2026-11-17: agents wrote scratch files all over the real home), plus
+    # pinned SUIJIN_CONFIG/SUIJIN_ENV so the sandbox HOME doesn't make the
+    # config loader fall back to package defaults (openrouter/aion 403s).
+    with contextlib.suppress(Exception):
+        from suijin.server.platform.lib.workspace import WORKSPACE_DIR as _WS
+
+        agent_home = Path(_WS).parent / "engagements" / "_default" / "home"
+        agent_home.mkdir(parents=True, exist_ok=True)
+        (agent_home / "tmp").mkdir(parents=True, exist_ok=True)
+        env["HOME"] = str(agent_home)
+        env["TMPDIR"] = str(agent_home / "tmp")
+        _real_home = os.environ.get("HOME") or str(Path.home())
+        _real_cfg = Path(_real_home) / ".suijin" / "config"
+        if (_real_cfg / "config.json").is_file():
+            env["SUIJIN_CONFIG"] = str(_real_cfg / "config.json")
+        if (_real_cfg / ".env").is_file():
+            env["SUIJIN_ENV"] = str(_real_cfg / ".env")
+        env["SUIJIN_WORKSPACE"] = str(_real_cfg)
     proc = subprocess.Popen(
         [sys.executable, "-u", "-m", "suijin.server.swarm.agent",
          "--coordinator", f"127.0.0.1:{port}", "--identity", identity,

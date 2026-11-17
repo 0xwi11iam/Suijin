@@ -69,6 +69,62 @@ def _launch_chromium(pw):
     )
 
 
+
+def _kill_stale_browsers():
+    """Kill orphaned chrome-headless processes from dead agent PIDs.
+    Each agent spawns one browser — when the agent dies via SIGKILL, the
+    browser survives. This runs before launching a new browser to prevent
+    the 14-Chrome memory explosion (field bug 2026-11-17: load avg 53,
+    16GB consumed, agents frozen for hours)."""
+    import subprocess as _sp
+    import os as _os
+
+    my_pid = _os.getpid()
+    try:
+        result = _sp.run(
+            ["pgrep", "-f", "chrome-headless-shell"],
+            capture_output=True, text=True, timeout=5,
+        )
+        pids = [int(p) for p in result.stdout.split() if p.strip().isdigit()]
+    except Exception:
+        return 0
+
+    killed = 0
+    for pid in pids[:20]:  # cap at 20 to avoid runaway
+        if pid == my_pid:
+            continue
+        # check if the parent is still alive
+        try:
+            ppid = int(_sp.run(
+                ["ps", "-o", "ppid=", "-p", str(pid)],
+                capture_output=True, text=True, timeout=3,
+            ).stdout.strip() or "0")
+        except Exception:
+            continue
+        # if parent is init (1) or zombie, it's orphaned
+        if ppid <= 1:
+            with contextlib.suppress(ProcessLookupError):
+                _os.kill(pid, 9)
+                killed += 1
+    if killed:
+        import time as _t
+        _t.sleep(0.5)  # let the OS reclaim memory
+    return killed
+
+
+def _memory_ok_for_browser():
+    """Don't launch a browser if free memory is critically low."""
+    with contextlib.suppress(Exception):
+        import subprocess as _sp
+        r = _sp.run(["vm_stat"], capture_output=True, text=True, timeout=3)
+        for line in r.stdout.splitlines():
+            if "Pages free" in line:
+                free_pages = int(line.split(":")[1].strip().rstrip("."))
+                # ~16KB per page; need at least 500MB free
+                return free_pages > 30000
+    return True  # can't check — allow
+
+
 def _boot_browser():
     """Browsers-path ladder, launch-probed: workspace cache → default.
 
@@ -85,6 +141,11 @@ def _boot_browser():
     import os as _os
 
     from playwright.sync_api import sync_playwright
+
+    # Cleanup + memory guard (2026-11-17: the 14-Chrome memory explosion)
+    _kill_stale_browsers()
+    if not _memory_ok_for_browser():
+        raise RuntimeError("Insufficient free memory to launch a browser — close other applications first.")
 
     override_set = False
     with contextlib.suppress(Exception):

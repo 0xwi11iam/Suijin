@@ -37,6 +37,45 @@ def _swarm_db_path() -> Path:
     return swarm_db_path()
 
 
+def _kill_child_browsers() -> int:
+    """NO ORPHANS (operator ruling 2026-11-17): every process this agent
+    spawned must die with it. os._exit / SIGKILL skip every finally and
+    atexit, so the mcp_playwright chromium child survives as a 200-400MB
+    orphan (field: 14 leaked browsers = 16GB, load avg 53). Scan direct
+    children of THIS pid for browser cmdlines and kill them."""
+    import subprocess as _sp
+
+    me = os.getpid()
+    killed = 0
+    try:
+        out = _sp.run(
+            ["pgrep", "-f", "-P", str(me), "chrome-headless-shell|chromium"],
+            capture_output=True, text=True, timeout=5,
+        )
+        pids = [int(p) for p in out.stdout.split() if p.strip().isdigit()]
+    except Exception:
+        return 0
+    for pid in pids:
+        with contextlib.suppress(ProcessLookupError, OSError):
+            os.kill(pid, 9)
+            killed += 1
+    return killed
+
+
+def _install_signal_cleanup() -> None:
+    """SIGTERM/SIGINT kill spawned children before exiting — the default
+    SIGTERM disposition skips Python cleanup entirely."""
+    import signal as _signal
+
+    def _clean_exit(signum, _frame):
+        _kill_child_browsers()
+        os._exit(0)
+
+    for sig in (_signal.SIGTERM, _signal.SIGINT, _signal.SIGHUP):
+        with contextlib.suppress(Exception):
+            _signal.signal(sig, _clean_exit)
+
+
 class SwarmAgent:
     """A worker — claims intents, executes them, reports.
 
@@ -90,6 +129,8 @@ class SwarmAgent:
         return True
 
     def stop(self):
+        # NO ORPHANS: the browser child dies with the agent on every path
+        _kill_child_browsers()
         self._running = False
         self._bus.close()
 
@@ -139,7 +180,11 @@ class SwarmAgent:
                         _db.commit()
                         _db.close()
                     print(f"[{self._identity}] queue dry — following the title: {self._mission[:60]}")
-                    mi = {"id": f"mission-{mission_runs}", "text": self._mission, "engagement": "default"}
+                    # engagement = THIS AGENT'S SWARM (field 2026-11-17): the
+                    # hardcoded "default" sent every tool event to the shared
+                    # _default engagement — the console session never saw any
+                    # tool activity. The swarm name IS the console session id.
+                    mi = {"id": f"mission-{mission_runs}", "text": self._mission, "engagement": self._swarm}
                     result = self._execute_intent(mi)
                     self._complete_intent(mi, result)
                     continue
@@ -186,6 +231,7 @@ class SwarmAgent:
             failed = 0 if ok else failed + 1
             if failed >= 6:
                 print(f"[{self._identity}] coordinator unreachable — exiting (orphan guard)")
+                _kill_child_browsers()
                 self._running = False
                 with contextlib.suppress(OSError):
                     os._exit(0)
@@ -283,8 +329,15 @@ class SwarmAgent:
 
             db = sqlite3.connect(str(swarm_db_path()), timeout=5)
 
+            # SWARM-SCOPED CLAIM (field 2026-11-17: an agent claimed ANY
+            # open intent — a fresh google.com engagement locked onto a
+            # stale webflow intent left in the queue by an old hunt. An
+            # agent only ever claims intents of its OWN swarm; title-
+            # following covers everything else.)
             row = db.execute(
-                "SELECT id, text, engagement FROM intents WHERE state = 'open' ORDER BY created_at LIMIT 1"
+                "SELECT id, text, engagement FROM intents "
+                "WHERE state = 'open' AND swarm = ? ORDER BY created_at LIMIT 1",
+                (self._swarm,),
             ).fetchone()
             if not row:
                 db.close()
@@ -318,6 +371,20 @@ class SwarmAgent:
         from suijin.server.swarm.worker_loop import execute_intent
 
         def _on_event(turn: int, tool_name: str, result_str: str, tool_args=None, thought: str = ""):
+            # KILL/STOP CHECK PER TURN (field 2026-11-17: control messages
+            # only drained at intent boundaries — a title-following mission
+            # runs many turns without one, so Delete/Stop left agents
+            # running for minutes). The turn boundary is the natural
+            # checkpoint: drain, and honor terminal commands instantly.
+            with contextlib.suppress(Exception):
+                for msg in self._bus.drain(20):
+                    topic = str(msg.get("topic") or "")
+                    if f"/agent/{self._identity}/kill" in topic or "/cmd/stop" in topic:
+                        print(f"[{self._identity}] {topic} — exiting now (mid-mission stop)")
+                        self._running = False
+                        _kill_child_browsers()
+                        os._exit(0)
+
             # USAGE ON THE BUS: token spend flows to every node (web
             # console, remote suijins) — the data layer reads the same
             # tally locally; this is the wire version
@@ -346,7 +413,7 @@ class SwarmAgent:
 
                 from suijin.server.platform.lib.workspace import WORKSPACE_DIR
 
-                _eng = str(intent.get("engagement") or "default")
+                _eng = str(intent.get("engagement") or self._swarm or "default")
                 if _eng in ("default", ""):
                     _eng = "_default"  # the workspace's default engagement slug
                 ev_dir = Path(WORKSPACE_DIR).parent / "engagements" / _eng
@@ -500,11 +567,15 @@ def run_agent(args=None) -> int:
         return 1
 
     agent = SwarmAgent(host, int(port_s), parsed.identity, mission=parsed.mission, swarm=parsed.swarm)
+    _install_signal_cleanup()
     try:
         return agent.run()
     except KeyboardInterrupt:
         agent.stop()
         return 0
+    finally:
+        # every exit path — no orphans
+        _kill_child_browsers()
 
 
 if __name__ == "__main__":

@@ -1326,6 +1326,127 @@ def generate(
     return f"Error: Unknown provider '{provider}'"
 
 
+
+# ── provider request-config overrides (the Models page JSON) ─────────
+# The Models page stores a per-provider JSON that IS the final request
+# shape: base URL, auth style/headers, paths, static query, body merge,
+# model mapping. Field 2026-11-17: "the JSON editor is the real config" —
+# any provider, however picky, fits without code.
+
+_OVERRIDE_ENV = {"z-ai": "ZAI", "zai": "ZAI"}
+
+
+def providers_json_path():
+    from pathlib import Path as _P
+
+    with contextlib.suppress(Exception):
+        from suijin.server.platform.lib.workspace import WORKSPACE_DIR
+
+        return _P(WORKSPACE_DIR) / "providers.json"
+    return _P.home() / ".suijin" / "config" / "providers.json"
+
+
+def provider_override(key: str, cfg: dict | None = None) -> dict:
+    """The stored request-config JSON for a provider, {} when none."""
+    with contextlib.suppress(Exception):
+        p = providers_json_path()
+        import json as _json
+
+        if p.is_file():
+            data = _json.loads(p.read_text())
+            ov = data.get(key) or {}
+            if isinstance(ov, dict):
+                return ov
+    return {}
+
+
+def save_provider_override(key: str, override: dict) -> None:
+    p = providers_json_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    data = {}
+    with contextlib.suppress(Exception):
+        if p.is_file():
+            data = json.loads(p.read_text()) or {}
+    import json as _json
+
+    data[key] = override
+    p.write_text(_json.dumps(data, indent=2))
+
+
+def _base_url_for(spec, cfg: dict | None, override: dict) -> str:
+    """Models-page override → <KEY>_BASE_URL env → custom entry → spec."""
+    ov = str(override.get("baseUrl") or "").strip()
+    if ov:
+        return ov
+    env_name = (override.get("auth") or {}).get("baseEnv") or (
+        f"{_OVERRIDE_ENV.get(spec.key, spec.key.upper())}_BASE_URL")
+    with contextlib.suppress(Exception):
+        import os as _os
+
+        v = _os.environ.get(env_name)
+        if v:
+            return v
+    with contextlib.suppress(Exception):
+        for entry in (cfg or {}).get("custom_providers") or []:
+            if str(entry.get("name")) == spec.key and entry.get("base_url"):
+                return str(entry["base_url"])
+    return spec.base_url
+
+
+def _auth_headers(spec, api_key: str, override: dict) -> dict:
+    auth = override.get("auth") or {}
+    style = str(auth.get("type") or "bearer").lower()
+    headers: dict = {}
+    if style != "none" and api_key:
+        key = api_key
+        with contextlib.suppress(Exception):
+            key.encode("latin-1")
+        with contextlib.suppress(Exception):
+            from urllib.parse import quote
+
+            key = quote(key, safe="")
+        if style == "x-api-key":
+            headers["x-api-key"] = key
+        elif style == "api-key-header":
+            headers[str(auth.get("keyHeader") or "api-key")] = key
+        else:
+            prefix = str(auth.get("keyPrefix") if auth.get("keyPrefix") is not None else "Bearer ")
+            headers[str(auth.get("keyHeader") or "Authorization")] = f"{prefix}{key}"
+    vh = auth.get("versionHeader")
+    if vh:
+        headers[str(vh.get("name") or "anthropic-version")] = str(vh.get("value") or "2023-01-01")
+    for k, v in (auth.get("extraHeaders") or {}).items():
+        headers[str(k)] = str(v)
+    return headers
+
+
+def _merged_request(spec, cfg: dict | None, model: str, messages: list, max_tokens: int,
+                    temperature: float, api_key: str) -> tuple[str, dict, dict, str]:
+    """Everything the wire call needs, with the Models-page override
+    merged in. Returns (url, headers, payload, wire_model). Relative
+    chat paths JOIN the base (field 2026-11-17: the Gemini /v1beta/openai
+    subpath-reset bug — a leading / in a stored path must not discard the
+    base's own subpath)."""
+    override = provider_override(spec.key, cfg)
+    base = _base_url_for(spec, cfg, override).rstrip("/")
+    paths = override.get("paths") or {}
+    chat_path = str(paths.get("chat") or "/chat/completions").lstrip("/")
+    url = f"{base}/{chat_path}"
+    query = override.get("query") or {}
+    if query:
+        from urllib.parse import urlencode
+
+        url += f"?{urlencode({k: str(v) for k, v in query.items()})}"
+    headers = {"Content-Type": "application/json"}
+    headers.update(_auth_headers(spec, api_key, override))
+    mapping = override.get("modelMapping") or {}
+    wire_model = str(mapping.get(model) or model)
+    payload = {"model": wire_model, "messages": messages, "max_tokens": max_tokens, "temperature": temperature}
+    for k, v in (override.get("body") or {}).items():
+        payload[str(k)] = v
+    return url, headers, payload, wire_model
+
+
 def _compat_call(spec, messages, config, *, temperature, max_tokens, retries, on_delta, model_id=None):
     """The generic OpenAI-compatible engine — one code path for every
     registry provider (cloud table rows AND custom: LAN boxes). Streaming
@@ -1351,26 +1472,13 @@ def _compat_call(spec, messages, config, *, temperature, max_tokens, retries, on
             "(suijin config / Settings) — e.g. the model id your endpoint serves."
         )
 
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        # the key is ANY string (no format policing); HTTP headers are
-        # latin-1 — non-latin-1 keys fly percent-encoded rather than
-        # crashing the transport with UnicodeEncodeError
-        try:
-            api_key.encode("latin-1")
-        except UnicodeEncodeError:
-            from urllib.parse import quote
-
-            api_key = quote(api_key, safe="")
-        headers["Authorization"] = f"Bearer {api_key}"
-    payload = {
-        "model": model,
-        "messages": messages,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }
+    # THE MODELS-PAGE OVERRIDE IS THE REAL CONFIG (field 2026-11-17):
+    # base URL, auth style/headers, paths, static query, body params and
+    # model mapping all come from the stored JSON (defaults when absent).
+    url, headers, payload, wire_model = _merged_request(
+        spec, config, model, messages, max_tokens, temperature, api_key)
+    model = wire_model
     _apply_effort(payload, model, config, max_tokens, openai_style=True, provider=spec.key)
-    url = f"{spec.base_url.rstrip('/')}/chat/completions"
     _diag_llm_start(spec.key, model, len(messages))
     _t0 = time.monotonic()
     last_diag = "transport failure"

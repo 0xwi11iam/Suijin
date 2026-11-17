@@ -79,7 +79,11 @@ export function ToolActivity({ calls, reasoning, working = false, showLatest = f
   const history = calls.filter(call => call !== latest);
   const GroupIcon = toolKind(latest?.name ?? calls[0]?.name ?? "tools").Icon;
   return <section className="console-tool-activity" aria-label="Tool activity" data-active={active || undefined} data-latest-tool={latest ? "true" : undefined}>
-    <Disclosure open={expanded} onOpenChange={setExpanded} triggerClassName="group/tool-history inline-flex w-full min-w-0 items-center gap-2 rounded-[var(--radius-control)] py-1 text-left text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring" summary={<>
+    {/* ACTIVE BATCHES STAY OPEN (field 2026-11-17: streaming re-mounts reset
+      the disclosure state — "Thinking…" collapsed instantly and the operator
+      could never read the reasoning. An active batch shows its reasoning and
+      tool details live; finished batches keep the manual toggle.) */}
+    <Disclosure open={expanded || active} onOpenChange={setExpanded} triggerClassName="group/tool-history inline-flex w-full min-w-0 items-center gap-2 rounded-[var(--radius-control)] py-1 text-left text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring" summary={<>
       {active ? <ActivityMark compact /> : <GroupIcon aria-hidden="true" className="size-3.5 shrink-0" />}
       {active && <span className="console-working-label shrink-0">{calls.length ? "Working…" : "Thinking…"}</span>}
       {latest ? <span className="min-w-0 truncate" title={toolTitle(latest)}>{active ? `· ${latest.isRunning ? presentToolCall(latest).title : toolTitle(latest)}` : toolTitle(latest)}</span> : !active && <span>{calls.length ? `${calls.length} tool call${calls.length === 1 ? "" : "s"}` : "Thinking"}</span>}

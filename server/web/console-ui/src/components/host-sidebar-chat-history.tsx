@@ -62,7 +62,7 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
     else {
       if (creatingHost) return;
       setCreatingHost(id); setCreationError("");
-      void createChatOnExecutionHost(id, { title: "New swarm" }).then(session => {
+      void createChatOnExecutionHost(id, { title: "New engagement" }).then(session => {
         if (version !== navigationVersion.current) return;
         select();
         navigate(backendRouteHref(id, `/chats/${encodeURIComponent(session.id)}`));

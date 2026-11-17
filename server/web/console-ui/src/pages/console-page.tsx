@@ -50,6 +50,29 @@ import type { FindingRecord } from "@/types";
 import { consoleSnapshotKey, useConsoleWorkspace } from "@/console/use-console-workspace";
 import type { SettingsResponse } from "@/components/console-control/contracts";
 
+const HERO_PROMPTS = [
+  "What would you like to hack and fix today?",
+  "What should we break into first?",
+  "Which surface are we auditing today?",
+  "Pick a target — the engagement is warm.",
+  "Where are we hunting tonight?",
+  "What's the weakest link you can find?",
+  "Got scope? Let's hunt.",
+  "Which login page should we test?",
+  "Point me at a domain and I'll map it.",
+  "What needs a security-header audit?",
+  "Hunt for broken access control where?",
+  "Which API deserves a poking today?",
+  "What are we fuzzing this time?",
+  "Name a host — I'll find its secrets.",
+  "Which auth flow are we abusing?",
+  "What's today's bug of the day?",
+  "Which endpoint leaks too much?",
+  "Give me a target and a deadline.",
+  "What should the engagement break first?",
+  "Where do we start the hunt tonight?",
+];
+
 interface FeedbackResult { saved: boolean; path?: string; submitted: boolean; previewId?: string; preview?: { url: string; body: unknown; headers: unknown; warnings: string[] }; error?: string }
 type ConfirmAction = { kind: "close" | "clear" | "delete" | "delete-live" | "drain"; id: string; title: string };
 
@@ -78,7 +101,7 @@ export function ConsolePage(props:ConsolePageProps = {}) {
 }
 function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,onCloseDockChat,onDockViewChange,onDockRosterChange,onDockSessionResolved}:ConsolePageProps) {
   const scopedApi=useBackendApi();
-  const { client, teamClient, archiveConsoleSession, closeConsoleSession, configureConsoleSession, controlConsoleSession, deleteConsoleSession, deleteSavedConsoleSession, exportConsoleSession, resolveConsoleDecision, resumeConsoleSession, stopConsoleWorker, webFetchJson, getConsoleSnapshot } = scopedApi;
+  const { client, teamClient, archiveConsoleSession, closeConsoleSession, configureConsoleSession, controlConsoleSession, deleteConsoleSession, deleteSavedConsoleSession, exportConsoleSession, resolveConsoleDecision, resumeConsoleSession, sendConsoleMessage, stopConsoleWorker, webFetchJson, getConsoleSnapshot } = scopedApi;
   const queryClient=useQueryClient();
   const backendRegistry=useBackendSelection();
   const team = useTeamAccess();
@@ -101,11 +124,19 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
   const workspace = useConsoleWorkspace(sessionId, workerId);
   const [sessionAliases, setSessionAliases] = usePersistentState<Record<string, SessionAlias>>("0-console-session-aliases", {});
   const recoveryAttempt = useRef<string | null>(null);
+  const justCreated = useRef<string | null>(null); // sessions we spawned this load — heartbeat lag ≠ deleted
   const [recoveringSession, setRecoveringSession] = useState(false);
   const [landingMsg, setLandingMsg] = useState("");
+  const [heroPromptIndex] = useState(() => Math.floor(Math.random() * 20));
+  const runtimeInfo = useQuery({ queryKey: ["runtime-info"], queryFn: () => scopedApi.webFetchJson("/api/console/runtime"), refetchInterval: 15000 });
   const startFromLanding = async (message: string) => {
-    await createSession();
-    if (message.trim()) { workspace.setDraft(message); void submit(true); }
+    // ONE PATH (field 2026-11-17: this used to create the session AND
+    // submit, while the composer's create-at-submit also fired from the
+    // stale closure — two creates, the prompt bubble doubled). The
+    // composer submit owns creation: draft + submit is enough.
+    if (!message.trim()) return;
+    workspace.setRootDraft(message);
+    void submit(true);
   };
   useEffect(() => {
     if (!workspace.sessionsLoaded) return;
@@ -133,7 +164,15 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
         if (readOnlyTeam) { if(!embedded) navigate(`/chats/saved/${plan.id}`, { replace: true }); return; }
         replacement = await workspace.perform(() => resumeConsoleSession(plan.id, {}), sessionId);
       }
-      if (!replacement && plan.kind === "blank" && !readOnlyTeam) replacement = await createOwnedSession({});
+      if (!replacement && plan.kind === "blank" && !readOnlyTeam) {
+        // BLANK ≠ STALE (field 2026-11-17: every brand-new session has
+        // messageCount 0, so "recovery" saw fresh chats as stale blanks and
+        // created ANOTHER empty session — the phantom second chat). There is
+        // nothing to recover: go home instead of creating anything.
+        if (justCreated.current === plan.id) return; // heartbeat lag ≠ deleted
+        if (!embedded) navigate("/chats?new=1", { replace: true });
+        return;
+      }
       if (!replacement) return;
       workspace.remapDrafts(sessionId, replacement.id);
       setSessionAliases(previous => ({ ...previous, [sessionId]: { savedId: plan.durableId, messageCount: replacement!.messageCount }, [replacement!.id]: { savedId: replacement!.savedId ?? plan.durableId, messageCount: replacement!.messageCount } }));
@@ -235,7 +274,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
   const createOwnedSession=(configuration:ConsoleCreateSessionInput)=>workspace.perform(()=>createChatOnExecutionHost(client.backendId,configuration),undefined);
   const createChatOnHost = async(backendId:string) => {
     if(backendId===client.backendId){await createSession();return;}
-    try {const created=await createChatOnExecutionHost(backendId,{title:"New swarm",role:"audit",autonomyMode:DEFAULT_AUTONOMY_MODE});setHostRosters(previous=>({...previous,[backendId]:[...(previous[backendId]??[]).filter(item=>item.id!==created.id),created]}));onDockSessionResolved?.(backendId,created.id,created);replaceChatInPlace(created.id,created.title||"New swarm",backendId);}
+    try {const created=await createChatOnExecutionHost(backendId,{title:"New engagement",role:"audit",autonomyMode:DEFAULT_AUTONOMY_MODE});setHostRosters(previous=>({...previous,[backendId]:[...(previous[backendId]??[]).filter(item=>item.id!==created.id),created]}));onDockSessionResolved?.(backendId,created.id,created);replaceChatInPlace(created.id,created.title||"New engagement",backendId);}
     catch(error){if (isRequestCancellation(error)) return;setNotice(error instanceof Error?error.message:"Couldn't open a chat on that computer.");}
   };
   const settingsQuery = useQuery({ queryKey: ["console-settings", client.backendId, team.user?.workspaceId, team.user?.userId], queryFn: ({ signal }) => webFetchJson<SettingsResponse>("/api/console/settings", { signal }), refetchInterval: 5000 });
@@ -347,21 +386,25 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
     return !live || (live.messages.length === 0 && live.queuedMessages.length === 0 && !live.stagedPrompt && !live.events.some((event) => event.type === "user"));
   };
   const findBlankSession = () => team.enabled ? undefined : workspace.sessions.find((item) => isBlankSession(item) && !item.target && (!item.title || /^(new chat|new conversation|new session)$/i.test(item.title)));
-  const createSession = async () => {
+  const createSession = async (title?: string) => {
     if (readOnlyTeam) { const available = workspace.sessions.find(item => item.status !== "closed"); if (available) openDockChat(available.id,available.title || "Chat"); return; }
     if (creatingSession.current) return;
     setRailOpen(false);
     const blank = findBlankSession();
     if (blank) {
-      if (blank.id !== sessionId) replaceChatInPlace(blank.id,blank.title || "New swarm");
+      if (blank.id !== sessionId) replaceChatInPlace(blank.id,blank.title || "New engagement");
       else if (!embedded) { setActiveChatId(null); if (search.get("new") === "1") navigate(`/chats/${blank.id}`, { replace:true }); }
       requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(`[data-console-session="${CSS.escape(blank.id)}"] textarea[aria-autocomplete="list"]`)?.focus());
       return;
     }
     creatingSession.current = true;
     try {
-      const created = await createOwnedSession({ title: "Basic red team engagement", role: "audit", autonomyMode: DEFAULT_AUTONOMY_MODE });
-      if (created) { queryClient.setQueryData<DesktopConsoleSession[]>(["console-sessions"],previous=>[...(previous??[]).filter(item=>item.id!==created.id),created]);onDockSessionResolved?.(client.backendId,created.id,created);replaceChatInPlace(created.id,created.title || "New swarm"); }
+      // THE PROMPT IS THE MISSION (field 2026-11-17): a chat started from the
+      // landing composer must carry the typed prompt as its title — the swarm
+      // title IS the agents' standing mission. The old hardcoded default made
+      // agents hunt "Basic red team engagement" nonsense regardless of input.
+      const created = await createOwnedSession({ title: title?.trim() || "Basic red team engagement", role: "audit", autonomyMode: DEFAULT_AUTONOMY_MODE });
+      if (created) { queryClient.setQueryData<DesktopConsoleSession[]>(["console-sessions"],previous=>[...(previous??[]).filter(item=>item.id!==created.id),created]);onDockSessionResolved?.(client.backendId,created.id,created);replaceChatInPlace(created.id,created.title || "New engagement"); }
     } finally { creatingSession.current = false; }
   };
   useEffect(() => {
@@ -371,10 +414,14 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
   }, [sessionId, search, setSearch]);
   useEffect(() => {
     if (embedded) return;
-    if (search.get("new") !== "1") { requestedNewSession.current = false; return; }
-    if (requestedNewSession.current || !workspace.sessionsLoaded) return;
-    requestedNewSession.current = true;
-    void createSession();
+    // NO AUTO-CREATE ON LANDING (field 2026-11-17): /chats?new=1 used to
+    // create a session immediately — every page load spawned agent hunts
+    // named "Basic red team engagement"/"new swarm" that wandered off to
+    // hunt whatever they found in memory. The landing is a blank composer;
+    // the session is created AT SUBMIT with the typed prompt as its title
+    // (the title IS the agents' mission).
+    if (search.get("new") === "1") { requestedNewSession.current = true; return; }
+    requestedNewSession.current = false;
   }, [search, workspace.sessionsLoaded]);
   useEffect(() => {
     if (!findingId) { focused.current = null; return; }
@@ -455,7 +502,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
         return;
       }
       if (name === "explain") {
-        if (!sessionId || active) { setNotice("Wait until 0 finishes, then try again."); return; }
+        if (!sessionId || active) { setNotice("Wait until Suijin finishes, then try again."); return; }
         if (!command.args && !snapshot?.messages.length) { setNotice("Nothing to explain yet. Use /explain <topic>."); return; }
         const topic = command.args ? `Explain "${command.args}"` : "Explain your previous result";
         await messageWorkspace.send({ text: `${topic} like I am five years old. Use 3–5 very short sentences, mostly under 12 words each. Use familiar everyday words and one simple comparison. No jargon, acronyms, code, headings, or baby talk. Say what happened, why it matters, and one thing to do next. Keep the facts accurate and say plainly what is not yet confirmed. Explain only; do not run new tests or tools.`, mode: "send", ...(messageWorkerId ? { workerId: messageWorkerId } : {}) });
@@ -475,7 +522,33 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
       setNotice(`/${name} isn't available here.`);
       return;
     }
-    if (!sessionId || (messageWorkerId && !worker)) { setNotice("Pick a chat first."); return; }
+    if (!sessionId || (messageWorkerId && !worker)) {
+      // CREATE-AT-SUBMIT (field 2026-11-17): a message typed into the blank
+      // landing creates the session with THE PROMPT AS TITLE — the title is
+      // the agents' standing mission, so the swarm hunts what was typed.
+      if (!sessionId && !messageWorkerId && text) {
+        void (async () => {
+          const created = await createOwnedSession({ title: text.slice(0, 120), spawn: true, role: "audit", autonomyMode: DEFAULT_AUTONOMY_MODE } as ConsoleCreateSessionInput);
+          if (!created) { setNotice("Couldn't start the engagement. Try again."); return; }
+          justCreated.current = created.id;
+          // clear the typed draft BEFORE remapping so the new session's
+          // composer inherits empty (field 2026-11-17: the prompt stayed
+          // sitting in the composer after submit)
+          messageWorkspace.setDraft("");
+          workspace.setDraft("");
+          workspace.remapDrafts(sessionId ?? "new", created.id);
+          queryClient.setQueryData<DesktopConsoleSession[]>(["console-sessions"], previous => [...(previous ?? []).filter(item => item.id !== created.id), created]);
+          onDockSessionResolved?.(client.backendId, created.id, created);
+          navigate(`/chats/${created.id}`, { replace: true });
+          // post directly — this closure's workspace still points at the
+          // old (blank) session id
+          try { await sendConsoleMessage(created.id, { text, attachments: [] }); }
+          catch { setNotice("The engagement started but the message didn't land. Send it again."); }
+        })();
+        return;
+      }
+      setNotice("Pick a chat first."); return;
+    }
     await messageWorkspace.send({ text, attachments: messageWorkspace.attachments.map(({ kind, value, name }) => ({ kind, value, name })), mode: messageWorkerId ? "send" : active ? mode : "send", ...(messageWorkerId ? { workerId: messageWorkerId } : {}) });
   };
   const onAddFinding = (finding: FindingRecord) => {
@@ -520,16 +593,23 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
         {snapshot?.focusedFinding && <Disclosure key={snapshot.focusedFinding.id} className="shrink-0 bg-muted/10 px-4 py-3 text-xs" defaultOpen={search.get("intent") === "impact"} summary={<>{snapshot.focusedFinding.title} · {snapshot.focusedFinding.severity}</>} triggerClassName="cursor-pointer font-medium"><div className="max-h-64 space-y-3 overflow-auto pt-3"><p className="whitespace-pre-wrap">{snapshot.focusedFinding.description}</p><div><div className="font-medium">Impact</div>{snapshot.focusedFinding.impactAssessment ? <pre className="mt-2 whitespace-pre-wrap break-words">{JSON.stringify(snapshot.focusedFinding.impactAssessment, null, 2)}</pre> : <p className="mt-1 text-muted-foreground">Not assessed yet.</p>}</div><Button size="sm" variant="outline" asChild><Link to={`/fix${controlsQuery}&finding=${encodeURIComponent(snapshot.focusedFinding.id)}`}>Prepare a fix</Link></Button></div></Disclosure>}
         {recoveringSession || workspace.loading ? <ConversationSkeleton /> : snapshot ? workerId && !worker ? <div className="grid flex-1 place-items-center p-8 text-center"><div><h2 className="text-base font-medium">This sub-agent has ended</h2><Button className="mt-4" variant="outline" onClick={() => navigate(`/chats/${snapshot.session.id}`)}>Back</Button></div></div> : <Conversation detailsControl={<ChatDetailsPopover open={inspectOpen} onOpenChange={setInspectOpen} contextPercent={snapshot.contextInputTokens !== undefined && (snapshot.contextWindowTokens ?? snapshot.runtime?.contextWindowTokens) ? Math.round(snapshot.contextInputTokens / (snapshot.contextWindowTokens ?? snapshot.runtime?.contextWindowTokens)! * 100) : undefined}>{inspector}</ChatDetailsPopover>} onSubmitRoot={() => void submit(true)} onStopRoot={() => void workspace.perform(() => controlConsoleSession(snapshot.session.id, "cancel"))} onDrainAgents={() => setConfirm({ kind: "drain", id: snapshot.session.id, title: snapshot.title })} onOpenDetails={() => { closeAgents(); setBrowserOpen(false); setInspectOpen(true); }} agentsOpen={agentsOpen} onCloseAgents={closeAgents} onSelectWorker={selectWorker} sendBehavior={mode} workspace={workspace} worker={worker} onSubmit={() => void submit()} onStop={() => void workspace.perform(() => worker ? stopConsoleWorker(snapshot.session.id, worker.id) : controlConsoleSession(snapshot.session.id, "cancel"))} onResolve={(id, response) => void workspace.perform(() => resolveConsoleDecision(snapshot.session.id, id, response))} resumeCap={() => setCapOpen(true)} /> : <div className="console-enter grid flex-1 place-items-center overflow-auto p-6"><div className="max-w-2xl text-center">
               <BrandMark className="mx-auto mb-6" />
-              <h1 className="font-heading text-2xl font-medium">What would you like to hack and fix today?</h1>
-              <form className="mt-6 flex w-full items-center gap-2" onSubmit={(event) => { event.preventDefault(); void startFromLanding(landingMsg); landingMsg && setLandingMsg(""); }}>
-                <input autoFocus aria-label="What should we hack today?" placeholder="What should we hack today?" value={landingMsg} maxLength={400} disabled={workspace.busy || readOnlyTeam} onChange={(event) => setLandingMsg(event.target.value)} className="h-12 w-full rounded-[var(--radius-composer,22px)] border border-border bg-background px-4 text-sm outline-none placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-ring" />
-                <Button type="submit" size="lg" disabled={workspace.busy || readOnlyTeam}>Hack it</Button>
-                <Button type="button" variant="ghost" onClick={() => setRailOpen(true)}>History</Button>
+              <h1 className="font-heading text-2xl font-medium">{HERO_PROMPTS[heroPromptIndex]}</h1>
+              <form className="mt-6 w-full rounded-[var(--radius-composer,22px)] border border-border bg-background p-3 shadow-sm focus-within:outline-2 focus-within:outline-ring" onSubmit={(event) => { event.preventDefault(); void startFromLanding(landingMsg); landingMsg && setLandingMsg(""); }}>
+                <input autoFocus aria-label="What should we hack today?" placeholder="What should we hack today?" value={landingMsg} maxLength={400} disabled={workspace.busy || readOnlyTeam} onChange={(event) => setLandingMsg(event.target.value)} className="w-full bg-transparent px-1 text-sm outline-none placeholder:text-muted-foreground" />
+                <div className="mt-3 flex items-center justify-between">
+                  <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                    {runtimeInfo?.runtime?.model && <span className="flex shrink-0 items-center gap-1"><span className="font-medium text-foreground">{runtimeInfo.runtime.model}</span>{runtimeInfo.effort && runtimeInfo.effort !== "off" && <span>· {runtimeInfo.effort}</span>}</span>}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setRailOpen(true)}>History</Button>
+                    <Button type="submit" size="sm" disabled={workspace.busy || readOnlyTeam}>Hack it</Button>
+                  </div>
+                </div>
               </form>
               <div className="mt-6 flex flex-col items-start gap-2 text-left">
                 <button type="button" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" onClick={() => { setLandingMsg("Map the attack surface of the target"); void startFromLanding("Map the attack surface of the target"); }}><ShieldCheck className="size-4" />Map the attack surface</button>
                 <button type="button" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" onClick={() => { setLandingMsg("Hunt for exploitable paths and auth bypasses"); void startFromLanding("Hunt for exploitable paths and auth bypasses"); }}><Search className="size-4" />Hunt for exploitable paths</button>
-                <button type="button" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" onClick={() => { setLandingMsg("Plan a structured swarm hunt with lanes and guardrails"); void startFromLanding("Plan a structured swarm hunt with lanes and guardrails"); }}><Workflow className="size-4" />Plan the swarm hunt</button>
+                <button type="button" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" onClick={() => { setLandingMsg("Plan a structured engagement with lanes and guardrails"); void startFromLanding("Plan a structured engagement with lanes and guardrails"); }}><Workflow className="size-4" />Plan the engagement</button>
               </div>
             </div></div>}
       </section>;
@@ -555,7 +635,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
   return <ChatHostSelectionScope backendId={client.backendId} reconnect={backendRegistry?.reconnect} onSelectHost={(host:string)=>void createChatOnHost(host)}>
     {embedded ? chatContent : <div className="console-frame flex min-w-0 overflow-hidden bg-background">
       {historySlot ? createPortal(rail,historySlot) : <aside ref={sessionRailElement} className="hidden w-64 shrink-0 lg:block">{rail}</aside>}
-      <DockWorkspace primarySessionId={sessionId} primaryBackendId={client.backendId} persistenceKey={dockPersistenceKey} legacyPersistenceKey={dockLegacyKey} restoreReady={workspace.sessionsLoaded && dockChatsNormalized} chatIdRemap={dockRemap.current.ids} onRestoreLayoutState={restoreDockState} primaryTitle={pendingPrimary ? pendingChatSelection!.title : snapshot?.messages.some(message => message.role === "user" || message.role === "assistant") ? snapshot.title || "Chat" : "New swarm"} primaryClosable={Boolean(snapshot?.messages.some(message => message.role === "user" || message.role === "assistant"))} onClosePrimary={replacement => { showPendingChat(null); if (replacement) routeNavigate(backendRouteHref(replacement.backendId, `/chats/${encodeURIComponent(replacement.id)}`)); else navigate(`/chats?new=1&host=${encodeURIComponent(client.backendId)}`); }} chat={pendingPrimary ? pendingChatContent : chatContent} actions={pendingPrimary ? undefined : chatActions} panels={ownerView?.panels ?? dockPanels} activePanel={pendingChatSelection ? null : ownerView?.activePanel ?? (activeChatId ? null : dockActive)} onActivePanelChange={ownerView?.select ?? selectDockPanel}
+      <DockWorkspace primarySessionId={sessionId} primaryBackendId={client.backendId} persistenceKey={dockPersistenceKey} legacyPersistenceKey={dockLegacyKey} restoreReady={workspace.sessionsLoaded && dockChatsNormalized} chatIdRemap={dockRemap.current.ids} onRestoreLayoutState={restoreDockState} primaryTitle={pendingPrimary ? pendingChatSelection!.title : snapshot?.messages.some(message => message.role === "user" || message.role === "assistant") ? snapshot.title || "Chat" : "New engagement"} primaryClosable={Boolean(snapshot?.messages.some(message => message.role === "user" || message.role === "assistant"))} onClosePrimary={replacement => { showPendingChat(null); if (replacement) routeNavigate(backendRouteHref(replacement.backendId, `/chats/${encodeURIComponent(replacement.id)}`)); else navigate(`/chats?new=1&host=${encodeURIComponent(client.backendId)}`); }} chat={pendingPrimary ? pendingChatContent : chatContent} actions={pendingPrimary ? undefined : chatActions} panels={ownerView?.panels ?? dockPanels} activePanel={pendingChatSelection ? null : ownerView?.activePanel ?? (activeChatId ? null : dockActive)} onActivePanelChange={ownerView?.select ?? selectDockPanel}
         extraChats={dockChatState.chats.map(item=>{const backendId=item.backendId??client.backendId,key=chatResourceKey({backendId,id:item.id});return {...item,backendId,title:pendingChatSelection?.paneKey===key?pendingChatSelection.title:item.title,actions:pendingChatSelection?.paneKey===key?undefined:embeddedViews[key]?.actions,content:pendingChatSelection?.paneKey===key?pendingChatContent:<ConsolePage embeddedSessionId={item.id} embeddedBackendId={backendId} onOpenDockChat={openDockChat} onDockViewChange={updateEmbeddedView} onCloseDockChat={closeDockChat} onDockRosterChange={updateHostRoster} onDockSessionResolved={resolveDockSession} />};})} activeChatId={activeChatId} onActiveChatChange={id => { showPendingChat(null); setActiveChatId(id); }} onOpenChat={(id,title,saved,backendId=client.backendId,onResolved)=>{if(!saved){openDockChat(id,title,backendId);return;}void runOnHost(backendId,api=>api.resumeConsoleSession(id,{})).then(created=>{onResolved?.({backendId,id:created.id});if(backendId===client.backendId)queryClient.setQueryData<DesktopConsoleSession[]>(["console-sessions"],previous=>[...(previous??[]).filter(item=>item.id!==created.id),created]);else setHostRosters(previous=>({...previous,[backendId]:[...(previous[backendId]??[]).filter(item=>item.id!==created.id),created]}));openDockChat(created.id,created.title||title,backendId);}).catch(error=>{if (!isRequestCancellation(error)) setNotice(error instanceof Error?error.message:"Couldn't resume that chat.");});}} onCloseChat={closeDockChat} />
 
     </div>}
@@ -567,7 +647,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{confirm?.kind === "delete-live" ? "Delete this chat?" : confirm?.kind === "delete" ? "Delete this chat?" : confirm?.kind === "clear" ? "Clear this chat?" : confirm?.kind === "drain" ? "Stop all sub-agents?" : "Close this chat?"}</DialogTitle>
-          <DialogDescription>{confirm?.kind === "delete-live" ? "This stops it and permanently deletes its history. This can't be undone." : confirm?.kind === "delete" ? "This permanently deletes its history. This can't be undone." : confirm?.kind === "clear" ? "0 forgets the messages so far. Permissions stay the same." : confirm?.kind === "drain" ? "The chat stays open." : "This stops any running work. You can resume it later from history."}</DialogDescription>
+          <DialogDescription>{confirm?.kind === "delete-live" ? "This stops it and permanently deletes its history. This can't be undone." : confirm?.kind === "delete" ? "This permanently deletes its history. This can't be undone." : confirm?.kind === "clear" ? "Suijin forgets the messages so far. Permissions stay the same." : confirm?.kind === "drain" ? "The chat stays open." : "This stops any running work. You can resume it later from history."}</DialogDescription>
           {dialogError}
         </DialogHeader>
         <p className="text-sm font-medium">{confirm?.title}</p>
@@ -576,6 +656,12 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
           <Button variant="destructive" disabled={workspace.busy} onClick={() => {
             if (!confirm) return;
             const action = confirm;
+            setConfirm(null);
+            // LEAVE FIRST (field 2026-11-17: staying on the deleted session's
+            // route until the delete resolved meant typing during the gap
+            // steered the half-deleted swarm and resurrected it — the "flash
+            // of the old chat" the operator saw). Navigate optimistically.
+            if ((action.kind === "delete-live" || action.kind === "delete") && !embedded) navigate("/chats", { replace: true });
             void workspace.perform(async () => {
               if (action.kind === "delete-live") return deleteConsoleSession(action.id);
               if (action.kind === "delete") return deleteSavedConsoleSession(action.id);
@@ -583,11 +669,11 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
               return controlConsoleSession(action.id, action.kind === "drain" ? "workers/stop" : "clear");
             }, action.id).then((result) => {
               if (!result) return;
-              setConfirm(null);
               if (action.kind === "clear") workspace.setRootDraft("");
               if (action.kind === "delete-live") {
                 workspace.forgetDrafts(action.id);
-                if (sessionId === action.id) { if (embedded) onCloseDockChat?.(chatResourceKey({backendId:client.backendId,id:action.id})); else { setActiveSession(null); navigate("/chats", { replace: true }); } }
+                closeDockChat(chatResourceKey({backendId:client.backendId,id:action.id}));
+                if (sessionId === action.id && embedded) onCloseDockChat?.(chatResourceKey({backendId:client.backendId,id:action.id}));
               }
             });
           }}>{confirm?.kind === "delete-live" || confirm?.kind === "delete" ? "Delete" : confirm?.kind === "clear" ? "Clear" : confirm?.kind === "drain" ? "Stop" : "Close"}</Button>

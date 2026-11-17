@@ -21,6 +21,7 @@ import { TeamSettingsPage } from "@/pages/team-settings-page";
 import { SkillsPage } from "@/pages/skills-page";
 import { WorkersPage } from "@/pages/workers-page";
 import { WebConsoleControlsPage } from "@/pages/console-controls-page";
+import { ModelsPage } from "@/pages/models-page";
 import { canonicalWorkspacePath } from "@/lib/workspace-navigation";
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -90,7 +91,9 @@ export function OperationsApp() {
           <Route path="/chats/:sessionId" element={<ConsolePage />} />
           <Route path="/chats/saved/:savedId" element={<SavedConversationPage />} />
           {["/setup", "/console/setup", "/console/onboarding"].map(path => <Route key={path} path={path} element={<Navigate to={{ pathname: "/onboarding", search: location.search, hash: location.hash }} replace />} />)}
-          {["onboarding", "connections", "models", "settings", "plugins", "doctor", "tools", "project", "fix"].map((route) => (
+          <Route path="/models" element={<ModelsPage />} />
+          <Route path="/connections" element={<Navigate to="/models" replace />} />
+          {["onboarding", "settings", "plugins", "doctor", "tools", "project", "fix"].map((route) => (
             <Route key={route} path={`/${route}`} element={<WebConsoleControlsPage />} />
           ))}
           <Route path="/automations" element={<WorkflowsPage />} />

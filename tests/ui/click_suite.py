@@ -59,7 +59,7 @@ def run(label):
 
 def main():
     with sync_playwright() as p:
-        browser = p.chromium.launch()
+        browser = p.chromium.launch(headless=True)
         ctx = browser.new_context(viewport={"width": 1600, "height": 1000})
         page = ctx.new_page()
         page.on("pageerror", lambda e: PAGE_ERRORS.append(str(e)[:200]))
