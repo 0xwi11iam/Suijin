@@ -127,8 +127,12 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
   const justCreated = useRef<string | null>(null); // sessions we spawned this load — heartbeat lag ≠ deleted
   const [recoveringSession, setRecoveringSession] = useState(false);
   const [landingMsg, setLandingMsg] = useState("");
-  const [heroPromptIndex] = useState(() => Math.floor(Math.random() * 20));
+  const [heroPromptIndex] = useState(() => Math.floor(Math.random() * HERO_PROMPTS.length));
   const runtimeInfo = useQuery({ queryKey: ["runtime-info"], queryFn: () => scopedApi.webFetchJson("/api/console/runtime"), refetchInterval: 15000 });
+  const heroCatalog = useQuery({ queryKey: ["hero-catalog"], queryFn: () => scopedApi.webFetchJson("/api/console/provider-catalog"), staleTime: 300000 });
+  const normKey = (k: string) => k.replace(/[^a-z0-9]/g, "");
+  const heroRuntime = (runtimeInfo.data as { runtime?: { providerId?: string; model?: string }; effort?: string } | undefined);
+  const heroProvider = ((heroCatalog.data as { providers?: { key: string; icon?: string; label?: string }[] } | undefined)?.providers ?? []).find(p => normKey(p.key) === normKey(String(heroRuntime?.runtime?.providerId || "")));
   const startFromLanding = async (message: string) => {
     // ONE PATH (field 2026-11-17: this used to create the session AND
     // submit, while the composer's create-at-submit also fired from the
@@ -352,7 +356,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
   const controlsQuery = sessionId ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(`/chats/${sessionId}${workerId ? `?worker=${encodeURIComponent(workerId)}` : ""}`)}` : "?return=/console";
   const active = snapshot && ["working", "waiting", "cancelling"].includes(snapshot.session.status);
   const visibleError = !recoveringSession && workspace.error && !recoveredProviderError(workspace.error, workspace.connectionRecovery) && workspace.error !== snapshot?.lastOutcome?.error ? workspace.error : undefined;
-  useAppNotice(embedded ? null : visibleError ? { id: `console:${sessionId}`, message: consoleErrorMessage(visibleError), kind: "error", onDismiss: () => { workspace.dismissError(); if (workspace.error) workspace.refresh(); setNotice(""); }, action: needsModelSourceReconnect(visibleError) && workspace.reconnectModelSource ? { label: workspace.modelSourceRecovery?.checking ? "Reconnecting…" : "Reconnect model source", onClick: () => void workspace.reconnectModelSource?.() } : needsProviderSignIn(visibleError) ? { label: "Manage connection", href: `/connections${controlsQuery}` } : undefined } : notice ? { id: `console:${sessionId}`, message: notice, kind: "status", onDismiss: () => setNotice("") } : null);
+  useAppNotice(embedded ? null : visibleError ? { id: `console:${sessionId}`, message: consoleErrorMessage(visibleError), kind: "error", onDismiss: () => { workspace.dismissError(); if (workspace.error) workspace.refresh(); setNotice(""); }, action: needsModelSourceReconnect(visibleError) && workspace.reconnectModelSource ? { label: workspace.modelSourceRecovery?.checking ? "Reconnecting…" : "Reconnect model source", onClick: () => void workspace.reconnectModelSource?.() } : needsProviderSignIn(visibleError) ? { label: "Manage connection", href: `/models${controlsQuery}` } : undefined } : notice ? { id: `console:${sessionId}`, message: notice, kind: "status", onDismiss: () => setNotice("") } : null);
   const dialogError = workspace.error && <p role="alert" className="rounded-[var(--radius-control)] border border-destructive/30 bg-destructive/5 p-3 text-xs leading-5 text-destructive">{workspace.error}</p>;
 
   useEffect(() => {
@@ -471,7 +475,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
     const command = findCommand(text);
     if (command.isSlash && !messageWorkspace.attachments.length) {
       if (command.isUnknown) { setNotice(`Unknown command /${command.rawName}. Type /help to see commands.`); return; }
-      const destinations: Record<string, string> = { onboard: "/onboarding", capabilities: "/tools", tools: "/tools", settings: "/settings", keybindings: "/settings", theme: "/settings", connect: "/connections", model: "/models", history: "/runs", findings: "/findings", launcher: "/audits", ops: "/dashboard", skills: "/plugins/skills", plugins: "/plugins", scope: "/project", doctor: "/doctor", fix: "/fix" };
+      const destinations: Record<string, string> = { onboard: "/onboarding", capabilities: "/tools", tools: "/tools", settings: "/settings", keybindings: "/settings", theme: "/settings", connect: "/models", model: "/models", history: "/runs", findings: "/findings", launcher: "/audits", ops: "/dashboard", skills: "/plugins/skills", plugins: "/plugins", scope: "/project", doctor: "/doctor", fix: "/fix" };
       const name = command.command!;
       if (messageWorkerId && (name === "clear" || name === "exit")) { setNotice(`Switch back to the main chat to use /${name}.`); return; }
       if (name === "help") { setHelpOpen(true); messageWorkspace.setDraft(""); return; }
@@ -598,7 +602,11 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
                 <input autoFocus aria-label="What should we hack today?" placeholder="What should we hack today?" value={landingMsg} maxLength={400} disabled={workspace.busy || readOnlyTeam} onChange={(event) => setLandingMsg(event.target.value)} className="w-full bg-transparent px-1 text-sm outline-none placeholder:text-muted-foreground" />
                 <div className="mt-3 flex items-center justify-between">
                   <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                    {runtimeInfo?.runtime?.model && <span className="flex shrink-0 items-center gap-1"><span className="font-medium text-foreground">{runtimeInfo.runtime.model}</span>{runtimeInfo.effort && runtimeInfo.effort !== "off" && <span>· {runtimeInfo.effort}</span>}</span>}
+                    {heroRuntime?.runtime?.model && <span className="flex shrink-0 items-center gap-1.5">
+                      {heroProvider?.icon && <img src={heroProvider.icon} alt="" className="size-3.5 rounded" loading="lazy" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />}
+                      <span className="font-medium text-foreground">{heroRuntime.runtime.model}</span>
+                      {heroRuntime.effort && heroRuntime.effort !== "off" && <span>· {heroRuntime.effort}</span>}
+                    </span>}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <Button type="button" variant="ghost" size="sm" onClick={() => setRailOpen(true)}>History</Button>

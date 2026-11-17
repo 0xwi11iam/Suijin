@@ -20,7 +20,7 @@ def check(name, ok, detail=""):
 
 
 def db_agents(swarm=None):
-    db = sqlite3.connect("/Users/williamjiang/.suijin/swarm/swarm.db", timeout=10)
+    db = sqlite3.connect(str(Path.home() / ".suijin/swarm/swarm.db"), timeout=10)
     if swarm:
         rows = db.execute("SELECT id, status FROM agents WHERE swarm = ?", (swarm,)).fetchall()
     else:
@@ -42,7 +42,7 @@ def main():
         inp.fill("action test engagement")
         page.locator("button:has-text('Create engagement')").click()
         page.wait_for_timeout(4000)
-        d = Path("/Users/williamjiang/.suijin/engagements/action-test-engagement")
+        d = Path.home() / ".suijin/engagements/action-test-engagement"
         check("engagement dir created on disk", d.exists())
         body = page.inner_text("body")
         check("engagement appears in list", "action test engagement" in body)
@@ -63,7 +63,7 @@ def main():
         key_inp.fill("sk-test-actions-000000")
         page.locator("button:has-text('Connect')").first.click()
         page.wait_for_timeout(5000)
-        env = Path("/Users/williamjiang/.suijin/config/.env")
+        env = Path.home() / ".suijin/config/.env"
         check("z-ai key written to .env", env.exists() and "ZAI_API_KEY=" in env.read_text())
         page.screenshot(path=str(SHOTS / "20-connected.png"))
 

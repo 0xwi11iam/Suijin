@@ -48,6 +48,7 @@ _SECRET_PATTERNS = [
 #: product tool names, and the safety denylist. Anything else fails.
 _VENDOR_LINE_PATTERNS = [
     re.compile(r"dl\.google\.com|cloud\.google\.com|storage\.googleapis"),
+    re.compile(r"gemini\.google\.com|www\.google\.com/s2/favicons"),
     re.compile(r"google-cloud-sdk|googleusercontent"),
     re.compile(r"google_key_probe|google_dork|duckduckgo"),
     re.compile(r"_EXACT_BLOCKED_DOMAINS|_KNOWN_FAMILIES"),
@@ -65,6 +66,8 @@ _MACHINE_PATH = re.compile(r"/Users/[a-z][\w.-]*/|/home/[a-z][\w.-]*/")
 #:   hard_guardrail.py — the SAFETY denylist must name the domains it
 #:   blocks (a config-driven denylist is a disable-by-accident footgun).
 _EXEMPT_FILES = {"suijin/server/platform/lib/helpers/hard_guardrail.py"}
+#: vendored upstream trees are not ours to scrub (third-party source).
+_EXEMPT_PREFIXES = ("server/web/console-ui/vendor/",)
 
 _TEXT_SUFFIXES = {".py", ".json", ".md", ".sh", ".toml", ".yml", ".yaml", ".txt", ".cfg", ".ini"}
 
@@ -107,7 +110,7 @@ class TestNoHardcode:
         offenders = []
         for f in _tracked_files():
             rel = str(f.relative_to(REPO))
-            if rel in _EXEMPT_FILES:
+            if rel in _EXEMPT_FILES or rel.startswith(_EXEMPT_PREFIXES):
                 continue
             for line in f.read_text(errors="replace").splitlines():
                 if any(t in line for t in targets) and not any(p.search(line) for p in _VENDOR_LINE_PATTERNS):

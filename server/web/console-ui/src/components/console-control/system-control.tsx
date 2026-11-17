@@ -96,7 +96,7 @@ export function DoctorControl() {
         const healthy = data.availability.apiRuntime.valid && data.runtime.nodeSupported && providerProblems.length === 0 && missing.length === 0;
         return <>
           {healthy ? <Feedback message={`All good · ${data.availability.apiRuntime.providerLabel} · v${data.version}`} /> : <>
-            {!data.availability.apiRuntime.valid && <div className="space-y-2"><Feedback error={data.availability.apiRuntime.error ?? "No provider connected."} /><Link to="/connections" className="block text-sm underline">Connect a provider</Link></div>}
+            {!data.availability.apiRuntime.valid && <div className="space-y-2"><Feedback error={data.availability.apiRuntime.error ?? "No provider connected."} /><Link to="/models" className="block text-sm underline">Connect a provider</Link></div>}
             {!data.runtime.nodeSupported && <Feedback error={`Node ${data.runtime.node} is not supported. Install Node 24+.`} />}
             {providerProblems.map(provider => <Feedback key={provider.id} error={`${provider.label}: ${provider.diagnostics.message ?? "needs attention"}`} />)}
             {missing.length > 0 && <Feedback error={`Missing: ${missing.map(item => item.id).join(", ")}`} />}

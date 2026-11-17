@@ -330,7 +330,7 @@ class SwarmAgent:
             db = sqlite3.connect(str(swarm_db_path()), timeout=5)
 
             # SWARM-SCOPED CLAIM (field 2026-11-17: an agent claimed ANY
-            # open intent — a fresh google.com engagement locked onto a
+            # open intent — a fresh engagement on a public search host locked onto a
             # stale webflow intent left in the queue by an old hunt. An
             # agent only ever claims intents of its OWN swarm; title-
             # following covers everything else.)
