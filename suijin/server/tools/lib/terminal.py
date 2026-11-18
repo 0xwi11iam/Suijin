@@ -56,7 +56,7 @@ _AUX_HOSTS = {
     "github.com", "api.github.com", "raw.githubusercontent.com",
     "codeload.github.com", "objects.githubusercontent.com",
     "pypi.org", "files.pythonhosted.org",
-    "localhost", "127.0.0.1", "::1",
+    "localhost", "127.0.0.1", "::1", "cdn.jsdelivr.net", "unpkg.com", "cdnjs.cloudflare.com", "static.launchdarkly.com", "cdn.launchdarkly.com",
 }
 _SCANNER_RE = re.compile(
     r"(?<![A-Za-z0-9_-])(nmap|masscan|rustscan|naabu|ffuf|gobuster|dirb|dirsearch|"

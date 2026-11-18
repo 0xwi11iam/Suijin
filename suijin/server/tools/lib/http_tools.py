@@ -92,6 +92,11 @@ def http_request(method, url, headers=None, body="", credential=""):
             from suijin.server.tools.lib.transport_guards import guard
 
             blocked = guard(url, method)
+            # merge per-program identity headers the guard resolved
+            from suijin.server.tools.lib.transport_guards import _PENDING_IDENTITY
+            if _PENDING_IDENTITY:
+                req_headers.update(dict(_PENDING_IDENTITY))
+                _PENDING_IDENTITY.clear()
             if blocked and blocked.startswith("BLOCKED"):
                 return blocked
             # THROTTLED absorbs inline (the guard already slept)
