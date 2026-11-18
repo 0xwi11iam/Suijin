@@ -515,7 +515,7 @@ class SwarmAgent:
                         "VALUES (?, ?, 'confirmed', ?, ?, ?, ?)",
                         (
                             f"find-{os.urandom(4).hex()}",
-                            summary[:120],
+                            summary[:1000],
                             sev,
                             self._identity,
                             intent.get("engagement", ""),

@@ -12,6 +12,8 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Feedback, QueryState, SubmitButton, jsonBody } from "./control-ui";
 import { SettingsRow, SettingsSection } from "./settings-section";
+import { Input } from "@/components/ui/input";
+import { ProviderIcon } from "@/components/provider-icon";
 import type { SettingDefinition, SettingsResponse } from "./contracts";
 
 export function useConsoleSettings() {
@@ -24,6 +26,39 @@ export function useConsoleSettings() {
 export { settingsCategories, categoryFor, settingLabel, visibleWebSetting, type SettingsCategory } from "./web-settings";
 import { settingsCategories, categoryFor, settingLabel, visibleWebSetting, webSettingDetails, settingChoiceLabel, sharedSettingKeys, type SettingsCategory } from "./web-settings";
 
+const MODEL_KEYS = new Set(["routing_worker_model", "model_1", "model_2", "model_3"]);
+const stringValue = (v: unknown) => (typeof v === "string" ? v : v == null ? "" : String(v));
+
+function ModelSelect({ definition, value, disabled, onChange }: { definition: SettingDefinition; value: string; disabled: boolean; onChange: (v: string) => void }) {
+  const { webFetchJson } = useBackendApi();
+  const list = useQuery({
+    queryKey: ["available-models"],
+    queryFn: () => webFetchJson<{ models: { value: string; label: string; providerLabel: string }[]; providers: { key: string; label: string }[] }>("/api/console/available-models"),
+    staleTime: 300_000,
+    retry: 1,
+  });
+  const id = `mdl-${definition.key}`;
+  const options = list.data?.models ?? [];
+  const providerFromPrefix = (list.data?.providers ?? []).find(pr => value.startsWith(`${pr.key}:`));
+  const selected = options.find(m => m.value === value
+    || (value.length > 0 && m.value.endsWith(":" + value))
+    || m.label === value);
+  const selectedProvider = selected && (list.data?.providers ?? []).find(pr => pr.label === selected.providerLabel);
+  const routeId = providerFromPrefix?.key ?? selectedProvider?.key ?? "";
+  const routeLabel = providerFromPrefix?.label ?? selectedProvider?.label ?? (selected?.providerLabel ?? "");
+  return <div className="space-y-1">
+    <Input id={id} list={`${id}-list`} value={value} onChange={e => onChange(e.target.value)} disabled={disabled}
+      placeholder="provider:model — pick from the list or type it" className="w-full" autoComplete="off" />
+    <datalist id={`${id}-list`}>{options.map(m => <option key={m.value} value={m.value}>{m.providerLabel} · {m.label}</option>)}</datalist>
+    <p className="flex items-center gap-1.5 text-xs leading-4 text-muted-foreground">
+      {routeLabel && <ProviderIcon providerId={routeId} className="size-3 shrink-0" />}
+      {routeLabel ? `via ${routeLabel}` : list.isPending ? "Fetching connected providers' models…"
+        : list.isError ? "Model list unreachable — type a provider:model id."
+        : "Pick a provider:model from the list, or type one"}
+    </p>
+  </div>;
+}
+
 function SettingRow({ definition, value, scope, pending, apply }: { definition: SettingDefinition; value: unknown; scope: "global" | "project"; pending: boolean; apply: (key: string, value: unknown, scope: "global" | "project") => void }) {
   const label = settingLabel(definition);
   const description = webSettingDetails(definition.key)?.description ?? "";
@@ -31,7 +66,9 @@ function SettingRow({ definition, value, scope, pending, apply }: { definition: 
   const isToggle = definition.kind === "boolean" || enabledChoice !== undefined;
   const applyValue = (next: unknown) => apply(definition.key, next, definition.operatorOnly ? "global" : scope);
   return <SettingsRow id={`setting-${definition.key}`} label={label} description={description} badge={definition.operatorOnly ? "This engine" : undefined}>
-    {isToggle ? <Switch aria-label={label} checked={definition.kind === "boolean" ? value === true : value === enabledChoice} disabled={pending} onCheckedChange={next => applyValue(definition.kind === "boolean" ? next : next ? enabledChoice : "off")} /> : <Select aria-label={label} className="w-full" value={typeof value === "string" ? value : ""} onValueChange={applyValue} disabled={pending} options={definition.choices?.map(choice => ({ value: choice, label: settingChoiceLabel(definition.key, choice) })) ?? []} />}
+    {isToggle ? <Switch aria-label={label} checked={definition.kind === "boolean" ? value === true : value === enabledChoice} disabled={pending} onCheckedChange={next => applyValue(definition.kind === "boolean" ? next : next ? enabledChoice : "off")} /> : MODEL_KEYS.has(definition.key)
+      ? <ModelSelect definition={definition} value={stringValue(value)} disabled={pending} onChange={applyValue} />
+      : <Select aria-label={label} className="w-full" value={stringValue(value)} onValueChange={applyValue} disabled={pending} options={definition.choices?.map(choice => ({ value: choice, label: settingChoiceLabel(definition.key, choice) })) ?? []} />}
   </SettingsRow>;
 }
 

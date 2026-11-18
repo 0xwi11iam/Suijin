@@ -88,11 +88,37 @@ def should_escalate(response_length: int, has_confirmed: bool = False) -> bool:
     return has_confirmed or response_length > threshold
 
 
+def _split_provider_model(value: str) -> tuple[str, str]:
+    """'provider:model-id' → (provider, model-id) when the prefix is a
+    known provider (numes, openrouter, zai, ...). Model ids may contain
+    colons (openrouter 'z-ai/glm-5.3:free') — only a registry prefix wins."""
+    if ":" not in value:
+        return "", value
+    head, rest = value.split(":", 1)
+    try:
+        from suijin.server.providers.lib.registry import PROVIDER_REGISTRY
+
+        if head in PROVIDER_REGISTRY or head == "custom":
+            return head, rest
+    except Exception:  # noqa: BLE001
+        pass
+    return "", value
+
+
 def apply_routing(cfg: dict, task: str = "worker") -> dict:
     """Mutate a provider config dict for the task tier. The worker loop
-    calls this before generate()."""
+    calls this before generate(). A 'provider:model' value routes that
+    tier at the OTHER provider (any connected model, any slot)."""
     model = model_for(task)
-    if model:
-        provider = str(cfg.get("provider") or "")
-        cfg[f"{provider}_model"] = model
+    if not model:
+        return cfg
+    provider, wire_model = _split_provider_model(model)
+    if provider:
+        cfg = dict(cfg)
+        cfg["provider"] = provider
+        cfg[f"{provider}_model"] = wire_model
+        cfg["model_1"] = wire_model
+        return cfg
+    provider = str(cfg.get("provider") or "")
+    cfg[f"{provider}_model"] = model
     return cfg
