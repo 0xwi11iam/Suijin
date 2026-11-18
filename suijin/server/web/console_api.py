@@ -551,13 +551,38 @@ def _scan_summary() -> dict:
     return {"totalFindings": len(fs), "totalAttacks": len(fs) * 3, **sev}
 
 
+def _ledger(name: str) -> dict:
+    """Tiny persistent overlay for the finding ledgers (triage, workflow,
+    impact) — the swarm.db finding row is immutable history, this is the
+    operator's review state."""
+    p = _ws() / "config" / f"finding_{name}.json"
+    with contextlib.suppress(Exception):
+        data = json.loads(p.read_text(errors="replace"))
+        if isinstance(data, dict):
+            return data
+    return {}
+
+
+def _ledger_save(name: str, data: dict) -> None:
+    p = _ws() / "config" / f"finding_{name}.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, indent=1))
+    tmp.replace(p)
+
+
 def _workflow(f: dict) -> dict:
     status = "human_review" if f["status"] in ("reported", "new") else "in_progress"
+    fp = re.sub(r"[^a-z0-9]+", "-", (f["title"] or "finding").lower()).strip("-")[:60]
+    saved = _ledger("workflow").get(fp)
+    persisted = (saved or {}).get("workflowStatus") or status
+    assignee = (saved or {}).get("workflowAssignee") or f["agent"]
+    updated = (saved or {}).get("workflowUpdatedAt")
     return {
-        "status": status, "persistedStatus": status, "recommendedStatus": status,
-        "phase": "in_progress" if status == "in_progress" else "todo",
-        "reviewGate": "none", "reviewReason": None, "assignee": f["agent"],
-        "updatedAt": None, "consensus": "pending", "activeAgentRoles": [],
+        "status": persisted, "persistedStatus": persisted, "recommendedStatus": status,
+        "phase": "in_progress" if persisted == "in_progress" else "todo",
+        "reviewGate": "none", "reviewReason": None, "assignee": assignee,
+        "updatedAt": updated, "consensus": "pending", "activeAgentRoles": [],
         "evidenceSignal": "medium" if f["status"] == "reported" else "weak",
         "verdictCounts": {"truePositive": 0, "falsePositive": 0, "unsure": 0, "total": 0},
     }
@@ -565,11 +590,18 @@ def _workflow(f: dict) -> dict:
 
 def _finding_group(f: dict) -> dict:
     fp = re.sub(r"[^a-z0-9]+", "-", (f["title"] or "finding").lower())[:60]
+    triage = _ledger("triage").get(fp) or {}
+    impact = _ledger("impact").get(f["id"])
+    workflow_ledger = _ledger("workflow").get(fp) or {}
     rec = {
         "id": f["id"], "scanId": f["agent"], "title": f["title"],
         "description": f["title"], "severity": f["severity"], "category": "finding",
-        "status": f["status"], "fingerprint": fp, "triageStatus": "accepted",
-        "workflowStatus": "in_progress", "workflowAssignee": f["agent"],
+        "status": f["status"], "fingerprint": fp,
+        "triageStatus": triage.get("triageStatus") or "new",
+        "triageNote": triage.get("triageNote") or "",
+        "impactAssessment": impact,
+        "workflowStatus": workflow_ledger.get("workflowStatus") or "in_progress",
+        "workflowAssignee": workflow_ledger.get("workflowAssignee") or f["agent"],
         "timestamp": f["ts"], "score": None, "confidence": None,
         "evidenceRequest": "", "evidenceResponse": "",
     }
@@ -672,6 +704,76 @@ def work():
 @router.get("/api/events/recent")
 def recent_events():
     return {"events": []}
+
+
+@router.post("/api/finding-family/{fingerprint}/triage")
+def finding_family_triage(fingerprint: str, body: dict = Body(default={})):
+    status = str(body.get("triageStatus") or "").strip()
+    if status not in ("new", "accepted", "suppressed"):
+        return JSONResponse({"error": "triageStatus must be new|accepted|suppressed"}, status_code=400)
+    ledger = _ledger("triage")
+    ledger[fingerprint] = {"triageStatus": status,
+                           "triageNote": str(body.get("triageNote") or "")[:2000],
+                           "triagedAt": _now_iso()}
+    _ledger_save("triage", ledger)
+    return {"ok": True}
+
+
+@router.post("/api/finding-family/{fingerprint}/workflow")
+def finding_family_workflow(fingerprint: str, body: dict = Body(default={})):
+    status = str(body.get("workflowStatus") or "").strip()
+    if status:
+        if status not in ("todo", "in_progress", "blocked", "done"):
+            return JSONResponse({"error": "unknown workflowStatus"}, status_code=400)
+    ledger = _ledger("workflow")
+    cur = dict(ledger.get(fingerprint) or {})
+    cur["workflowStatus"] = status or cur.get("workflowStatus") or "in_progress"
+    cur["workflowAssignee"] = str(body.get("workflowAssignee") or "").strip()[:120] or cur.get("workflowAssignee")
+    cur["workflowUpdatedAt"] = _now_iso()
+    ledger[fingerprint] = cur
+    _ledger_save("workflow", ledger)
+    return {"ok": True}
+
+
+@router.get("/api/findings/{finding_id}/impact-assessment")
+def impact_assessment_get(finding_id: str):
+    return {"findingId": finding_id, "impactAssessment": _ledger("impact").get(finding_id)}
+
+
+@router.post("/api/findings/{finding_id}/impact-assessment")
+def impact_assessment_set(finding_id: str, body: dict = Body(default={})):
+    assessment = body.get("impactAssessment") if isinstance(body.get("impactAssessment"), dict) else body
+    if not isinstance(assessment, dict):
+        return JSONResponse({"error": "body must be an impact assessment object"}, status_code=400)
+    ledger = _ledger("impact")
+    ledger[finding_id] = assessment
+    _ledger_save("impact", ledger)
+    return {"findingId": finding_id, "impactAssessment": assessment}
+
+
+@router.delete("/api/findings/{finding_id}/impact-assessment")
+def impact_assessment_clear(finding_id: str):
+    ledger = _ledger("impact")
+    ledger.pop(finding_id, None)
+    _ledger_save("impact", ledger)
+    return {"findingId": finding_id, "impactAssessment": None}
+
+
+@router.get("/api/findings/export")
+def findings_export(ids: str = ""):
+    """Download findings as JSONL (ids: comma-separated, or all)."""
+    from fastapi import Response as _FastapiResponse
+
+    want = {x for x in ids.split(",") if x} if ids else None
+    rows = []
+    for f in _findings():
+        if want is not None and f["id"] not in want:
+            continue
+        g = _finding_group(f)
+        rows.append(g["latest"])
+    body = "\n".join(json.dumps(r, default=str) for r in rows)
+    return _FastapiResponse(content=body, media_type="application/x-ndjson",
+                            headers={"Content-Disposition": "attachment; filename=findings.jsonl"})
 
 
 @router.get("/api/finding-family/{fingerprint}")
@@ -1192,17 +1294,17 @@ def models():
 
 _SETTING_DEFS = [
     {"key": "swarm_autopilot", "label": "Autopilot", "description": "Coordinator requeues and summons on its own.", "kind": "boolean", "default": True, "group": "swarm"},
-    {"key": "swarm_turn_cap", "label": "Turn cap", "description": "Per-agent turn budget. none = unlimited.", "kind": "enum", "default": "none", "choices": ["none", "25", "50", "100"], "group": "swarm"},
+    {"key": "swarm_turn_cap", "label": "Turn cap", "description": "Per-agent turn budget. 0 = unlimited.", "kind": "enum", "default": "0", "choices": ["0", "25", "50", "100"], "group": "swarm"},
     {"key": "complexity", "label": "Complexity", "description": "Gates advanced swarm verbs.", "kind": "enum", "default": "basic", "choices": ["basic", "advanced"], "group": "swarm"},
     {"key": "sandbox_pool_size", "label": "Warm pool", "description": "Idle boxes kept ready.", "kind": "enum", "default": "0", "choices": ["0", "2", "4", "8"], "group": "sandbox"},
     {"key": "transport_scope_guard", "label": "Scope guard", "description": "Drop requests outside engagement scope at the transport layer.", "kind": "boolean", "default": True, "group": "transport"},
     {"key": "transport_method_guard", "label": "Method guard", "description": "Restrict unsafe methods at the transport layer.", "kind": "boolean", "default": True, "group": "transport"},
     {"key": "transport_rate_limit", "label": "Rate limit", "description": "Requests/second ceiling.", "kind": "enum", "default": "off", "choices": ["off", "10", "50", "200"], "group": "transport"},
     {"key": "ledger_retest_days", "label": "Retest window", "description": "Stale verdicts invite retesting after this many days.", "kind": "enum", "default": "90", "choices": ["30", "90", "180"], "group": "ledger"},
-    {"key": "routing_worker_model", "label": "Worker model", "description": "Volume model for engagements (save money).", "kind": "enum", "default": "glm-5.3", "choices": ["glm-5.3", "glm-4.7-air", "glm-4.6", "glm-5.3"], "group": "models"},
-    {"key": "model_1", "label": "M1 · Leader model", "description": "REQUIRED for structured mode — the strongest brain.", "kind": "enum", "default": "glm-5.3", "choices": ["glm-5.3", "glm-5.3", "glm-4.7-air"], "group": "models"},
-    {"key": "model_2", "label": "M2 · Supervisor model", "description": "Defaults to M1 when unset.", "kind": "enum", "default": "", "choices": ["", "glm-5.3", "glm-5.3", "glm-4.7-air"], "group": "models"},
-    {"key": "model_3", "label": "M3 · Worker model", "description": "Defaults to M2 when unset. Cascade m3→m2→m1.", "kind": "enum", "default": "", "choices": ["", "glm-5.3", "glm-4.7-air", "glm-5.3"], "group": "models"},
+    {"key": "routing_worker_model", "label": "Worker model", "description": "Volume model for engagements.", "kind": "enum", "default": "", "choices": [], "group": "models"},
+    {"key": "model_1", "label": "M1 · Leader model", "description": "REQUIRED for structured mode — the strongest brain.", "kind": "enum", "default": "", "choices": [], "group": "models"},
+    {"key": "model_2", "label": "M2 · Supervisor model", "description": "Defaults to M1 when unset.", "kind": "enum", "default": "", "choices": [], "group": "models"},
+    {"key": "model_3", "label": "M3 · Worker model", "description": "Defaults to M2 when unset. Cascade m3→m2→m1.", "kind": "enum", "default": "", "choices": [], "group": "models"},
     {"key": "memory_preflight_guard", "label": "Memory guard", "description": "Refuse spawn plans exceeding the RAM budget.", "kind": "boolean", "default": True, "group": "swarm"},
 ]
 
@@ -1313,6 +1415,10 @@ def prune_stopped():
 def settings_get():
     cfg = _cfg()
     defs, values, sources = [], {}, {}
+    model_keys = {"routing_worker_model", "model_1", "model_2", "model_3"}
+    model_choices: list[str] = []
+    with contextlib.suppress(Exception):
+        model_choices = [m["value"] for m in available_models()["models"]][:400]
     for d in _SETTING_DEFS:
         k = d["key"]
         cur = cfg.get(k, d["default"])
@@ -1320,7 +1426,12 @@ def settings_get():
             cur = bool(cur)
         else:
             cur = str(cur)
-        defs.append({**d, "choices": d.get("choices"), "operatorOnly": False})
+        choices = d.get("choices") or []
+        if k in model_keys:
+            choices = ([""] if k in ("model_2", "model_3") else []) + model_choices
+            if cur and cur not in choices:
+                choices = [cur] + choices
+        defs.append({**d, "choices": choices, "operatorOnly": False})
         values[k] = cur
         sources[k] = "global"
     return {"settings": values, "sources": sources, "definitions": defs,
@@ -1336,8 +1447,8 @@ def settings_patch(body: dict = Body(default={})):
         return JSONResponse({"error": f"unknown setting '{key}'"}, status_code=400)
     if defs[key]["kind"] == "boolean":
         val = bool(val)
-    elif str(val) == "none":
-        val = 0 if key == "swarm_turn_cap" else val
+    elif str(val) == "none" or str(val) == "0":
+        val = 0 if key == "swarm_turn_cap" else ("" if key == "model_2" or key == "model_3" else val)
     _cfg_save({key: val})
     return settings_get()
 
@@ -1589,7 +1700,7 @@ def provider_catalog():
         "vllm": "vllm.ai", "llamacpp": "github.com", "jan": "jan.ai",
         "anthropic": "anthropic.com", "google": "gemini.google.com",
         "cloudflare": "cloudflare.com", "deepseek": "deepseek.com",
-        "custom": "",
+        "numes": "numes.ai", "ollama_cloud": "ollama.com", "custom": "",
     }
     merged: dict[str, dict] = {}
 
@@ -1797,9 +1908,9 @@ def provider_icon(domain: str):
     cache_dir = _ws() / "cache" / "provider-icons"
     cache_dir.mkdir(parents=True, exist_ok=True)
     headers = {"Cache-Control": "public, max-age=604800"}
-    for ext, media in ((".png", "image/png"), (".ico", "image/vnd.microsoft.icon")):
+    for ext, media in ((".png", "image/png"), (".svg", "image/svg+xml"), (".ico", "image/vnd.microsoft.icon")):
         cached = cache_dir / f"{dom}{ext}"
-        if cached.exists() and cached.stat().st_size > 100:
+        if cached.exists() and cached.stat().st_size > 50:
             return Response(cached.read_bytes(), media_type=media, headers=headers)
     sources = (
         f"https://unavatar.io/{dom}",
@@ -1812,8 +1923,16 @@ def provider_icon(domain: str):
             with urllib.request.urlopen(req, timeout=10) as r:
                 data = r.read()
                 ctype = r.headers.get_content_type() or "image/png"
-            if len(data) > 100:
-                ext = ".ico" if "icon" in ctype else ".png"
+            if len(data) > 50:
+                head = data[:400].lstrip().lower()
+                if data[:8] == b"\x89PNG\r\n\x1a\n":
+                    ext, ctype = ".png", "image/png"
+                elif data[:4] == b"\x00\x00\x01\x00":
+                    ext, ctype = ".ico", "image/vnd.microsoft.icon"
+                elif b"<svg" in head or head.startswith(b"<?xml"):
+                    ext, ctype = ".svg", "image/svg+xml"
+                else:
+                    continue  # not an image — try the next source
                 (cache_dir / f"{dom}{ext}").write_bytes(data)
                 return Response(data, media_type=ctype, headers=headers)
         except Exception:  # noqa: BLE001
@@ -1884,42 +2003,40 @@ def provider_override_put(key: str, body: dict = Body(default={})):
     return {"ok": True, "key": key, "override": ov}
 
 
-@router.post("/api/console/provider-override/{key}/test")
-def provider_override_test(key: str, body: dict = Body(default={})):
-    """Fire a REAL 1-token call through the stored (or inline) override —
-    the operator sees the raw response or the raw error."""
+def _ping_provider(key: str, override: dict | None = None, model: str = "", max_tokens: int = 16) -> dict:
+    """Fire ONE tiny real call — the truth about whether a provider works
+    right now (key saved ≠ provider up). Shared by Test ping and the
+    Diagnostics verifier. Never raises; raw error text is safe to show."""
     import urllib.request
 
-    from suijin.server.providers.lib import _merged_request
+    from suijin.server.providers.lib import _merged_request, provider_override
     from suijin.server.providers.lib.registry import PROVIDER_REGISTRY
 
     spec = PROVIDER_REGISTRY.get(key)
+    ov = dict(override or provider_override(key) or {})
+    if not spec and not ov:
+        return {"ok": False, "status": None, "error": f"unknown provider '{key}'"}
     if not spec:
-        return JSONResponse({"error": f"unknown provider '{key}'"}, status_code=400)
+        # custom OpenAI-compatible box — build a minimal spec from the override
+        from suijin.server.providers.lib.registry import ProviderSpec
+
+        spec = ProviderSpec(key=key, label=str(ov.get("label") or key),
+                            base_url=str(ov.get("baseUrl") or "").rstrip("/"),
+                            key_envs=(str((ov.get("auth") or {}).get("keyEnv") or "CUSTOM_API_KEY"),),
+                            default_model=str(ov.get("model") or ""))
     cfg = load_config_safe()
-    # inline override: test what's IN THE EDITOR, not the last save
-    ov = body.get("override")
-    if isinstance(ov, dict) and ov:
-        from suijin.server.providers.lib import save_provider_override as _save
-
-        _save(key, ov)
-    api_key = ""
-    with contextlib.suppress(Exception):
-        env_name = spec.key_envs[0]
-        import os as _os
-
-        api_key = _os.environ.get(env_name) or ""
-        if not api_key:
-            env_path = _ws() / "config" / ".env"
-            for ln in env_path.read_text(errors="replace").splitlines():
-                if ln.startswith(f"{env_name}="):
-                    api_key = ln.split("=", 1)[1].strip()
-                    break
-    if not api_key:
-        return {"ok": False, "error": f"{spec.key_envs[0]} not set — enter the key first", "status": None}
-    model = str((body.get("override") or {}).get("model") or body.get("model") or cfg.get("model_1") or spec.default_model or "gpt-3.5-turbo")
-    url, headers, payload, wire_model = _merged_request(
-        spec, cfg, model, [{"role": "user", "content": "ping"}], 16, 0.2, api_key)
+    api_key = _key_value_for(key, spec.key_envs[0] if spec.key_envs else "", ov)
+    if not api_key and key not in _LOCAL_PROVIDERS:
+        return {"ok": False, "status": None,
+                "error": f"{spec.key_envs[0] if spec.key_envs else 'key'} not set — enter the key first"}
+    if ov and not spec.key_envs:
+        api_key = api_key or ""  # local/anonymous box
+    model = str(model or (ov.get("model") if ov else "") or cfg.get(f"{key}_model") or cfg.get("model_1") or spec.default_model or "gpt-3.5-turbo")
+    try:
+        url, headers, payload, wire_model = _merged_request(
+            spec, cfg, model, [{"role": "user", "content": "ping"}], max_tokens, 0.2, api_key)
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "status": None, "error": f"{type(e).__name__}: {str(e)[:160]}"}
     try:
         req = urllib.request.Request(url, data=json.dumps(payload).encode(),
                                      headers=headers, method="POST")
@@ -1927,10 +2044,104 @@ def provider_override_test(key: str, body: dict = Body(default={})):
             data = json.loads(r.read().decode())
         msg = ((data.get("choices") or [{}])[0].get("message") or {})
         return {"ok": True, "status": 200, "url": url,
-                "reply": (msg.get("content") or msg.get("reasoning_content") or "(empty)")[:200],
+                "reply": str(msg.get("content") or msg.get("reasoning_content") or msg.get("reasoning") or "(empty)")[:200],
                 "model": wire_model}
     except urllib.error.HTTPError as e:
         raw = e.read().decode(errors="replace")[:300]
         return {"ok": False, "status": e.code, "url": url, "error": raw}
     except Exception as e:  # noqa: BLE001
         return {"ok": False, "status": None, "url": url, "error": f"{type(e).__name__}: {str(e)[:200]}"}
+
+
+@router.post("/api/console/provider-override/{key}/test")
+def provider_override_test(key: str, body: dict = Body(default={})):
+    """Fire a REAL 1-token call through the stored (or inline) override —
+    the operator sees the raw response or the raw error."""
+    ov = body.get("override")
+    if isinstance(ov, dict) and ov:
+        from suijin.server.providers.lib import save_provider_override as _save
+
+        _save(key, ov)
+    return _ping_provider(key, ov if isinstance(ov, dict) else None,
+                          str(body.get("model") or ""))
+
+
+@router.post("/api/console/providers/{key}/verify")
+def provider_verify(key: str):
+    """Diagnostics honesty: what a provider ACTUALLY does right now."""
+    return _ping_provider(key)
+
+
+_available_models_cache: dict = {"at": 0.0, "models": [], "providers": []}
+
+
+@router.get("/api/console/available-models")
+def available_models():
+    """Every model from every CONFIGURED provider — values are
+    'provider:model' so a pick routes there; cached 5 minutes."""
+    import time as _t
+
+    if _available_models_cache["models"] and _t.time() - _available_models_cache["at"] < 300:
+        return {"models": _available_models_cache["models"],
+                "providers": _available_models_cache["providers"], "cached": True}
+    catalog = provider_catalog()
+    models: list[dict] = []
+    providers: list[dict] = []
+    for entry in catalog["providers"]:
+        if not entry.get("configured"):
+            continue
+        key, label = entry["key"], entry["label"]
+        providers.append({"key": key, "label": label})
+        for mid in _provider_model_ids(key):
+            models.append({"value": f"{key}:{mid}", "label": mid,
+                           "provider": key, "providerLabel": label,
+                           "supported": True})
+    _available_models_cache.update(at=_t.time(), models=models, providers=providers)
+    return {"models": models, "providers": providers, "cached": False}
+
+
+def _provider_model_ids(key: str) -> list[str]:
+    """Cached live list for one provider; falls back to models.dev."""
+    import time as _t
+
+    cache = getattr(_provider_model_ids, "_cache", None)
+    if cache is None:
+        cache = {}
+        _provider_model_ids._cache = cache
+    entry = cache.setdefault(key, {"at": 0.0, "ids": []})
+    if entry["ids"] and _t.time() - entry["at"] < 300:
+        return entry["ids"]
+    ids: list[str] = []
+    with contextlib.suppress(Exception):
+        from suijin.server.providers.lib import provider_override
+
+        ov = provider_override(key) or {}
+        import urllib.request
+
+        catalog = provider_catalog()
+        spec_entry = next((p for p in catalog["providers"] if p["key"] == key), None)
+        base = str(ov.get("baseUrl") or (spec_entry or {}).get("baseUrl") or "")
+        if "{account_id}" in base:
+            account = str((ov.get("extras") or {}).get("account_id") or
+                          (load_config_safe().get("provider_extras") or {}).get(key, {}).get("account_id") or "")
+            base = base.replace("{account_id}", account) if account else ""
+        if base.startswith(("http://", "https://")):
+            key_env = (spec_entry or {}).get("keyEnv") or ""
+            api_key = _key_value_for(key, key_env, ov)
+            headers = {"Content-Type": "application/json"}
+            if api_key:
+                headers["Authorization"] = f"Bearer {api_key}"
+            path = "/api/tags" if key == "ollama" else "/models"
+            req = urllib.request.Request(f"{base.rstrip('/')}{path}", headers=headers)
+            with urllib.request.urlopen(req, timeout=6) as r:
+                data = json.loads(r.read().decode())
+            if key == "ollama":
+                ids = [m.get("name") for m in data.get("models", []) if m.get("name")]
+            else:
+                ids = [m.get("id") for m in (data.get("data") or data.get("models") or []) if m.get("id")]
+    if not ids:
+        ids = _models_dev_models_for(key)
+    entry.update(at=_t.time(), ids=sorted(set(str(i) for i in ids if i))[:300])
+    return entry["ids"]
+
+

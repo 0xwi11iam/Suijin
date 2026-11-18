@@ -44,14 +44,11 @@ export function categoryFor(definition: { key: string }): SettingsCategory { ret
 export function settingLabel(definition: { key: string; label: string }): string { return webSettingDetails(definition.key)?.label ?? definition.label; }
 export function settingChoiceLabel(key: string, choice: string): string {
   const labels: Record<string, Record<string, string>> = {
-    swarm_turn_cap: { none: "Unlimited" },
+    swarm_turn_cap: { "0": "Unlimited" },
     sandbox_pool_size: { "0": "Off", "2": "2 boxes", "4": "4 boxes", "8": "8 boxes" },
     transport_rate_limit: { off: "Off" },
     ledger_retest_days: { "30": "30 days", "90": "90 days", "180": "180 days" },
-    routing_worker_model: { "glm-5.3-flash": "GLM 5.3 Flash (fast)", "glm-4.7-air": "GLM 4.7 Air", "glm-4.6": "GLM 4.6" },
-    model_1: { "glm-5.3": "GLM 5.3 (strong)", "glm-5.3-flash": "GLM 5.3 Flash", "glm-4.7-air": "GLM 4.7 Air" },
-    model_2: { "": "Same as M1", "glm-5.3": "GLM 5.3", "glm-5.3-flash": "GLM 5.3 Flash", "glm-4.7-air": "GLM 4.7 Air" },
-    model_3: { "": "Same as M2", "glm-5.3-flash": "GLM 5.3 Flash (cheap)", "glm-4.7-air": "GLM 4.7 Air", "glm-5.3": "GLM 5.3" },
+    // model_* options are dynamic (provider:model) from /api/console/available-models — never hardcoded
     complexity: { basic: "Basic", advanced: "Advanced" },
   };
   return labels[key]?.[choice] ?? choice.charAt(0).toUpperCase() + choice.slice(1);

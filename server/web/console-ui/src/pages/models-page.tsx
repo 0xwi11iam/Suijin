@@ -47,6 +47,25 @@ export function ModelsPage() {
   const [jsonDirty, setJsonDirty] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
   const [testResult, setTestResult] = useState<string>("");
+  const [health, setHealth] = useState<Record<string, { ok: boolean | null; status?: string; error?: string }>>(() => {
+    try { return JSON.parse(window.localStorage.getItem("suijin-provider-health") || "{}"); } catch { return {}; }
+  });
+  const [verifying, setVerifying] = useState(false);
+  const verifyAll = async () => {
+    setVerifying(true);
+    const next = { ...health };
+    for (const pr of (catalog.data?.providers ?? []).filter(p => p.configured)) {
+      try {
+        const r = await webFetchJson<{ ok: boolean; status?: number | null; error?: string }>(`/api/console/providers/${pr.key}/verify`, { method: "POST", body: "{}" });
+        next[pr.key] = { ok: r.ok, status: r.status == null ? "network" : String(r.status), error: r.error?.slice(0, 200) };
+      } catch (e) {
+        next[pr.key] = { ok: false, status: "error", error: String(e) };
+      }
+      setHealth({ ...next });
+    }
+    try { window.localStorage.setItem("suijin-provider-health", JSON.stringify(next)); } catch { /* ignore */ }
+    setVerifying(false);
+  };
 
   const catalog = useQuery<CatalogResponse>({ queryKey: ["provider-catalog"], queryFn: () => webFetchJson("/api/console/provider-catalog"), staleTime: Infinity });
   const providersDev = useQuery({ queryKey: ["models-dev"], queryFn: () => webFetchJson("/api/console/models-dev"), staleTime: 600_000, retry: 1 });
@@ -215,7 +234,7 @@ export function ModelsPage() {
     {spec && <section className="space-y-3 rounded-xl border border-border p-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">{spec.label}</h2>
-        {statusLine && <span className="text-xs text-muted-foreground">{statusLine.configured ? "✓ connected" : "not connected"}</span>}
+        {statusLine && <span className="text-xs text-muted-foreground">{statusLine.configured ? "key saved" : "not configured"}</span>}
       </div>
 
       <label className="block space-y-1">
@@ -296,13 +315,29 @@ export function ModelsPage() {
       </div>
     </section>
 
-    {/* diagnostics */}
+    {/* diagnostics — honest: key saved ≠ verified working */}
     <section className="space-y-1 rounded-xl border border-border p-4">
-      <h3 className="text-sm font-semibold">Diagnostics</h3>
-      {(catalog.data?.providers ?? []).slice(0, 12).map(pr => <div key={pr.key} className="flex items-center justify-between text-xs">
-        <span className="flex items-center gap-2">{hostOf(pr.baseUrl) && <img src={iconUrl(pr.baseUrl)} alt="" className="size-4 rounded" loading="lazy" onError={e => { (e.target as HTMLImageElement).style.visibility = "hidden"; }} />}<span>{pr.label}</span></span>
-        <span className={pr.configured ? "text-emerald-500" : "text-muted-foreground"}>{pr.configured ? "✓ connected" : "not connected"}</span>
-      </div>)}
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">Diagnostics</h3>
+        <Button size="sm" variant="ghost" onClick={() => void verifyAll()} disabled={verifying}>{verifying ? "verifying…" : "Verify all"}</Button>
+      </div>
+      <p className="text-xs text-muted-foreground">"connected" means a key is saved. Verify pings each provider once (uses 1 token).</p>
+      {(catalog.data?.providers ?? []).slice(0, 15).map(pr => {
+        const h = health[pr.key];
+        const state = !pr.configured ? "idle" : h ? (h.ok ? "ok" : "fail") : "untested";
+        const badge = state === "ok" ? "verified"
+          : state === "fail" ? `failing${h?.status ? ` (${h.status})` : ""}`
+          : state === "untested" ? "key saved · untested"
+          : "not configured";
+        const color = state === "ok" ? "text-emerald-500"
+          : state === "fail" ? "text-red-500"
+          : state === "untested" ? "text-amber-500"
+          : "text-muted-foreground";
+        return <div key={pr.key} className="flex items-center justify-between gap-2 text-xs">
+          <span className="flex min-w-0 items-center gap-2">{iconUrl(pr) && <img src={iconUrl(pr)} alt="" className="size-4 shrink-0 rounded" loading="lazy" onError={e => { (e.target as HTMLImageElement).style.visibility = "hidden"; }} />}<span className="truncate">{pr.label}</span></span>
+          <span className={color} title={h?.error ?? undefined}>{badge}</span>
+        </div>;
+      })}
       {providersDev.isError && <p className="text-xs text-amber-500">models.dev unreachable — using registry defaults</p>}
     </section>
   </div>;
@@ -316,6 +351,6 @@ function ProviderRow({ p, selected, onClick }: { p: ProviderSpec; selected: bool
       : null}
     <span className={src ? "hidden size-4 rounded bg-muted text-center text-[9px] leading-4" : "size-4 rounded bg-muted text-center text-[9px] leading-4"}>{p.label.charAt(0)}</span>
     <span className="min-w-0 flex-1 truncate">{p.label}</span>
-    {p.configured && <span className="text-[10px] text-emerald-500">connected</span>}
+    {p.configured && <span className="text-[10px] text-amber-500">key saved</span>}
   </button>;
 }

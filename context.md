@@ -591,3 +591,11 @@ code and config did.
   scope rail. In-process `memory_guard` (agent/coordinator/web) plus a
   host watchdog cap RSS, dedupe one agent per engagement, and stop hunts at
   a deadline. Tests: `test_memory_guard.py`.
+
+- Models page Diagnostics (2026-11-18): rows show icon + verified/failing/
+  untested state from a per-provider ping (/api/console/providers/{key}/
+  verify); settings model choices come from /api/console/available-models
+  ('provider:model' values, routed cross-provider by model_routing's
+  provider:model split); findings console adapter gained POST triage,
+  workflow and impact-assessment routes plus GET /api/findings/export,
+  backed by local finding_*.json ledger overlays (swarm.db untouched).
