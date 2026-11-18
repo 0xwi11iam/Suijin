@@ -54,6 +54,7 @@ def mutation_allow_patterns() -> list[str]:
 # ── rate: per-host token bucket ─────────────────────────────────
 
 _buckets: dict = {}
+_PENDING_IDENTITY: dict = {}
 _bucket_lock = threading.Lock()
 
 
@@ -106,6 +107,18 @@ def guard(url: str, method: str = "GET") -> str | None:
                 return f"BLOCKED: {method} on {path} — no mutation allowlist match (guardrails.mutation_allow_paths)"
             if not allows:
                 return f"BLOCKED: {method} blocked by default — add the path to guardrails.mutation_allow_paths if intended"
+
+        # IDENTITY HEADERS (per-program brief requirements): Immutable
+        # requires X-Bugcrowd-Username; Tripadvisor requires "bugcrowd"
+        # in the User-Agent. Forgetting these = no payout even for valid
+        # findings, so they ride on every request automatically.
+        # (Configured in guardrails.identity_headers as {suffix: {header: value}})
+        with contextlib.suppress(Exception):
+            identities = (cfg.get("guardrails") or {}).get("identity_headers") or {}
+            for suffix, headers in identities.items():
+                if host == suffix or host.endswith("." + suffix):
+                    _PENDING_IDENTITY.update(headers)
+                    break
 
         # RAIL 3 — rate
         wait = _check_rate(host)
