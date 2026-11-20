@@ -1,8 +1,8 @@
 import { ControlDisclosure } from "./control-disclosure";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, ShieldCheck, CheckCircle2, Plus } from "lucide-react";
+import { ExternalLink, RefreshCw, ShieldCheck, CheckCircle2, Plus } from "lucide-react";
 import { AgentOnboarding } from "@/console/agent-onboarding";
 import { useBackendSelection } from "@/backend-context";
 import { useBackendApi } from "@/api";
@@ -23,6 +23,49 @@ const officialAuthHosts: Record<string, readonly string[]> = {
   xai: ["auth.x.ai"], kimi: ["auth.kimi.com"], openrouter: ["openrouter.ai"], google: ["accounts.google.com"],
 };
 const supportsEndpoint: Record<string, true> = { deepseek: true, anthropic: true, azure: true, openai: true, "z-ai": true, kimi: true, qwen: true, xai: true, opencode: true, cline: true, together: true, copilot: true };
+
+// ── provider-diagnostics cache (localStorage, ~10 min) ─────────────────
+// A saved key is "key saved · untested" until the operator runs Verify all,
+// which fires one real 1-token call per configured provider and caches the
+// live state: verified / failing (code) / key saved · untested.
+const DIAG_CACHE_KEY = "suijin-provider-diagnostics";
+const DIAG_CACHE_TTL = 10 * 60 * 1000;
+
+function readDiagCache(): Record<string, { valid: boolean; reason: string | null; message: string }> {
+  try {
+    const raw = localStorage.getItem(DIAG_CACHE_KEY);
+    if (!raw) return {};
+    const data = JSON.parse(raw) as Record<string, { valid?: boolean; reason?: string | null; message?: string; at?: number }>;
+    const now = Date.now();
+    const out: Record<string, { valid: boolean; reason: string | null; message: string }> = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (value.at && now - value.at < DIAG_CACHE_TTL) {
+        out[key] = { valid: !!value.valid, reason: value.reason ?? null, message: value.message ?? "" };
+      }
+    }
+    return out;
+  } catch { return {}; }
+}
+
+function writeDiagCache(updates: Record<string, { valid: boolean; reason: string | null; message: string }>) {
+  try {
+    const cur = readDiagCache();
+    localStorage.setItem(DIAG_CACHE_KEY, JSON.stringify({ ...cur, ...updates, _t: Date.now() }));
+  } catch { /* localStorage unavailable — fall back to backend defaults */ }
+}
+
+function providerStatusLabel(diag: { valid: boolean; reason: string | null; message: string | null }): string {
+  if (diag.valid) return "verified";
+  if (diag.reason === "failing") return diag.message ?? "failing";
+  if (diag.reason === "untested") return "key saved · untested";
+  return "not connected";
+}
+function providerStatusColor(diag: { valid: boolean; reason: string | null; message: string | null }): string {
+  if (diag.valid) return "bg-emerald-900/30 text-emerald-400 border-emerald-500/40";
+  if (diag.reason === "failing") return "bg-red-900/30 text-red-400 border-red-500/40";
+  if (diag.reason === "untested") return "bg-amber-900/30 text-amber-400 border-amber-500/40";
+  return "bg-muted/50 text-muted-foreground border-border";
+}
 
 function officialAuthUrl(providerId: string, raw: string | null): string | null {
   if (!raw) return null;
@@ -58,10 +101,36 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
   const openaiCatalog = (provider?.connectionIdentity && !openaiModels.error ? openaiModels.data?.models ?? [] : []).filter(item => item.provider === "openai");
   useEffect(() => { if (openaiModels.error) void providers.refetch(); }, [openaiModels.errorUpdatedAt]);
   const authUrl = provider ? officialAuthUrl(provider.id, provider.auth.verificationUrl) : null;
-  const connectedProviders = providers.data?.providers.filter(item => item.configured && item.diagnostics.valid) ?? [];
+  const [verifying, setVerifying] = useState<Set<string>>(new Set());
+  const diagCache = readDiagCache();
+  const verifiedIds = useMemo(() => new Set(Object.entries(diagCache).filter(([, v]) => v.valid).map(([k]) => k)), [diagCache]);
+  const diagFor = (p: { id: string; diagnostics: { valid: boolean; reason: string | null; message: string | null } }) => diagCache[p.id] ?? p.diagnostics;
+  // "connected" = a key is saved and ready to use; "verified" = a real ping
+  // just succeeded (green). Untested configured providers show amber, not a
+  // fake OK — that was the diagnostics lie.
+  const connectedProviders = providers.data?.providers.filter(item => item.configured) ?? [];
+  const verifiedProviders = providers.data?.providers.filter(item => verifiedIds.has(item.id)) ?? [];
   const chooseProvider = (id: string) => { setSelected(id); setAddingProvider(false); };
-  useEffect(() => { if (provider) onProviderChange?.(provider.id, provider.configured && provider.diagnostics.valid); }, [provider?.id, provider?.configured, provider?.diagnostics.valid, onProviderChange]);
-  useEffect(() => { if (provider?.configured && provider.diagnostics.valid) setAddingProvider(false); }, [provider?.id, provider?.configured, provider?.diagnostics.valid]);
+  const verifyAll = async () => {
+    const configured = providers.data?.providers.filter(p => p.configured) ?? [];
+    for (const p of configured) {
+      setVerifying(s => new Set([...s, p.id]));
+      try {
+        const res = await webFetchJson<{ ok?: boolean; status?: number; error?: string }>(`/api/console/providers/${encodeURIComponent(p.id)}/verify`, { method: "POST", body: "{}" });
+        const entry = res.ok
+          ? { valid: true, reason: "verified", message: "verified" }
+          : { valid: false, reason: "failing", message: `failing (${res.status ?? "?"})${res.error ? ": " + res.error : ""}` };
+        writeDiagCache({ [p.id]: entry });
+      } catch (e) {
+        writeDiagCache({ [p.id]: { valid: false, reason: "failing", message: `failing: ${String(e)}` } });
+      } finally {
+        setVerifying(s => { const n = new Set(s); n.delete(p.id); return n; });
+      }
+    }
+    void providers.refetch();
+  };
+  useEffect(() => { if (provider) onProviderChange?.(provider.id, verifiedIds.has(provider.id)); }, [provider?.id, verifiedIds, onProviderChange]);
+  useEffect(() => { if (provider?.configured && verifiedIds.has(provider.id)) setAddingProvider(false); }, [provider?.id, provider?.configured, verifiedIds]);
 
   useEffect(() => { if (!selected && providers.data) setSelected(providers.data.preference?.providerId ?? providers.data.providers.find(item => item.configured)?.id ?? providers.data.providers[0]?.id ?? ""); }, [providers.data, selected]);
   useEffect(() => { setApiKey(""); setBaseUrl(provider?.configuration?.baseUrl ?? ""); setModel(provider?.configuration?.model ?? ""); setProjectId(provider?.configuration?.projectId ?? ""); setDisconnect(null); setMessage(null); }, [selected, provider?.connectionIdentity]);
@@ -96,9 +165,9 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
     {!focused && providers.data && <div className="grid gap-3 sm:grid-cols-2">{[{ id: "chatgpt-plan", title: "ChatGPT plan", description: "Sign in directly to 0 and choose whether to allow your ChatGPT plan." }, { id: "chatgpt-codex", title: "ChatGPT / Codex account", description: "Sign in with ChatGPT, or use the Codex sign-in already available on this host." }, { id: "anthropic", title: "Claude via Anthropic API", description: "Connect an Anthropic API key to use Claude models in web chats." }].filter(item => providers.data!.providers.some(provider => provider.id === item.id)).map(item => <ChoiceCard key={item.id} selected={selected === item.id} className="h-auto items-start justify-start gap-3 whitespace-normal p-4 text-left" onClick={() => setSelected(item.id)}><ProviderIcon providerId={item.id} /><span><span className="block font-medium">{item.title}</span><span className="mt-1 block text-xs font-normal leading-5 text-muted-foreground">{item.description}</span></span></ChoiceCard>)}</div>}
     {providers.data && <div className={focused ? "space-y-5" : "grid gap-5 xl:grid-cols-[minmax(12rem,0.7fr)_minmax(0,1.3fr)]"}>
       {focused ? <div className="space-y-3">
-        {connectedProviders.length > 0 && <div className="flex flex-wrap items-center gap-2" aria-label="Connected AI providers">{connectedProviders.map(item => <Button key={item.id} variant="ghost" size="sm" aria-pressed={selected === item.id && !addingProvider} className={selected === item.id && !addingProvider ? "bg-muted" : ""} onClick={() => chooseProvider(item.id)}><span className="inline-flex min-w-0 items-center gap-2 leading-5"><ProviderIcon providerId={item.id} className="block size-4" /><span>{item.id === "chatgpt-codex" ? "ChatGPT / Codex" : item.label}</span></span><CheckCircle2 className="size-3.5 text-emerald-500" /></Button>)}<Button variant="ghost" size="sm" onClick={() => { setAddingProvider(true); setSelected(providers.data!.providers.find(item => !item.configured)?.id ?? selected); }}><Plus className="size-4" />Connect another</Button></div>}
+        {(verifiedProviders.length > 0 || connectedProviders.length > 0) && <div className="flex flex-wrap items-center gap-2" aria-label="Connected AI providers">{verifiedProviders.map(item => <Button key={item.id} variant="ghost" size="sm" aria-pressed={selected === item.id && !addingProvider} className={selected === item.id && !addingProvider ? "bg-muted" : ""} onClick={() => chooseProvider(item.id)}><span className="inline-flex min-w-0 items-center gap-2 leading-5"><ProviderIcon providerId={item.id} className="block size-4" /><span>{item.id === "chatgpt-codex" ? "ChatGPT / Codex" : item.label}</span><span className="ml-1 text-[10px] bg-emerald-900/30 text-emerald-400 rounded px-1.5 py-0.5">verified</span></span></Button>)}<Button variant="ghost" size="sm" disabled={verifying.size > 0 || connectedProviders.length === 0} onClick={verifyAll} title={verifying.size > 0 ? "Verifying providers…" : "Run a real 1-token ping against every saved key and mark verified / failing"}><RefreshCw className="size-3.5 mr-1.5" />{verifying.size > 0 ? "verifying…" : "Verify all"}</Button><Button variant="ghost" size="sm" onClick={() => { setAddingProvider(true); setSelected(providers.data!.providers.find(item => !item.configured)?.id ?? selected); }}><Plus className="size-4" />Connect another</Button></div>}
         {(addingProvider || connectedProviders.length === 0) && <div className="space-y-3"><Select aria-label="Choose AI provider" value={selected} onValueChange={setSelected} options={[...providers.data.providers].sort((a,b) => (a.id === "chatgpt-codex" ? -1 : b.id === "chatgpt-codex" ? 1 : Number(b.configured)-Number(a.configured))).map(item => ({ value: item.id, label: <span className="flex items-center gap-2"><ProviderIcon providerId={item.id} className="size-4" /><span>{item.id === "chatgpt-codex" ? "ChatGPT / Codex" : item.id === "anthropic" ? "Claude · API key" : item.label}</span></span> }))} />{connectedProviders.length > 0 && <Button variant="ghost" size="sm" onClick={() => chooseProvider(connectedProviders[0].id)}>Cancel</Button>}</div>}
-      </div> : <ControlCard title="Providers"><div className="space-y-2">{[...providers.data.providers].sort((a, b) => Number(b.configured) - Number(a.configured)).map(item => <Button variant="ghost" size="sm" key={item.id} type="button" onClick={() => setSelected(item.id)} aria-pressed={selected === item.id} className={`h-auto whitespace-normal justify-start font-normal flex w-full items-center justify-between gap-3  px-3 py-2.5 text-left text-sm     ${selected === item.id ? "bg-muted" : ""}`}><span className="flex min-w-0 items-center gap-3"><ProviderIcon providerId={item.id} /><span className="truncate">{item.label}</span></span>{item.configured && <Badge variant="secondary">Configured</Badge>}</Button>)}</div></ControlCard>}
+      </div> : <ControlCard title="Providers"><div className="space-y-2">{[...providers.data.providers].sort((a, b) => Number(b.configured) - Number(a.configured)).map(item => <Button variant="ghost" size="sm" key={item.id} type="button" onClick={() => setSelected(item.id)} aria-pressed={selected === item.id} className={`h-auto whitespace-normal justify-start font-normal flex w-full items-center justify-between gap-3  px-3 py-2.5 text-left text-sm     ${selected === item.id ? "bg-muted" : ""}`}><span className="flex min-w-0 items-center gap-3"><ProviderIcon providerId={item.id} /><span className="truncate">{item.label}</span></span>{item.configured && <span className={`ml-2 flex items-center gap-1 px-2 py-0.5 rounded-[var(--radius-control)] text-[10px] font-medium border ${providerStatusColor(diagFor(item))}`}>{providerStatusLabel(diagFor(item))}</span>}</Button>)}</div></ControlCard>}
       {provider && <ControlCard title={focused ? undefined : provider.label}>
         {provider.id === "chatgpt-codex" && (!focused || !provider.configured || !provider.diagnostics.valid) && <div className="space-y-2 text-sm text-muted-foreground"><p>Sign in with ChatGPT to use Codex models.</p><p>Already signed in to Codex on {hostName}? <Button variant="link" size="sm" className="h-auto px-0" disabled={providers.isFetching} onClick={() => void providers.refetch()}>Check existing sign-in</Button></p>{!provider.auth.available && <p>Codex must be installed and runnable on {hostName} to start sign-in here. You can also run <code>codex login --device-auth</code> in that host’s terminal, then check again.</p>}</div>}
         {provider.id === "chatgpt-plan" && <div className="space-y-2 text-sm text-muted-foreground"><p>Sign in directly with ChatGPT for this local 0 application. You choose whether to allow use of your ChatGPT plan.</p><p>Account sign-in, plan permission, and available models are checked separately. This connection uses its own registration and does not import your Codex credentials.</p><p>The sign-in page must open on this computer so its local callback can reach 0.</p></div>}
@@ -108,7 +177,7 @@ export function ConnectionsControl({ onConnected, focused = false, onProviderCha
         {provider.id === "cline" && <p className="text-sm text-muted-foreground">Create a key in <a className="underline" href="https://app.cline.bot" target="_blank" rel="noopener noreferrer">Cline Settings → API Keys</a>. Choose a <code>cline-pass/*</code> model for your active ClinePass plan; other model IDs use usage billing. The public catalog does not verify subscription access.</p>}
 
         {provider.methods.length === 0 && <p role="status" className="text-sm text-muted-foreground">{provider.auth.message}</p>}
-        {provider.configured && !provider.diagnostics.valid && <Feedback error={provider.diagnostics.message ?? "This connection needs attention."} />}
+        {provider && provider.configured && diagFor(provider).reason === "failing" && <Feedback error={diagFor(provider).message ?? "This connection needs attention."} />}
         {!focused && provider.accounts.length > 0 && <div className="space-y-3">{provider.accounts.map(account => <div key={account.accountId} className="rounded-[var(--radius-menu,12px)] bg-muted/40 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-medium">{account.label}</p><p className="mt-1 text-xs text-muted-foreground">{account.status === "signed-out" ? "Signed out" : account.status === "reauth-required" ? "Sign-in required" : account.kind === "oauth" ? account.sharing === false ? "Signed in · Plan permission required" : "Signed in" : "API key"} · {account.active ? "Active" : "Inactive"}</p></div><div className="flex gap-2">{provider.id === "chatgpt-plan" && <Button size="sm" variant="outline" disabled={auth.isPending || provider.auth.phase === "running" || !provider.auth.available} onClick={() => auth.mutate({ profileId: account.accountId })}>Sign in again</Button>}{!account.active && account.status !== "signed-out" && account.status !== "reauth-required" && <Button size="sm" variant="outline" disabled={mutation.isPending} onClick={() => mutation.mutate({ action: "activate", accountId: account.accountId })}>Activate</Button>}<Button size="sm" variant="ghost" disabled={mutation.isPending} onClick={() => setDisconnect(account.accountId)}>Disconnect</Button></div></div>{disconnect === account.accountId && <div className="mt-3 space-y-2"><p className="text-sm">{provider.id === "chatgpt-plan" ? `Sign out of this ChatGPT connection on ${hostName}? 0 will clear its saved tokens and attempt to revoke this registration’s refresh token.` : <>Remove this account from {hostName}? It stays active with the provider.</>}</p><div className="flex gap-2"><SubmitButton size="sm" variant="destructive" pending={mutation.isPending} onClick={() => mutation.mutate({ action: "disconnect", accountId: account.accountId })}>Remove</SubmitButton><Button size="sm" variant="outline" onClick={() => setDisconnect(null)}>Cancel</Button></div></div>}</div>)}</div>}
         {provider.methods.includes("oauth") && (!focused || !provider.configured || !provider.diagnostics.valid || provider.auth.phase === "running") && <section className="space-y-3 rounded-[var(--radius-panel,16px)] bg-muted/40 p-4"><h3 className="flex items-center gap-2 text-sm font-medium"><ShieldCheck className="size-4" />{provider.id === "chatgpt-plan" ? "Connect ChatGPT to 0" : provider.id === "chatgpt-codex" ? "Connect your Codex account" : "Sign in"}</h3><p role="status" className="text-sm text-muted-foreground">{provider.auth.message}</p>{provider.auth.userCode && <div><p className="text-xs text-muted-foreground">Your code</p><code className="mt-1 inline-block rounded-[var(--radius-control,8px)] border border-border px-3 py-2 text-lg tracking-widest">{provider.auth.userCode}</code></div>}{authUrl && <Button asChild variant="outline"><a href={authUrl} target="_blank" rel="noopener noreferrer">Open sign-in page<ExternalLink className="size-4" /></a></Button>}{provider.auth.verificationUrl && !authUrl && <Feedback error="This sign-in link looks unsafe, so it wasn't opened." />}<div className="flex flex-wrap gap-2">{provider.auth.phase === "running" ? <SubmitButton pending={auth.isPending} variant="outline" onClick={() => auth.mutate(true)}>Cancel sign-in</SubmitButton> : <SubmitButton pending={auth.isPending} disabled={!provider.auth.available} onClick={() => auth.mutate(false)}>{provider.configured ? "Connect another account" : (provider.id === "chatgpt-plan" || provider.id === "chatgpt-codex") ? "Continue with ChatGPT" : "Sign in"}</SubmitButton>}{provider.auth.phase === "connected" && provider.diagnostics.valid && onConnected && <Button variant="outline" onClick={onConnected}>Continue</Button>}</div></section>}
         {(!focused || provider.id === "azure" || provider.id === "google" || provider.id === "openai") && (supportsEndpoint[provider.id] || provider.id === "google") && <ControlDisclosure key={provider.id} defaultOpen={provider.id === "azure" || provider.id === "google" || provider.id === "openai"} className="pt-2" title={<>{provider.id === "azure" || provider.id === "google" ? "Settings" : provider.id === "openai" ? "Custom provider (bring your own key)" : "Advanced"}</>}><form className="mt-3 space-y-4" onSubmit={event => { event.preventDefault(); mutation.mutate({ action: "configure" }); }}>

@@ -1,9 +1,8 @@
-import { Activity, BookOpen, Library, MessageSquare, Plug, Server, Settings, ShieldCheck, Workflow } from "lucide-react";
+import { BookOpen, Library, MessageSquare, Plug, Server, Settings, ShieldCheck, Workflow } from "lucide-react";
 
 /** One destination inventory for desktop and touch navigation. */
 export const WORKSPACE_DESTINATIONS = [
   { to: "/chats", label: "Chat", icon: MessageSquare },
-  { to: "/runs", label: "Runs", icon: Activity },
   { to: "/findings", label: "Findings", icon: ShieldCheck },
   { to: "/plugins/skills", label: "Skills", icon: Library },
   { to: "/plugins", label: "Plugins", icon: Plug },

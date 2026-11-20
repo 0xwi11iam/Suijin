@@ -2,7 +2,6 @@ import { cn } from "@/lib/utils";
 import openRouterCloud from "@/assets/brands/openrouter-cloud.svg";
 import openRouterInk from "@/assets/brands/openrouter-ink.svg";
 import zAiLogo from "@/assets/brands/z-ai.svg";
-import { Cpu } from "lucide-react";
 import { PROVIDER_BRAND_PATHS } from "./provider-brand-paths";
 
 // Brand paths from Simple Icons (CC0), normalized to its 24 × 24 viewBox.
@@ -18,6 +17,27 @@ const BRAND_PATHS: Record<string, string> = {
 };
 const BRAND_ALIASES: Record<string, string> = { "chatgpt-plan": "openai", "chatgpt-codex": "openai", codex: "openai", chatgpt: "openai", copilot: "githubcopilot", xai: "grok", "z-ai": "zai" };
 
+// Deterministic accent per provider so the letter-avatar fallback is stable
+// and distinct (no generic monogram for every unbranded provider).
+const AVATAR_COLORS: Record<string, string> = {
+  "ollama": "bg-neutral-300 text-neutral-900", "together": "bg-sky-100 text-sky-900", "groq": "bg-orange-100 text-orange-900",
+  "mistral": "bg-amber-100 text-amber-900", "perplexity": "bg-teal-100 text-teal-900", "cohere": "bg-rose-100 text-rose-900",
+  "fireworks": "bg-red-100 text-red-900", "deepinfra": "bg-violet-100 text-violet-900", "cerebras": "bg-emerald-100 text-emerald-900",
+  "sambanova": "bg-cyan-100 text-cyan-900", "lambda": "bg-indigo-100 text-indigo-900", "baseten": "bg-fuchsia-100 text-fuchsia-900",
+  "novita": "bg-lime-100 text-lime-900", "nvidia": "bg-green-100 text-green-900", "moonshot": "bg-blue-100 text-blue-900",
+  "zhipu": "bg-sky-100 text-sky-900", "numes": "bg-purple-100 text-purple-900", "stepfun": "bg-pink-100 text-pink-900",
+  "modelscope": "bg-violet-100 text-violet-900", "siliconflow": "bg-indigo-100 text-indigo-900", "iflytek": "bg-cyan-100 text-cyan-900",
+  "longcat": "bg-amber-100 text-amber-900", "cloudflare": "bg-orange-100 text-orange-900", "lmstudio": "bg-slate-100 text-slate-900",
+  "vllm": "bg-teal-100 text-teal-900", "llamacpp": "bg-stone-100 text-stone-900", "jan": "bg-emerald-100 text-emerald-900",
+};
+const AVATAR_COLOR_CYCLE = ["bg-neutral-200 text-neutral-800", "bg-sky-100 text-sky-900", "bg-amber-100 text-amber-900", "bg-emerald-100 text-emerald-900", "bg-rose-100 text-rose-900", "bg-violet-100 text-violet-900", "bg-cyan-100 text-cyan-900"];
+function avatarColor(id: string): string {
+  if (AVATAR_COLORS[id]) return AVATAR_COLORS[id];
+  let h = 0;
+  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return AVATAR_COLOR_CYCLE[h % AVATAR_COLOR_CYCLE.length];
+}
+
 /** Decorative brand mark; the adjacent provider label supplies its accessible name. */
 export function ProviderIcon({ providerId, className }: { providerId: string; className?: string }) {
   const id = providerId.toLowerCase();
@@ -27,9 +47,14 @@ export function ProviderIcon({ providerId, className }: { providerId: string; cl
   if (id === "z-ai" || id === "zai" || id === "glm") return <img aria-hidden="true" data-provider-icon="zai" src={zAiLogo} alt="" className={cn("size-4 shrink-0 object-contain", className)} />;
   const brand = BRAND_ALIASES[id] ?? id;
   const paths = PROVIDER_BRAND_PATHS[brand] ?? (BRAND_PATHS[brand] ? [{ d: BRAND_PATHS[brand] }] : undefined);
-  return paths
-    ? <svg aria-hidden="true" data-provider-icon={brand} viewBox="0 0 24 24" fill="currentColor" fillRule={PROVIDER_BRAND_PATHS[brand] ? "evenodd" : undefined} className={cn("size-4 shrink-0", className)}>{paths.map((path, index) => <path key={index} d={path.d} fillOpacity={path.fillOpacity} />)}</svg>
-    : <Cpu aria-hidden="true" data-provider-icon="generic" className={cn("size-4 shrink-0", className)} />;
+  if (paths) return <svg aria-hidden="true" data-provider-icon={brand} viewBox="0 0 24 24" fill="currentColor" fillRule={PROVIDER_BRAND_PATHS[brand] ? "evenodd" : undefined} className={cn("size-4 shrink-0", className)}>{paths.map((path, index) => <path key={index} d={path.d} fillOpacity={path.fillOpacity} />)}</svg>;
+  // Letter-avatar fallback: provider initial on a deterministic accent —
+  // distinct per provider, never a generic monogram for everyone.
+  const initial = (providerLabelShort(id) || id).charAt(0).toUpperCase();
+  return <span aria-hidden="true" data-provider-icon="letter" className={cn("inline-flex size-4 shrink-0 items-center justify-center rounded-[3px] text-[9px] font-bold leading-none", avatarColor(id), className)}>{initial}</span>;
+}
+function providerLabelShort(id: string): string {
+  return ({ chatgpt: "ChatGPT", codex: "Codex", copilot: "Copilot", "chatgpt-plan": "ChatGPT", "chatgpt-codex": "Codex", deepseek: "D", qwen: "Q", kimi: "K", glm: "G", numes: "N", zhipu: "Z", together: "T", groq: "G", mistral: "M", perplexity: "P", cohere: "C", fireworks: "F", ollama: "O", lmstudio: "L", vllm: "V", jan: "J" } as Record<string, string>)[id] ?? id;
 }
 
 /** Model maker can differ from its connection provider (for example Claude on OpenRouter). */
