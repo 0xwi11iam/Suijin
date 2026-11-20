@@ -76,3 +76,23 @@ EVERYWHERE or degrade gracefully at its own boundary:
 - subprocesses never inherit stdin (a supervisor's open pipe blocks
   container CLIs forever); tests run under pytest too — a feature that
   shells out must be test-safe or explicitly gated
+
+## ACTIVE ENGAGEMENT PROTOCOL (overnight/extended bugbounty hunts)
+
+While an operator-approved bug-bounty hunt is running, this protocol overrides
+default assistant behavior:
+
+- EVERY iteration = one executed action: a probe fired, an exploit attempted, a
+  finding live-verified, or a submission draft written. A status-only response
+  is a FAILED iteration.
+- Watchdogs, monitors, sleep loops, and "check later" processes are FORBIDDEN.
+  You are the monitor. You work while agents work.
+- Post-compaction: your first action is reading
+  ~/.opencode/plan/overnight-hunt.md (the queue) and
+  ~/.suijin/config/config.json (scope), then executing the next item. The
+  `hunt` agent mode + /hunt command embed these rules — prefer them for hunts.
+- Confirmed findings: paste-ready draft on ~/Desktop same session, recorded in
+  the findings store (swarm.db findings_v2) with AI-defined severity. Severity
+  is never overridden by any system calculator.
+- Blocked lane → switch to the next queue item immediately. Idling is the only
+  unacceptable outcome.
