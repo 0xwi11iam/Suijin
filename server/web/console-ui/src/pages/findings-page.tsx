@@ -394,13 +394,6 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
         eyebrow="Findings"
         title="Findings"
         summary="Review evidence, assess impact, and track remediation."
-        actions={(
-          <>
-            <Button variant="outline" asChild><Link to="/scope">Assessment reports</Link></Button>
-            <ReportExportControl label={selectedGroup ? "Export finding" : `Export ${visibleGroups.length} finding${visibleGroups.length === 1 ? "" : "s"}`} path={selectedGroup ? `/api/findings/export?ids=${encodeURIComponent(selectedGroup.latest.id)}` : `/api/findings/export?ids=${encodeURIComponent(visibleGroups.map(group => group.latest.id).join(","))}`} disabled={!selectedGroup && visibleGroups.length === 0} />
-
-          </>
-        )}
       />
 
       <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius-panel)] border border-border p-3">
@@ -671,22 +664,6 @@ function FindingFamilyInspector({
         />
 
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant="success"
-            onClick={() => onTriage("accepted", note)}
-            disabled={isSaving}
-          >
-            <ShieldCheck className="size-4" />
-            Accept
-          </Button>
-          <Button
-            variant="warning"
-            onClick={() => onTriage("suppressed", note)}
-            disabled={isSaving}
-          >
-            <ShieldOff className="size-4" />
-            Dismiss
-          </Button>
           {data.latest.triageStatus !== "new" ? (
             <Button
               variant="ghost"
@@ -701,64 +678,6 @@ function FindingFamilyInspector({
 
 
 
-        <Button variant="outline" asChild className="w-full"><Link to={`/chats?finding=${encodeURIComponent(data.latest.id)}&intent=${handoffIntent}`}><MessageSquare className="size-4" />{handoffTitle}</Link></Button>
-        <Disclosure summary="Terminal command" className="rounded-[var(--radius-panel)] border border-border p-3 text-sm" triggerClassName="cursor-pointer text-muted-foreground">
-        <div className="mt-3 space-y-2">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <MessageSquare className="size-4 text-primary-text" />
-              {handoffTitle}
-            </div>
-            <Button variant="outline" size="sm" onClick={() => void copyHandoff()}>
-              <Copy className="size-4" />
-              Copy
-            </Button>
-          </div>
-          <code className="block overflow-x-auto rounded-[var(--radius-menu,12px)] bg-background/80 px-3 py-2 font-mono text-sm text-foreground">
-            {handoffCommand}
-          </code>
-          {handoffNotice ? <div className="text-xs leading-5 text-muted-foreground">{handoffNotice}</div> : null}
-        </div>
-
-        </Disclosure>
-        <Disclosure className="rounded-[var(--radius-panel,16px)] bg-muted/30 px-4 py-3 text-sm" summary={<> Details </>} triggerClassName="cursor-pointer font-medium text-foreground">
-
-          <div className="mt-4 space-y-4">
-            <div className="grid gap-3 md:grid-cols-2">
-              <SummaryMetric label="Status" value={executionHeadline} />
-              <SummaryMetric
-                label="Now"
-                value={activeWorkItem ? activeWorkItem.title : blockedWorkItem ? blockedWorkItem.title : "—"}
-              />
-              <SummaryMetric
-                label="Next"
-                value={nextQueuedWorkItem ? nextQueuedWorkItem.title : data.workflow.reviewGate !== "none" ? "Review" : "—"}
-              />
-              <SummaryMetric label="Verdict" value={`${data.workflow.consensus} · ${data.workflow.evidenceSignal} signal`} />
-              <SummaryMetric
-                label="Votes (real / false / unsure)"
-                value={`${data.workflow.verdictCounts.truePositive} / ${data.workflow.verdictCounts.falsePositive} / ${data.workflow.verdictCounts.unsure}`}
-              />
-              <SummaryMetric label="Seen" value={`${data.rows.length}×`} />
-              <SummaryMetric
-                label="Target type"
-                value={data.case ? formatCaseTargetTypeLabel(data.case.targetType) : "Unknown"}
-              />
-              <SummaryMetric label="ID" value={data.fingerprint} mono />
-            </div>
-
-            {data.workflow.reviewReason || (selectedSummary && selectedSummary.persistedStatus !== selectedSummary.phase) ? (
-              <div className="text-sm text-muted-foreground">
-                {data.workflow.reviewReason ?? ""}
-                {selectedSummary && selectedSummary.persistedStatus !== selectedSummary.phase
-                  ? ` You set it to ${selectedSummary.persistedStatus}.`
-                  : ""}
-              </div>
-            ) : null}
-
-
-          </div>
-        </Disclosure>
       </InspectorPane>
 
       <section className="order-1 min-w-0 xl:col-start-1 xl:row-start-1">

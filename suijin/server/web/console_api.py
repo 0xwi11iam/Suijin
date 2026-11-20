@@ -1248,6 +1248,23 @@ def _zai_configured() -> bool:
     return False
 
 
+def _provider_diagnostics(configured: bool, verified: bool | None = None,
+                          status: int | None = None, error: str | None = None) -> dict:
+    """Honest per-provider diagnostics. A saved key is NOT "verified" — it's
+    "key saved · untested" until a real ping succeeds. verified=None means
+    we haven't pinged (the default); verified True/False is a live result."""
+    if not configured:
+        return {"valid": False, "reason": None, "message": "not connected"}
+    if verified is True:
+        return {"valid": True, "reason": "verified", "message": "verified"}
+    if verified is False:
+        msg = f"failing ({status})" if status else "failing"
+        if error:
+            msg = f"{msg}: {error[:160]}"
+        return {"valid": False, "reason": "failing", "message": msg}
+    return {"valid": False, "reason": "untested", "message": "key saved · untested"}
+
+
 @router.get("/api/console/providers")
 def providers():
     cfg = _cfg()
@@ -1256,7 +1273,7 @@ def providers():
         "id": "z-ai", "label": "Z.ai", "methods": ["api-key"],
         "configured": zai, "source": "env" if zai else None,
         "connectionIdentity": "suijin-zai" if zai else None,
-        "diagnostics": [],
+        "diagnostics": _provider_diagnostics(zai),
         "accounts": ([{"accountId": "suijin", "kind": "api-key", "active": True,
                        "label": "coding plan", "status": "active"}] if zai else []),
         "auth": {"phase": "connected" if zai else "unconfigured",
@@ -1267,7 +1284,7 @@ def providers():
     for pid, label in (("anthropic", "Anthropic"), ("openai", "OpenAI"),
                        ("google", "Google"), ("openrouter", "OpenRouter")):
         provs.append({"id": pid, "label": label, "methods": ["api-key"], "configured": False,
-                      "source": None, "diagnostics": [], "accounts": [],
+                      "source": None, "diagnostics": _provider_diagnostics(False), "accounts": [],
                       "auth": {"phase": "unconfigured", "message": "no credential", "lines": [],
                                "verificationUrl": None, "userCode": None, "available": True}})
     model = cfg.get("zai_model") or "glm-5.3"
@@ -1542,8 +1559,7 @@ def doctor():
     zai = _zai_configured()
     doc_provs = []
     for p in provs["providers"]:
-        doc_provs.append({**p, "diagnostics": {"valid": bool(p["configured"]),
-                                               "message": "" if p["configured"] else "not connected"}})
+        doc_provs.append({**p, "diagnostics": _provider_diagnostics(bool(p["configured"]))})
     return {
         "version": "1.0.0",
         "runtime": {"node": "24", "nodeSupported": True, "platform": "host",
@@ -2011,6 +2027,11 @@ def _ping_provider(key: str, override: dict | None = None, model: str = "", max_
 
     from suijin.server.providers.lib import _merged_request, provider_override
     from suijin.server.providers.lib.registry import PROVIDER_REGISTRY
+
+    # The frontend lists providers by display id ("z-ai"); the registry and
+    # provider catalog use the registry key ("zai"). Normalize so Verify
+    # actually reaches the right provider spec (and reads the right key env).
+    key = {"z-ai": "zai", "zhipu": "zai"}.get(key, key)
 
     spec = PROVIDER_REGISTRY.get(key)
     ov = dict(override or provider_override(key) or {})

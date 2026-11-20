@@ -21,6 +21,7 @@ Layout:
 from __future__ import annotations
 
 import contextlib
+import os
 import time
 
 # report_finding writer, resolved lazily in route_tool (boundary rule)

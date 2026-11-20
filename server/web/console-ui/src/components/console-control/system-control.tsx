@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Check, ControlCard, Empty, Facts, Feedback, Field, QueryState, SubmitButton, TextField, jsonBody } from "./control-ui";
+import { ProviderIcon } from "@/components/provider-icon";
 import type { CheckItem, ChecksResponse, ProjectResponse, Provider, SessionSnapshot, SessionSummary } from "./contracts";
 import { DiagnosticReportControl } from "./diagnostic-report-control";
 
@@ -86,26 +87,47 @@ interface DoctorResponse { version: string; runtime: { node: string; nodeSupport
 export function DoctorControl() {
   const { webFetchJson } = useBackendApi();
   const doctor = useQuery({ queryKey: ["console-doctor"], queryFn: ({ signal }) => webFetchJson<DoctorResponse>("/api/console/doctor", { signal }) });
+  const [verifying, setVerifying] = useState<Set<string>>(new Set());
+  const verifyAll = async () => {
+    const providers = doctor.data?.providers.filter(p => p.configured) ?? [];
+    for (const p of providers) {
+      setVerifying(s => new Set([...s, p.id]));
+      try {
+        await webFetchJson<{ ok?: boolean; status?: number; error?: string }>(`/api/console/providers/${encodeURIComponent(p.id)}/verify`, { method: "POST", body: "{}" });
+      } catch { /* errors are surfaced by the badge state on next doctor fetch */ }
+      finally { setVerifying(s => { const n = new Set(s); n.delete(p.id); return n; }); }
+    }
+    void doctor.refetch();
+  };
   return <div className="space-y-5">
     <ControlCard title="Health">
       <QueryState pending={doctor.isPending} error={doctor.error} retry={doctor.refetch} />
       {doctor.data && (() => {
         const data = doctor.data;
-        const providerProblems = data.providers.filter(provider => provider.configured && !provider.diagnostics.valid);
+        const providerStatus = (diag: { valid: boolean; reason: string | null; message: string | null }) => {
+          if (diag.valid) return { label: "verified", color: "text-emerald-400 bg-emerald-900/30 border-emerald-500/40" };
+          if (diag.reason === "failing") return { label: diag.message ?? "failing", color: "text-red-400 bg-red-900/30 border-red-500/40" };
+          if (diag.reason === "untested") return { label: "key saved · untested", color: "text-amber-400 bg-amber-900/30 border-amber-500/40" };
+          return { label: "not connected", color: "text-muted-foreground bg-muted/50 border-border" };
+        };
+        // Any configured provider that hasn't been verified (untested or failing) means the
+        // stack is not truly healthy — "key saved" is not "verified".
+        const unverifiedProviders = data.providers.filter(p => p.configured && p.diagnostics.reason !== "verified");
+        const failingProviders = data.providers.filter(provider => provider.diagnostics.reason === "failing");
         const missing = data.prerequisites.filter(item => item.required && !item.available);
-        const healthy = data.availability.apiRuntime.valid && data.runtime.nodeSupported && providerProblems.length === 0 && missing.length === 0;
+        const healthy = data.availability.apiRuntime.valid && data.runtime.nodeSupported && unverifiedProviders.length === 0 && missing.length === 0;
         return <>
           {healthy ? <Feedback message={`All good · ${data.availability.apiRuntime.providerLabel} · v${data.version}`} /> : <>
             {!data.availability.apiRuntime.valid && <div className="space-y-2"><Feedback error={data.availability.apiRuntime.error ?? "No provider connected."} /><Link to="/models" className="block text-sm underline">Connect a provider</Link></div>}
             {!data.runtime.nodeSupported && <Feedback error={`Node ${data.runtime.node} is not supported. Install Node 24+.`} />}
-            {providerProblems.map(provider => <Feedback key={provider.id} error={`${provider.label}: ${provider.diagnostics.message ?? "needs attention"}`} />)}
+            {unverifiedProviders.map(provider => <Feedback key={provider.id} error={`${provider.label}: ${providerStatus(provider.diagnostics).label}`} />)}
             {missing.length > 0 && <Feedback error={`Missing: ${missing.map(item => item.id).join(", ")}`} />}
           </>}
-          <Button variant="outline" onClick={() => void doctor.refetch()} disabled={doctor.isFetching}><RefreshCcw className="size-4" />Check again</Button>
+          <Button variant="outline" onClick={verifyAll} disabled={doctor.isFetching || verifying.size > 0}><RefreshCcw className="size-4" />{verifying.size > 0 ? "verifying…" : "Check again"}</Button>
           <ControlDisclosure title={<>Details</>}><div className="mt-4 space-y-5">
             <Facts entries={[["Version", data.version], ["Engine", `${data.runtime.engine} ${data.runtime.engineVersion}`], ["Node", data.runtime.node], ["Platform", `${data.runtime.platform} · ${data.runtime.arch}`], ["Other providers", data.availability.availableRuntimes.join(", ") || "None"], ["Execution profile", data.settings.executionProfile], ["Release channel", data.runtime.releaseChannel], ["Usage sharing", data.settings.analyticsLevel], ["Problem reporting", data.settings.diagnosticReporting]]} />
             <Link to="/settings" className="block text-sm underline">Change sharing in Settings</Link>
-            <ul className="divide-y divide-border">{data.providers.map(provider => <li key={provider.id} className="flex flex-wrap items-center justify-between gap-3 py-2"><p className="text-sm">{provider.label}</p><Badge variant="outline">{provider.diagnostics.valid ? "OK" : provider.configured ? "Needs attention" : "Not connected"}</Badge></li>)}</ul>
+            <ul className="divide-y divide-border">{data.providers.map(provider => { const st = providerStatus(provider.diagnostics); return <li key={provider.id} className="flex flex-wrap items-center justify-between gap-3 py-2"><div className="flex items-center gap-2"><ProviderIcon providerId={provider.id} className="block size-4 shrink-0" /><p className="text-sm">{provider.label}</p></div><span className={`px-2 py-0.5 rounded-[var(--radius-control)] text-[10px] font-medium border ${st.color}`}>{st.label}</span></li>; })}</ul>
             <ul className="divide-y divide-border">{data.prerequisites.map(item => <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-2"><p className="text-sm">{item.id}{item.required ? "" : " (optional)"}</p><Badge variant={item.available ? "secondary" : "outline"}>{item.available ? "Installed" : item.required ? "Missing" : "Not installed"}</Badge></li>)}</ul>
           </div></ControlDisclosure>
         </>;

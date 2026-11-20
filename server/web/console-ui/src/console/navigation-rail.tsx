@@ -4,9 +4,8 @@ import { TeamAccount, useTeamAccess } from "@/components/team-access";
 import { backendRoute } from "@/lib/backend-client";
 import { backendRouteHref } from "./chat-host";
 import { NavLink, useLocation } from "react-router-dom";
-import { Settings, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
+import { Settings, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
-import { openAppSearch } from "@/components/command-palette";
 import { NewChatButton } from "@/components/new-chat-button";
 import { BrandMark } from "@/components/brand-mark";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -65,7 +64,6 @@ export function ConsoleNavigationRail({ settingsHref, onHistorySlot }: { setting
           <span aria-hidden={!compact} className={cn("console-navigation-brand-compact pointer-events-none absolute left-1.5 top-1.5 transition-opacity duration-150 motion-reduce:transition-none",compact ? "opacity-100" : "opacity-0")}><BrandMark compact className="size-5" /></span>
           <span aria-hidden={compact} className="console-navigation-label pointer-events-none absolute left-1 w-36"><BrandMark className="w-36" /></span>
         </a>
-        <Tooltip content="Search anything" shortcut="⌘K" side="right"><Button variant="ghost" size="icon-sm" aria-label="Search anything" aria-keyshortcuts="Meta+K Control+K" onClick={event => openAppSearch("all", event.currentTarget)} className={cn("absolute text-muted-foreground", compact ? "left-0 top-20 size-8" : "left-[168px] top-1")}><Search className="size-4" /></Button></Tooltip>
         <Tooltip content={collapsed ? "Pin navigation open" : "Unpin navigation"} shortcut="⇧⌘S" side="right"><Button type="button" variant="ghost" size="icon-sm" aria-keyshortcuts="Meta+Shift+S Control+Shift+S" aria-label={collapsed ? "Pin navigation open" : "Unpin navigation"} aria-expanded={expanded} aria-controls="navigation-chat-history" onClick={() => setCollapsed(value => !value)} className="console-navigation-toggle console-navigation-control absolute top-1 flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-control,8px)] text-muted-foreground hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
           {collapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
         </Button></Tooltip>
