@@ -1,6 +1,5 @@
 import { LoadingState } from "@/components/state-panel";
 import { Tooltip } from "@/components/ui/tooltip";
-import { ServicePluginsControl } from "./service-plugins-control";
 import { ControlDisclosure } from "./control-disclosure";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -20,7 +19,6 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
   const queryClient = useQueryClient();
   const inventory = useQuery({ queryKey: ["console-plugins"], queryFn: ({ signal }) => webFetchJson<PluginsResponse>("/api/console/plugins", { signal }), refetchInterval: 5000 });
   const isolated = inventory.data?.executionProfile === "smolvm";
-  const [section, setSection] = useState<"integrations" | "plugins">("integrations");
   const [filter, setFilter] = useState("");
   const [confirmation, setConfirmation] = useState<{ action: "install" | "enable" | "run"; item: PluginItem } | null>(null);
   const [technicalMessage, setTechnicalMessage] = useState<string | null>(null);
@@ -43,28 +41,26 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
     await Promise.all([inventory.refetch(), queryClient.invalidateQueries({ queryKey: ["console-settings"] }), queryClient.invalidateQueries({ queryKey: ["console-tools"] })]);
     setConfirmation(null);
     setTechnicalMessage(result.message);
-    setMessage(action === "enable" ? result.deferred ? "Enabled. Loading after the current response finishes." : "Enabled." : action === "disable" ? "Disabled for new chats." : action === "install" ? "Installed." : result.deferred ? "Loading is waiting for the current response to finish." : "Loaded.");
+    setMessage(action === "enable" ? result.deferred ? "Enabled. Loading after the current response finishes." : "Enabled." : action === "disable" ? "Disabled." : action === "install" ? "Installed." : result.deferred ? "Loading is waiting for the current response to finish." : "Loaded.");
   }, onError: () => { void inventory.refetch(); } });
   const requestConfirmation = (action: "install" | "enable" | "run", target: PluginItem) => { mutate.reset(); setConfirmation({ action, item: target }); };
   const items = inventory.data?.items.filter(entry => entry.kind === "plugin").filter(entry => `${entry.name} ${entry.id} ${entry.description}`.toLowerCase().includes(filter.toLowerCase())) ?? [];
+  const PluginIcon = ({ item }: { item: PluginItem }) => {
+    const [failed, setFailed] = useState(false);
+    if (item.icon && !failed) return <img src={item.icon} alt="" loading="lazy" className="mt-0.5 size-5 shrink-0 rounded-[4px] object-contain" onError={() => setFailed(true)} />;
+    return <Blocks aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-muted-foreground" />;
+  };
   return <div className="space-y-6">
-    <div className="space-y-3">
-      <div role="group" aria-label="Plugin collection" className="inline-flex gap-1 rounded-[var(--radius-menu,12px)] bg-muted/30 p-1">
-        {(["integrations", "plugins"] as const).map(value => <Button key={value} variant={section === value ? "secondary" : "ghost"} size="sm" aria-pressed={section === value} onClick={() => { setSection(value); setFilter(""); }}>{value === "integrations" ? "Integrations" : "Plugins"}</Button>)}
+    <div className="flex items-center gap-2">
+      <div className="relative min-w-0 flex-1 sm:max-w-sm">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input data-1p-ignore data-lpignore="true" autoComplete="off" aria-label="Search plugins" type="search" placeholder="Search plugins" value={filter} onChange={event => setFilter(event.target.value)} className="pl-9" />
       </div>
-      <div className="flex items-center gap-2">
-        <div className="relative min-w-0 flex-1 sm:max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input data-1p-ignore data-lpignore="true" autoComplete="off" aria-label={section === "integrations" ? "Search integrations" : "Search plugins"} type="search" placeholder={section === "integrations" ? "Search integrations" : "Search plugins"} value={filter} onChange={event => setFilter(event.target.value)} className="pl-9" />
-        </div>
-        <Tooltip content={inventory.isFetching ? "Refreshing plugins…" : mutate.isPending ? "Wait for the current operation" : "Refresh plugins"}><span className="inline-flex" tabIndex={inventory.isFetching || mutate.isPending ? 0 : undefined}><Button variant="ghost" size="icon" onClick={() => { void inventory.refetch(); void queryClient.invalidateQueries({ queryKey: ["console-service-plugins"] }); }} disabled={inventory.isFetching || mutate.isPending} aria-label="Refresh plugins"><RefreshCcw className="size-4" /></Button></span></Tooltip>
-      </div>
+      <Tooltip content={inventory.isFetching ? "Refreshing plugins…" : mutate.isPending ? "Wait for the current operation" : "Refresh plugins"}><span className="inline-flex" tabIndex={inventory.isFetching || mutate.isPending ? 0 : undefined}><Button variant="ghost" size="icon" onClick={() => { void inventory.refetch(); }} disabled={inventory.isFetching || mutate.isPending} aria-label="Refresh plugins"><RefreshCcw className="size-4" /></Button></span></Tooltip>
     </div>
-    <div hidden={section !== "integrations"}><ServicePluginsControl filter={filter} /></div>
-    {section === "plugins" && <>
     <div className="space-y-2">
       <h2 className="text-base font-medium">Plugins</h2>
-      <p className="text-xs text-muted-foreground">{isolated ? "Approved plugins are copied into each new SmolVM chat and run inside its VM. Plugin changes apply to new chats." : sessionId ? "Plugin changes apply to new chats, not this one." : "Plugin changes apply to new chats."}</p>
+      <p className="text-xs text-muted-foreground">Every installed Suijin module pack. Enable/disable applies on the next boot; core-tier modules are boot-required and never listed here.</p>
     </div>
     {inventory.isPending && <LoadingState label="Loading plugins…" variant="cards" />}
     {inventory.error && <div className="space-y-3"><Feedback error={inventory.error} /><Button variant="outline" disabled={inventory.isFetching} onClick={() => void inventory.refetch()}>Try again</Button></div>}
@@ -73,13 +69,12 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
       {items.length === 0 ? <div className="space-y-2 py-8 text-sm text-muted-foreground"><p>{filter.trim() ? "No installed plugins match your search." : "No plugins available."}</p>{filter && <Button variant="ghost" size="sm" onClick={() => setFilter("")}>Clear search</Button>}</div> :
         <div className="space-y-4" aria-label="Plugins">
           {items.map(item => {
-            const Icon = Blocks;
             const executionFacts: [string, string][] = item.kind === "plugin" ? [[isolated ? "Enabled for new VM chats" : "Loaded in current host", (isolated ? item.state === "enabled" : item.loaded) ? "Yes" : "No"]] : [];
             const feedbackForItem = mutate.variables?.target.id === item.id && mutate.variables?.target.kind === item.kind;
             const description = item?.description && !inventory.data?.host.tools.some(tool => tool.name === item.description) && !/^[a-z][a-z0-9_]*(?:, [a-z][a-z0-9_]*)+$/.test(item.description) && !/^[a-z][a-z0-9]*_[a-z0-9_]+$/.test(item.description) ? item.description : "";
             return <section key={`${item.kind}:${item.id}`} className="min-w-0 space-y-4 rounded-[var(--radius-panel,16px)] bg-muted/35 p-5" aria-label={item.name}>
             <div className="flex items-start gap-3">
-              <Icon aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+              <PluginIcon item={item} />
               <div className="min-w-0 flex-1"><h3 className="text-sm font-medium">{item.name}</h3><p className="mt-1 text-xs text-muted-foreground">Plugin · {item.version}</p></div>
               <Badge variant="outline" className="shrink-0 text-xs">{item.state}</Badge>
             </div>
@@ -99,7 +94,6 @@ export function PluginsControl({ sessionId }: { sessionId?: string }) {
       <ControlDisclosure title="Registry details"><div className="mt-4 space-y-4"><Facts entries={[["Registry", inventory.data.registry.url], ...(!isolated ? [["Loaded plugins", inventory.data.host.loadedPluginIds.length ? inventory.data.host.loadedPluginIds.join(", ") : "None"], ["Waiting to load", inventory.data.deferred.length ? inventory.data.deferred.join(", ") : "None"]] as [string, string][] : [])]} />
         {!isolated && inventory.data.host.tools.length > 0 && <div className="space-y-3"><p className="text-xs text-muted-foreground">Plugin tools</p><ul className="space-y-3">{inventory.data.host.tools.map(tool => <li key={tool.name}><p className="text-sm font-medium">{tool.name}</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{tool.description}</p></li>)}</ul></div>}
       </div></ControlDisclosure>
-    </>}
     </>}
     <Dialog open={Boolean(confirmation)} onOpenChange={open => { if (!open && !mutate.isPending) { setConfirmation(null); mutate.reset(); } }}><DialogContent showCloseButton={!mutate.isPending} onCloseAutoFocus={event => { event.preventDefault(); confirmationTrigger.current?.focus(); }} onEscapeKeyDown={event => { if (mutate.isPending) event.preventDefault(); }} onInteractOutside={event => { if (mutate.isPending) event.preventDefault(); }}><DialogHeader><DialogTitle>{confirmation?.action === "enable" ? "Enable" : confirmation?.action === "run" ? "Load" : "Install"} {confirmation?.item.name}</DialogTitle><DialogDescription>{confirmation?.action === "enable" ? isolated ? "Approve this version and its permissions for new SmolVM chats. Its files will be copied and its code loaded inside the VM automatically. Existing chats keep their current tools." : "Approve this version and its permissions, and allow its code to load in the local host. Existing chats keep their current tools." : confirmation?.action === "run" ? "This runs the plugin's code in the local host. An active response may defer loading." : "Install this artifact from the configured registry."}</DialogDescription></DialogHeader>
       {confirmation && <div className="space-y-3 text-sm"><p className="text-muted-foreground">{confirmation.item.name} {confirmation.item.version}</p>{confirmation.action === "install" && confirmation.item.signature === "unverified" && <p className="leading-6">The signature is unverified. Only install if you trust this source.</p>}{confirmation.item.kind === "plugin" && confirmation.action !== "run" && <div><p className="font-medium">Permissions</p>{confirmation.item.capabilities.length ? <ul className="mt-2 list-inside list-disc space-y-1 break-words">{confirmation.item.capabilities.map(capability => <li key={capability}>{capability}</li>)}</ul> : <p className="mt-2 text-muted-foreground">No extra permissions.</p>}</div>}<Feedback error={mutate.error} /></div>}

@@ -1,6 +1,8 @@
 import { Link, useLocation } from "react-router-dom";
 import type { ConsoleExecutionStatus } from "@0/engine/shared";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { ChevronDown } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useWebTheme } from "@/lib/web-theme";
 import { useTeamAccess } from "@/components/team-access";
@@ -37,7 +39,6 @@ function ModelSelect({ definition, value, disabled, onChange }: { definition: Se
     staleTime: 300_000,
     retry: 1,
   });
-  const id = `mdl-${definition.key}`;
   const options = list.data?.models ?? [];
   const providerFromPrefix = (list.data?.providers ?? []).find(pr => value.startsWith(`${pr.key}:`));
   const selected = options.find(m => m.value === value
@@ -46,10 +47,72 @@ function ModelSelect({ definition, value, disabled, onChange }: { definition: Se
   const selectedProvider = selected && (list.data?.providers ?? []).find(pr => pr.label === selected.providerLabel);
   const routeId = providerFromPrefix?.key ?? selectedProvider?.key ?? "";
   const routeLabel = providerFromPrefix?.label ?? selectedProvider?.label ?? (selected?.providerLabel ?? "");
-  return <div className="space-y-1">
-    <Input id={id} list={`${id}-list`} value={value} onChange={e => onChange(e.target.value)} disabled={disabled}
-      placeholder="provider:model — pick from the list or type it" className="w-full" autoComplete="off" />
-    <datalist id={`${id}-list`}>{options.map(m => <option key={m.value} value={m.value}>{m.providerLabel} · {m.label}</option>)}</datalist>
+  // PORTALLED dropdown — the settings control column is only 12rem wide and
+  // card surfaces clip absolutely-positioned panels, so the list renders into
+  // <body> with fixed coordinates: 22rem wide, scrolls, opens below the input
+  // (flips above when there is no room). The native <datalist> this replaces
+  // could not scroll at all.
+  const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<{ right: number; top: number; bottom: number } | null>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const syncAnchor = () => {
+    const r = boxRef.current?.getBoundingClientRect();
+    if (r) setAnchor({ right: r.right, top: r.bottom, bottom: window.innerHeight - r.bottom });
+  };
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (boxRef.current && !boxRef.current.contains(e.target as Node) && !(e.target as Element)?.closest?.("[data-model-panel]")) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    const onScroll = () => syncAnchor();
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onScroll);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); window.removeEventListener("resize", onScroll); };
+  }, [open]);
+  const toggle = () => { if (!open) { syncAnchor(); setPanelQuery(""); } setOpen(o => !o); };
+  // The panel shows ALL connected providers' models (511+) — filtering only
+  // happens in the panel's own search box, never from the typed model value.
+  const [panelQuery, setPanelQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (open) searchRef.current?.focus(); }, [open]);
+  const q = panelQuery.trim().toLowerCase();
+  const matches = options.filter(m => !q || `${m.value} ${m.providerLabel} ${m.label}`.toLowerCase().includes(q));
+  const panelStyle = anchor ? (() => {
+    const width = 352;
+    const left = Math.max(8, Math.min(anchor.right - width, window.innerWidth - width - 8));
+    const below = anchor.bottom - 12;
+    if (below >= 160) return { left, top: anchor.top + 4, width, maxHeight: Math.min(320, below) };
+    const above = anchor.top - window.innerHeight + anchor.bottom - anchor.top; // space above = top edge y
+    const spaceAbove = anchor.top - 12;
+    return { left, bottom: window.innerHeight - anchor.top + 4, width, maxHeight: Math.min(320, Math.max(160, spaceAbove)) };
+  })() : { left: 8, top: 8, width: 352, maxHeight: 320 };
+  return <div className="space-y-1" ref={boxRef}>
+    <div className="flex gap-1.5">
+      <Input value={value} onChange={e => onChange(e.target.value)} disabled={disabled}
+        placeholder="provider:model — pick from the list or type it" className="w-full" autoComplete="off" />
+      <Button type="button" variant="outline" size="icon" aria-label="Show models" aria-expanded={open}
+        disabled={disabled || options.length === 0} onClick={toggle} className="shrink-0">
+        <ChevronDown aria-hidden="true" className="size-4" />
+      </Button>
+    </div>
+    {open && createPortal(
+      <div role="listbox" data-model-panel aria-label={`${definition.label} models`} style={panelStyle}
+        className="ui-menu-surface fixed z-[80] flex flex-col overflow-hidden rounded-[var(--radius-menu,12px)] border border-border bg-popover text-popover-foreground shadow-[var(--ui-panel-shadow,0_8px_24px_rgb(0_0_0_/_16%))]" >
+        <div className="shrink-0 border-b border-border/60 p-1.5">
+          <Input ref={searchRef} value={panelQuery} onChange={e => setPanelQuery(e.target.value)}
+            placeholder={`Search ${options.length} models…`} className="h-8 w-full text-sm" autoComplete="off" />
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-1">
+        {matches.length === 0
+          ? <p className="px-3 py-2 text-xs text-muted-foreground">{options.length ? "No models match." : "No models available."}</p>
+          : matches.map(m => <button key={m.value} type="button" role="option" aria-selected={m.value === value}
+              onClick={() => { onChange(m.value); setOpen(false); }}
+              className={`block w-full rounded-[var(--radius-control,8px)] px-2.5 py-1.5 text-left ${m.value === value ? "bg-muted" : "hover:bg-muted/60"}`}>
+              <span className="block w-full truncate text-sm leading-5">{m.label}</span>
+              <span className="block w-full truncate text-xs leading-4 text-muted-foreground">{m.providerLabel}</span>
+            </button>)}
+        </div>
+      </div>, document.body)}
     <p className="flex items-center gap-1.5 text-xs leading-4 text-muted-foreground">
       {routeLabel && <ProviderIcon providerId={routeId} className="size-3 shrink-0" />}
       {routeLabel ? `via ${routeLabel}` : list.isPending ? "Fetching connected providers' models…"

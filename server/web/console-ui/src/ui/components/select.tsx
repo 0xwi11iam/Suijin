@@ -27,10 +27,10 @@ export function Select({ value, onValueChange, options, className, label, placeh
         <SelectPrimitive.Icon asChild><ChevronDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" /></SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
       <SelectPrimitive.Portal>
-        <SelectPrimitive.Content data-slot="select-content" style={{ maxHeight: "min(var(--radix-select-content-available-height), 28rem)" }} position="popper" sideOffset={6} collisionPadding={12}
+        <SelectPrimitive.Content data-slot="select-content" style={{ maxHeight: "min(var(--radix-select-content-available-height, 24rem), 24rem)" }} position="popper" sideOffset={6} collisionPadding={12}
           className="ui-menu-surface z-[60] max-h-[var(--radix-select-content-available-height)] min-w-[var(--radix-select-trigger-width)] origin-[var(--radix-select-content-transform-origin)] overflow-hidden rounded-[var(--radius-menu,12px)] border-[length:var(--ui-frame-border-width,1px)] border-border bg-popover p-1 text-popover-foreground shadow-[var(--ui-panel-shadow,0_8px_24px_rgb(0_0_0_/_16%))] motion-safe:data-[state=open]:animate-in motion-safe:data-[state=closed]:animate-out motion-safe:data-[state=closed]:fade-out-0 motion-safe:data-[state=open]:fade-in-0 motion-safe:data-[state=closed]:zoom-out-95 motion-safe:data-[state=open]:zoom-in-95 motion-safe:data-[state=open]:duration-200 motion-safe:data-[state=closed]:duration-150">
           <SelectPrimitive.ScrollUpButton className="flex h-6 items-center justify-center"><ChevronUp aria-hidden="true" className="size-3.5" /></SelectPrimitive.ScrollUpButton>
-          <SelectPrimitive.Viewport className="scroll-my-1">
+          <SelectPrimitive.Viewport className="max-h-[inherit] scroll-my-1 overflow-y-auto">
             {options.map(option => <SelectPrimitive.Item data-slot="select-item" key={option.value} value={encode(option.value)} disabled={option.disabled} className="ui-menu-item relative flex cursor-default select-none items-center pr-7 outline-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground">
               <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
               <SelectPrimitive.ItemIndicator className="absolute right-2"><Check aria-hidden="true" className="size-3.5" /></SelectPrimitive.ItemIndicator>

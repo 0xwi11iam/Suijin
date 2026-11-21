@@ -65,6 +65,9 @@ importers:
       cmdk:
         specifier: ^1.1.1
         version: 1.1.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      cytoscape:
+        specifier: ^3.35.0
+        version: 3.35.0
       dockview-react:
         specifier: ^8.6.1
         version: 8.9.0(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
