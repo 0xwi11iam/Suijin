@@ -5,7 +5,7 @@ import { autonomyModeDraft, SELECTABLE_AUTONOMY_MODES } from "@/console/autonomy
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCcw } from "lucide-react";
+import { CheckCircle2, RefreshCcw } from "lucide-react";
 import { useBackendApi } from "@/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -117,23 +117,16 @@ export function DoctorControl() {
         const missing = data.prerequisites.filter(item => item.required && !item.available);
         const healthy = data.availability.apiRuntime.valid && data.runtime.nodeSupported && unverifiedProviders.length === 0 && missing.length === 0;
         return <>
-          {healthy ? <Feedback message={`All good · ${data.availability.apiRuntime.providerLabel} · v${data.version}`} /> : <>
+          {healthy ? <div role="status" className="flex items-start gap-2 rounded-[var(--radius-menu,12px)] border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-400"><CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0" /><span className="min-w-0 flex-1 break-words">All good · {data.availability.apiRuntime.providerLabel}</span></div> : <>
             {!data.availability.apiRuntime.valid && <div className="space-y-2"><Feedback error={data.availability.apiRuntime.error ?? "No provider connected."} /><Link to="/models" className="block text-sm underline">Connect a provider</Link></div>}
             {!data.runtime.nodeSupported && <Feedback error={`Node ${data.runtime.node} is not supported. Install Node 24+.`} />}
             {unverifiedProviders.map(provider => <Feedback key={provider.id} error={`${provider.label}: ${providerStatus(provider.diagnostics).label}`} />)}
             {missing.length > 0 && <Feedback error={`Missing: ${missing.map(item => item.id).join(", ")}`} />}
           </>}
           <Button variant="outline" onClick={verifyAll} disabled={doctor.isFetching || verifying.size > 0}><RefreshCcw className="size-4" />{verifying.size > 0 ? "verifying…" : "Check again"}</Button>
-          <ControlDisclosure title={<>Details</>}><div className="mt-4 space-y-5">
-            <Facts entries={[["Version", data.version], ["Engine", `${data.runtime.engine} ${data.runtime.engineVersion}`], ["Node", data.runtime.node], ["Platform", `${data.runtime.platform} · ${data.runtime.arch}`], ["Other providers", data.availability.availableRuntimes.join(", ") || "None"], ["Execution profile", data.settings.executionProfile], ["Release channel", data.runtime.releaseChannel], ["Usage sharing", data.settings.analyticsLevel], ["Problem reporting", data.settings.diagnosticReporting]]} />
-            <Link to="/settings" className="block text-sm underline">Change sharing in Settings</Link>
-            <ul className="divide-y divide-border">{data.providers.map(provider => { const st = providerStatus(provider.diagnostics); return <li key={provider.id} className="flex flex-wrap items-center justify-between gap-3 py-2"><div className="flex items-center gap-2"><ProviderIcon providerId={provider.id} className="block size-4 shrink-0" /><p className="text-sm">{provider.label}</p></div><span className={`px-2 py-0.5 rounded-[var(--radius-control)] text-[10px] font-medium border ${st.color}`}>{st.label}</span></li>; })}</ul>
-            <ul className="divide-y divide-border">{data.prerequisites.map(item => <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-2"><p className="text-sm">{item.id}{item.required ? "" : " (optional)"}</p><Badge variant={item.available ? "secondary" : "outline"}>{item.available ? "Installed" : item.required ? "Missing" : "Not installed"}</Badge></li>)}</ul>
-          </div></ControlDisclosure>
         </>;
       })()}
     </ControlCard>
-    <DiagnosticReportControl />
   </div>;
 }
 
@@ -141,7 +134,7 @@ export function ToolsControl({ sessionId }: { sessionId?: string }) {
   const { webFetchJson } = useBackendApi();
   const [filter, setFilter] = useState("");
   const [role, setRole] = useState("");
-  const tools = useQuery({ queryKey: ["console-tools"], queryFn: ({ signal }) => webFetchJson<{ roles: string[]; tools: { name: string; description: string; roles: string[] }[]; plugins: { name: string; description: string }[] }>("/api/console/tools", { signal }) });
+  const tools = useQuery({ queryKey: ["console-tools"], queryFn: ({ signal }) => webFetchJson<{ roles: string[]; tools: { name: string; description: string; roles: string[]; icon?: string }[]; plugins: { name: string; description: string }[] }>("/api/console/tools", { signal }) });
   const snapshot = useQuery({ queryKey: ["console-control-session", sessionId], enabled: !!sessionId, queryFn: async ({ signal }) => (await webFetchJson<{ snapshot: SessionSnapshot }>(`/api/console/sessions/${encodeURIComponent(sessionId!)}`, { signal })).snapshot, refetchInterval: 3000 });
   const rows = tools.data?.tools.filter(tool => (!role || tool.roles.includes(role)) && `${tool.name} ${tool.description}`.toLowerCase().includes(filter.toLowerCase())) ?? [];
   const harness = snapshot.data?.harness;
@@ -156,7 +149,7 @@ export function ToolsControl({ sessionId }: { sessionId?: string }) {
       <QueryState pending={tools.isPending} error={tools.error} retry={tools.refetch} />
       <div className="grid gap-4 sm:grid-cols-2"><TextField label="Find a tool" type="search" value={filter} onChange={event => setFilter(event.target.value)} /><Field label="Role"><Select aria-label="Role" value={role} onValueChange={setRole} options={[{ value: "", label: "All roles" }, ...(tools.data?.roles.map(value => ({ value, label: value === "copilot" ? "Auto" :value === "recon" ? "Read-only" : "Ask each action" })) ?? [])]} /></Field></div>
       {tools.data && rows.length === 0 && <Empty>No tools match these filters.</Empty>}
-      <ul className="divide-y divide-border">{rows.map(tool => <li key={tool.name} className="space-y-1 py-3"><h3 className="font-medium text-sm">{tool.name}</h3><p className="text-xs leading-relaxed text-muted-foreground">{tool.description}</p></li>)}</ul>
+      <ul className="divide-y divide-border">{rows.map(tool => <li key={tool.name} className="flex items-start gap-3 py-3">{tool.icon && <img src={tool.icon} alt="" loading="lazy" className="mt-0.5 size-4 shrink-0 rounded-[3px] object-contain" onError={event => { event.currentTarget.style.display = "none"; }} />}<div className="min-w-0 flex-1 space-y-1"><h3 className="font-medium text-sm">{tool.name}</h3><p className="text-xs leading-relaxed text-muted-foreground">{tool.description}</p></div></li>)}</ul>
     </ControlCard>
     {tools.data?.plugins.length ? <ControlCard title="Plugin tools"><ul className="space-y-3">{tools.data.plugins.map(tool => <li key={tool.name}><p className="font-medium text-sm">{tool.name}</p><p className="text-xs text-muted-foreground">{tool.description}</p></li>)}</ul></ControlCard> : null}
   </div>;

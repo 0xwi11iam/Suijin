@@ -68,7 +68,6 @@ export function WebConsoleControlsPage({ mode: passedMode }: { mode?: WebConsole
     </nav>}
     <section className="min-w-0 space-y-6" aria-label={mode === "settings" ? "Preferences" : page.label}>
       {content}
-      {mode === "doctor" && <div className="flex flex-wrap gap-2"><Button variant="outline" asChild><Link to={`/tools${suffix}`}><Wrench className="size-4" />Available tools</Link></Button><Button variant="outline" asChild><Link to={`/fix${suffix}`}><Wrench className="size-4" />Review a code fix</Link></Button></div>}
       {mode === "connections" && <Button variant="outline" asChild><Link to={`/project${suffix}`}><FolderCheck className="size-4" />Workspace settings</Link></Button>}
     </section>
   </PageContent>;

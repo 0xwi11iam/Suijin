@@ -1265,6 +1265,42 @@ def _provider_diagnostics(configured: bool, verified: bool | None = None,
     return {"valid": False, "reason": "untested", "message": "key saved · untested"}
 
 
+# Last real verify result per provider (Check again / Verify all). WITHOUT this
+# the ping result was thrown away and every doctor/providers call recomputed
+# "untested" — clicking Check again could never change anything. TTL 5 min.
+_verify_results: dict[str, dict] = {}
+_VERIFY_TTL_S = 300.0
+
+
+def _store_verify_result(key: str, result: dict) -> None:
+    import time as _t
+
+    _verify_results[str(key)] = {"ok": bool(result.get("ok")),
+                                 "status": result.get("status"),
+                                 "error": str(result.get("error") or "")[:200],
+                                 "at": _t.time()}
+
+
+def _cached_diagnostics(provider_id: str, configured: bool) -> dict:
+    """Diagnostics overlaying the last persisted verify result (if fresh)."""
+    import time as _t
+
+    entry = _verify_results.get(provider_id)
+    if entry and _t.time() - entry.get("at", 0) < _VERIFY_TTL_S:
+        return _provider_diagnostics(configured, verified=entry["ok"],
+                                     status=entry.get("status"), error=entry.get("error"))
+    return _provider_diagnostics(configured)
+
+
+def _provider_verify_state(provider_id: str) -> dict | None:
+    import time as _t
+
+    entry = _verify_results.get(provider_id)
+    if entry and _t.time() - entry.get("at", 0) < _VERIFY_TTL_S:
+        return entry
+    return None
+
+
 @router.get("/api/console/providers")
 def providers():
     cfg = _cfg()
@@ -1273,7 +1309,7 @@ def providers():
         "id": "z-ai", "label": "Z.ai", "methods": ["api-key"],
         "configured": zai, "source": "env" if zai else None,
         "connectionIdentity": "suijin-zai" if zai else None,
-        "diagnostics": _provider_diagnostics(zai),
+        "diagnostics": _cached_diagnostics("z-ai", zai),
         "accounts": ([{"accountId": "suijin", "kind": "api-key", "active": True,
                        "label": "coding plan", "status": "active"}] if zai else []),
         "auth": {"phase": "connected" if zai else "unconfigured",
@@ -1479,58 +1515,654 @@ def settings_reset(body: dict = Body(default={})):
     return settings_get()
 
 
-# ── plugins (suijin modules) ─────────────────────────────────────
+# ── plugins (the REAL module registry — suijin/modules/*) ────────
 
-_PLUGIN_ITEMS = [
-    {"id": "transport-guards", "name": "transport guards", "version": "1.4.0", "description": "scope/method/rate enforced at the HTTP session layer", "capabilities": ["transport"], "state": "active", "loaded": True},
-    {"id": "mesh-bridge", "name": "mesh bridge", "version": "1.2.0", "description": "gc.log ↔ mesh chat, no echo loops", "capabilities": ["mesh"], "state": "active", "loaded": True},
-    {"id": "knowledge-graph", "name": "knowledge graph", "version": "0.9.1", "description": "workspace-first intel graph", "capabilities": ["memory"], "state": "installed", "loaded": False},
-    {"id": "obsidian-sync", "name": "obsidian decision log", "version": "0.3.0", "description": "push decisions to the vault", "capabilities": ["docs"], "state": "available", "loaded": False},
-]
+# Pack/tool id → icon source. Forms:
+#   "domain.tld"      → favicon of that site (cached proxy)
+#   "github/<user>"   → the GitHub org/user avatar via unavatar
+#   "local:sui"       → the Suijin glyph (sui-native packs have no web brand)
+# Everything the operator sees gets a real icon; nothing falls back to letters.
+_TOOL_DOMAINS: dict[str, str] = {
+    # networks / scanners
+    "nmap": "nmap.org", "mcp_nmap": "nmap.org", "sqlmap": "sqlmap.org",
+    "nikto": "sullo", "gobuster": "OJ", "feroxbuster": "ehsahil",
+    "ffuf": "joohoi", "dirsearchp": "maurosoria", "rustscan": "RustScan",
+    "masscan": "robertdavidgraham", "naabu": "projectdiscovery.io",
+    "portscanx": "github.com", "portmap": "github.com", "whatweb": "urbanadventurer",
+    "wafw00f": "EnableSecurity", "webprobe": "github.com", "crawl": "projectdiscovery.io",
+    # projectdiscovery family
+    "nuclei": "projectdiscovery.io", "mcp_nuclei": "projectdiscovery.io",
+    "httpx": "projectdiscovery.io", "subfinder": "projectdiscovery.io",
+    "katana": "projectdiscovery.io", "notify": "projectdiscovery.io",
+    # exploitation / brute force
+    "metasploit": "metasploit.com", "mcp_metasploit": "metasploit.com",
+    "hashcat": "hashcat.net", "hashcatp": "hashcat.net", "hashcrack": "hashcat.net",
+    "john": "openwall.com", "hydra": "vanhauser-thc", "trufflehog": "trufflesecurity.com",
+    "pwdaudit": "github.com", "medusap": "local:sui",
+    # web / app layer
+    "sqlmap": "sqlmap.org", "testssl": "testssl.sh", "testsslp": "testssl.sh",
+    "sslscan": "github.com", "sslprobe": "github.com", "ssrfcanary": "local:sui",
+    "jwt_tool": "ticarpi", "jwtlab": "jwt.io", "graphqlprobe": "graphql.org",
+    "graphql_diff": "graphql.org", "redirecthunter": "local:sui",
+    "redirtrace": "local:sui", "hostheaderi": "local:sui", "origin_confuse": "local:sui",
+    "headeraudit": "local:sui", "cookieaudit": "local:sui", "cacheinspect": "local:sui",
+    "cors": "local:sui", "takeoverfp": "github.com", "techfp": "github.com",
+    "uacheck": "github.com", "wafw00f": "EnableSecurity",
+    # recon / osint
+    "shodan": "shodan.io", "crtsh": "crt.sh", "crtshq": "crt.sh",
+    "amass": "owasp.org", "asninfo": "ipinfo.io", "iprepq": "github.com",
+    "ipmath": "github.com", "macvendor": "github.com", "emailharvest": "github.com",
+    "theharvester": "laramies", "google_dork": "google.com", "githubdork": "github.com",
+    "dns_zone": "github.com", "dnsbrute": "github.com", "dnsreconp": "darkoperator",
+    "dnssec": "github.com", "dnssniff": "github.com", "dohquery": "github.com",
+    "whoisraw": "iana.org", "waybacker": "web.archive.org", "sitemapper": "github.com",
+    "robotsparse": "github.com", "securitytxt": "github.com", "subzy": "LukaSikich",
+    # cloud
+    "gcpenumer": "cloud.google.com", "cloudmeta": "cloud.google.com",
+    "awsenumer": "aws.amazon.com", "azurenumer": "azure.microsoft.com",
+    # creds / secrets / crypto
+    "hashid": "psypanda", "hashkit": "local:sui", "cryptomisc": "local:sui",
+    "secretscanr": "local:sui", "credential_store": "local:sui",
+    "list_credentials": "local:sui",
+    # sui-native packs — the Suijin glyph is their brand
+    "auto_fix": "local:sui", "bugscope": "local:sui", "cmdsmith": "local:sui",
+    "cronkit": "local:sui", "devtoolsk": "local:sui", "encodesk": "local:sui",
+    "extractr": "local:sui", "genkit": "local:sui", "querykit": "local:sui",
+    "knowledge": "local:sui", "knowledge_graph": "local:sui", "kg_neo4j": "neo4j.com",
+    "log_surgeon": "local:sui", "ops": "local:sui", "redteam": "local:sui",
+    "skills": "local:sui", "tool_inventory": "local:sui", "write_note": "local:sui",
+    "tool_search": "local:sui", "traffic_search": "local:sui", "traffic_get": "local:sui",
+    "insert_asset": "local:sui", "record_fact": "local:sui", "rows_snapshot": "local:sui",
+    "attack_tree": "local:sui", "attack_paths": "local:sui", "recon_chain": "local:sui",
+    "dispatch_testers": "local:sui", "select_lanes": "local:sui", "set_intent": "local:sui",
+    "target_dossier": "local:sui", "surface_verdict": "local:sui", "surface_expand": "local:sui",
+    "memory_recall": "local:sui", "cheatsheet_note": "local:sui", "chain_lookup": "local:sui",
+    "chain_suggest": "local:sui", "chain_track": "local:sui", "state": "local:sui",
+    "help": "local:sui", "tools": "", "execute_terminal": "", "http_request": "",
+    "http_replay": "", "http_replay_raw": "", "web_fetch": "", "web_search": "",
+    "web_session": "", "smart_fetch": "", "dom_recon": "", "js_bundle_analyze": "",
+    "source_map_probe": "", "api_discover": "",
+    # generic utilities with a home on the web
+    "curl": "curl.se", "pyrun": "python.org", "pip_install": "pypi.org",
+    "fetch_resource": "github.com", "mcp_terminal": "local:sui",
+    "socat": "github.com", "netutils": "github.com", "wifi": "aircrack-ng.org",
+    "gvm": "openvas.org", "exploitdbp": "exploit-db.com",
+    "search_cve": "cvedetails.com", "cvelookup": "cvedetails.com", "cve_advise_tools": "cvedetails.com",
+    "mitmproxy_capture": "mitmproxy.org", "proxy_capture": "mitmproxy.org",
+    "playwright": "playwright.dev", "mcp_playwright": "playwright.dev",
+    "websocket_client": "github.com", "htmlparse": "github.com",
+    "wordlisthub": "github.com", "wordlistio": "github.com", "find_wordlist": "github.com",
+    "mutate_wordlist": "github.com", "cewl_words": "github.com",
+    "containerbreak": "docker.com", "local_docker_sock": "docker.com",
+    "ssh_exec": "github.com", "ssh_inventory": "github.com",
+    "ssh_pull": "github.com", "ssh_push": "github.com",
+    "shell_start": "local:sui", "shell_send": "local:sui", "shell_stop": "local:sui",
+    "shell_list": "local:sui",
+    "adenum": "github.com", "apifuzz": "github.com", "apkstatics": "github.com",
+    "awsenumer": "aws.amazon.com", "azurenumer": "azure.microsoft.com",
+    "backuphunter": "github.com", "bucketprobe": "github.com",
+    "cloudflare": "cloudflare.com", "cmseek": "Tuhinshubhra",
+    "smb_enum": "github.com", "snmpenum": "github.com", "imppack": "github.com",
+    "ipastatics": "github.com", "iptables_control": "github.com",
+    "kerberos_attacks": "github.com", "kerbtools": "github.com",
+    "openapi_parser": "github.com", "openapik": "github.com",
+    "payloadescape": "local:sui", "payloadforge": "local:sui", "payloadpk": "local:sui",
+    "payload_generate": "local:sui", "payload_mutate": "local:sui",
+    "extract_payloads": "local:sui", "code_harness": "local:sui",
+    "evidence_capture": "local:sui", "evidence_verify": "local:sui",
+    "generate_report": "local:sui", "export_html": "local:sui", "export_burp": "portswigger.net",
+    "burp": "portswigger.net", "catalog_exploit": "local:sui",
+    "record_finding": "local:sui", "report_finding": "local:sui",
+    "retest_finding": "local:sui", "finding_dedup": "local:sui",
+    "coverage_check": "local:sui", "completion_status": "local:sui",
+    "observation_status": "local:sui", "bypass_403": "local:sui",
+    "race_test": "local:sui", "mass_assign": "local:sui", "param_pollute": "local:sui",
+    "auth_diff": "local:sui", "auth_forge": "local:sui", "request_auth": "local:sui",
+    "mesh_ask": "local:sui", "mesh_broadcast": "local:sui", "mesh_dm": "local:sui",
+    "mesh_read": "local:sui", "mesh_reply": "local:sui", "mesh_status": "local:sui",
+    "job_cancel": "local:sui", "job_list": "local:sui", "job_output": "local:sui",
+    "job_status": "local:sui", "job_wait": "local:sui",
+    "read_file": "local:sui", "write_file": "local:sui", "list_own_files": "local:sui",
+    "ensure_tools": "local:sui", "skill_load": "local:sui", "skill_search": "local:sui",
+    "list_skills": "local:sui", "edit_skill": "local:sui",
+    "kb_read": "local:sui", "kb_stats": "local:sui", "kb_freshness": "local:sui",
+    "search_kb": "local:sui", "check_knowledge": "neo4j.com",
+    "recipe_define": "local:sui", "recipe_list": "local:sui", "recipe_run": "local:sui",
+    "adjust_config": "local:sui", "set_live_config": "local:sui",
+    "deploy_subagent": "local:sui", "fireteam_status": "local:sui",
+    "ssrf_listener": "local:sui", "csrf_extract": "local:sui",
+    "url_dedup": "local:sui", "url_rewrite": "local:sui", "url_merge": "local:sui",
+    "normalize_output": "local:sui", "mine_failures": "local:sui",
+    "suggest_exploit": "local:sui", "claim_flag": "local:sui",
+    "register_credential": "local:sui", "list_credentials": "local:sui",
+    "local_cred_hunt": "local:sui", "local_docker_sock": "docker.com",
+    "local_env_secrets": "local:sui", "local_file_find": "local:sui",
+    "local_hist_search": "local:sui", "local_lpe_scan": "local:sui",
+    "local_mounts": "local:sui", "local_net": "local:sui", "local_path_hijack": "local:sui",
+    "local_priv_check": "local:sui", "local_proc": "local:sui", "local_sched": "local:sui",
+    "local_service_hijack": "local:sui", "local_services": "local:sui",
+    "local_suid_audit": "local:sui", "local_sys_info": "local:sui",
+    "local_users": "local:sui", "google_key_probe": "google.com",
+    "fetch_authorization_page": "local:sui", "diff_response": "local:sui",
+    "response_diff": "local:sui", "attack_surface": "local:sui",
+    "providers": "local:sui", "addons": "local:sui", "core_utils": "local:sui",
+    "cmepack": "cisco.com", "execute_terminal": "local:sui",
+    "fileio": "local:sui", "filekit": "local:sui", "http_request": "local:sui",
+    "httplive": "local:sui", "httpmethods": "github.com", "protodetect": "github.com",
+    "proxycheck": "github.com", "redisenum": "redis.io", "reqdiff": "local:sui",
+    "reqtool": "local:sui", "sourcemap": "github.com", "tfsec": "tfsec.dev",
+    "urltoolz": "local:sui", "hashcrack": "hashcat.net",
+    "sui": "local:sui", "msf_check": "metasploit.com", "msf_command": "metasploit.com",
+    "msf_run": "metasploit.com", "msf_sessions": "metasploit.com",
+}
+
+
+def _pack_icon(mid: str) -> str:
+    d = _TOOL_DOMAINS.get(mid) or (_TOOL_DOMAINS.get(mid.split(".")[-1]) if "." in mid else "") or ""
+    if not d:
+        return ""
+    if d == "local:sui":
+        return "/favicon.png"
+    if d.startswith("github/"):
+        return f"/api/console/provider-icon/{d}"
+    return f"/api/console/provider-icon/{d}"
+
+
+# tool name → (owning pack dir, description), built from module + addon
+# manifests (cached). Pack tools appear on the Tools page with icons.
+_pack_tools_cache: dict[str, tuple[str, str]] | None = None
+
+
+def _pack_tools() -> dict[str, tuple[str, str]]:
+    global _pack_tools_cache
+    if _pack_tools_cache is None:
+        import json as _json
+
+        mapping: dict[str, tuple[str, str]] = {}
+        roots = (Path(__file__).resolve().parents[2] / "modules",
+                 Path(__file__).resolve().parents[2] / "addons")
+        for root in roots:
+            with contextlib.suppress(OSError):
+                for mf in root.glob("*/manifest.json"):
+                    with contextlib.suppress(Exception):
+                        data = _json.loads(mf.read_text(errors="replace"))
+                        pack = mf.parent.name
+                        for t, spec in (data.get("tools") or {}).items():
+                            desc = ""
+                            if isinstance(spec, dict):
+                                desc = str(spec.get("description") or "")
+                            elif isinstance(spec, str):
+                                desc = spec
+                            mapping.setdefault(str(t), (pack, desc))
+        _pack_tools_cache = mapping
+    return _pack_tools_cache
+
+
+def _pack_of_tool(name: str) -> str:
+    """Owning pack for a route tool: exact manifest match, else the longest
+    pack id contained in the tool name (gobuster_dir → gobuster)."""
+    mapping = _pack_tools()
+    if name in mapping:
+        return mapping[name][0]
+    nl = name.lower()
+    best = ""
+    for pid in {v[0] for v in mapping.values()}:
+        if len(pid) > len(best) and pid in nl:
+            best = pid
+    return best
+
+
+def _tool_icon(name: str) -> str:
+    if not name:
+        return ""
+    d = _TOOL_DOMAINS.get(name)
+    if d is None:
+        d = _TOOL_DOMAINS.get(_pack_of_tool(name), "")
+    if not d:
+        return ""
+    if d == "local:sui":
+        return "/favicon.png"
+    return f"/api/console/provider-icon/{d}"
+
+
+# Display-name conventions — read pack-by-pack from the manifests and
+# corrected manually: compound words in proper CamelCase, official product
+# styling kept (nmap, sqlmap, nuclei, httpx, subfinder, katana, shodan,
+# trufflehog, whatweb stay lowercase because that IS how they style
+# themselves). This map wins over whatever the manifest says.
+_NAME_OVERRIDES: dict[str, str] = {
+    "adenum": "AdEnum", "amass": "Amass", "apifuzz": "ApiFuzz",
+    "apkstatics": "ApkStatics", "asninfo": "AsnInfo",
+    "auto_fix": "Auto-Fix Pipeline", "awsenumer": "AwsEnumer",
+    "azurenumer": "AzureEnumer", "backuphunter": "BackupHunter",
+    "bucketprobe": "BucketProbe", "bugscope": "BugScope",
+    "cacheinspect": "CacheInspect", "cloudmeta": "CloudMeta",
+    "cmdsmith": "CmdSmith", "cmepack": "CmePack",
+    "containerbreak": "ContainerBreak", "cookieaudit": "CookieAudit",
+    "cronkit": "CronKit", "crtsh": "CRT.sh", "crtshq": "CRT.sh Query",
+    "cryptomisc": "CryptoMisc", "curl": "cURL HTTP",
+    "cvelookup": "CveLookup", "devtoolsk": "DevToolsK",
+    "dirsearchp": "DirSearch", "dns_zone": "DNS Zone Transfer",
+    "dnsbrute": "DNSBrute", "dnsreconp": "DNSRecon", "dnssec": "DNSSEC",
+    "dnssniff": "DnsSniff", "dohquery": "DoHQuery",
+    "emailharvest": "EmailHarvest", "encodesk": "EncodeSk",
+    "exploitdbp": "ExploitDB", "extractr": "Extractr",
+    "feroxbuster": "Feroxbuster", "ffuf": "FFUF", "fileio": "File I/O",
+    "filekit": "FileKit", "gcpenumer": "GcpEnumer", "genkit": "GenKit",
+    "githubdork": "GitHubDork", "gobuster": "Gobuster",
+    "google_dork": "Google Dork", "graphql_diff": "GraphQL Schema Diff",
+    "graphqlprobe": "GraphQLProbe", "gvm": "GVM/OpenVAS",
+    "hashcatp": "Hashcat", "hashcrack": "Hashcat Crack", "hashid": "HashID",
+    "hashkit": "HashKit", "headeraudit": "HeaderAudit",
+    "hostheaderi": "HostHeader Injection", "htmlparse": "HTML Parse",
+    "httplive": "HttpLive", "httpmethods": "HTTP Methods", "httpx": "httpx",
+    "imppack": "ImpPack", "ipastatics": "IpaStatics", "ipmath": "IpMath",
+    "iprepq": "IpRepQ", "iptables_control": "IPTables Control",
+    "jwt_tool": "JWT Toolkit", "jwtlab": "JWTLab", "kerbtools": "KerbTools",
+    "log_surgeon": "Log Surgeon", "macvendor": "MacVendor",
+    "medusap": "MedusaPack", "mitmproxy_capture": "mitmproxy Capture",
+    "netutils": "NetUtils", "openapik": "OpenAPI Kit",
+    "payloadescape": "PayloadEscape", "payloadforge": "PayloadForge",
+    "payloadpk": "PayloadPK", "portmap": "PortMap", "portscanx": "PortScanX",
+    "protodetect": "ProtoDetect", "proxycheck": "ProxyCheck",
+    "pwdaudit": "PwdAudit", "pyrun": "PyRun", "querykit": "QueryKit",
+    "redirecthunter": "RedirectHunter", "redirtrace": "RedirTrace",
+    "redisenum": "RedisEnum", "reqdiff": "ReqDiff", "reqtool": "ReqTool",
+    "robotsparse": "RobotsParse", "secretscanr": "SecretScanr",
+    "securitytxt": "security.txt", "sitemapper": "SiteMapper",
+    "snmpenum": "SnmpEnum", "sourcemap": "SourceMap", "sslprobe": "SslProbe",
+    "ssrfcanary": "SsrfCanary", "takeoverfp": "TakeoverFP", "techfp": "TechFP",
+    "testssl": "testssl.sh", "tfsec": "tfsec", "uacheck": "UaCheck",
+    "urltoolz": "UrlToolz", "wafw00f": "WAFW00F", "webprobe": "WebProbe",
+    "whoisraw": "WhoisRaw", "wordlisthub": "WordlistHub",
+    "wordlistio": "WordlistIO", "services": "Services",
+    "addons": "Addons", "core_utils": "Core Utils",
+    "credential_store": "Credential Store", "providers": "Providers",
+    "knowledge": "Knowledge", "ops": "Ops", "redteam": "RedTeam",
+    "skills": "Skills", "execute_terminal": "Shell Execution",
+    "http_request": "HTTP Request", "http_replay": "HTTP Replay",
+    "http_replay_raw": "HTTP Replay Raw", "web_fetch": "Web Fetch",
+    "web_search": "Web Search", "web_session": "Web Session",
+}
+
+
+def _module_items() -> list[dict]:
+    """Every installed suijin module as a PluginItem. Real enable state
+    from the module manager, name/description enriched from each pack's
+    manifest.json (the manager's own description field is empty)."""
+    with contextlib.suppress(Exception):
+        from suijin.modules.manager import list_modules, module_info
+
+        items = []
+        for m in list_modules():
+            enabled = bool(m.get("enabled"))
+            mid = str(m.get("id"))
+            desc = str(m.get("description") or "")
+            with contextlib.suppress(Exception):
+                source = module_info(mid).get("source")
+                manifest = Path(str(source)) / "manifest.json"
+                if manifest.is_file():
+                    data = json.loads(manifest.read_text(errors="replace"))
+                    desc = str(data.get("description") or desc)
+            # The manual conventions map wins LAST — the manifest's sloppy
+            # casing ("Jwtlab", "Bugscope") must never leak back onto the panel.
+            name = _NAME_OVERRIDES.get(mid, mid)
+            items.append({
+                "id": mid, "kind": "plugin",
+                "name": name, "version": str(m.get("version") or "1.0"),
+                "description": desc,
+                "capabilities": [str(x) for x in (m.get("permissions") or [])],
+                "signature": "verified", "error": None,
+                "tier": str(m.get("tier") or ""),
+                "state": "enabled" if enabled else "installed",
+                "loaded": enabled, "icon": _pack_icon(mid),
+            })
+        return items
+    return []
 
 
 @router.get("/api/console/plugins")
 def plugins():
-    items = [{**p, "kind": "plugin", "signature": "verified", "error": None} for p in _PLUGIN_ITEMS]
+    # Core-tier modules (platform/tools/agent/console) are boot-required and
+    # cannot be disabled — they never appear on the operator's panel at all.
+    items = [p for p in _module_items() if p.get("tier") != "core"]
+    enabled = [p["id"] for p in items if p["loaded"]]
+    tools: list[dict] = []
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib.dispatch import list_route_tools
+
+        tools = [{"name": n, "description": f"Suijin tool: {n}"} for n in list(list_route_tools())[:12]]
     return {"executionProfile": "local",
-            "registry": {"url": "suijin-local", "available": False, "error": None},
+            "registry": {"url": "vendored modules", "available": True, "error": None},
             "items": items, "deferred": [],
-            "host": {"loadedPluginIds": [p["id"] for p in _PLUGIN_ITEMS if p["loaded"]],
-                     "tools": [{"name": "inject_probe", "description": "payload arrays into sink contexts"},
-                               {"name": "mark_dead", "description": "broadcast a dead region"},
-                               {"name": "report_finding", "description": "publish a finding"}]}}
+            "host": {"loadedPluginIds": enabled, "tools": tools}}
 
 
-# ── skills (the real tool registry) ──────────────────────────────
+def _module_action(kind: str, module_id: str):
+    """Real enable/disable through the module manager. Core tier refuses to
+    disable (boot requires it); install/run answer honestly for bundled packs."""
+    if not module_id:
+        return JSONResponse({"ok": False, "message": "id required"}, status_code=400)
+    with contextlib.suppress(Exception):
+        from suijin.modules.manager import list_modules, set_enabled
+
+        mods = {str(m.get("id")): m for m in list_modules()}
+        m = mods.get(module_id)
+        if not m:
+            return JSONResponse({"ok": False, "message": f"unknown module '{module_id}'"}, status_code=404)
+        if kind == "disable" and str(m.get("tier")) == "core":
+            return JSONResponse({"ok": False, "message": f"'{module_id}' is core tier — boot requires it, it cannot be disabled."}, status_code=400)
+        if kind in ("enable", "disable"):
+            if not set_enabled(module_id, kind == "enable"):
+                return JSONResponse({"ok": False, "message": f"could not set state for '{module_id}'"}, status_code=500)
+            return {"ok": True, "deferred": False,
+                    "message": f"{module_id} {'enabled' if kind == 'enable' else 'disabled'} — applies on next boot."}
+        if kind == "install":
+            return {"ok": True, "deferred": False, "message": f"{module_id} is already installed (bundled pack)."}
+        if kind == "run":
+            live = bool(m.get("enabled"))
+            return {"ok": live, "deferred": False,
+                    "message": f"{module_id} loads at boot" + ("." if live else " — enable it first.")}
+    return JSONResponse({"ok": False, "message": "module manager unavailable"}, status_code=500)
+
+
+@router.post("/api/console/plugins/enable")
+def plugins_enable(body: dict = Body(default={})):
+    return _module_action("enable", str(body.get("id") or ""))
+
+
+@router.post("/api/console/plugins/disable")
+def plugins_disable(body: dict = Body(default={})):
+    return _module_action("disable", str(body.get("id") or ""))
+
+
+@router.post("/api/console/plugins/install")
+def plugins_install(body: dict = Body(default={})):
+    return _module_action("install", str(body.get("id") or ""))
+
+
+@router.post("/api/console/plugins/run")
+def plugins_run(body: dict = Body(default={})):
+    return _module_action("run", str(body.get("id") or ""))
+
+
+# ── skills (the REAL workspace skill library) ────────────────────
+
+_SKILL_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,80}")
+
+
+def _skills_root() -> Path:
+    with contextlib.suppress(Exception):
+        from suijin.server.platform.lib.workspace import WORKSPACE_DIR
+
+        return Path(WORKSPACE_DIR) / "skills"
+    return Path.home() / ".suijin" / "config" / "skills"
+
+
+def _skills_mounts() -> list[dict]:
+    """Mounted skill folders (read-only sources) persisted beside the library."""
+    p = _skills_root().parent / "skills-mounts.json"
+    with contextlib.suppress(Exception):
+        data = json.loads(p.read_text(errors="replace"))
+        if isinstance(data, list):
+            return [{"id": m.get("id") or "", "path": m.get("path") or ""} for m in data if isinstance(m, dict) and m.get("path")]
+    return []
+
+
+def _skills_mounts_save(mounts: list[dict]) -> None:
+    p = _skills_root().parent / "skills-mounts.json"
+    with contextlib.suppress(OSError):
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(mounts, indent=1))
+
+
+def _skill_frontmatter(content: str) -> dict:
+    """Parse the frontmatter head of a SKILL.md (name/description/version/
+    category/tags). Tolerant: some imported skills carry license comment
+    lines BEFORE the --- block, so search for the first block in the head."""
+    out: dict = {}
+    m = re.search(r"(?:^|\r?\n)---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)", content[:4000])
+    if not m:
+        return out
+    lines = m.group(1).splitlines()
+    collecting_tags = False
+    tags: list[str] = []
+    for line in lines:
+        if collecting_tags:
+            tm = re.match(r"^\s*-\s*(.+)$", line)
+            if tm:
+                tags.append(tm.group(1).strip().strip('"').strip("'"))
+                continue
+            collecting_tags = False
+        lm = re.match(r"^(name|description|version|category|author|tags):\s*(.*)$", line.strip())
+        if lm:
+            if lm.group(1) == "tags":
+                collecting_tags = True
+                if lm.group(2).strip():
+                    tags = [t.strip() for t in lm.group(2).split(",") if t.strip()]
+            else:
+                out[lm.group(1)] = lm.group(2).strip().strip('"').strip("'")
+    if tags:
+        out["tags"] = tags
+    return out
+
+
+def _skill_files(folder: Path) -> list[dict]:
+    files: list[dict] = []
+    for p in sorted(folder.rglob("*")):
+        if p.is_file():
+            with contextlib.suppress(OSError):
+                files.append({"path": str(p.relative_to(folder)), "size": p.stat().st_size})
+    return files[:256]
+
+
+def _skill_record(folder: Path, scope: str = "workspace") -> dict | None:
+    md = folder / "SKILL.md"
+    if not md.is_file():
+        return None
+    content = ""
+    with contextlib.suppress(OSError):
+        content = md.read_text(errors="replace")
+    fm = _skill_frontmatter(content)
+    return {
+        "id": folder.name, "name": fm.get("name") or folder.name,
+        "description": fm.get("description") or "",
+        "category": fm.get("category") or "",
+        "tags": fm.get("tags") or [],
+        "scope": scope, "revision": fm.get("version") or "r1",
+        "writable": scope == "workspace", "fileCount": len(_skill_files(folder)),
+        "source": str(md),
+    }
+
+
+def _skill_folder(skill_id: str) -> Path | None:
+    """Locate a skill folder by id across the library and mounted roots."""
+    if not _SKILL_ID_RE.fullmatch(skill_id):
+        return None
+    folder = _skills_root() / skill_id
+    if (folder / "SKILL.md").is_file():
+        return folder
+    for mount in _skills_mounts():
+        candidate = Path(mount["path"]) / skill_id
+        if (candidate / "SKILL.md").is_file():
+            return candidate
+    return None
 
 
 @router.get("/api/skills")
 def skills_list():
-    out = []
-    with contextlib.suppress(Exception):
-        from suijin.modules.tools.lib.dispatch import list_route_tools
-
-        for name in list_route_tools():
-            out.append({"id": name, "name": name, "description": f"Suijin tool: {name}",
-                        "scope": "builtin", "revision": "r1", "writable": False,
-                        "fileCount": 0, "source": "core"})
-    return {"skills": out, "mounts": [], "diagnostics": [], "workspacePath": "suijin workspace"}
+    root = _skills_root()
+    out: list[dict] = []
+    if root.is_dir():
+        for folder in sorted(root.iterdir()):
+            if folder.is_dir():
+                rec = _skill_record(folder)
+                if rec:
+                    out.append(rec)
+    for mount in _skills_mounts():
+        mroot = Path(mount["path"])
+        if mroot.is_dir():
+            for folder in sorted(mroot.iterdir()):
+                if folder.is_dir():
+                    rec = _skill_record(folder, scope="mounted")
+                    if rec and not any(x["id"] == rec["id"] for x in out):
+                        out.append(rec)
+    out.sort(key=lambda r: r["name"].lower())
+    return {"skills": out, "mounts": _skills_mounts(), "diagnostics": [], "workspacePath": str(root)}
 
 
 @router.get("/api/skills/{skill_id}")
 def skill_detail(skill_id: str):
-    import inspect
+    folder = _skill_folder(skill_id)
+    if not folder:
+        return JSONResponse({"error": "skill not found"}, status_code=404)
+    rec = _skill_record(folder, scope="workspace" if folder.parent == _skills_root() else "mounted") or {}
+    content = ""
+    with contextlib.suppress(OSError):
+        content = (folder / "SKILL.md").read_text(errors="replace")
+    return {"skill": {**rec, "id": skill_id, "content": content,
+                      "files": _skill_files(folder), "source": str(folder / "SKILL.md")}}
 
-    doc = ""
-    with contextlib.suppress(Exception):
-        from suijin.modules.tools.lib import dispatch as d
 
-        fn = getattr(d, skill_id, None)
-        if fn and hasattr(fn, "__doc__"):
-            doc = (fn.__doc__ or "").strip()
-    return {"id": skill_id, "name": skill_id, "description": doc[:300] or f"Suijin tool: {skill_id}",
-            "scope": "builtin", "revision": "r1", "writable": False, "fileCount": 0,
-            "source": "core", "content": doc[:4000] or f"# {skill_id}\n", "files": []}
+@router.post("/api/skills")
+def skill_create(body: dict = Body(default={})):
+    content = str(body.get("content") or "").strip()
+    if not content:
+        return JSONResponse({"error": "content required"}, status_code=400)
+    fm = _skill_frontmatter(content)
+    base = re.sub(r"[^a-z0-9]+", "-", str(fm.get("name") or "skill").lower()).strip("-")[:48] or "skill"
+    root = _skills_root()
+    with contextlib.suppress(OSError):
+        root.mkdir(parents=True, exist_ok=True)
+    slug, n = base, 2
+    while (_skills_root() / slug).exists():
+        slug = f"{base}-{n}"
+        n += 1
+    folder = root / slug
+    with contextlib.suppress(OSError):
+        folder.mkdir(parents=True)
+        (folder / "SKILL.md").write_text(content)
+    rec = _skill_record(folder)
+    if not rec:
+        return JSONResponse({"error": "could not write skill"}, status_code=500)
+    return {"skill": rec}
+
+
+@router.post("/api/skills/import")
+def skill_import(body: dict = Body(default={})):
+    import base64
+
+    bundle = body.get("bundle") if isinstance(body.get("bundle"), dict) else body
+    files = bundle.get("files") or []
+    name = str(bundle.get("name") or "imported")
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:48] or "imported"
+    root = _skills_root()
+    with contextlib.suppress(OSError):
+        root.mkdir(parents=True, exist_ok=True)
+    s, n = slug, 2
+    while (root / s).exists():
+        s = f"{slug}-{n}"
+        n += 1
+    folder = root / s
+    with contextlib.suppress(OSError):
+        folder.mkdir(parents=True)
+    for f in files[:256]:
+        if not isinstance(f, dict):
+            continue
+        rel = str(f.get("path") or "")
+        if not rel or ".." in rel:
+            continue
+        with contextlib.suppress(Exception):
+            dest = folder / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(base64.b64decode(str(f.get("content") or "")))
+    if not (folder / "SKILL.md").is_file():
+        with contextlib.suppress(OSError):
+            (folder / "SKILL.md").write_text(f"---\nname: \"{s}\"\ndescription: \"Imported skill\"\n---\n\nImported skill.\n")
+    rec = _skill_record(folder)
+    if not rec:
+        return JSONResponse({"error": "could not write skill"}, status_code=500)
+    return {"skill": rec}
+
+
+@router.put("/api/skills/{skill_id}")
+def skill_save(skill_id: str, body: dict = Body(default={})):
+    folder = _skill_folder(skill_id)
+    if not folder or folder.parent != _skills_root():
+        return JSONResponse({"error": "skill not found or read-only"}, status_code=404)
+    content = str(body.get("content") or "")
+    if not content.strip():
+        return JSONResponse({"error": "content required"}, status_code=400)
+    with contextlib.suppress(OSError):
+        (folder / "SKILL.md").write_text(content)
+    rec = _skill_record(folder) or {}
+    return {"skill": {**rec, "id": skill_id}}
+
+
+@router.post("/api/skills/{skill_id}/copy")
+def skill_copy(skill_id: str, body: dict = Body(default={})):
+    folder = _skill_folder(skill_id)
+    if not folder:
+        return JSONResponse({"error": "skill not found"}, status_code=404)
+    content = str(body.get("content") or "")
+    if not content.strip():
+        with contextlib.suppress(OSError):
+            content = (folder / "SKILL.md").read_text(errors="replace")
+    root = _skills_root()
+    slug, n = f"{skill_id}-custom", 2
+    while (root / slug).exists():
+        slug = f"{skill_id}-custom-{n}"
+        n += 1
+    new_folder = root / slug
+    with contextlib.suppress(OSError):
+        new_folder.mkdir(parents=True)
+        (new_folder / "SKILL.md").write_text(content)
+    rec = _skill_record(new_folder)
+    if not rec:
+        return JSONResponse({"error": "could not write skill"}, status_code=500)
+    return {"skill": rec}
+
+
+@router.get("/api/skills/{skill_id}/export")
+def skill_export(skill_id: str):
+    import base64
+
+    from fastapi import Response
+
+    folder = _skill_folder(skill_id)
+    if not folder:
+        return Response(status_code=404)
+    files = []
+    for p in sorted(folder.rglob("*")):
+        if p.is_file():
+            with contextlib.suppress(OSError):
+                files.append({"path": str(p.relative_to(folder)), "encoding": "base64",
+                              "content": base64.b64encode(p.read_bytes()).decode()})
+    bundle = {"format": "agent-skill", "version": 1, "name": skill_id, "files": files}
+    return Response(json.dumps(bundle), media_type="application/json",
+                    headers={"Content-Disposition": f"attachment; filename=\"{skill_id}.skill.json\""})
+
+
+@router.post("/api/skills/mounts")
+def skills_mount_add(body: dict = Body(default={})):
+    path = str(body.get("path") or "").strip()
+    folder = Path(path).expanduser()
+    if not path or not folder.is_dir():
+        return JSONResponse({"error": "folder does not exist"}, status_code=400)
+    mounts = _skills_mounts()
+    entry = {"id": re.sub(r"[^a-z0-9]+", "-", folder.name.lower()).strip("-")[:48] or "mount", "path": str(folder)}
+    if any(m["path"] == entry["path"] for m in mounts):
+        return {"mount": entry}
+    mounts.append(entry)
+    _skills_mounts_save(mounts)
+    return {"mount": entry}
+
+
+@router.delete("/api/skills/mounts/{mount_id}")
+def skills_mount_remove(mount_id: str):
+    mounts = [m for m in _skills_mounts() if m["id"] != mount_id]
+    _skills_mounts_save(mounts)
+    return {"ok": True}
 
 
 # ── project metadata (home suggestions) ──────────────────────────
@@ -1559,7 +2191,7 @@ def doctor():
     zai = _zai_configured()
     doc_provs = []
     for p in provs["providers"]:
-        doc_provs.append({**p, "diagnostics": _provider_diagnostics(bool(p["configured"]))})
+        doc_provs.append({**p, "diagnostics": _cached_diagnostics(str(p["id"]), bool(p["configured"]))})
     return {
         "version": "1.0.0",
         "runtime": {"node": "24", "nodeSupported": True, "platform": "host",
@@ -1585,7 +2217,17 @@ def console_tools():
         from suijin.modules.tools.lib.dispatch import list_route_tools
 
         tools = [{"name": n, "description": f"Suijin tool: {n}",
-                  "roles": ["worker", "planner"]} for n in list_route_tools()]
+                  "roles": ["worker", "planner"], "icon": _tool_icon(n)} for n in list_route_tools()]
+    # Pack tools (gobuster, nikto, sqlmap, …) the AI dispatches through packs —
+    # every one lands on the menu with its owning pack's icon.
+    seen = {t["name"] for t in tools}
+    for name, (pack, desc) in sorted(_pack_tools().items()):
+        if name in seen:
+            continue
+        seen.add(name)
+        tools.append({"name": name, "description": desc or f"{pack} pack tool",
+                      "roles": ["worker", "planner"], "icon": _tool_icon(name),
+                      "pack": pack})
     return {"roles": ["worker", "planner"], "tools": tools, "plugins": []}
 
 
@@ -1599,16 +2241,357 @@ def console_learning():
     return {"events": [], "knowledge": [], "improvements": []}
 
 
+# ── memory graph (the librarian's knowledge map) ─────────────────
+
+_PRIVATE_IP = re.compile(r"^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.0\.0\.0|::1)", re.I)
+_INTERNAL_NAMES = ("localhost", "local", "host.docker", ".local", ".corp", ".internal", ".lan")
+
+
+def _kg_path() -> Path:
+    with contextlib.suppress(Exception):
+        from suijin.server.platform.lib.workspace import WORKSPACE_DIR
+
+        return Path(WORKSPACE_DIR) / "intel" / "knowledge_graph.json"
+    return Path.home() / ".suijin" / "config" / "intel" / "knowledge_graph.json"
+
+
+def _url_host(node_id: str) -> str:
+    m = re.match(r"^[a-z]+://([^/?#]+)", node_id, re.I)
+    return m.group(1).lower() if m else ""
+
+
+def _registrable(host: str) -> str:
+    """Crude registrable domain: last two labels, three for co.uk style."""
+    labels = [x for x in host.split(".") if x]
+    if len(labels) >= 3 and labels[-2] in ("co", "com", "org", "net", "gov", "edu", "ac") and len(labels[-1]) == 2:
+        return ".".join(labels[-3:])
+    return ".".join(labels[-2:]) if len(labels) > 2 else host
+
+
+def _node_kind(node_id: str, host: str = "") -> str:
+    nid = node_id.strip().lower()
+    h = (host or nid).lower()
+    if nid == "methodology" or nid.endswith("methodology") or "architecture" in nid or " ordering" in nid:
+        return "methodology"
+    if nid.startswith("auto-agent") or re.search(r"agent-[0-9a-f]{4}", nid):
+        return "agent"
+    if _PRIVATE_IP.match(h) or any(h == n or h.endswith(n) for n in _INTERNAL_NAMES):
+        return "internal"
+    if re.match(r"^[a-z]+://", node_id, re.I):
+        return "url"
+    if ":" in nid and re.match(r"^[\d.:]+$", nid):
+        return "internal"
+    return "external"
+
+
+@router.get("/api/console/memory-graph")
+def memory_graph():
+    """The fullscreen mindmap: MEMORY → External/Internal TARGETS → each
+    target carries Info / Endpoints / Vulnerabilities branches populated with
+    its real intel entries, plus cross-links where evidence mentions other
+    targets. Per-target housekeeping — the AI cleans up per target during an
+    engagement. Local-only: reads the operator workspace, never leaves it."""
+    kg = _kg_path()
+    if not kg.is_file():
+        return {"nodes": [], "edges": [], "stats": {"nodes": 0, "edges": 0, "entries": 0}, "missing": True}
+    with contextlib.suppress(Exception):
+        data = json.loads(kg.read_text(errors="replace"))
+    if not isinstance(data, dict):
+        return {"nodes": [], "edges": [], "stats": {"nodes": 0, "edges": 0, "entries": 0}, "missing": True}
+
+    VULN_CATS = {"bypass", "vulnerability", "vulnerabilities", "finding", "findings",
+                 "exploit", "misconfig", "misconfiguration", "leak", "leaks", "weakness", "abuse"}
+    ENDPOINT_HINT = re.compile(r"/|:\d|\.", re.I)
+
+    def _norm(s: str) -> str:
+        return re.sub(r"[^a-z0-9.:/_\-* ]+", "", s.lower()).strip()
+
+    def _host_of(key: str) -> str:
+        if re.match(r"^[a-z]+://", key, re.I):
+            m = re.match(r"^[a-z]+://([^/?#]+)", key, re.I)
+            return (m.group(1) if m else "").lower()
+        if "://" not in key and "/" not in key and ENDPOINT_HINT.search(key):
+            return key.lower()
+        return ""
+
+    nodes: dict[str, dict] = {}
+    total_entries = 0
+    for raw_id, payload in data.items():
+        key = str(raw_id).strip()
+        if not key:
+            continue
+        kind = _node_kind(key)
+        host = _host_of(key) if kind == "url" else ""
+        cats: dict[str, int] = {}
+        entries_flat: list[dict] = []
+        entry_count = 0
+        if isinstance(payload, dict):
+            for cat, entries in payload.items():
+                if isinstance(entries, list):
+                    cats[str(cat)] = len(entries)
+                    entry_count += len(entries)
+                    for e in entries[:60]:
+                        if isinstance(e, dict):
+                            entries_flat.append({
+                                "category": str(cat),
+                                "rule": str(e.get("rule") or "")[:400],
+                                "evidence": str(e.get("evidence") or "")[:500],
+                                "confidence": e.get("confidence"),
+                                "severity": str(e.get("severity") or ""),
+                                "verified": bool(e.get("verified")),
+                            })
+        total_entries += entry_count
+        label = key
+        if kind == "url":
+            label = re.sub(r"^[a-z]+://", "", key, flags=re.I).rstrip("/")
+            if len(label) > 64:
+                label = label[:61] + "…"
+        nodes[key] = {
+            "id": key, "label": label, "kind": kind, "host": host,
+            "internal": kind == "internal" or (host != "" and bool(_PRIVATE_IP.match(host))),
+            "entryCount": entry_count, "categories": cats, "entries": entries_flat,
+        }
+
+    # ── pass A: the TARGET set — registrable domains + internal bases ──
+    targets: set[str] = set()
+    internal_targets: set[str] = set()
+    for key, meta in nodes.items():
+        k = _norm(key)
+        if meta["kind"] == "external":
+            reg = _registrable(k)
+            if reg:
+                targets.add(reg)
+        elif meta["kind"] == "url":
+            h = meta["host"]
+            if h:
+                if _PRIVATE_IP.match(h) or any(h == n or h.endswith(n) for n in _INTERNAL_NAMES):
+                    internal_targets.add(h)
+                else:
+                    reg = _registrable(h)
+                    if reg:
+                        targets.add(reg)
+        elif meta["kind"] == "internal":
+            internal_targets.add(k)
+    targets.discard("")
+
+    # ── pass B: resolve every node to ONE target (layered, first hit wins) ──
+    def resolve_target(key: str, meta: dict) -> str | None:
+        kind = meta["kind"]
+        k = _norm(key)
+        if kind == "internal":
+            h = meta["host"] or k
+            return h if (internal_targets and h in internal_targets) or True else None
+        if kind == "url":
+            h = meta["host"]
+            if h:
+                if h in internal_targets:
+                    return h
+                reg = _registrable(h)
+                if reg in targets:
+                    return reg
+                return reg or None
+            return None
+        if kind == "external":
+            reg = _registrable(k)
+            if reg in targets:
+                return reg
+            m = re.match(r"github\.com/([^/]+)", k)
+            if m:
+                org = m.group(1).lower()
+                if len(org) >= 4:
+                    for t in sorted(targets, key=len, reverse=True):
+                        if org == t.split(".")[0] or org in k:
+                            return t
+            if "npm:" in k:
+                stem = re.sub(r"npm:|@.*|\(.*\)", "", k).lower()
+                for t in sorted(targets, key=len, reverse=True):
+                    base = t.split(".")[0]
+                    if len(base) >= 5 and base in stem:
+                        return t
+            for t in sorted(targets, key=len, reverse=True):
+                base = t.split(".")[0]
+                if len(base) >= 5 and base in k:
+                    return t
+            return "__unsorted__"
+        return None  # methodology / agents live on their own branches
+
+    assignment: dict[str, str | None] = {}
+    for key, meta in nodes.items():
+        assignment[key] = resolve_target(key, meta)
+
+    # ── pass C: classify entries into the three branches per target ──
+    # target → branch → synthesized leaves (deduped by rule text)
+    branch_leaves: dict[str, dict[str, list[dict]]] = {}
+    def add_leaf(target: str, branch: str, entry: dict, ref: str = "") -> None:
+        slot = branch_leaves.setdefault(target, {}).setdefault(branch, [])
+        # GROUP by rule prefix — 98 identical "GET /admin returns 20…" entries
+        # are ONE node ("GET /admin · ×98"), never a wall of repeated text.
+        toks = entry["rule"][:60].split()
+        group_key = " ".join(toks[:2]) if toks else entry["rule"][:40]
+        for leaf in slot:
+            if leaf["group"] == group_key:
+                leaf["count"] += 1
+                if not leaf["severity"] and entry.get("severity"):
+                    leaf["severity"] = entry["severity"]
+                if entry.get("verified"):
+                    leaf["verified"] = True
+                return
+        cap = 24 if branch == "vulns" else 12
+        if len(slot) >= cap:
+            # over cap: merge into the nearest existing group instead
+            if slot:
+                slot[-1]["count"] += 1
+            return
+        slot.append({**entry, "ref": ref, "group": group_key, "count": 1,
+                     "rule": " ".join(toks[:4])[:60] or entry["rule"][:60],
+                     "full": entry})
+
+    for key, meta in nodes.items():
+        t = assignment.get(key)
+        if not t:
+            continue
+        is_endpoint = meta["kind"] in ("url",) or (meta["kind"] == "external" and key.lower() != t)
+        for entry in meta["entries"]:
+            branch = "vulns" if entry["category"].lower() in VULN_CATS else "info"
+            add_leaf(t, branch, entry, ref=key)
+        _ = is_endpoint  # endpoints render as real nodes below
+
+    # ── assemble the tree ──
+    SEV_COLOR = {"critical": "#ef4444", "high": "#f97316", "medium": "#eab308",
+                 "low": "#84cc16", "verified": "#34d399"}
+    nodes_out: dict[str, dict] = {}
+    edge_set: set[tuple[str, str]] = set()
+
+    def add_node(nid: str, label: str, kind: str, color: str, size: int, entries: list[dict] | None = None, raw: dict | None = None) -> None:
+        if nid in nodes_out:
+            return
+        nodes_out[nid] = {"id": nid, "label": label[:64], "kind": kind, "color": color,
+                          "size": size, "entryCount": len(entries or []), "entries": entries or []}
+
+    def add_edge(s: str, t: str, ekind: str = "tree") -> None:
+        if s != t and s in nodes_out and t in nodes_out:
+            edge_set.add((s, t, ekind) if s < t else (t, s, ekind))
+
+    add_node("__root__", "MEMORY", "hub", "#64748b", 46)
+    add_node("__ext__", "External targets", "branch", "#14b8a6", 34)
+    add_node("__int__", "Internal targets", "branch", "#fb923c", 34)
+    add_node("__unsorted__", "Unsorted", "branch", "#94a3b8", 22)
+    add_edge("__root__", "__ext__")
+    add_edge("__root__", "__int__")
+    add_edge("__root__", "__unsorted__")
+
+    BRANCH_COLOR = {"info": "#60a5fa", "endpoints": "#2dd4bf", "vulns": "#ef4444"}
+    SEVERITY_COLOR = {"critical": "#ef4444", "high": "#f97316", "medium": "#eab308",
+                      "low": "#84cc16", "info": "#94a3b8"}
+
+    def add_target(target: str, internal: bool) -> str:
+        nid = f"target:{target}"
+        if nid in nodes_out:
+            return nid
+        hub = "__int__" if internal else "__ext__"
+        tot = sum(len(v) for v in branch_leaves.get(target, {}).values())
+        label = f"{target} · {tot}" if tot > 0 else target
+        add_node(nid, label, "target" + (":internal" if internal else ":external"),
+                 "#fb923c" if internal else "#14b8a6", min(64, 22 + tot * 1.4))
+        add_edge(hub, nid)
+        for bname, blabel in (("info", "Info"), ("endpoints", "Endpoints"), ("vulns", "Vulnerabilities")):
+            bid = f"{nid}/{bname}"
+            leaves = branch_leaves.get(target, {}).get(bname, [])
+            add_node(bid, blabel, f"branch:{bname}", BRANCH_COLOR[bname], 22)
+            add_edge(nid, bid)
+            for i, leaf in enumerate(leaves[:40]):
+                lid = f"{bid}/leaf:{i}"
+                count = leaf.get("count", 1)
+                count_tag = f" · ×{count}" if count > 1 else ""
+                if bname == "vulns":
+                    color = SEVERITY_COLOR.get((leaf.get("severity") or "info").lower(), "#94a3b8")
+                    lbl = ((leaf["rule"][:46] + "…") if len(leaf["rule"]) > 47 else leaf["rule"]) + count_tag
+                else:
+                    color = "#38bdf8" if bname == "info" else "#5eead4"
+                    lbl = ((leaf["rule"][:46] + "…") if len(leaf["rule"]) > 47 else leaf["rule"]) + count_tag
+                add_node(lid, lbl, bname + ":leaf", color, 10 + (3 if leaf.get("verified") else 0) + (2 if count > 1 else 0),
+                         [{**leaf.get("full", leaf), "count": count}])
+                add_edge(bid, lid)
+        return nid
+
+    # endpoints: real url / subdomain nodes under their target's Endpoints branch
+    endpoint_parent: dict[str, str] = {}
+    for key, meta in nodes.items():
+        t = assignment.get(key)
+        if not t:
+            continue
+        internal = meta["kind"] == "internal" or (meta["kind"] == "url" and meta["host"] in internal_targets)
+        tid = add_target(t, internal)
+        if meta["kind"] == "url" or (meta["kind"] == "external" and key.lower() != t):
+            bid = f"{tid}/endpoints"
+            color = "#fb923c" if meta["internal"] else "#5eead4"
+            add_node(key, meta["label"], "endpoint", color,
+                     min(30, 10 + meta["entryCount"] * 2), meta["entries"], meta)
+            add_edge(bid, key)
+            endpoint_parent[key] = tid
+
+    # non-endpoint nodes (repos, packages, architecture notes) → Info children
+    for key, meta in nodes.items():
+        t = assignment.get(key)
+        if not t or meta["kind"] in ("url", "internal"):
+            continue
+        is_target_self = key.lower() == t
+        if meta["kind"] == "external" and is_target_self:
+            continue
+        tid = add_target(t, internal=False)
+        bid = f"{tid}/info"
+        add_node(key, meta["label"], "info", "#60a5fa",
+                 min(24, 10 + meta["entryCount"] * 2), meta["entries"], meta)
+        add_edge(bid, key)
+
+    # internal targets' own urls already route via endpoint pass ✓
+    # ── cross-links: evidence mentioning another known node or target ──
+    id_list = sorted(nodes.keys())
+    cross = 0
+    for key, meta in nodes.items():
+        if cross >= 300:
+            break
+        mentioned: set[str] = set()
+        text = " ".join(e["rule"] + " " + e["evidence"] for e in meta["entries"]).lower()
+        if not text:
+            continue
+        for other in id_list:
+            if other == key or len(other) < 6:
+                continue
+            o = _norm(other)
+            if len(o) >= 6 and o in text:
+                mentioned.add(other)
+        for other in list(mentioned)[:4]:
+            if other in nodes_out and key in nodes_out:
+                add_edge(key, other, "cross")
+                cross += 1
+            elif other.startswith("target:"):
+                add_edge(key, other, "cross")
+                cross += 1
+
+    edges = [{"source": s, "target": t, "ekind": k} for (s, t, k) in edge_set]
+    return {"nodes": list(nodes_out.values()), "edges": edges,
+            "stats": {"nodes": len(nodes_out), "edges": len(edges), "entries": total_entries},
+            "targets": sorted({nid for nid in nodes_out if nid.startswith("target:")})}
+
+
 @router.get("/api/console/service-plugins")
 def service_plugins():
     items = [{
         "id": p["id"], "name": p["name"], "description": p["description"],
         "category": "suijin", "configured": True, "enabled": p["loaded"],
-        "tools": [{"name": t["name"], "description": t["description"]}
-                  for t in plugins()["host"]["tools"][:1]],
-        "values": {}, "testedAt": None,
-    } for p in _PLUGIN_ITEMS]
+        "icon": p.get("icon") or "",
+        "tools": [], "values": {}, "testedAt": None,
+    } for p in _module_items()]
     return {"items": items, "executionProfile": "local"}
+
+
+@router.patch("/api/console/service-plugins/{module_id}")
+def service_plugin_toggle(module_id: str, body: dict = Body(default={})):
+    """The integrations-tab switch is REAL: enable/disable via the module
+    manager (core tier refuses, same as the Plugins tab)."""
+    enabled = body.get("enabled")
+    return _module_action("enable" if enabled else "disable", module_id)
 
 
 @router.get("/api/console/workflow-definitions")
@@ -1622,7 +2605,7 @@ def workflow_tool_catalog():
     with contextlib.suppress(Exception):
         from suijin.modules.tools.lib.dispatch import list_route_tools
 
-        tools = [{"name": n, "description": f"Suijin tool: {n}"} for n in list_route_tools()]
+        tools = [{"name": n, "description": f"Suijin tool: {n}", "icon": _tool_icon(n)} for n in list_route_tools()]
     return {"tools": tools}
 
 
@@ -1904,6 +2887,44 @@ def _models_dev_models_for(key: str) -> list[str]:
     return sorted((entry.get("models") or {}).keys())
 
 
+@router.get("/api/console/provider-icon/github/{user}")
+def provider_icon_github(user: str):
+    """GitHub org/user avatar via unavatar — for tools that only live on
+    GitHub (gobuster/OJ, ffuf/joohoi, …). Same cache, same rules."""
+    import re as _re
+
+    from fastapi import Response
+
+    usr = str(user or "").strip()
+    if not _re.fullmatch(r"[A-Za-z0-9._-]{1,60}", usr):
+        return Response(status_code=404)
+    cache_dir = _ws() / "cache" / "provider-icons"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_key = f"github_{usr}"
+    headers = {"Cache-Control": "public, max-age=604800"}
+    for ext, media in ((".png", "image/png"), (".svg", "image/svg+xml"), (".ico", "image/vnd.microsoft.icon")):
+        cached = cache_dir / f"{cache_key}{ext}"
+        if cached.exists() and cached.stat().st_size > 50:
+            return Response(cached.read_bytes(), media_type=media, headers=headers)
+    import urllib.request
+
+    sources = (f"https://unavatar.io/github/{usr}?fallback=false",)
+    for src in sources:
+        try:
+            req = urllib.request.Request(src, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                data = r.read()
+            if len(data) > 50 and data[:8] == b"\x89PNG\r\n\x1a\n":
+                (cache_dir / f"{cache_key}.png").write_bytes(data)
+                return Response(data, media_type="image/png", headers=headers)
+            if len(data) > 50:
+                (cache_dir / f"{cache_key}.png").write_bytes(data)
+                return Response(data, media_type="image/png", headers=headers)
+        except Exception:  # noqa: BLE001
+            continue
+    return Response(status_code=404)
+
+
 @router.get("/api/console/provider-icon/{domain}")
 def provider_icon(domain: str):
     """Provider logo from a cached local copy.
@@ -2089,8 +3110,16 @@ def provider_override_test(key: str, body: dict = Body(default={})):
 
 @router.post("/api/console/providers/{key}/verify")
 def provider_verify(key: str):
-    """Diagnostics honesty: what a provider ACTUALLY does right now."""
-    return _ping_provider(key)
+    """Diagnostics honesty: what a provider ACTUALLY does right now. The
+    result is persisted (5 min TTL) so doctor/providers reflect it."""
+    result = _ping_provider(key)
+    # store under BOTH the display id the UI sends ("z-ai") and the registry
+    # key the ping normalized to ("zai") — lookups use the display id.
+    _store_verify_result(key, result)
+    normalized = {"z-ai": "zai", "zhipu": "zai"}.get(key)
+    if normalized and normalized != key:
+        _store_verify_result(normalized, result)
+    return result
 
 
 _available_models_cache: dict = {"at": 0.0, "models": [], "providers": []}

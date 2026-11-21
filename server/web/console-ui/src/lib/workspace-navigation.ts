@@ -6,7 +6,7 @@ export const WORKSPACE_DESTINATIONS = [
   { to: "/findings", label: "Findings", icon: ShieldCheck },
   { to: "/plugins/skills", label: "Skills", icon: Library },
   { to: "/plugins", label: "Plugins", icon: Plug },
-  { to: "/learning", label: "Memory", icon: BookOpen },
+  { to: "/memory", label: "Memory", icon: BookOpen },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 

@@ -146,8 +146,8 @@ export function CommandPalette({
     const base: PaletteAction[] = [
       ...WORKSPACE_DESTINATIONS.map(({ to, label, icon }): PaletteAction => ({
         id: `page-${to.slice(1)}`, group: "Pages", label, icon,
-        meta: to === "/runs" ? "Assessments, automation executions and retained evidence" : to === "/automations" ? "Edit automations and manage schedules" : `Open ${label.toLowerCase()}`,
-        keywords: [label, to.slice(1), ...(to === "/automations" ? ["automations workflows schedules audit"] : to === "/runs" ? ["scans history executions"] : [])],
+        meta: to === "/memory" ? "Fullscreen mindmap of everything the librarian knows" : `Open ${label.toLowerCase()}`,
+        keywords: [label, to.slice(1), ...(to === "/memory" ? ["memory graph mindmap knowledge map"] : [])],
         run: () => {
           const sessionId = location.pathname.match(/^\/console\/([^/]+)/)?.[1];
           navigate(`${to}${sessionId && to === "/settings" ? `?session=${encodeURIComponent(sessionId)}&return=${encodeURIComponent(location.pathname)}` : ""}`);
