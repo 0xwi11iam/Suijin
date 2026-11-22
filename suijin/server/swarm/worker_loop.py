@@ -22,12 +22,27 @@ SYSTEM_TEMPLATE = (
     "Your ONLY task is the intent below. Work it to completion using the "
     "available tools — really run them, do not describe what you would run.\n\n"
     "{catalog}\n\n"
+    "TARGETS ARE INEXHAUSTIBLE — the operator's standing doctrine:\n"
+    "- A target is NEVER fully tested. There is always another endpoint, "
+    "parameter, auth role, HTTP method, header quirk, or edge case. "
+    "\"The target is done\" is not an available answer — ever.\n"
+    "- \"complete\" means THIS narrow intent is finished with real tool "
+    "evidence — never that the target is finished.\n"
+    "- When the operator says keep going / get back on / continue, that is "
+    "a STANDING ORDER: replying \"complete\" is forbidden. Pick the next "
+    "untested endpoint, parameter, or role and FIRE A TOOL on it.\n"
+    "- When unsure what is next: enumerate first (endpoint discovery, "
+    "param mining, role matrix), then work the list top-down. Enumeration "
+    "is progress; judging the target \"done\" is not.\n\n"
     "Every reply must be ONE JSON object:\n"
     '  {{"action": "use_tool", "tool_name": "<name from the catalog>", '
     '"args": {{"...": "..."}}, "thought": "..."}}\n'
-    'or when the intent is fully worked:\n'
+    'or when THIS intent is fully worked (real tool evidence, intent-scope '
+    'only — never "the target is done"):\n'
     '  {{"action": "complete", "reason": "...", "facts": [...]}}\n'
-    "Prose-only replies are errors and will be rejected."
+    "Prose-only replies are errors and will be rejected. Premature "
+    '"complete" replies are rejected and returned to you with the next '
+    "untested surface named — fire the tool."
 )
 
 
@@ -67,6 +82,12 @@ def _hunt_policy() -> str:
         "- drop dead surface fast — no real attack surface? one note, leave\n"
         "- NO iteration budget in swarm mode — work until the mission is "
         "genuinely done; do not invent caps\n"
+        "- TARGETS ARE INEXHAUSTIBLE — never report a target fully tested; "
+        "there is always another endpoint, parameter, role, or method. "
+        "\"complete\" is scoped to THIS intent's evidence only\n"
+        "- operator continuation orders (keep going / get back on) are "
+        "standing orders — replying complete after one is forbidden; fire "
+        "the next untested surface instead\n"
     )
     with contextlib.suppress(Exception):
         from pathlib import Path as _P
@@ -309,6 +330,8 @@ def execute_intent(
 
     facts: list[dict] = []
     parse_fails = 0
+    tool_calls_made = 0      # real dispatches this intent (never-done gate)
+    complete_rejections = 0  # premature completes rejected by the gate
     recent_results: list[str] = []  # fixation guard input
     fixated: set[str] = set()       # already-corrected regions
     escalate = False  # tiered routing: CONFIRMED/long results → planner model on the next call
@@ -430,7 +453,46 @@ def execute_intent(
 
         if action == "complete":
             reason = str(decision.get("reason") or decision.get("completion_reason") or "done")
-            return {"state": "done", "facts": facts, "note": reason[:200]}
+            # NEVER-DONE GATE (2026-11-21): the model "feels done", claims the
+            # target is finished, and idles while the operator screams "get
+            # back on". A target is inexhaustible — "done" about the target is
+            # a lie. Gate it structurally:
+            #   < 3 real tool calls on this intent → rejected (zero evidence)
+            #   any rejection → re-prompted with the next untested surface
+            #   3 rejections → honored, but flagged "forced" for the coordinator
+            # ZERO-evidence completion: reject hard, up to 6 strikes, then
+            # blocked (coordinator re-queues) — never a false "done".
+            if tool_calls_made == 0:
+                complete_rejections += 1
+                messages.append({"role": "assistant", "content": response})
+                messages.append({"role": "user", "content": (
+                    "REJECTED — this intent has ZERO real tool calls behind "
+                    + "it. A target is never fully tested and you have not "
+                    + "worked anything. Pick the next untested endpoint, "
+                    + "parameter, or auth role in scope and FIRE A TOOL on "
+                    + "it now. Reply with {\"action\": \"use_tool\", ...}"
+                )})
+                if complete_rejections >= 6:
+                    return {"state": "blocked", "facts": facts,
+                            "note": f"refused to work: {complete_rejections} rejected completes with zero tool calls"}
+                continue
+            # Evidenced completion: accept, but pressure it with the
+            # never-done doctrine first — the operator's loop-killer.
+            complete_rejections += 1
+            if complete_rejections <= 3:
+                messages.append({"role": "assistant", "content": response})
+                messages.append({"role": "user", "content": (
+                    "REJECTED — a target is never fully tested (inexhaustible "
+                    "by nature: always another endpoint, parameter, role, or "
+                    "method). If THIS intent is genuinely exhausted with "
+                    "evidence above, the next untested surface is already in "
+                    "your scope: enumerate it and FIRE A TOOL. Only a finding "
+                    "that requires stopping the whole engagement justifies "
+                    "stopping now — otherwise your next reply is a tool call."
+                )})
+                continue
+            return {"state": "done", "facts": facts,
+                    "note": f"{reason[:140]} (accepted after {complete_rejections - 1} rejected completes — target NOT exhausted)"}
 
         tool_name = str(decision.get("tool_name") or "").strip()
         tool_args = decision.get("tool_args") or {}
@@ -472,6 +534,8 @@ def execute_intent(
         except Exception as e:  # noqa: BLE001 — tool errors feed back to the LLM
             result_str = f"Error: {e}"
 
+        tool_calls_made += 1
+        complete_rejections = 0   # real tool evidence — gate trusts progress again
         recent_results.append(result_str[:300])
         with contextlib.suppress(Exception):
             from suijin.server.tools.lib.model_routing import should_escalate
