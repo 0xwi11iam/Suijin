@@ -443,8 +443,9 @@ def execute_intent(
                 f"(truncated={truncated}, head: {response[:120]!r})",
                 flush=True,
             )
-            if parse_fails >= 5:
-                return {"state": "blocked", "facts": facts, "note": "model never emitted a JSON decision (5 strikes)"}
+            strike_limit = int(cfg.get("model_strike_limit") or 5)
+            if parse_fails >= strike_limit:
+                return {"state": "blocked", "facts": facts, "note": f"model never emitted a JSON decision ({strike_limit} strikes)"}
             messages.append({"role": "assistant", "content": response})
             messages.append({"role": "user", "content": REprompt_TRUNCATED if truncated else REprompt_TOOL})
             continue

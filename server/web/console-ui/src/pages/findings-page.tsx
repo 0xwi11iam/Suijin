@@ -1,7 +1,6 @@
 import { Tooltip } from "@/components/ui/tooltip";
 import { Disclosure } from "@/components/ui/disclosure";
 import { AssessmentAccessMilestones } from "@/components/access-milestone";
-import { RecordedFindingStatus } from "@/components/recorded-finding-status";
 import { FindingImpactEditor } from "@/components/finding-impact-editor";
 import { getFindingPriority } from "@0/engine/dist/shared/finding-priority.js";
 import { ReportExportControl } from "@/components/report-export-control";
@@ -25,9 +24,11 @@ import { InspectorPane } from "@/components/inspector-pane";
 import { PageHeader, PageContent } from "@/components/page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
 import {
+  CvssBadge,
+  ExpIdBadge,
+  FindingStatusDot,
   PhaseBadge,
   ReviewBadge,
-  SeverityBadge,
   StatusBadge,
 } from "@/components/status-badges";
 import {
@@ -237,6 +238,18 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
     () => ["all", ...new Set(dashboard.groups.map((group) => group.latest.severity.toLowerCase()))],
     [dashboard.groups],
   );
+  const severityCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const group of dashboard.groups) {
+      const key = group.latest.severity.toLowerCase();
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  }, [dashboard.groups]);
+  const confirmedCount = useMemo(
+    () => dashboard.groups.filter((group) => group.latest.status.toLowerCase() === "confirmed").length,
+    [dashboard.groups],
+  );
 
   const filteredGroups = useMemo(() => {
     const normalized = deferredSearch.trim().toLowerCase();
@@ -395,6 +408,27 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
         title="Findings"
         summary="Review evidence, assess impact, and track remediation."
       />
+
+      <div className="flex flex-wrap items-center gap-2">
+        {[
+          { key: "critical", label: "Critical", dot: "bg-red-500" },
+          { key: "high", label: "High", dot: "bg-orange-500" },
+          { key: "medium", label: "Medium", dot: "bg-amber-400" },
+          { key: "low", label: "Low", dot: "bg-sky-400" },
+          { key: "info", label: "Info", dot: "bg-slate-400" },
+        ].map(({ key, label, dot }) => (
+          <span key={key} className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/20 px-3 py-1 text-xs">
+            <span className={`size-2 rounded-full ${dot}`} />
+            <span className="text-muted-foreground">{label}</span>
+            <span className="font-mono font-semibold tabular-nums text-foreground">{severityCounts[key] ?? 0}</span>
+          </span>
+        ))}
+        <span className="ml-auto inline-flex items-center gap-2 rounded-full border border-border bg-muted/20 px-3 py-1 text-xs">
+          <span className="text-muted-foreground">Confirmed</span>
+          <span className="font-mono font-semibold tabular-nums text-emerald-400">{confirmedCount}</span>
+          <span className="text-muted-foreground">of {dashboard.groups.length}</span>
+        </span>
+      </div>
 
       <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius-panel)] border border-border p-3">
         <Tabs value={viewMode} onValueChange={(value) => setConsoleState((current) => ({ ...current, viewMode: value as ThreadViewMode }))}>
@@ -605,7 +639,7 @@ function FindingFamilyInspector({
       : handoffIntent === "verify"
         ? "Verify in chat"
         : "Investigate in chat";
-  const findingLocation = [data.case?.target, data.latest.category].filter(Boolean).join(" · ");
+  const findingLocation = [data.case?.target, data.latest.engagement, data.latest.category].filter(Boolean).join(" · ");
 
   const copyHandoff = async () => {
     try {
@@ -640,8 +674,8 @@ function FindingFamilyInspector({
         }
       >
         <div className="flex flex-wrap items-center gap-2">
-          <Tooltip content={data.latest.cvssVector || "Technical severity"}><span tabIndex={0} className="flex items-center gap-1 text-xs text-muted-foreground">Severity <SeverityBadge severity={data.latest.severity} />{typeof data.latest.cvssScore === "number" && Number.isFinite(data.latest.cvssScore) ? ` · CVSS ${data.latest.cvssScore}` : null}</span></Tooltip>
-          <RecordedFindingStatus status={data.latest.status} />
+          <Tooltip content={data.latest.cvssVector || "Technical severity"}><span tabIndex={0} className="flex items-center gap-2 text-xs text-muted-foreground"><ExpIdBadge id={data.latest.expId} /><CvssBadge score={data.latest.cvssScore} severity={data.latest.severity} /></span></Tooltip>
+          <FindingStatusDot status={data.latest.status} />
           <PhaseBadge value={data.workflow.phase} />
           <ReviewBadge value={data.workflow.reviewGate} />
           {data.latest.triageStatus !== "new" ? <StatusBadge value={data.latest.triageStatus} /> : null}
@@ -913,13 +947,13 @@ function ThreadListItem({
         className="group/finding grid w-full min-w-0 gap-3 rounded-[var(--radius-control)] px-4 py-5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:grid-cols-[minmax(0,1fr)_180px_140px] sm:gap-6"
       >
         <div className="min-w-0 space-y-2">
-          <div className="flex items-start gap-2"><span className="text-sm font-medium leading-6 text-foreground">{group.latest.title}</span><ArrowUpRight aria-hidden="true" className="mt-1 size-3.5 shrink-0 text-muted-foreground opacity-0 group-hover/finding:opacity-100" /></div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground"><span>{group.latest.category}</span><span>{group.count} occurrence{group.count === 1 ? "" : "s"}</span></div>
+          <div className="flex items-start gap-2"><ExpIdBadge id={group.latest.expId} /><span className="text-sm font-medium leading-6 text-foreground">{group.latest.title}</span><ArrowUpRight aria-hidden="true" className="mt-1 size-3.5 shrink-0 text-muted-foreground opacity-0 group-hover/finding:opacity-100" /></div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">{group.latest.engagement ? <span className="rounded-full bg-muted/40 px-2 py-0.5">{group.latest.engagement}</span> : null}<span>{group.count} occurrence{group.count === 1 ? "" : "s"}</span></div>
           {helperText ? <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">{helperText}</p> : null}
         </div>
         <div className="flex flex-wrap items-start gap-2 sm:flex-col sm:justify-center">
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><SeverityBadge severity={group.latest.severity} /> severity</span>
-          <RecordedFindingStatus status={group.latest.status} />
+          <CvssBadge score={group.latest.cvssScore} severity={group.latest.severity} />
+          <FindingStatusDot status={group.latest.status} />
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end sm:justify-center">
           <PhaseBadge value={group.workflow.phase} />

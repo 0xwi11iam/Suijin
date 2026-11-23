@@ -244,7 +244,8 @@ class SwarmCoordinator:
                 "INSERT INTO agents (id, identity, joined_at, last_heartbeat, status, swarm) "
                 "VALUES (?, ?, ?, ?, 'active', ?) "
                 "ON CONFLICT(id) DO UPDATE SET identity=excluded.identity, "
-                "last_heartbeat=excluded.last_heartbeat, status='active', "
+                "last_heartbeat=excluded.last_heartbeat, "
+                "status=CASE WHEN agents.status = 'paused' THEN 'paused' ELSE 'active' END, "
                 "swarm=COALESCE(NULLIF(excluded.swarm, ''), agents.swarm)",
                 (agent_id, identity, time.time(), time.time(), swarm),
             )

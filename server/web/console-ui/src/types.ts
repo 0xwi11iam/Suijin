@@ -76,6 +76,8 @@ export type FindingRecord = {
   confidence?: number | null;
   cvssScore?: number | null;
   cvssVector?: string | null;
+  expId?: string | null;
+  engagement?: string | null;
   evidenceRequest: string;
   evidenceResponse: string;
   evidenceAnalysis?: string | null;

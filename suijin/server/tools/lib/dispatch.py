@@ -1138,6 +1138,9 @@ def _build_routes(config):
             claim=bool(a.get("claim")),
             entry_id=a.get("entry_id", ""),
             config=config,
+            yaml_path=a.get("yaml") or a.get("yaml_path") or "",
+            name=a.get("name", ""),
+            exp_id=a.get("exp_id", ""),
         ),
         # Note-taking
         "write_note": lambda a: write_note(
@@ -1517,7 +1520,7 @@ def route_tool(tool_name, args, config):
         # kwargs; control flags must never ride along.
         with contextlib.suppress(Exception):
             args = {k: v for k, v in args.items() if k != "_force"}
-    elif isinstance(args, dict):
+    elif isinstance(args, dict) and tool_name not in {"catalog_exploit", "write_file", "apply_patch", "execute_terminal"}:
         with contextlib.suppress(Exception):
             from suijin.modules.tools.lib.ux_tools import cache_check
 
@@ -1574,11 +1577,14 @@ def route_tool(tool_name, args, config):
             return blocked_repeat
         result = _execute_with_healing(routes[tool_name], args, tool_name)
         _repeat_guard_record(tool_name, args, result)
-        # ACTION CACHE: record for future dedup
-        with contextlib.suppress(Exception):
-            from suijin.modules.tools.lib.ux_tools import cache_record
+        # ACTION CACHE: record for future dedup. Mutation tools are exempt —
+        # a cached verdict/write would make "edit the yaml and call again"
+        # lie (the path is the same; the file contents changed).
+        if tool_name not in {"catalog_exploit", "write_file", "apply_patch", "execute_terminal"}:
+            with contextlib.suppress(Exception):
+                from suijin.modules.tools.lib.ux_tools import cache_record
 
-            cache_record(tool_name, dict(args), result)
+                cache_record(tool_name, dict(args), result)
         return _with_fallback_hint(tool_name, _with_error_hints(tool_name, _with_install_hint(tool_name, result)))
     # ── CUSTOM TOOL FALLBACK (2026-10-10) ────────────────────────────
     # The agent names a tool that doesn't exist → instead of dead-ending,
@@ -1651,9 +1657,9 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
   ```json
   {"tool": "check_knowledge", "args": {"target": "TARGET_HOST"}}
   ```
-- **record_finding** — WRITE TO THE KNOWLEDGE GRAPH after EVERY confirmed result. SQLi works? Record it. WAF blocked something? Record it. CVE confirmed? Record it. This prevents duplicate work and builds institutional knowledge.
+- **record_finding** — WRITE NON-CATALOGED KNOWLEDGE to the knowledge graph (WAF blocks, rate limits, dead ends, behavior). A `catalog_exploit` SUCCESS already records the finding — do NOT double-record the same exploit.
   ```json
-  {"tool": "record_finding", "args": {"target": "TARGET", "finding_type": "verified_cve", "rule": "CVE-2021-41773 path traversal works on /cgi-bin/.%2e/%2e%2e/etc/passwd", "evidence": "Got /etc/passwd contents in response"}}
+  {"tool": "record_finding", "args": {"target": "TARGET", "finding_type": "waf", "rule": "Cloudflare 403 on raw UNION; comments bypass", "evidence": "403 then 200 with /*!50000UNION*/"}}
   ```
 - **generate_report** — MANDATORY at engagement end. Writes the report FROM THE AUDIT TRAIL automatically — do NOT paste trace/findings JSON (it gets ignored). Creates detailed Markdown report with all findings, attack chains, Mermaid diagrams. Call BEFORE complete/claim_flag.
   ```json
@@ -1662,10 +1668,18 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
 - **export_html / export_burp** — deliverable formats from the same trail: one overwriting `reports/report.html` (client-facing, styled) and `reports/burp_export.xml` (Burp Suite import). No args needed beyond the engagement name.
   ```json
   {"tool": "export_html", "args": {"engagement": "target-name"}}
-- **catalog_exploit** — MANDATORY the moment you find something valuable. Call it with: `vuln_class`, `title`, `description` (one paragraph — what/where/impact), `severity`+`cvss`, `commands` (list of shell commands to run sequentially) and `expected_result` (the exact string the TARGET's output must contain to prove it). THE SYSTEM CREATES A FOLDER, writes finding.md + exploit.yaml, then the VERIFIER TAKES OVER: it runs every command sequentially and pauses you until it finishes. Match -> CONFIRMED, continue. No match -> you receive EVERY command and ALL its output back (copy-paste style) plus THREE options: (1) EDIT the YAML — re-call with `entry_id` + corrected `commands`/`expected_result`; (2) REWRITE — `entry_id` + `action:"rewrite"` (this exploit is abandoned; catalog a fresh one); (3) FALSE MISTAKE — it worked anyway, the result shows so: `entry_id` + `action:"worked_anyway"` + `evidence_line` (the EXACT output line that shows it — verified against the receipt; a fabricated line is rejected). Markers must be unique target-derived strings (>=8 chars, no generic '200/OK/root:'). A finding without a cataloged POC is a rumor.
-  ```json
-  {"tool": "catalog_exploit", "args": {"engagement": "t", "target": "http://t", "vuln_class": "sqli", "title": "login bypass", "description": "The id parameter on /admin concatenates raw SQL; OR 1=1 returns the admin row.", "severity": "critical", "cvss": 8.9, "commands": ["curl -s -c /tmp/j http://t/login -d 'u=x&p=y'", "curl -s -b /tmp/j 'http://t/admin?id=1 OR 1=1'"], "expected_result": "administrator:$(openssl rand -hex 6)", "guards": "needs low-priv session first"}}
+- **catalog_exploit** — prove a finding with one yaml + one call. Write `exploit.yaml` FIRST:
+  ```yaml
+  name: BOLA on /api/v2/users/1
+  class: idor
+  target: https://host
+  cvss: 7.5
+  description: GET /api/v2/users/1 without auth returns the admin record.
+  commands:
+    - 'curl -si https://host/api/v2/users/1'
+  Expected_result: '"role":"admin"'
   ```
+  Then call `{"tool": "catalog_exploit", "args": {"yaml": "tmp/exp-002.yaml"}}`. It runs the yaml and answers **SUCCESS or NO**. On NO, read the output, edit the yaml, call again with the same `exp_id`. No marker invention, no scripts required. A shell `echo` cannot satisfy the marker.
 
 ## Core Tools (args in the ALL AVAILABLE TOOLS registry below)
 - **execute_terminal** — Run ANY shell command. Use this for CLI tools: nmap, gobuster, ffuf, nikto, sqlmap, hydra, john, enum4linux, dirb, masscan, and any other pentesting tool installed on the system. Prefer dedicated CLI tools over raw curl/http_request for scanning and brute-forcing. SCRATCH FILES: write them under your workspace home ($HOME/tmp, also $TMPDIR) — NEVER hardcode /tmp: concurrent engagements on this machine SHARE /tmp, and a peer's downloaded artifact greps as YOUR finding. Before claiming any secret found in a scratch file, verify it appears on YOUR target's own pages.

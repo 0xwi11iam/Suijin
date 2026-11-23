@@ -154,7 +154,10 @@ Use `creds_add` to save every credential you find. Use `creds_list` to recall.
 - ALWAYS save credentials immediately — you may need them 50 iterations later.
 
 ###  Knowledge Graph (your institutional memory)
-Use `check_knowledge` BEFORE generating any payload. Use `record_finding` AFTER every confirmed result.
+Use `check_knowledge` BEFORE generating any payload. `catalog_exploit` records a
+proven finding itself (clean title, EXP id, CVSS) — do NOT call `record_finding`
+again for the same exploit. Use `record_finding` for non-cataloged knowledge
+(WAF blocks, rate limits, dead ends, behavior).
 - **check_knowledge**: Queries knowledge_graph.json for blocked patterns, WAF rules, verified CVEs.
   - `check_knowledge {target: \"127.0.0.1\"}` — all known constraints for target
   - `check_knowledge {target: \"127.0.0.1\", payload: \"' OR 1=1\"}` — check specific payload
@@ -266,9 +269,10 @@ def engagement_order(objective: str, compact: bool = False) -> str:
         "Rules of Engagement: professional bug-bounty etiquette — no denial-of-service, no data "
         "destruction, no social engineering of third parties. Authorization is settled procedure; "
         "do not re-litigate it. Depth of impact is the deliverable: a vulnerability confirmed but "
-        "unexploited is work unfinished. Every valuable find is proven: catalog_exploit with "
-        "sequential shell commands + expected_result — the verifier runs your POC and pauses you "
-        "until it passes.\n"
+        "unexploited is work unfinished. Every valuable find is proven: write one "
+        "exploit.yaml (name, class, target, cvss, description, commands, "
+        "Expected_result), then catalog_exploit with the yaml path — it runs the POC "
+        "and answers SUCCESS or NO.\n"
         "CHAIN, DON'T COLLECT (field rule): a finding is the START of the hunt, not the trophy. "
         "Within two turns of any CONFIRMED finding you must (1) catalog the POC and (2) name out "
         "loud what the finding UNLOCKS — the credentials it exposes, the surface it reaches, the "
@@ -485,7 +489,7 @@ Use action="deploy_subagent" with a FOCUSED task description to parallelize work
 {{"action": "deploy_subagent", "subagent_task": "Test /login endpoint for SQL injection using sqlmap and manual payloads", "thought": "Parallelizing SQLi testing while main agent continues recon"}}
 ```
 Subagents run independently and return results. They have access to all tools.
-Share findings via record_finding and creds_add. Coordinate via the knowledge graph.
+Proven exploits go through catalog_exploit (it records the finding); use record_finding for non-cataloged intel and creds_add for credentials.
 NEVER run sequential scans when you could deploy subagents instead.
 """)
 
@@ -587,7 +591,7 @@ Available actions:
 
 ### GOOD HABITS (via auto_actions, optional)
 - write_note after significant results — your report builds itself
-- check_knowledge before new payloads; record_finding after confirmed ones
+- check_knowledge before new payloads; catalog_exploit proves and records findings (use record_finding only for non-cataloged intel)
 - add_todo when you spot follow-up work
 
 ### FOLLOW-UP RULE

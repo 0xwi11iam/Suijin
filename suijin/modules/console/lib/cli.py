@@ -2128,10 +2128,91 @@ def run_engage_cmd(args) -> int:
 
 
 def run_exploit_cmd(args) -> int:
-    """`suijin exploit <target>` — instant exploitation with known intel."""
+    """`suijin exploit --yaml <file>` verifies an exploit.yaml; `--demo`
+    runs a built-in local fixture. Without either, the legacy instant
+    exploitation path runs."""
+    from suijin.server.tools.lib.exploit_catalog import verify_exploit_yaml
+
+    if getattr(args, "demo", False):
+        return _run_exploit_demo()
+
+    yaml_ref = str(getattr(args, "yaml", "") or "").strip()
+    if yaml_ref:
+        res = verify_exploit_yaml(
+            yaml_ref,
+            engagement=getattr(args, "engagement", "") or "default",
+        )
+        print(res["text"])
+        return 0 if res.get("ok") else 1
+
+    target = str(getattr(args, "target", "") or "").strip()
+    if not target:
+        print("usage: suijin exploit --yaml exploit.yaml   (or --demo to try it)")
+        return 2
     from suijin.modules.redteam.lib.redteamer import run_exploit
 
-    return int(run_exploit(getattr(args, "target", "")) or 0)
+    return int(run_exploit(target) or 0)
+
+
+def _run_exploit_demo() -> int:
+    """One-command tryout: local fixture + sample exploit.yaml + verdict."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
+    from suijin.server.tools.lib.exploit_catalog import verify_exploit_yaml
+
+    class _DemoHandler(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802 — stdlib handler name
+            if self.path.startswith("/api/v2/users/1"):
+                body = b'{"id":1,"email":"admin@example.test","role":"admin"}'
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            if self.path.startswith("/admin"):
+                body = b"SUIJIN{demo_admin_panel}"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            self.send_response(404)
+            self.end_headers()
+
+        def log_message(self, *_args):
+            pass
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), _DemoHandler)
+    port = srv.server_address[1]
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        tmp = Path(WORKSPACE_DIR) / "tmp"
+        tmp.mkdir(parents=True, exist_ok=True)
+        ypath = tmp / "exploit-demo.yaml"
+        ypath.write_text(
+            "name: Demo — unauthenticated admin record\n"
+            "exp_id: EXP-001\n"
+            "class: idor\n"
+            f"target: http://127.0.0.1:{port}\n"
+            "cvss: 7.5\n"
+            "description: GET /api/v2/users/1 without auth returns the admin record.\n"
+            "commands:\n"
+            f"  - 'curl -s http://127.0.0.1:{port}/api/v2/users/1'\n"
+            "Expected_result: '\"role\":\"admin\"'\n",
+            encoding="utf-8",
+        )
+        print(f"[demo] fixture: http://127.0.0.1:{port}/api/v2/users/1")
+        print(f"[demo] yaml:    {ypath}\n")
+        res = verify_exploit_yaml(str(ypath), engagement="demo")
+        print(res["text"])
+        return 0 if res.get("ok") else 1
+    finally:
+        srv.shutdown()
+        srv.server_close()
 
 
 def run_load_cmd(args) -> int:
@@ -3018,8 +3099,11 @@ def main(argv=None):
     engage.add_argument("--list", action="store_true", help="list templates")
     engage.set_defaults(func=run_engage_cmd)
 
-    exploit_p = sub.add_parser("exploit", help="instant exploitation — skips recon, uses all known intel")
-    exploit_p.add_argument("target", help="IP / hostname / URL (authorization checked)")
+    exploit_p = sub.add_parser("exploit", help="instant exploitation — skips recon, uses all known intel; --yaml verifies an exploit.yaml instead")
+    exploit_p.add_argument("target", nargs="?", help="IP / hostname / URL (authorization checked)")
+    exploit_p.add_argument("--yaml", default="", help="verify an exploit.yaml (commands + Expected_result) and print SUCCESS or NO")
+    exploit_p.add_argument("--demo", action="store_true", help="run a built-in local fixture so you can try the cataloguer immediately")
+    exploit_p.add_argument("--engagement", default="", help="engagement name for the yaml path (default: default)")
     exploit_p.set_defaults(func=run_exploit_cmd)
 
     prompt_p = sub.add_parser("prompt", help="the operator-editable system prompt (prompt.md)")

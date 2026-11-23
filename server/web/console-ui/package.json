@@ -36,6 +36,8 @@
     "dockview-react": "^8.6.1",
     "highlight.js": "11.11.1",
     "lucide-react": "^1.7.0",
+    "markmap-lib": "^0.18.13",
+    "markmap-view": "^0.18.13",
     "mermaid": "^11.17.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

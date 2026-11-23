@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import cytoscape from "cytoscape";
+import { Markmap } from "markmap-view";
 import { ArrowLeft, Crosshair, RefreshCcw, Search, X } from "lucide-react";
 import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,23 @@ type GraphPayload = {
   missing?: boolean;
 };
 
+/** Markmap's data shape: `content` is HTML, children are nested. We build it
+ * from the graph instead of markdown so every node keeps its graph id. */
+type MarkNode = {
+  content: string;
+  children: MarkNode[];
+  payload?: { color?: string; root?: boolean };
+};
+
+type Built = {
+  root: MarkNode;
+  nodeIndex: Map<string, MarkNode>;
+  targetEntries: Map<string, GraphEntry[]>;
+  targetVulns: Map<string, number>;
+  /** leaf id -> the target it belongs to (search focuses the target). */
+  ownerOf: Map<string, string>;
+};
+
 const LEGEND: { color: string; label: string }[] = [
   { color: "#14b8a6", label: "External targets" },
   { color: "#fb923c", label: "Internal targets" },
@@ -30,367 +47,328 @@ const LEGEND: { color: string; label: string }[] = [
   { color: "#94a3b8", label: "Unsorted" },
 ];
 
-/** Daisy mindmap (MindMeister style): every expanded node places its
- * children on a staggered circle AROUND itself — the map grows outward from
- * wherever you are, never re-flowing the whole world. Hue flows down each
- * branch. Positions exist for every node; visibility is applied separately. */
-function mindmapLayout(nodes: GraphNode[], edges: GraphEdge[], collapsed: Set<string>): { pos: Record<string, { x: number; y: number }>; hue: Record<string, string>; parentOf: Record<string, string>; children: Record<string, string[]> } {
-  const adj: Record<string, string[]> = {};
-  for (const e of edges) {
-    // cross-links (evidence mentions between targets) must not shape layout
-    if (e.ekind === "cross") continue;
-    (adj[e.source] ||= []).push(e.target);
-    (adj[e.target] ||= []).push(e.source);
-  }
-  const fullChildren: Record<string, string[]> = {};
-  const parentOf: Record<string, string> = {};
-  const depthOf: Record<string, number> = { __root__: 0 };
-  const fullQueue = ["__root__"];
-  for (let qi = 0; qi < fullQueue.length; qi++) {
-    const id = fullQueue[qi]!;
-    const d = depthOf[id]!;
-    const kids = (adj[id] ?? []).filter(k => depthOf[k] === undefined);
-    fullChildren[id] = kids;
-    for (const k of kids) { depthOf[k] = d + 1; parentOf[k] = id; fullQueue.push(k); }
-  }
-  const hue: Record<string, string> = {
-    __root__: "#64748b", __ext__: "#14b8a6", __int__: "#fb923c", __unsorted__: "#94a3b8",
-  };
-  for (let qi = 0; qi < fullQueue.length; qi++) {
-    const id = fullQueue[qi]!;
-    for (const k of fullChildren[id] ?? []) hue[k] = hue[k] ?? hue[id] ?? "#94a3b8";
-  }
-  // hidden = descendants of collapsed pills — they do not consume layout
-  // space until their branch is expanded (this is the anti-pile fix).
-  const hidden = new Set<string>();
-  for (const id of fullQueue) {
-    if (!collapsed.has(id)) continue;
-    const stack = [...(fullChildren[id] ?? [])];
-    while (stack.length) {
-      const h = stack.pop()!;
-      if (hidden.has(h)) continue;
-      hidden.add(h);
-      for (const k of fullChildren[h] ?? []) stack.push(k);
+const BRANCH_COLOR: Record<string, string> = {
+  "branch:info": "#60a5fa",
+  "branch:endpoints": "#2dd4bf",
+  "branch:vulns": "#ef4444",
+};
+
+const esc = (value: unknown) =>
+  String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+
+function buildTree(payload: GraphPayload): Built {
+  const byId = new Map(payload.nodes.map(node => [node.id, node] as const));
+  const nodeIndex = new Map<string, MarkNode>();
+  const targetEntries = new Map<string, GraphEntry[]>();
+  const targetVulns = new Map<string, number>();
+  const ownerOf = new Map<string, string>();
+
+  const targets = payload.nodes.filter(node => node.kind.startsWith("target"));
+  const branches = ["info", "endpoints", "vulns"] as const;
+
+  // Endpoint nodes (host-level intel) are linked to a target's /endpoints
+  // or /info branch by an edge; the id alone does not say whose it is.
+  const endpointTarget = new Map<string, string>();
+  const branchRe = /^(target:.+)\/(info|endpoints|vulns)$/;
+  for (const edge of payload.edges) {
+    if (edge.ekind === "cross") continue;
+    for (const [self, other] of [[edge.source, edge.target], [edge.target, edge.source]] as const) {
+      const endpoint = byId.get(self);
+      if (endpoint?.kind !== "endpoint") continue;
+      const match = branchRe.exec(other);
+      if (!match) continue;
+      const current = endpointTarget.get(self);
+      if (!current || match[2] === "endpoints") endpointTarget.set(self, match[1]!);
     }
   }
-  // separate visited map — depthOf was already filled by the full-tree BFS
-  // above, and reusing it here filtered out every node (all targets fell to
-  // fallback positions = the overlap pile).
-  const children: Record<string, string[]> = {};
-  const visDepth: Record<string, number> = { __root__: 0 };
-  const queue = ["__root__"];
-  for (let qi = 0; qi < queue.length; qi++) {
-    const id = queue[qi]!;
-    const d = visDepth[id]!;
-    const kids = (adj[id] ?? []).filter(k => visDepth[k] === undefined && !hidden.has(k));
-    children[id] = kids;
-    for (const k of kids) { visDepth[k] = d + 1; queue.push(k); }
-  }
-  const leaves: Record<string, number> = {};
-  const countLeaves = (id: string): number => {
-    if (leaves[id] !== undefined) return leaves[id];
-    const kids = children[id] ?? [];
-    const v = kids.length ? kids.reduce((s, k) => s + countLeaves(k), 0) : 1;
-    leaves[id] = v;
-    return v;
-  };
-  countLeaves("__root__");
-  const pos: Record<string, { x: number; y: number }> = { __root__: { x: 0, y: 0 } };
-  const LEVEL = 240;
-  const LEAF = 30;
-  const COL_MAX = 22;
-  const COL_PITCH = 300;
-  const stackVertical = (ids: string[], x: number, yTop: number, side: 1 | -1, depth: number): { bottom: number; center: number } => {
-    let y = yTop;
-    let first = 0, last = 0, had = false;
-    for (const k of ids) {
-      const r = placeSubtree(k, x, y, side, depth);
-      if (!had) { first = r.center; had = true; }
-      last = r.center;
-      y = r.bottom;
-    }
-    return { bottom: y, center: had ? (first + last) / 2 : yTop + LEAF / 2 };
-  };
-  function placeSubtree(id: string, x: number, yTop: number, side: 1 | -1, depth: number): { bottom: number; center: number } {
-    const kids = children[id] ?? [];
-    if (!kids.length) {
-      const yc = yTop + LEAF / 2;
-      pos[id] = { x, y: yc };
-      return { bottom: yTop + LEAF, center: yc };
-    }
-    if (kids.length > COL_MAX) {
-      const cols = Math.ceil(kids.length / COL_MAX);
-      const chunkSize = Math.ceil(kids.length / cols);
-      let xCol = x + side * COL_PITCH;
-      let maxBottom = yTop;
-      const centers: number[] = [];
-      for (let ci = 0; ci < cols; ci++) {
-        const chunk = kids.slice(ci * chunkSize, (ci + 1) * chunkSize);
-        const r = stackVertical(chunk, xCol, yTop, side, depth + 1);
-        centers.push(r.center);
-        maxBottom = Math.max(maxBottom, r.bottom);
-        xCol += side * COL_PITCH;
+
+  const leavesFor = (targetId: string, branch: (typeof branches)[number]): GraphNode[] => {
+    const prefix = `${targetId}/${branch}/leaf:`;
+    const out = payload.nodes.filter(node => node.id.startsWith(prefix));
+    if (branch === "endpoints") {
+      for (const [endpointId, owner] of endpointTarget) {
+        if (owner !== targetId) continue;
+        const endpoint = byId.get(endpointId);
+        if (endpoint) out.push(endpoint);
       }
-      const yc = (Math.min(...centers) + Math.max(...centers)) / 2;
-      pos[id] = { x, y: yc };
-      return { bottom: Math.max(maxBottom, yTop + LEAF), center: yc };
     }
-    const r = stackVertical(kids, x + side * LEVEL, yTop, side, depth + 1);
-    const yc = r.center;
-    pos[id] = { x, y: yc };
-    return { bottom: Math.max(r.bottom, yTop + LEAF), center: yc };
+    return out;
+  };
+
+  const entriesOf = (leaves: GraphNode[]): GraphEntry[] => leaves.flatMap(leaf => leaf.entries ?? []);
+  const branchLabel = (branch: string) =>
+    branch === "info" ? "Info" : branch === "endpoints" ? "Endpoints" : "Vulnerabilities";
+
+  const leafNode = (leaf: GraphNode, targetId: string, isVuln: boolean): MarkNode => {
+    const entries = leaf.entries?.length ? leaf.entries : [{ category: "", rule: leaf.label || leaf.id, evidence: "" }];
+    const content = entries.map(entry => {
+      const severity = String(entry.severity || leaf.severity || "").trim();
+      const cls = isVuln ? "mm-vuln" : "mm-leaf";
+      return `<div class="${cls}" data-gid="${esc(leaf.id)}" data-target="${esc(targetId)}">`
+        + (severity ? `<b class="mm-sev">${esc(severity)}</b> ` : "")
+        + `${esc(entry.rule || leaf.label || leaf.id)}</div>`
+        + (entry.evidence ? `<div class="mm-evidence">${esc(entry.evidence)}</div>` : "");
+    }).join("");
+    const node: MarkNode = {
+      content,
+      children: [],
+      payload: { color: isVuln ? "#ef4444" : leaf.color || "#94a3b8" },
+    };
+    nodeIndex.set(leaf.id, node);
+    ownerOf.set(leaf.id, targetId);
+    return node;
+  };
+
+  const categories = [
+    { id: "__ext__", kind: "target:external", label: byId.get("__ext__")?.label || "External targets", color: "#14b8a6" },
+    { id: "__int__", kind: "target:internal", label: byId.get("__int__")?.label || "Internal targets", color: "#fb923c" },
+    { id: "__unsorted__", kind: "", label: byId.get("__unsorted__")?.label || "Unsorted", color: "#94a3b8" },
+  ];
+
+  const categoryNodes: MarkNode[] = [];
+  for (const category of categories) {
+    const members = targets.filter(node => (category.kind ? node.kind === category.kind : !node.kind.startsWith("target:")));
+    const targetNodes: MarkNode[] = [];
+    for (const target of members) {
+      const allEntries: GraphEntry[] = [];
+      const branchNodes: MarkNode[] = [];
+      for (const branch of branches) {
+        const leaves = leavesFor(target.id, branch);
+        const entries = entriesOf(leaves);
+        allEntries.push(...entries);
+        const isVuln = branch === "vulns";
+        const node: MarkNode = {
+          content: `<span class="mm-branch" data-gid="${esc(`${target.id}/${branch}`)}" data-target="${esc(target.id)}">${branchLabel(branch)}</span> <span class="${isVuln ? "mm-vuln-badge" : "mm-badge"}">${entries.length}</span>`,
+          children: leaves.map(leaf => leafNode(leaf, target.id, isVuln)),
+          payload: { color: BRANCH_COLOR[`branch:${branch}`] ?? "#94a3b8" },
+        };
+        nodeIndex.set(`${target.id}/${branch}`, node);
+        ownerOf.set(`${target.id}/${branch}`, target.id);
+        branchNodes.push(node);
+      }
+      targetEntries.set(target.id, allEntries);
+      const vulns = entriesOf(leavesFor(target.id, "vulns")).length;
+      targetVulns.set(target.id, vulns);
+      const targetNode: MarkNode = {
+        content: `<span class="mm-target" data-gid="${esc(target.id)}" data-target="${esc(target.id)}">${esc(target.label)}</span>`
+          + (vulns ? ` <span class="mm-vuln-badge" title="${vulns} vulnerabilities">${vulns}</span>` : ""),
+        children: branchNodes,
+        payload: { color: category.color },
+      };
+      nodeIndex.set(target.id, targetNode);
+      ownerOf.set(target.id, target.id);
+      targetNodes.push(targetNode);
+    }
+    const categoryNode: MarkNode = {
+      content: `<span class="mm-cat" data-gid="${esc(category.id)}">${esc(category.label)}</span> <span class="mm-badge">${members.length}</span>`,
+      children: targetNodes,
+      payload: { color: category.color },
+    };
+    nodeIndex.set(category.id, categoryNode);
+    categoryNodes.push(categoryNode);
   }
-  const colHeight = (n: number) => { const c = Math.max(1, Math.ceil(n / COL_MAX)); return Math.ceil(n / c) * LEAF; };
-  const H = Math.max(colHeight(leaves["__ext__"] ?? 1), colHeight(leaves["__int__"] ?? 1), 500);
-  placeSubtree("__ext__", -LEVEL, -H / 2, -1, 1);
-  placeSubtree("__int__", LEVEL, -H / 2, 1, 1);
-  placeSubtree("__unsorted__", -LEVEL * 2.2, H / 2 + 80, -1, 1);
-  nodes.forEach((n, i) => {
-    if (pos[n.id]) return;
-    const p = parentOf[n.id];
-    const base = pos[p] ?? { x: 0, y: 0 };
-    const a = (i * 2.39996323) % (Math.PI * 2);
-    pos[n.id] = { x: base.x + 110 + Math.cos(a) * 80, y: base.y + Math.sin(a) * 80 };
-  });
-  return { pos, hue, parentOf, children: fullChildren };
+
+  const root: MarkNode = {
+    content: `<span class="mm-root" data-gid="__root__">MEMORY</span> <span class="mm-badge">${payload.stats.entries}</span>`,
+    children: categoryNodes,
+    payload: { color: "#64748b", root: true },
+  };
+  nodeIndex.set("__root__", root);
+  return { root, nodeIndex, targetEntries, targetVulns, ownerOf };
 }
 
-function applyCollapse(cy: any, parentOf: Record<string, string>, collapsed: Set<string>) {
-  cy.batch(() => {
-    cy.nodes().forEach((n: any) => {
-      let hidden = false;
-      let cur: string | undefined = n.id();
-      while (cur && cur !== "__root__") {
-        if (collapsed.has(cur)) { hidden = true; break; }
-        cur = parentOf[cur];
-      }
-      n.style("display", hidden ? "none" : "element");
-    });
-    cy.edges().forEach((e: any) => e.style("display",
-      e.source().style("display") === "none" || e.target().style("display") === "none" ? "none" : "element"));
-  });
+/** Markmap options that keep the operator's dark, reading-first surface. */
+const MAP_OPTIONS = {
+  autoFit: false,
+  duration: 220,
+  fitRatio: 0.88,
+  initialExpandLevel: 3,
+  maxWidth: 460,
+  maxInitialScale: 1.6,
+  nodeMinHeight: 18,
+  paddingX: 10,
+  spacingHorizontal: 110,
+  spacingVertical: 12,
+  color: (node: any) => String(node?.payload?.color ?? "#64748b"),
+  lineWidth: (node: any) => (node?.payload?.root ? 4 : 1.6),
+} as const;
+
+const MAP_CSS = `
+.memory-markmap .markmap {
+  --markmap-font: 500 12.5px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --markmap-text-color: #dbe4ee;
+  --markmap-code-bg: #1e293b;
+  --markmap-code-color: #7dd3fc;
+  --markmap-circle-open-bg: #0f172a;
+  --markmap-highlight-node-bg: #f59e0b33;
+  --markmap-a-color: #38bdf8;
+  --markmap-a-hover-color: #7dd3fc;
+  width: 100%;
+  height: 100%;
 }
+.memory-markmap .markmap-node > circle { fill: #0b0d10; stroke: #475569; }
+.memory-markmap .markmap-link { stroke-opacity: .42; }
+.memory-markmap .markmap-foreign { padding: 1px 2px; }
+.mm-root { font-weight: 750; letter-spacing: .1em; font-size: 14px; color: #f8fafc; }
+.mm-cat { font-weight: 650; letter-spacing: .02em; }
+.mm-target { font-weight: 650; color: #e2e8f0; }
+.mm-branch { font-weight: 600; color: #cbd5e1; }
+.mm-leaf { color: #b6c2d2; }
+.mm-vuln { color: #fecaca; }
+.mm-sev { color: #f87171; text-transform: uppercase; font-size: 9.5px; letter-spacing: .06em; }
+.mm-badge, .mm-vuln-badge {
+  display: inline-block; border-radius: 999px; padding: 0 6px;
+  font: 600 10px/16px ui-monospace, SFMono-Regular, Menlo, monospace;
+  vertical-align: 1px;
+}
+.mm-badge { background: #1e293b; color: #93c5fd; }
+.mm-vuln-badge { background: #7f1d1d; color: #fecaca; }
+.mm-evidence {
+  margin-top: 3px; color: #94a3b8; white-space: pre-wrap;
+  font: 400 10.5px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+`;
 
 export function MemoryMindmapPage() {
   const { webFetchJson } = useBackendApi();
   const navigate = useNavigate();
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const cyRef = useRef<any>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const mmRef = useRef<Markmap | null>(null);
+  const mmNodesRef = useRef<Map<string, any>>(new Map());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const graph = useQuery({ queryKey: ["memory-graph"], queryFn: ({ signal }) => webFetchJson<GraphPayload>("/api/console/memory-graph", { signal }), refetchOnWindowFocus: false });
-
-  // Branch-level collapse: a branch pill shows; its leaves reveal on click.
-  // Targets/branches are always placed (positions exist for every node).
-  const [collapsedNodes, setCollapsedNodes] = useState<Set<string>>(new Set());
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const layout = useMemo(() => (graph.data ? mindmapLayout(graph.data.nodes, graph.data.edges, collapsedNodes) : { pos: {} as Record<string, { x: number; y: number }>, hue: {} as Record<string, string>, parentOf: {} as Record<string, string>, children: {} as Record<string, string[]> }), [graph.data, collapsedNodes]);
-  const selected = useMemo(() => graph.data?.nodes.find(n => n.id === selectedId) ?? null, [graph.data, selectedId]);
+  const graph = useQuery({
+    queryKey: ["memory-graph"],
+    queryFn: ({ signal }) => webFetchJson<GraphPayload>("/api/console/memory-graph", { signal }),
+    refetchOnWindowFocus: false,
+  });
+  const built = useMemo(() => (graph.data ? buildTree(graph.data) : null), [graph.data]);
 
   useEffect(() => {
-    if (!graph.data || !canvasRef.current) return;
-    const container = canvasRef.current;
-    // Inline geometry — Tailwind inset-0 collapsed to 0px height at init in
-    // the field, leaving every cytoscape canvas 1600x0 (blank map).
-    container.style.position = "absolute";
-    container.style.inset = "0";
-    container.style.width = "100%";
-    container.style.height = "100%";
-    const elements = [
-      ...graph.data.nodes.map(n => {
-        const hue = layout.hue[n.id] ?? "#94a3b8";
-        // Structural pills (hubs + the 3 branch pills) = solid hue, dark text —
-        // the colorful skeleton. Content pills (targets, endpoints, leaves) =
-        // dark fill + colored border + light text, so 60 targets stay distinct.
-        const isHub = n.kind === "hub"; const isStruct = isHub || n.kind.startsWith("branch:");
-        const isBranchPill = n.kind.startsWith("branch:");
-        const sev = n.kind === "vulns:leaf" && n.color ? n.color : "";
-        const fill = isStruct ? hue : (sev || "#0f1317");
-        const border = isStruct ? "#0b0e11" : (sev || hue);
-        const textColor = isStruct ? "#04211f" : "#dbe4ee";
-        const h = n.kind === "hub" ? 44 : n.kind.startsWith("target") ? 32 : n.kind.startsWith("branch:") ? 28 : 24;
-        return {
-          data: {
-            id: n.id, label: n.kind.startsWith("target") ? `${n.label} · ${n.entryCount}` : n.label,
-            color: border, fill, h, border2: hue, text: textColor,
-            bw: isBranchPill || isHub ? 2 : 1.5,
-            raw: n,
-            imp: (n.kind.startsWith("target") || n.kind === "hub" || n.entryCount >= 8) ? 1 : 0,
-            branchnode: n.kind.startsWith("branch") ? 1 : 0,
-          },
-          classes: n.kind === "hub" ? "hubnode" : "",
-          position: layout.pos[n.id] ?? { x: 0, y: 0 },
-        };
-      }),
-      ...graph.data.edges.map(e => {
-        const src = e.source, dst = e.target;
-        const w = src === "__root__" ? 5 : src === "__ext__" || src === "__int__" ? 3.5 : 2;
-        // tint the connector with the CHILD branch hue, never the root gray
-        const ec = layout.hue[src === "__root__" ? dst : src] ?? "#64748b";
-        return { data: { source: src, target: dst, color: ec, w } };
-      }),
-    ];
-    const cy = cytoscape({
-      container,
-      elements,
-      layout: { name: "preset", fit: false },
-      wheelSensitivity: 0.25,
-      minZoom: 0.3, maxZoom: 2.5,
-      style: [
-        // MindMeister-style pills: rounded rect, width auto-fits the label,
-        // tinted fill of the branch hue, colored border, text centered.
-        { selector: "node", style: {
-          shape: "round-rectangle",
-          width: "label", height: "data(h)",
-          "background-color": "data(fill)", "background-opacity": 1,
-          "border-width": "data(bw)", "border-color": "data(color)",
-          label: "data(label)",
-          color: "data(text)", "font-size": 11, "font-family": "system-ui",
-          "font-weight": 600,
-          "text-valign": "center", "text-halign": "center",
-          "text-wrap": "ellipsis", "text-max-width": 160,
-          "min-zoomed-font-size": 6,
-        } },
-        { selector: "node[imp >= 1]", style: {
-          "font-size": 12, "min-zoomed-font-size": 4,
-        } },
-        { selector: "node[branchnode]", style: {
-          "font-size": 10, "color": "#8b949e", "min-zoomed-font-size": 6,
-          "text-opacity": 0.7,
-        } },
-        { selector: "node.hubnode", style: {
-          "font-size": 15, "font-weight": 700, "min-zoomed-font-size": 3,
-          "color": "#f8fafc",
-        } },
-        { selector: "edge", style: {
-          width: "data(w)", "line-color": "data(color)", "line-opacity": 0.9,
-          "curve-style": "bezier", "control-point-step-size": 70,
-        } },
-        { selector: "node.dim, edge.dim", style: { opacity: 0.12 } },
-        { selector: "node:selected", style: { "border-width": 2.5, "border-color": "#f8fafc" } },
-      ],
-    });
-    cyRef.current = cy;
-    // Exposed for headless verification (operator screenshot rule)
-    (window as any).__memoryCy = cy;
-    // Explicit resize + fit after init — the canvases were 0px tall when the
-    // container measured before layout; resize() re-reads the real size.
-    cy.resize();
-    applyCollapse(cy, layout.parentOf, collapsedNodes);
-    cy.fit(cy.elements().filter((el: any) => el.style("display") !== "none"), 60);
-    cy.on("tap", "node", (evt: any) => {
-      const id = String(evt.target.id());
-      const raw = evt.target.data("raw");
-      const kind = String(raw?.kind ?? "");
-      if (kind === "branch") {
-        // hub pill: frame its visible sub-tree (drill-in view)
-        requestAnimationFrame(() => { try {
-          const c = cyRef.current;
-          const b = c.getElementById(id);
-          c.animate({ center: { eles: b }, zoom: Math.max(c.zoom(), 0.7) }, { duration: 250 });
-        } catch {} });
-        setSelectedId(id);
-      } else if (kind.startsWith("branch:")) {
-        // branch pill: reveal / hide its leaves, then frame the branch
-        setCollapsedNodes(prev => { const nx = new Set(prev); if (nx.has(id)) nx.delete(id); else nx.add(id); return nx; });
-        setSelectedId(null);
-        requestAnimationFrame(() => { try {
-          const c = cyRef.current;
-          const b = c.getElementById(id);
-          c.animate({ center: { eles: b }, zoom: Math.max(c.zoom(), 0.75) }, { duration: 250 });
-        } catch {} });
-      } else if (kind.startsWith("target")) {
-        // target pill: click reveals its Info/Endpoints/Vulnerabilities branch
-        // pills; click again folds them back. Inspector shows the rollup.
-        // read CURRENT state inside the updater — a stale closure collapsed
-        // branches instead of expanding them
-        setCollapsedNodes(prev => {
-          const branchIds = (layout.children[id] ?? []).filter((cid: string) => cid.includes("/info") || cid.includes("/endpoints") || cid.includes("/vulns"));
-          const anyVisible = branchIds.some(bid => !prev.has(bid));
-          const nx = new Set(prev);
-          for (const bid of branchIds) { if (anyVisible) nx.add(bid); else nx.delete(bid); }
-          return nx;
-        });
-        setSelectedId(id);
-        requestAnimationFrame(() => { try {
-          const c = cyRef.current;
-          const b = c.getElementById(id);
-          c.animate({ center: { eles: b }, zoom: Math.max(c.zoom(), 0.7) }, { duration: 250 });
-        } catch {} });
-      } else {
-        setSelectedId(id);
+    const svg = svgRef.current;
+    if (!svg || !built) return;
+    const mm = Markmap.create(svg, MAP_OPTIONS as any, built.root as any);
+    mmRef.current = mm;
+    // markmap CLONES the data we hand it and attaches `state` to the clones.
+    // setHighlight/ensureVisible on our original nodes throws
+    // `Cannot read properties of undefined (reading 'id')`, so keep a map of
+    // the live internal nodes (keyed by the data-gid we rendered).
+    const internal = new Map<string, any>();
+    const index = (node: any) => {
+      const match = /data-gid="([^"]+)"/.exec(String(node?.content ?? ""));
+      if (match) internal.set(match[1]!, node);
+      for (const child of node?.children ?? []) index(child);
+    };
+    if (mm.state.data) index(mm.state.data);
+    mmNodesRef.current = internal;
+    // A fit-all of 83 targets lands at ~0.3x and the text becomes 4px.
+    // Start readable: center the root, then hold ~0.95x. The Fit button is
+    // the explicit overview.
+    const rootNode = internal.get("__root__");
+    if (rootNode) {
+      void mm.rescale(0.95)
+        .then(() => mm.ensureVisible(rootNode, { left: 360, right: 120, top: 160, bottom: 120 }))
+        .catch(() => {});
+    } else {
+      void mm.fit().catch(() => {});
+    }
+    // Exposed for headless verification (operator screenshot rule).
+    (window as any).__memoryMarkmap = mm;
+    const onClick = (event: MouseEvent) => {
+      const el = (event.target as Element | null)?.closest?.("[data-target]") as HTMLElement | null;
+      const targetId = el?.dataset.target;
+      if (targetId) setSelectedId(targetId);
+    };
+    svg.addEventListener("click", onClick);
+    return () => {
+      svg.removeEventListener("click", onClick);
+      mmRef.current = null;
+      mm.destroy();
+    };
+  }, [built]);
+
+  useEffect(() => {
+    const mm = mmRef.current;
+    if (!mm || !selectedId) return;
+    const node = mmNodesRef.current.get(selectedId);
+    if (node) void mm.setHighlight(node).catch(() => {});
+  }, [selectedId]);
+
+  const selected = useMemo(
+    () => graph.data?.nodes.find(node => node.id === selectedId) ?? null,
+    [graph.data, selectedId],
+  );
+  const selectedEntries = selected
+    ? (selected.entries.length ? selected.entries : built?.targetEntries.get(selected.id) ?? [])
+    : [];
+  const groupedEntries = useMemo(() => {
+    const groups = new Map<string, GraphEntry[]>();
+    for (const entry of selectedEntries) {
+      if (!groups.has(entry.category)) groups.set(entry.category, []);
+      groups.get(entry.category)!.push(entry);
+    }
+    return [...groups.entries()];
+  }, [selectedEntries]);
+  const selectedVulns = selected ? built?.targetVulns.get(selected.id) ?? 0 : 0;
+
+  const focus = (id: string) => {
+    const mm = mmRef.current;
+    const node = mmNodesRef.current.get(id);
+    if (mm && node) {
+      void mm.setHighlight(node).catch(() => {});
+      void mm.ensureVisible(node, { left: 120, right: 120, top: 120, bottom: 120 }).catch(() => {});
+    }
+    setSelectedId(id);
+  };
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (selectedId) setSelectedId(null);
+        else navigate("/chats");
       }
-    });
-    cy.on("tap", (e: any) => { if (e.target === cy) setSelectedId(null); });
-    cy.on("mouseover", "node", (evt: any) => {
-      cy.elements().addClass("dim");
-      evt.target.connectedEdges().connectedNodes().union(evt.target).removeClass("dim");
-    });
-    cy.on("mouseout", "node", () => cy.elements().removeClass("dim"));
-    return () => { cy.destroy(); cyRef.current = null; };
-  }, [graph.data, layout]);
-
-  // Re-apply collapse + re-fit whenever the collapsed set flips (expand or
-  // collapse of any pill) so the viewport re-frames the visible tree.
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy || !graph.data) return;
-    applyCollapse(cy, layout.parentOf, collapsedNodes);
-    cy.fit(cy.nodes().filter((n: any) => n.style("display") !== "none"), 60);
-  }, [graph.data, layout, collapsedNodes]);
-
-  // Seed: every Info/Endpoints/Vulnerabilities branch starts collapsed — its
-  // pill shows under the target; clicking the branch pill reveals its leaves.
-  useEffect(() => {
-    if (!graph.data) return;
-    setCollapsedNodes(prev => {
-      if (prev.size > 0) return prev;
-      const s = new Set(prev);
-      for (const n of graph.data.nodes) if (n.kind.startsWith("branch:")) s.add(n.id);
-      return s;
-    });
-  }, [graph.data]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { if (selectedId) setSelectedId(null); else navigate("/chats"); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [selectedId, navigate]);
 
-  const focusNode = (id: string) => {
-    const cy = cyRef.current;
-    if (!cy) return;
-    const node = cy.getElementById(id);
-    if (node.length) { cy.animate({ center: { eles: node }, zoom: 1.4 }, { duration: 300 }); setSelectedId(id); }
-  };
   const matches = query.trim() && graph.data
-    ? graph.data.nodes.filter(n => !n.id.startsWith("__") && n.label.toLowerCase().includes(query.trim().toLowerCase())).slice(0, 8)
+    ? graph.data.nodes
+        .filter(node => !node.id.startsWith("__")
+          && !node.kind.startsWith("branch")
+          && node.label.toLowerCase().includes(query.trim().toLowerCase()))
+        .slice(0, 8)
     : [];
   const stats = graph.data?.stats;
-  const extCount = graph.data?.nodes.filter(n => n.kind === "target:external").length ?? 0;
-  const intCount = graph.data?.nodes.filter(n => n.kind === "target:internal").length ?? 0;
+  const extCount = graph.data?.nodes.filter(node => node.kind === "target:external").length ?? 0;
+  const intCount = graph.data?.nodes.filter(node => node.kind === "target:internal").length ?? 0;
 
   return <div className="fixed inset-0 z-[100] bg-[#0b0d10] text-foreground">
-    <div ref={canvasRef} className="absolute inset-0" />
+    <style>{MAP_CSS}</style>
+    <div className="memory-markmap absolute inset-0">
+      <svg ref={svgRef} className="size-full" aria-label="Memory mindmap" />
+    </div>
 
     {/* back + controls */}
     <div className="absolute left-4 top-4 z-10 flex flex-col gap-2">
       <Button variant="outline" size="sm" onClick={() => navigate("/chats")} className="bg-[#111418]/90"><ArrowLeft className="size-4" />Back</Button>
       <div className="flex gap-1.5">
-        <Button variant="outline" size="icon-sm" title="Fit graph" aria-label="Fit graph" className="bg-[#111418]/90" onClick={() => cyRef.current?.fit(undefined, 60)}><Crosshair className="size-4" /></Button>
+        <Button variant="outline" size="icon-sm" title="Fit map" aria-label="Fit map" className="bg-[#111418]/90" onClick={() => void mmRef.current?.fit()}><Crosshair className="size-4" /></Button>
         <Button variant="outline" size="icon-sm" title="Reload memory" aria-label="Reload memory" className="bg-[#111418]/90" disabled={graph.isFetching} onClick={() => void graph.refetch()}><RefreshCcw className="size-4" /></Button>
       </div>
       <div className="relative w-64">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search targets, hosts, agents…" aria-label="Search the memory map" className="h-9 bg-[#111418]/90 pl-9 text-sm" autoComplete="off" />
+        <Input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search targets…" aria-label="Search the memory map" className="h-9 bg-[#111418]/90 pl-9 text-sm" autoComplete="off" />
         {matches.length > 0 && <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-[var(--radius-menu,12px)] border border-border bg-[#111418] p-1 shadow-xl">
-          {matches.map(m => <button key={m.id} type="button" onClick={() => { focusNode(m.id); setQuery(""); }}
+          {matches.map(match => <button key={match.id} type="button" onClick={() => { focus(built?.ownerOf.get(match.id) ?? match.id); setQuery(""); }}
             className="flex w-full items-center gap-2 rounded-[var(--radius-control,8px)] px-2.5 py-1.5 text-left text-sm hover:bg-muted/60">
-            <span className="size-2 shrink-0 rounded-full" style={{ background: layout.hue[m.id] ?? m.color ?? "#94a3b8" }} />
-            <span className="min-w-0 flex-1 truncate">{m.label}</span>
-            <span className="shrink-0 text-xs text-muted-foreground">{m.kind.startsWith("target") ? "Target" : m.kind.startsWith("branch") ? "Branch" : m.kind.replace(":leaf", "")}</span>
+            <span className="size-2 shrink-0 rounded-full" style={{ background: match.color ?? "#94a3b8" }} />
+            <span className="min-w-0 flex-1 truncate">{match.label}</span>
+            <span className="shrink-0 text-xs text-muted-foreground">{match.kind.startsWith("target") ? "Target" : "Entry"}</span>
           </button>)}
         </div>}
       </div>
@@ -399,9 +377,8 @@ export function MemoryMindmapPage() {
     {/* stats + legend */}
     {stats && <div className="absolute bottom-4 left-4 z-10 flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span className="rounded-full bg-[#111418]/90 px-2.5 py-1 font-mono">{stats.nodes} nodes</span>
-        <span className="rounded-full bg-[#111418]/90 px-2.5 py-1 font-mono">{stats.edges} links</span>
         <span className="rounded-full bg-[#111418]/90 px-2.5 py-1 font-mono">{stats.entries} intel entries</span>
+        <span className="rounded-full bg-[#111418]/90 px-2.5 py-1 font-mono">{stats.nodes} nodes</span>
         <span className="rounded-full bg-[#111418]/90 px-2.5 py-1 font-mono text-teal-300">{extCount} external</span>
         <span className="rounded-full bg-[#111418]/90 px-2.5 py-1 font-mono text-orange-300">{intCount} internal</span>
       </div>
@@ -413,23 +390,24 @@ export function MemoryMindmapPage() {
     {/* inspector */}
     {selected && <aside className="absolute bottom-4 right-4 top-4 z-20 flex w-[420px] max-w-[92vw] flex-col overflow-hidden rounded-[var(--radius-panel,16px)] border border-border bg-[#111418]/97 shadow-2xl">
       <div className="flex items-start gap-3 border-b border-border/60 p-4">
-        <span className="mt-1 size-3 shrink-0 rounded-full" style={{ background: layout.hue[selected.id] ?? selected.color ?? "#94a3b8" }} />
+        <span className="mt-1 size-3 shrink-0 rounded-full" style={{ background: selected.color ?? "#94a3b8" }} />
         <div className="min-w-0 flex-1"><h2 className="break-all text-sm font-semibold" title={selected.id}>{selected.label}</h2>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span>{selected.kind.replace(":leaf", " entry").replace(":", " · ")}</span>
+            <span>{selected.kind.replace(":leaf", " entry").replaceAll(":", " · ")}</span>
             {selected.internal && <span className="rounded-full bg-orange-500/15 px-2 py-0.5 text-orange-300">internal</span>}
             {selected.severity && <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-red-300">{selected.severity}</span>}
-            <span>{selected.entryCount} intel entries</span>
+            {selectedVulns > 0 && <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-red-300">{selectedVulns} vulns</span>}
+            <span>{selectedEntries.length} intel entries</span>
           </p>
         </div>
         <Button variant="ghost" size="icon-sm" aria-label="Close inspector" onClick={() => setSelectedId(null)}><X className="size-4" /></Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        {selected.entries.length === 0 && <p className="text-sm text-muted-foreground">No intel entries recorded for this node.</p>}
-        {Object.entries(selected.categories ?? {}).map(([category, count]) => <div key={category} className="mb-5">
-          <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{category} <span className="font-mono">{count}</span></h3>
+        {selectedEntries.length === 0 && <p className="text-sm text-muted-foreground">No intel entries recorded for this node.</p>}
+        {groupedEntries.map(([category, entries]) => <div key={category} className="mb-5">
+          <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{category} <span className="font-mono">{entries.length}</span></h3>
           <ul className="space-y-3">
-            {selected.entries.filter(entry => entry.category === category).map((entry, i) => <li key={i} className="rounded-[var(--radius-menu,12px)] border border-border/50 bg-muted/20 p-3">
+            {entries.map((entry, index) => <li key={index} className="rounded-[var(--radius-menu,12px)] border border-border/50 bg-muted/20 p-3">
               <p className="text-sm leading-5">{entry.rule}</p>
               {entry.evidence && <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-[var(--radius-control,8px)] bg-background/70 p-2 font-mono text-xs leading-4 text-muted-foreground">{entry.evidence}</pre>}
               <p className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
@@ -439,7 +417,7 @@ export function MemoryMindmapPage() {
             </li>)}
           </ul>
         </div>)}
-        <Button variant="outline" size="sm" className="w-full" onClick={() => { focusNode(selected.id); }}>Center on map</Button>
+        <Button variant="outline" size="sm" className="w-full" onClick={() => focus(selected.id)}>Center on map</Button>
       </div>
     </aside>}
 

@@ -4,7 +4,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Monitor, Server, SquarePen, Trash2, Ellipsis, Columns2, Crosshair, Waves } from "lucide-react";
+import { ChevronDown, Monitor, Server, SquarePen, Trash2, Ellipsis, Columns2, Crosshair, Waves, Folder } from "lucide-react";
 import { BackendDescriptorSchema, parseBackendHandshake, type BackendDescriptor } from "@0/engine/dist/shared/backend-protocol.js";
 import { createBackendApi, localControlFetch, useBackendApi } from "@/api";
 import { useBackendSelection } from "@/backend-context";
@@ -129,6 +129,40 @@ const HostChatGroup = memo(function HostChatGroup({ host, navigationVersion, onS
     return sortSidebarChats(remembered, sort, filter);
   }, [history.data, account, team.enabled, selectedBackendId, host.id, selectedId, sort, filter]);
   const rowDetails = useMemo(() => sidebarChatDetails(rows), [rows]);
+  // AUTO TARGET FOLDERS (2026-11-23): one folder per target, derived from
+  // session metadata on every render — no manual setup, no Targets section.
+  const [folderState, setFolderState] = usePersistentState<Record<string, boolean>>(`host-sidebar-target-folders:${host.id}`, {});
+  const folders = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; rows: (typeof rows)[number][]; timestamp: number; working: boolean }>();
+    for (const row of rows) {
+      const session = row.session as (typeof row.session) & { targetKey?: string; targetLabel?: string };
+      const label = String(session.targetLabel || session.target || "Unsorted target");
+      const key = String(session.targetKey || label.toLowerCase());
+      let folder = map.get(key);
+      if (!folder) { folder = { key, label, rows: [], timestamp: 0, working: false }; map.set(key, folder); }
+      folder.rows.push(row);
+      folder.timestamp = Math.max(folder.timestamp, row.timestamp);
+      folder.working = folder.working || (row.kind === "live" && ["working", "cancelling"].includes(row.session.status));
+    }
+    return [...map.values()].sort(sort === "name"
+      ? (a, b) => a.label.localeCompare(b.label)
+      : (a, b) => b.timestamp - a.timestamp || a.label.localeCompare(b.label));
+  }, [rows, sort]);
+  const renderRow = (row: (typeof rows)[number]) => {
+        const session = row.session;
+        const title = sidebarChatTitle(row);
+        const detail = rowDetails.get(row.key);
+        const isSaved = row.kind === "saved";
+        const selected = openingId === session.id || selectedBackendId === host.id && selectedId === session.id;
+        return <div key={row.key} data-ui-selected={selected || undefined} className="sidebar-history-row group relative z-10 flex min-w-0 items-center rounded-[var(--radius-control)] hover:bg-muted/50">
+          <Button variant="row" size="sm" asChild className={cn("min-w-0 flex-1 justify-start px-3 font-normal", detail && "h-auto min-h-8 py-1.5")}>
+            <a onPointerEnter={() => { if (prefetchTimer.current) clearTimeout(prefetchTimer.current); prefetchTimer.current = setTimeout(() => prefetch(session.id, isSaved), 80); }} onPointerLeave={() => { if (prefetchTimer.current) clearTimeout(prefetchTimer.current); }} onFocus={() => prefetch(session.id, isSaved)} aria-busy={openingId === session.id || undefined} href={backendRouteHref(host.id, `/chats/${isSaved ? "saved/" : ""}${encodeURIComponent(session.id)}`)} draggable={true} onDragStart={event => { suppressClickUntil.current = Number.POSITIVE_INFINITY; event.dataTransfer.setData(CHAT_DRAG_MIME, JSON.stringify({ id: session.id, sessionId: session.id, backendId: host.id, title, saved: isSaved })); event.dataTransfer.effectAllowed = "copy"; }} onDragEnd={() => { suppressClickUntil.current = Date.now() + 350; }} onClick={event => { if (Date.now() < suppressClickUntil.current) { event.preventDefault(); return; } if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); if (isSaved) void resume(session.id, title); else { if (currentApi.client.backendId === host.id && row.kind === "live") cache.setQueryData<import("@0/engine/shared").DesktopConsoleSession[]>(["console-sessions"], previous => [...(previous ?? []).filter(item => item.id !== session.id), row.session]); open(session.id, title); } } }}><span title={detail ? `${title} — ${detail}` : title} className="min-w-0 flex-1 text-left"><span className="block truncate">{title}</span>{detail && <span className="block truncate text-xs text-muted-foreground">{detail}</span>}</span></a>
+          </Button>
+          {row.kind === "live" && ["working", "cancelling"].includes(row.session.status) && <span role="status" aria-label={row.session.status === "cancelling" ? "Stopping" : "Working"} className={cn("mr-2 flex size-4 shrink-0 items-center justify-center text-muted-foreground", !readOnly && "group-hover:opacity-0 group-has-[:focus-visible]:opacity-0 [@media(hover:none)]:opacity-0")}><ActivityMark compact /></span>}
+          {!readOnly && <Button variant="ghost" size="icon-xs" disabled={busy || unavailable} className="sidebar-history-delete absolute right-1 pointer-events-none opacity-0 text-muted-foreground hover:text-destructive group-hover:pointer-events-auto group-hover:opacity-100 group-has-[:focus-visible]:pointer-events-auto group-has-[:focus-visible]:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100" aria-label={`Delete ${title}`} onClick={() => setDeletion({ id: session.id, title, saved: isSaved })}><Trash2 className="size-3.5" /></Button>}
+        </div>;
+  };
+
   const offline = connectionStatus !== "connected";
   const unavailable = offline || history.isError;
   const open = (id: string, title: string, saved = false) => {
@@ -179,25 +213,19 @@ const HostChatGroup = memo(function HostChatGroup({ host, navigationVersion, onS
   const statusLabel = `${host.name} — ${offline ? "Disconnected" : history.isError ? "Connected; chats unavailable" : "Connected"}`;
   return <Disclosure open={groupOpen} onOpenChange={setGroupOpen} className="mb-2" triggerClassName="group flex h-8 w-full items-center gap-2.5 rounded-[var(--radius-control)] border border-transparent px-1.5 text-xs text-muted-foreground hover:bg-muted/50" summary={<><Icon className="size-4 shrink-0" /><span className="min-w-0 truncate text-left">{host.id === "local" && /darwin|mac/i.test(host.platform?.os ?? "") ? "My Mac" : host.name}</span><Tooltip content={statusLabel} side="right"><span role="img" aria-label={statusLabel} className={cn("size-1.5 shrink-0 rounded-full", offline ? "bg-muted-foreground/40" : "bg-emerald-500")} /></Tooltip><ChevronDown className="size-3 transition-transform group-aria-expanded:rotate-180" /></>}>
     {history.isError && !history.data ? <Button size="xs" variant="ghost" onClick={() => void history.refetch()}>Retry loading chats</Button> : history.isPending ? <ChatHistorySkeleton /> : <div className="relative isolate">
-      <SelectionHighlight activeKey={`${selectedBackendId}:${openingId ?? selectedId}`} revision={rows.map(row => row.key).join(":")} />
+      <SelectionHighlight activeKey={`${selectedBackendId}:${openingId ?? selectedId}`} revision={rows.map(row => row.key).join(":") + JSON.stringify(folderState)} />
       <div className="mb-1 flex flex-col gap-0.5">
         <Button variant="row" size="sm" asChild className="justify-start px-3 font-normal text-muted-foreground"><Link to="/chats?new=1"><Crosshair className="size-3.5" />New engagement</Link></Button>
       </div>
-      {rows.map(row => {
-        const session = row.session;
-        const title = sidebarChatTitle(row);
-        const detail = rowDetails.get(row.key);
-        const isSaved = row.kind === "saved";
-        const selected = openingId === session.id || selectedBackendId === host.id && selectedId === session.id;
-        return <div key={row.key} data-ui-selected={selected || undefined} className="sidebar-history-row group relative z-10 flex min-w-0 items-center rounded-[var(--radius-control)] hover:bg-muted/50">
-          <Button variant="row" size="sm" asChild className={cn("min-w-0 flex-1 justify-start px-3 font-normal", detail && "h-auto min-h-8 py-1.5")}>
-            <a onPointerEnter={() => { if (prefetchTimer.current) clearTimeout(prefetchTimer.current); prefetchTimer.current = setTimeout(() => prefetch(session.id, isSaved), 80); }} onPointerLeave={() => { if (prefetchTimer.current) clearTimeout(prefetchTimer.current); }} onFocus={() => prefetch(session.id, isSaved)} aria-busy={openingId === session.id || undefined} href={backendRouteHref(host.id, `/chats/${isSaved ? "saved/" : ""}${encodeURIComponent(session.id)}`)} draggable={true} onDragStart={event => { suppressClickUntil.current = Number.POSITIVE_INFINITY; event.dataTransfer.setData(CHAT_DRAG_MIME, JSON.stringify({ id: session.id, sessionId: session.id, backendId: host.id, title, saved: isSaved })); event.dataTransfer.effectAllowed = "copy"; }} onDragEnd={() => { suppressClickUntil.current = Date.now() + 350; }} onClick={event => { if (Date.now() < suppressClickUntil.current) { event.preventDefault(); return; } if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); if (isSaved) void resume(session.id, title); else { if (currentApi.client.backendId === host.id && row.kind === "live") cache.setQueryData<import("@0/engine/shared").DesktopConsoleSession[]>(["console-sessions"], previous => [...(previous ?? []).filter(item => item.id !== session.id), row.session]); open(session.id, title); } } }}><span title={detail ? `${title} — ${detail}` : title} className="min-w-0 flex-1 text-left"><span className="block truncate">{title}</span>{detail && <span className="block truncate text-xs text-muted-foreground">{detail}</span>}</span></a>
-          </Button>
-          {row.kind === "live" && ["working", "cancelling"].includes(row.session.status) && <span role="status" aria-label={row.session.status === "cancelling" ? "Stopping" : "Working"} className={cn("mr-2 flex size-4 shrink-0 items-center justify-center text-muted-foreground", !readOnly && "group-hover:opacity-0 group-has-[:focus-visible]:opacity-0 [@media(hover:none)]:opacity-0")}><ActivityMark compact /></span>}
-          {!readOnly && <Button variant="ghost" size="icon-xs" disabled={busy || unavailable} className="sidebar-history-delete absolute right-1 pointer-events-none opacity-0 text-muted-foreground hover:text-destructive group-hover:pointer-events-auto group-hover:opacity-100 group-has-[:focus-visible]:pointer-events-auto group-has-[:focus-visible]:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100" aria-label={`Delete ${title}`} onClick={() => setDeletion({ id: session.id, title, saved: isSaved })}><Trash2 className="size-3.5" /></Button>}
-        </div>;
+      {rows.length === 0 && <p className="px-3 py-2 text-xs text-muted-foreground">{filter ? "No matching chats." : "No chats yet."}</p>}
+      {folders.map(folder => {
+        const open = folderState[folder.key] ?? true;
+        return <Disclosure key={folder.key} open={open} onOpenChange={value => setFolderState(current => ({ ...current, [folder.key]: value }))} className="mb-0.5" triggerClassName="group flex h-7 w-full items-center gap-1.5 rounded-[var(--radius-control)] px-2 text-xs text-muted-foreground hover:bg-muted/50" summary={<><Folder className="size-3.5 shrink-0" /><span className="min-w-0 flex-1 truncate text-left font-medium text-foreground/80">{folder.label}</span>{folder.working && <span role="status" aria-label="Working" className="size-1.5 shrink-0 rounded-full bg-emerald-500" />}<span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px] tabular-nums">{folder.rows.length}</span><ChevronDown className="size-3 shrink-0 transition-transform group-aria-expanded:rotate-180" /></>}>
+          <div className="mb-1 flex flex-col gap-0.5 pl-2">
+            {folder.rows.map(row => renderRow(row))}
+          </div>
+        </Disclosure>;
       })}
-      {!rows.length && <p className="px-3 py-2 text-xs text-muted-foreground">{filter ? "No matching chats." : "No chats yet."}</p>}
     </div>}
     {error && <p role="alert" className="px-2 py-1 text-xs text-destructive">{error}</p>}
     <Dialog open={Boolean(deletion)} onOpenChange={open => { if (!open) setDeletion(null); }}><DialogContent><DialogHeader><DialogTitle>Delete chat?</DialogTitle><DialogDescription>Delete “{deletion?.title}” from {host.name}? This cannot be undone.</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" disabled={busy} onClick={() => setDeletion(null)}>Cancel</Button><Button variant="destructive" disabled={busy} onClick={() => void remove()}>Delete chat</Button></DialogFooter></DialogContent></Dialog>

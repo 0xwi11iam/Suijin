@@ -216,7 +216,7 @@ def _live_agents(session: str | None = None, include_stopped: bool = False) -> l
                 continue
             out.append({
                 "id": r["id"], "swarm": sw, "lane": r["current_intent"] or "idle",
-                "hb_age": int(age), "dead": dead or stopped,
+                "hb_age": int(age), "dead": dead or stopped, "status": r["status"] or "",
                 "boxed": "-sbx" in r["id"],
             })
         return out
@@ -248,19 +248,66 @@ def _intents(session: str | None = None) -> list[dict]:
         conn.close()
 
 
+_FINDING_FRONTMATTER = re.compile(
+    r"^(?:catalog_exploit|exploit)\s+confirmed:\s*"
+    r"(?:(EXP-\d{1,4})\s+CONFIRMED\s+—\s*)?"
+    r"(?:(CRITICAL|HIGH|MEDIUM|LOW|INFO)\s+)?"
+    r"(?:CVSS\s+([\d.]+)\s*)?"
+    r":?\s*(.+)$",
+    re.I,
+)
+_FINDING_LEGACY_HEAD = re.compile(
+    r"^(EXP-\d{1,4})\s+CONFIRMED\s+—\s*"
+    r"(?:(CRITICAL|HIGH|MEDIUM|LOW|INFO)\s+)?"
+    r"(?:CVSS\s+([\d.]+)\s*)?"
+    r":?\s*(.+)$",
+    re.I,
+)
+
+
+def _clean_finding_title(raw: str) -> tuple[str, str, str, float | None]:
+    """Strip the old write-path frontmatter from a stored finding title.
+
+    Field rows read `catalog_exploit confirmed: EXP-002 CONFIRMED — LOW
+    CVSS 3.7 : <real title>`. The real title is the part after the last
+    colon; the EXP id and CVSS ride along as structured display fields.
+    """
+    t = str(raw or "").strip()
+    exp_id, sev_hint, cvss = "", "", None
+    for pattern in (_FINDING_FRONTMATTER, _FINDING_LEGACY_HEAD):
+        m = pattern.match(t)
+        if not m:
+            continue
+        exp_id = (m.group(1) or "").upper()
+        sev_hint = (m.group(2) or "").lower()
+        with contextlib.suppress(TypeError, ValueError):
+            cvss = float(m.group(3)) if m.group(3) else None
+        t = m.group(4).strip()
+        break
+    t = re.sub(r"^(?:catalog_exploit|exploit)\s+confirmed:\s*", "", t, flags=re.I)
+    t = re.sub(r"^EXP-\d{1,4}\s*[:\-]\s*", "", t, flags=re.I)
+    # Legacy summaries appended the verifier sentence and were truncated at
+    # 150 chars ("... primitive). The VERIF"). Strip that tail too.
+    t = re.sub(r"\.\s+(?:The\s+)?VERIF\w*\b.*$", "", t, flags=re.I)
+    return t.strip() or str(raw or "").strip(), exp_id, sev_hint, cvss
+
+
 def _findings(session: str | None = None) -> list[dict]:
     conn = _db()
     if not conn:
         return []
     try:
-        q = ("SELECT severity, status, title, agent_id, created_at, id "
+        q = ("SELECT severity, status, title, agent_id, created_at, id, engagement "
              "FROM findings ORDER BY created_at DESC LIMIT 100")
         out = []
         for r in conn.execute(q).fetchall():
             with contextlib.suppress(Exception):
+                title, exp_id, sev_hint, cvss = _clean_finding_title(r[2] or "")
                 out.append({
-                    "id": str(r[5] or ""), "severity": r[0] or "info", "status": r[1] or "new",
-                    "title": (r[2] or "")[:1000], "agent": r[3] or "",
+                    "id": str(r[5] or ""), "severity": r[0] or sev_hint or "info", "status": r[1] or "new",
+                    "title": title[:1000], "agent": r[3] or "",
+                    "engagement": r[6] or "",
+                    "expId": exp_id, "cvssScore": cvss,
                     # findings.created_at is SECONDS; the frontend renders ms
                     "ts": float(r[4] or time.time()) * 1000.0,
                 })
@@ -284,6 +331,51 @@ def _session_status(session: str) -> str:
     return "idle"
 
 
+_TARGET_RE = re.compile(
+    r"(?i)\b((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24})(?::(\d{2,5}))?\b"
+)
+
+
+def _target_from_text(text: str) -> str:
+    """The host a session is about — explicit `target` first, else the typed
+    mission. Auto target folders key off this; no manual setup."""
+    match = _TARGET_RE.search(str(text or ""))
+    if not match:
+        return ""
+    host = match.group(1).lower().rstrip(".")
+    port = match.group(2)
+    return f"{host}:{port}" if port else host
+
+
+def _session_engagement_meta(session: str) -> dict:
+    with contextlib.suppress(Exception):
+        meta = _eng_dir(session) / "engagement.json"
+        if meta.is_file():
+            value = json.loads(meta.read_text())
+            if isinstance(value, dict):
+                return value
+    return {}
+
+
+def _target_for_meta(meta: dict, session: str = "") -> str:
+    """AUTO TARGET FOLDERS: explicit target -> mission text -> slug.
+    The sidebar groups sessions by this; the operator never creates a folder."""
+    # An explicit target is the operator's label — often a PROGRAM name
+    # ("Absolute"), not a host. Use it verbatim; only parse hits out of the
+    # mission text when no explicit target was stored.
+    explicit = str(meta.get("target") or meta.get("scope") or "").strip()
+    if explicit:
+        return explicit
+    target = (
+        _target_from_text(meta.get("name") or "")
+        or _target_from_text(meta.get("description") or "")
+    )
+    if not target:
+        slug = re.sub(r"^\d{8}_\d{6}_", "", session)
+        target = slug.replace("__", "-").replace("_", "-").strip("-") or session
+    return target
+
+
 def _desk_session(session: str) -> dict:
     """DesktopConsoleSession shape."""
     agents = _live_agents(session)
@@ -294,15 +386,19 @@ def _desk_session(session: str) -> dict:
     # set lanes or claim intents — the old lane-based check reported "idle"
     # while agents hunted, so the composer showed no Stop control and the
     # operator couldn't stop a running engagement from the UI.
-    status = "working" if live else "idle"
+    paused = bool(live) and all(str(a.get("status") or "") == "paused" for a in live)
+    status = "waiting" if paused else "working" if live else "idle"
     # THE REAL TITLE (field 2026-11-17: "webflow.com" displayed as
     # "webflow com" — the title was rebuilt from the slug, which ate the
     # dot). The typed title is stored in engagement.json at create; show it.
-    title = _engagement_record(session).get("name") or session.replace("-", " ")
+    meta = _session_engagement_meta(session)
+    title = str(meta.get("name") or "").strip() or session.replace("-", " ")
+    target = _target_for_meta(meta, session)[:120]
     return {
-        "id": session, "target": session, "role": "root",
+        "id": session, "target": target, "role": "root",
+        "targetKey": target.lower(), "targetLabel": target,
         "autonomyMode": "standard", "scopeConfigured": False,
-        "localScopeConfigured": False, "status": status,
+        "localScopeConfigured": False, "status": status, "paused": paused,
         "createdAt": _now_iso(), "updatedAt": _now_iso(),
         "title": title, "messageCount": _session_seq(session),
     }
@@ -328,7 +424,7 @@ def _worker_list(session: str) -> list[dict]:
     out = []
     for a in _live_agents(session, include_stopped=True):
         st = (statuses.get(a["id"]) or "").lower()
-        status = "stopped" if (st == "stopped" or a["dead"]) else "running"
+        status = "stopped" if (st == "stopped" or a["dead"]) else "parked" if st == "paused" else "running"
         out.append({
             "id": a["id"], "parentId": "", "name": a["id"], "status": status,
             "task": a["lane"], "transcript": [], "role": "worker",
@@ -597,6 +693,8 @@ def _finding_group(f: dict) -> dict:
         "id": f["id"], "scanId": f["agent"], "title": f["title"],
         "description": f["title"], "severity": f["severity"], "category": "finding",
         "status": f["status"], "fingerprint": fp,
+        "expId": f.get("expId") or "", "cvssScore": f.get("cvssScore"),
+        "engagement": f.get("engagement") or "",
         "triageStatus": triage.get("triageStatus") or "new",
         "triageNote": triage.get("triageNote") or "",
         "impactAssessment": impact,
@@ -867,10 +965,68 @@ def engagement_report(name: str):
 # ── console sessions (= swarms) ──────────────────────────────────
 
 
+def _recent_engagement_sessions(live: set[str], per_target: int = 8) -> list[str]:
+    """Previous engagements for the targets that are live right now.
+
+    The sidebar is target-folders: a running agent should sit next to that
+    target's older chats. Scanning all 1,000+ historical engagement folders
+    is noise, so only folders whose derived target matches a live target are
+    included, capped per target."""
+    root = _ws() / "engagements"
+    if not root.is_dir():
+        return []
+    live_targets = {_desk_session(name).get("targetKey") for name in live}
+    candidates: list[tuple[float, str]] = []
+    for entry in root.iterdir():
+        if not entry.is_dir() or entry.name in live or entry.name in ("_default", "default"):
+            continue
+        if entry.name in _deleted_sessions:
+            continue
+        if not (entry / "engagement.json").is_file() and not (entry / "events.jsonl").is_file():
+            continue
+        with contextlib.suppress(OSError):
+            candidates.append((entry.stat().st_mtime, entry.name))
+    candidates.sort(reverse=True)
+    out: list[str] = []
+    counts: dict[str, int] = {}
+    for _mtime, name in candidates[:800]:
+        meta = _session_engagement_meta(name)
+        explicit = str(meta.get("target") or "").strip()
+        key = _target_for_meta(meta, name).lower()
+        # Legacy folders with no target still join a live target when their
+        # slug spells it: `webflow-com` → webflow.com, and
+        # `audit-…-www-design-webflow-com` → design.webflow.com.
+        if not explicit and key not in live_targets:
+            dotted = re.sub(r"^\d{8}_\d{6}_", "", name).replace("-", ".")
+            for target_key in live_targets:
+                # Only HOST keys can be recovered from a slug; a program name
+                # like "Webflow" would match every slug ending in ".webflow".
+                if not target_key or "." not in target_key:
+                    continue
+                if dotted == target_key or dotted.endswith("." + target_key):
+                    key = target_key
+                    break
+        # Explicit-target sessions persist after their agents stop (the five
+        # operator-launched engagements stay as folders). Legacy folders with
+        # no target join only while a live session shares their target.
+        if not explicit and key not in live_targets:
+            continue
+        if counts.get(key, 0) >= per_target:
+            continue
+        counts[key] = counts.get(key, 0) + 1
+        out.append(name)
+    return out
+
+
 @router.get("/api/console/sessions")
 def sessions_list():
+    live = _swarm_names()
+    names = list(live)
+    for name in _recent_engagement_sessions(set(live)):
+        if name not in names:
+            names.append(name)
     out = []
-    for name in _swarm_names():
+    for name in names:
         s = _desk_session(name)
         s["archived"] = False
         out.append(s)
@@ -940,9 +1096,15 @@ def sessions_create(body: dict = Body(default={})):
         s = _desk_session(name)
         s.update({"status": "working", "title": title})
         return {"session": s}
-    if not _session_exists(name):
+    # The reports mkdir above already created the dir, so _session_exists()
+    # is true for every new session — key the metadata write on the FILE,
+    # not the folder (field 2026-11-23: explicit targets never persisted).
+    if not (d / "engagement.json").is_file():
+        explicit_target = str(body.get("target") or "").strip()
         (d / "engagement.json").write_text(json.dumps({
-            "name": title, "description": title, "createdAt": _now_iso(), "revision": 1,
+            "name": title, "description": title,
+            "target": explicit_target or _target_from_text(title),
+            "createdAt": _now_iso(), "revision": 1,
             "structured": structured}))
     else:
         live = [a for a in _live_agents(name) if not a["dead"]]
@@ -1082,6 +1244,17 @@ def session_message(session_id: str, body: dict = Body(default={})):
         threading.Thread(target=_lazy_hunt, daemon=True, name=f"lazyspawn-{session_id}").start()
         _emit(session_id, {"type": "notice", "text": f"Engagement started: {mission}"})
     if text:
+        # A paused session resumes on the operator's next message.
+        with contextlib.suppress(Exception):
+            db = sqlite3.connect(str(_swarm_db()), timeout=5)
+            paused = db.execute(
+                "SELECT COUNT(*) FROM agents WHERE swarm = ? AND status = 'paused'", (session_id,)
+            ).fetchone()[0]
+            if paused:
+                db.execute("UPDATE agents SET status = 'active' WHERE swarm = ? AND status = 'paused'", (session_id,))
+                db.commit()
+                _publish("/cmd/resume", {"swarm": session_id})
+            db.close()
         _publish("/cmd/steer", {"message": text[:500], "swarm": session_id})
         with contextlib.suppress(Exception):
             from suijin.server.agent.lib.mesh import mesh_dir
@@ -1106,14 +1279,20 @@ def session_config_post(session_id: str, body: dict = Body(default={})):
 
 @router.post("/api/console/sessions/{session_id}/workers/stop")
 def workers_stop_all(session_id: str):
-    """Stop every sub-agent of this swarm (the agents panel's stop)."""
-    _publish("/cmd/stop", {"swarm": session_id})
+    """PAUSE every sub-agent of this swarm (the agents panel's stop).
+    Stop is a pause now — agents hold between turns and resume on /resume."""
+    _publish("/cmd/pause", {"swarm": session_id})
     workers = _worker_list(session_id)
     for w in workers:
-        _publish("/cmd/stop", {"agent": w["id"]})
-        # stream the stop INTO the transcript so the panel updates live
-        _emit(session_id, {"type": "worker", "worker": {**w, "status": "stopped"}})
-    _emit(session_id, {"type": "notice", "text": "stop requested for all sub-agents"})
+        _publish("/cmd/pause", {"agent": w["id"]})
+        # stream the pause INTO the transcript so the panel updates live
+        _emit(session_id, {"type": "worker", "worker": {**w, "status": "parked"}})
+    with contextlib.suppress(Exception):
+        db = sqlite3.connect(str(_swarm_db()), timeout=5)
+        db.execute("UPDATE agents SET status = 'paused' WHERE swarm = ?", (session_id,))
+        db.commit()
+        db.close()
+    _emit(session_id, {"type": "notice", "text": "pause requested for all sub-agents"})
     return {"session": _desk_session(session_id)}
 
 
@@ -1157,25 +1336,33 @@ def saved_delete(session_id: str):
 
 @router.post("/api/console/sessions/{session_id}/{action}")
 def session_action(session_id: str, action: str, body: dict = Body(default={})):
-    if action in ("cancel", "force-stop", "stop"):
+    if action in ("cancel", "pause", "stop"):
+        # STOP = PAUSE (2026-11-23 operator ruling): the agents hold between
+        # turns and keep their process/context. Delete is the destructive one.
+        _publish("/cmd/pause", {"swarm": session_id})
+        with contextlib.suppress(Exception):
+            db = sqlite3.connect(str(_swarm_db()), timeout=5)
+            db.execute("UPDATE agents SET status = 'paused' WHERE swarm = ?", (session_id,))
+            db.commit()
+            db.close()
+        _emit(session_id, {"type": "notice", "text": "paused — send a message or Resume to continue"})
+    elif action == "force-stop":
         _publish("/cmd/stop", {"swarm": session_id})
-        # STOP OPENS THE RESUME DOOR (field 2026-11-17: the in-flight spawn
-        # marker outlived the stop — a resume inside the window was dropped)
         with contextlib.suppress(Exception):
             _inflight_hunts.discard(session_id)
-        # MARK STOPPED NOW (field 2026-11-17: the agent exits at its next
-        # turn boundary, which can be minutes — meanwhile liveness said
-        # "working" and a resume in that window was silently dropped)
-        with contextlib.suppress(Exception):
             db = sqlite3.connect(str(_swarm_db()), timeout=5)
             db.execute("UPDATE agents SET status = 'stopped' WHERE swarm = ?", (session_id,))
             db.commit()
             db.close()
-        _emit(session_id, {"type": "notice", "text": "stop requested"})
-    elif action == "pause":
-        _publish("/cmd/pause", {"swarm": session_id})
+        _emit(session_id, {"type": "notice", "text": "force-stopped"})
     elif action in ("resume", "clear"):
         _publish("/cmd/resume", {"swarm": session_id})
+        with contextlib.suppress(Exception):
+            db = sqlite3.connect(str(_swarm_db()), timeout=5)
+            db.execute("UPDATE agents SET status = 'active' WHERE swarm = ? AND status = 'paused'", (session_id,))
+            db.commit()
+            db.close()
+        _emit(session_id, {"type": "notice", "text": "resumed"})
     elif action == "delete":
         # the sidebar trash lands here — same as pressing delete
         return session_close(session_id)
@@ -1187,7 +1374,6 @@ def session_decision(session_id: str, decision_id: str, body: dict = Body(defaul
     return {"session": _desk_session(session_id)}
 
 
-@router.delete("/api/console/sessions/{session_id}")
 def _bus_addr_direct():
     with contextlib.suppress(Exception):
         from suijin.server.mesh.bus import discover_bus
@@ -1196,10 +1382,12 @@ def _bus_addr_direct():
     return None
 
 
+@router.delete("/api/console/sessions/{session_id}")
 def session_close(session_id: str):
-    """Delete the chat: HARD-stop its agents (kill, not graceful — the
-    operator pressed delete, they want it gone now) AND remove the swarm's
-    rows so the chat disappears from the list."""
+    """Delete the chat: send the backend PAUSE then DELETE commands, then
+    hard-stop any agent that ignored them, and remove the swarm's rows."""
+    _publish("/cmd/pause", {"swarm": session_id})
+    _publish("/cmd/delete", {"swarm": session_id})
     for a in _live_agents(session_id, include_stopped=True):
         with contextlib.suppress(Exception):
             from suijin.server.mesh.bus import BusClient
@@ -1218,6 +1406,10 @@ def session_close(session_id: str):
         db.execute("DELETE FROM agents WHERE swarm = ? AND status = 'stopped'", (session_id,))
         db.commit()
         db.close()
+    # Hide the history record too: without engagement.json the recent-target
+    # scanner cannot resurrect the deleted chat as a folder.
+    with contextlib.suppress(Exception):
+        (_eng_dir(session_id) / "engagement.json").unlink(missing_ok=True)
     with _ring_lock:
         _rings.pop(session_id, None)
         _seqs.pop(session_id, None)
@@ -1227,7 +1419,13 @@ def session_close(session_id: str):
 
 @router.post("/api/console/sessions/{session_id}/workers/{worker_id}/stop")
 def worker_stop(session_id: str, worker_id: str):
-    _publish("/cmd/stop", {"agent": worker_id})
+    """Pause one sub-agent. Stop is a pause now; Delete removes it."""
+    _publish("/cmd/pause", {"agent": worker_id})
+    with contextlib.suppress(Exception):
+        db = sqlite3.connect(str(_swarm_db()), timeout=5)
+        db.execute("UPDATE agents SET status = 'paused' WHERE id = ?", (worker_id,))
+        db.commit()
+        db.close()
     return {"ok": True}
 
 

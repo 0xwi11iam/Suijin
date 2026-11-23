@@ -432,48 +432,19 @@ TOOL_REGISTRY = {
     # these from the model's view entirely — the agent LITERALLY reported
     # 'catalog_exploit doesn't exist in my tool list' mid-engagement) =====
     "catalog_exploit": {
-        "purpose": "MANDATORY on every valuable find — writes the exploit folder and the verifier RUNS your POC; verdict + copy-paste fix options on miss",
+        "purpose": "Prove a finding: run the exploit.yaml you wrote and get SUCCESS or NO",
         "when_to_use": "The moment something is exploitable.",
-        "args_format": '"engagement": "...", "target": "...", "vuln_class": "sqli", "title": "...", "description": "one paragraph", "severity": "high", "cvss": 8.9, "commands": ["python3 tmp/poc_<name>.py"], "expected_result": "MARKER:<unique-string>", "control_commands": ["python3 tmp/poc_<name>_control.py"]',
+        "args_format": '"yaml": "tmp/exp-002.yaml"',
         "description": (
-            "**catalog_exploit** — write a POC script, the system runs it, marker in output → CONFIRMED.\n\n"
-            "**THE RECIPE (do exactly this — step 1 FIRST or you WILL fail):**\n"
-            "1. `execute_terminal` → run your POC command ONCE to see the actual output\n"
-            "2. `write_file` → `tmp/poc_<name>.py` — script that prints `MARKER:<literal-string-from-step-1>` on success\n"
-            "3. `catalog_exploit` with `expected_result` = **the LITERAL string you saw in step 1** — NOT a description\n"
-            "\n"
-            "**expected_result is a LITERAL STRING MATCH** — the verifier checks if this exact string "
-            "appears in the output. NOT 'grep count >= 1', NOT a sentence, NOT a description. "
-            "If the output says `1`, the marker is `1`. If it says `Example Domain`, the marker is "
-            "`Example Domain`. COPY-PASTE from what you SAW.\n"
-            "1. `write_file` → `tmp/poc_<name>.py` — a python script that (a) contacts the target, "
-            "(b) prints `MARKER:<unique-string>` on success, (c) exits 1 on failure.\n"
-            '2. `catalog_exploit` with `commands=["python3 tmp/poc_<name>.py"]` and '
-            '`expected_result="MARKER:<unique-string>"`.\n'
-            "3. The verifier runs your script fresh; marker appears → CONFIRMED. Done.\n\n"
-            "**SKELETON** (copy this, change the URL + the marker):\n"
-            "```python\n"
-            "import urllib.request\n"
-            "url = 'http://TARGET/vuln?param=PAYLOAD'\n"
-            "body = urllib.request.urlopen(url, timeout=15).read().decode('utf-8','replace')\n"
-            "if 'EXPECTED-UNIQUE-STRING' in body:\n"
-            "    print('MARKER:EXPECTED-UNIQUE-STRING')\n"
-            "else:\n"
-            "    print('MISS — got %d bytes, no marker' % len(body)); raise SystemExit(1)\n"
-            "```\n\n"
-            "**THE 4 GATES (checked before the run — fix upfront, not by failure):**\n"
-            "- marker: ≥8 chars, unique to the payload (a computed value, an echoed id, a fragment "
-            "the endpoint only prints WITH your payload) — generic words rejected\n"
-            "- target: the target host must appear in a command string OR in the output (your "
-            "script's URL counts — it's in the command)\n"
-            "- echo-block: `echo MARKER:...` as a shell command is rejected — the marker must come "
-            "from a script's print AFTER contacting the target\n"
-            "- differential: injection classes (sqli/ssti/xss/rce/lfi/ssrf/deserialization) require "
-            "`control_commands` — same script minus the payload; marker must NOT appear in control "
-            "output\n\n"
-            "**ON MISS:** the receipt tells you which gate failed and hands you copy-paste JSON for "
-            "the three options: (1) edit + re-call with entry_id, (2) action=rewrite, "
-            "(3) action=worked_anyway + evidence_line (the exact output line)."
+            "**catalog_exploit** — write the POC as exploit.yaml FIRST, then call this tool.\n\n"
+            "```yaml\nname: BOLA on /api/v2/users/1\nclass: idor\ntarget: https://host\n"
+            "cvss: 7.5\ndescription: GET /api/v2/users/1 without auth returns the admin record.\n"
+            "commands:\n  - 'curl -si https://host/api/v2/users/1'\n"
+            "Expected_result: '\"role\":\"admin\"'\n```\n\n"
+            "Call `{\"yaml\": \"tmp/exp-002.yaml\"}`. The cataloguer runs the commands and "
+            "answers **SUCCESS** or **NO**.\n\n"
+            "On NO: read the output, edit the yaml, call again with the same `exp_id`. "
+            "That is the whole flow. A shell `echo` cannot satisfy the marker."
         ),
     },
     "request_auth": {

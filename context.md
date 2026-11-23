@@ -602,3 +602,83 @@ code and config did.
 
 ### 2026-11-20 — SEVERITY-AI retirement (commit 0d34465a)
 Operator ruling executed: the severity calculator is fully retired — no `system_severity` stamping, no `_honesty_check()` cap, no CVSS recomputation of the severity word in `classed_title`, and `_write_finding` renders the stated severity verbatim. The AI-defined severity is the severity of record. Both legacy functions remain defined (import compat) but are dead on every path. Also this commit appended the ACTIVE ENGAGEMENT PROTOCOL to AGENTS.md (autonomous overnight hunts while operator-approved).
+
+### 2026-11-23 — exploit catalog: one yaml, one call
+
+`suijin/server/tools/lib/exploit_catalog.py` leads with `verify_exploit_yaml()`:
+an `exploit.yaml` (name, class, target, cvss, description, commands,
+Expected_result) is written with `write_file`, then `catalog_exploit {"yaml":
+<path>}` runs it and answers only SUCCESS or NO. On NO the AI edits the yaml
+and calls again with the same `exp_id`. The tool writes `EXP-NNN/{exploit.yaml,
+finding.md, run-N.log}`, checks the marker in non-echo output, and records the
+finding itself (stable id, clean title, AI-defined severity). Legacy inline
+`commands=`/`expected_result=`/`entry_id=` calls still work. Operator surface:
+`suijin exploit --yaml <file>` and `suijin exploit --demo` (built-in local
+fixture). Mutation tools are exempt from the action cache so retries are real.
+
+### 2026-11-23 — Memory page is a markmap reading surface
+
+`console-ui/src/pages/memory-mindmap.tsx` (and the `~/0/packages/web` twin) now
+renders the library as a nested markmap instead of a cytoscape graph:
+`MEMORY → External/Internal/Unsorted → target → Info/Endpoints/Vulnerabilities
+→ entry`. Targets render folded (markmap depth 1 = root, `initialExpandLevel: 3`
+shows categories + targets, hides branches); a click reveals a target's three
+branches, and vulnerabilities show their full rule + evidence in the map. The
+tree is built deterministically from node kinds/ids (endpoint nodes are mapped
+to their target through the endpoint branch edge), so the graph's noisy
+cross-links can't reorder the hierarchy. Vuln count badges ride target and
+Vulnerability branch nodes. The existing Back / fit / reload / target-and-entry search /
+inspector / Escape / pan / zoom / dark surface are kept; the initial view is
+~0.95–1.0x centered on the root (fit-all is a button, not the entry view, so
+text never lands at 4px). Deps: `markmap-lib` + `markmap-view` 0.18.13 in both
+web trees. Verified headless via CDP: 869 data nodes / 87 visible (root + 3
+categories + 83 targets), branch expansion, 24 full vuln entries with
+evidence, search → inspector, Escape close, Back to `/chats`, zoom/pan on,
+zero console exceptions. Screenshots: `/tmp/memory-initial.png`,
+`/tmp/memory-expanded.png`.
+
+### 2026-11-23 — sidebar is target folders, auto-created and populated
+
+`host-sidebar-chat-history.tsx` (both web trees) now groups every session under
+its target: **My Mac → target folder → running agents + previous engagements**.
+There is no separate Targets section and no manual folder creation — the fold-
+ers are derived from each session's target on every render. The console adapter
+(`console_api.py`) derives the target from an explicit `target` in
+`engagement.json`, else the mission text, else the slug, and exposes
+`targetKey`/`targetLabel` on the session. Folder headers carry a live dot while
+any agent in them is working and a chat count; collapse state persists per host.
+Previous engagements for a live target are merged into the same folder (bounded
+per target); sessions with an explicit target persist after their agents stop,
+so the five operator-launched engagements remain as folders. Metadata writing
+was keyed on the engagement FILE (the reports mkdir made the old folder check
+always true, so explicit targets were never stored). Verified headless: five
+auto folders under My Mac, one chat each, live dots, collapse/expand, open chat,
+zero console errors.
+
+### 2026-11-23 — Stop pauses, Delete pauses then deletes, targets are programs
+
+The composer Stop button now PAUSES the engagement instead of killing it:
+`/api/console/sessions/{id}/pause` sets `paused` on the agents, the session
+reports `waiting` + `paused: true`, the composer swaps the stop control for a
+Resume (play) button, and sending a message also resumes. The agent holds
+between turns (heartbeat preserves `paused`); `/cmd/pause` and `/cmd/resume`
+are swarm-scoped so one session cannot pause the fleet. `force-stop` remains
+the kill path. Delete (`DELETE /api/console/sessions/{id}`) now publishes
+`/cmd/pause` then `/cmd/delete`, hard-stops anything left, removes the swarm
+rows, and unlinks `engagement.json` so the deleted chat cannot resurrect as a
+folder. Target folders use the explicit program label verbatim (e.g. a brand
+name), not a parsed endpoint host; a program with two engagements shows one
+folder with both chats.
+
+### 2026-11-23 — Findings queue summary + cleaner rows
+
+The Findings page now opens with a severity summary strip (Critical/High/Medium/
+Low/Info counts + `Confirmed N of M`) before the toolbar. Rows show the EXP id
+as a badge, the CVSS score as a colored badge (color follows the AI-defined
+severity), a subtle status dot, and the engagement chip when the backend
+provides one; the generic "finding" category label is gone. The API now selects
+`findings.engagement` and passes it through `_finding_group`. Catalogued titles
+stay clean (frontmatter stripped at read/write). Empty/old rows show just the
+title, occurrences, CVSS/EXP and workflow phase. Verified headless: summary
+counts render, 38/40 rows carry EXP badges, 33 carry CVSS badges, zero console
+errors.

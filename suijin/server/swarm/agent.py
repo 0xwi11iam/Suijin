@@ -96,6 +96,10 @@ class SwarmAgent:
         self._iterations = 0
         self._operator_notes: list[str] = []  # `suijin swarm say` landings
         self._notes_lock = threading.Lock()
+        # PAUSE (2026-11-23): Stop is a pause, not a kill. The event is set
+        # by /cmd/pause and cleared by /cmd/resume; _wait_if_paused holds
+        # the agent between turns without dying.
+        self._paused = threading.Event()
 
     @property
     def identity(self) -> str:
@@ -148,6 +152,7 @@ class SwarmAgent:
         while self._running:
             # check for steering/kill messages
             self._handle_control()
+            self._wait_if_paused()
 
             # claim the next intent
             intent = self._claim_intent()
@@ -238,15 +243,52 @@ class SwarmAgent:
 
             time.sleep(5.0)
 
+    def _targets_me(self, payload: dict) -> bool:
+        """A /cmd/* broadcast may carry a swarm or agent id; honor only ours."""
+        payload = payload or {}
+        swarm = str(payload.get("swarm") or "")
+        agent = str(payload.get("agent") or "")
+        if swarm and swarm != self._swarm:
+            return False
+        if agent and agent != self._identity:
+            return False
+        return True
+
+    def _wait_if_paused(self) -> None:
+        """Hold between turns while paused. Stop/delete still work; resume
+        clears the hold; steering still lands in the notes."""
+        if not self._paused.is_set():
+            return
+        print(f"[{self._identity}] paused — holding (resume to continue)", flush=True)
+        while self._running and self._paused.is_set():
+            time.sleep(0.5)
+            for msg in self._bus.drain(20):
+                topic = str(msg.get("topic") or "")
+                payload = msg.get("payload") or {}
+                if not self._targets_me(payload):
+                    continue
+                if f"/agent/{self._identity}/kill" in topic or "/cmd/stop" in topic or "/cmd/delete" in topic:
+                    print(f"[{self._identity}] stop while paused — exiting", flush=True)
+                    self._running = False
+                    return
+                if "/cmd/resume" in topic:
+                    self._paused.clear()
+                    print(f"[{self._identity}] resumed", flush=True)
+                elif "/cmd/steer" in topic:
+                    note = str(payload.get("message") or "")[:500]
+                    if note:
+                        with self._notes_lock:
+                            self._operator_notes.append(note)
+
     def _handle_control(self):
-        """Process steering, kill, and graceful-stop messages."""
+        """Process steering, pause/resume, kill, and graceful-stop messages."""
         for msg in self._bus.drain(20):
             topic = str(msg.get("topic") or "")
             payload = msg.get("payload") or {}
             event = str(payload.get("event") or "")
 
             # GRACEFUL STOP: finish the current step, exit clean
-            if event == "graceful_stop" or "graceful_stop" in str(payload):
+            if (event == "graceful_stop" or "graceful_stop" in str(payload)) and self._targets_me(payload):
                 print(f"[{self._identity}] graceful stop — finishing current step, exiting")
                 self._running = False
                 # release the current intent back to the queue (unpicked work)
@@ -263,15 +305,14 @@ class SwarmAgent:
                         db.close()
                 return
 
-            # PAUSE: hold before the next step (resume clears the flag)
-            if event == "pause" or _pause_flag_set():
-                print(f"[{self._identity}] paused — holding (resume to continue)")
-                while _pause_flag_set() and self._running:
-                    time.sleep(1)
-
-            # RESUME: the bus event clears it too
-            if event == "resume":
-                pass  # the pause loop above exits on flag clear
+            # PAUSE: hold between turns (resume clears it). The global pause
+            # flag still applies to every agent; a /cmd/pause carries a swarm
+            # or agent id so one session does not pause the whole fleet.
+            if (event == "pause" or _pause_flag_set()) and self._targets_me(payload):
+                print(f"[{self._identity}] pause requested — holding", flush=True)
+                self._paused.set()
+            if event == "resume" and self._targets_me(payload):
+                self._paused.clear()
 
             if f"/agent/{self._identity}/kill" in topic:
                 print(f"[{self._identity}] killed by operator")
@@ -279,24 +320,19 @@ class SwarmAgent:
                 return
             # ── the command bus (broadcast control) ─────────────────
             if "/cmd/" in topic:
+                if not self._targets_me(payload):
+                    continue
                 cmd = topic.rsplit("/", 1)[-1].lower()
-                if cmd in ("stop", "graceful_stop", "shutdown"):
-                    print(f"[{self._identity}] command: stop — finishing current step")
+                if cmd in ("stop", "graceful_stop", "shutdown", "delete"):
+                    print(f"[{self._identity}] command: {cmd} — exiting")
                     self._running = False
                     return
                 elif cmd == "pause":
-                    print(f"[{self._identity}] command: pause — holding")
-                    while self._running:
-                        time.sleep(1)
-                        for m in self._bus.drain(20):
-                            t2 = str(m.get("topic") or "")
-                            if t2.endswith("/resume"):
-                                break
-                        else:
-                            continue
-                        break
+                    print(f"[{self._identity}] command: pause — holding", flush=True)
+                    self._paused.set()
                 elif cmd == "resume":
-                    pass  # the pause loop exits on this message
+                    print(f"[{self._identity}] command: resume", flush=True)
+                    self._paused.clear()
                 elif cmd == "steer":
                     msg = str((payload or {}).get("message") or "")[:500]
                     if msg:
@@ -379,11 +415,18 @@ class SwarmAgent:
             with contextlib.suppress(Exception):
                 for msg in self._bus.drain(20):
                     topic = str(msg.get("topic") or "")
-                    if f"/agent/{self._identity}/kill" in topic or "/cmd/stop" in topic:
+                    payload = msg.get("payload") or {}
+                    if not self._targets_me(payload):
+                        continue
+                    if f"/agent/{self._identity}/kill" in topic or "/cmd/stop" in topic or "/cmd/delete" in topic:
                         print(f"[{self._identity}] {topic} — exiting now (mid-mission stop)")
                         self._running = False
                         _kill_child_browsers()
                         os._exit(0)
+                    if "/cmd/pause" in topic:
+                        self._paused.set()
+                    elif "/cmd/resume" in topic:
+                        self._paused.clear()
 
             # USAGE ON THE BUS: token spend flows to every node (web
             # console, remote suijins) — the data layer reads the same
@@ -452,6 +495,7 @@ class SwarmAgent:
             print(f"[{self._identity}] turn {turn}: > {tool_name}{arg_hint} -> {head}{(' [' + mark + ']') if mark else ''}")
 
         def _on_turn(turn: int) -> str | None:
+            self._wait_if_paused()
             with self._notes_lock:
                 if not self._operator_notes:
                     return None
@@ -505,17 +549,38 @@ class SwarmAgent:
                 # a bare CONFIRMED elsewhere (command output, sandbox
                 # banners) promoted noise on the first field run.
                 if "CONFIRMED —" in summary and summary.split(" confirmed:")[0] != "execute_terminal":
+                    import re as _re
+
+                    # Title cleanup at the WRITE path (2026-11-23): old rows
+                    # stored `catalog_exploit confirmed: EXP-002 CONFIRMED —
+                    # LOW CVSS 3.7 : <title>`. Keep the real title; the EXP
+                    # id rides the stable finding id (no duplicate on rerun).
+                    m = _re.search(
+                        r"(EXP-\d{1,4})\s+CONFIRMED\s+—\s*"
+                        r"(?:(?:CRITICAL|HIGH|MEDIUM|LOW|INFO)\s+)?"
+                        r"(?:CVSS\s+[\d.]+\s*)?:?\s*(.+)$",
+                        summary, _re.I,
+                    )
+                    clean_title = (m.group(2) if m else summary).strip()
+                    clean_title = _re.sub(
+                        r"^(?:catalog_exploit|exploit)\s+confirmed:\s*", "",
+                        clean_title, flags=_re.I,
+                    ).strip() or summary[:1000]
                     sev = "unknown"
                     for level in ("CRITICAL", "HIGH", "MEDIUM", "LOW"):
                         if level in summary.upper():
                             sev = level.lower()
                             break
+                    fid = (
+                        f"find-{m.group(1).lower()}-{intent.get('engagement', '')}"
+                        if m else f"find-{os.urandom(4).hex()}"
+                    )
                     db.execute(
-                        "INSERT INTO findings (id, title, status, severity, agent_id, engagement, created_at) "
+                        "INSERT OR IGNORE INTO findings (id, title, status, severity, agent_id, engagement, created_at) "
                         "VALUES (?, ?, 'confirmed', ?, ?, ?, ?)",
                         (
-                            f"find-{os.urandom(4).hex()}",
-                            summary[:1000],
+                            fid,
+                            clean_title[:1000],
                             sev,
                             self._identity,
                             intent.get("engagement", ""),
