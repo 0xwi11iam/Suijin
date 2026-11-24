@@ -682,3 +682,17 @@ stay clean (frontmatter stripped at read/write). Empty/old rows show just the
 title, occurrences, CVSS/EXP and workflow phase. Verified headless: summary
 counts render, 38/40 rows carry EXP badges, 33 carry CVSS badges, zero console
 errors.
+
+
+### 2026-11-24 — runtime containment and cleanup
+
+All runtime data now lives under `~/.suijin`; the product repo carries only
+code/docs/tests. Removed target-derived source trees and screenshots from the
+working tree and rewrote git history to purge them. Pruned stale engagements
+and duplicate artifact roots, preserved one archived engagement with its
+findings/evidence, and rebuilt the engagement index. Generated data for a live
+engagement resolves inside `~/.suijin/engagements/<slug>/`; the global fallback
+is `~/.suijin/artifacts/` (never `config/artifacts`). Browser profile/session
+jars moved to `~/.suijin/browser/`, learned intel to `~/.suijin/intel/`.
+`scripts/rebuild_engagement_index.py` writes `engagements/index.json` mapping
+each chat to its target, audit trail, artifacts, and finding count.

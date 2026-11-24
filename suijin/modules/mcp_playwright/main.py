@@ -179,7 +179,7 @@ def _boot_browser():
 
 def _inject_session_jar(page, url: str) -> bool:
     """Load the saved suijin-auth session for url's domain into the live
-    browser context (cookies from ~/.suijin/config/sessions/<dom>.json).
+    browser context (cookies from ~/.suijin/browser/sessions/<dom>.json).
     Domain matching is parent-aware: accounts.example.com matches the
     example.com jar. Returns True when cookies were injected."""
     import json as _json

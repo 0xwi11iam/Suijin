@@ -213,7 +213,7 @@ def artifact_dir(name: str) -> Path:
         raise ValueError(f"unknown artifact dir {name!r} (one of {ARTIFACT_DIRS})")
     if _CURRENT_ENGAGEMENT is not None:
         return _ensure(_CURRENT_ENGAGEMENT / name)
-    return _ensure(WORKSPACE_DIR / "artifacts" / name)
+    return _ensure(runtime_root() / "artifacts" / name)
 
 
 # ── per-engagement state ──────────────────────────────────────────────
@@ -326,32 +326,42 @@ def home_dir() -> Path:
     return h
 
 
+def runtime_root() -> Path:
+    """The data root above the config workspace.
+
+    Production: WORKSPACE_DIR is ~/.suijin/config → ~/.suijin.
+    Tests/fixtures often point WORKSPACE_DIR at a bare tmp dir; keep their
+    artifacts hermetic there instead of writing to the pytest parent.
+    """
+    return WORKSPACE_DIR.parent if WORKSPACE_DIR.name == "config" else WORKSPACE_DIR
+
+
 def notes_dir() -> Path:
     """Engagement notes (write_note) — inside the engagement, always."""
     if _CURRENT_ENGAGEMENT is not None:
         return _ensure(_CURRENT_ENGAGEMENT / ".notes")
-    return _ensure(WORKSPACE_DIR / "artifacts" / ".notes")
+    return _ensure(runtime_root() / "artifacts" / ".notes")
 
 
 def exploits_dir() -> Path:
     """The engagement's exploit catalog root (EXP-NNN/ folders)."""
     if _CURRENT_ENGAGEMENT is not None:
         return _ensure(_CURRENT_ENGAGEMENT / "exploits")
-    return _ensure(WORKSPACE_DIR / "artifacts" / "exploits")
+    return _ensure(runtime_root() / "artifacts" / "exploits")
 
 
 def state_dir() -> Path:
     """Per-engagement state files (scratchpad, guidance, questions, .sje)."""
     if _CURRENT_ENGAGEMENT is not None:
         return _ensure(_CURRENT_ENGAGEMENT / "state")
-    return _ensure(WORKSPACE_DIR / "artifacts" / "state")
+    return _ensure(runtime_root() / "artifacts" / "state")
 
 
 def toollogs_dir() -> Path:
     """Timestamped tool output dumps (nmap_scan_*, execute_terminal_*)."""
     if _CURRENT_ENGAGEMENT is not None:
         return _ensure(_CURRENT_ENGAGEMENT / "toollogs")
-    return _ensure(WORKSPACE_DIR / "artifacts" / "toollogs")
+    return _ensure(runtime_root() / "artifacts" / "toollogs")
 
 
 def profiles_root() -> Path:

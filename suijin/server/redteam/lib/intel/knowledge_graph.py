@@ -42,7 +42,8 @@ def _default_graph_path() -> Path:
     with contextlib.suppress(Exception):
         from suijin.modules.platform.lib.workspace import WORKSPACE_DIR
 
-        return WORKSPACE_DIR / "intel" / "knowledge_graph.json"
+        base = WORKSPACE_DIR.parent if WORKSPACE_DIR.name == "config" else WORKSPACE_DIR
+        return base / "intel" / "knowledge_graph.json"
     return SEED_PATH
 
 

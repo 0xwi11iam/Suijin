@@ -96,3 +96,21 @@ default assistant behavior:
   is never overridden by any system calculator.
 - Blocked lane → switch to the next queue item immediately. Idling is the only
   unacceptable outcome.
+
+
+## Runtime data lives only in ~/.suijin (operator ruling, 2026-11-24)
+
+- The product repository (`~/suijin`) contains code, tests, docs, and shipped
+  assets only. Engagement data never enters it: no target source clones,
+  screenshots, evidence, artifacts, or target names in comments/tests/docs.
+- All runtime state lives under `~/.suijin`:
+  `config/`, `browser/`, `intel/`, `engagements/<slug>/`, `artifacts/`,
+  `logs/`, `swarm/`, `cache/`, `tmp/`, `backups/`.
+- One engagement folder per chat: `engagement.json`, `events.jsonl`, `home/`,
+  plus generated `exploits/`, `.notes/`, `reports/`, `state/`, `toollogs/`.
+  Global `artifacts/` is only the pre-engagement fallback.
+- Every engagement gets `engagement.json` before agents start; findings point
+  to their chat and `events.jsonl` audit path. Rebuild
+  `engagements/index.json` with `python scripts/rebuild_engagement_index.py`.
+- No Suijin state outside `~/suijin` and `~/.suijin`: no `~/0`, `~/.0`,
+  `~/suijin_agent`, Desktop screenshots, stale launch agents, or temp copies.

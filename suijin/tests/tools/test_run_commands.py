@@ -82,7 +82,7 @@ class TestLiveHandlers:
 
         import suijin.modules.platform.lib.workspace as ws
 
-        monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)  # v7.2: idle /note parks at config/artifacts/.notes
+        monkeypatch.setattr(ws, "WORKSPACE_DIR", tmp_path)  # v7.2: idle /note parks at ~/.suijin/artifacts/.notes
         ws._reset_engagement()
         notes = tmp_path / "artifacts" / ".notes"
         box, out = make_box()

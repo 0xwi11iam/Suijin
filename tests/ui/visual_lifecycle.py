@@ -12,7 +12,7 @@ from playwright.sync_api import sync_playwright
 SHOTS = Path(__file__).resolve().parent / "shots"
 SHOTS.mkdir(parents=True, exist_ok=True)
 BASE = "http://127.0.0.1:8790"
-PROMPT = "Check the security headers of www.design.webflow.com and summarize the findings"
+PROMPT = "Check the security headers of www.design.example.com and summarize the findings"
 
 
 def shot(page, name):

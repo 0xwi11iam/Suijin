@@ -306,9 +306,14 @@ def _catalog_index() -> dict:
     if now - float(_CATALOG_INDEX_CACHE.get("at") or 0) < 60:
         return _CATALOG_INDEX_CACHE.get("index") or {}
     index: dict[str, list[dict]] = {}
-    root = _ws() / "config" / "artifacts" / "exploits"
-    if root.is_dir():
-        for path in root.glob("*/catalog.json"):
+    roots = [_ws() / "artifacts" / "exploits"]
+    engagements = _ws() / "engagements"
+    if engagements.is_dir():
+        roots.extend(sorted(engagements.glob("*/exploits")))
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for path in list(root.glob("catalog.json")) + list(root.glob("*/catalog.json")):
             with contextlib.suppress(Exception):
                 data = json.loads(path.read_text())
                 for eid, entry in (data.get("entries") or {}).items():
@@ -431,8 +436,8 @@ def _desk_session(session: str) -> dict:
     # operator couldn't stop a running engagement from the UI.
     paused = bool(live) and all(str(a.get("status") or "") == "paused" for a in live)
     status = "waiting" if paused else "working" if live else "idle"
-    # THE REAL TITLE (field 2026-11-17: "webflow.com" displayed as
-    # "webflow com" — the title was rebuilt from the slug, which ate the
+    # THE REAL TITLE (field 2026-11-17: "example.com" displayed as
+    # "example com" — the title was rebuilt from the slug, which ate the
     # dot). The typed title is stored in engagement.json at create; show it.
     meta = _session_engagement_meta(session)
     title = str(meta.get("name") or "").strip() or session.replace("-", " ")
@@ -1041,13 +1046,13 @@ def _recent_engagement_sessions(live: set[str], per_target: int = 8) -> list[str
         explicit = str(meta.get("target") or "").strip()
         key = _target_for_meta(meta, name).lower()
         # Legacy folders with no target still join a live target when their
-        # slug spells it: `webflow-com` → webflow.com, and
-        # `audit-…-www-design-webflow-com` → design.webflow.com.
+        # slug spells it: `example-com` → example.com, and
+        # `audit-…-www-design-example-com` → design.example.com.
         if not explicit and key not in live_targets:
             dotted = re.sub(r"^\d{8}_\d{6}_", "", name).replace("-", ".")
             for target_key in live_targets:
                 # Only HOST keys can be recovered from a slug; a program name
-                # like "Webflow" would match every slug ending in ".webflow".
+                # like "Example" would match every slug ending in ".example".
                 if not target_key or "." not in target_key:
                     continue
                 if dotted == target_key or dotted.endswith("." + target_key):

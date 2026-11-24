@@ -20,7 +20,7 @@ not carry a domain (url-form instead). Google's auth jar is entirely
 __Secure-/__Host- prefixed — naive pasting breaks on exactly the
 targets that matter.
 
-Session files are local-only (~/.suijin/config/sessions/) — they hold
+Session files are local-only (~/.suijin/browser/sessions/) — they hold
 live session cookies and never reach the repo tree.
 """
 
@@ -48,8 +48,13 @@ def _config_root() -> Path:
         return Path.home() / ".suijin" / "config"
 
 
+def _browser_root() -> Path:
+    base = _config_root()
+    return (base.parent if base.name == "config" else base) / "browser"
+
+
 def sessions_dir() -> Path:
-    d = _config_root() / "sessions"
+    d = _browser_root() / "sessions"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -370,7 +375,7 @@ def live_session_browser(start_url: str = "", poll_seconds: float = 4.0) -> int:
     """`suijin auth` (bare) — THE live cookie jar.
 
     Opens a persistent-profile browser (the profile lives in
-    ~/.suijin/config/auth-profile, so logins survive between runs).
+    ~/.suijin/browser/auth-profile, so logins survive between runs).
     Prefers the operator's REAL Chrome when present — some providers
     (Google among them) block sign-in from automation Chromium builds;
     on hosts with no Chrome, degrades to bundled Chromium and says so.
@@ -386,7 +391,7 @@ def live_session_browser(start_url: str = "", poll_seconds: float = 4.0) -> int:
     """
     sync_playwright, stack = _stealth_playwright()
 
-    profile = _config_root() / "auth-profile"
+    profile = _browser_root() / "auth-profile"
     profile.mkdir(parents=True, exist_ok=True)
     start = str(start_url or "").strip()
     if not start:

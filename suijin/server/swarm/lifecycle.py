@@ -285,7 +285,7 @@ def _spawn_agent(port: int, mission: str = "", swarm: str = "") -> tuple[str, in
     from suijin.server.platform.lib.workspace import WORKSPACE_DIR as _WS
     # PER-ENGAGEMENT SANDBOX (field 2026-11-17 night): every agent used
     # `_default/home`, so three concurrent engagements shared one
-    # workspace — the Webflow agent found the PostHog source clone and
+    # workspace — one engagement found another target's source clone and
     # started reviewing the wrong target. The session id is the home.
     sandbox = swarm or "_default"
     agent_home = Path(_WS).parent / "engagements" / sandbox / "home"
