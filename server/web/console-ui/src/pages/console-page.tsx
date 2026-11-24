@@ -36,6 +36,7 @@ import { usePersistentState } from "@/lib/use-persistent-state";
 import { ConversationSkeleton } from "@/console/loading-state";
 import { recoveredProviderError } from "@/console/connection-recovery";
 import { consoleErrorMessage, needsProviderSignIn, needsModelSourceReconnect } from "@/console/provider-error";
+import { ProviderGlyph } from "@/components/provider-glyph";
 import { TeamCollaboration } from "@/console/team-collaboration";
 import { AgentsPanel } from "@/console/agents-panel";
 import { BrowserPreviews } from "@/console/browser-previews";
@@ -603,7 +604,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
                 <div className="mt-3 flex items-center justify-between">
                   <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
                     {heroRuntime?.runtime?.model && <span className="flex shrink-0 items-center gap-1.5">
-                      {heroProvider?.icon && <img src={heroProvider.icon} alt="" className="size-3.5 rounded" loading="lazy" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />}
+                      <ProviderGlyph src={heroProvider?.icon} label={heroProvider?.label || String(heroRuntime?.runtime?.providerId || "Provider")} className="size-3.5" />
                       <span className="font-medium text-foreground">{heroRuntime.runtime.model}</span>
                       {heroRuntime.effort && heroRuntime.effort !== "off" && <span>· {heroRuntime.effort}</span>}
                     </span>}

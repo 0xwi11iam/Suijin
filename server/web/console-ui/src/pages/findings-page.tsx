@@ -1,9 +1,6 @@
 import { Tooltip } from "@/components/ui/tooltip";
 import { Disclosure } from "@/components/ui/disclosure";
-import { AssessmentAccessMilestones } from "@/components/access-milestone";
-import { FindingImpactEditor } from "@/components/finding-impact-editor";
 import { getFindingPriority } from "@0/engine/dist/shared/finding-priority.js";
-import { ReportExportControl } from "@/components/report-export-control";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -19,16 +16,12 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { useBackendApi } from "@/api";
-import { FindingWorkflowBoard } from "@/components/finding-workflow-board";
 import { InspectorPane } from "@/components/inspector-pane";
 import { PageHeader, PageContent } from "@/components/page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/state-panel";
 import {
   CvssBadge,
   ExpIdBadge,
-  FindingStatusDot,
-  PhaseBadge,
-  ReviewBadge,
   StatusBadge,
 } from "@/components/status-badges";
 import {
@@ -227,7 +220,6 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
     severityFilter,
     consensusFilter,
     activeOnly,
-    viewMode,
     queueSort: storedSort,
   } = consoleState;
   const queueSort = storedSort === "newest" ? "newest" : "severity";
@@ -246,10 +238,6 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
     }
     return counts;
   }, [dashboard.groups]);
-  const confirmedCount = useMemo(
-    () => dashboard.groups.filter((group) => group.latest.status.toLowerCase() === "confirmed").length,
-    [dashboard.groups],
-  );
 
   const filteredGroups = useMemo(() => {
     const normalized = deferredSearch.trim().toLowerCase();
@@ -275,19 +263,6 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
     return ranked;
   }, [filteredGroups, queueSort]);
 
-  const reviewGroups = useMemo(() => queueGroups.filter(group => group.workflow.reviewGate !== "none"), [queueGroups]);
-
-  const agentReviewGroups = useMemo(
-    () => reviewGroups.filter((group) => group.workflow.reviewGate === "agent_review"),
-    [reviewGroups],
-  );
-
-  const humanReviewGroups = useMemo(
-    () => reviewGroups.filter((group) => group.workflow.reviewGate === "human_review"),
-    [reviewGroups],
-  );
-
-  const visibleGroups = viewMode === "review" ? reviewGroups : queueGroups;
   const selectedFingerprint = fingerprint ?? null;
 
   const familyQuery = useQuery({
@@ -382,16 +357,13 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
     return (
       <PageContent width="wide">
         <Button variant="ghost" size="sm" asChild><Link to="/findings"><ArrowLeft className="size-4" />All findings</Link></Button>
-        <PageHeader
-          title={familyQuery.data?.latest.title ?? selectedGroup?.latest.title ?? "Finding"}
-          actions={selectedGroup ? <ReportExportControl label="Export finding" path={`/api/findings/export?ids=${encodeURIComponent(selectedGroup.latest.id)}`} /> : undefined}
-        />
+        <PageHeader title={familyQuery.data?.latest.title ?? selectedGroup?.latest.title ?? "Finding"} />
         {familyQuery.isLoading ? <LoadingState label="Loading finding" /> : familyQuery.error ? <ErrorState error={familyQuery.error} /> : familyQuery.data ? (
           <FindingFamilyInspector
             key={selectedFingerprint}
             data={familyQuery.data}
             selectedSummary={selectedGroup?.workflow ?? null}
-            reviewMode={viewMode === "review"}
+            reviewMode={false}
             isSaving={triageMutation.isPending || workflowMutation.isPending}
             onTriage={(triageStatus, triageNote) => triageMutation.mutate({ triageStatus, triageNote })}
           />
@@ -406,7 +378,7 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
       <PageHeader
         eyebrow="Findings"
         title="Findings"
-        summary="Review evidence, assess impact, and track remediation."
+        summary="Assess impact and track remediation."
       />
 
       <div className="flex flex-wrap items-center gap-2">
@@ -423,23 +395,12 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
             <span className="font-mono font-semibold tabular-nums text-foreground">{severityCounts[key] ?? 0}</span>
           </span>
         ))}
-        <span className="ml-auto inline-flex items-center gap-2 rounded-full border border-border bg-muted/20 px-3 py-1 text-xs">
-          <span className="text-muted-foreground">Confirmed</span>
-          <span className="font-mono font-semibold tabular-nums text-emerald-400">{confirmedCount}</span>
-          <span className="text-muted-foreground">of {dashboard.groups.length}</span>
-        </span>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius-panel)] border border-border p-3">
-        <Tabs value={viewMode} onValueChange={(value) => setConsoleState((current) => ({ ...current, viewMode: value as ThreadViewMode }))}>
-          <TabsList>
-            <TabsTrigger value="inbox">All findings</TabsTrigger>
-            <TabsTrigger value="review">Review</TabsTrigger>
-            <TabsTrigger value="board">Board</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <span className="text-sm font-medium">All findings <span className="text-muted-foreground">{queueGroups.length}</span></span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-        {viewMode === "inbox" ? <Select aria-label="Sort findings" value={queueSort} onValueChange={value => setConsoleState(current => ({ ...current, queueSort: value as QueueSortMode }))} options={[{ value: "severity", label: "Sort: Severity" }, { value: "newest", label: "Sort: Newest" }]} /> : null}
+        <Select aria-label="Sort findings" value={queueSort} onValueChange={value => setConsoleState(current => ({ ...current, queueSort: value as QueueSortMode }))} options={[{ value: "severity", label: "Sort: Severity" }, { value: "newest", label: "Sort: Newest" }]} />
         <div className="relative w-full sm:w-60"><Search aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" /><Input aria-label="Search findings" type="search" autoComplete="off" data-1p-ignore data-lpignore="true" value={search} onChange={event => setConsoleState(current => ({ ...current, search: event.target.value }))} placeholder="Search findings" className="pl-9" /></div>            <Button variant="outline" onClick={() => setFiltersOpen(true)}>
               <SlidersHorizontal className="size-4" />
               Filters
@@ -466,42 +427,12 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
       </div> : null}
 
       <div className="min-w-0 space-y-4">
-        {viewMode === "board" ? (
-          <FindingWorkflowBoard
-            groups={queueGroups}
-            selectedFingerprint={selectedFingerprint}
-            pendingFingerprint={workflowMutation.isPending ? workflowMutation.variables?.fingerprint ?? null : null}
-            onSelect={(nextFingerprint) => navigate(`/findings/${nextFingerprint}`)}
-            onMove={(nextFingerprint, workflowStatus) => {
-              if (selectedFingerprint !== nextFingerprint) {
-                navigate(`/findings/${nextFingerprint}`);
-              }
-
-              workflowMutation.mutate({
-                fingerprint: nextFingerprint,
-                workflowStatus,
-                workflowAssignee:
-                  dashboard.groups.find((group) => group.fingerprint === nextFingerprint)?.workflow.assignee ?? "",
-                optimisticStatus: workflowStatus,
-              });
-            }}
-          />
-        ) : viewMode === "review" ? (
-          <ThreadReviewDeck
-            agentReviewGroups={agentReviewGroups}
-            humanReviewGroups={humanReviewGroups}
-            selectedFingerprint={selectedFingerprint}
-            pendingFingerprint={workflowMutation.isPending ? workflowMutation.variables?.fingerprint ?? null : null}
-            onSelect={(nextFingerprint) => navigate(`/findings/${nextFingerprint}`)}
-          />
-        ) : (
-          <ThreadInbox
-            groups={queueGroups}
-            selectedFingerprint={selectedFingerprint}
-            pendingFingerprint={workflowMutation.isPending ? workflowMutation.variables?.fingerprint ?? null : null}
-            onSelect={(nextFingerprint) => navigate(`/findings/${nextFingerprint}`)}
-          />
-        )}
+        <ThreadInbox
+          groups={queueGroups}
+          selectedFingerprint={selectedFingerprint}
+          pendingFingerprint={workflowMutation.isPending ? workflowMutation.variables?.fingerprint ?? null : null}
+          onSelect={(nextFingerprint) => navigate(`/findings/${nextFingerprint}`)}
+        />
       </div>
 
       <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
@@ -570,7 +501,7 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
 
             <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
               <div className="text-sm text-muted-foreground">
-                {visibleGroups.length} of {dashboard.groups.length} shown
+                {queueGroups.length} of {dashboard.groups.length} shown
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" onClick={clearFilters}>
@@ -639,7 +570,7 @@ function FindingFamilyInspector({
       : handoffIntent === "verify"
         ? "Verify in chat"
         : "Investigate in chat";
-  const findingLocation = [data.case?.target, data.latest.engagement, data.latest.category].filter(Boolean).join(" · ");
+  const findingLocation = [data.latest.target, data.latest.engagement, data.case?.target, data.latest.category].filter(Boolean).join(" · ");
 
   const copyHandoff = async () => {
     try {
@@ -667,21 +598,15 @@ function FindingFamilyInspector({
         className="order-2 min-w-0 rounded-[var(--radius-panel)] border border-border bg-muted/10 xl:col-start-2 xl:row-start-1"
         title={
           reviewMode
-            ? data.workflow.reviewGate === "human_review"
-              ? "Your decision"
-              : "Next step"
-            : "Review & priority"
+            ? "Next step"
+            : "Priority"
         }
       >
         <div className="flex flex-wrap items-center gap-2">
           <Tooltip content={data.latest.cvssVector || "Technical severity"}><span tabIndex={0} className="flex items-center gap-2 text-xs text-muted-foreground"><ExpIdBadge id={data.latest.expId} /><CvssBadge score={data.latest.cvssScore} severity={data.latest.severity} /></span></Tooltip>
-          <FindingStatusDot status={data.latest.status} />
-          <PhaseBadge value={data.workflow.phase} />
-          <ReviewBadge value={data.workflow.reviewGate} />
           {data.latest.triageStatus !== "new" ? <StatusBadge value={data.latest.triageStatus} /> : null}
         </div>
 
-        <FindingImpactEditor key={data.latest.id} finding={data.latest} />
         {findingLocation ? <div className="text-sm text-muted-foreground">{findingLocation}</div> : null}
 
         {blockedWorkItem || data.workflow.phase === "blocked" ? (
@@ -719,50 +644,10 @@ function FindingFamilyInspector({
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="occurrences">History ({data.rows.length})</TabsTrigger>
-            <TabsTrigger value="runbook">Steps</TabsTrigger>
           </TabsList>
-
-          <TabsContent value="runbook" className="space-y-5">
-            <div className="space-y-3">
-              {data.workItems.length === 0 ? (
-                <div className="rounded-[var(--radius-panel,16px)] bg-muted/30 px-4 py-8 text-sm text-muted-foreground">
-                  No steps yet.
-                </div>
-              ) : (
-                <ExecutionGraph
-                  items={data.workItems}
-                  activeWorkItemId={activeWorkItem?.id ?? null}
-                  blockedWorkItemId={blockedWorkItem?.id ?? null}
-                />
-              )}
-            </div>
-
-            <div className="space-y-3">
-              {data.artifacts.length === 0 ? (
-                <div className="rounded-[var(--radius-panel,16px)] bg-muted/30 px-4 py-8 text-sm text-muted-foreground">
-                  No files yet.
-                </div>
-              ) : (
-                <div className="grid gap-3">
-                  {data.artifacts.map((artifact) => (
-                    <div key={artifact.id} className="rounded-[var(--radius-panel,16px)] bg-muted/30 px-4 py-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-foreground">{artifact.label}</div>
-                          <div className="mt-1 text-xs leading-5 text-muted-foreground">{artifact.summary}</div>
-                        </div>
-                        <Badge variant="outline">{formatArtifactKindLabel(artifact.kind)}</Badge>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </TabsContent>
 
           <TabsContent value="overview" className="space-y-6">
             <section className="space-y-2"><h2 className="text-sm font-medium">Summary</h2><p className="whitespace-pre-wrap text-sm leading-7 text-muted-foreground">{data.latest.description}</p></section>
-            <AssessmentAccessMilestones scanId={data.latest.scanId} />
             {([
               ["Evidence", data.latest.evidenceRequest],
               ["Response", data.latest.evidenceResponse],
@@ -773,6 +658,10 @@ function FindingFamilyInspector({
           </TabsContent>
 
           <TabsContent value="occurrences">
+            <div className="mb-4 space-y-1 rounded-[var(--radius-panel)] border border-border bg-muted/20 px-4 py-3 text-sm">
+              <div><span className="text-muted-foreground">Chat: </span>{data.latest.chatTitle || data.latest.chatId || "unknown"}</div>
+              {data.latest.auditPath ? <div className="break-all font-mono text-xs text-muted-foreground">{data.latest.auditPath}</div> : null}
+            </div>
             <Card className="overflow-hidden">
               <CardContent>
                 <Table>
@@ -948,16 +837,13 @@ function ThreadListItem({
       >
         <div className="min-w-0 space-y-2">
           <div className="flex items-start gap-2"><ExpIdBadge id={group.latest.expId} /><span className="text-sm font-medium leading-6 text-foreground">{group.latest.title}</span><ArrowUpRight aria-hidden="true" className="mt-1 size-3.5 shrink-0 text-muted-foreground opacity-0 group-hover/finding:opacity-100" /></div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">{group.latest.engagement ? <span className="rounded-full bg-muted/40 px-2 py-0.5">{group.latest.engagement}</span> : null}<span>{group.count} occurrence{group.count === 1 ? "" : "s"}</span></div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">{(group.latest.target || group.latest.engagement) ? <span className="rounded-full bg-muted/40 px-2 py-0.5">{group.latest.target || group.latest.engagement}</span> : null}<span>{group.count} occurrence{group.count === 1 ? "" : "s"}</span></div>
           {helperText ? <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">{helperText}</p> : null}
         </div>
         <div className="flex flex-wrap items-start gap-2 sm:flex-col sm:justify-center">
           <CvssBadge score={group.latest.cvssScore} severity={group.latest.severity} />
-          <FindingStatusDot status={group.latest.status} />
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end sm:justify-center">
-          <PhaseBadge value={group.workflow.phase} />
-          {mode === "inbox" && group.workflow.reviewGate !== "none" ? <ReviewBadge value={group.workflow.reviewGate} /> : null}
           {group.latest.triageStatus !== "new" ? <StatusBadge value={group.latest.triageStatus} /> : null}
           <span className="text-xs tabular-nums text-muted-foreground">{saving ? "Saving…" : formatTime(group.workflow.updatedAt ?? group.latest.timestamp)}</span>
         </div>

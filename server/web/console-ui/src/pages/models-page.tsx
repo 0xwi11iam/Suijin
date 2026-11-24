@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ProviderGlyph } from "@/components/provider-glyph";
 import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -334,7 +335,7 @@ export function ModelsPage() {
           : state === "untested" ? "text-amber-500"
           : "text-muted-foreground";
         return <div key={pr.key} className="flex items-center justify-between gap-2 text-xs">
-          <span className="flex min-w-0 items-center gap-2">{iconUrl(pr) && <img src={iconUrl(pr)} alt="" className="size-4 shrink-0 rounded" loading="lazy" onError={e => { (e.target as HTMLImageElement).style.visibility = "hidden"; }} />}<span className="truncate">{pr.label}</span></span>
+          <span className="flex min-w-0 items-center gap-2"><ProviderGlyph src={iconUrl(pr)} label={pr.label} /><span className="truncate">{pr.label}</span></span>
           <span className={color} title={h?.error ?? undefined}>{badge}</span>
         </div>;
       })}
@@ -346,10 +347,7 @@ export function ModelsPage() {
 function ProviderRow({ p, selected, onClick }: { p: ProviderSpec; selected: boolean; onClick: () => void }) {
   const src = iconUrl(p);
   return <button className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted" data-ui-selected={selected || undefined} onClick={onClick}>
-    {src
-      ? <img src={src} alt="" className="size-4 rounded" loading="lazy" onError={e => { const t = e.target as HTMLImageElement; t.style.display = "none"; t.nextElementSibling?.classList.remove("hidden"); }} />
-      : null}
-    <span className={src ? "hidden size-4 rounded bg-muted text-center text-[9px] leading-4" : "size-4 rounded bg-muted text-center text-[9px] leading-4"}>{p.label.charAt(0)}</span>
+    <ProviderGlyph src={src} label={p.label} />
     <span className="min-w-0 flex-1 truncate">{p.label}</span>
     {p.configured && <span className="text-[10px] text-amber-500">key saved</span>}
   </button>;

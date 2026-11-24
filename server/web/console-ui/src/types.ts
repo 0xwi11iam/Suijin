@@ -78,6 +78,10 @@ export type FindingRecord = {
   cvssVector?: string | null;
   expId?: string | null;
   engagement?: string | null;
+  target?: string | null;
+  chatId?: string | null;
+  chatTitle?: string | null;
+  auditPath?: string | null;
   evidenceRequest: string;
   evidenceResponse: string;
   evidenceAnalysis?: string | null;

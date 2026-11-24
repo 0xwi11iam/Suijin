@@ -292,6 +292,40 @@ def _clean_finding_title(raw: str) -> tuple[str, str, str, float | None]:
     return t.strip() or str(raw or "").strip(), exp_id, sev_hint, cvss
 
 
+_CATALOG_INDEX_CACHE: dict = {"at": 0.0, "index": {}}
+
+
+def _catalog_index() -> dict:
+    """EXP id -> full catalog entries (title/target/class).
+
+    Legacy findings stored a 150-char truncated title and no target. The
+    exploit catalog still has the full title and target; join on EXP id +
+    the stored prefix so the Findings page can show both.
+    """
+    now = time.time()
+    if now - float(_CATALOG_INDEX_CACHE.get("at") or 0) < 60:
+        return _CATALOG_INDEX_CACHE.get("index") or {}
+    index: dict[str, list[dict]] = {}
+    root = _ws() / "config" / "artifacts" / "exploits"
+    if root.is_dir():
+        for path in root.glob("*/catalog.json"):
+            with contextlib.suppress(Exception):
+                data = json.loads(path.read_text())
+                for eid, entry in (data.get("entries") or {}).items():
+                    if not isinstance(entry, dict):
+                        continue
+                    title = str(entry.get("title") or "").strip()
+                    if not title:
+                        continue
+                    index.setdefault(str(eid).upper(), []).append({
+                        "title": title,
+                        "target": str(entry.get("target") or "").strip(),
+                        "class": str(entry.get("class") or "").strip(),
+                    })
+    _CATALOG_INDEX_CACHE.update(at=now, index=index)
+    return index
+
+
 def _findings(session: str | None = None) -> list[dict]:
     conn = _db()
     if not conn:
@@ -303,10 +337,19 @@ def _findings(session: str | None = None) -> list[dict]:
         for r in conn.execute(q).fetchall():
             with contextlib.suppress(Exception):
                 title, exp_id, sev_hint, cvss = _clean_finding_title(r[2] or "")
+                target = ""
+                if exp_id:
+                    prefix = title[:48].casefold()
+                    for candidate in _catalog_index().get(exp_id.upper(), []):
+                        full = candidate["title"]
+                        if full.casefold().startswith(prefix) or prefix.startswith(full.casefold()[:48]):
+                            title = full
+                            target = candidate["target"]
+                            break
                 out.append({
                     "id": str(r[5] or ""), "severity": r[0] or sev_hint or "info", "status": r[1] or "new",
                     "title": title[:1000], "agent": r[3] or "",
-                    "engagement": r[6] or "",
+                    "engagement": r[6] or "", "target": target,
                     "expId": exp_id, "cvssScore": cvss,
                     # findings.created_at is SECONDS; the frontend renders ms
                     "ts": float(r[4] or time.time()) * 1000.0,
@@ -689,12 +732,16 @@ def _finding_group(f: dict) -> dict:
     triage = _ledger("triage").get(fp) or {}
     impact = _ledger("impact").get(f["id"])
     workflow_ledger = _ledger("workflow").get(fp) or {}
+    engagement = f.get("engagement") or ""
+    chat_title = _engagement_record(engagement).get("name") if engagement else ""
+    audit_path = str(_eng_dir(engagement) / "events.jsonl") if engagement else ""
     rec = {
         "id": f["id"], "scanId": f["agent"], "title": f["title"],
         "description": f["title"], "severity": f["severity"], "category": "finding",
         "status": f["status"], "fingerprint": fp,
         "expId": f.get("expId") or "", "cvssScore": f.get("cvssScore"),
-        "engagement": f.get("engagement") or "",
+        "engagement": engagement, "target": f.get("target") or "",
+        "chatId": engagement, "chatTitle": chat_title, "auditPath": audit_path,
         "triageStatus": triage.get("triageStatus") or "new",
         "triageNote": triage.get("triageNote") or "",
         "impactAssessment": impact,
