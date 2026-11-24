@@ -1158,6 +1158,10 @@ def sessions_create(body: dict = Body(default={})):
             "target": explicit_target or _target_from_text(title),
             "createdAt": _now_iso(), "revision": 1,
             "structured": structured}))
+        with contextlib.suppress(Exception):
+            from suijin.server.platform.lib.engagement_index import rebuild as _rebuild_index
+
+            _rebuild_index()
     else:
         live = [a for a in _live_agents(name) if not a["dead"]]
         s = _desk_session(name)
@@ -1466,6 +1470,10 @@ def session_close(session_id: str):
         _rings.pop(session_id, None)
         _seqs.pop(session_id, None)
     _deleted_sessions.add(session_id)
+    with contextlib.suppress(Exception):
+        from suijin.server.platform.lib.engagement_index import rebuild as _rebuild_index
+
+        _rebuild_index()
     return {"ok": True}
 
 
