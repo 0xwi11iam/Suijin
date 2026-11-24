@@ -108,10 +108,10 @@ def guard(url: str, method: str = "GET") -> str | None:
             if not allows:
                 return f"BLOCKED: {method} blocked by default — add the path to guardrails.mutation_allow_paths if intended"
 
-        # IDENTITY HEADERS (per-program brief requirements): Immutable
-        # requires X-Bugcrowd-Username; Tripadvisor requires "bugcrowd"
-        # in the User-Agent. Forgetting these = no payout even for valid
-        # findings, so they ride on every request automatically.
+        # IDENTITY HEADERS (per-program brief requirements): some programs
+        # require a researcher identity header or marker in the User-Agent.
+        # Forgetting these = no payout even for valid findings, so they ride
+        # on every request automatically.
         # (Configured in guardrails.identity_headers as {suffix: {header: value}})
         with contextlib.suppress(Exception):
             identities = (cfg.get("guardrails") or {}).get("identity_headers") or {}
