@@ -156,3 +156,5 @@ private-vault/
 
 # local-only mission log (engagement names — never committed)
 ACTIVE_TASK.md
+wf/
+$TMPDIR/
