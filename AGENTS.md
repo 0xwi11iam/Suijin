@@ -105,7 +105,7 @@ default assistant behavior:
   screenshots, evidence, artifacts, or target names in comments/tests/docs.
 - All runtime state lives under `~/.suijin`:
   `config/`, `browser/`, `intel/`, `engagements/<slug>/`, `artifacts/`,
-  `logs/`, `swarm/`, `cache/`, `tmp/`, `backups/`.
+  `logs/`, `swarm/`, `mesh/`, `cache/`, `tmp/`, `backups/`.
 - One engagement folder per chat: `engagement.json`, `events.jsonl`, `home/`,
   plus generated `exploits/`, `.notes/`, `reports/`, `state/`, `toollogs/`.
   Global `artifacts/` is only the pre-engagement fallback.

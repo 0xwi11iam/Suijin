@@ -42,27 +42,15 @@ def mesh_dir() -> Path:
     """Runtime dir (honours a monkeypatched module attr for tests).
 
     v7.2 CONTAINMENT: an explicit SUIJIN_WORKSPACE is SELF-CONTAINED —
-    the mesh lives INSIDE it (<ws>/mesh). Prod (no override): platform
-    Application Support directory — NOT ~/.suijin (the operator's
-    2026-10-19 ruling: ~/.suijin holds only config, engagements, and
-    the dev install).
+    the mesh lives INSIDE it (<ws>/mesh). Prod: the runtime root's mesh
+    (`~/.suijin/mesh`) so no Suijin state lives outside the two roots.
     """
     v = globals().get("MESH_DIR_OVERRIDE")
     if v is not None:
         return Path(v)
-    from suijin.modules.platform.lib.workspace import _EXPLICIT_WS, WORKSPACE_DIR
+    from suijin.modules.platform.lib.workspace import runtime_root
 
-    if _EXPLICIT_WS:
-        return WORKSPACE_DIR / "mesh"
-    import sys
-
-    if sys.platform == "darwin":
-        d = Path.home() / "Library" / "Application Support" / "suijin" / "mesh"
-    else:
-        import os
-
-        xdg = os.environ.get("XDG_RUNTIME_DIR") or "/tmp"
-        d = Path(xdg) / "suijin" / "mesh"
+    d = runtime_root() / "mesh"
     d.mkdir(parents=True, exist_ok=True)
     return d
 

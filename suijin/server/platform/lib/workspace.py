@@ -169,20 +169,9 @@ def engagements_root() -> Path:
 
 
 def caches_dir() -> Path:
-    """Machine-level caches (models.dev.json, ms-playwright) — platform
-    cache directory (~/Library/Caches/suijin on macOS, XDG_CACHE_HOME
-    on Linux), never inside ~/.suijin (the operator's 2026-10-19
-    ruling: keep ~/.suijin clean — only config, engagements, and the
-    dev install)."""
-    import sys
-
-    if sys.platform == "darwin":
-        d = Path.home() / "Library" / "Caches" / "suijin"
-    else:
-        import os
-
-        xdg = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
-        d = Path(xdg) / "suijin"
+    """Machine-level caches (models catalog, downloads) under the runtime
+    root — `~/.suijin/cache`. No platform-cache spill outside the two roots."""
+    d = runtime_root() / "cache"
     d.mkdir(parents=True, exist_ok=True)
     return d
 

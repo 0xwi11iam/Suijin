@@ -20,6 +20,7 @@ Suijin state lives in exactly two places:
   artifacts/         global fallback only (pre-engagement tools)
   logs/              runtime logs
   swarm/swarm.db     agents, intents, findings
+  mesh/              live agent bus state
   cache/  tmp/
   backups/           config and migration backups
 ```
