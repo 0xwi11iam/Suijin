@@ -492,50 +492,6 @@ Description: {short}
 Do not invent target behavior."""
 
 
-def _fallback_explain(rec: dict, catalog: dict, evidence: list[str]) -> str:
-    from suijin.server.tools.lib.submission_report import defaults
-
-    meta = defaults(str(catalog.get("class") or ""), str(rec.get("title") or ""), str(rec.get("target") or ""))
-    description = (catalog.get("description") or rec.get("description") or rec.get("title") or "").strip()
-    severity = str(rec.get("severity") or "unknown").lower()
-    pay = {
-        "critical": "Likely payable at the top of the program's range if the impact is proven end-to-end.",
-        "high": "Usually payable at a high tier if the preconditions and impact are clear.",
-        "medium": "Payable on many programs, but triagers will weigh preconditions and duplicate risk.",
-        "low": "Usually low or informational; payability depends on a concrete abuse path.",
-    }.get(severity, "Payability depends on the concrete impact and program rules.")
-    acceptance = "Medium to High" if evidence else "Low to Medium"
-    missing = (
-        "No verifier receipt is attached; add the exact request/response and a run log."
-        if not evidence else
-        "The receipt is present; add a victim-context or browser screenshot if the program asks for one."
-    )
-    return f"""## Plain explanation
-
-{description}
-
-## Business impact
-
-{meta['impact']}
-
-## Payability
-
-{pay}
-
-## Chance of acceptance
-
-{acceptance}. {missing}
-
-## Missing information
-
-- Confirm the exact affected asset and endpoint in the submission form.
-- Attach the verifier receipt and any screenshot or recording the program allows.
-- State the tested account/role and the preconditions for the issue.
-
-_This review was generated deterministically from the finding because the local model returned no text._
-"""
-
-
 def _write_explain_report(finding_id: str) -> dict:
     from suijin.modules.platform.lib.config_loader import load_config
     from suijin.modules.providers.lib import generate
@@ -543,37 +499,48 @@ def _write_explain_report(finding_id: str) -> dict:
     rec, catalog, evidence = _explain_context(finding_id)
     prompt = _explain_prompt(rec, catalog, evidence)
     cfg = load_config()
+    # M1 = the main leader model (`model_1`); no alternate provider, no local
+    # or heuristic model in this path.
+    leader = str(cfg.get("model_1") or cfg.get("final_model_id") or "").strip()
+    provider = str(cfg.get("provider") or "").strip().lower()
+    if ":" in leader:
+        head, rest = leader.split(":", 1)
+        try:
+            from suijin.server.providers.lib.registry import PROVIDER_REGISTRY
 
-    def _one(model: str) -> str:
-        local = dict(cfg)
-        if model:
-            local["numes_model"] = model
-        holder: dict = {}
+            if head in PROVIDER_REGISTRY:
+                provider, leader = head, rest
+        except Exception:  # noqa: BLE001
+            pass
+    if leader:
+        cfg["provider"] = provider or cfg.get("provider")
+        cfg[f"{provider}_model"] = leader
+        cfg["model_1"] = leader
 
-        def run():
-            holder["out"] = generate(
-                [
-                    {"role": "system", "content": "You are a precise security reviewer. Return only the requested Markdown."},
-                    {"role": "user", "content": prompt},
-                ],
-                local,
-                max_tokens=900,
-                retries=1,
-            )
+    holder: dict = {}
 
-        import threading
+    def run():
+        holder["out"] = generate(
+            [
+                {"role": "system", "content": "You are a precise security reviewer. Return only the requested Markdown."},
+                {"role": "user", "content": prompt},
+            ],
+            cfg,
+            max_tokens=2000,
+            retries=2,
+        )
 
-        thread = threading.Thread(target=run, daemon=True)
-        thread.start()
-        thread.join(15)
-        if thread.is_alive():
-            return "Error: model timed out after 15 seconds"
-        return str(holder.get("out") or "")
+    import threading
 
-    first = str(cfg.get("numes_model") or "")
-    text = _one(first)
-    if not text.strip() or text.strip() == "(empty response)" or text.startswith("Error:"):
-        text = _fallback_explain(rec, catalog, evidence)
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    thread.join(120)
+    if thread.is_alive():
+        raise RuntimeError("main leader model timed out after 120 seconds")
+    text = str(holder.get("out") or "").strip()
+    if not text or text == "(empty response)" or text.startswith("Error:"):
+        raise RuntimeError("main leader model returned no text" + (f": {text[:300]}" if text else ""))
+
     title = str(rec.get("title") or "finding")
     markdown = f"# Explain: {title}\n\n**Asset:** {rec.get('target') or 'unknown'}\n\n{text}\n"
     DESKTOP_DIR.mkdir(parents=True, exist_ok=True)
@@ -602,6 +569,8 @@ def finding_explain(finding_id: str):
         return _write_explain_report(finding_id)
     except KeyError:
         return JSONResponse({"error": "finding not found"}, status_code=404)
+    except Exception as exc:  # noqa: BLE001 — surface the leader model's real error
+        return JSONResponse({"error": str(exc)}, status_code=502)
 
 
 def _findings(session: str | None = None) -> list[dict]:

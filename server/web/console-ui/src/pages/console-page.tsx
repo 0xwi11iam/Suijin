@@ -618,21 +618,21 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
 
 
         {snapshot?.focusedFinding && <Disclosure key={snapshot.focusedFinding.id} className="shrink-0 bg-muted/10 px-4 py-3 text-xs" defaultOpen={search.get("intent") === "impact"} summary={<>{snapshot.focusedFinding.title} · {snapshot.focusedFinding.severity}</>} triggerClassName="cursor-pointer font-medium"><div className="max-h-64 space-y-3 overflow-auto pt-3"><p className="whitespace-pre-wrap">{snapshot.focusedFinding.description}</p><div><div className="font-medium">Impact</div>{snapshot.focusedFinding.impactAssessment ? <pre className="mt-2 whitespace-pre-wrap break-words">{JSON.stringify(snapshot.focusedFinding.impactAssessment, null, 2)}</pre> : <p className="mt-1 text-muted-foreground">Not assessed yet.</p>}</div><Button size="sm" variant="outline" asChild><Link to={`/fix${controlsQuery}&finding=${encodeURIComponent(snapshot.focusedFinding.id)}`}>Prepare a fix</Link></Button></div></Disclosure>}
-        {recoveringSession || workspace.loading ? <ConversationSkeleton /> : snapshot ? workerId && !worker ? <div className="grid flex-1 place-items-center p-8 text-center"><div><h2 className="text-base font-medium">This sub-agent has ended</h2><Button className="mt-4" variant="outline" onClick={() => navigate(`/chats/${snapshot.session.id}`)}>Back</Button></div></div> : <Conversation detailsControl={<ChatDetailsPopover open={inspectOpen} onOpenChange={setInspectOpen} contextPercent={snapshot.contextInputTokens !== undefined && (snapshot.contextWindowTokens ?? snapshot.runtime?.contextWindowTokens) ? Math.round(snapshot.contextInputTokens / (snapshot.contextWindowTokens ?? snapshot.runtime?.contextWindowTokens)! * 100) : undefined}>{inspector}</ChatDetailsPopover>} onSubmitRoot={() => void submit(true)} onStopRoot={() => void workspace.perform(() => controlConsoleSession(snapshot.session.id, "pause"))} onDrainAgents={() => setConfirm({ kind: "drain", id: snapshot.session.id, title: snapshot.title })} onOpenDetails={() => { closeAgents(); setBrowserOpen(false); setInspectOpen(true); }} agentsOpen={agentsOpen} onCloseAgents={closeAgents} onSelectWorker={selectWorker} sendBehavior={mode} workspace={workspace} worker={worker} onSubmit={() => void submit()} onStop={() => void workspace.perform(() => worker ? stopConsoleWorker(snapshot.session.id, worker.id) : controlConsoleSession(snapshot.session.id, "pause"))} onResolve={(id, response) => void workspace.perform(() => resolveConsoleDecision(snapshot.session.id, id, response))} resumeCap={() => setCapOpen(true)} /> : <div className="console-enter grid flex-1 place-items-center overflow-auto p-6"><div className="max-w-2xl text-center">
-              <BrandMark className="mx-auto mb-6" />
-              <h1 className="font-heading text-2xl font-medium">{HERO_PROMPTS[heroPromptIndex]}</h1>
-              <form className="mt-6 w-full rounded-[var(--radius-composer,22px)] border border-border bg-background p-3 shadow-sm focus-within:outline-2 focus-within:outline-ring" onSubmit={(event) => { event.preventDefault(); void startFromLanding(landingMsg); landingMsg && setLandingMsg(""); }}>
-                <input autoFocus aria-label="What should we hack today?" placeholder="What should we hack today?" value={landingMsg} maxLength={400} disabled={workspace.busy || readOnlyTeam} onChange={(event) => setLandingMsg(event.target.value)} className="w-full bg-transparent px-1 text-sm outline-none placeholder:text-muted-foreground" />
-                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/50 pt-3 text-xs text-muted-foreground">
+        {recoveringSession || workspace.loading ? <ConversationSkeleton /> : snapshot ? workerId && !worker ? <div className="grid flex-1 place-items-center p-8 text-center"><div><h2 className="text-base font-medium">This sub-agent has ended</h2><Button className="mt-4" variant="outline" onClick={() => navigate(`/chats/${snapshot.session.id}`)}>Back</Button></div></div> : <Conversation detailsControl={<ChatDetailsPopover open={inspectOpen} onOpenChange={setInspectOpen} contextPercent={snapshot.contextInputTokens !== undefined && (snapshot.contextWindowTokens ?? snapshot.runtime?.contextWindowTokens) ? Math.round(snapshot.contextInputTokens / (snapshot.contextWindowTokens ?? snapshot.runtime?.contextWindowTokens)! * 100) : undefined}>{inspector}</ChatDetailsPopover>} onSubmitRoot={() => void submit(true)} onStopRoot={() => void workspace.perform(() => controlConsoleSession(snapshot.session.id, "pause"))} onDrainAgents={() => setConfirm({ kind: "drain", id: snapshot.session.id, title: snapshot.title })} onOpenDetails={() => { closeAgents(); setBrowserOpen(false); setInspectOpen(true); }} agentsOpen={agentsOpen} onCloseAgents={closeAgents} onSelectWorker={selectWorker} sendBehavior={mode} workspace={workspace} worker={worker} onSubmit={() => void submit()} onStop={() => void workspace.perform(() => worker ? stopConsoleWorker(snapshot.session.id, worker.id) : controlConsoleSession(snapshot.session.id, "pause"))} onResolve={(id, response) => void workspace.perform(() => resolveConsoleDecision(snapshot.session.id, id, response))} resumeCap={() => setCapOpen(true)} /> : <div className="console-enter grid flex-1 place-items-center overflow-auto p-6"><div className="max-w-5xl text-center">
+              <BrandMark className="mx-auto mb-9" />
+              <h1 className="font-heading text-3xl font-medium sm:text-4xl">{HERO_PROMPTS[heroPromptIndex]}</h1>
+              <form className="mt-8 w-full rounded-[28px] border border-border bg-background p-5 shadow-[0_12px_48px_rgba(0,0,0,0.22)] focus-within:outline-2 focus-within:outline-ring sm:p-6" onSubmit={(event) => { event.preventDefault(); void startFromLanding(landingMsg); landingMsg && setLandingMsg(""); }}>
+                <input autoFocus aria-label="What should we hack today?" placeholder="What should we hack today?" value={landingMsg} maxLength={400} disabled={workspace.busy || readOnlyTeam} onChange={(event) => setLandingMsg(event.target.value)} className="w-full bg-transparent px-2 py-2 text-lg outline-none placeholder:text-muted-foreground sm:text-xl" />
+                <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-border/60 pt-5 text-sm text-muted-foreground">
                   <label className="flex items-center gap-1.5">Permissions
-                    <select aria-label="Permissions" value={heroPermissions} disabled={workspace.busy} onChange={event => setHeroPermissions(event.target.value as typeof heroPermissions)} className="rounded-[var(--radius-control,8px)] border border-border bg-background px-2 py-1 text-xs text-foreground">
+                    <select aria-label="Permissions" value={heroPermissions} disabled={workspace.busy} onChange={event => setHeroPermissions(event.target.value as typeof heroPermissions)} className="rounded-[var(--radius-control,10px)] border border-border bg-background px-3 py-2 text-sm text-foreground">
                       <option value="recon">Recon</option>
                       <option value="exploitation">Exploitation</option>
                       <option value="maximum">Maximum</option>
                     </select>
                   </label>
                   <label className="flex items-center gap-1.5">Mode
-                    <select aria-label="Mode" value={heroMode} disabled={workspace.busy} onChange={event => setHeroMode(event.target.value as typeof heroMode)} className="rounded-[var(--radius-control,8px)] border border-border bg-background px-2 py-1 text-xs text-foreground">
+                    <select aria-label="Mode" value={heroMode} disabled={workspace.busy} onChange={event => setHeroMode(event.target.value as typeof heroMode)} className="rounded-[var(--radius-control,10px)] border border-border bg-background px-3 py-2 text-sm text-foreground">
                       <option value="bbp">BBP</option>
                       <option value="vdp">VDP</option>
                       <option value="ctf">CTF</option>
@@ -640,27 +640,27 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
                     </select>
                   </label>
                   <input ref={heroFileRef} type="file" multiple className="hidden" accept=".md,.txt,.json,.yaml,.yml,.xml,.csv,.html,.conf,.ini,.log,.scope,text/*" onChange={event => setHeroFiles(Array.from(event.target.files ?? []))} />
-                  <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => heroFileRef.current?.click()} disabled={workspace.busy || readOnlyTeam}>+ Files{heroFiles.length ? ` (${heroFiles.length})` : ""}</Button>
+                  <Button type="button" variant="ghost" size="sm" className="h-9 px-3 text-sm" onClick={() => heroFileRef.current?.click()} disabled={workspace.busy || readOnlyTeam}>+ Files{heroFiles.length ? ` (${heroFiles.length})` : ""}</Button>
                   {heroMode === "pentest" && !heroFiles.length ? <span className="text-amber-500">Upload a text scope document to start a pentest.</span> : null}
                 </div>
-                <div className="mt-3 flex items-center justify-between">
+                <div className="mt-5 flex items-center justify-between">
                   <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
                     {heroRuntime?.runtime?.model && <span className="flex shrink-0 items-center gap-1.5">
-                      <ProviderGlyph src={heroProvider?.icon} label={heroProvider?.label || String(heroRuntime?.runtime?.providerId || "Provider")} className="size-3.5" />
+                      <ProviderGlyph label={heroProvider?.label || String(heroRuntime?.runtime?.providerId || "Provider")} className="size-4 text-[9px]" />
                       <span className="font-medium text-foreground">{heroRuntime.runtime.model}</span>
                       {heroRuntime.effort && heroRuntime.effort !== "off" && <span>· {heroRuntime.effort}</span>}
                     </span>}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setRailOpen(true)}>History</Button>
-                    <Button type="submit" size="sm" disabled={workspace.busy || readOnlyTeam || (heroMode === "pentest" && !heroFiles.length)}>Hack it</Button>
+                    <Button type="button" variant="ghost" size="lg" onClick={() => setRailOpen(true)}>History</Button>
+                    <Button type="submit" size="lg" disabled={workspace.busy || readOnlyTeam || (heroMode === "pentest" && !heroFiles.length)}>Hack it</Button>
                   </div>
                 </div>
               </form>
-              <div className="mt-6 flex flex-col items-start gap-2 text-left">
-                <button type="button" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" onClick={() => { setLandingMsg("Map the attack surface of the target"); void startFromLanding("Map the attack surface of the target"); }}><ShieldCheck className="size-4" />Map the attack surface</button>
-                <button type="button" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" onClick={() => { setLandingMsg("Hunt for exploitable paths and auth bypasses"); void startFromLanding("Hunt for exploitable paths and auth bypasses"); }}><Search className="size-4" />Hunt for exploitable paths</button>
-                <button type="button" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" onClick={() => { setLandingMsg("Plan a structured engagement with lanes and guardrails"); void startFromLanding("Plan a structured engagement with lanes and guardrails"); }}><Workflow className="size-4" />Plan the engagement</button>
+              <div className="mt-10 flex flex-col items-start gap-3 text-left">
+                <button type="button" className="flex items-center gap-2.5 text-base text-muted-foreground hover:text-foreground" onClick={() => { setLandingMsg("Map the attack surface of the target"); void startFromLanding("Map the attack surface of the target"); }}><ShieldCheck className="size-4" />Map the attack surface</button>
+                <button type="button" className="flex items-center gap-2.5 text-base text-muted-foreground hover:text-foreground" onClick={() => { setLandingMsg("Hunt for exploitable paths and auth bypasses"); void startFromLanding("Hunt for exploitable paths and auth bypasses"); }}><Search className="size-4" />Hunt for exploitable paths</button>
+                <button type="button" className="flex items-center gap-2.5 text-base text-muted-foreground hover:text-foreground" onClick={() => { setLandingMsg("Plan a structured engagement with lanes and guardrails"); void startFromLanding("Plan a structured engagement with lanes and guardrails"); }}><Workflow className="size-4" />Plan the engagement</button>
               </div>
             </div></div>}
       </section>;

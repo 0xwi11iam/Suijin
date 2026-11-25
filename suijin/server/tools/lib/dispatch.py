@@ -1676,8 +1676,8 @@ Tool names and their arguments are listed in ALL AVAILABLE TOOLS. Copy arg names
   cvss: 7.5
   description: |
     GET /api/v2/users/1 without auth returns the admin record.
-    The endpoint trusts the caller and skips the session check.
-    This exposes the admin profile and its role to any visitor.
+    The endpoint trusts the caller and skips the session check, so any visitor reads the admin profile.
+    Impact: admin data exposure and admin-role actions reachable by an unauthenticated attacker.
   commands:
     - 'curl -si https://host/api/v2/users/1'
   Expected_result: '"role":"admin"'

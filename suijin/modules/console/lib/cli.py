@@ -2199,7 +2199,7 @@ def _run_exploit_demo() -> int:
             "class: idor\n"
             f"target: http://127.0.0.1:{port}\n"
             "cvss: 7.5\n"
-            "description: GET /api/v2/users/1 without auth returns the admin record.\n"
+            "description: |\n  GET /api/v2/users/1 without auth returns the admin record. The endpoint trusts the caller and skips the session check.\n  A victim opening the crafted link executes script in the authenticated origin, and the same handler forwards OAuth codes.\n  Impact: admin profile exposure and OAuth code theft for any user who clicks the link.\n"
             "commands:\n"
             f"  - 'curl -s http://127.0.0.1:{port}/api/v2/users/1'\n"
             "Expected_result: '\"role\":\"admin\"'\n",

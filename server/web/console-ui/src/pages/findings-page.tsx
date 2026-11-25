@@ -952,7 +952,7 @@ function ThreadListItem({
       >
         <div className="min-w-0 space-y-2">
           <div className="flex items-start gap-2"><ExpIdBadge id={group.latest.expId} /><span className="text-sm font-medium leading-6 text-foreground">{group.latest.title}</span><ArrowUpRight aria-hidden="true" className="mt-1 size-3.5 shrink-0 text-muted-foreground opacity-0 group-hover/finding:opacity-100" /></div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">{(group.latest.target || group.latest.engagement) ? <span className="rounded-full bg-muted/40 px-2 py-0.5">{group.latest.target || group.latest.engagement}</span> : null}<span>{group.count} occurrence{group.count === 1 ? "" : "s"}</span></div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">{(group.latest.target || group.latest.engagement) ? <span className="rounded-full bg-muted/40 px-2 py-0.5">{group.latest.target || group.latest.engagement}</span> : null}</div>
           {helperText ? <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">{helperText}</p> : null}
         </div>
         <div className="flex flex-wrap items-start gap-2 sm:flex-col sm:justify-center">

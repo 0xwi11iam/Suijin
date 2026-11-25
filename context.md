@@ -727,7 +727,8 @@ mission tells the agent its permissions/mode and to read `inbox/`. Pentest is
 gated on an uploaded text document in both the UI and the API. Findings carry
 the full multi-paragraph description from the catalog/`findings_v2`, plus
 Impact and Remediation sections in the detail view. The finding page has an
-**Explain** popover: a copy-ready review prompt and a local-model analysis
-that writes a Markdown report to `~/Desktop` (deterministic fallback if the
-free model returns nothing). The catalog YAML accepts a `description: |`
+**Explain** popover: a copy-ready review prompt and an analysis by the main
+leader model (`model_1`) that writes a Markdown report to `~/Desktop`. If the
+leader returns no text, the UI surfaces the real provider error; there is no
+alternate or heuristic model in that path. The catalog YAML accepts a `description: |`
 block and the prompt requires 2-3 paragraphs: what/where, root cause, impact.
