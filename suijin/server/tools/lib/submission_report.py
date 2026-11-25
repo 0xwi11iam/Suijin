@@ -251,7 +251,10 @@ def _body(rec: dict, catalog: dict | None, metadata: dict) -> str:
     endpoint = _endpoint(target, rec.get("title") or "", rec.get("description") or "")
     if endpoint == target or endpoint == "affected asset":
         endpoint = _command_endpoint(catalog) or endpoint
-    description = _redact((catalog or {}).get("description") or rec.get("description") or rec.get("title") or "")
+    description = _redact(rec.get("description") or (catalog or {}).get("description") or rec.get("title") or "")
+    # Strip Suijin-internal references from the submitted text.
+    description = re.sub(r"\s*\((?:exploit\.yaml|run-\d+\.log|catalog\.json)[^)]*\)", "", description)
+    description = re.sub(r"\bEXP-\d+\b", "the attached POC", description, flags=re.I)
     steps = "\n".join(f"{i}. {step}" for i, step in enumerate(_steps(rec, catalog), 1))
     raw = _raw(rec, catalog)
     evidence = "\n".join(f"- `{name}`" for name in _evidence(rec, catalog))

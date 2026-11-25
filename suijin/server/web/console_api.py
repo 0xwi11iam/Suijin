@@ -417,7 +417,7 @@ def _write_submission_report(finding_id: str, platform: str) -> dict:
     target = rec.get("target") or (catalog or {}).get("target") or ""
     report_rec = {
         "title": rec.get("title") or (catalog or {}).get("title") or "Security finding",
-        "description": (catalog or {}).get("description") or rec.get("description") or rec.get("title") or "",
+        "description": _finding_description(rec) or (catalog or {}).get("description") or rec.get("title") or "",
         "target": target,
         "severity": rec.get("severity") or "",
         "cvss": rec.get("cvssScore"),
