@@ -114,3 +114,5 @@ default assistant behavior:
   `engagements/index.json` with `python scripts/rebuild_engagement_index.py`.
 - No Suijin state outside `~/suijin` and `~/.suijin`: no `~/0`, `~/.0`,
   `~/suijin_agent`, Desktop screenshots, stale launch agents, or temp copies.
+  Operator-requested submission reports are the one deliberate exception: the
+  finding export writes them to `~/Desktop` as deliverables, not runtime state.
