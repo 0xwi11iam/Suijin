@@ -128,6 +128,10 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
   const justCreated = useRef<string | null>(null); // sessions we spawned this load — heartbeat lag ≠ deleted
   const [recoveringSession, setRecoveringSession] = useState(false);
   const [landingMsg, setLandingMsg] = useState("");
+  const [heroPermissions, setHeroPermissions] = usePersistentState<"recon" | "exploitation" | "maximum">("hero-permissions", "exploitation");
+  const [heroMode, setHeroMode] = usePersistentState<"bbp" | "vdp" | "ctf" | "pentest">("hero-mode", "vdp");
+  const [heroFiles, setHeroFiles] = useState<File[]>([]);
+  const heroFileRef = useRef<HTMLInputElement>(null);
   const [heroPromptIndex] = useState(() => Math.floor(Math.random() * HERO_PROMPTS.length));
   const runtimeInfo = useQuery({ queryKey: ["runtime-info"], queryFn: () => scopedApi.webFetchJson("/api/console/runtime"), refetchInterval: 15000 });
   const heroCatalog = useQuery({ queryKey: ["hero-catalog"], queryFn: () => scopedApi.webFetchJson("/api/console/provider-catalog"), staleTime: 300000 });
@@ -533,7 +537,8 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
       // the agents' standing mission, so the swarm hunts what was typed.
       if (!sessionId && !messageWorkerId && text) {
         void (async () => {
-          const created = await createOwnedSession({ title: text.slice(0, 120), spawn: true, role: "audit", autonomyMode: DEFAULT_AUTONOMY_MODE } as ConsoleCreateSessionInput);
+          if (heroMode === "pentest" && !heroFiles.length) { setNotice("Upload a text scope document before starting a pentest."); return; }
+          const created = await createOwnedSession({ title: text.slice(0, 120), spawn: !heroFiles.length, role: "audit", autonomyMode: DEFAULT_AUTONOMY_MODE, permissions: heroPermissions, mode: heroMode } as ConsoleCreateSessionInput);
           if (!created) { setNotice("Couldn't start the engagement. Try again."); return; }
           justCreated.current = created.id;
           // clear the typed draft BEFORE remapping so the new session's
@@ -544,6 +549,23 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
           workspace.remapDrafts(sessionId ?? "new", created.id);
           queryClient.setQueryData<DesktopConsoleSession[]>(["console-sessions"], previous => [...(previous ?? []).filter(item => item.id !== created.id), created]);
           onDockSessionResolved?.(client.backendId, created.id, created);
+          if (heroFiles.length) {
+            try {
+              const files = await Promise.all(heroFiles.map(async file => ({ name: file.name, content: await file.text() })));
+              const upload = await fetch(`/api/console/sessions/${encodeURIComponent(created.id)}/files`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ files }),
+              });
+              if (!upload.ok) {
+                const detail = await upload.json().catch(() => ({}));
+                setNotice(detail.error || "The inbox upload failed.");
+                setHeroFiles([]);
+                return;
+              }
+            } catch { setNotice("The inbox upload failed."); setHeroFiles([]); return; }
+            setHeroFiles([]);
+          }
           navigate(`/chats/${created.id}`, { replace: true });
           // post directly — this closure's workspace still points at the
           // old (blank) session id
@@ -601,6 +623,26 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
               <h1 className="font-heading text-2xl font-medium">{HERO_PROMPTS[heroPromptIndex]}</h1>
               <form className="mt-6 w-full rounded-[var(--radius-composer,22px)] border border-border bg-background p-3 shadow-sm focus-within:outline-2 focus-within:outline-ring" onSubmit={(event) => { event.preventDefault(); void startFromLanding(landingMsg); landingMsg && setLandingMsg(""); }}>
                 <input autoFocus aria-label="What should we hack today?" placeholder="What should we hack today?" value={landingMsg} maxLength={400} disabled={workspace.busy || readOnlyTeam} onChange={(event) => setLandingMsg(event.target.value)} className="w-full bg-transparent px-1 text-sm outline-none placeholder:text-muted-foreground" />
+                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/50 pt-3 text-xs text-muted-foreground">
+                  <label className="flex items-center gap-1.5">Permissions
+                    <select aria-label="Permissions" value={heroPermissions} disabled={workspace.busy} onChange={event => setHeroPermissions(event.target.value as typeof heroPermissions)} className="rounded-[var(--radius-control,8px)] border border-border bg-background px-2 py-1 text-xs text-foreground">
+                      <option value="recon">Recon</option>
+                      <option value="exploitation">Exploitation</option>
+                      <option value="maximum">Maximum</option>
+                    </select>
+                  </label>
+                  <label className="flex items-center gap-1.5">Mode
+                    <select aria-label="Mode" value={heroMode} disabled={workspace.busy} onChange={event => setHeroMode(event.target.value as typeof heroMode)} className="rounded-[var(--radius-control,8px)] border border-border bg-background px-2 py-1 text-xs text-foreground">
+                      <option value="bbp">BBP</option>
+                      <option value="vdp">VDP</option>
+                      <option value="ctf">CTF</option>
+                      <option value="pentest">Pentest</option>
+                    </select>
+                  </label>
+                  <input ref={heroFileRef} type="file" multiple className="hidden" accept=".md,.txt,.json,.yaml,.yml,.xml,.csv,.html,.conf,.ini,.log,.scope,text/*" onChange={event => setHeroFiles(Array.from(event.target.files ?? []))} />
+                  <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => heroFileRef.current?.click()} disabled={workspace.busy || readOnlyTeam}>+ Files{heroFiles.length ? ` (${heroFiles.length})` : ""}</Button>
+                  {heroMode === "pentest" && !heroFiles.length ? <span className="text-amber-500">Upload a text scope document to start a pentest.</span> : null}
+                </div>
                 <div className="mt-3 flex items-center justify-between">
                   <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
                     {heroRuntime?.runtime?.model && <span className="flex shrink-0 items-center gap-1.5">
@@ -611,7 +653,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <Button type="button" variant="ghost" size="sm" onClick={() => setRailOpen(true)}>History</Button>
-                    <Button type="submit" size="sm" disabled={workspace.busy || readOnlyTeam}>Hack it</Button>
+                    <Button type="submit" size="sm" disabled={workspace.busy || readOnlyTeam || (heroMode === "pentest" && !heroFiles.length)}>Hack it</Button>
                   </div>
                 </div>
               </form>

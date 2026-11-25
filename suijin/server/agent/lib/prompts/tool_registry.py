@@ -438,7 +438,7 @@ TOOL_REGISTRY = {
         "description": (
             "**catalog_exploit** — write the POC as exploit.yaml FIRST, then call this tool.\n\n"
             "```yaml\nname: BOLA on /api/v2/users/1\nclass: idor\ntarget: https://host\n"
-            "cvss: 7.5\ndescription: GET /api/v2/users/1 without auth returns the admin record.\n"
+            "cvss: 7.5\ndescription: |\n  GET /api/v2/users/1 without auth returns the admin record.\n  The endpoint trusts the caller and skips the session check.\n  This exposes the admin profile and its role to any visitor.\n"
             "commands:\n  - 'curl -si https://host/api/v2/users/1'\n"
             "Expected_result: '\"role\":\"admin\"'\n```\n\n"
             "Call `{\"yaml\": \"tmp/exp-002.yaml\"}`. The cataloguer runs the commands and "

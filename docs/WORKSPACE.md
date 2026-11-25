@@ -33,6 +33,7 @@ Suijin state lives in exactly two places:
   events.jsonl       audit trail (the path shown in Finding History)
   home/              disposable agent sandbox
   exploits/          EXP-NNN/{description.md,exploit.yaml,run-N.log,catalog.json}
+  inbox/             operator-provided text files (scope, notes, templates)
   .notes/  reports/  state/  toollogs/
 ```
 

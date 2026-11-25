@@ -449,6 +449,163 @@ def finding_submission_report(finding_id: str, body: dict = Body(default={})):
         return JSONResponse({"error": "finding not found"}, status_code=404)
 
 
+def _explain_context(finding_id: str) -> tuple[dict, dict, list[str]]:
+    rec = next((f for f in _findings() if str(f.get("id")) == str(finding_id)), None)
+    if not rec:
+        raise KeyError(finding_id)
+    catalog = _catalog_entry_for(rec) or {}
+    evidence = _finding_evidence(rec)
+    return rec, catalog, evidence
+
+
+def _explain_prompt(rec: dict, catalog: dict, evidence: list[str]) -> str:
+    title = str(rec.get("title") or catalog.get("title") or "Security finding")
+    target = rec.get("target") or catalog.get("target") or "unknown"
+    severity = rec.get("severity") or "unknown"
+    cvss = rec.get("cvssScore")
+    description = catalog.get("description") or rec.get("description") or title
+    names = ", ".join(Path(p).name for p in evidence) or "none listed"
+    short = description[:1200]
+    return f"""Review this finding for a bug-bounty researcher. Be concise (under 350 words) and use exactly these sections:
+
+## Plain explanation
+2-3 short paragraphs: what it is, where, how it works.
+
+## Business impact
+Who is affected and what an attacker can reach.
+
+## Payability
+Would a program pay? Realistic rating and reasons.
+
+## Chance of acceptance
+Low / Medium / High and why.
+
+## Missing information
+What is not proven and the exact evidence needed.
+
+Finding: {title}
+Asset: {target}
+Severity: {severity}{f" (CVSS {cvss})" if cvss else ""}
+Evidence: {names}
+Description: {short}
+
+Do not invent target behavior."""
+
+
+def _fallback_explain(rec: dict, catalog: dict, evidence: list[str]) -> str:
+    from suijin.server.tools.lib.submission_report import defaults
+
+    meta = defaults(str(catalog.get("class") or ""), str(rec.get("title") or ""), str(rec.get("target") or ""))
+    description = (catalog.get("description") or rec.get("description") or rec.get("title") or "").strip()
+    severity = str(rec.get("severity") or "unknown").lower()
+    pay = {
+        "critical": "Likely payable at the top of the program's range if the impact is proven end-to-end.",
+        "high": "Usually payable at a high tier if the preconditions and impact are clear.",
+        "medium": "Payable on many programs, but triagers will weigh preconditions and duplicate risk.",
+        "low": "Usually low or informational; payability depends on a concrete abuse path.",
+    }.get(severity, "Payability depends on the concrete impact and program rules.")
+    acceptance = "Medium to High" if evidence else "Low to Medium"
+    missing = (
+        "No verifier receipt is attached; add the exact request/response and a run log."
+        if not evidence else
+        "The receipt is present; add a victim-context or browser screenshot if the program asks for one."
+    )
+    return f"""## Plain explanation
+
+{description}
+
+{meta['impact']}
+
+## Business impact
+
+{meta['impact']}
+
+## Payability
+
+{pay}
+
+## Chance of acceptance
+
+{acceptance}. {missing}
+
+## Missing information
+
+- Confirm the exact affected asset and endpoint in the submission form.
+- Attach the verifier receipt and any screenshot or recording the program allows.
+- State the tested account/role and the preconditions for the issue.
+
+_This review was generated deterministically from the finding because the local model returned no text._
+"""
+
+
+def _write_explain_report(finding_id: str) -> dict:
+    from suijin.modules.platform.lib.config_loader import load_config
+    from suijin.modules.providers.lib import generate
+
+    rec, catalog, evidence = _explain_context(finding_id)
+    prompt = _explain_prompt(rec, catalog, evidence)
+    cfg = load_config()
+
+    def _one(model: str) -> str:
+        local = dict(cfg)
+        if model:
+            local["numes_model"] = model
+        holder: dict = {}
+
+        def run():
+            holder["out"] = generate(
+                [
+                    {"role": "system", "content": "You are a precise security reviewer. Return only the requested Markdown."},
+                    {"role": "user", "content": prompt},
+                ],
+                local,
+                max_tokens=900,
+                retries=1,
+            )
+
+        import threading
+
+        thread = threading.Thread(target=run, daemon=True)
+        thread.start()
+        thread.join(15)
+        if thread.is_alive():
+            return "Error: model timed out after 15 seconds"
+        return str(holder.get("out") or "")
+
+    first = str(cfg.get("numes_model") or "")
+    text = _one(first)
+    if not text.strip() or text.strip() == "(empty response)" or text.startswith("Error:"):
+        text = _fallback_explain(rec, catalog, evidence)
+    title = str(rec.get("title") or "finding")
+    markdown = f"# Explain: {title}\n\n**Asset:** {rec.get('target') or 'unknown'}\n\n{text}\n"
+    DESKTOP_DIR.mkdir(parents=True, exist_ok=True)
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:60] or "finding"
+    path = DESKTOP_DIR / f"{time.strftime('%Y-%m-%d')}_explain_{slug}.md"
+    counter = 2
+    while path.exists():
+        path = DESKTOP_DIR / f"{path.stem}-{counter}.md"
+        counter += 1
+    path.write_text(markdown, encoding="utf-8")
+    return {"path": str(path), "markdown": markdown}
+
+
+@router.get("/api/findings/{finding_id}/explain-prompt")
+def finding_explain_prompt(finding_id: str):
+    try:
+        rec, catalog, evidence = _explain_context(finding_id)
+        return {"prompt": _explain_prompt(rec, catalog, evidence)}
+    except KeyError:
+        return JSONResponse({"error": "finding not found"}, status_code=404)
+
+
+@router.post("/api/findings/{finding_id}/explain")
+def finding_explain(finding_id: str):
+    try:
+        return _write_explain_report(finding_id)
+    except KeyError:
+        return JSONResponse({"error": "finding not found"}, status_code=404)
+
+
 def _findings(session: str | None = None) -> list[dict]:
     conn = _db()
     if not conn:
@@ -565,6 +722,8 @@ def _desk_session(session: str) -> dict:
         "targetKey": target.lower(), "targetLabel": target,
         "autonomyMode": "standard", "scopeConfigured": False,
         "localScopeConfigured": False, "status": status, "paused": paused,
+        "permissions": meta.get("permissions") or "exploitation",
+        "mode": meta.get("mode") or "vdp",
         "createdAt": _now_iso(), "updatedAt": _now_iso(),
         "title": title, "messageCount": _session_seq(session),
     }
@@ -850,6 +1009,32 @@ def _workflow(f: dict) -> dict:
     }
 
 
+def _finding_description(f: dict) -> str:
+    """The full operator-facing description, not the title.
+
+    findings_v2 carries the multi-paragraph description written by the
+    agent; fall back to the catalog, then the title for old rows."""
+    engagement = f.get("engagement") or ""
+    if engagement:
+        db = sqlite3.connect(str(_swarm_db()), timeout=5)
+        try:
+            row = db.execute(
+                "SELECT description_md FROM findings_v2 WHERE engagement=? "
+                "AND (legacy_id=? OR title LIKE ?) LIMIT 1",
+                (engagement, f.get("expId") or "", f"%{str(f.get('title') or '')[:40]}%"),
+            ).fetchone()
+        except sqlite3.Error:
+            row = None
+        finally:
+            db.close()
+        if row and str(row[0] or "").strip():
+            return str(row[0]).strip()
+    catalog = _catalog_entry_for(f)
+    if catalog and catalog.get("description"):
+        return str(catalog["description"]).strip()
+    return str(f.get("title") or "")
+
+
 def _finding_group(f: dict) -> dict:
     fp = re.sub(r"[^a-z0-9]+", "-", (f["title"] or "finding").lower())[:60]
     triage = _ledger("triage").get(fp) or {}
@@ -858,12 +1043,24 @@ def _finding_group(f: dict) -> dict:
     engagement = f.get("engagement") or ""
     chat_title = _engagement_record(engagement).get("name") if engagement else ""
     audit_path = str(_eng_dir(engagement) / "events.jsonl") if engagement else ""
+    try:
+        from suijin.server.tools.lib.submission_report import defaults as _sub_defaults
+
+        _catalog = _catalog_entry_for(f)
+        _meta = _sub_defaults(
+            (_catalog or {}).get("class") or "", f.get("title") or "",
+            f.get("target") or (_catalog or {}).get("target") or "",
+        )
+        impact, remediation = _meta["impact"], _meta["remediation"]
+    except Exception:  # noqa: BLE001 — display detail must never break the API
+        impact = remediation = ""
     rec = {
         "id": f["id"], "scanId": f["agent"], "title": f["title"],
-        "description": f["title"], "severity": f["severity"], "category": "finding",
+        "description": _finding_description(f), "severity": f["severity"], "category": "finding",
         "status": f["status"], "fingerprint": fp,
         "expId": f.get("expId") or "", "cvssScore": f.get("cvssScore"),
         "engagement": engagement, "target": f.get("target") or "",
+        "impact": impact, "remediation": remediation,
         "chatId": engagement, "chatTitle": chat_title, "auditPath": audit_path,
         "triageStatus": triage.get("triageStatus") or "new",
         "triageNote": triage.get("triageNote") or "",
@@ -1230,11 +1427,99 @@ def _track_pids(pids: list[int]) -> None:
         p.write_text(" ".join(str(x) for x in set(existing + pids)))
 
 
+PERMISSIONS = ("recon", "exploitation", "maximum")
+MODES = ("bbp", "vdp", "ctf", "pentest")
+
+
+def _mission_with_settings(session: str, title: str) -> str:
+    meta = _session_engagement_meta(session)
+    permissions = str(meta.get("permissions") or "exploitation").lower()
+    mode = str(meta.get("mode") or "vdp").lower()
+    files = [str(f) for f in (meta.get("files") or [])]
+    lines = [
+        title,
+        "",
+        f"ENGAGEMENT SETTINGS: permissions={permissions}; mode={mode}.",
+        "Operator-provided files are in inbox/ — read them before acting.",
+    ]
+    if files:
+        lines.append("Inbox files: " + ", ".join(files) + ".")
+    if mode == "pentest":
+        lines.append("PENTEST: the uploaded scope document is authoritative; do not test outside it.")
+    elif mode == "bbp":
+        lines.append("BBP: catalog only findings you would actually submit; skip low-value noise.")
+    elif mode == "vdp":
+        lines.append("VDP: catalog valid findings, including smaller ones the program wants.")
+    elif mode == "ctf":
+        lines.append("CTF: hunt flags; reporting format is secondary.")
+    if permissions == "recon":
+        lines.append("RECON ONLY: passive/read-only actions; no state changes, logins or submissions.")
+    elif permissions == "maximum":
+        lines.append("MAXIMUM: everything except denial-of-service.")
+    return "\n".join(lines)
+
+
+@router.post("/api/console/sessions/{session_id}/files")
+def session_files_upload(session_id: str, body: dict = Body(default={})):
+    """Operator inbox: text files the agent may use however it wants."""
+    meta = _session_engagement_meta(session_id)
+    if not meta:
+        return JSONResponse({"error": "session not found"}, status_code=404)
+    inbox = _eng_dir(session_id) / "inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    saved: list[dict] = []
+    existing = [str(x) for x in (meta.get("files") or [])]
+    for item in (body.get("files") or [])[:20]:
+        if not isinstance(item, dict):
+            continue
+        raw_name = Path(str(item.get("name") or "file.txt")).name
+        name = re.sub(r"[^A-Za-z0-9._ -]+", "_", raw_name).strip(" .")[:80] or "file.txt"
+        content = item.get("content")
+        if not isinstance(content, str) or not content.strip():
+            continue
+        if len(content.encode("utf-8")) > 1_000_000:
+            return JSONResponse({"error": f"{name}: file is larger than 1 MB"}, status_code=400)
+        if any(ord(ch) < 32 and ch not in "\n\r\t" for ch in content):
+            return JSONResponse({"error": f"{name}: not plain text (control characters)"}, status_code=400)
+        path = inbox / name
+        counter = 2
+        while path.exists():
+            path = inbox / f"{Path(name).stem}-{counter}{Path(name).suffix}"
+            counter += 1
+        path.write_text(content, encoding="utf-8")
+        saved.append({"name": path.name, "bytes": len(content.encode("utf-8"))})
+        if path.name not in existing:
+            existing.append(path.name)
+    meta["files"] = existing
+    meta["inbox"] = str(inbox)
+    (_eng_dir(session_id) / "engagement.json").write_text(json.dumps(meta, indent=2))
+    readme = inbox / "README.md"
+    readme.write_text(
+        "# Operator inbox\n\n"
+        "These files were provided by the operator. Use them however the engagement needs — "
+        "scope, credentials, templates, prior notes, or target material.\n\n"
+        + "\n".join(f"- `{name}`" for name in existing)
+        + "\n",
+        encoding="utf-8",
+    )
+    with contextlib.suppress(Exception):
+        from suijin.server.platform.lib.engagement_index import rebuild as _rebuild_index
+
+        _rebuild_index()
+    return {"files": saved, "all": existing}
+
+
 @router.post("/api/console/sessions")
 def sessions_create(body: dict = Body(default={})):
     title = str(body.get("title") or body.get("target") or "").strip() or "new swarm"
     structured = bool(body.get("structured"))
     workers_per_cat = int(body.get("workers") or 2)
+    permissions = str(body.get("permissions") or "exploitation").lower()
+    mode = str(body.get("mode") or "vdp").lower()
+    if permissions not in PERMISSIONS:
+        permissions = "exploitation"
+    if mode not in MODES:
+        mode = "vdp"
     # SPAWN GATE (field 2026-11-17: loading the landing page fired three
     # blank creates and each one spawned a live agent hunt — swarms named
     # "new swarm" wandering off to hunt whatever they found in memory).
@@ -1274,6 +1559,7 @@ def sessions_create(body: dict = Body(default={})):
         (d / "engagement.json").write_text(json.dumps({
             "name": title, "description": title,
             "target": explicit_target or _target_from_text(title),
+            "permissions": permissions, "mode": mode,
             "createdAt": _now_iso(), "revision": 1,
             "structured": structured}))
         with contextlib.suppress(Exception):
@@ -1281,11 +1567,19 @@ def sessions_create(body: dict = Body(default={})):
 
             _rebuild_index()
     else:
+        meta = _session_engagement_meta(name)
+        meta["permissions"] = permissions
+        meta["mode"] = mode
+        (d / "engagement.json").write_text(json.dumps(meta, indent=2))
         live = [a for a in _live_agents(name) if not a["dead"]]
         s = _desk_session(name)
         s.update({"status": "working" if live else s["status"], "title": title})
         if live:
             return {"session": s}
+    if spawn and mode == "pentest" and not _session_engagement_meta(name).get("files"):
+        _inflight_hunts.discard(name)
+        return JSONResponse({"error": "Pentest requires an uploaded text scope document"}, status_code=400)
+
     _inflight_hunts.add(name)
 
     if structured and spawn:
@@ -1327,7 +1621,7 @@ def sessions_create(body: dict = Body(default={})):
             # single agent per engagement — no swarms by default.
             # swarm=name: agents register under THIS session's id (the
             # uniquified slug), not a re-slug of the title.
-            run_swarm_hunt(title, host_n=1, boxed_n=0, swarm=name)
+            run_swarm_hunt(_mission_with_settings(name, title), host_n=1, boxed_n=0, swarm=name)
     def _release():
         time.sleep(5)
         with contextlib.suppress(Exception):
@@ -1395,6 +1689,10 @@ def session_message(session_id: str, body: dict = Body(default={})):
     if text and not _live_agents(session_id) and session_id not in _inflight_hunts \
             and session_id not in _deleted_sessions and not body.get("steerOnly"):
         s = _desk_session(session_id)
+        meta = _session_engagement_meta(session_id)
+        if str(meta.get("mode") or "").lower() == "pentest" and not meta.get("files"):
+            _emit(session_id, {"type": "error", "message": "Pentest requires an uploaded text scope document in the inbox."})
+            return {"session": s}
         mission = str(s.get("title") or session_id)
         _inflight_hunts.add(session_id)
         # RELEASE THE MARKER (field 2026-11-17: the lazy path added the
@@ -1414,7 +1712,7 @@ def session_message(session_id: str, body: dict = Body(default={})):
                 from suijin.server.swarm.lifecycle import run_swarm_hunt
 
                 # ONE AGENT — see the spawn-gate comment in sessions_create
-                run_swarm_hunt(mission, host_n=1, boxed_n=0, swarm=session_id)
+                run_swarm_hunt(_mission_with_settings(session_id, mission), host_n=1, boxed_n=0, swarm=session_id)
         threading.Thread(target=_lazy_hunt, daemon=True, name=f"lazyspawn-{session_id}").start()
         _emit(session_id, {"type": "notice", "text": f"Engagement started: {mission}"})
     if text:

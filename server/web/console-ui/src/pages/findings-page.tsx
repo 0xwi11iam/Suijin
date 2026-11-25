@@ -16,6 +16,7 @@ import {
   ShieldOff,
   ShieldQuestion,
   SlidersHorizontal,
+  Sparkles,
 } from "lucide-react";
 import { useBackendApi } from "@/api";
 import { InspectorPane } from "@/components/inspector-pane";
@@ -37,6 +38,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import {
@@ -362,7 +364,7 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
         <Button variant="ghost" size="sm" asChild><Link to="/findings"><ArrowLeft className="size-4" />All findings</Link></Button>
         <PageHeader
           title={familyQuery.data?.latest.title ?? selectedGroup?.latest.title ?? "Finding"}
-          actions={selectedGroup ? <SubmissionExport findingId={selectedGroup.latest.id} /> : undefined}
+          actions={selectedGroup ? <div className="flex items-center gap-2"><ExplainFinding findingId={selectedGroup.latest.id} /><SubmissionExport findingId={selectedGroup.latest.id} /></div> : undefined}
         />
         {familyQuery.isLoading ? <LoadingState label="Loading finding" /> : familyQuery.error ? <ErrorState error={familyQuery.error} /> : familyQuery.data ? (
           <FindingFamilyInspector
@@ -654,6 +656,8 @@ function FindingFamilyInspector({
 
           <TabsContent value="overview" className="space-y-6">
             <section className="space-y-2"><h2 className="text-sm font-medium">Summary</h2><p className="whitespace-pre-wrap text-sm leading-7 text-muted-foreground">{data.latest.description}</p></section>
+            {data.latest.impact ? <section className="space-y-2"><h2 className="text-sm font-medium">Impact</h2><p className="whitespace-pre-wrap text-sm leading-7 text-muted-foreground">{data.latest.impact}</p></section> : null}
+            {data.latest.remediation ? <section className="space-y-2"><h2 className="text-sm font-medium">Remediation</h2><p className="whitespace-pre-wrap text-sm leading-7 text-muted-foreground">{data.latest.remediation}</p></section> : null}
             {([
               ["Evidence", data.latest.evidenceRequest],
               ["Response", data.latest.evidenceResponse],
@@ -695,6 +699,73 @@ function FindingFamilyInspector({
       </section>
     </div>
   );
+}
+
+function ExplainFinding({ findingId }: { findingId: string }) {
+  const api = useBackendApi();
+  const [open, setOpen] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [answer, setAnswer] = useState("");
+  const [saved, setSaved] = useState("");
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+  const openDialog = async () => {
+    setOpen(true);
+    if (prompt) return;
+    try {
+      const result = await api.webFetchJson<{ prompt: string }>(`/api/findings/${encodeURIComponent(findingId)}/explain-prompt`);
+      setPrompt(result.prompt);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not build the prompt.");
+    }
+  };
+  const copyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch { setError("Clipboard unavailable. Select and copy the text manually."); }
+  };
+  const analyse = async () => {
+    setBusy(true);
+    setError("");
+    setAnswer("");
+    setSaved("");
+    try {
+      const result = await api.webFetchJson<{ path: string; markdown: string }>(`/api/findings/${encodeURIComponent(findingId)}/explain`, { method: "POST", body: "{}" });
+      setSaved(result.path);
+      setAnswer(result.markdown);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Analysis failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <>
+    <Button variant="outline" size="sm" onClick={() => void openDialog()}><Sparkles className="size-4" />Explain</Button>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogContent className="max-h-[88dvh] overflow-y-auto sm:max-w-5xl">
+        <DialogHeader>
+          <DialogTitle>Explain this finding</DialogTitle>
+          <DialogDescription>Copy the prompt to another AI, or let the local model analyse it and write a Markdown report to your Desktop.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between"><h3 className="text-sm font-medium">Prompt to paste</h3><Button variant="ghost" size="sm" onClick={() => void copyPrompt()}>{copied ? "Copied" : <><Copy className="size-3.5" />Copy</>}</Button></div>
+            <textarea readOnly value={prompt} aria-label="Explain prompt" className="min-h-[300px] w-full resize-y rounded-[var(--radius-panel)] border border-border bg-muted/20 p-3 font-mono text-xs leading-5 text-muted-foreground outline-none" />
+          </div>
+          <div className="space-y-3">
+            <h3 className="text-sm font-medium">Local analysis</h3>
+            <Button onClick={() => void analyse()} disabled={busy}>{busy ? "Generating…" : "Analyse for me"}</Button>
+            {saved ? <p className="break-all text-xs text-muted-foreground">Saved to {saved}</p> : null}
+            {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
+            {answer ? <pre className="max-h-[46dvh] overflow-auto whitespace-pre-wrap break-words rounded-[var(--radius-panel)] border border-border bg-muted/20 p-3 text-xs leading-5">{answer}</pre> : null}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  </>;
 }
 
 function SubmissionExport({ findingId }: { findingId: string }) {

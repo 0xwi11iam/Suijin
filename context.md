@@ -716,3 +716,18 @@ subprocesses share it safely. JSON remains the fallback and holds the
 operator-owned `methodology` branch; the memory page reads whichever backend
 is configured and merges methodology from the JSON file. Switched the local
 config to `kg_backend=ladybug` and migrated the current targets/constraints.
+
+
+### 2026-11-25 — engagement permissions/mode, inbox, explain, detailed findings
+
+The hero now carries **Permissions** (Recon read-only / Exploitation safe-harbour /
+Maximum except-DoS) and **Mode** (BBP / VDP / CTF / Pentest) plus a `+ Files`
+inbox. Settings and uploaded text files are stored on `engagement.json`; the
+mission tells the agent its permissions/mode and to read `inbox/`. Pentest is
+gated on an uploaded text document in both the UI and the API. Findings carry
+the full multi-paragraph description from the catalog/`findings_v2`, plus
+Impact and Remediation sections in the detail view. The finding page has an
+**Explain** popover: a copy-ready review prompt and a local-model analysis
+that writes a Markdown report to `~/Desktop` (deterministic fallback if the
+free model returns nothing). The catalog YAML accepts a `description: |`
+block and the prompt requires 2-3 paragraphs: what/where, root cause, impact.
