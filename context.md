@@ -706,3 +706,13 @@ the platform selectors (CWE, VRT, asset type, CVSS version, severity method),
 summary/prerequisites/root cause, numbered steps, raw requests (redacted),
 impact, remediation, and evidence filenames. `finding_submission_meta` stores
 the derived metadata at catalog time; the export derives it for old rows.
+
+### 2026-11-25 — embedded LadybugDB knowledge graph
+
+Added a LadybugDB backend: an embedded Cypher graph at
+`~/.suijin/intel/knowledge_graph.ladybug`, no Docker or daemon. The graph
+opens/closes per operation with a lock retry so the web server and agent
+subprocesses share it safely. JSON remains the fallback and holds the
+operator-owned `methodology` branch; the memory page reads whichever backend
+is configured and merges methodology from the JSON file. Switched the local
+config to `kg_backend=ladybug` and migrated the current targets/constraints.

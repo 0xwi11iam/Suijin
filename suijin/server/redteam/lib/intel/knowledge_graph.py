@@ -14,10 +14,11 @@ Storage backends (v5.1):
            put a live engagement's API keys and target intel into git);
            the in-tree file is a READ-ONLY neutral seed, copied to the
            workspace on first boot.
-  neo4j  — flip config.json "kg_backend": "neo4j" (+ neo4j_uri/user/
-           password, or SUIJIN_NEO4J_* env vars) to switch. Same API,
-           same result shapes; see kg_backend.py for the schema and the
-           switch contract.
+  ladybug — flip config.json "kg_backend": "ladybug" for the embedded
+           Cypher graph (no Docker/server). Optional "ladybug_path".
+  neo4j   — flip config.json "kg_backend": "neo4j" (+ neo4j_uri/user/
+           password, or SUIJIN_NEO4J_* env vars) for an external server.
+           Same API, same result shapes; see kg_backend.py.
 """
 
 import contextlib

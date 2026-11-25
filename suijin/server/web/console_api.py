@@ -2627,8 +2627,10 @@ def _kg_path() -> Path:
     with contextlib.suppress(Exception):
         from suijin.server.platform.lib.workspace import WORKSPACE_DIR
 
-        return Path(WORKSPACE_DIR) / "intel" / "knowledge_graph.json"
-    return Path.home() / ".suijin" / "config" / "intel" / "knowledge_graph.json"
+        base = Path(WORKSPACE_DIR)
+        root = base.parent if base.name == "config" else base
+        return root / "intel" / "knowledge_graph.json"
+    return Path.home() / ".suijin" / "intel" / "knowledge_graph.json"
 
 
 def _url_host(node_id: str) -> str:
@@ -2660,6 +2662,32 @@ def _node_kind(node_id: str, host: str = "") -> str:
     return "external"
 
 
+def _kg_graph_data() -> dict:
+    """The live knowledge graph from whichever backend is configured.
+
+    Every backend implements get_all_targets/get_constraints, so the
+    mindmap works on JSON, LadybugDB and Neo4j without knowing which one
+    answered. `methodology` is operator-owned and stays in the JSON file;
+    merge it in so the map keeps its playbook branch.
+    """
+    data: dict = {}
+    with contextlib.suppress(Exception):
+        from suijin.modules.redteam.lib.intel.kg_backend import get_backend
+
+        backend = get_backend(lambda: _kg_path())
+        for target in backend.get_all_targets():
+            constraints = backend.get_constraints(target)
+            if isinstance(constraints, dict):
+                data[str(target)] = constraints
+    with contextlib.suppress(Exception):
+        path = _kg_path()
+        if path.is_file():
+            raw = json.loads(path.read_text(errors="replace"))
+            if isinstance(raw, dict) and isinstance(raw.get("methodology"), dict) and "methodology" not in data:
+                data["methodology"] = raw["methodology"]
+    return data
+
+
 @router.get("/api/console/memory-graph")
 def memory_graph():
     """The fullscreen mindmap: MEMORY → External/Internal TARGETS → each
@@ -2667,12 +2695,8 @@ def memory_graph():
     its real intel entries, plus cross-links where evidence mentions other
     targets. Per-target housekeeping — the AI cleans up per target during an
     engagement. Local-only: reads the operator workspace, never leaves it."""
-    kg = _kg_path()
-    if not kg.is_file():
-        return {"nodes": [], "edges": [], "stats": {"nodes": 0, "edges": 0, "entries": 0}, "missing": True}
-    with contextlib.suppress(Exception):
-        data = json.loads(kg.read_text(errors="replace"))
-    if not isinstance(data, dict):
+    data = _kg_graph_data()
+    if not isinstance(data, dict) or not data:
         return {"nodes": [], "edges": [], "stats": {"nodes": 0, "edges": 0, "entries": 0}, "missing": True}
 
     VULN_CATS = {"bypass", "vulnerability", "vulnerabilities", "finding", "findings",

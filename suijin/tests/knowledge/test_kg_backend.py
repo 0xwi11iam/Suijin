@@ -5,6 +5,7 @@ backend. The Neo4j driver is optional — selection fails safe to JSON
 with a logged error, never bricking an engagement.
 """
 
+import pytest
 from unittest import mock
 
 from suijin.modules.redteam.lib.intel import kg_backend as kb
@@ -189,3 +190,19 @@ class TestBackendSelection:
         monkeypatch.setattr(kb, "_config_backend", lambda: "json")
         monkeypatch.setattr(kb, "_config_uri", lambda: "")
         assert kb.backend_status().startswith("json (default)")
+
+
+class TestLadybugBackend:
+    def test_contract_and_dedup(self, tmp_path):
+        pytest.importorskip("ladybug")
+        kg = kb.LadybugKG(tmp_path / "kg.ladybug")
+        kg.add_constraint("example.com", "behavior", "rule one", evidence="e1", confidence=0.4)
+        kg.add_constraint("example.com", "behavior", "rule one", evidence="e2", confidence=0.9)
+        kg.add_constraint("example.com", "vulnerability", "xss", evidence="e3", confidence=1.0)
+        assert kg.get_all_targets() == ["example.com"]
+        constraints = kg.get_constraints("example.com")
+        assert len(constraints["behavior"]) == 1
+        assert constraints["behavior"][0]["evidence"] == "e2"
+        assert constraints["behavior"][0]["confidence"] == 0.9
+        kg.clear_target("example.com")
+        assert kg.get_all_targets() == []

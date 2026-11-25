@@ -1,13 +1,18 @@
-"""Knowledge-graph backends — JSON today, Neo4j tomorrow, one switch apart.
+"""Knowledge-graph backends — JSON fallback, embedded LadybugDB, Neo4j optional.
 
 Switch (config.json):
+    "kg_backend": "ladybug",       # embedded, no Docker/server (recommended)
+    "ladybug_path": "~/.suijin/intel/knowledge_graph.ladybug",  # optional
+or:
     "kg_backend": "neo4j",
     "neo4j_uri":      "bolt://localhost:7687",     # or env SUIJIN_NEO4J_URI
     "neo4j_user":     "neo4j",                    # or env SUIJIN_NEO4J_USER
     "neo4j_password": "..."                        # or env SUIJIN_NEO4J_PASSWORD
 
 Default is "json" (the existing knowledge_graph.json — unchanged,
-human-readable, git-friendly).
+human-readable, git-friendly). LadybugDB is the embedded graph option; it
+needs no daemon and opens/closes around each operation so multiple Suijin
+processes can share the file.
 
 THE CONTRACT (this is what makes the switch trivial): every backend
 returns the SAME shapes as the JSON file:
@@ -33,6 +38,7 @@ when the backend is actually switched on.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from datetime import datetime, timezone
@@ -115,6 +121,127 @@ class JsonKG:
         data = self._load()
         data.pop(target, None)
         self._save(data)
+
+
+# ── LadybugDB backend (embedded, no server) ───────────────────────────────
+
+
+class LadybugKG:
+    """Embedded property graph (Cypher) — one file, no Docker/server.
+
+    Ladybug holds an exclusive file lock while a Database is open, so the
+    web process and agent subprocesses cannot keep a connection open at the
+    same time. Each operation opens, runs and closes (with a short lock
+    retry). The graph is tiny; the open cost is negligible and this keeps
+    multi-process writes working without a daemon.
+    """
+
+    def __init__(self, path: str | Path) -> None:
+        self._path = Path(path)
+
+    @contextlib.contextmanager
+    def _connection(self):
+        import ladybug
+        import time
+
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        db = conn = None
+        last = None
+        for _ in range(100):
+            try:
+                db = ladybug.Database(str(self._path), enable_multi_writes=True)
+                conn = ladybug.Connection(db)
+                break
+            except Exception as exc:  # lock held by another process
+                last = exc
+                db = conn = None
+                if "lock" not in str(exc).lower():
+                    raise
+                time.sleep(0.05)
+        if conn is None:
+            raise RuntimeError(f"LadybugDB lock unavailable: {last}")
+        try:
+            for ddl in (
+                "CREATE NODE TABLE IF NOT EXISTS Target(name STRING, PRIMARY KEY(name))",
+                "CREATE NODE TABLE IF NOT EXISTS Constraint(id STRING, rule STRING, ctype STRING, "
+                "evidence STRING, confidence DOUBLE, verified_at STRING, last_seen STRING, PRIMARY KEY(id))",
+                "CREATE REL TABLE IF NOT EXISTS HAS(FROM Target TO Constraint)",
+            ):
+                conn.execute(ddl)
+            yield conn
+        finally:
+            with contextlib.suppress(Exception):
+                conn.close()
+            with contextlib.suppress(Exception):
+                db.close()
+
+    def _connect(self):
+        with self._connection():
+            return True
+
+    def _rows(self, query: str, params: dict | None = None) -> list[dict]:
+        with self._connection() as conn:
+            result = conn.execute(query, params or {})
+            columns = result.get_column_names()
+            return [dict(zip(columns, row)) for row in result.get_all()]
+
+    @staticmethod
+    def _constraint_id(target: str, ctype: str, rule: str) -> str:
+        import hashlib
+
+        return hashlib.sha1(f"{target}|{ctype}|{rule}".encode()).hexdigest()[:20]
+
+    def add_constraint(self, target, ctype, rule, evidence="", confidence=1.0) -> None:
+        self._rows(
+            """
+            MERGE (t:Target {name: $target})
+            MERGE (c:Constraint {id: $id})
+            SET c.rule = $rule, c.ctype = $ctype, c.evidence = $evidence,
+                c.confidence = CASE WHEN c.confidence IS NULL OR c.confidence < $confidence
+                                    THEN $confidence ELSE c.confidence END,
+                c.last_seen = $now,
+                c.verified_at = CASE WHEN c.verified_at IS NULL THEN $now ELSE c.verified_at END
+            MERGE (t)-[:HAS]->(c)
+            """,
+            {
+                "target": str(target), "id": self._constraint_id(str(target), str(ctype), str(rule)),
+                "rule": str(rule), "ctype": str(ctype), "evidence": str(evidence),
+                "confidence": float(confidence), "now": _now(),
+            },
+        )
+
+    def get_constraints(self, target) -> dict:
+        rows = self._rows(
+            """
+            MATCH (t:Target {name: $target})-[:HAS]->(c:Constraint)
+            RETURN c.ctype AS ctype, c.rule AS rule, c.evidence AS evidence,
+                   c.confidence AS confidence, c.verified_at AS verified_at,
+                   c.last_seen AS last_seen
+            ORDER BY c.rule
+            """,
+            {"target": str(target)},
+        )
+        out: dict = {}
+        for row in rows:
+            out.setdefault(row.get("ctype") or "?", []).append({
+                key: row.get(key) for key in ("rule", "evidence", "confidence", "verified_at", "last_seen")
+            })
+        return out
+
+    def get_all_targets(self) -> list:
+        return [row["name"] for row in self._rows(
+            "MATCH (t:Target) RETURN t.name AS name ORDER BY name"
+        )]
+
+    def clear_target(self, target) -> None:
+        self._rows(
+            "MATCH (t:Target {name: $target})-[r:HAS]->(c:Constraint) DELETE r, c",
+            {"target": str(target)},
+        )
+        self._rows("MATCH (t:Target {name: $target}) DELETE t", {"target": str(target)})
+
+    def close(self) -> None:
+        return None
 
 
 # ── Neo4j backend (theory-complete; activate by switching config) ────────
@@ -272,15 +399,18 @@ def _invalidate_backend_cache() -> None:
 def get_backend(json_path_fn):
     """Return the configured KG backend (config kg_backend / env override).
 
-    Fails loud at ENGAGEMENT START, never mid-run: if neo4j is selected
-    but unreachable, we fall back to JSON ONCE with an error log (a
-    dead server must brick nothing), and the operator sees it in the
-    journal. json (the default) always returns the file backend.
+    json (default) -> file backend
+    ladybug        -> embedded LadybugDB file under ~/.suijin/intel
+    neo4j          -> external server (legacy option)
+
+    If a configured backend cannot open, fall back to JSON ONCE with a log
+    line; a missing server or package must brick nothing.
     """
     import os
 
-    if "json" in _BACKEND_CACHE:
-        return _BACKEND_CACHE["json"]  # memoized: selection reads config once
+    cached = _BACKEND_CACHE.get("backend")
+    if cached is not None:
+        return cached
     backend = os.environ.get("SUIJIN_KG_BACKEND", "").lower()
     if not backend:
         try:
@@ -290,41 +420,56 @@ def get_backend(json_path_fn):
         except Exception:  # noqa: BLE001 — config problems never block the KG
             backend = "json"
 
-    if backend != "neo4j":
-        kg = JsonKG(json_path_fn)
-        _BACKEND_CACHE["json"] = kg
-        return kg
+    if backend == "ladybug":
+        path = _env_var("SUIJIN_LADYBUG_PATH")
+        if not path:
+            try:
+                from suijin.modules.platform.lib.config_loader import load_config
 
-    # env > .env file > config.json (the password NEVER goes in config.json
-    # — that file is committed)
-    uri = _env_var("SUIJIN_NEO4J_URI")
-    user = _env_var("SUIJIN_NEO4J_USER") or "neo4j"
-    password = _env_var("SUIJIN_NEO4J_PASSWORD")
-    if not uri:
+                path = str(load_config().get("ladybug_path", ""))
+            except Exception:  # noqa: BLE001
+                path = ""
+        if not path:
+            path = str(json_path_fn().parent / "knowledge_graph.ladybug")
         try:
-            from suijin.modules.platform.lib.config_loader import load_config
+            kg = LadybugKG(path)
+            kg._connect()  # create/open + schema check before the run
+            _BACKEND_CACHE["backend"] = kg
+            return kg
+        except Exception as e:  # noqa: BLE001 — ImportError or filesystem error
+            logger.error("LadybugDB backend unavailable (%s) — staying on JSON.", e)
+            kg = JsonKG(json_path_fn)
+            _BACKEND_CACHE["backend"] = kg
+            return kg
 
-            cfg = load_config()
-            uri = str(cfg.get("neo4j_uri", ""))
-            user = str(cfg.get("neo4j_user") or user)
-            password = str(cfg.get("neo4j_password") or password)
-        except Exception:  # noqa: BLE001
-            pass
-    if not uri:
-        logger.error("kg_backend=neo4j but no neo4j_uri configured — staying on JSON")
-        return JsonKG(json_path_fn)
+    if backend == "neo4j":
+        uri = _env_var("SUIJIN_NEO4J_URI")
+        user = _env_var("SUIJIN_NEO4J_USER") or "neo4j"
+        password = _env_var("SUIJIN_NEO4J_PASSWORD")
+        if not uri:
+            try:
+                from suijin.modules.platform.lib.config_loader import load_config
 
-    try:
-        kg = Neo4jKG(uri, user, password)
-        kg._connect()  # verify BEFORE the engagement starts, not mid-payload
-        _BACKEND_CACHE["json"] = kg
-        return kg
-    except Exception as e:  # noqa: BLE001 — ImportError (no driver) or connection refused
-        logger.error("Neo4j backend unavailable (%s) — staying on JSON. Fix the server and restart.", e)
-        kg = JsonKG(json_path_fn)
-        _BACKEND_CACHE["json"] = kg
-        return kg
+                cfg = load_config()
+                uri = str(cfg.get("neo4j_uri", ""))
+                user = str(cfg.get("neo4j_user") or user)
+                password = str(cfg.get("neo4j_password") or password)
+            except Exception:  # noqa: BLE001
+                pass
+        if uri:
+            try:
+                kg = Neo4jKG(uri, user, password)
+                kg._connect()
+                _BACKEND_CACHE["backend"] = kg
+                return kg
+            except Exception as e:  # noqa: BLE001 — ImportError or connection refused
+                logger.error("Neo4j backend unavailable (%s) — staying on JSON. Fix the server and restart.", e)
+        else:
+            logger.error("kg_backend=neo4j but no neo4j_uri configured — staying on JSON")
 
+    kg = JsonKG(json_path_fn)
+    _BACKEND_CACHE["backend"] = kg
+    return kg
 
 def _bolt_reachable(uri: str, timeout: float = 1.5) -> bool:
     """Cheap liveness probe: a TCP connect to the bolt port. No driver,
@@ -359,6 +504,9 @@ def backend_status() -> str:
             if _bolt_reachable(uri)
             else f"neo4j ({uri}) — DOWN, running on json (start the server)"
         )
+    if sel == "ladybug":
+        path = _env_var("SUIJIN_LADYBUG_PATH") or _config_setting("ladybug_path") or "~/.suijin/intel/knowledge_graph.ladybug"
+        return f"ladybug (embedded {path}) — UP"
     return "json (default)" + (f" [neo4j configured at {uri} — flip kg_backend to switch]" if uri else "")
 
 
