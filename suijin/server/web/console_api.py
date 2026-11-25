@@ -514,8 +514,6 @@ def _fallback_explain(rec: dict, catalog: dict, evidence: list[str]) -> str:
 
 {description}
 
-{meta['impact']}
-
 ## Business impact
 
 {meta['impact']}
@@ -1436,11 +1434,12 @@ def _mission_with_settings(session: str, title: str) -> str:
     permissions = str(meta.get("permissions") or "exploitation").lower()
     mode = str(meta.get("mode") or "vdp").lower()
     files = [str(f) for f in (meta.get("files") or [])]
+    inbox = _eng_dir(session) / "inbox"
     lines = [
         title,
         "",
         f"ENGAGEMENT SETTINGS: permissions={permissions}; mode={mode}.",
-        "Operator-provided files are in inbox/ — read them before acting.",
+        f"Operator-provided files are in {inbox} (also visible as ~/inbox). Read them before acting.",
     ]
     if files:
         lines.append("Inbox files: " + ", ".join(files) + ".")
@@ -1493,6 +1492,13 @@ def session_files_upload(session_id: str, body: dict = Body(default={})):
     meta["files"] = existing
     meta["inbox"] = str(inbox)
     (_eng_dir(session_id) / "engagement.json").write_text(json.dumps(meta, indent=2))
+    # Make the inbox reachable from the agent's userland without copying.
+    home = _eng_dir(session_id) / "home"
+    home.mkdir(parents=True, exist_ok=True)
+    link = home / "inbox"
+    if not link.exists():
+        with contextlib.suppress(OSError):
+            link.symlink_to("../inbox", target_is_directory=True)
     readme = inbox / "README.md"
     readme.write_text(
         "# Operator inbox\n\n"
