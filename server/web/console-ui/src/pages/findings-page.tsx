@@ -7,7 +7,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ArrowUpRight,
+  ChevronDown,
   Copy,
+  Download,
   MessageSquare,
   Search,
   ShieldCheck,
@@ -34,6 +36,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import {
@@ -357,7 +360,10 @@ export function FindingsPage({ dashboard }: { dashboard: DashboardResponse }) {
     return (
       <PageContent width="wide">
         <Button variant="ghost" size="sm" asChild><Link to="/findings"><ArrowLeft className="size-4" />All findings</Link></Button>
-        <PageHeader title={familyQuery.data?.latest.title ?? selectedGroup?.latest.title ?? "Finding"} />
+        <PageHeader
+          title={familyQuery.data?.latest.title ?? selectedGroup?.latest.title ?? "Finding"}
+          actions={selectedGroup ? <SubmissionExport findingId={selectedGroup.latest.id} /> : undefined}
+        />
         {familyQuery.isLoading ? <LoadingState label="Loading finding" /> : familyQuery.error ? <ErrorState error={familyQuery.error} /> : familyQuery.data ? (
           <FindingFamilyInspector
             key={selectedFingerprint}
@@ -689,6 +695,44 @@ function FindingFamilyInspector({
       </section>
     </div>
   );
+}
+
+function SubmissionExport({ findingId }: { findingId: string }) {
+  const api = useBackendApi();
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState("");
+  const exportFor = async (platform: string) => {
+    setBusy(true);
+    setSaved("");
+    try {
+      const result = await api.webFetchJson<{ path: string }>(
+        `/api/findings/${encodeURIComponent(findingId)}/submission-report`,
+        { method: "POST", body: JSON.stringify({ platform }) },
+      );
+      setSaved(result.path);
+    } catch (error) {
+      setSaved(error instanceof Error ? error.message : "Export failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <div className="flex min-w-0 items-center gap-2">
+    <DropdownMenu>
+      <DropdownMenu.Trigger className="flex items-center">
+        <Button variant="outline" size="sm" disabled={busy}><Download className="size-4" /> Submission report <ChevronDown className="size-3" /></Button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="end">
+        <DropdownMenu.Group>
+          <DropdownMenu.Label>Export to Desktop</DropdownMenu.Label>
+          <DropdownMenu.Item onClick={() => void exportFor("intigriti")}>Intigriti</DropdownMenu.Item>
+          <DropdownMenu.Item onClick={() => void exportFor("hackerone")}>HackerOne</DropdownMenu.Item>
+          <DropdownMenu.Item onClick={() => void exportFor("bugcrowd")}>Bugcrowd</DropdownMenu.Item>
+          <DropdownMenu.Item onClick={() => void exportFor("other")}>Other — all three</DropdownMenu.Item>
+        </DropdownMenu.Group>
+      </DropdownMenu.Content>
+    </DropdownMenu>
+    {saved ? <span className="max-w-[260px] truncate text-xs text-muted-foreground" title={saved}>{saved.startsWith("/") ? `Saved: ${saved.split("/").pop()}` : saved}</span> : null}
+  </div>;
 }
 
 function ThreadInbox({

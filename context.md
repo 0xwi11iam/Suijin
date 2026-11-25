@@ -696,3 +696,13 @@ is `~/.suijin/artifacts/` (never `config/artifacts`). Browser profile/session
 jars moved to `~/.suijin/browser/`, learned intel to `~/.suijin/intel/`.
 `scripts/rebuild_engagement_index.py` writes `engagements/index.json` mapping
 each chat to its target, audit trail, artifacts, and finding count.
+
+### 2026-11-25 — platform-specific submission reports
+
+The finding detail page exports a submission report via a dropdown:
+Intigriti, HackerOne, Bugcrowd, or Other (all three). Each writes one Markdown
+file to `~/Desktop`; no EXP/chat/audit/Suijin ids appear in it. Reports carry
+the platform selectors (CWE, VRT, asset type, CVSS version, severity method),
+summary/prerequisites/root cause, numbered steps, raw requests (redacted),
+impact, remediation, and evidence filenames. `finding_submission_meta` stores
+the derived metadata at catalog time; the export derives it for old rows.

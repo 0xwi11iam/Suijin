@@ -322,13 +322,131 @@ def _catalog_index() -> dict:
                     title = str(entry.get("title") or "").strip()
                     if not title:
                         continue
+                    last = entry.get("last_run") or {}
                     index.setdefault(str(eid).upper(), []).append({
                         "title": title,
                         "target": str(entry.get("target") or "").strip(),
                         "class": str(entry.get("class") or "").strip(),
+                        "description": str(entry.get("description") or "").strip(),
+                        "poc": entry.get("poc") or [],
+                        "last_run": str((last.get("output") if isinstance(last, dict) else "") or ""),
                     })
     _CATALOG_INDEX_CACHE.update(at=now, index=index)
     return index
+
+
+DESKTOP_DIR = Path.home() / "Desktop"
+
+
+def _catalog_entry_for(rec: dict) -> dict | None:
+    exp = str(rec.get("expId") or "").strip().upper()
+    if not exp:
+        return None
+    prefix = str(rec.get("title") or "")[:60].casefold()
+    for entry in _catalog_index().get(exp, []):
+        full = str(entry.get("title") or "").casefold()
+        if full.startswith(prefix[:40]) or prefix.startswith(full[:40]):
+            return entry
+    return None
+
+
+def _submission_metadata(rec: dict, catalog: dict | None) -> dict:
+    from suijin.server.tools.lib.submission_report import defaults
+
+    meta = defaults(
+        (catalog or {}).get("class") or rec.get("class") or "",
+        str(rec.get("title") or ""),
+        str(rec.get("target") or (catalog or {}).get("target") or ""),
+    )
+    db = sqlite3.connect(str(_swarm_db()), timeout=5)
+    try:
+        db.execute(
+            "CREATE TABLE IF NOT EXISTS finding_submission_meta ("
+            "finding_id TEXT PRIMARY KEY, class TEXT, cwe TEXT, vrt TEXT, "
+            "asset_type TEXT, cvss_version TEXT, severity_method TEXT, tester_ip TEXT, updated_at TEXT)"
+        )
+        row = db.execute(
+            "SELECT class,cwe,vrt,asset_type,cvss_version,severity_method,tester_ip "
+            "FROM finding_submission_meta WHERE finding_id=?", (rec["id"],)
+        ).fetchone()
+        if row:
+            keys = ("class", "cwe", "vrt", "asset_type", "cvss_version", "severity_method", "tester_ip")
+            meta.update({k: v for k, v in zip(keys, row) if v})
+        db.execute(
+            "INSERT OR REPLACE INTO finding_submission_meta "
+            "(finding_id,class,cwe,vrt,asset_type,cvss_version,severity_method,tester_ip,updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (rec["id"], meta["class"], meta["cwe"], meta["vrt"], meta["asset_type"],
+             meta["cvss_version"], meta["severity_method"], meta["tester_ip"],
+             time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())),
+        )
+        db.commit()
+    finally:
+        db.close()
+    return meta
+
+
+def _finding_evidence(rec: dict) -> list[str]:
+    db = sqlite3.connect(str(_swarm_db()), timeout=5)
+    try:
+        row = db.execute(
+            "SELECT evidence_paths,description_md FROM findings_v2 "
+            "WHERE engagement=? AND (legacy_id=? OR title LIKE ?) LIMIT 1",
+            (rec.get("engagement") or "", rec.get("expId") or "", f"%{str(rec.get('title') or '')[:40]}%"),
+        ).fetchone()
+    except sqlite3.Error:
+        row = None
+    finally:
+        db.close()
+    out: list[str] = []
+    if row and row[0]:
+        with contextlib.suppress(Exception):
+            out = [str(p) for p in json.loads(row[0]) if p]
+    return out
+
+
+def _write_submission_report(finding_id: str, platform: str) -> dict:
+    from suijin.server.tools.lib.submission_report import render
+
+    rec = next((f for f in _findings() if str(f.get("id")) == str(finding_id)), None)
+    if not rec:
+        raise KeyError(finding_id)
+    catalog = _catalog_entry_for(rec)
+    meta = _submission_metadata(rec, catalog)
+    evidence = _finding_evidence(rec)
+    target = rec.get("target") or (catalog or {}).get("target") or ""
+    report_rec = {
+        "title": rec.get("title") or (catalog or {}).get("title") or "Security finding",
+        "description": (catalog or {}).get("description") or rec.get("description") or rec.get("title") or "",
+        "target": target,
+        "severity": rec.get("severity") or "",
+        "cvss": rec.get("cvssScore"),
+        "evidencePaths": evidence,
+    }
+    markdown = render(report_rec, meta, platform, catalog)
+    DESKTOP_DIR.mkdir(parents=True, exist_ok=True)
+    slug = re.sub(r"[^a-z0-9]+", "-", str(report_rec["title"]).lower()).strip("-")[:60] or "finding"
+    program = re.sub(r"[^a-z0-9]+", "-", target.lower()).strip("-")[:32] or "target"
+    label = platform if platform != "other" else "all"
+    name = f"{time.strftime('%Y-%m-%d')}_{program}_{label}_{slug}.md"
+    path = DESKTOP_DIR / name
+    counter = 2
+    while path.exists():
+        path = DESKTOP_DIR / f"{path.stem}-{counter}.md"
+        counter += 1
+    path.write_text(markdown, encoding="utf-8")
+    return {"path": str(path), "platform": platform, "bytes": len(markdown.encode())}
+
+
+@router.post("/api/findings/{finding_id}/submission-report")
+def finding_submission_report(finding_id: str, body: dict = Body(default={})):
+    platform = str(body.get("platform") or "other").strip().lower()
+    if platform not in ("hackerone", "bugcrowd", "intigriti", "other"):
+        return JSONResponse({"error": "unknown platform"}, status_code=400)
+    try:
+        return _write_submission_report(finding_id, platform)
+    except KeyError:
+        return JSONResponse({"error": "finding not found"}, status_code=404)
 
 
 def _findings(session: str | None = None) -> list[dict]:
