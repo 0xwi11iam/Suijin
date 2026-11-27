@@ -82,6 +82,7 @@ export type FindingRecord = {
   chatId?: string | null;
   chatTitle?: string | null;
   auditPath?: string | null;
+  location?: string | null;
   impact?: string | null;
   remediation?: string | null;
   evidenceRequest: string;

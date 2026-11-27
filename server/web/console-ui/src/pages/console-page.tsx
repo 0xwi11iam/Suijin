@@ -16,7 +16,7 @@ import { findCommand, SLASH_COMMANDS } from "@0/engine/dist/shared/slash-command
 import type { ConsoleSessionSnapshot, ConsolePublicExport, DesktopConsoleSession, HarnessSnapshot, ConsoleCreateSessionInput } from "@0/engine/shared";
 import { BackendDescriptorSchema, parseBackendHandshake } from "@0/engine/dist/shared/backend-protocol.js";
 import { DEFAULT_AUTONOMY_MODE } from "@0/engine/dist/shared/desktop-console.js";
-import { Copy, Download, Menu, MoreHorizontal, Info, Square, Trash2, Pencil, Eraser, X, Users, Globe, ShieldCheck, Search, Workflow } from "lucide-react";
+import { Copy, Download, Menu, MoreHorizontal, Trash2, Pencil, Eraser, X, Users, Globe } from "lucide-react";
 import { createBackendApi, localControlFetch, useBackendApi } from "@/api";
 import { BackendApiContext, BackendSelectionContext, useBackendSelection } from "@/backend-context";
 import { ChatBackendScope, ChatHostSelectionScope } from "@/chat-backend-scope";
@@ -24,7 +24,6 @@ import { chatResourceKey, parseChatResourceKey, backendRouteHref } from "@/conso
 import { createChatOnExecutionHost, configureChatRuntime } from "@/console/model-source";
 import { HostSidebarChatHistory, type PendingChatSelection } from "@/components/host-sidebar-chat-history";
 import { useTeamAccess } from "@/components/team-access";
-import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
@@ -36,13 +35,14 @@ import { usePersistentState } from "@/lib/use-persistent-state";
 import { ConversationSkeleton } from "@/console/loading-state";
 import { recoveredProviderError } from "@/console/connection-recovery";
 import { consoleErrorMessage, needsProviderSignIn, needsModelSourceReconnect } from "@/console/provider-error";
-import { ProviderGlyph } from "@/components/provider-glyph";
 import { TeamCollaboration } from "@/console/team-collaboration";
 import { AgentsPanel } from "@/console/agents-panel";
 import { BrowserPreviews } from "@/console/browser-previews";
 import { DockWorkspace, type DockPanelId } from "@/console/dock-workspace";
 import { reconcileDockChatState } from "@/console/dock-chat-state";
 import { Conversation, Composer } from "@/console/conversation";
+import { HeroFrame, type HeroBridge, type HeroSubmitMessage } from "@/console/hero-frame";
+import type { HeroMode, HeroPermissions } from "../../zero/entry/protocol";
 
 import { ConsoleInspector } from "@/console/inspector";
 import { ConsoleSessionRail } from "@/console/session-rail";
@@ -50,29 +50,6 @@ import { addFindingToDraft } from "@/console/finding-context";
 import type { FindingRecord } from "@/types";
 import { consoleSnapshotKey, useConsoleWorkspace } from "@/console/use-console-workspace";
 import type { SettingsResponse } from "@/components/console-control/contracts";
-
-const HERO_PROMPTS = [
-  "What would you like to hack and fix today?",
-  "What should we break into first?",
-  "Which surface are we auditing today?",
-  "Pick a target — the engagement is warm.",
-  "Where are we hunting tonight?",
-  "What's the weakest link you can find?",
-  "Got scope? Let's hunt.",
-  "Which login page should we test?",
-  "Point me at a domain and I'll map it.",
-  "What needs a security-header audit?",
-  "Hunt for broken access control where?",
-  "Which API deserves a poking today?",
-  "What are we fuzzing this time?",
-  "Name a host — I'll find its secrets.",
-  "Which auth flow are we abusing?",
-  "What's today's bug of the day?",
-  "Which endpoint leaks too much?",
-  "Give me a target and a deadline.",
-  "What should the engagement break first?",
-  "Where do we start the hunt tonight?",
-];
 
 interface FeedbackResult { saved: boolean; path?: string; submitted: boolean; previewId?: string; preview?: { url: string; body: unknown; headers: unknown; warnings: string[] }; error?: string }
 type ConfirmAction = { kind: "close" | "clear" | "delete" | "delete-live" | "drain"; id: string; title: string };
@@ -127,24 +104,26 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
   const recoveryAttempt = useRef<string | null>(null);
   const justCreated = useRef<string | null>(null); // sessions we spawned this load — heartbeat lag ≠ deleted
   const [recoveringSession, setRecoveringSession] = useState(false);
-  const [landingMsg, setLandingMsg] = useState("");
-  const [heroPermissions, setHeroPermissions] = usePersistentState<"recon" | "exploitation" | "maximum">("hero-permissions", "exploitation");
-  const [heroMode, setHeroMode] = usePersistentState<"bbp" | "vdp" | "ctf" | "pentest">("hero-mode", "vdp");
+  const [heroPermissions, setHeroPermissions] = usePersistentState<HeroPermissions>("hero-permissions", "exploitation");
+  const [heroMode, setHeroMode] = usePersistentState<HeroMode>("hero-mode", "vdp");
   const [heroFiles, setHeroFiles] = useState<File[]>([]);
-  const heroFileRef = useRef<HTMLInputElement>(null);
-  const [heroPromptIndex] = useState(() => Math.floor(Math.random() * HERO_PROMPTS.length));
-  const runtimeInfo = useQuery({ queryKey: ["runtime-info"], queryFn: () => scopedApi.webFetchJson("/api/console/runtime"), refetchInterval: 15000 });
-  const heroCatalog = useQuery({ queryKey: ["hero-catalog"], queryFn: () => scopedApi.webFetchJson("/api/console/provider-catalog"), staleTime: 300000 });
-  const normKey = (k: string) => k.replace(/[^a-z0-9]/g, "");
-  const heroRuntime = (runtimeInfo.data as { runtime?: { providerId?: string; model?: string }; effort?: string } | undefined);
-  const heroProvider = ((heroCatalog.data as { providers?: { key: string; icon?: string; label?: string }[] } | undefined)?.providers ?? []).find(p => normKey(p.key) === normKey(String(heroRuntime?.runtime?.providerId || "")));
-  const startFromLanding = async (message: string) => {
+  // The landing frame hands over a whole submission. `submit` reads the hero settings from this
+  // ref rather than its render closure, so a session is never created with the previous selection.
+  const heroSettings = useRef({ permissions: heroPermissions, mode: heroMode, files: heroFiles });
+  heroSettings.current = { permissions: heroPermissions, mode: heroMode, files: heroFiles };
+  // The landing waits to hear whether its submission became a session; it keeps the text if not.
+  const heroBridge = useRef<HeroBridge | null>(null);
+  const startFromHero = (submission: HeroSubmitMessage) => {
     // ONE PATH (field 2026-11-17: this used to create the session AND
     // submit, while the composer's create-at-submit also fired from the
     // stale closure — two creates, the prompt bubble doubled). The
     // composer submit owns creation: draft + submit is enough.
-    if (!message.trim()) return;
-    workspace.setRootDraft(message);
+    if (!submission.text.trim()) return;
+    heroSettings.current = { permissions: submission.permissions, mode: submission.mode, files: submission.files };
+    setHeroPermissions(submission.permissions);
+    setHeroMode(submission.mode);
+    setHeroFiles(submission.files);
+    workspace.setRootDraft(submission.text);
     void submit(true);
   };
   useEffect(() => {
@@ -537,9 +516,10 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
       // the agents' standing mission, so the swarm hunts what was typed.
       if (!sessionId && !messageWorkerId && text) {
         void (async () => {
-          if (heroMode === "pentest" && !heroFiles.length) { setNotice("Upload a text scope document before starting a pentest."); return; }
-          const created = await createOwnedSession({ title: text.slice(0, 120), spawn: !heroFiles.length, role: "audit", autonomyMode: DEFAULT_AUTONOMY_MODE, permissions: heroPermissions, mode: heroMode } as ConsoleCreateSessionInput);
-          if (!created) { setNotice("Couldn't start the engagement. Try again."); return; }
+          const hero = heroSettings.current;
+          if (hero.mode === "pentest" && !hero.files.length) { setNotice("Upload a text scope document before starting a pentest."); heroBridge.current?.reject("Upload a text scope document before starting a pentest."); return; }
+          const created = await createOwnedSession({ title: text.slice(0, 120), spawn: !hero.files.length, role: "audit", autonomyMode: DEFAULT_AUTONOMY_MODE, permissions: hero.permissions, mode: hero.mode } as ConsoleCreateSessionInput).catch((error: unknown) => { setNotice(error instanceof Error ? error.message : "Couldn't start the engagement. Try again."); return null; });
+          if (!created) { setNotice("Couldn't start the engagement. Try again."); heroBridge.current?.reject("Couldn't start the engagement. Try again."); return; }
           justCreated.current = created.id;
           // clear the typed draft BEFORE remapping so the new session's
           // composer inherits empty (field 2026-11-17: the prompt stayed
@@ -549,9 +529,9 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
           workspace.remapDrafts(sessionId ?? "new", created.id);
           queryClient.setQueryData<DesktopConsoleSession[]>(["console-sessions"], previous => [...(previous ?? []).filter(item => item.id !== created.id), created]);
           onDockSessionResolved?.(client.backendId, created.id, created);
-          if (heroFiles.length) {
+          if (hero.files.length) {
             try {
-              const files = await Promise.all(heroFiles.map(async file => ({ name: file.name, content: await file.text() })));
+              const files = await Promise.all(hero.files.map(async file => ({ name: file.name, content: await file.text() })));
               const upload = await fetch(`/api/console/sessions/${encodeURIComponent(created.id)}/files`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -561,11 +541,14 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
                 const detail = await upload.json().catch(() => ({}));
                 setNotice(detail.error || "The inbox upload failed.");
                 setHeroFiles([]);
+                heroBridge.current?.reject(detail.error || "The inbox upload failed.");
                 return;
               }
-            } catch { setNotice("The inbox upload failed."); setHeroFiles([]); return; }
+            } catch { setNotice("The inbox upload failed."); setHeroFiles([]); heroBridge.current?.reject("The inbox upload failed."); return; }
             setHeroFiles([]);
           }
+          // Only now does the console own the prompt: a session exists and its inbox is in place.
+          heroBridge.current?.accept();
           navigate(`/chats/${created.id}`, { replace: true });
           // post directly — this closure's workspace still points at the
           // old (blank) session id
@@ -618,51 +601,7 @@ function ConsolePageContent({embeddedSessionId,embeddedBackendId,onOpenDockChat,
 
 
         {snapshot?.focusedFinding && <Disclosure key={snapshot.focusedFinding.id} className="shrink-0 bg-muted/10 px-4 py-3 text-xs" defaultOpen={search.get("intent") === "impact"} summary={<>{snapshot.focusedFinding.title} · {snapshot.focusedFinding.severity}</>} triggerClassName="cursor-pointer font-medium"><div className="max-h-64 space-y-3 overflow-auto pt-3"><p className="whitespace-pre-wrap">{snapshot.focusedFinding.description}</p><div><div className="font-medium">Impact</div>{snapshot.focusedFinding.impactAssessment ? <pre className="mt-2 whitespace-pre-wrap break-words">{JSON.stringify(snapshot.focusedFinding.impactAssessment, null, 2)}</pre> : <p className="mt-1 text-muted-foreground">Not assessed yet.</p>}</div><Button size="sm" variant="outline" asChild><Link to={`/fix${controlsQuery}&finding=${encodeURIComponent(snapshot.focusedFinding.id)}`}>Prepare a fix</Link></Button></div></Disclosure>}
-        {recoveringSession || workspace.loading ? <ConversationSkeleton /> : snapshot ? workerId && !worker ? <div className="grid flex-1 place-items-center p-8 text-center"><div><h2 className="text-base font-medium">This sub-agent has ended</h2><Button className="mt-4" variant="outline" onClick={() => navigate(`/chats/${snapshot.session.id}`)}>Back</Button></div></div> : <Conversation detailsControl={<ChatDetailsPopover open={inspectOpen} onOpenChange={setInspectOpen} contextPercent={snapshot.contextInputTokens !== undefined && (snapshot.contextWindowTokens ?? snapshot.runtime?.contextWindowTokens) ? Math.round(snapshot.contextInputTokens / (snapshot.contextWindowTokens ?? snapshot.runtime?.contextWindowTokens)! * 100) : undefined}>{inspector}</ChatDetailsPopover>} onSubmitRoot={() => void submit(true)} onStopRoot={() => void workspace.perform(() => controlConsoleSession(snapshot.session.id, "pause"))} onDrainAgents={() => setConfirm({ kind: "drain", id: snapshot.session.id, title: snapshot.title })} onOpenDetails={() => { closeAgents(); setBrowserOpen(false); setInspectOpen(true); }} agentsOpen={agentsOpen} onCloseAgents={closeAgents} onSelectWorker={selectWorker} sendBehavior={mode} workspace={workspace} worker={worker} onSubmit={() => void submit()} onStop={() => void workspace.perform(() => worker ? stopConsoleWorker(snapshot.session.id, worker.id) : controlConsoleSession(snapshot.session.id, "pause"))} onResolve={(id, response) => void workspace.perform(() => resolveConsoleDecision(snapshot.session.id, id, response))} resumeCap={() => setCapOpen(true)} /> : <div className="console-enter grid flex-1 place-items-center overflow-auto p-6"><div className="max-w-5xl text-center">
-              <BrandMark className="mx-auto mb-9" />
-              <h1 className="font-heading text-3xl font-medium sm:text-4xl">{HERO_PROMPTS[heroPromptIndex]}</h1>
-              <form className="mt-8 w-full rounded-[28px] border border-border bg-background p-5 shadow-[0_12px_48px_rgba(0,0,0,0.22)] focus-within:outline-2 focus-within:outline-ring sm:p-6" onSubmit={(event) => { event.preventDefault(); void startFromLanding(landingMsg); landingMsg && setLandingMsg(""); }}>
-                <input autoFocus aria-label="What should we hack today?" placeholder="What should we hack today?" value={landingMsg} maxLength={400} disabled={workspace.busy || readOnlyTeam} onChange={(event) => setLandingMsg(event.target.value)} className="w-full bg-transparent px-2 py-2 text-lg outline-none placeholder:text-muted-foreground sm:text-xl" />
-                <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-border/60 pt-5 text-sm text-muted-foreground">
-                  <label className="flex items-center gap-1.5">Permissions
-                    <select aria-label="Permissions" value={heroPermissions} disabled={workspace.busy} onChange={event => setHeroPermissions(event.target.value as typeof heroPermissions)} className="rounded-[var(--radius-control,10px)] border border-border bg-background px-3 py-2 text-sm text-foreground">
-                      <option value="recon">Recon</option>
-                      <option value="exploitation">Exploitation</option>
-                      <option value="maximum">Maximum</option>
-                    </select>
-                  </label>
-                  <label className="flex items-center gap-1.5">Mode
-                    <select aria-label="Mode" value={heroMode} disabled={workspace.busy} onChange={event => setHeroMode(event.target.value as typeof heroMode)} className="rounded-[var(--radius-control,10px)] border border-border bg-background px-3 py-2 text-sm text-foreground">
-                      <option value="bbp">BBP</option>
-                      <option value="vdp">VDP</option>
-                      <option value="ctf">CTF</option>
-                      <option value="pentest">Pentest</option>
-                    </select>
-                  </label>
-                  <input ref={heroFileRef} type="file" multiple className="hidden" accept=".md,.txt,.json,.yaml,.yml,.xml,.csv,.html,.conf,.ini,.log,.scope,text/*" onChange={event => setHeroFiles(Array.from(event.target.files ?? []))} />
-                  <Button type="button" variant="ghost" size="sm" className="h-9 px-3 text-sm" onClick={() => heroFileRef.current?.click()} disabled={workspace.busy || readOnlyTeam}>+ Files{heroFiles.length ? ` (${heroFiles.length})` : ""}</Button>
-                  {heroMode === "pentest" && !heroFiles.length ? <span className="text-amber-500">Upload a text scope document to start a pentest.</span> : null}
-                </div>
-                <div className="mt-5 flex items-center justify-between">
-                  <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                    {heroRuntime?.runtime?.model && <span className="flex shrink-0 items-center gap-1.5">
-                      <ProviderGlyph label={heroProvider?.label || String(heroRuntime?.runtime?.providerId || "Provider")} className="size-4 text-[9px]" />
-                      <span className="font-medium text-foreground">{heroRuntime.runtime.model}</span>
-                      {heroRuntime.effort && heroRuntime.effort !== "off" && <span>· {heroRuntime.effort}</span>}
-                    </span>}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Button type="button" variant="ghost" size="lg" onClick={() => setRailOpen(true)}>History</Button>
-                    <Button type="submit" size="lg" disabled={workspace.busy || readOnlyTeam || (heroMode === "pentest" && !heroFiles.length)}>Hack it</Button>
-                  </div>
-                </div>
-              </form>
-              <div className="mt-10 flex flex-col items-start gap-3 text-left">
-                <button type="button" className="flex items-center gap-2.5 text-base text-muted-foreground hover:text-foreground" onClick={() => { setLandingMsg("Map the attack surface of the target"); void startFromLanding("Map the attack surface of the target"); }}><ShieldCheck className="size-4" />Map the attack surface</button>
-                <button type="button" className="flex items-center gap-2.5 text-base text-muted-foreground hover:text-foreground" onClick={() => { setLandingMsg("Hunt for exploitable paths and auth bypasses"); void startFromLanding("Hunt for exploitable paths and auth bypasses"); }}><Search className="size-4" />Hunt for exploitable paths</button>
-                <button type="button" className="flex items-center gap-2.5 text-base text-muted-foreground hover:text-foreground" onClick={() => { setLandingMsg("Plan a structured engagement with lanes and guardrails"); void startFromLanding("Plan a structured engagement with lanes and guardrails"); }}><Workflow className="size-4" />Plan the engagement</button>
-              </div>
-            </div></div>}
+        {recoveringSession || workspace.loading ? <ConversationSkeleton /> : snapshot ? workerId && !worker ? <div className="grid flex-1 place-items-center p-8 text-center"><div><h2 className="text-base font-medium">This sub-agent has ended</h2><Button className="mt-4" variant="outline" onClick={() => navigate(`/chats/${snapshot.session.id}`)}>Back</Button></div></div> : <Conversation detailsControl={<ChatDetailsPopover open={inspectOpen} onOpenChange={setInspectOpen} contextPercent={snapshot.contextInputTokens !== undefined && (snapshot.contextWindowTokens ?? snapshot.runtime?.contextWindowTokens) ? Math.round(snapshot.contextInputTokens / (snapshot.contextWindowTokens ?? snapshot.runtime?.contextWindowTokens)! * 100) : undefined}>{inspector}</ChatDetailsPopover>} onSubmitRoot={() => void submit(true)} onStopRoot={() => void workspace.perform(() => controlConsoleSession(snapshot.session.id, "pause"))} onDrainAgents={() => setConfirm({ kind: "drain", id: snapshot.session.id, title: snapshot.title })} onOpenDetails={() => { closeAgents(); setBrowserOpen(false); setInspectOpen(true); }} agentsOpen={agentsOpen} onCloseAgents={closeAgents} onSelectWorker={selectWorker} sendBehavior={mode} workspace={workspace} worker={worker} onSubmit={() => void submit()} onStop={() => void workspace.perform(() => worker ? stopConsoleWorker(snapshot.session.id, worker.id) : controlConsoleSession(snapshot.session.id, "pause"))} onResolve={(id, response) => void workspace.perform(() => resolveConsoleDecision(snapshot.session.id, id, response))} resumeCap={() => setCapOpen(true)} /> : <div className="console-enter flex min-h-0 flex-1 flex-col"><HeroFrame permissions={heroPermissions} mode={heroMode} busy={workspace.busy} readOnly={readOnlyTeam} onSubmit={startFromHero} onHistory={() => setRailOpen(true)} onNavigate={(to) => void navigate(to)} onSelect={(selection) => { setHeroPermissions(selection.permissions); setHeroMode(selection.mode); }} bridge={heroBridge} /></div>}
       </section>;
 
   const pendingChatContent = <section data-pending-chat={pendingChatSelection?.id} aria-label={pendingChatSelection ? `Opening ${pendingChatSelection.title}` : undefined} className="flex h-full min-h-0 flex-col"><ConversationSkeleton /></section>;

@@ -578,7 +578,7 @@ function FindingFamilyInspector({
       : handoffIntent === "verify"
         ? "Verify in chat"
         : "Investigate in chat";
-  const findingLocation = [data.latest.target, data.latest.engagement, data.case?.target, data.latest.category].filter(Boolean).join(" · ");
+  const findingLocation = data.latest.location || data.latest.target || "";
 
   const copyHandoff = async () => {
     try {

@@ -42,6 +42,19 @@ top-level `artifacts/` directory is only the fallback for tools that run before
 an engagement is set. Findings store `engagement` (chat id) and the UI derives
 the audit path from `~/.suijin/engagements/<engagement>/events.jsonl`.
 
+### Deleting a chat
+
+Deleting a chat in the console pauses and stops its agents, removes its rows
+(including any intent tagged with the engagement, whichever swarm it was filed
+under), and then takes the folder with it:
+
+- **Nothing references the chat** (no finding in `findings`/`findings_v2`, no
+  `exploits/` content) → the whole folder is removed. No skeleton is left.
+- **A finding or exploit does** → the folder stays, because findings point at
+  its `events.jsonl`; only the disposable `home/` sandbox is removed.
+
+The coordinator's own `_default` folder is never touched by this.
+
 ## Rules
 
 - Never write engagement data into the package tree or the repo.

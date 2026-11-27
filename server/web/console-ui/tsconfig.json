@@ -18,7 +18,8 @@
     "rootDir": ".",
     "outDir": "dist",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@zero/*": ["zero/src/*"]
     },
     "types": ["vite/client"]
   },

@@ -1,0 +1,74 @@
+/* Shared motion vocabulary. Product layouts own geometry, controls own feedback. */
+:root {
+  --ui-duration-fast:100ms;
+  --ui-duration-standard:200ms;
+  --ui-duration-enter:240ms;
+  --ui-ease-out:cubic-bezier(.16,1,.3,1);
+}
+@keyframes ui-surface-enter {
+  from { opacity:0; transform:translateY(6px); }
+  to { opacity:1; transform:translateY(0); }
+}
+.ui-surface-enter { animation:ui-surface-enter var(--ui-duration-enter) var(--ui-ease-out) both; }
+
+/* In-progress text only; completed rows and idle chrome never shimmer.
+   200% gradient sweeping 100% -> -100% over 2s: muted, foreground, muted. */
+@keyframes ui-text-shimmer-sweep { from { background-position:100% 0; } to { background-position:-100% 0; } }
+.ui-text-shimmer {
+  --ui-shimmer-base:var(--muted-foreground-2, color-mix(in oklch, currentColor 52%, transparent));
+  background-image:linear-gradient(90deg,var(--ui-shimmer-base) 25%,var(--foreground,#fff) 50%,var(--ui-shimmer-base) 75%);
+  background-size:200% 100%; background-repeat:repeat;
+  -webkit-background-clip:text; background-clip:text;
+  -webkit-text-fill-color:transparent; color:transparent;
+  animation:ui-text-shimmer-sweep 2s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-text-shimmer { animation:none; background-image:none; -webkit-text-fill-color:currentColor; color:var(--ui-shimmer-base); }
+}
+/* <html data-motion="reduce"> is set by lib/web-appearance.ts when the OS asks for reduced motion or the
+   user overrides it in Appearance settings; it mirrors every prefers-reduced-motion block below. */
+html[data-motion="reduce"] .ui-text-shimmer { animation:none; background-image:none; -webkit-text-fill-color:currentColor; color:var(--ui-shimmer-base); }
+@keyframes ui-activity-arrive { from { opacity:0; transform:translateY(3px) scale(.8); } to { opacity:1; transform:translateY(0) scale(1); } }
+
+/* Popup contract shared by menu, popover, select, command, tooltip and dialog:
+   scale + opacity through Base UI starting/ending-style hooks, 150ms in / 120ms out. */
+.ui-popup {
+  --ui-popup-scale: .97;
+  --ui-popup-in: var(--duration-fast, 150ms);
+  transition: opacity var(--ui-popup-in) var(--ease-out-quint, cubic-bezier(.23,1,.32,1)), scale var(--ui-popup-in) var(--ease-out-quint, cubic-bezier(.23,1,.32,1));
+  transform-origin: var(--transform-origin, center);
+}
+.ui-popup[data-side="top"] { transform-origin: var(--transform-origin, bottom center); }
+.ui-popup[data-side="bottom"] { transform-origin: var(--transform-origin, top center); }
+.ui-popup[data-side="left"] { transform-origin: var(--transform-origin, right center); }
+.ui-popup[data-side="right"] { transform-origin: var(--transform-origin, left center); }
+.ui-popup[data-starting-style], .ui-popup[data-ending-style] { opacity: 0; scale: var(--ui-popup-scale); }
+.ui-popup[data-ending-style] { transition-duration: 120ms; }
+.ui-popup[data-instant] { transition: none; }
+/* Dialog: larger travel, 200ms in, centered so keep the default origin. */
+.ui-popup.ui-popup-dialog { --ui-popup-scale: .95; --ui-popup-in: var(--duration-base, 200ms); transform-origin: center; }
+.ui-backdrop { transition: opacity var(--ui-duration-standard) var(--ui-ease-out); background-color: var(--overlay) !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+.ui-backdrop[data-starting-style], .ui-backdrop[data-ending-style] { opacity: 0; }
+/* Scroll-timeline edge fades never finish, so Base UI would wait forever to unmount a closing popup. */
+.ui-popup[data-ending-style], .ui-popup[data-closed], .ui-sheet[data-ending-style], .ui-sheet[data-closed],
+.ui-popup[data-ending-style] *, .ui-sheet[data-ending-style] * { animation: none !important; }
+/* A closing layer must never swallow clicks, even if its exit transition stalls. */
+.ui-popup[data-ending-style], .ui-popup[data-closed], .ui-backdrop[data-ending-style], .ui-backdrop[data-closed], .ui-sheet[data-ending-style], .ui-sheet[data-closed] { pointer-events: none !important; }
+.ui-sheet { transition: translate var(--ui-duration-surface, 240ms) var(--ui-ease-out), opacity var(--ui-duration-standard) var(--ui-ease-out); }
+.ui-sheet[data-starting-style], .ui-sheet[data-ending-style] { opacity: 0; }
+.ui-sheet[data-side="right"][data-starting-style], .ui-sheet[data-side="right"][data-ending-style] { translate: 2.5rem 0; }
+.ui-sheet[data-side="left"][data-starting-style], .ui-sheet[data-side="left"][data-ending-style] { translate: -2.5rem 0; }
+.ui-sheet[data-side="top"][data-starting-style], .ui-sheet[data-side="top"][data-ending-style] { translate: 0 -2.5rem; }
+.ui-sheet[data-side="bottom"][data-starting-style], .ui-sheet[data-side="bottom"][data-ending-style] { translate: 0 2.5rem; }
+@media (prefers-reduced-motion: reduce) {
+  .ui-popup, .ui-backdrop, .ui-sheet { transition: opacity var(--ui-duration-fast) linear; }
+  .ui-popup[data-starting-style], .ui-popup[data-ending-style] { scale: 1; }
+  .ui-popup[data-ending-style] { transition-duration: var(--ui-duration-fast); }
+}
+html[data-motion="reduce"] :is(.ui-popup, .ui-backdrop, .ui-sheet) { transition: opacity var(--ui-duration-fast) linear; }
+html[data-motion="reduce"] .ui-popup:is([data-starting-style], [data-ending-style]) { scale: 1; }
+html[data-motion="reduce"] .ui-popup[data-ending-style] { transition-duration: var(--ui-duration-fast); }
+html[data-motion="reduce"] .ui-surface-enter { animation: none; }
+
+@keyframes ui-loader-wave { 0%,75%,100% { opacity:.25; } 35% { opacity:1; } }
+@keyframes skeleton-pulse { 0%,100% { opacity:1; } 50% { opacity:.55; } }

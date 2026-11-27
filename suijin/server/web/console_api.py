@@ -22,6 +22,7 @@ import contextlib
 import json
 import os
 import re
+import shutil
 import sqlite3
 import threading
 import time
@@ -1002,6 +1003,22 @@ def _finding_description(f: dict) -> str:
     return str(f.get("title") or "")
 
 
+def _finding_location(f: dict) -> str:
+    """Operator-facing location: host + endpoint path, never the internal
+    engagement slug or the generic 'finding' word."""
+    target = str(f.get("target") or "")
+    host = re.sub(r"^[a-z]+://", "", target).split("/")[0]
+    haystack = " ".join(str(x or "") for x in (f.get("title"), _finding_description(f)))
+    path = ""
+    for candidate in re.findall(r"(?<![\w.])/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+", haystack):
+        if len(candidate) > 1 and candidate not in ("/", "//"):
+            path = candidate
+            break
+    if not host:
+        return path
+    return f"{host}{path}" if path else host
+
+
 def _finding_group(f: dict) -> dict:
     fp = re.sub(r"[^a-z0-9]+", "-", (f["title"] or "finding").lower())[:60]
     triage = _ledger("triage").get(fp) or {}
@@ -1027,6 +1044,7 @@ def _finding_group(f: dict) -> dict:
         "status": f["status"], "fingerprint": fp,
         "expId": f.get("expId") or "", "cvssScore": f.get("cvssScore"),
         "engagement": engagement, "target": f.get("target") or "",
+        "location": _finding_location(f),
         "impact": impact, "remediation": remediation,
         "chatId": engagement, "chatTitle": chat_title, "auditPath": audit_path,
         "triageStatus": triage.get("triageStatus") or "new",
@@ -1829,6 +1847,39 @@ def _bus_addr_direct():
     return None
 
 
+def _prune_engagement(session_id: str) -> None:
+    """A deleted chat leaves nothing of value on disk.
+
+    With no finding and no exploit referencing the engagement, its whole folder
+    goes — audit trail, agent sandbox, reports. A folder that does hold evidence
+    stays (findings point at its events.jsonl), minus the disposable sandbox.
+    The coordinator's own scratch folder is never touched.
+    """
+    if session_id in ("default", "", "_default"):
+        return
+    eng = _eng_dir(session_id)
+    if not eng.is_dir():
+        return
+    evidence = False
+    db = sqlite3.connect(str(_swarm_db()), timeout=5)
+    try:
+        for table in ("findings", "findings_v2"):
+            try:
+                if db.execute(f"SELECT 1 FROM {table} WHERE engagement = ? LIMIT 1", (session_id,)).fetchone():
+                    evidence = True
+            except sqlite3.Error:
+                pass  # table absent on this install
+    finally:
+        db.close()
+    exploits = eng / "exploits"
+    if exploits.is_dir() and any(exploits.iterdir()):
+        evidence = True
+    if evidence:
+        shutil.rmtree(eng / "home", ignore_errors=True)
+    else:
+        shutil.rmtree(eng, ignore_errors=True)
+
+
 @router.delete("/api/console/sessions/{session_id}")
 def session_close(session_id: str):
     """Delete the chat: send the backend PAUSE then DELETE commands, then
@@ -1849,7 +1900,9 @@ def session_close(session_id: str):
     with contextlib.suppress(Exception):
         db = sqlite3.connect(str(_swarm_db()), timeout=5)
         db.execute("UPDATE agents SET status = 'stopped' WHERE swarm = ?", (session_id,))
-        db.execute("DELETE FROM intents WHERE swarm = ?", (session_id,))
+        # An intent the session owned can sit under another swarm name (anything filed before the
+        # session's swarm existed); the engagement tag is what makes it this session's work.
+        db.execute("DELETE FROM intents WHERE swarm = ? OR engagement = ?", (session_id, session_id))
         db.execute("DELETE FROM agents WHERE swarm = ? AND status = 'stopped'", (session_id,))
         db.commit()
         db.close()
@@ -1857,6 +1910,9 @@ def session_close(session_id: str):
     # scanner cannot resurrect the deleted chat as a folder.
     with contextlib.suppress(Exception):
         (_eng_dir(session_id) / "engagement.json").unlink(missing_ok=True)
+    # …and take the folder with it when nothing of value references the chat.
+    with contextlib.suppress(Exception):
+        _prune_engagement(session_id)
     with _ring_lock:
         _rings.pop(session_id, None)
         _seqs.pop(session_id, None)
@@ -2082,19 +2138,15 @@ def stop_daemon():
 
 @router.post("/api/control/start-daemon")
 def start_daemon(body: dict = Body(default={})):
-    """The dashboard's Start engine — bring the coordinator up."""
-    started = bool(_bus())
-    if not started:
-        with contextlib.suppress(Exception):
-            import subprocess
-            import sys
+    """The dashboard's Start engine — bring the coordinator up from this tree.
 
-            subprocess.Popen(
-                [sys.executable, "-m", "suijin.server.swarm.coordinator"],
-                stdout=open("/tmp/suijin-coordinator.log", "a"), stderr=subprocess.STDOUT,
-                stdin=subprocess.DEVNULL, start_new_session=True)
-            time.sleep(4)
-            started = bool(_bus())
+    Shared with the hunt's cold start and `swarm init`, so all three start the coordinator the
+    same way: this interpreter's code, logging inside the runtime root, and reported as started
+    only once it actually answers.
+    """
+    from suijin.server.swarm.lifecycle import start_coordinator
+
+    started = bool(_bus()) or start_coordinator()
     return {"ok": True, "pid": None, "label": "suijin coordinator", "started": started}
 
 

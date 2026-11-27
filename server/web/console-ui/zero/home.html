@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Suijin</title>
+    <script>
+      // Suijin's console is always dark. Match the palette before styles can paint, the same way
+      // 0's own index.html applies its theme (no flash of the light palette).
+      (() => {
+        const root = document.documentElement;
+        root.classList.add("dark");
+        root.dataset.mode = "dark";
+        root.dataset.suijinHome = "";
+        root.style.colorScheme = "dark";
+        try {
+          if (matchMedia("(prefers-reduced-motion: reduce)").matches) root.dataset.motion = "reduce";
+        } catch {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./entry/home.tsx"></script>
+  </body>
+</html>

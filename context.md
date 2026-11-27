@@ -732,3 +732,66 @@ leader model (`model_1`) that writes a Markdown report to `~/Desktop`. If the
 leader returns no text, the UI surfaces the real provider error; there is no
 alternate or heuristic model in that path. The catalog YAML accepts a `description: |`
 block and the prompt requires 2-3 paragraphs: what/where, root cause, impact.
+
+## Landing = 0's native new-thread screen (2026-11-27)
+
+The console's landing is no longer hand-built. It is **0's own new-thread
+screen**, carried in `server/web/console-ui/zero/` from `0sec-labs/0` @
+`78d453c0` (MIT OR Apache-2.0 — licences kept beside it, `zero/README.md` is
+the provenance record) and adapted for Suijin. 233 upstream files are mirrored
+verbatim apart from four mechanical path rewrites (`MANIFEST.json` lists them).
+
+**Why a second document.** 0's landing is a 233-file closure of their source,
+and 65 of those files are ones this console has modified. So the landing runs
+in its own document (`zero/home.html`, a second Vite entry → `/zero/home.html`),
+hosted same-origin in a frame by `src/console/hero-frame.tsx`. 0's stylesheet
+can never reach the console, and no Suijin logic was overwritten.
+
+**The bridge** (`zero/entry/protocol.ts`, the only shared file): both sides
+check `origin` + `source`; the console shape-checks every submission. The frame
+only collects the prompt — session creation, inbox upload, navigation,
+pause/resume/delete stay in the console. The console *accepts* once a session
+exists and its inbox is in place (and clears the stored draft itself, since it
+navigates away at once), or *rejects* and the frame keeps the text and files
+and says why. A selector change is announced immediately, so a choice survives
+a reload. `console-page.tsx` changed only in its landing slot: `<HeroFrame>`
+replaces the inline form, and the create-at-submit branch reads the selection
+from a ref.
+
+**Mapping, the way 0 itself slots them:** Mode (BBP/VDP/CTF/Pentest) sits in
+0's context row where their project selector is; Permissions
+(Recon/Exploitation/Maximum) sits in 0's autonomy slot where `YOLO` is; 0's
+prebuilt `ModelCatalog` is fed by `/api/console/available-models` and saves
+through the runtime PATCH. Three Suijin suggestions replace 0's. Composer up
+to 1120px wide, never below 128px tall. Palette measured from 0's own screen
+(`#101010` base, `#1b1b1b` card, amber-inked dither field).
+
+**Found by running it for real, and fixed in the backend:**
+- Delete left a folder skeleton per chat, and any intent filed under another
+  swarm name stayed `open` — and one open intent anywhere pauses the idle
+  autopilot. `session_close` now removes intents tagged with the engagement and
+  prunes the folder when no finding/exploit references it (`docs/WORKSPACE.md`).
+- A cold start shelled out to the `suijin` launcher on PATH, starting the
+  coordinator under the system interpreter (which has no `ladybug`), and
+  `swarm init <title>` filed the title into the DEFAULT swarm. All three
+  starters (hunt, `swarm init`, the dashboard's Start Engine) now share
+  `lifecycle.start_coordinator()`: this interpreter, logging inside the runtime
+  root, ready only once the bus and schema answer. The Start Engine's old
+  `python -m suijin.server.swarm.coordinator` was a no-op — the module has no
+  `__main__`.
+
+**Verified:** `tests/hero_journey.py` 42/42 (real browser, state-changing
+endpoints stubbed), `tests/hero_layout.py` all measurements at five window
+sizes (overlap / clipping / overflow / click-blocking / WCAG AA contrast),
+`vitest` 6/6, 18 new pytest cases (incl. a router-level check that DELETE is
+bound to `session_close` — a helper once took its decorator), one real cold
+start 15/16 (the miss was a bad check: `ps` cannot tell a venv from the system
+interpreter; the proof is the coordinator being a child of the console process).
+
+**Not done / known:** the reasoning typewriter and the conversational chat
+agent are not built (next phase). When the free provider stalls, a session
+shows `working` with nothing visible for minutes. Agent log/pid files still go
+to the system temp dir (`suijin-agent-*`). 19 pytest failures predate this
+work: 11 stale (CLI providers probe, verb drift `api`, a dangling import in
+`suijin/main.py`, module globals, static prompt 210 tokens over budget, doctor
+rows) and 8 that only fail from test-order leakage in the combined run.

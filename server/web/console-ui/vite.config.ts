@@ -14,6 +14,9 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": resolve(rootDir, "src"),
+      // 0's upstream source, carried verbatim in zero/src (see zero/README.md). Upstream files import
+      // their own modules through this alias, so they never resolve to the console's modified copies.
+      "@zero": resolve(rootDir, "zero/src"),
     },
   },
   server: {
@@ -26,7 +29,10 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     rolldownOptions: {
-      input: { operations: resolve(rootDir, "index.html") },
+      // Two documents: the console, and the new-engagement landing (0's new-thread screen, kept in
+      // its own document so its stylesheet stays out of the console). Served same-origin at
+      // /zero/home.html by the console's static handler.
+      input: { operations: resolve(rootDir, "index.html"), "zero-home": resolve(rootDir, "zero/home.html") },
     },
   },
 });

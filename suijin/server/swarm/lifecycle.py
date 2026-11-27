@@ -63,6 +63,50 @@ def _add_intent(text: str, swarm: str = "default") -> str:
     return iid, count
 
 
+def _coordinator_log() -> Path:
+    """The coordinator's log lives inside the runtime root, with every other Suijin log."""
+    return Path(_swarm_db()).parent.parent / "logs" / "swarm-coordinator.log"
+
+
+def start_coordinator() -> bool:
+    """Start the swarm coordinator from THIS interpreter's tree and wait until it is ready.
+
+    Never the ``suijin`` launcher on PATH: that can be a stale installed copy, so a hunt started
+    from a development tree would run its coordinator on different code than the console. The
+    coordinator module has no ``__main__`` block (``python -m`` would import it and exit), so it
+    is started by calling its entry point, as ``swarm init`` always has.
+
+    Returns True only once the bus answers AND the database schema exists.
+    """
+    log = _coordinator_log()
+    log.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.Popen(
+        [sys.executable, "-c", "from suijin.server.swarm.coordinator import run_swarm_start; run_swarm_start()"],
+        stdout=open(log, "a"),
+        stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    for _ in range(20):
+        time.sleep(0.5)
+        if _bus_addr():
+            break
+    return bool(_bus_addr()) and _wait_for_schema()
+
+
+def _drop_unclaimed_intent(text: str, swarm: str = "default") -> int:
+    """Remove an intent nobody has picked up yet. Returns the number of rows removed."""
+    db = _db()
+    cur = db.execute(
+        "DELETE FROM intents WHERE swarm = ? AND text = ? AND state = 'open' AND agent_id IS NULL",
+        (swarm, str(text)[:400]),
+    )
+    db.commit()
+    removed = cur.rowcount if cur.rowcount is not None else 0
+    db.close()
+    return max(0, removed)
+
+
 def _list_swarms() -> list[dict]:
     """All named swarms with their intent counts."""
     db = _db()
@@ -145,22 +189,8 @@ def run_swarm_init(args=None) -> int:
 
     if not already_running:
         console.print("[bold]starting swarm coordinator…[/bold]")
-        coordinator_log = Path(tempfile.gettempdir()) / "suijin-swarm-coordinator.log"
-        subprocess.Popen(
-            [sys.executable, "-c", "from suijin.server.swarm.coordinator import run_swarm_start; run_swarm_start()"],
-            stdout=open(coordinator_log, "w"),
-            stderr=subprocess.STDOUT,
-            stdin=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-
-        for _ in range(20):
-            time.sleep(0.5)
-            addr = _bus_addr()
-            if addr:
-                break
-        if not addr:
-            console.print(f"[red]coordinator failed — check {coordinator_log}[/red]")
+        if not start_coordinator():
+            console.print(f"[red]coordinator failed — check {_coordinator_log()}[/red]")
             return 1
     if not _wait_for_schema():
         console.print("[red]coordinator up but the database never became ready[/red]")
@@ -754,13 +784,14 @@ def run_swarm_hunt(title: str = "", host_n: int = 0, boxed_n: int = 0, force: bo
     addr = _bus_addr()
     if not addr:
         console.print("[yellow]no coordinator — starting one…[/yellow]")
-        import subprocess as _sp
-
-        _sp.run(["suijin", "swarm", "init", title], timeout=120)
-        addr = _bus_addr()
-        if not addr or not _wait_for_schema():
+        if not start_coordinator():
             console.print("[red]could not start the swarm[/red]")
             return 1
+        # `init <title>` also queues the title into the DEFAULT swarm's intent queue, but a hunt
+        # named for its own swarm follows the title directly. Left in place the intent outlives
+        # its session as orphaned work — and one open intent anywhere pauses the idle autopilot.
+        if swarm:
+            _drop_unclaimed_intent(title, "default")
     host_n = max(0, int(host_n or 0))
     boxed_n = max(0, int(boxed_n or 0))
     if not host_n and not boxed_n:

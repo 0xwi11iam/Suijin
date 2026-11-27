@@ -1,0 +1,42 @@
+/*
+ * Suijin Home palette.
+ *
+ * Sits AFTER 0's stylesheet (styles.css) and overrides only the semantic tokens that 0's dark
+ * palette owns — the same mechanism 0 uses for its own colour themes: tokens in, geometry and
+ * every component untouched. Values are measured from 0's own new-thread screen so the landing
+ * reads as the same product: a near-black base, a faint warm glow above the composer, a slightly
+ * lighter card with a crisp hairline.
+ */
+
+html[data-suijin-home],
+html[data-suijin-home] body {
+  height: 100%;
+}
+
+/* 0's app shell makes #root a full-height column, which is what lets its Home root flex to the viewport and
+   centre the composer. The frame has no shell, so the entry provides the same two declarations. */
+html[data-suijin-home] #root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+html[data-suijin-home].dark {
+  --background: #101010;
+  --card: #1b1b1b;
+  --card-hover: #222222;
+  --popover: #1f1f1f;
+  /* 0's own hairline tokens stay as shipped (#303030 over the card, #383838 at its foot). */
+  /* 0's dither field, inked amber: at its native 15% it reads as the warm haze above the composer. */
+  --dither-ink: #f2a65a;
+  --sh-composer: 0 18px 54px rgb(0 0 0 / 38%), 0 2px 6px rgb(0 0 0 / 2%);
+}
+
+/* The atmosphere: a faint amber glow over the top of the surface, gone by about 40% of the height.
+   0's backdrop canvas (the dither field) paints on top of this as its own layer. */
+html[data-suijin-home] body {
+  background:
+    radial-gradient(40% 42% at 46% 0%, rgb(255 150 64 / 7%), rgb(255 150 64 / 0) 100%),
+    #101010;
+  background-attachment: fixed;
+}

@@ -1,0 +1,97 @@
+/* Neutral geometry and surfaces shared by controls; applications supply the palette. */
+:root {
+  /* Radii. Control/menu/composer keep their historical names; the rest follow Capy. */
+  --radius-control:8px;
+  --radius-menu:12px;
+  --radius-panel:12px;
+  --radius-button:6px;
+  --radius-card:8px;
+  --radius-overlay:8px;
+  --radius-inner:2px;
+  --radius-kbd:3px;
+
+  /* Touch-first control scale; the desktop block below overrides it. */
+  --h-control-xs:28px;
+  --h-control-sm:32px;
+  --h-control-base:36px;
+  --h-control-lg:48px;
+  --icon-xs:14px;
+  --icon-sm:15px;
+  --icon-base:18px;
+  --icon-lg:20px;
+  --h-menu-row:36px;
+  --h-palette-row:44px;
+  --responsive-text-2xs:calc(13px * var(--ui-font-scale,1));
+  --responsive-text-xs:calc(14px * var(--ui-font-scale,1));
+  --responsive-text-sm:calc(15px * var(--ui-font-scale,1));
+  --responsive-text-base:calc(16px * var(--ui-font-scale,1));
+  --responsive-text-lg:calc(20px * var(--ui-font-scale,1));
+  --responsive-text-xl:calc(24px * var(--ui-font-scale,1));
+  --responsive-text-2xl:calc(28px * var(--ui-font-scale,1));
+
+  /* Legacy control heights now alias the scale. */
+  --control-height:var(--h-control-base);
+
+  /* Motion. */
+  --duration-fast:.15s;
+  --duration-base:.2s;
+  --duration-slow:.3s;
+  --duration-slower:.5s;
+  --ease-out-quint:cubic-bezier(.23,1,.32,1);
+
+  /* Stacking order. */
+  --z-top-bar:10;
+  --z-sidebar:50;
+  --z-drawer:350;
+}
+@media (width >= 768px), (hover: hover) and (pointer: fine) {
+  :root {
+    --h-control-xs:24px;
+    --h-control-sm:28px;
+    --h-control-base:32px;
+    --h-control-lg:44px;
+    --icon-xs:12px;
+    --icon-sm:14px;
+    --icon-base:16px;
+    --icon-lg:18px;
+    --h-menu-row:28px;
+    --h-palette-row:40px;
+    --responsive-text-2xs:calc(11px * var(--ui-font-scale,1));
+    --responsive-text-xs:calc(12px * var(--ui-font-scale,1));
+    --responsive-text-sm:calc(13px * var(--ui-font-scale,1));
+    --responsive-text-base:calc(14px * var(--ui-font-scale,1));
+    --responsive-text-lg:calc(18px * var(--ui-font-scale,1));
+    --responsive-text-xl:calc(22px * var(--ui-font-scale,1));
+    --responsive-text-2xl:calc(26px * var(--ui-font-scale,1));
+  }
+}
+
+/* Intents inject colour into buttons/chips through --intent-* variables; neutral sets none. */
+.ui-intent-accent { --intent-color:var(--primary); --intent-ink:var(--primary-ink); --intent-on-bg:var(--primary-foreground); --intent-solid-hover:var(--primary-hover); --intent-soft:var(--primary-soft); --intent-soft-hover:var(--primary-soft-hover); }
+.ui-intent-danger { --intent-color:var(--destructive-background); --intent-ink:var(--destructive); --intent-on-bg:var(--destructive-foreground); --intent-soft:var(--destructive-soft); --intent-soft-hover:var(--destructive-soft-hover); }
+.ui-intent-warning { --intent-color:var(--warning); --intent-ink:var(--warning-foreground); --intent-on-bg:#18181b; }
+.ui-intent-success { --intent-color:var(--success); --intent-ink:var(--success-ink); --intent-on-bg:#fff; }
+:is(.ui-intent-accent,.ui-intent-danger,.ui-intent-warning,.ui-intent-success) {
+  --intent-bg:var(--intent-color);
+  --intent-bg-soft:var(--intent-soft,color-mix(in srgb,var(--intent-color) 12%,transparent));
+  --intent-bg-soft-hover:var(--intent-soft-hover,color-mix(in srgb,var(--intent-color) 18%,transparent));
+  --intent-text:var(--intent-ink);
+  --intent-text-hover:color-mix(in srgb,var(--intent-ink) 80%,transparent);
+  --intent-text-on-bg:var(--intent-on-bg);
+  --intent-border:color-mix(in srgb,var(--intent-color) 30%,transparent);
+  --intent-border-solid:color-mix(in srgb,var(--intent-color) 80%,black);
+  --intent-highlight:oklch(1 0 0 / .12);
+  --intent-bg-hover:var(--intent-soft,color-mix(in srgb,var(--intent-color) 12%,transparent));
+  --intent-bg-solid-hover:var(--intent-solid-hover,color-mix(in srgb,var(--intent-color) 92%,black));
+}
+
+/* Semantic aliases; pages never re-skin controls. */
+:root {
+  --radius:var(--radius-button);
+  --ui-control-height:var(--control-height);
+  --ui-button-radius:var(--radius-button);
+}
+
+/* Capy-style placeholders: a slow gradient shimmer over the card/secondary/muted tokens. */
+:root {
+}
