@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { OctagonX, Pause, Play, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -12,6 +13,8 @@ import { SwarmsPanel } from "@/ops/swarms";
 import { ConfirmDialog, ErrorNote, FlashBar, Stat } from "@/ops/ui";
 
 export function SwarmPage() {
+  const [search] = useSearchParams();
+  const deepSwarm = search.get("swarm") || undefined;
   const query = useOverview();
   const { run, pending } = useRun();
   const [steerOpen, setSteerOpen] = useState(false);
@@ -46,7 +49,7 @@ export function SwarmPage() {
 
       <FlashBar />
 
-      <SwarmsPanel />
+      <SwarmsPanel initialSwarm={deepSwarm} />
 
       {errorEntries.length > 0 && (
         <ErrorNote error="Some sources did not answer">

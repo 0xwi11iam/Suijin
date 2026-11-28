@@ -1,4 +1,6 @@
 import { ActivityMark, ChatHistorySkeleton } from "@/console/loading-state";
+import { useSwarms, type OpsSwarm } from "@/ops/api";
+import { Layers } from "lucide-react";
 import { SelectionHighlight } from "../ui/components/selection-highlight";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { useNavigate } from "react-router-dom";
@@ -132,6 +134,8 @@ const HostChatGroup = memo(function HostChatGroup({ host, navigationVersion, onS
   // AUTO TARGET FOLDERS (2026-11-23): one folder per target, derived from
   // session metadata on every render — no manual setup, no Targets section.
   const [folderState, setFolderState] = usePersistentState<Record<string, boolean>>(`host-sidebar-target-folders:${host.id}`, {});
+  const swarmsQuery = useSwarms(5000);
+  const swarmRows: OpsSwarm[] = swarmsQuery.data?.swarms ?? [];
   const folders = useMemo(() => {
     const map = new Map<string, { key: string; label: string; rows: (typeof rows)[number][]; timestamp: number; working: boolean; chat: boolean }>();
     for (const row of rows) {
@@ -224,6 +228,14 @@ const HostChatGroup = memo(function HostChatGroup({ host, navigationVersion, onS
         return <Disclosure key={folder.key} open={open} onOpenChange={value => setFolderState(current => ({ ...current, [folder.key]: value }))} className="mb-0.5" triggerClassName="group flex h-7 w-full items-center gap-1.5 rounded-[var(--radius-control)] px-2 text-xs text-muted-foreground hover:bg-muted/50" summary={<>{folder.chat ? <MessageSquare className="size-3.5 shrink-0" /> : <Folder className="size-3.5 shrink-0" />}<span className="min-w-0 flex-1 truncate text-left font-medium text-foreground/80">{folder.label}</span><span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px] tabular-nums">{folder.rows.length}</span><ChevronDown className="size-3 shrink-0 transition-transform group-aria-expanded:rotate-180" /></>}>
           <div className="mb-1 flex flex-col gap-0.5 pl-2">
             {folder.rows.map(row => renderRow(row))}
+            {!folder.chat && swarmRows.filter(swarm => swarm.target === folder.label.toLowerCase()).map(swarm => (
+              <Link key={swarm.id} to={`/swarm?swarm=${encodeURIComponent(swarm.id)}`} className="group flex h-7 items-center gap-1.5 rounded-[var(--radius-control)] px-2 pl-5 text-xs text-muted-foreground hover:bg-muted/50">
+                <Layers className="size-3 shrink-0" />
+                <span className="min-w-0 flex-1 truncate">{swarm.title || swarm.id}</span>
+                {swarm.status === "running" && <span aria-label="running" className="size-1.5 shrink-0 rounded-full bg-emerald-500 animate-pulse" />}
+                <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px]">{swarm.status}</span>
+              </Link>
+            ))}
           </div>
         </Disclosure>;
       })}

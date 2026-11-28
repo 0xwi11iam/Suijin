@@ -197,12 +197,12 @@ function SwarmActivity({ swarmId }: { swarmId: string | undefined }) {
 }
 
 /** The swarm list — the first panel of the Swarm page. */
-export function SwarmsPanel() {
+export function SwarmsPanel({ initialSwarm }: { initialSwarm?: string }) {
   const query = useSwarms();
   const swarms = query.data?.swarms ?? [];
   const live = swarms.filter(swarm => swarm.status === "running");
   const [defineOpen, setDefineOpen] = useState(false);
-  const [openId, setOpenId] = useState<string | undefined>(undefined);
+  const [openId, setOpenId] = useState<string | undefined>(initialSwarm);
   return (
     <Panel
       title={<span className="flex items-center gap-2"><Layers className="size-4" />Swarms ({swarms.length})</span>}
