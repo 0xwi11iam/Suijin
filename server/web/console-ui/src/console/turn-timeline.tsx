@@ -10,7 +10,9 @@ import type { ReducedTurn } from "./transcript";
 function TurnWorkStatus({ turn }: { turn: ReducedTurn }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => { if (!turn.isWorking) return; const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, [turn.isWorking]);
-  if (!turn.isWorking && !turn.toolCalls.length) return null;
+  // The status row lives only while the turn is live (operator 2026-11-28: finished turns
+  // showed a bare "Worked" line with a rule under it — noise). Done is silence.
+  if (!turn.isWorking) return null;
   const start = Date.parse(turn.startedAt ?? "");
   const end = turn.isWorking ? now : Date.parse(turn.endedAt ?? "");
   const elapsed = Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, Math.floor((end - start) / 1000)) : undefined;

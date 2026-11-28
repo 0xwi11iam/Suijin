@@ -70,7 +70,7 @@
 
 :root {
   /* Shared geometry: controls nest inside menus and panel surfaces. */
-  --workspace-canvas: #101011;
+  --workspace-canvas: #000000;
   --workspace-panel: #ffffff;
   --surface-selected: color-mix(in srgb, var(--workspace-panel) 88%, var(--foreground));
   --surface-hover: color-mix(in srgb, var(--workspace-panel) 94%, var(--foreground));
@@ -186,7 +186,7 @@
 .console-sidebar-surface {
   color-scheme: dark;
   --background: #101011;
-  --workspace-canvas: #101011;
+  --workspace-canvas: #000000;
   --workspace-panel: #19191b;
   --foreground: #ededee;
   --card: #19191b;
@@ -243,7 +243,12 @@
 .console-frame { height: 100dvh; border: 0; border-radius: 0; box-shadow: none; background: var(--workspace-canvas); }
 .console-onboarding-frame { background: var(--background); }
 .console-page-workspace { background: var(--workspace-canvas); }
-.console-sidebar-surface { background: #000000; color: var(--foreground); } /* operator 2026-11-28: matched to the logo's own tile colour (pure black, sampled) so the mark sits seamless — #101011 read tinted, #0a0a0b still showed a seam */
+.console-sidebar-surface { background: #000000; color: var(--foreground); }
+/* the rail and the history list paint their own #101011 over the surface — black them too,
+   or the sidebar reads as two points lighter than the logo's tile (operator 2026-11-28) */
+/* doubled class = wins over 0's later-loaded .dark .session-rail rule (same value fight, seen live) */
+.console-sidebar-surface .console-navigation-rail,
+.console-sidebar-surface .session-rail.session-rail { background: #000000; } /* operator 2026-11-28: matched to the logo's own tile colour (pure black, sampled) so the mark sits seamless — #101011 read tinted, #0a0a0b still showed a seam */
 .console-sidebar-surface [data-brand-mark="compact"] { color: #fcfaf6; }
 .console-sidebar-surface [data-brand-variant="ink"] { display: none; }
 .console-sidebar-surface [data-brand-variant="white"] { display: block; }
