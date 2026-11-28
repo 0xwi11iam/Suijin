@@ -114,23 +114,16 @@ def _list_swarms() -> list[dict]:
         "SELECT swarm, COUNT(*) as total, SUM(CASE WHEN state = 'open' THEN 1 ELSE 0 END) as open_count "
         "FROM intents GROUP BY swarm ORDER BY swarm"
     ).fetchall()
-    agents = db.execute(
-        "SELECT swarm, COUNT(*) FROM agents WHERE status = 'active' GROUP BY swarm"
-    ).fetchall()
+    agents = db.execute("SELECT swarm, COUNT(*) FROM agents WHERE status = 'active' GROUP BY swarm").fetchall()
     agent_map = {r[0]: r[1] for r in agents}
     db.close()
-    return [
-        {"name": r[0], "intents_total": r[1], "intents_open": r[2], "agents": agent_map.get(r[0], 0)}
-        for r in rows
-    ]
+    return [{"name": r[0], "intents_total": r[1], "intents_open": r[2], "agents": agent_map.get(r[0], 0)} for r in rows]
 
 
 def _first_swarm() -> str | None:
     """The first swarm with open intents, or None."""
     db = _db()
-    row = db.execute(
-        "SELECT swarm FROM intents WHERE state = 'open' ORDER BY created_at LIMIT 1"
-    ).fetchone()
+    row = db.execute("SELECT swarm FROM intents WHERE state = 'open' ORDER BY created_at LIMIT 1").fetchone()
     db.close()
     return row[0] if row else None
 
@@ -162,7 +155,9 @@ def _wait_for_schema(timeout: float = 15.0) -> bool:
             return True
         except Exception as e:
             if _dbg and attempt < 5:
-                print(f"[schema-wait] {attempt}: {e.__class__.__name__}: {str(e)[:80]} path={swarm_db_path()}", flush=True)
+                print(
+                    f"[schema-wait] {attempt}: {e.__class__.__name__}: {str(e)[:80]} path={swarm_db_path()}", flush=True
+                )
             attempt += 1
         time.sleep(0.3)
     return False
@@ -204,7 +199,9 @@ def run_swarm_init(args=None) -> int:
     if existing > 0 and not intent_text:
         console.print(f"\n[yellow]{existing} intent(s) already in the queue:[/yellow]")
         db = _db()
-        for r in db.execute("SELECT text, state, swarm FROM intents WHERE state IN ('open','running') LIMIT 5").fetchall():
+        for r in db.execute(
+            "SELECT text, state, swarm FROM intents WHERE state IN ('open','running') LIMIT 5"
+        ).fetchall():
             console.print(f"  [{r[1]}] {r[0][:60]}  [dim]({r[2]})[/dim]")
         db.close()
         if not Confirm.ask("  Wipe them and start fresh?", default=False):
@@ -225,10 +222,13 @@ def run_swarm_init(args=None) -> int:
 
     # print the summary
     swarms = _list_swarms()
-    swarm_lines = "\n".join(
-        f"    {s['name']:<12} {s['intents_open']} open / {s['intents_total']} total · {s['agents']} agents"
-        for s in swarms
-    ) or "    (empty — add work: suijin swarm intent \"...\")"
+    swarm_lines = (
+        "\n".join(
+            f"    {s['name']:<12} {s['intents_open']} open / {s['intents_total']} total · {s['agents']} agents"
+            for s in swarms
+        )
+        or '    (empty — add work: suijin swarm intent "...")'
+    )
 
     console.print(
         Panel(
@@ -239,7 +239,7 @@ def run_swarm_init(args=None) -> int:
             f"  [cyan]suijin swarm spawn --tui[/cyan]      ← same agent, shown in this terminal\n"
             f"  [cyan]suijin swarm spawn --swarm name[/cyan] ← specific swarm\n\n"
             f"[bold]add work:[/bold]\n"
-            f"  [cyan]suijin swarm intent \"test X for Y\"[/cyan]\n\n"
+            f'  [cyan]suijin swarm intent "test X for Y"[/cyan]\n\n'
             f"[bold]other:[/bold]\n"
             f"  [cyan]suijin swarm status[/cyan]  ·  [cyan]suijin swarm stop[/cyan]",
             title=" swarm ready ",
@@ -303,8 +303,16 @@ def _spawn_agent(port: int, mission: str = "", swarm: str = "") -> tuple[str, in
     identity = f"agent-{int(time.time()) % 10000}-{os.urandom(2).hex()}"
     log_file = Path(tempfile.gettempdir()) / f"suijin-agent-{identity}.log"
     pid_file = Path(tempfile.gettempdir()) / f"suijin-agent-{identity}.pid"
-    argv = [sys.executable, "-u", "-m", "suijin.server.swarm.agent",
-            "--coordinator", f"127.0.0.1:{port}", "--identity", identity]
+    argv = [
+        sys.executable,
+        "-u",
+        "-m",
+        "suijin.server.swarm.agent",
+        "--coordinator",
+        f"127.0.0.1:{port}",
+        "--identity",
+        identity,
+    ]
     if mission:
         argv += ["--mission", mission]
     if swarm:
@@ -313,6 +321,7 @@ def _spawn_agent(port: int, mission: str = "", swarm: str = "") -> tuple[str, in
     # home because $HOME pointed to the real home). Override HOME to the
     # engagement sandbox so cd ~/tmp, npm install, etc. stay contained.
     from suijin.server.platform.lib.workspace import WORKSPACE_DIR as _WS
+
     # PER-ENGAGEMENT SANDBOX (field 2026-11-17 night): every agent used
     # `_default/home`, so three concurrent engagements shared one
     # workspace — one engagement found another target's source clone and
@@ -396,7 +405,9 @@ def run_swarm_spawn(args=None) -> int:
         for _ in range(sandbox_n):
             identity = f"agent-{int(time.time()) % 10000}-{os.urandom(2).hex()}-sbx"
             _mission = str(getattr(args, "mission", "") or "")
-            name = hv.spawn_sandbox_agent(box_addr, identity, swarm_name or "default", on_log=console.print, mission=_mission)
+            name = hv.spawn_sandbox_agent(
+                box_addr, identity, swarm_name or "default", on_log=console.print, mission=_mission
+            )
             if name:
                 names.append(name)
                 console.print(f"  [green]✓[/green] {identity} in box [cyan]{name}[/cyan]")
@@ -422,12 +433,15 @@ def run_swarm_spawn(args=None) -> int:
 
         bc = BusClient()
         if bc.connect(addr[0], addr[1], "spawner"):
-            bc.publish("/swarm/status", {
-                "event": "spawn_agents",
-                "count": count,
-                "swarm": swarm_name or "default",
-                "identities": spawned,
-            })
+            bc.publish(
+                "/swarm/status",
+                {
+                    "event": "spawn_agents",
+                    "count": count,
+                    "swarm": swarm_name or "default",
+                    "identities": spawned,
+                },
+            )
             bc.close()
 
         console.print(f"  [green]✓[/green] {len(spawned)} agent(s) requested (shared process, full tools)")
@@ -595,8 +609,9 @@ def _resolve_agent_fragment(fragment: str) -> tuple[str, str] | None:
         return None
 
     # host agents: pid files
-    for pf in sorted(Path(tempfile.gettempdir()).glob("suijin-agent-*.pid"),
-                     key=lambda p: p.stat().st_mtime, reverse=True):
+    for pf in sorted(
+        Path(tempfile.gettempdir()).glob("suijin-agent-*.pid"), key=lambda p: p.stat().st_mtime, reverse=True
+    ):
         aid = pf.stem.replace("suijin-agent-", "")
         if frag in aid.lower():
             with contextlib.suppress(Exception):
@@ -605,16 +620,24 @@ def _resolve_agent_fragment(fragment: str) -> tuple[str, str] | None:
 
     # boxed agents: docker containers
     with contextlib.suppress(Exception):
-        r = subprocess.run(["docker", "ps", "--filter", "name=suijin-sbx", "--format",
-                            "{{.Names}}"], capture_output=True, text=True, timeout=10)
+        r = subprocess.run(
+            ["docker", "ps", "--filter", "name=suijin-sbx", "--format", "{{.Names}}"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
         for name in (r.stdout or "").split():
             if frag in name.lower():
                 return ("box", name)
 
     # bare fragment like '5476-f85a' → try as agent-<frag> against boxes
     with contextlib.suppress(Exception):
-        r = subprocess.run(["docker", "ps", "--filter", "name=suijin-sbx", "--format",
-                            "{{.Names}}"], capture_output=True, text=True, timeout=10)
+        r = subprocess.run(
+            ["docker", "ps", "--filter", "name=suijin-sbx", "--format", "{{.Names}}"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
         for name in (r.stdout or "").split():
             if "agent-" + frag in name:
                 return ("box", name)
@@ -637,8 +660,9 @@ def run_swarm_attach(args=None) -> int:
     if not hit:
         # nothing matched (or nothing given) — list every watchable agent
         console.print("[yellow]watchable agents (any fragment works):[/yellow]")
-        for pf in sorted(Path(tempfile.gettempdir()).glob("suijin-agent-*.pid"),
-                         key=lambda p: p.stat().st_mtime, reverse=True)[:10]:
+        for pf in sorted(
+            Path(tempfile.gettempdir()).glob("suijin-agent-*.pid"), key=lambda p: p.stat().st_mtime, reverse=True
+        )[:10]:
             aid = pf.stem.replace("suijin-agent-", "")
             alive = "  "
             with contextlib.suppress(Exception):
@@ -646,8 +670,12 @@ def run_swarm_attach(args=None) -> int:
                 alive = "●"
             console.print(f"  host {alive} {aid}")
         with contextlib.suppress(Exception):
-            r = subprocess.run(["docker", "ps", "--filter", "name=suijin-sbx", "--format",
-                                "{{.Names}}"], capture_output=True, text=True, timeout=10)
+            r = subprocess.run(
+                ["docker", "ps", "--filter", "name=suijin-sbx", "--format", "{{.Names}}"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
             for name in (r.stdout or "").split():
                 if "pool" not in name:
                     console.print(f"  box  ● {name}")
@@ -658,11 +686,9 @@ def run_swarm_attach(args=None) -> int:
     try:
         if kind == "host":
             log_file = Path(tempfile.gettempdir()) / f"suijin-agent-{ref}.log"
-            proc = subprocess.Popen(["tail", "-n", "40", "-f", str(log_file)],
-                                    stdin=subprocess.DEVNULL)
+            proc = subprocess.Popen(["tail", "-n", "40", "-f", str(log_file)], stdin=subprocess.DEVNULL)
         else:
-            proc = subprocess.Popen(["docker", "logs", "-f", "--tail", "40", ref],
-                                    stdin=subprocess.DEVNULL)
+            proc = subprocess.Popen(["docker", "logs", "-f", "--tail", "40", ref], stdin=subprocess.DEVNULL)
         proc.wait()
     except KeyboardInterrupt:
         with contextlib.suppress(Exception):
@@ -716,8 +742,8 @@ def run_swarm_resume(args=None) -> int:
     return 0
 
 
-HOST_AGENT_MB = 220   # measured: a host agent's python + tool tree
-BOX_AGENT_MB = 160    # measured: a boxed agent container
+HOST_AGENT_MB = 220  # measured: a host agent's python + tool tree
+BOX_AGENT_MB = 160  # measured: a boxed agent container
 
 
 def spawn_capacity_check(host_n: int, boxed_n: int) -> tuple[bool, str]:
@@ -746,7 +772,7 @@ def spawn_capacity_check(host_n: int, boxed_n: int) -> tuple[bool, str]:
                 suggestion = f"~{max(0, int(budget_mb // BOX_AGENT_MB))} boxed"
             return False, (
                 f"this plan needs ~{need_mb:.0f}MB of memory.\n"
-                f"    your machine: {vm.total/1e9:.0f}GB total · {(vm.total - vm.available)/1e9:.1f}GB "
+                f"    your machine: {vm.total / 1e9:.0f}GB total · {(vm.total - vm.available) / 1e9:.1f}GB "
                 f"already in use · 0.85 safety ceiling\n"
                 f"    → ~{budget_mb:.0f}MB left for agents ≈ {suggestion}.\n"
                 "    free memory (close apps / stop other swarms) or override with --force."
@@ -805,20 +831,20 @@ def run_swarm_hunt(title: str = "", host_n: int = 0, boxed_n: int = 0, force: bo
     from suijin.server.swarm.structured import _slug as _title_slug
 
     swarm_name = str(swarm).strip() or _title_slug(title)
-    console.print(f'  hunt: [bold]{title[:70]}[/bold]')
+    console.print(f"  hunt: [bold]{title[:70]}[/bold]")
     console.print(f"  agents: {host_n} host + {boxed_n} boxed — the title is their standing mission")
     rc = 0
     if boxed_n:
         import types as _types
 
-        r = run_swarm_spawn(_types.SimpleNamespace(
-            tui=False, swarm=swarm_name, count=0, sandbox=boxed_n, mission=title))
+        r = run_swarm_spawn(
+            _types.SimpleNamespace(tui=False, swarm=swarm_name, count=0, sandbox=boxed_n, mission=title)
+        )
         rc = rc or r
     for _ in range(host_n):
         import types as _types
 
-        r = run_swarm_spawn(_types.SimpleNamespace(
-            tui=False, swarm=swarm_name, count=1, sandbox=0, mission=title))
+        r = run_swarm_spawn(_types.SimpleNamespace(tui=False, swarm=swarm_name, count=1, sandbox=0, mission=title))
         rc = rc or r
     console.print("  [cyan]suijin swarm console[/cyan] to watch · [cyan]suijin swarm say[/cyan] to steer")
     return rc
@@ -843,14 +869,16 @@ def run_swarm_say(args=None) -> int:
     console = Console()
     message = str(getattr(args, "message", "") or "").strip()
     if not message:
-        console.print("[red]usage: suijin swarm say \"what to say\"[/red]")
+        console.print('[red]usage: suijin swarm say "what to say"[/red]')
         return 1
+    swarm_filter = str(getattr(args, "swarm", "") or "").strip()
     addr = _bus_addr()
     if not addr:
         console.print("[red]no swarm — run [cyan]suijin swarm init[/cyan] first[/red]")
         return 1
 
-    # live agents: heartbeat in the last 30s
+    # live agents: heartbeat in the last 30s; --swarm scopes it (S2: say used to text
+    # every live agent on the MACHINE — a real defect against parallel swarms)
     import sqlite3
 
     from suijin.server.swarm.coordinator import swarm_db_path
@@ -859,9 +887,18 @@ def run_swarm_say(args=None) -> int:
     with contextlib.suppress(Exception):
         db = sqlite3.connect(str(swarm_db_path()), timeout=5)
         cutoff = time.time() - 30
-        agents = [r[0] for r in db.execute(
-            "SELECT id FROM agents WHERE last_heartbeat > ? ORDER BY id", (cutoff,)
-        ).fetchall()]
+        if swarm_filter:
+            agents = [
+                r[0]
+                for r in db.execute(
+                    "SELECT id FROM agents WHERE last_heartbeat > ? AND swarm = ? ORDER BY id", (cutoff, swarm_filter)
+                ).fetchall()
+            ]
+        else:
+            agents = [
+                r[0]
+                for r in db.execute("SELECT id FROM agents WHERE last_heartbeat > ? ORDER BY id", (cutoff,)).fetchall()
+            ]
         db.close()
 
     if not agents:
@@ -951,7 +988,14 @@ def _stop_sandboxes(console) -> None:
         if removed:
             console.print(f"[yellow]{removed} box(es) removed[/yellow]")
     with contextlib.suppress(Exception):
-        subprocess.run(["docker", "rm", "-f"] + [
-            n for n in subprocess.run(["docker", "ps", "-aq", "--filter", "name=suijin-sbx"],
-                                      capture_output=True, text=True, timeout=15).stdout.split()
-        ], capture_output=True, timeout=60)
+        subprocess.run(
+            ["docker", "rm", "-f"]
+            + [
+                n
+                for n in subprocess.run(
+                    ["docker", "ps", "-aq", "--filter", "name=suijin-sbx"], capture_output=True, text=True, timeout=15
+                ).stdout.split()
+            ],
+            capture_output=True,
+            timeout=60,
+        )

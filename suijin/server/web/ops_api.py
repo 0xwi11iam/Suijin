@@ -677,6 +677,40 @@ def ops_swarm_mission(body: dict | None = None):
     }
 
 
+def _spawn_agents(swarm: str, mission: str, host: int, boxed: int):
+    """The spawn core (terminal ``swarm spawn`` and the swarm launcher share one path —
+    the operator rule: never a second path). Returns (spawned, error) where error is a
+    (payload, status) pair to answer with, or None."""
+    addr = _bus()
+    if not addr:
+        return None, ({"error": "the coordinator is not running — start it first"}, 409)
+    fits, why = lifecycle.spawn_capacity_check(host, boxed)
+    if not fits:
+        return None, ({"error": "not enough free memory for that many agents", "detail": why}, 409)
+    spawned: dict[str, list] = {"host": [], "boxed": []}
+    for _ in range(host):
+        identity, pid = lifecycle._spawn_agent(addr[1], mission=mission, swarm=swarm)
+        spawned["host"].append({"id": identity, "pid": pid})
+    if boxed:
+        from suijin.server.box import hypervisor as hyp
+
+        if not box_status._engine_socket():
+            return spawned, (
+                {"error": "no container engine is running — boxed agents need OrbStack or Docker. Start it, then try again.", "spawned": spawned},
+                409,
+            )
+        if not hyp.image_exists():
+            return spawned, ({"error": "the sandbox image is not built — build it under Boxes first", "spawned": spawned}, 409)
+        box_addr = hyp.coordinator_addr_for_boxes(addr[1])
+        for _ in range(boxed):
+            identity = f"agent-{int(time.time()) % 10000}-{os.urandom(2).hex()}-sbx"
+            name = hyp.spawn_sandbox_agent(box_addr, identity, swarm, mission=mission)
+            if name:
+                spawned["boxed"].append({"id": identity, "box": name})
+    box_status.snapshot()  # refreshes in the background; never waits on docker
+    return spawned, None
+
+
 @router.post("/swarm/spawn")
 def ops_swarm_spawn(body: dict | None = None):
     """Start agents in a swarm — the terminal's ``swarm spawn``: host agents as real processes
@@ -694,44 +728,140 @@ def ops_swarm_spawn(body: dict | None = None):
         return JSONResponse({"error": "host and boxed must be numbers"}, status_code=400)
     if not host and not boxed:
         return JSONResponse({"error": "ask for at least one agent"}, status_code=400)
-    addr = _bus()
-    if not addr:
-        return JSONResponse({"error": "the coordinator is not running — start it first"}, status_code=409)
-    fits, why = lifecycle.spawn_capacity_check(host, boxed)
-    if not fits:
-        return JSONResponse({"error": "not enough free memory for that many agents", "detail": why}, status_code=409)
-    spawned: dict[str, list] = {"host": [], "boxed": []}
-    for _ in range(host):
-        identity, pid = lifecycle._spawn_agent(addr[1], mission=mission, swarm=swarm)
-        spawned["host"].append({"id": identity, "pid": pid})
-    if boxed:
-        from suijin.server.box import hypervisor as hyp
-
-        if not box_status._engine_socket():
-            return JSONResponse(
-                {
-                    "error": "no container engine is running — boxed agents need OrbStack or Docker. Start it, then try again.",
-                    "spawned": spawned,
-                },
-                status_code=409,
-            )
-        if not hyp.image_exists():
-            return JSONResponse(
-                {"error": "the sandbox image is not built — build it under Boxes first", "spawned": spawned},
-                status_code=409,
-            )
-        box_addr = hyp.coordinator_addr_for_boxes(addr[1])
-        for _ in range(boxed):
-            identity = f"agent-{int(time.time()) % 10000}-{os.urandom(2).hex()}-sbx"
-            name = hyp.spawn_sandbox_agent(box_addr, identity, swarm, mission=mission)
-            if name:
-                spawned["boxed"].append({"id": identity, "box": name})
-    box_status.snapshot()  # refreshes in the background; never waits on docker
+    spawned, error = _spawn_agents(swarm, mission, host, boxed)
+    if error:
+        return JSONResponse(error[0], status_code=error[1])
     return {
         "ok": True,
         "spawned": spawned,
         "note": f"{len(spawned['host'])} host and {len(spawned['boxed'])} boxed agent(s) started in {swarm}",
     }
+
+
+# ── swarms as things (the registry, S0/S1 of the 2026-11-28 plan) ───────────────────────────
+
+
+@router.get("/swarms")
+def ops_swarms_list():
+    """Every swarm — the new Targets layout plus the legacy engagement archive as one list."""
+    from suijin.server.swarm import registry
+
+    return {"swarms": registry.list_swarms()}
+
+
+@router.get("/swarms/{swarm_id}")
+def ops_swarm_get(swarm_id: str):
+    from suijin.server.swarm import registry
+
+    data = registry.load(swarm_id)
+    if data is None:
+        return JSONResponse({"error": "no such swarm"}, status_code=404)
+    conn = _db()
+    agents, intents = [], []
+    if conn is not None:
+        try:
+            agents = [
+                {"id": r[0], "status": r[1], "intent": r[2], "heartbeat_age_s": round(max(0.0, time.time() - (r[3] or 0)))}
+                for r in conn.execute(
+                    "SELECT id, status, current_intent, last_heartbeat FROM agents WHERE swarm = ? ORDER BY id", (swarm_id,)
+                ).fetchall()
+            ]
+            intents = [
+                {"id": r[0], "text": r[1], "state": r[2]}
+                for r in conn.execute(
+                    "SELECT id, text, state FROM intents WHERE swarm = ? AND state IN ('open', 'running') ORDER BY created_at LIMIT 50",
+                    (swarm_id,),
+                ).fetchall()
+            ]
+        except sqlite3.Error:
+            pass
+        finally:
+            conn.close()
+    return {"swarm": data, "agents": agents, "open_intents": intents}
+
+
+@router.post("/swarms")
+def ops_swarm_define(body: dict | None = None):
+    """Define a swarm and (at once, when start is set) launch it: the coordinator comes up,
+    the lanes queue as prioritised work, the agents spawn — one path, the registry's file
+    is the truth."""
+    body = body or {}
+    target = str(body.get("target") or "").strip()
+    title = str(body.get("title") or "").strip()
+    if not target or not title:
+        return JSONResponse({"error": "target and title are required"}, status_code=400)
+    lanes = [str(x).strip() for x in (body.get("lanes") or []) if str(x).strip()][:16]
+    try:
+        host = max(0, min(8, int(body.get("host") or 0)))
+        boxed = max(0, min(16, int(body.get("boxed") or 0)))
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "host and boxed must be numbers"}, status_code=400)
+    from suijin.server.swarm import registry
+
+    definition = registry.create(
+        target,
+        title,
+        lanes=lanes,
+        host_n=host,
+        boxed_n=boxed,
+        brain=body.get("brain") if isinstance(body.get("brain"), dict) else {},
+        engine=str(body.get("engine") or "auto"),
+        permissions=str(body.get("permissions") or ""),
+        mode=str(body.get("mode") or ""),
+        chat=str(body.get("chat") or ""),
+    )
+    swarm = definition["id"]
+    note_parts: list[str] = []
+    if not (host or boxed) and not body.get("start"):
+        return {"ok": True, "swarm": definition, "note": "defined — no agents asked for yet"}
+    if not (host or boxed):
+        host = 4  # the terminal's own sensible default
+    addr = _bus()
+    if not addr:
+        from suijin.server.swarm import lifecycle
+
+        ready = lifecycle.start_coordinator()
+        if not ready:
+            return JSONResponse(
+                {"error": "the coordinator did not come up — see the coordinator log", "swarm": definition},
+                status_code=502,
+            )
+        note_parts.append("coordinator started")
+    for lane in lanes:
+        try:
+            lifecycle._add_intent(lane, swarm)
+        except Exception:  # the swarm db may not exist until an agent registers
+            pass
+    spawned, error = _spawn_agents(swarm, title, host, boxed)
+    if error:
+        return JSONResponse({**error[0], "swarm": definition}, status_code=error[1])
+    definition = registry.set_status(swarm, "running") or definition
+    note_parts.append(f"{len(spawned['host'])} host and {len(spawned['boxed'])} boxed agent(s) started")
+    return {"ok": True, "swarm": definition, "spawned": spawned, "note": "; ".join(note_parts)}
+
+
+@router.delete("/swarms/{swarm_id}")
+def ops_swarm_delete(swarm_id: str):
+    """Stop the swarm's agents, then remove the folder, the rows and the definition together —
+    the delete lesson: a half-deleted swarm must never resurrect."""
+    if not SAFE_ID.match(swarm_id or ""):
+        return JSONResponse({"error": "bad swarm id"}, status_code=400)
+    from suijin.server.swarm import registry
+
+    _publish("/cmd/stop", {"swarm": swarm_id})
+    _publish("/cmd/delete", {"swarm": swarm_id})
+    conn = _db()
+    if conn is not None:
+        try:
+            conn.execute("DELETE FROM agents WHERE swarm = ?", (swarm_id,))
+            conn.execute("DELETE FROM intents WHERE swarm = ?", (swarm_id,))
+            conn.commit()
+        except sqlite3.Error:
+            pass
+        finally:
+            conn.close()
+    removed = registry.delete(swarm_id)
+    return {"ok": True, "folder_removed": removed, "note": "stopped, then removed — definition, folder and roster rows together"}
 
 
 @router.post("/swarm/stop-all")

@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS intents (
     parent_fact TEXT,
     claimed_at REAL,
     completed_at REAL,
-    created_at REAL
+    created_at REAL,
+    swarm TEXT DEFAULT 'default'
 );
 CREATE TABLE IF NOT EXISTS facts (
     id TEXT PRIMARY KEY,
@@ -102,6 +103,7 @@ class SwarmCoordinator:
         self._health_thread: threading.Thread | None = None
         self._last_work_ts = time.time()
         self._autopilot_last = 0.0
+        self._done_last = 0.0
         self._heartbeat_timeout = 15.0  # seconds without heartbeat = dead
         self._agents: dict[str, dict] = {}  # id → {identity, last_hb, intent}
         # RESOURCE GOVERNOR (2026-11-05): shared process pool + disk batcher
@@ -177,6 +179,8 @@ class SwarmCoordinator:
         # added out-of-tree — create it for dbs born without it
         with contextlib.suppress(sqlite3.Error):
             db.execute("ALTER TABLE agents ADD COLUMN swarm TEXT DEFAULT 'default'")
+        with contextlib.suppress(sqlite3.Error):
+            db.execute("ALTER TABLE intents ADD COLUMN swarm TEXT DEFAULT 'default'")
         db.commit()
         return db
 
@@ -204,10 +208,20 @@ class SwarmCoordinator:
 
     def claim_next_intent(self, agent_id: str) -> dict | None:
         self._last_work_ts = time.time()
-        """Give this agent the next open intent. Marks it running."""
+        """Give this agent the next open intent. Marks it running.
+
+        Own swarm first (operator plan 2026-11-28): with two swarms live, Immutable's
+        lanes must never be claimed by Acme's agent. Unswarmed intents (swarm '' /
+        NULL) stay claimable by anyone — that is how work queued before a swarm
+        existed still gets picked up."""
         with contextlib.suppress(sqlite3.Error):
+            mine = self._db.execute("SELECT swarm FROM agents WHERE id = ?", (agent_id,)).fetchone()
+            swarm = str(mine[0] or "default") if mine else "default"
             row = self._db.execute(
-                "SELECT id, text, engagement, parent_fact FROM intents WHERE state = 'open' ORDER BY created_at LIMIT 1"
+                "SELECT id, text, engagement, parent_fact FROM intents "
+                "WHERE state = 'open' AND (swarm = '' OR swarm IS NULL OR swarm = ?) "
+                "ORDER BY CASE WHEN swarm = ? THEN 0 ELSE 1 END, created_at LIMIT 1",
+                (swarm, swarm),
             ).fetchone()
             if not row:
                 return None
@@ -235,7 +249,7 @@ class SwarmCoordinator:
 
     # ── health monitoring ────────────────────────────────────────
 
-    def register_agent(self, agent_id: str, identity: str, swarm: str = ""):
+    def register_agent(self, agent_id: str, identity: str, swarm: str = "default"):
         with contextlib.suppress(sqlite3.Error):
             # ON CONFLICT UPDATE (not REPLACE): a replace wipes columns a
             # pre-registration set (swarm, current_intent — structured mode
@@ -332,13 +346,20 @@ class SwarmCoordinator:
                 sweep_db.commit()
                 sweep_db.close()
                 self._autopilot_check(now)
+                self._swarm_done_check(now)
                 # LEDGER ON THE BUS: the tested-ledger snapshot flows to
                 # every node (web console renders it; remote suijins see
                 # what's dead without reading the file)
                 with contextlib.suppress(Exception):
                     from suijin.server.tools.lib.dead_regions import ledger_rows
 
-                    rows = ledger_rows(engagement="_default", ) if False else []
+                    rows = (
+                        ledger_rows(
+                            engagement="_default",
+                        )
+                        if False
+                        else []
+                    )
                 with contextlib.suppress(Exception):
                     from suijin.server.agent.lib.mesh import mesh_dir
 
@@ -373,33 +394,76 @@ class SwarmCoordinator:
             if str((load_config() or {}).get("swarm_autopilot", "true")).lower() in ("false", "0", "no", "off"):
                 return  # operator switched it off in settings
         with contextlib.suppress(Exception):
-            if not self._agents or now - self._last_work_ts <= 600 or now - self._autopilot_last <= 3600:
+            if not self._agents or now - self._autopilot_last <= 3600:
                 return
-            open_n = self._db.execute("SELECT COUNT(*) FROM intents WHERE state='open'").fetchone()[0]
-            run_n = self._db.execute("SELECT COUNT(*) FROM intents WHERE state='running'").fetchone()[0]
-            if open_n or run_n:
-                return
+            # PER SWARM (operator plan 2026-11-28): one open intent in some other swarm
+            # used to freeze the autopilot everywhere — the thing that silently stalled
+            # overnight runs. Each swarm's own queue is judged on its own.
             added = 0
-            for (summary,) in self._db.execute(
-                "SELECT summary FROM facts ORDER BY created_at DESC LIMIT 3"
-            ).fetchall():
-                text = f"continue investigation: {str(summary)[:180]}"
-                dup = self._db.execute(
-                    "SELECT COUNT(*) FROM intents WHERE text LIKE ?", (f"%{str(summary)[:60]}%",)
+            idles = self._db.execute(
+                "SELECT DISTINCT swarm FROM agents WHERE status = 'active' AND current_intent IS NULL "
+                "AND last_heartbeat > ?",
+                (now - 30,),
+            ).fetchall()
+            for (swarm,) in idles:
+                busy = self._db.execute(
+                    "SELECT COUNT(*) FROM intents WHERE state IN ('open', 'running') AND swarm = ?",
+                    (str(swarm or "default"),),
                 ).fetchone()[0]
-                if dup:
+                if busy:
                     continue
-                self._db.execute(
-                    "INSERT INTO intents (id, text, state, engagement, created_at, swarm) "
-                    "VALUES (?, ?, 'open', ?, ?, 'default')",
-                    (f"in_{os.urandom(6).hex()}", text, "", now),
-                )
-                added += 1
+                for (summary,) in self._db.execute(
+                    "SELECT summary FROM facts WHERE engagement = ? OR engagement = '' OR engagement IS NULL "
+                    "ORDER BY created_at DESC LIMIT 3",
+                    (str(swarm or ""),),
+                ).fetchall():
+                    text = f"continue investigation: {str(summary)[:180]}"
+                    dup = self._db.execute(
+                        "SELECT COUNT(*) FROM intents WHERE text LIKE ?", (f"%{str(summary)[:60]}%",)
+                    ).fetchone()[0]
+                    if dup:
+                        continue
+                    self._db.execute(
+                        "INSERT INTO intents (id, text, state, engagement, created_at, swarm) "
+                        "VALUES (?, ?, 'open', ?, ?, ?)",
+                        (f"in_{os.urandom(6).hex()}", text, str(swarm or ""), now, str(swarm or "default")),
+                    )
+                    added += 1
             self._db.commit()
             if added:
                 self._last_work_ts = now
-                print(f"[autopilot] idle swarm → queued {added} follow-up intent(s) from facts", flush=True)
+                print(f"[autopilot] idle swarm(s) → queued {added} follow-up intent(s) from facts", flush=True)
             self._autopilot_last = now
+
+    def _swarm_done_check(self, now: float) -> None:
+        """An end state (operator plan S5): a running swarm with no open or running work
+        and no live agent is DONE in its definition — the journal shows it, the page
+        shows it, nothing waits on it. Checked at most once a minute."""
+        if now - self._done_last < 60:
+            return
+        self._done_last = now
+        with contextlib.suppress(Exception):
+            from suijin.server.swarm import registry
+
+            for row in registry.list_swarms(include_legacy=False):
+                if row.get("status") != "running":
+                    continue
+                sid = str(row.get("id") or "")
+                if not sid:
+                    continue
+                busy = self._db.execute(
+                    "SELECT COUNT(*) FROM intents WHERE state IN ('open', 'running') AND swarm = ?", (sid,)
+                ).fetchone()[0]
+                if busy:
+                    continue
+                live = self._db.execute(
+                    "SELECT COUNT(*) FROM agents WHERE swarm = ? AND status = 'active' AND last_heartbeat > ?",
+                    (sid, now - 30),
+                ).fetchone()[0]
+                if live:
+                    continue
+                registry.set_status(sid, "done")
+                print(f"[registry] swarm {sid} has no work and no live agents → done", flush=True)
 
     # ── rate limiting (per-target, across ALL agents) ───────────
 
@@ -522,9 +586,9 @@ class _MeshBridge:
                                 if ln and "[bus]" not in ln:
                                     parts = ln.split("|", 4)
                                     msg = parts[-1] if parts else ln
-                                    self._client.publish("/mesh/chat", {
-                                        "line": ln[:400], "src": "file",
-                                        "msg": str(msg)[:300]})
+                                    self._client.publish(
+                                        "/mesh/chat", {"line": ln[:400], "src": "file", "msg": str(msg)[:300]}
+                                    )
                         self._seen_bytes = size
                     elif size < self._seen_bytes:
                         self._seen_bytes = 0  # truncated/rotated
@@ -615,8 +679,8 @@ class _BusEventListener:
                     swarm = str((payload or {}).get("swarm") or "")
                     if swarm:
                         self._coord._db.execute(
-                            "UPDATE agents SET status = 'stopped' WHERE swarm = ? AND status != 'dead'",
-                            (swarm,))
+                            "UPDATE agents SET status = 'stopped' WHERE swarm = ? AND status != 'dead'", (swarm,)
+                        )
                     else:
                         self._coord._db.execute("UPDATE agents SET status = 'stopped' WHERE status != 'dead'")
                     self._coord._db.commit()
@@ -724,13 +788,11 @@ def _sweep_orphans() -> None:
     killed = 0
     # 1. browser shells whose parent is init (PPID <= 1)
     try:
-        out = _sp.run(["pgrep", "-f", "chrome-headless-shell|chromium"],
-                      capture_output=True, text=True, timeout=5)
+        out = _sp.run(["pgrep", "-f", "chrome-headless-shell|chromium"], capture_output=True, text=True, timeout=5)
         for pid_s in out.stdout.split():
             with contextlib.suppress(ValueError):
                 pid = int(pid_s)
-                ppid_out = _sp.run(["ps", "-o", "ppid=", "-p", str(pid)],
-                                   capture_output=True, text=True, timeout=3)
+                ppid_out = _sp.run(["ps", "-o", "ppid=", "-p", str(pid)], capture_output=True, text=True, timeout=3)
                 if int(ppid_out.stdout.strip() or 0) <= 1:
                     with contextlib.suppress(ProcessLookupError, OSError):
                         os.kill(pid, 9)
@@ -834,9 +896,7 @@ def run_swarm_status(args=None) -> int:
     # (unverified) / verified / confirmed / duplicate / false_positive
     # all show; nothing is hidden behind an aggregate count.
     with contextlib.suppress(sqlite3.Error):
-        rows = db.execute(
-            "SELECT severity, status, title FROM findings ORDER BY created_at DESC LIMIT 10"
-        ).fetchall()
+        rows = db.execute("SELECT severity, status, title FROM findings ORDER BY created_at DESC LIMIT 10").fetchall()
         if rows:
             board = Table(title="findings — the honest board", show_header=True)
             board.add_column("severity", style="bold")
