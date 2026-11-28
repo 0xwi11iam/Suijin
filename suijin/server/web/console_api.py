@@ -3681,6 +3681,17 @@ def doctor():
     }
 
 
+def _tool_label(name: str) -> str:
+    """The curated casing map keyed by pack/module ids; tool names carry suffixes
+    (gobuster_dir, crtsh_search) — the longest contained id wins, like _tool_icon."""
+    low = str(name).lower()
+    best = ""
+    for key, label in _NAME_OVERRIDES.items():
+        if (low == key or low.startswith(key + "_") or key + "_" in low or low == key.replace("_", "")) and len(key) > len(best):
+            best = key
+    return _NAME_OVERRIDES.get(best, "") if best else ""
+
+
 @router.get("/api/console/tools")
 def console_tools():
     tools = []
@@ -3688,7 +3699,8 @@ def console_tools():
         from suijin.modules.tools.lib.dispatch import list_route_tools
 
         tools = [{"name": n, "description": f"Suijin tool: {n}",
-                  "roles": ["worker", "planner"], "icon": _tool_icon(n)} for n in list_route_tools()]
+                  "roles": ["worker", "planner"], "icon": _tool_icon(n),
+                  "label": _tool_label(n)} for n in list_route_tools()]
     # Pack tools (gobuster, nikto, sqlmap, …) the AI dispatches through packs —
     # every one lands on the menu with its owning pack's icon.
     seen = {t["name"] for t in tools}
@@ -3698,7 +3710,7 @@ def console_tools():
         seen.add(name)
         tools.append({"name": name, "description": desc or f"{pack} pack tool",
                       "roles": ["worker", "planner"], "icon": _tool_icon(name),
-                      "pack": pack})
+                      "label": _tool_label(name), "pack": pack})
     return {"roles": ["worker", "planner"], "tools": tools, "plugins": []}
 
 

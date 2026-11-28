@@ -1,12 +1,10 @@
 import { Skeleton } from "../ui/components/skeleton";
-import { Loader } from "../ui/components/loader";
 import "./loading-state.css";
 
-/** Compatibility footprint for the shared nine-square activity mark. */
+/** The shared activity mark: a quiet pulsing dot. The coloured nine-square was 0's
+ *  decoration — Suijin is monochrome while working (operator 2026-11-28). */
 export function ActivityMark({ className = "", compact = false, waiting = false }: { className?: string; compact?: boolean; waiting?: boolean }) {
-  return <span aria-hidden="true" data-waiting={waiting || undefined} className={`console-activity-mark ${compact ? "console-activity-mark-compact" : ""} ${className}`}>
-    <Loader active={!waiting} aria-hidden="true" />
-  </span>;
+  return <span aria-hidden="true" data-waiting={waiting || undefined} className={`console-quiet-mark ${compact ? "console-quiet-mark-compact" : ""} ${className}`} />;
 }
 
 /** Compatibility for shared consumers: the old dots now use the same activity mark. */

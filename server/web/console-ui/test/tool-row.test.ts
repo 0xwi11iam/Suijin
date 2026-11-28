@@ -12,6 +12,11 @@ describe("toolRowTitle", () => {
   it("falls back to the raw name until labels arrive", () => {
     expect(toolRowTitle({ name: "crtsh", arguments: "{}", result: "ok" }, {})).toBe("Used crtsh");
   });
+  it("pack tools drop their action suffix in the fallback", () => {
+    expect(toolRowTitle({ name: "nmap_scan", arguments: "{}", result: "ok" }, {})).toBe("Used nmap");
+    expect(toolRowTitle({ name: "nikto_scan", arguments: "{}", result: "ok" }, {})).toBe("Used nikto");
+    expect(toolRowTitle({ name: "gobuster_dir", arguments: "{}", result: "ok" }, {})).toBe("Used gobuster");
+  });
   it("says running, failed and stopped with the same white words", () => {
     expect(toolRowTitle({ name: "crtsh", arguments: "{}", result: undefined, isRunning: true }, { crtsh: "CRT.sh" })).toBe("Running CRT.sh");
     expect(toolRowTitle({ name: "crtsh", arguments: "{}", result: "boom", status: "Error" }, { crtsh: "CRT.sh" })).toBe("Failed CRT.sh");

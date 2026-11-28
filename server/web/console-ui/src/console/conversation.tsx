@@ -12,7 +12,6 @@ import { AccessProgramPicker } from "./access-program-picker";
 import { ReasoningPicker, REASONING_LABELS } from "./reasoning-picker";
 import { BackendConnectionPicker } from "@/components/backend-connection-picker";
 import { FilePathPicker } from "./file-path-picker";
-import { HomeAnalytics } from "./home-analytics";
 import { QueuedMessages } from "./queued-messages";
 type SendBehavior = "queue" | "steer";
 import { AgentOnboarding } from "./agent-onboarding";
@@ -121,7 +120,7 @@ export function Conversation({ detailsControl, emptyState, composerPlaceholder, 
       <Composer onOpenAgents={() => onSelectWorker(null)} detailsControl={detailsControl} placeholder={composerPlaceholder} canWrite={canWrite} sendBehavior={sendBehavior} workspace={rootWorkspace} snapshot={snapshot} onSubmit={onSubmitRoot} onStop={onStopRoot} />
       <ContextSuggestions snapshot={snapshot} onChoose={prompt => { workspace.setRootDraft(prompt); requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(`[data-console-resource="${CSS.escape(chatResourceKey({backendId:client.backendId,id:snapshot.session.id}))}"] .console-composer textarea`)?.focus()); }} />
     </section>
-    <HomeAnalytics />
+    {/* suijin: 0's artwork removed — the empty chat is quiet */}
   </div>;
   return (
     <div className="flex min-h-0 min-w-0 flex-1">

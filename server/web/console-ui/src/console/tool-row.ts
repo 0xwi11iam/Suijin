@@ -11,6 +11,16 @@ function short(name: string): string {
   return name.replace(/^.*[.:/]/, "").toLowerCase();
 }
 
+/** Pack tools carry an action suffix (nmap_scan, gobuster_dir) — the row names the TOOL
+ *  (official-lowercase styling: nmap, sqlmap, nikto — operator convention). */
+const TOOL_SUFFIXES = new Set(["scan", "probe", "search", "check", "dir", "dns", "brute", "recon", "hunt", "grab", "fetch", "enum", "audit", "info", "lookup"]);
+
+function plain(name: string): string {
+  const parts = short(name).split("_");
+  if (parts.length > 1 && TOOL_SUFFIXES.has(parts.at(-1)!)) return parts.slice(0, -1).join("_");
+  return short(name);
+}
+
 /** The one row line: verb + name, white, no colour, no icons beyond the one glyph. */
 export function toolRowTitle(call: Pick<ToolCallState, "name" | "arguments" | "result"> & { isRunning?: boolean; status?: string }, labels: ToolLabels): string {
   const name = short(call.name);
@@ -22,7 +32,7 @@ export function toolRowTitle(call: Pick<ToolCallState, "name" | "arguments" | "r
   if (/^(read_file|read|file_read)$/.test(name)) return "Read file";
   if (/^(write_file|file_write)$/.test(name)) return "Wrote file";
   if (name === "catalog_exploit") return "Catalogued exploit";
-  return `Used ${labels[name] ?? name}`;
+  return `Used ${labels[name] ?? plain(name)}`;
 }
 
 /** The file tools' dropdown: the path, nothing else. */

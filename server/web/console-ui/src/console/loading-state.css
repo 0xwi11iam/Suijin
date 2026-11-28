@@ -15,3 +15,14 @@
 [data-slot="dialog-overlay"], [data-slot="sheet-overlay"] {
   animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
+
+/* the quiet mark: a monochrome pulse — no coloured nine-square (operator 2026-11-28) */
+.console-quiet-mark {
+  display: inline-block; width: 7px; height: 7px; border-radius: 9999px;
+  background: color-mix(in srgb, var(--foreground) 55%, transparent);
+  animation: console-quiet-pulse 1.2s ease-in-out infinite;
+}
+.console-quiet-mark-compact { width: 6px; height: 6px; }
+.console-quiet-mark[data-waiting] { animation: none; opacity: 0.4; }
+@media (prefers-reduced-motion: reduce) { .console-quiet-mark { animation: none; } }
+@keyframes console-quiet-pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.95; } }
