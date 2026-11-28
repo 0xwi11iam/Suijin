@@ -3126,7 +3126,7 @@ def _pack_icon(mid: str) -> str:
 _pack_tools_cache: dict[str, tuple[str, str]] | None = None
 
 
-def _pack_tools() -> dict[str, tuple[str, str]]:
+def _pack_tools() -> dict[str, tuple[str, str, str]]:
     global _pack_tools_cache
     if _pack_tools_cache is None:
         import json as _json
@@ -3146,7 +3146,7 @@ def _pack_tools() -> dict[str, tuple[str, str]]:
                                 desc = str(spec.get("description") or "")
                             elif isinstance(spec, str):
                                 desc = spec
-                            mapping.setdefault(str(t), (pack, desc))
+                            mapping.setdefault(str(t), (pack, desc, str(data.get("name") or pack)))
         _pack_tools_cache = mapping
     return _pack_tools_cache
 
@@ -3683,13 +3683,24 @@ def doctor():
 
 def _tool_label(name: str) -> str:
     """The curated casing map keyed by pack/module ids; tool names carry suffixes
-    (gobuster_dir, crtsh_search) — the longest contained id wins, like _tool_icon."""
+    (gobuster_dir, crtsh_search) — the longest contained id wins, like _tool_icon.
+    No curated entry: the owning pack's manifest display name (Gobuster, Nikto…)."""
     low = str(name).lower()
     best = ""
-    for key, label in _NAME_OVERRIDES.items():
+    for key in _NAME_OVERRIDES:
         if (low == key or low.startswith(key + "_") or key + "_" in low or low == key.replace("_", "")) and len(key) > len(best):
             best = key
-    return _NAME_OVERRIDES.get(best, "") if best else ""
+    if best:
+        return _NAME_OVERRIDES.get(best, "")
+    owned = _pack_tools().get(str(name))
+    if owned and owned[2]:
+        return owned[2]
+    owner = _pack_of_tool(str(name))
+    if owner:
+        for v in _pack_tools().values():
+            if v[0] == owner and v[2]:
+                return v[2]
+    return ""
 
 
 @router.get("/api/console/tools")
@@ -3704,7 +3715,7 @@ def console_tools():
     # Pack tools (gobuster, nikto, sqlmap, …) the AI dispatches through packs —
     # every one lands on the menu with its owning pack's icon.
     seen = {t["name"] for t in tools}
-    for name, (pack, desc) in sorted(_pack_tools().items()):
+    for name, (pack, desc, _pname) in sorted(_pack_tools().items()):
         if name in seen:
             continue
         seen.add(name)
