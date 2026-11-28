@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import re
 import uuid
 from typing import Callable
 
@@ -191,7 +192,62 @@ def _decision_object(text: str) -> dict | None:
         obj = _loads(raw)
         if obj and any(key in obj for key in _DECISION_KEYS):
             return obj
-    return None
+    for raw in reversed(_balanced_objects(text)):  # broken JSON: salvage the fields by key
+        if '"reply"' in raw or '"thought"' in raw:
+            obj = _salvage_decision(raw)
+            if obj:
+                return obj
+    return _salvage_decision(text)
+
+
+def _unescape(text: str) -> str:
+    """The JSON escapes a broken object still carries: \n, \t, \", \\."""
+    return (
+        str(text)
+        .replace("\\\\", "\x00")
+        .replace("\\n", "\n")
+        .replace("\\t", "\t")
+        .replace('\\"', '"')
+        .replace("\x00", "\\")
+    )
+
+
+_SALVAGE_REPLY = re.compile(r'"(?:reply|message|answer|content)"\s*:\s*"((?:[^"\\\\]|\\.)*)"', re.S)
+_SALVAGE_THOUGHT = re.compile(r'"(?:thought|reasoning)"\s*:\s*"((?:[^"\\\\]|\\.)*)"', re.S)
+_SALVAGE_TOOL = re.compile(r'"(?:tool_name|tool)"\s*:\s*"([^"]+)"')
+_SALVAGE_ACTION = re.compile(r'"action"\s*:\s*"(use[_ ]?tool|tool|call_tool|run_tool)"', re.I)
+
+
+def _salvage_decision(text: str) -> dict | None:
+    """A decision whose JSON broke — the models leave an unescaped quote inside a value, and the
+    strict parse refuses the whole thing even though the reply is right there (seen live
+    2026-11-28: the operator's answer rendered as one raw JSON blob). Pull the fields out by
+    their keys instead of giving up. Only when the text clearly is a decision attempt."""
+    if '"reply"' not in text and '"thought"' not in text and '"action"' not in text:
+        return None
+    reply = ""
+    replies = _SALVAGE_REPLY.findall(text)
+    for candidate in reversed(replies):  # the last field wins when a stray quote closed early
+        if _unescape(candidate).strip():
+            reply = _unescape(candidate).strip()
+            break
+    thought = ""
+    thoughts = _SALVAGE_THOUGHT.findall(text)
+    for candidate in thoughts:
+        if _unescape(candidate).strip():
+            thought = _unescape(candidate).strip()
+            break
+    if not reply:
+        return None
+    tool = _SALVAGE_TOOL.search(text)
+    action = "use_tool" if (tool or _SALVAGE_ACTION.search(text)) else "done"
+    return {
+        "thought": thought,
+        "reply": reply[:CHAT_RECORD_CAP],
+        "action": action,
+        "tool_name": tool.group(1).strip() if tool else "",
+        "tool_args": {},
+    }
 
 
 def _mapping(*values) -> dict:

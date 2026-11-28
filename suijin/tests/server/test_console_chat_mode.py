@@ -546,3 +546,35 @@ def test_a_deleted_turn_winding_down_does_not_tear_down_the_chat_made_again_unde
     assert kinds[0] == "user.message" and kinds[-1] == "assistant.message", kinds
     events = [event["type"] for event in console_api.session_snapshot(second)["snapshot"]["events"]]
     assert events.count("user") == 1 and "assistant-delta" in events, events
+
+
+# ── the reply survives broken JSON ──────────────────────────────────────────────────────────
+
+
+def test_a_broken_decision_still_yields_the_reply():
+    """Seen live 2026-11-28: the model left an unescaped quote inside its thought, the strict
+    parse refused the whole object, and the operator's answer rendered as one raw JSON blob."""
+    from suijin.server.web.chat_operator import parse_step
+
+    blob = (
+        '{"thThe state block already told me: no engagements.", '
+        '"reply": "Nothing is running right now:\\n\\n**Engagements**\\n- none active", '
+        '"action": "done"}'
+    )
+    step = parse_step(blob)
+    assert step["action"] == "done"
+    assert step["reply"].startswith("Nothing is running right now:")
+    assert "**Engagements**" in step["reply"] and "\n" in step["reply"]
+
+
+def test_prose_stays_prose_and_tools_survive_salvage():
+    from suijin.server.web.chat_operator import parse_step
+
+    prose = parse_step("Just a plain sentence, no JSON.")
+    assert prose["reply"] == "Just a plain sentence, no JSON." and prose["action"] == "done"
+    tool = parse_step(
+        '{"thBroken "quote here", "reply": "Checking the swarm…", '
+        '"action": "use_tool", "tool_name": "local_sys_info", "tool_args": {}}'
+    )
+    assert tool["action"] == "use_tool" and tool["tool_name"] == "local_sys_info"
+    assert tool["reply"] == "Checking the swarm…"
