@@ -67,6 +67,12 @@ def _swarm_db() -> Path:
 
 def _eng_dir(name: str) -> Path:
     slug = "_default" if name in ("default", "") else name
+    # the Targets layout first when the folder moved there (S0 migration, 2026-11-29)
+    with contextlib.suppress(Exception):
+        from suijin.server.swarm import registry
+        found = registry.find_folder(slug, legacy_root=_ws() / "engagements")
+        if found is not None:
+            return found
     return _ws() / "engagements" / slug
 
 
@@ -360,6 +366,9 @@ def _catalog_index() -> dict:
     engagements = _ws() / "engagements"
     if engagements.is_dir():
         roots.extend(sorted(engagements.glob("*/exploits")))
+    with contextlib.suppress(Exception):
+        from suijin.server.swarm import registry as _reg
+        roots.extend(sorted(_reg.targets_root().glob("*/swarms/*/exploits")))
     for root in roots:
         if not root.is_dir():
             continue
@@ -1504,6 +1513,15 @@ def _engagement_record(name: str) -> dict:
     meta = d / "engagement.json"
     with contextlib.suppress(Exception):
         display = str(json.loads(meta.read_text()).get("name") or name)
+    with contextlib.suppress(Exception):
+        from suijin.server.swarm import registry as _reg
+        swarm = d / "swarm.json"
+        if swarm.exists():
+            data = json.loads(swarm.read_text())
+            display = str(data.get("title") or data.get("name") or name)
+        else:
+            data = _reg.load(name) or {}
+            display = str(data.get("title") or display)
     return {
         "id": name, "name": display, "description": "", "notes": "",
         "scanIds": [], "createdAt": _now_iso(),
@@ -1516,8 +1534,11 @@ def _engagement_record(name: str) -> dict:
 @router.get("/api/engagements")
 def engagements_list():
     root = _ws() / "engagements"
-    names = sorted(p.name for p in root.iterdir() if p.is_dir()) if root.exists() else []
-    return {"engagements": [_engagement_record(n) for n in names]}
+    names = {p.name for p in root.iterdir() if p.is_dir()} if root.exists() else set()
+    with contextlib.suppress(Exception):
+        from suijin.server.swarm import registry as _reg
+        names.update(str(row.get("id")) for row in _reg.list_swarms() if row.get("id"))
+    return {"engagements": [_engagement_record(n) for n in sorted(names)]}
 
 
 @router.post("/api/engagements")
@@ -1586,12 +1607,18 @@ def _recent_engagement_sessions(live: set[str], per_target: int = 8) -> list[str
         return []
     live_targets = {_desk_session(name).get("targetKey") for name in live}
     candidates: list[tuple[float, str]] = []
-    for entry in root.iterdir():
+    seen_entries: set[str] = set()
+    entries: list[object] = [p for p in root.iterdir() if p.is_dir()]
+    with contextlib.suppress(Exception):
+        from suijin.server.swarm import registry as _reg
+        entries.extend(_reg.targets_root().glob("*/swarms/*"))
+    for entry in entries:
         if not entry.is_dir() or entry.name in live or entry.name in ("_default", "default"):
             continue
-        if entry.name in _deleted_sessions:
+        if entry.name in _deleted_sessions or entry.name in seen_entries:
             continue
-        if not (entry / "engagement.json").is_file() and not (entry / "events.jsonl").is_file():
+        seen_entries.add(entry.name)
+        if not (entry / "engagement.json").is_file() and not (entry / "swarm.json").is_file() and not (entry / "events.jsonl").is_file():
             continue
         with contextlib.suppress(OSError):
             candidates.append((entry.stat().st_mtime, entry.name))

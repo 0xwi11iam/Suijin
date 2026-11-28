@@ -290,18 +290,19 @@ def _engagement_folders() -> list[Path]:
     """Engagement folders: ones that have metadata or a journal. An empty or leftover folder is not
     an engagement (the index applies the same rule)."""
     root = _engagements_root()
-    if not root.is_dir():
-        return []
-    return sorted(
-        (
+    folders: list[Path] = []
+    if root.is_dir():
+        folders.extend(
             folder
             for folder in root.iterdir()
             if folder.is_dir()
             and not folder.name.startswith(".")
             and ((folder / "engagement.json").is_file() or (folder / "events.jsonl").is_file())
-        ),
-        key=lambda folder: folder.name,
-    )
+        )
+    with contextlib.suppress(Exception):
+        from suijin.server.swarm import registry as _reg
+        folders.extend(_reg.targets_root().glob("*/swarms/*"))
+    return sorted((f for f in folders if f.is_dir()), key=lambda folder: folder.name)
 
 
 def _engagement_summary(folder: Path) -> dict:

@@ -361,15 +361,24 @@ def ops_overview() -> dict:
 
 
 def _engagement_ids() -> list[str]:
+    ids = set()
     root = _rt() / "engagements"
-    if not root.is_dir():
-        return []
-    return sorted((f.name for f in root.iterdir() if f.is_dir() and not f.name.startswith(".")), reverse=True)
+    if root.is_dir():
+        ids.update(f.name for f in root.iterdir() if f.is_dir() and not f.name.startswith("."))
+    with contextlib.suppress(Exception):
+        from suijin.server.swarm import registry
+        ids.update(str(row.get("id")) for row in registry.list_swarms() if row.get("id"))
+    return sorted(ids, reverse=True)
 
 
 def _valid_engagement(engagement_id: str) -> Path | None:
     if not SAFE_ID.match(engagement_id or "") or engagement_id not in _engagement_ids():
         return None
+    with contextlib.suppress(Exception):
+        from suijin.server.swarm import registry
+        found = registry.find_folder(engagement_id, legacy_root=_rt() / "engagements")
+        if found is not None:
+            return found
     return _rt() / "engagements" / engagement_id
 
 

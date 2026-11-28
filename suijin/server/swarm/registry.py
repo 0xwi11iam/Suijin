@@ -182,6 +182,25 @@ def list_swarms(include_legacy: bool = True) -> list[dict]:
     return out
 
 
+def find_folder(swarm_id: str, legacy_root: Path | None = None) -> Path | None:
+    """Where a swarm/engagement folder lives: the caller's legacy root first, then the
+    Targets layout. ONE resolver for every consumer of an engagement folder — after the
+    S0 migration nothing may hard-code ``~/.suijin/engagements`` alone."""
+    if legacy_root is not None:
+        legacy = legacy_root / swarm_id
+        if legacy.is_dir():
+            return legacy
+    else:
+        legacy = Path.home() / ".suijin" / "engagements" / swarm_id
+        if legacy.is_dir():
+            return legacy
+    with contextlib.suppress(OSError):
+        for path in targets_root().glob("*/swarms/*/swarm.json"):
+            if path.parent.name == swarm_id:
+                return path.parent
+    return None
+
+
 def migrate_legacy(swarm_id: str, *, dry_run: bool = False) -> dict | None:
     """Move one legacy engagement folder into the Targets layout.
 
