@@ -8,6 +8,7 @@ import { useOverview, useRun } from "@/ops/api";
 import { AgentsPanel, QueuePanel, SpawnPanel } from "@/ops/swarm-agents";
 import { BoxesPanel } from "@/ops/swarm-boxes";
 import { CoordinatorPanel, FleetPanel, JobsPanel, MeshPanel, StructuredPanel, SystemPanel } from "@/ops/swarm-fleet";
+import { SwarmsPanel } from "@/ops/swarms";
 import { ConfirmDialog, ErrorNote, FlashBar, Stat } from "@/ops/ui";
 
 export function SwarmPage() {
@@ -44,6 +45,8 @@ export function SwarmPage() {
       />
 
       <FlashBar />
+
+      <SwarmsPanel />
 
       {errorEntries.length > 0 && (
         <ErrorNote error="Some sources did not answer">

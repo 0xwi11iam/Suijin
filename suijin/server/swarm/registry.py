@@ -242,7 +242,7 @@ def migrate_legacy(swarm_id: str, *, dry_run: bool = False) -> dict | None:
         "mode": str(meta.get("mode") or ""),
         "chat": str(meta.get("chat") or ""),
         "status": "stopped",
-        "created": str(meta.get("created") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
+        "created": str(meta.get("created") or meta.get("createdAt") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
         "migrated_from": str(source),
     }
     _atomic_write(destination / "swarm.json", json.dumps(definition, indent=2, ensure_ascii=False) + "\n")

@@ -303,3 +303,53 @@ export function useRun() {
   }, [action, show]);
   return { run, pending: action.isPending };
 }
+
+
+export interface OpsSwarm {
+  id: string;
+  target: string;
+  title: string;
+  lanes: string[];
+  agents?: { host: number; boxed: number };
+  status: string;
+  created?: string;
+  folder?: string;
+  engine?: string;
+  permissions?: string;
+  mode?: string;
+  chat?: string;
+}
+
+export function useSwarms(interval = 3000) {
+  const ops = useOps();
+  return useQuery({
+    queryKey: ["ops", "swarms"],
+    queryFn: async () => (await ops.get("/api/ops/swarms")) as { swarms: OpsSwarm[] },
+    refetchInterval: interval,
+  });
+}
+
+export interface SwarmAgentRow { id: string; status: string; intent: string | null; heartbeat_age_s: number }
+export interface SwarmIntentRow { id: string; text: string; state: string }
+
+export function useSwarm(id: string | undefined, interval = 3000) {
+  const ops = useOps();
+  return useQuery({
+    queryKey: ["ops", "swarms", id],
+    queryFn: async () => (await ops.get(`/api/ops/swarms/${id ?? ""}`)) as { swarm: OpsSwarm; agents: SwarmAgentRow[]; open_intents: SwarmIntentRow[] },
+    enabled: Boolean(id),
+    refetchInterval: interval,
+  });
+}
+
+export interface SwarmEventRow { kind: string; ts?: string | number; at?: string; text?: string; content?: string; output?: string; title?: string; id?: string }
+
+export function useSwarmActivity(id: string | undefined, interval = 2500) {
+  const ops = useOps();
+  return useQuery({
+    queryKey: ["ops", "swarms", id, "activity"],
+    queryFn: async () => (await ops.get(`/api/ops/engagements/${id ?? ""}/events`, { limit: 10 })) as { rows?: SwarmEventRow[] },
+    enabled: Boolean(id),
+    refetchInterval: interval,
+  });
+}
