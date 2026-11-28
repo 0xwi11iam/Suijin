@@ -40,17 +40,37 @@ def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _adopt_nested(entry_root: Path) -> None:
+    """Evidence used to land one level too deep (``exploits/exploits/<EXP>/evidence``): the catalog
+    passed the exploits root where the engagement folder was expected. Move it beside its entry."""
+    nested = entry_root.parent / "exploits" / entry_root.name / "evidence"
+    target = _blobs_root(entry_root)
+    with contextlib.suppress(OSError):
+        if nested.is_dir() and not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            nested.replace(target)
+            for shell in (nested.parent, nested.parent.parent):  # leave no empty exploits/exploits/<EXP> behind
+                if shell.is_dir() and not any(shell.iterdir()):
+                    shell.rmdir()
+
+
 def capture(entry_id: str, role: str, content: str, engagement_dir) -> dict | None:
-    """Write one evidence blob + manifest row. role: proof | baseline |
-    verification | supporting. Returns the manifest record (or None on
-    failure — capture must never break a confirmation)."""
+    """Write one evidence blob + manifest row for ``<engagement_dir>/exploits/<entry_id>``."""
+    return capture_into(_entry_root(engagement_dir, entry_id), role, content)
+
+
+def capture_into(entry_root: Path, role: str, content: str) -> dict | None:
+    """Write one evidence blob + manifest row under ``<entry_root>/evidence``. ``entry_root`` is the
+    entry's own folder, whatever tree it sits in. role: proof | baseline | verification |
+    supporting. Returns the manifest record (or None on failure — capture must never break a
+    confirmation)."""
     try:
-        eid = str(entry_id or "").strip()
         body = str(content or "").encode("utf-8", errors="replace")
-        if not eid or not body:
+        if not body:
             return None
         h = _sha(body)
-        root = _blobs_root(_entry_root(engagement_dir, eid))
+        _adopt_nested(Path(entry_root))
+        root = _blobs_root(Path(entry_root))
         blob = root / h[:2] / f"{h}.bin"
         blob.parent.mkdir(parents=True, exist_ok=True)
         blob.write_bytes(body)
@@ -89,6 +109,7 @@ def verify(engagement_dir, entry_id: str = "") -> dict:
             return {"entries": {}}
         roots = [_entry_root(engagement_dir, entry_id)] if entry_id else sorted(base.iterdir())
         for root in roots:
+            _adopt_nested(root)
             eid = root.name
             problems: list[str] = []
             mpath = root / "evidence" / "evidence.json"

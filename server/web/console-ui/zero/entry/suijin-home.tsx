@@ -1,14 +1,17 @@
 /**
- * Suijin Home — the new-engagement landing.
+ * Suijin Home — the new-chat landing.
  *
  * Ported from 0's native new-thread screen (0sec-labs/0, packages/web/src/console/conversation.tsx
- * @ 78d453c0, Apache-2.0 OR MIT): the backdrop, the layout wrappers, the context row, the composer
- * card, the gradient hairline, the textarea + overlay and the controls row all keep 0's markup and
- * class names, and every control is one of 0's prebuilt components (Backdrop, Button, Tooltip,
- * DropdownMenu, ModelCatalog, ModelIcon, LoadingDots).
+ * @ 78d453c0, Apache-2.0 OR MIT): the layout wrappers, the context row, the composer card, the
+ * gradient hairline, the textarea + overlay and the controls row all keep 0's markup and class
+ * names, and every control is one of 0's prebuilt components (Button, Tooltip, DropdownMenu,
+ * ModelCatalog, ModelIcon, LoadingDots).
  *
  * What Suijin changes is marked `suijin:` — content and wiring only:
- *   - 0's project selector (top context row) becomes the engagement Mode
+ *   - the backdrop is asciify-engine's studio background (fluid stipple, blue-cyan ink)
+ *   - 0's project selector (top context row) becomes Chat | Engagement — a chat by default
+ *     (operator 2026-11-27); the engagement Mode sits beside it, Permissions in the composer,
+ *     and both show only for an engagement
  *   - 0's autonomy selector (the "YOLO" control in the composer) becomes Permissions
  *   - 0's model catalog is fed from Suijin's own runtime + model list
  *   - submit hands the prompt to the console's create-at-submit path; it creates nothing itself
@@ -16,14 +19,17 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import {
+  Activity,
   ArrowUp,
   Bug,
   ChevronDown,
   ClipboardCheck,
+  Crosshair,
   FileText,
   Flag,
   Flame,
   History,
+  MessageSquare,
   Plus,
   Radar,
   Settings,
@@ -32,25 +38,70 @@ import {
   Zap,
   X,
 } from "lucide-react";
-import { Backdrop } from "@zero/ui/backdrops";
-import { useWebBackground } from "@zero/lib/web-appearance";
 import { Button } from "@zero/components/ui/button";
 import { Tooltip } from "@zero/components/ui/tooltip";
 import { DropdownMenu } from "@zero/components/ui/dropdown-menu";
 import { ModelCatalog, type CatalogModel, type CatalogProvider } from "@zero/components/model-picker";
 import { ModelIcon } from "@zero/components/provider-icon";
+import { registerSuijinBrandImages } from "./brand-art";
 import { LoadingDots } from "@zero/console/loading-state";
+import { mountStudioBackground, type StudioBackgroundOptions } from "./vendor/studio-background";
+import suiMark from "../../src/assets/sui.png";
 import {
+  HERO_DEFAULT_KIND,
   HERO_DRAFT_KEY,
   HERO_MAX_FILES,
   HERO_MAX_TEXT,
+  isHeroKind,
   isHeroMode,
   isHeroPermissions,
+  type HeroKind,
   type HeroMode,
   type HeroPermissions,
   type HeroSubmitMessage,
   type HeroToChild,
 } from "./protocol";
+
+/* ── suijin: backdrop ────────────────────────────────────────────────────────────────────── */
+
+/** Blue-cyan: bluer than the template's mint `#8fd3c7`, in the family of the Suijin mark. */
+const INK = "#22d3ee";
+
+/** How much of the field shows through. Kept low: the landing is a reading surface first. */
+const BACKDROP_OPACITY = "0.35";
+
+/** The template's own settings, with Suijin's ink and base. Typed against the engine's settings. */
+const STUDIO_BACKGROUND: StudioBackgroundOptions = {
+  pattern: "fluid",
+  speed: 1,
+  scene: "flow",
+  settings: {
+    style: "stipple",
+    cellSize: 11,
+    ink: INK,
+    backdrop: { mode: "transparent" },
+    dither: { algorithm: "bayer4", palette: "custom", colors: ["#0b0b0a", INK], amount: 0, scale: 11 },
+    // The field stays put: it does not follow the pointer (operator 2026-11-27 — it was hard to read behind).
+    hover: { effect: "none", strength: 0, radius: 0.3 },
+  },
+};
+
+/**
+ * The studio background, mounted on the landing's own root so it sizes with the hero and pointer
+ * moves over the composer reach its hover field. The template pauses itself when the tab is
+ * hidden, under reduced motion, or when the hero is off-screen.
+ */
+function StudioBackdrop() {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const node = canvas.current;
+    const host = node?.parentElement;
+    if (!node || !host) return;
+    const background = mountStudioBackground(host, node, STUDIO_BACKGROUND);
+    return () => background.destroy();
+  }, []);
+  return <canvas ref={canvas} aria-hidden="true" data-suijin-home-backdrop="" className="pointer-events-none absolute inset-0 h-full w-full" style={{ opacity: BACKDROP_OPACITY }} />;
+}
 
 /* ── suijin: content ─────────────────────────────────────────────────────────────────────── */
 
@@ -87,33 +138,55 @@ const MODES: Choice<HeroMode>[] = [
   { id: "pentest", label: "Pentest", icon: ClipboardCheck, hint: "Needs an uploaded scope document before it starts." },
 ];
 
-const SUGGESTIONS: { label: string; hint: string; prompt: string; icon: typeof Radar }[] = [
+/** What the send button starts — the slot 0 gives its project selector above the composer. */
+const KINDS: Choice<HeroKind>[] = [
+  { id: "chat", label: "Chat", icon: MessageSquare, hint: "Talk to Suijin. It answers, looks things up, runs tools, and starts an engagement when you ask." },
+  { id: "engagement", label: "Engagement", icon: Crosshair, hint: "An autonomous hunt. Suijin works the target on its own and reports what it finds." },
+];
+
+type Suggestion = { label: string; hint: string; prompt: string; icon: typeof Radar };
+const CHAT_SUGGESTIONS: Suggestion[] = [
   {
     label: "Check Suijin is healthy",
-    hint: "Providers, models, tools, the knowledge graph and the exploit cataloguer",
-    prompt:
-      "Run the Suijin doctor: check providers, models, tools, the knowledge graph and the exploit cataloguer. Report anything broken and how to fix it.",
+    hint: "Model connection, swarm, knowledge graph and config",
+    prompt: "Run suijin_doctor and tell me, in plain language, what is healthy and what needs fixing.",
     icon: Stethoscope,
   },
   {
-    label: "Explain my top finding",
-    hint: "Business impact, payability, and what the write-up is missing",
-    prompt:
-      "Open my highest-severity finding and explain it: what the bug is in plain language, the business impact, whether a program would pay for it, the chance of acceptance, and what the write-up is missing.",
-    icon: Bug,
+    label: "What's running?",
+    hint: "Engagements, agents and the findings so far",
+    prompt: "What engagements and agents are running right now, and what has been found so far?",
+    icon: Activity,
   },
   {
-    label: "Recon a target",
-    hint: "Passive recon — type the target after the prompt",
-    prompt: "Run passive recon on ",
-    icon: Radar,
+    label: "Explain my top finding",
+    hint: "What it is, why it matters, and whether it is worth submitting",
+    prompt:
+      "Find my highest-severity finding and explain it: what the bug is in plain language, the business impact, whether a program would pay for it, and what the write-up is missing.",
+    icon: Bug,
   },
+];
+const ENGAGEMENT_SUGGESTIONS: Suggestion[] = [
+  { label: "Recon a target", hint: "Passive recon — type the target after the prompt", prompt: "Run passive recon on ", icon: Radar },
+  { label: "Map an attack surface", hint: "Subdomains, endpoints and technologies — type the target after the prompt", prompt: "Map the attack surface of ", icon: Crosshair },
+  { label: "Hunt a login flow", hint: "Auth, session and access-control bugs — type the target after the prompt", prompt: "Hunt for authentication and access-control vulnerabilities in the login flow of ", icon: Bug },
 ];
 
 /* ── suijin: Suijin's own API (the frame is same-origin with the console) ──────────────────── */
 
+interface RuntimeModel {
+  providerId?: string;
+  model?: string;
+}
+/** GET /api/console/runtime. `runtime` is null until a model is configured. */
 interface RuntimeResponse {
-  runtime?: { providerId?: string; model?: string };
+  runtime?: RuntimeModel | null;
+  effort?: string;
+}
+/** PATCH /api/console/runtime answers `{ok, runtime, effort}`. */
+interface RuntimePatchResponse {
+  ok?: boolean;
+  runtime?: RuntimeModel | null;
   effort?: string;
 }
 interface AvailableModel {
@@ -126,6 +199,8 @@ interface AvailableModel {
 interface AvailableModelsResponse {
   models?: AvailableModel[];
   providers?: { key: string; label: string }[];
+  /** maker → site icon, for makers the picker has no vector logo for */
+  icons?: Record<string, string>;
 }
 interface Catalog {
   models: CatalogModel[];
@@ -212,11 +287,11 @@ function ContextSelector<T extends string>({ label, value, options, onChange, di
 }
 
 export function SuijinHome() {
-  const [background] = useWebBackground();
   const [draft, setDraft] = useState(readDraft);
   const [files, setFiles] = useState<File[]>([]);
   const [permissions, setPermissions] = useState<HeroPermissions>("exploitation");
   const [mode, setMode] = useState<HeroMode>("vdp");
+  const [kind, setKind] = useState<HeroKind>(HERO_DEFAULT_KIND);
   const [busy, setBusy] = useState(false);
   const [readOnly, setReadOnly] = useState(false);
   /** The submission waiting for the console's acknowledgment; the send control shows it as in flight. */
@@ -249,12 +324,13 @@ export function SuijinHome() {
       if (data.type === "suijin:hero:rejected") {
         // Nothing was created: the prompt and its files stay exactly where they were.
         setSubmitting(null);
-        setNotice(typeof data.reason === "string" && data.reason ? data.reason : "The engagement didn't start. Try again.");
+        setNotice(typeof data.reason === "string" && data.reason ? data.reason : "The chat didn't start. Try again.");
         return;
       }
       if (data.type !== "suijin:hero:state") return;
       if (isHeroPermissions(data.permissions)) setPermissions(data.permissions);
       if (isHeroMode(data.mode)) setMode(data.mode);
+    if (isHeroKind(data.kind)) setKind(data.kind);
       setBusy(Boolean(data.busy));
       setReadOnly(Boolean(data.readOnly));
     };
@@ -296,6 +372,8 @@ export function SuijinHome() {
       .then((data) => {
         if (!alive) return;
         const available = data.models ?? [];
+        // Makers without vector artwork (and the Numes connection) draw their site icon; register before the first render.
+        registerSuijinBrandImages(data.icons);
         const models = available
           .filter((model) => model.supported !== false)
           .map((model) => ({ id: stripProvider(model.value, model.provider), provider: model.provider }));
@@ -316,12 +394,12 @@ export function SuijinHome() {
   const pickModel = async (model: CatalogModel) => {
     setModelError(undefined);
     try {
-      const next = await requestJson<RuntimeResponse>("/api/console/runtime", {
+      const next = await requestJson<RuntimePatchResponse>("/api/console/runtime", {
         method: "PATCH",
         body: JSON.stringify({ providerId: model.provider, model: model.id }),
       });
-      // The endpoint answers `{ok, runtime: {runtime, effort}}`; the read endpoint answers `{runtime, effort}`.
-      setRuntime(next.runtime ?? next);
+      if (next.ok === false || !next.runtime) throw new Error("runtime not switched");
+      setRuntime((previous) => ({ runtime: next.runtime ?? null, effort: next.effort || previous?.effort }));
       refocusComposer();
     } catch {
       setModelError(`Couldn't switch to ${model.id}. It stays on the previous model.`);
@@ -353,28 +431,35 @@ export function SuijinHome() {
   const refocusComposer = () => {
     window.setTimeout(() => textarea.current?.focus({ preventScroll: true }), 0);
   };
-  /** The console remembers a selection the moment it is made (it used to, with inline selects). */
-  const announce = (nextPermissions: HeroPermissions, nextMode: HeroMode) => {
-    window.parent.postMessage({ type: "suijin:hero:select", permissions: nextPermissions, mode: nextMode }, window.location.origin);
+  /** The console follows a selection the moment it is made (it used to, with inline selects). */
+  const announce = (nextPermissions: HeroPermissions, nextMode: HeroMode, nextKind: HeroKind) => {
+    window.parent.postMessage({ type: "suijin:hero:select", permissions: nextPermissions, mode: nextMode, kind: nextKind }, window.location.origin);
   };
   const chooseMode = (next: HeroMode) => {
     setMode(next);
-    announce(permissions, next);
+    announce(permissions, next, kind);
     refocusComposer();
   };
   const choosePermissions = (next: HeroPermissions) => {
     setPermissions(next);
-    announce(next, mode);
+    announce(next, mode, kind);
     refocusComposer();
   };
 
-  const needsScope = mode === "pentest" && files.length === 0;
+  const chooseKind = (next: HeroKind) => {
+    setKind(next);
+    announce(permissions, mode, next);
+    refocusComposer();
+  };
+  const isEngagement = kind === "engagement";
+  const sendLabel = isEngagement ? "Hack it" : "Send";
+  const needsScope = isEngagement && mode === "pentest" && files.length === 0;
   const closed = busy || readOnly;
   const canSend = draft.trim().length > 0 && !closed && !submitting && !needsScope;
 
   const submit = () => {
     if (!canSend) return;
-    const message: HeroSubmitMessage = { type: "suijin:hero:submit", text: draft.trim().slice(0, HERO_MAX_TEXT), permissions, mode, files };
+    const message: HeroSubmitMessage = { type: "suijin:hero:submit", text: draft.trim().slice(0, HERO_MAX_TEXT), permissions, mode, kind, files };
     window.parent.postMessage(message, window.location.origin);
     setSubmitting(message);
   };
@@ -425,15 +510,27 @@ export function SuijinHome() {
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col" aria-label="Home">
-      <Backdrop kind={background} />
+      <StudioBackdrop />
       <div className="relative h-full overflow-y-auto overscroll-contain">
         <section className="relative flex min-h-full items-center justify-center px-6 py-10">
-          {/* suijin: 0's column is 712px; Suijin's composer is the whole surface */}
-          <div className="relative flex w-full min-w-0 max-w-[min(1120px,100%)] flex-col pb-[6dvh]">
+          {/* suijin: 0's column is 712px; Suijin's composer is the whole surface. The foot padding
+              grows by the mark's height so the composer stays where it was and the mark sits above. */}
+          <div className="relative flex w-full min-w-0 max-w-[min(1120px,100%)] flex-col pb-[calc(6dvh+6.75rem)]">
+            {/* suijin: the mark — Sui beside the wordmark (operator 2026-11-27: "put the Sui icon here") */}
+            <header data-suijin-home-brand="" className="mb-8 flex items-center justify-center">
+              <h1 className="brand-glow flex items-center gap-3 font-sans text-[2.5rem] font-semibold leading-none tracking-[-0.045em] text-foreground">
+                <img src={suiMark} alt="" className="size-10 shrink-0" />
+                Suijin
+              </h1>
+            </header>
+
             {/* 0's context row: plain-text selectors above the composer */}
             <div className="flex min-h-8 min-w-0 items-center justify-between gap-3 pb-1.5 pl-4 pr-4 text-muted-foreground">
               <div className="flex min-w-0 flex-1 items-center gap-3">
-                <ContextSelector label="Mode" value={mode} options={MODES} onChange={chooseMode} disabled={closed} />
+                <ContextSelector label="Start a" value={kind} options={KINDS} onChange={chooseKind} disabled={closed} />
+                {isEngagement && (
+                  <ContextSelector label="Mode" value={mode} options={MODES} onChange={chooseMode} disabled={closed} />
+                )}
               </div>
               {needsScope && (
                 <span role="status" className="shrink-0 text-xs text-warning">
@@ -504,7 +601,7 @@ export function SuijinHome() {
                   data-1p-ignore
                   data-lpignore="true"
                   ref={textarea}
-                  aria-label="What should we hack today?"
+                  aria-label={isEngagement ? "What should we hack today?" : "Ask Suijin anything"}
                   className="block w-full resize-none overscroll-contain scroll-fade-y bg-transparent p-1 text-[16px] font-[450] leading-[1.35] tracking-[-0.014em] [--sf-size:32px] outline-none focus:outline-none focus-visible:outline-none supports-[animation-timeline:scroll()]:[scrollbar-width:none]"
                   style={{ minHeight: MIN_COMPOSER_HEIGHT, maxHeight: MAX_COMPOSER_HEIGHT }}
                   value={draft}
@@ -520,8 +617,8 @@ export function SuijinHome() {
                     aria-hidden="true"
                     className="pointer-events-none absolute left-1 top-1 text-[16px] font-[450] leading-[1.35] tracking-[-0.014em] text-muted-foreground-2"
                   >
-                    What should we hack today?
-                    <span className="text-muted-foreground-3 @max-md/composer:hidden">, or drop a scope file</span>
+                    {isEngagement ? "What should we hack today?" : "Ask Suijin anything"}
+                    <span className="text-muted-foreground-3 @max-md/composer:hidden">{isEngagement ? ", or drop a scope file" : ", or drop a file for context"}</span>
                   </span>
                 )}
               </div>
@@ -555,18 +652,20 @@ export function SuijinHome() {
                       <Plus className="size-4" strokeWidth={1.5} />
                     </Button>
                   </Tooltip>
-                  <DropdownMenu>
-                    <Tooltip content="Permissions">
-                      <DropdownMenu.Trigger aria-label="Permissions" data-suijin-home-permissions="" disabled={closed}>
-                        <Button type="button" variant="ghost" size="sm" className={CONTROL_TRIGGER}>
-                          <PermissionsIcon aria-hidden="true" strokeWidth={1.5} className="size-3.5 shrink-0" />
-                          <span className="truncate">{(PERMISSIONS.find((option) => option.id === permissions) ?? PERMISSIONS[0]).label}</span>
-                          <ChevronDown className="size-4 shrink-0 text-icon-muted" strokeWidth={1.5} />
-                        </Button>
-                      </DropdownMenu.Trigger>
-                    </Tooltip>
-                    <Choices label="Permissions" value={permissions} options={PERMISSIONS} onChange={choosePermissions} disabled={closed} />
-                  </DropdownMenu>
+                  {isEngagement && (
+                    <DropdownMenu>
+                      <Tooltip content="Permissions">
+                        <DropdownMenu.Trigger aria-label="Permissions" data-suijin-home-permissions="" disabled={closed}>
+                          <Button type="button" variant="ghost" size="sm" className={CONTROL_TRIGGER}>
+                            <PermissionsIcon aria-hidden="true" strokeWidth={1.5} className="size-3.5 shrink-0" />
+                            <span className="truncate">{(PERMISSIONS.find((option) => option.id === permissions) ?? PERMISSIONS[0]).label}</span>
+                            <ChevronDown className="size-4 shrink-0 text-icon-muted" strokeWidth={1.5} />
+                          </Button>
+                        </DropdownMenu.Trigger>
+                      </Tooltip>
+                      <Choices label="Permissions" value={permissions} options={PERMISSIONS} onChange={choosePermissions} disabled={closed} />
+                    </DropdownMenu>
+                  )}
                   <DropdownMenu onOpenChange={(open) => open && setModelError(undefined)}>
                     <Tooltip content="Choose model">
                       <DropdownMenu.Trigger aria-label="Choose model" data-suijin-home-model="" disabled={closed || !modelLabel}>
@@ -632,18 +731,18 @@ export function SuijinHome() {
                       <span>History</span>
                     </Button>
                   </Tooltip>
-                  <Tooltip content="Hack it. Shift+Enter for a new line." shortcut="Enter">
+                  <Tooltip content={`${sendLabel}. Shift+Enter for a new line.`} shortcut="Enter">
                     <Button
                       type="button"
                       size="sm"
                       data-suijin-home-submit=""
-                      aria-label="Hack it"
+                      aria-label={sendLabel}
                       aria-busy={Boolean(submitting)}
                       disabled={!canSend}
                       onClick={submit}
                       className="h-8 gap-1.5 px-3 text-[13px] font-[450]"
                     >
-                      {submitting ? <LoadingDots className="scale-75" /> : <span>Hack it</span>}
+                      {submitting ? <LoadingDots className="scale-75" /> : <span>{sendLabel}</span>}
                       <ArrowUp className="size-3.5" strokeWidth={1.5} />
                     </Button>
                   </Tooltip>
@@ -653,7 +752,7 @@ export function SuijinHome() {
 
             {/* 0's suggestion row */}
             <div aria-label="Suggested prompts" className="flex w-full flex-wrap items-center justify-center gap-2 pt-5">
-              {SUGGESTIONS.map((suggestion) => {
+              {(isEngagement ? ENGAGEMENT_SUGGESTIONS : CHAT_SUGGESTIONS).map((suggestion) => {
                 const Icon = suggestion.icon;
                 return (
                   <Tooltip key={suggestion.label} content={suggestion.hint}>
@@ -663,7 +762,7 @@ export function SuijinHome() {
                       size="sm"
                       data-suijin-home-suggestion={suggestion.label}
                       disabled={closed}
-                      className="max-w-full !px-2.5"
+                      className="max-w-full bg-[var(--card)] !px-2.5" /* suijin: solid surface — the animated backdrop runs behind the row */
                       onClick={() => chooseSuggestion(suggestion.prompt)}
                     >
                       <Icon aria-hidden="true" strokeWidth={1} className="shrink-0 text-icon-muted" />

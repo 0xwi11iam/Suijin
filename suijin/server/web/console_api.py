@@ -29,13 +29,17 @@ import time
 from collections import deque
 from pathlib import Path
 
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, HTTPException
 from fastapi.responses import JSONResponse
 
 router = APIRouter()
 
 SCHEMA_VERSION = 1
 HB_DEAD_S = 30
+# What `POST /api/console/sessions/{id}/{action}` understands. Anything else is a 400, not a
+# silent 200 that looks like success.
+SESSION_ACTIONS = ("cancel", "pause", "stop", "resume", "force-stop", "clear", "delete")
+ROSTER_STOPPED_CAP = 40  # stopped agents stay visible in a session's roster; a long hunt shows its most recent ones
 
 # ── workspace paths ──────────────────────────────────────────────
 
@@ -126,7 +130,19 @@ _seqs: dict[str, int] = {}
 _rings: dict[str, deque] = {}
 _ring_lock = threading.Lock()
 MAX_RING = 600
+TOOL_OUTPUT_CAP = 16000  # chars of one tool result sent to the page (2000 cut most JSON mid-object)
 _event_offsets: dict[str, int] = {}  # session → byte offset into events.jsonl
+
+# ── chat mode: the operator's conversation with Suijin (never spawns a hunt) ─
+# A turn is one thread per session. Its finished records are appended to events.jsonl like any
+# agent's, AND ringed the moment they exist — so the poller must skip the ones it already rang
+# (`_chat_streamed`) or the operator would read every reply twice.
+_chat_running: set[str] = set()
+_chat_cancel: dict[str, threading.Event] = {}
+_chat_queue: dict[str, list[str]] = {}  # messages sent while a turn was answering
+_chat_lock = threading.Lock()
+_chat_streamed: dict[str, set[int]] = {}
+CHAT_USER_CAP = 20000  # characters of one operator message kept
 
 
 def _new_event_records(session: str) -> list[dict]:
@@ -667,6 +683,23 @@ def _target_for_meta(meta: dict, session: str = "") -> str:
     return target
 
 
+def _real_target(meta: dict) -> str:
+    """The target a session is ABOUT: the explicit one, else a host in its title. Empty when the
+    session is not about a target at all — a question, a tool test — which files under General."""
+    explicit = str((meta or {}).get("target") or (meta or {}).get("scope") or "").strip()
+    return (
+        explicit
+        or _target_from_text((meta or {}).get("name") or "")
+        or _target_from_text((meta or {}).get("description") or "")
+    )
+
+
+def _session_kind(meta: dict) -> str:
+    """``chat`` (a conversation with Suijin) or ``engagement`` (a hunt). Sessions older than chat
+    mode have no ``kind`` and are engagements."""
+    return "chat" if str((meta or {}).get("kind") or "").strip().lower() == "chat" else "engagement"
+
+
 def _desk_session(session: str) -> dict:
     """DesktopConsoleSession shape."""
     agents = _live_agents(session)
@@ -678,18 +711,34 @@ def _desk_session(session: str) -> dict:
     # while agents hunted, so the composer showed no Stop control and the
     # operator couldn't stop a running engagement from the UI.
     paused = bool(live) and all(str(a.get("status") or "") == "paused" for a in live)
-    status = "waiting" if paused else "working" if live else "idle"
+    with _chat_lock:
+        chatting = session in _chat_running
+    status = "waiting" if paused else "working" if live or chatting else "idle"
     # THE REAL TITLE (field 2026-11-17: "example.com" displayed as
     # "example com" — the title was rebuilt from the slug, which ate the
     # dot). The typed title is stored in engagement.json at create; show it.
     meta = _session_engagement_meta(session)
     title = str(meta.get("name") or "").strip() or session.replace("-", " ")
-    target = _target_for_meta(meta, session)[:120]
+    # Not about a target — a chat, or a run with no target (a tool test, a question) — files under
+    # General with the chats, never in a target folder (operator 2026-11-27: anything not related
+    # to engagements is general). Folders that predate the kind field keep their slug.
+    kind = _session_kind(meta)
+    if kind == "chat" or ("kind" in meta and not _real_target(meta)):
+        target = ""
+    else:
+        target = _target_for_meta(meta, session)[:120]
     return {
-        "id": session, "target": target, "role": "root",
-        "targetKey": target.lower(), "targetLabel": target,
-        "autonomyMode": "standard", "scopeConfigured": False,
-        "localScopeConfigured": False, "status": status, "paused": paused,
+        "id": session,
+        "target": target,
+        "role": "root",
+        "kind": kind,
+        "targetKey": target.lower(),
+        "targetLabel": target,
+        "autonomyMode": "standard",
+        "scopeConfigured": False,
+        "localScopeConfigured": False,
+        "status": status,
+        "paused": paused,
         "permissions": meta.get("permissions") or "exploitation",
         "mode": meta.get("mode") or "vdp",
         "createdAt": _now_iso(), "updatedAt": _now_iso(),
@@ -698,15 +747,11 @@ def _desk_session(session: str) -> dict:
 
 
 def _worker_list(session: str) -> list[dict]:
-    # prune the zombie pile first: rows whose agents died >10 min ago are
-    # clutter from duplicate hunts — the roster shows live + recently stopped
-    with contextlib.suppress(Exception):
-        db = sqlite3.connect(str(_swarm_db()), timeout=5)
-        db.execute("DELETE FROM agents WHERE swarm = ? AND last_heartbeat < ?", (session, time.time() - 600))
-        db.commit()
-        db.close()
-    # show EVERY agent of the swarm — stopped ones stay visible (the
-    # operator must see what they stopped), stale = status stopped
+    # The roster is a read: it deletes nothing. (It used to delete this swarm's rows with a
+    # heartbeat older than ten minutes — a GET that destroyed the record of stopped agents. The
+    # coordinator's own sweep prunes dead rows; history lives in the engagement's journal.)
+    # Show EVERY agent of the swarm — stopped ones stay visible (the operator must see what they
+    # stopped), stale = status stopped; only the most recent ones, so a long hunt stays readable.
     try:
         conn = sqlite3.connect(str(_swarm_db()), timeout=5)
         statuses = {r[0]: (r[1] or "") for r in conn.execute(
@@ -715,9 +760,14 @@ def _worker_list(session: str) -> list[dict]:
     except Exception:  # noqa: BLE001
         statuses = {}
     out = []
+    shown_stopped = 0
     for a in _live_agents(session, include_stopped=True):
         st = (statuses.get(a["id"]) or "").lower()
         status = "stopped" if (st == "stopped" or a["dead"]) else "parked" if st == "paused" else "running"
+        if status == "stopped":
+            shown_stopped += 1
+            if shown_stopped > ROSTER_STOPPED_CAP:
+                continue
         out.append({
             "id": a["id"], "parentId": "", "name": a["id"], "status": status,
             "task": a["lane"], "transcript": [], "role": "worker",
@@ -819,16 +869,26 @@ def _shape_events(session: str, records: list[dict]) -> list[dict]:
     shaped = []
     for r in records:
         kind = r.get("kind")
-        if kind == "assistant.message":
+        if kind == "assistant.message" and str(r.get("phase") or "") == "error":
+            shaped.append({"type": "error", "message": str(r.get("content") or "")})
+        elif kind == "assistant.message":
             shaped.append({"type": "assistant-delta", "text": str(r.get("content") or "")})
+        elif kind == "user.message":
+            shaped.append({"type": "user", "text": str(r.get("content") or "")})
+        elif kind == "assistant.reasoning":
+            shaped.append({"type": "reasoning-delta", "text": str(r.get("content") or "")})
         elif kind == "tool.call":
             shaped.append({"type": "tool-start", "call": {
                 "id": str(r.get("id") or ""), "name": str(r.get("name") or "tool"),
                 "arguments": r.get("args") or {}}})
         elif kind == "tool.result":
-            shaped.append({"type": "tool-result", "call": {
-                "id": str(r.get("id") or ""), "name": str(r.get("name") or "tool"),
-                "arguments": {}}, "result": str(r.get("output") or "")[:2000]})
+            shaped.append(
+                {
+                    "type": "tool-result",
+                    "call": {"id": str(r.get("id") or ""), "name": str(r.get("name") or "tool"), "arguments": {}},
+                    "result": str(r.get("output") or "")[:TOOL_OUTPUT_CAP],
+                }
+            )
         elif kind == "finding":
             shaped.append({"type": "notice", "text": f"finding: {r.get('title','')}"})
         else:
@@ -865,12 +925,26 @@ def _messages_from(session: str) -> list[dict]:
         kind = r.get("kind")
         if kind == "assistant.message":
             out.append({"role": "assistant", "content": [{"type": "text", "text": str(r.get("content") or "")}]})
+        elif kind == "assistant.reasoning":
+            out.append({"role": "assistant", "content": [{"type": "reasoning", "text": str(r.get("content") or "")}]})
+        elif kind == "user.message":
+            out.append({"role": "user", "content": [{"type": "text", "text": str(r.get("content") or "")}]})
         elif kind == "tool.call":
             out.append({"role": "assistant", "content": [{"type": "tool_use", "id": str(r.get("id") or ""),
                         "name": str(r.get("name") or "tool"), "input": r.get("args") or {}}]})
         elif kind == "tool.result":
-            out.append({"role": "assistant", "content": [{"type": "tool_result",
-                        "tool_use_id": str(r.get("id") or ""), "content": str(r.get("output") or "")[:2000]}]})
+            out.append(
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": str(r.get("id") or ""),
+                            "content": str(r.get("output") or "")[:TOOL_OUTPUT_CAP],
+                        }
+                    ],
+                }
+            )
     return out
 
 
@@ -937,7 +1011,12 @@ def _scan_summary() -> dict:
     for f in fs:
         s = (f["severity"] or "info").lower()
         sev[s if s in sev else "info"] += 1
-    return {"totalFindings": len(fs), "totalAttacks": len(fs) * 3, **sev}
+    # An attack is an exploit that was built and run — one catalog entry each. This used to be
+    # findings × 3, a number with nothing behind it (2026-11-28).
+    attacks = 0
+    with contextlib.suppress(Exception):
+        attacks = sum(len(entries) for entries in _catalog_index().values())
+    return {"totalFindings": len(fs), "totalAttacks": attacks, **sev}
 
 
 def _ledger(name: str) -> dict:
@@ -1343,6 +1422,11 @@ def _recent_engagement_sessions(live: set[str], per_target: int = 8) -> list[str
     counts: dict[str, int] = {}
     for _mtime, name in candidates[:800]:
         meta = _session_engagement_meta(name)
+        if _session_kind(meta) == "chat" or ("kind" in meta and not _real_target(meta)):
+            # Not about a target — a chat, a tool test, a question: it stays listed on its own under
+            # General, like an explicit-target session.
+            out.append(name)
+            continue
         explicit = str(meta.get("target") or "").strip()
         key = _target_for_meta(meta, name).lower()
         # Legacy folders with no target still join a live target when their
@@ -1391,7 +1475,9 @@ def sessions_saved():
 
 
 _inflight_hunts: set[str] = set()
-_deleted_sessions: set[str] = set()  # resurrect guard — a deleted chat stays dead
+_deleted_sessions: set[str] = set()  # resurrect guard — a deleted chat stays dead (for a moment: see below)
+_deleted_at: dict[str, float] = {}  # slug → when it was deleted; the guard outlives only the delete's request storm
+_DELETED_STORM_S = 5.0
 _recent_sessions: dict[str, float] = {}  # slug → creation time (rate-limit duplicate POSTs)
 _hunt_pids_file = None
 
@@ -1399,7 +1485,7 @@ _hunt_pids_file = None
 def _hunt_pids_path() -> Path:
     global _hunt_pids_file
     if _hunt_pids_file is None:
-        _hunt_pids_file = _root() / "swarm" / "console-agents.pids"
+        _hunt_pids_file = _ws() / "swarm" / "console-agents.pids"
     return _hunt_pids_file
 
 
@@ -1513,18 +1599,40 @@ def sessions_create(body: dict = Body(default={})):
         permissions = "exploitation"
     if mode not in MODES:
         mode = "vdp"
+    # KIND (operator 2026-11-27): a session is a CHAT — a conversation with Suijin, the default
+    # from the landing — or an ENGAGEMENT, a hunt. A chat never spawns agents, whatever asks.
+    kind = str(body.get("kind") or "engagement").strip().lower()
+    if kind not in ("chat", "engagement"):
+        kind = "engagement"
+    if kind == "chat":
+        title = str(body.get("title") or "").strip() or "New chat"
     # SPAWN GATE (field 2026-11-17: loading the landing page fired three
     # blank creates and each one spawned a live agent hunt — swarms named
     # "new swarm" wandering off to hunt whatever they found in memory).
     # A session record is cheap; a hunt is EXPENSIVE. Hunts spawn when the
     # operator submits a real mission (spawn=true from the composer) or on
     # the first message into a never-spawned swarm (lazy spawn below).
-    spawn = bool(body.get("spawn"))
+    spawn = bool(body.get("spawn")) and kind != "chat"  # a chat has no hunt to spawn
     name = _slug(title)
+    # RESURRECT GUARD, and it expires: a deleted name is refused only while the delete's own
+    # request storm lasts. For good, it meant the same first message could never be sent again —
+    # the re-created session existed but was never listed, and an engagement never started.
+    if name in _deleted_sessions:
+        if time.time() - _deleted_at.get(name, 0.0) < _DELETED_STORM_S:
+            return JSONResponse(
+                {"error": "That chat was just deleted. Give it a moment, then send it again."}, status_code=409
+            )
+        _deleted_sessions.discard(name)
+        _deleted_at.pop(name, None)
+        _recent_sessions.pop(name, None)  # the duplicate guard must not answer with the session that was deleted
     # RATE LIMIT: the same chat requested within 60s returns the existing
     # session (the frontend re-fires create on poll ticks — server-side
     # dedupe is the only reliable break for that loop)
-    if name in _recent_sessions and time.time() - _recent_sessions[name] < 60:
+    if (
+        name in _recent_sessions
+        and time.time() - _recent_sessions[name] < 60
+        and (_eng_dir(name) / "engagement.json").is_file()
+    ):
         s = _desk_session(name)
         s.update({"status": "working" if _live_agents(name) else s["status"], "title": title})
         return {"session": s}
@@ -1549,12 +1657,22 @@ def sessions_create(body: dict = Body(default={})):
     # not the folder (field 2026-11-23: explicit targets never persisted).
     if not (d / "engagement.json").is_file():
         explicit_target = str(body.get("target") or "").strip()
-        (d / "engagement.json").write_text(json.dumps({
-            "name": title, "description": title,
-            "target": explicit_target or _target_from_text(title),
-            "permissions": permissions, "mode": mode,
-            "createdAt": _now_iso(), "revision": 1,
-            "structured": structured}))
+        (d / "engagement.json").write_text(
+            json.dumps(
+                {
+                    "name": title,
+                    "description": title,
+                    # a chat is a conversation, not a target: it files under Chats, never in a target folder
+                    "target": "" if kind == "chat" else (explicit_target or _target_from_text(title)),
+                    "permissions": permissions,
+                    "mode": mode,
+                    "kind": kind,
+                    "createdAt": _now_iso(),
+                    "revision": 1,
+                    "structured": structured,
+                }
+            )
+        )
         with contextlib.suppress(Exception):
             from suijin.server.platform.lib.engagement_index import rebuild as _rebuild_index
 
@@ -1654,11 +1772,311 @@ def session_snapshot(session_id: str):
     }}
 
 
+# ── chat mode: the operator's conversation with Suijin ─────────────────────────────────────
+# A chat session runs conversation turns (suijin/server/web/chat_operator.py) and never spawns a
+# hunt. One turn per session at a time; a message that arrives meanwhile is read before the next
+# step of the running turn, or starts the next one.
+
+_chat_catalog_cache: dict = {"at": 0.0, "text": ""}
+
+
+def _chat_log(session: str):
+    """The session's append-only log — the same file the hunt agents write."""
+    from suijin.server.agent.lib.event_log import EventLog
+
+    return EventLog(_eng_dir(session) / "events.jsonl")
+
+
+def _chat_ring(session: str, record: dict) -> None:
+    """Put one chat record on the session's ring now, with a monotonic sequence."""
+    with _ring_lock:
+        for payload in _shape_events(session, [record]):
+            n = _seqs.get(session, 0) + 1
+            _seqs[session] = n
+            payload["sequence"] = n
+            _rings.setdefault(session, deque(maxlen=MAX_RING)).append(payload)
+
+
+def _chat_recorder(session: str, log):
+    """``record(kind, **fields)`` for one turn: append to the log, ring it at once, and remember
+    the seq — the poller skips records a turn already rang, or every reply would show twice."""
+
+    def record(kind: str, **fields) -> int:
+        seq = log.append(kind, **fields)
+        if seq:
+            with _chat_lock:
+                _chat_streamed.setdefault(session, set()).add(seq)
+            _chat_ring(
+                session,
+                {"kind": kind, "seq": seq, "ts": _now_iso(), **{k: v for k, v in fields.items() if v is not None}},
+            )
+        return seq
+
+    return record
+
+
+def _chat_say(session: str, record, text: str) -> None:
+    """The operator's message, the moment the model reads it."""
+    record("user.message", content=text[:CHAT_USER_CAP], author="operator")
+
+
+def _chat_generate(session: str, messages: list, on_delta) -> str:
+    """One model call on the leader (model_1 — the model the operator picked on the landing)."""
+    from suijin.modules.platform.lib.config_loader import load_config, load_env
+
+    load_env()
+    from suijin.modules.providers.lib import generate
+
+    cfg = dict(load_config() or {})
+    with contextlib.suppress(Exception):
+        from suijin.server.tools.lib.model_routing import apply_routing
+
+        cfg = apply_routing(cfg, task="tier:leader") or cfg
+    cfg["max_tokens_per_request"] = max(int(cfg.get("max_tokens_per_request") or 0), 4000)
+    return generate(messages, cfg, on_delta=on_delta)
+
+
+def _chat_tool_listing() -> str:
+    """The plain tool list, one line per tool. Never the hunt catalog whole: its header orders a
+    note after every action and a knowledge query before every payload, which is no way to talk."""
+    import time as _t
+
+    if _chat_catalog_cache["text"] and _t.time() - _chat_catalog_cache["at"] < 300:
+        return _chat_catalog_cache["text"]
+    text = "(the tool list is unavailable right now)"
+    with contextlib.suppress(Exception):
+        from suijin.modules.tools.lib import dispatch
+
+        catalog = str(dispatch.get_tool_catalog())
+        match = re.search(r"^## ALL AVAILABLE TOOLS.*?(?=^## |\Z)", catalog, re.M | re.S)
+        text = match.group(0) if match else catalog[-24000:]
+    _chat_catalog_cache.update(at=_t.time(), text=text)
+    return text
+
+
+def _chat_state_note(session: str) -> str:
+    """A few true lines about right now, so a simple question needs no tool call."""
+    lines: list[str] = []
+    runtime = _runtime()
+    if runtime:
+        lines.append(f"- model you are running on: {runtime.get('providerId')}/{runtime.get('model')}")
+    meta = _session_engagement_meta(session)
+    attached = [str(name) for name in (meta.get("files") or [])]
+    if attached:
+        where = str(meta.get("inbox") or (_eng_dir(session) / "inbox"))
+        lines.append(
+            f"- files the operator attached to this chat (in {where}; read them with read_file): " + ", ".join(attached)
+        )
+    with contextlib.suppress(Exception):
+        sessions = sessions_list().get("sessions") or []
+        engagements = [s for s in sessions if s.get("kind") != "chat"]
+        lines.append(
+            "- engagements: "
+            + ("; ".join(f'"{s.get("title") or s.get("id")}" ({s.get("status")})' for s in engagements[:8]) or "none")
+        )
+        lines.append(f"- chats (this one included): {sum(1 for s in sessions if s.get('kind') == 'chat')}")
+    conn = _db()
+    if conn:
+        try:
+            rows = conn.execute("SELECT severity, COUNT(*) FROM findings_v2 GROUP BY severity").fetchall()
+            counts = {str(r[0] or "info").lower(): int(r[1]) for r in rows}
+        except Exception:  # noqa: BLE001 — no findings table on this install
+            counts = {}
+        finally:
+            conn.close()
+        if counts:
+            lines.append(
+                "- findings catalogued: "
+                + str(sum(counts.values()))
+                + " ("
+                + ", ".join(f"{k} {v}" for k, v in sorted(counts.items(), key=lambda kv: -kv[1]))
+                + ")"
+            )
+        else:
+            lines.append("- findings catalogued: none")
+    return "\n".join(lines) or "- (state unavailable — look it up)"
+
+
+def _chat_doctor() -> dict:
+    """The health check the Settings page runs, in the shape a reply can quote."""
+    try:
+        doc = doctor()
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    providers = []
+    for entry in doc.get("providers") or []:
+        if not entry.get("configured"):
+            continue  # the registry lists every known provider; a reply quotes the ones with a key
+        diag = entry.get("diagnostics") or {}
+        providers.append(
+            {
+                "provider": entry.get("label") or entry.get("id"),
+                "connected": bool(entry.get("configured")),
+                "state": diag.get("reason") or ("ok" if diag.get("valid") else "unknown"),
+                "detail": diag.get("message"),
+            }
+        )
+    failing = [p["provider"] for p in providers if p["connected"] and p["state"] == "failing"]
+    coordinator = next(
+        (bool(p.get("available")) for p in doc.get("prerequisites") or [] if p.get("id") == "coordinator"), False
+    )
+    verified = [p["provider"] for p in providers if p["state"] == "verified"]
+    untested = [p["provider"] for p in providers if p["state"] == "untested"]
+    return {
+        "ok": not failing,
+        "model": _runtime(),
+        "providers": providers,
+        "verified": verified,
+        "failing": failing,
+        "coordinator_running": coordinator,
+        "summary": f"{len(verified)} verified, {len(failing)} failing, {len(untested)} saved but untested; coordinator "
+        + ("running" if coordinator else "not running"),
+    }
+
+
+def _chat_start_engagement(session: str, args: dict) -> dict:
+    """``start_engagement``: an engagement through the same door the landing uses, so the spawn
+    gate, the rate limit and the mission settings all apply."""
+    mission = str(args.get("mission") or "").strip()
+    if not mission:
+        return "Error: start_engagement needs a mission — one or two sentences on what to do."
+    if str(args.get("mode") or "").strip().lower() == "pentest":
+        return (
+            "Error: a pentest needs a scope document in its inbox. Start that one from the "
+            "landing page with the file attached."
+        )
+    body: dict = {"title": mission[:200], "spawn": True, "kind": "engagement"}
+    for key in ("target", "permissions", "mode"):
+        if str(args.get(key) or "").strip():
+            body[key] = str(args[key]).strip()
+    created = (sessions_create(body) or {}).get("session") or {}
+    new_id = str(created.get("id") or "")
+    if not new_id:
+        return "Error: the engagement could not be created."
+    return {
+        "ok": True,
+        "session_id": new_id,
+        "title": created.get("title") or mission,
+        "path": f"/chats/{new_id}",
+        "next": "Tell the operator it has started and link the path: [Open engagement](path).",
+    }
+
+
+def _chat_tool(session: str, name: str, args) -> object:
+    """A tool call from a chat turn: the two operator tools first, then any registered Suijin
+    tool through the same door the hunt agents use (guardrails, policy, repeat guard)."""
+    clean = dict(args) if isinstance(args, dict) else {}
+    if name == "start_engagement":
+        return _chat_start_engagement(session, clean)
+    if name == "suijin_doctor":
+        return _chat_doctor()
+    from suijin.modules.tools.lib import dispatch
+
+    return dispatch.route_tool(name, clean, config={})
+
+
+def _chat_take_pending(session: str, record) -> str | None:
+    """The next message queued behind the running turn, if any — recorded as read."""
+    with _chat_lock:
+        queued = _chat_queue.get(session)
+        text = queued.pop(0) if queued else ""
+        if queued is not None and not queued:
+            _chat_queue.pop(session, None)
+    if not text:
+        return None
+    _chat_say(session, record, text)
+    return text
+
+
+def _chat_turn(session: str, text: str) -> None:
+    """Thread body: one conversation turn, then whatever was queued behind it."""
+    from suijin.server.web.chat_operator import build_system_prompt, history_from_records, run_turn
+
+    _prime_ring(session)
+    with _chat_lock:
+        cancel = _chat_cancel.setdefault(session, threading.Event())
+    log = _chat_log(session)
+    record = _chat_recorder(session, log)
+    next_text = ""
+    try:
+        history = history_from_records(_ev_records(session))
+        _chat_say(session, record, text)
+        run_turn(
+            text,
+            history=history,
+            system_prompt=build_system_prompt(_chat_tool_listing(), state_note=_chat_state_note(session)),
+            generate_step=lambda messages, on_delta: _chat_generate(session, messages, on_delta),
+            run_tool=lambda name, args: _chat_tool(session, name, args),
+            emit_delta=lambda kind, piece: _emit(
+                session, {"type": "reasoning-delta" if kind == "reasoning" else "assistant-delta", "text": piece}
+            ),
+            record=record,
+            cancelled=cancel.is_set,
+            pending=lambda: _chat_take_pending(session, record),
+        )
+    except Exception as e:  # noqa: BLE001 — the operator sees it; the console carries on
+        with contextlib.suppress(Exception):
+            record(
+                "assistant.message",
+                phase="error",
+                content=f"I couldn't finish that reply: {type(e).__name__}: {str(e)[:160]}",
+            )
+    finally:
+        log.close()
+        with _chat_lock:
+            queued = _chat_queue.get(session)
+            next_text = queued.pop(0) if queued else ""
+            if queued is not None and not queued:
+                _chat_queue.pop(session, None)
+            if next_text:
+                # The follow-up turn takes over the "running" mark without a gap, with a fresh
+                # cancel flag — Stop must never slip through the handoff.
+                _chat_cancel[session] = threading.Event()
+            else:
+                _chat_running.discard(session)
+                _chat_cancel.pop(session, None)
+    if next_text:
+        threading.Thread(target=_chat_turn, args=(session, next_text), daemon=True, name=f"chat-{session}").start()
+
+
+def _chat_message(session: str, text: str) -> dict:
+    """A message into a CHAT session runs a conversation turn — never a hunt."""
+    if session in _deleted_sessions:
+        return {"session": _desk_session(session)}
+    text = text.strip()[:CHAT_USER_CAP]
+    with _chat_lock:
+        busy = session in _chat_running
+        if busy:
+            _chat_queue.setdefault(session, []).append(text)
+        else:
+            _chat_running.add(session)
+            _chat_cancel[session] = threading.Event()
+    if busy:
+        # Recorded when the model reads it, so it is shown exactly once.
+        _emit(session, {"type": "notice", "text": "Queued — answered as soon as the current reply is done."})
+    else:
+        threading.Thread(target=_chat_turn, args=(session, text), daemon=True, name=f"chat-{session}").start()
+    return {"session": _desk_session(session)}
+
+
+def _chat_forget(session: str) -> None:
+    """Delete: stop a running turn at the end of its current step and drop its chat state."""
+    with _chat_lock:
+        cancel = _chat_cancel.get(session)
+        if cancel is not None:
+            cancel.set()
+        _chat_cancel.pop(session, None)
+        _chat_queue.pop(session, None)
+        _chat_streamed.pop(session, None)
+
+
 @router.get("/api/console/sessions/{session_id}/events")
 def session_events(session_id: str, after: int = 0):
     _prime_ring(session_id)
-    # pull the NEW tail into the ring first (incremental file read)
-    fresh_records = _new_event_records(session_id)
+    # pull the NEW tail into the ring first (incremental file read) — minus the records a chat
+    # turn already rang live
+    already_rang = _chat_streamed.get(session_id)
+    fresh_records = [r for r in _new_event_records(session_id) if not (already_rang and r.get("seq") in already_rang)]
     if fresh_records:
         with _ring_lock:
             for payload in _shape_events(session_id, fresh_records):
@@ -1676,6 +2094,9 @@ def session_events(session_id: str, after: int = 0):
 @router.post("/api/console/sessions/{session_id}/messages")
 def session_message(session_id: str, body: dict = Body(default={})):
     text = str(body.get("text") or "").strip()
+    # A CHAT session answers with a conversation turn; everything below is the engagement path.
+    if text and _session_kind(_session_engagement_meta(session_id)) == "chat":
+        return _chat_message(session_id, text)
     # LAZY SPAWN (pairs with the create-time spawn gate): a message into a
     # swarm that never spawned starts its hunt. The swarm title is the
     # standing mission; this message steers on top of it.
@@ -1801,9 +2222,22 @@ def saved_delete(session_id: str):
 
 @router.post("/api/console/sessions/{session_id}/{action}")
 def session_action(session_id: str, action: str, body: dict = Body(default={})):
+    if action not in SESSION_ACTIONS:
+        # Until 2026-11-28 an unknown action fell through every branch and answered 200 with the
+        # unchanged session — a control that silently did nothing looked like success.
+        raise HTTPException(status_code=400, detail=f"unknown session action '{action}' — one of: {', '.join(SESSION_ACTIONS)}")
     if action in ("cancel", "pause", "stop"):
         # STOP = PAUSE (2026-11-23 operator ruling): the agents hold between
         # turns and keep their process/context. Delete is the destructive one.
+        if _session_kind(_session_engagement_meta(session_id)) == "chat":
+            # A chat has no agents: Stop ends the turn at the close of its current step (a model
+            # call in flight finishes first); the next message starts a new turn.
+            with _chat_lock:
+                cancel = _chat_cancel.get(session_id)
+            if cancel is not None:
+                cancel.set()
+            _emit(session_id, {"type": "notice", "text": "stopped — send a message to continue"})
+            return {"session": _desk_session(session_id)}
         _publish("/cmd/pause", {"swarm": session_id})
         with contextlib.suppress(Exception):
             db = sqlite3.connect(str(_swarm_db()), timeout=5)
@@ -1886,6 +2320,7 @@ def session_close(session_id: str):
     hard-stop any agent that ignored them, and remove the swarm's rows."""
     _publish("/cmd/pause", {"swarm": session_id})
     _publish("/cmd/delete", {"swarm": session_id})
+    _chat_forget(session_id)
     for a in _live_agents(session_id, include_stopped=True):
         with contextlib.suppress(Exception):
             from suijin.server.mesh.bus import BusClient
@@ -1917,6 +2352,7 @@ def session_close(session_id: str):
         _rings.pop(session_id, None)
         _seqs.pop(session_id, None)
     _deleted_sessions.add(session_id)
+    _deleted_at[session_id] = time.time()
     with contextlib.suppress(Exception):
         from suijin.server.platform.lib.engagement_index import rebuild as _rebuild_index
 
@@ -2008,30 +2444,57 @@ def _provider_verify_state(provider_id: str) -> dict | None:
 
 @router.get("/api/console/providers")
 def providers():
+    """Every provider in the registry with its real state: which ones have a key, which one is
+    active, and — from the last real verify — which was tested. Nothing hardcoded: until
+    2026-11-28 this listed Z.ai and four "unconfigured" names while the active provider (another
+    one) was not on the page at all."""
     cfg = _cfg()
-    zai = _zai_configured()
-    provs = [{
-        "id": "z-ai", "label": "Z.ai", "methods": ["api-key"],
-        "configured": zai, "source": "env" if zai else None,
-        "connectionIdentity": "suijin-zai" if zai else None,
-        "diagnostics": _cached_diagnostics("z-ai", zai),
-        "accounts": ([{"accountId": "suijin", "kind": "api-key", "active": True,
-                       "label": "coding plan", "status": "active"}] if zai else []),
-        "auth": {"phase": "connected" if zai else "unconfigured",
-                 "message": "connected" if zai else "set ZAI_API_KEY in suijin/.env",
-                 "lines": [], "verificationUrl": None, "userCode": None, "available": True},
-        "configuration": {"model": cfg.get("zai_model") or "glm-5.3"},
-    }]
-    for pid, label in (("anthropic", "Anthropic"), ("openai", "OpenAI"),
-                       ("google", "Google"), ("openrouter", "OpenRouter")):
-        provs.append({"id": pid, "label": label, "methods": ["api-key"], "configured": False,
-                      "source": None, "diagnostics": _provider_diagnostics(False), "accounts": [],
-                      "auth": {"phase": "unconfigured", "message": "no credential", "lines": [],
-                               "verificationUrl": None, "userCode": None, "available": True}})
-    model = cfg.get("zai_model") or "glm-5.3"
-    return {"providers": provs,
-            "preference": {"providerId": "z-ai", "model": model,
-                           "connectionIdentity": "suijin-zai"} if zai else None}
+    runtime = _runtime() or {}
+    active_id = str(runtime.get("providerId") or "")
+    provs = []
+    for entry in provider_catalog()["providers"]:
+        key, label = str(entry["key"]), str(entry["label"])
+        display = "z-ai" if key == "zai" else key  # the id the console has always used for Z.ai
+        configured = bool(entry.get("configured"))
+        provs.append(
+            {
+                "id": display,
+                "key": key,
+                "label": label,
+                "methods": ["api-key"],
+                "configured": configured,
+                "source": "env" if configured else None,
+                "connectionIdentity": f"suijin-{display}" if configured else None,
+                "active": key == active_id or display == active_id,
+                "diagnostics": _cached_diagnostics(display, configured),
+                "accounts": (
+                    [{"accountId": "suijin", "kind": "api-key", "active": True, "label": "api key", "status": "active"}]
+                    if configured
+                    else []
+                ),
+                "auth": {
+                    "phase": "connected" if configured else "unconfigured",
+                    "message": "connected" if configured else f"no key saved for {label}",
+                    "lines": [],
+                    "verificationUrl": None,
+                    "userCode": None,
+                    "available": True,
+                },
+                "configuration": {"model": entry.get("defaultModel") or cfg.get(f"{key}_model") or ""},
+            }
+        )
+    provs.sort(key=lambda p: (not p["active"], not p["configured"], p["label"]))
+    return {
+        "providers": provs,
+        "active": active_id,
+        "preference": {
+            "providerId": active_id,
+            "model": runtime.get("model"),
+            "connectionIdentity": f"suijin-{active_id}",
+        }
+        if active_id
+        else None,
+    }
 
 
 @router.get("/api/console/models")
@@ -2157,12 +2620,14 @@ def recover_stale():
 
 @router.post("/api/control/prune-stopped-workers")
 def prune_stopped():
+    deleted = 0
     with contextlib.suppress(Exception):
         db = sqlite3.connect(str(_swarm_db()), timeout=5)
-        db.execute("DELETE FROM agents WHERE status = 'stopped' OR last_heartbeat < ?", (time.time() - 300,))
+        cur = db.execute("DELETE FROM agents WHERE status = 'stopped' OR last_heartbeat < ?", (time.time() - 300,))
+        deleted = max(0, cur.rowcount or 0)  # it always reported 0, right after deleting
         db.commit()
         db.close()
-    return {"ok": True, "deleted": 0}
+    return {"ok": True, "deleted": deleted}
 
 
 @router.get("/api/console/settings")
@@ -2893,18 +3358,36 @@ def doctor():
     doc_provs = []
     for p in provs["providers"]:
         doc_provs.append({**p, "diagnostics": _cached_diagnostics(str(p["id"]), bool(p["configured"]))})
+    import platform as _platform
+
+    import suijin
+    from suijin.server.web import box_status
+
+    runtime = _runtime() or {}
+    leader = str(runtime.get("model") or "")
+    owner = next((p for p in provs["providers"] if str(p.get("id")) == str(runtime.get("providerId"))), {}) or {}
+    provider_label = " · ".join(part for part in (str(owner.get("label") or ""), leader) if part)
+    version = str(getattr(suijin, "__version__", "") or "unknown")
     return {
-        "version": "1.0.0",
-        "runtime": {"node": "24", "nodeSupported": True, "platform": "host",
-                    "arch": "arm64", "engine": "suijin", "engineVersion": "1.0.0",
-                    "releaseChannel": "stable"},
-        "availability": {"hasApiKey": zai, "availableRuntimes": ["z-ai"],
-                         "apiRuntime": {"configured": zai, "valid": zai,
-                                        "providerLabel": "Z.ai · glm-5.3"}},
+        "version": version,
+        "runtime": {
+            "node": "24",
+            "nodeSupported": True,
+            "platform": "host",
+            "arch": _platform.machine() or "unknown",
+            "engine": "suijin",
+            "engineVersion": version,
+            "releaseChannel": "stable",
+        },
+        "availability": {
+            "hasApiKey": zai,
+            "availableRuntimes": ["z-ai"],
+            "apiRuntime": {"configured": bool(leader), "valid": bool(leader), "providerLabel": provider_label},
+        },
         "providers": doc_provs,
         "prerequisites": [
             {"id": "coordinator", "available": bool(_bus()), "required": False},
-            {"id": "sandbox-engine", "available": True, "required": False},
+            {"id": "sandbox-engine", "available": box_status.snapshot().get("engine") == "running", "required": False},
         ],
         "settings": {"onboardingCompleted": True, "analyticsLevel": "off",
                      "diagnosticReporting": "off", "executionProfile": "local"},
@@ -3560,8 +4043,8 @@ def provider_live_models(key: str):
     the web server never loads .env into the process)."""
     import urllib.request
 
-    from suijin.server.providers.lib.registry import PROVIDER_REGISTRY
     from suijin.server.providers.lib import provider_override as _get_override
+    from suijin.server.providers.lib.registry import PROVIDER_REGISTRY
 
     catalog = provider_catalog()
     entry = next((p for p in catalog["providers"] if p["key"] == key), None)
@@ -3612,42 +4095,117 @@ def _models_dev_models_for(key: str) -> list[str]:
     return sorted((entry.get("models") or {}).keys())
 
 
-@router.get("/api/console/provider-icon/github/{user}")
-def provider_icon_github(user: str):
-    """GitHub org/user avatar via unavatar — for tools that only live on
-    GitHub (gobuster/OJ, ffuf/joohoi, …). Same cache, same rules."""
-    import re as _re
+def _image_type(data: bytes) -> tuple[str, str] | None:
+    """(cache extension, media type) for an image payload, by its bytes — or None."""
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return ".png", "image/png"
+    if data[:3] == b"\xff\xd8\xff":
+        return ".jpg", "image/jpeg"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ".webp", "image/webp"
+    if data[:4] == b"\x00\x00\x01\x00":
+        return ".ico", "image/vnd.microsoft.icon"
+    head = data[:400].lstrip().lower()
+    if b"<svg" in head or head.startswith(b"<?xml"):
+        return ".svg", "image/svg+xml"
+    return None
+
+
+def _cached_avatar(cache_key: str, sources: list[str]):
+    """Serve an avatar from the workspace cache, fetching the first source that
+    answers with an image. Any failure is a 404 and the UI falls back."""
+    import urllib.request
 
     from fastapi import Response
 
-    usr = str(user or "").strip()
-    if not _re.fullmatch(r"[A-Za-z0-9._-]{1,60}", usr):
-        return Response(status_code=404)
     cache_dir = _ws() / "cache" / "provider-icons"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_key = f"github_{usr}"
     headers = {"Cache-Control": "public, max-age=604800"}
-    for ext, media in ((".png", "image/png"), (".svg", "image/svg+xml"), (".ico", "image/vnd.microsoft.icon")):
+    media = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".webp": "image/webp",
+        ".svg": "image/svg+xml",
+        ".ico": "image/vnd.microsoft.icon",
+    }
+    for ext, media_type in media.items():
         cached = cache_dir / f"{cache_key}{ext}"
         if cached.exists() and cached.stat().st_size > 50:
-            return Response(cached.read_bytes(), media_type=media, headers=headers)
-    import urllib.request
-
-    sources = (f"https://unavatar.io/github/{usr}?fallback=false",)
+            return Response(cached.read_bytes(), media_type=media_type, headers=headers)
     for src in sources:
         try:
             req = urllib.request.Request(src, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(req, timeout=10) as r:
                 data = r.read()
-            if len(data) > 50 and data[:8] == b"\x89PNG\r\n\x1a\n":
-                (cache_dir / f"{cache_key}.png").write_bytes(data)
-                return Response(data, media_type="image/png", headers=headers)
-            if len(data) > 50:
-                (cache_dir / f"{cache_key}.png").write_bytes(data)
-                return Response(data, media_type="image/png", headers=headers)
+            kind = _image_type(data) if len(data) > 50 else None
+            if kind:
+                (cache_dir / f"{cache_key}{kind[0]}").write_bytes(data)
+                return Response(data, media_type=kind[1], headers=headers)
         except Exception:  # noqa: BLE001
             continue
     return Response(status_code=404)
+
+
+def _avatar_sources_github(user: str) -> list[str]:
+    """unavatar answers a bare avatar; the GitHub API answers its URL and covers
+    the hours unavatar throttles."""
+    import urllib.request
+
+    sources = [f"https://unavatar.io/github/{user}?fallback=false"]
+    with contextlib.suppress(Exception):
+        req = urllib.request.Request(
+            f"https://api.github.com/users/{user}",
+            headers={"User-Agent": "Mozilla/5.0", "Accept": "application/vnd.github+json"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            avatar = json.loads(r.read().decode()).get("avatar_url")
+        if avatar:
+            sources.append(str(avatar))
+    return sources
+
+
+def _avatar_sources_huggingface(user: str) -> list[str]:
+    """Community fine-tuners (Sao10K, TheDrummer, Undi95, …) only exist on
+    Hugging Face; the user overview names the avatar."""
+    import urllib.request
+
+    sources: list[str] = []
+    with contextlib.suppress(Exception):
+        req = urllib.request.Request(
+            f"https://huggingface.co/api/users/{user}/overview", headers={"User-Agent": "Mozilla/5.0"}
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            avatar = json.loads(r.read().decode()).get("avatarUrl")
+        if avatar:
+            sources.append(avatar if str(avatar).startswith("https://") else f"https://huggingface.co{avatar}")
+    return sources
+
+
+@router.get("/api/console/provider-icon/github/{user}")
+def provider_icon_github(user: str):
+    """GitHub org/user avatar — for tools that only live on GitHub
+    (gobuster/OJ, ffuf/joohoi, …). Same cache, same rules."""
+    import re as _re
+
+    usr = str(user or "").strip()
+    if not _re.fullmatch(r"[A-Za-z0-9._-]{1,60}", usr):
+        from fastapi import Response
+
+        return Response(status_code=404)
+    return _cached_avatar(f"github_{usr}", _avatar_sources_github(usr))
+
+
+@router.get("/api/console/provider-icon/huggingface/{user}")
+def provider_icon_huggingface(user: str):
+    """Hugging Face user avatar — for model makers that only exist there."""
+    import re as _re
+
+    usr = str(user or "").strip()
+    if not _re.fullmatch(r"[A-Za-z0-9._-]{1,60}", usr):
+        from fastapi import Response
+
+        return Response(status_code=404)
+    return _cached_avatar(f"huggingface_{usr}", _avatar_sources_huggingface(usr))
 
 
 @router.get("/api/console/provider-icon/{domain}")
@@ -3732,7 +4290,9 @@ def runtime_patch(body: dict = Body(default={})):
         from suijin.modules.platform.lib.config_loader import CONFIG_PATH
 
         CONFIG_PATH.write_text(_json.dumps(cfg, indent=2))
-    return {"ok": True, "runtime": _runtime()}
+    # The reader caches for 30s: answer with what was just written, never with what was cached before.
+    _runtime_cache.update(value=None, at=0.0)
+    return {"ok": True, "runtime": _runtime(), "effort": str(cfg.get("reasoning_effort") or "medium")}
 
 
 @router.get("/api/console/provider-override/{key}")
@@ -3850,29 +4410,88 @@ def provider_verify(key: str):
 _available_models_cache: dict = {"at": 0.0, "models": [], "providers": []}
 
 
+# Model makers with no vector logo in the picker's artwork table get their site
+# icon or avatar instead. Keys are the vendor half of a "vendor/model" id, or a
+# connection provider key. Values are public websites — extend as new makers
+# appear in the model list; nothing here is engagement data.
+_MAKER_SITES: dict[str, str] = {
+    "numes": "numes.ai",
+    "sakana": "sakana.ai",
+    "nousresearch": "nousresearch.com",
+    "reflection": "reflection.ai",
+    "thinkingmachines": "thinkingmachines.ai",
+    "inclusionai": "inclusion.ai",
+    "moondream": "moondream.ai",
+    "inference-net": "inference.net",
+    "kt": "tokenfactory.kt.com",
+    "mancer": "mancer.tech",
+    "morph": "morphllm.com",
+    "particle-ai": "particle.ai",
+    "perceptron": "perceptron.inc",
+    "relace": "relace.ai",
+    "scaledown": "scaledown.ai",
+    "nex-agi": "nex-agi.cn",
+    "prism-ml": "prism.ml",
+    "aion-labs": "www.aionlabs.ai",
+}
+_MAKER_AVATARS: dict[str, tuple[str, str]] = {
+    "sao10k": ("huggingface", "sao10k"),
+    "thedrummer": ("huggingface", "thedrummer"),
+    "undi95": ("huggingface", "undi95"),
+    "dealignai": ("huggingface", "dealignai"),
+    "gryphe": ("huggingface", "gryphe"),
+    "anthracite-org": ("github", "anthracite-org"),
+    "cognitivecomputations": ("github", "cognitivecomputations"),
+    "motif-technologies": ("github", "motif-technologies"),
+    "uniboshi": ("github", "uniboshi"),
+    "elorian": ("github", "elorian"),
+    "rekaai": ("github", "reka-ai"),  # its site has no favicon any source can find
+}
+
+
+def _maker_icon_urls() -> dict[str, str]:
+    """maker → icon URL for every maker in the tables above (no network here;
+    the icon route fetches once and caches)."""
+    urls = {maker: f"/api/console/provider-icon/{domain}" for maker, domain in _MAKER_SITES.items()}
+    for maker, (site, user) in _MAKER_AVATARS.items():
+        urls[maker] = f"/api/console/provider-icon/{site}/{user}"
+    return urls
+
+
 @router.get("/api/console/available-models")
 def available_models():
     """Every model from every CONFIGURED provider — values are
-    'provider:model' so a pick routes there; cached 5 minutes."""
+    'provider:model' so a pick routes there; cached 5 minutes. `icons` maps a
+    model maker to its site icon when the picker has no vector logo for it."""
     import time as _t
 
     if _available_models_cache["models"] and _t.time() - _available_models_cache["at"] < 300:
-        return {"models": _available_models_cache["models"],
-                "providers": _available_models_cache["providers"], "cached": True}
+        return {
+            "models": _available_models_cache["models"],
+            "providers": _available_models_cache["providers"],
+            "cached": True,
+            "icons": _maker_icon_urls(),
+        }
     catalog = provider_catalog()
     models: list[dict] = []
     providers: list[dict] = []
+    # A provider whose list could not be fetched must not be cached as "no models": a failure right
+    # after a restart left the picker without that connection for the whole cache window.
+    complete = True
     for entry in catalog["providers"]:
         if not entry.get("configured"):
             continue
         key, label = entry["key"], entry["label"]
         providers.append({"key": key, "label": label})
-        for mid in _provider_model_ids(key):
-            models.append({"value": f"{key}:{mid}", "label": mid,
-                           "provider": key, "providerLabel": label,
-                           "supported": True})
-    _available_models_cache.update(at=_t.time(), models=models, providers=providers)
-    return {"models": models, "providers": providers, "cached": False}
+        ids = _provider_model_ids(key)
+        complete = complete and bool(ids)
+        for mid in ids:
+            models.append(
+                {"value": f"{key}:{mid}", "label": mid, "provider": key, "providerLabel": label, "supported": True}
+            )
+    if complete:
+        _available_models_cache.update(at=_t.time(), models=models, providers=providers)
+    return {"models": models, "providers": providers, "cached": False, "icons": _maker_icon_urls()}
 
 
 def _provider_model_ids(key: str) -> list[str]:

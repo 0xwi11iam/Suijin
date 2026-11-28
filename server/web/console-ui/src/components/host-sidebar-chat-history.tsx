@@ -4,7 +4,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Monitor, Server, SquarePen, Trash2, Ellipsis, Columns2, Crosshair, Waves, Folder } from "lucide-react";
+import { ChevronDown, Crosshair, Monitor, Server, SquarePen, Trash2, Ellipsis, Columns2, MessageSquare, Waves, Folder } from "lucide-react";
 import { BackendDescriptorSchema, parseBackendHandshake, type BackendDescriptor } from "@0/engine/dist/shared/backend-protocol.js";
 import { createBackendApi, localControlFetch, useBackendApi } from "@/api";
 import { useBackendSelection } from "@/backend-context";
@@ -14,7 +14,7 @@ import { Button } from "./ui/button";
 import { DropdownMenu } from "./ui/dropdown-menu";
 import { Disclosure } from "./ui/disclosure";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
-import { rememberSidebarActivity, sidebarChatDetails, sidebarChatTitle, sortSidebarChats, type SidebarChatActivity } from "@/console/sidebar-chat-order";
+import { rememberSidebarActivity, sessionFolder, sidebarChatDetails, sidebarChatTitle, sortSidebarChats, type SidebarChatActivity } from "@/console/sidebar-chat-order";
 import { orderSessionRail } from "@/console/session-rail-order";
 import { CHAT_DRAG_MIME } from "@/console/dock-workspace";
 import { createChatOnExecutionHost } from "@/console/model-source";
@@ -62,7 +62,7 @@ export function HostSidebarChatHistory(props: HostHistoryProps) {
     else {
       if (creatingHost) return;
       setCreatingHost(id); setCreationError("");
-      void createChatOnExecutionHost(id, { title: "New engagement" }).then(session => {
+      void createChatOnExecutionHost(id, { title: "New chat" }).then(session => {
         if (version !== navigationVersion.current) return;
         select();
         navigate(backendRouteHref(id, `/chats/${encodeURIComponent(session.id)}`));
@@ -133,20 +133,20 @@ const HostChatGroup = memo(function HostChatGroup({ host, navigationVersion, onS
   // session metadata on every render — no manual setup, no Targets section.
   const [folderState, setFolderState] = usePersistentState<Record<string, boolean>>(`host-sidebar-target-folders:${host.id}`, {});
   const folders = useMemo(() => {
-    const map = new Map<string, { key: string; label: string; rows: (typeof rows)[number][]; timestamp: number; working: boolean }>();
+    const map = new Map<string, { key: string; label: string; rows: (typeof rows)[number][]; timestamp: number; working: boolean; chat: boolean }>();
     for (const row of rows) {
-      const session = row.session as (typeof row.session) & { targetKey?: string; targetLabel?: string };
-      const label = String(session.targetLabel || session.target || "Unsorted target");
-      const key = String(session.targetKey || label.toLowerCase());
+      // Not about an engagement — a chat, a question, a tool test — files together under one folder,
+      // General, so it never clutters the target folders (operator 2026-11-27).
+      const { key, label, general } = sessionFolder(row.session as (typeof row.session) & { targetKey?: string; targetLabel?: string; kind?: string });
       let folder = map.get(key);
-      if (!folder) { folder = { key, label, rows: [], timestamp: 0, working: false }; map.set(key, folder); }
+      if (!folder) { folder = { key, label, rows: [], timestamp: 0, working: false, chat: general }; map.set(key, folder); }
       folder.rows.push(row);
       folder.timestamp = Math.max(folder.timestamp, row.timestamp);
       folder.working = folder.working || (row.kind === "live" && ["working", "cancelling"].includes(row.session.status));
     }
-    return [...map.values()].sort(sort === "name"
-      ? (a, b) => a.label.localeCompare(b.label)
-      : (a, b) => b.timestamp - a.timestamp || a.label.localeCompare(b.label));
+    return [...map.values()].sort((a, b) => Number(b.chat) - Number(a.chat) || (sort === "name"
+      ? a.label.localeCompare(b.label)
+      : b.timestamp - a.timestamp || a.label.localeCompare(b.label)));
   }, [rows, sort]);
   const renderRow = (row: (typeof rows)[number]) => {
         const session = row.session;
@@ -215,12 +215,13 @@ const HostChatGroup = memo(function HostChatGroup({ host, navigationVersion, onS
     {history.isError && !history.data ? <Button size="xs" variant="ghost" onClick={() => void history.refetch()}>Retry loading chats</Button> : history.isPending ? <ChatHistorySkeleton /> : <div className="relative isolate">
       <SelectionHighlight activeKey={`${selectedBackendId}:${openingId ?? selectedId}`} revision={rows.map(row => row.key).join(":") + JSON.stringify(folderState)} />
       <div className="mb-1 flex flex-col gap-0.5">
-        <Button variant="row" size="sm" asChild className="justify-start px-3 font-normal text-muted-foreground"><Link to="/chats?new=1"><Crosshair className="size-3.5" />New engagement</Link></Button>
+        <Button variant="row" size="sm" asChild className="justify-start px-3 font-normal text-muted-foreground"><Link to="/chats?new=1"><MessageSquare className="size-3.5" />New chat</Link></Button>
+        <Button variant="row" size="sm" asChild className="justify-start px-3 font-normal text-muted-foreground"><Link to="/chats?new=1&kind=engagement"><Crosshair className="size-3.5" />New engagement</Link></Button>
       </div>
       {rows.length === 0 && <p className="px-3 py-2 text-xs text-muted-foreground">{filter ? "No matching chats." : "No chats yet."}</p>}
       {folders.map(folder => {
         const open = folderState[folder.key] ?? true;
-        return <Disclosure key={folder.key} open={open} onOpenChange={value => setFolderState(current => ({ ...current, [folder.key]: value }))} className="mb-0.5" triggerClassName="group flex h-7 w-full items-center gap-1.5 rounded-[var(--radius-control)] px-2 text-xs text-muted-foreground hover:bg-muted/50" summary={<><Folder className="size-3.5 shrink-0" /><span className="min-w-0 flex-1 truncate text-left font-medium text-foreground/80">{folder.label}</span><span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px] tabular-nums">{folder.rows.length}</span><ChevronDown className="size-3 shrink-0 transition-transform group-aria-expanded:rotate-180" /></>}>
+        return <Disclosure key={folder.key} open={open} onOpenChange={value => setFolderState(current => ({ ...current, [folder.key]: value }))} className="mb-0.5" triggerClassName="group flex h-7 w-full items-center gap-1.5 rounded-[var(--radius-control)] px-2 text-xs text-muted-foreground hover:bg-muted/50" summary={<>{folder.chat ? <MessageSquare className="size-3.5 shrink-0" /> : <Folder className="size-3.5 shrink-0" />}<span className="min-w-0 flex-1 truncate text-left font-medium text-foreground/80">{folder.label}</span><span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px] tabular-nums">{folder.rows.length}</span><ChevronDown className="size-3 shrink-0 transition-transform group-aria-expanded:rotate-180" /></>}>
           <div className="mb-1 flex flex-col gap-0.5 pl-2">
             {folder.rows.map(row => renderRow(row))}
           </div>

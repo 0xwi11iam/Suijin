@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ConsoleSessionSnapshot } from "@0/engine/shared";
 import { Disclosure } from "@/components/ui/disclosure";
 import { Input } from "@/components/ui/input";
+import { JsonView } from "@/console/json-view";
 
 type Tool = ConsoleSessionSnapshot["tools"][number];
 
@@ -36,6 +37,6 @@ export function ToolCatalog({ tools }: { tools: Tool[] }) {
 function ToolDetail({ tool }: { tool: Tool }) {
   const [open, setOpen] = useState(false);
   return <Disclosure open={open} onOpenChange={setOpen} className="rounded-[var(--radius-panel)] bg-muted/30 p-3 text-xs" summary={tool.name.replace(/^mcp__zeroverse__/, "")} triggerClassName="rounded-[var(--radius-control)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 cursor-pointer font-medium">
-    {open && <><p className="mt-2 leading-5 text-muted-foreground">{tool.description}</p><pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words">{JSON.stringify(tool.inputSchema, null, 2)}</pre></>}
+    {open && <><p className="mt-2 leading-5 text-muted-foreground">{tool.description}</p><JsonView value={tool.inputSchema} className="mt-2" maxHeight={288} /></>}
   </Disclosure>;
 }

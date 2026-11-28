@@ -5,6 +5,7 @@ import { useBackendApi } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Check, ControlCard, Facts, Feedback, Field, SubmitButton, jsonBody } from "./control-ui";
+import { JsonView } from "@/console/json-view";
 
 interface FeedbackResponse { saved?: boolean; path?: string; submitted: boolean; cancelled?: boolean; previewId?: string; preview?: { url: string; body: string; headers: Record<string, string>; warnings: string[] } }
 
@@ -30,8 +31,8 @@ export function DiagnosticReportControl() {
     {staged?.preview && <section className="space-y-4 border-t border-border pt-4">
       <Facts entries={[["Sends to", staged.preview.url]]} />
       {staged.preview.warnings.map((warning, index) => <p key={index} className="rounded-[var(--radius-menu,12px)] border border-border bg-muted/20 p-3 text-sm">{warning}</p>)}
-      <ControlDisclosure title={<>Headers</>}><pre className="mt-2 max-h-48 overflow-auto rounded-[var(--radius-menu,12px)] border border-border bg-muted/20 p-3 text-xs">{JSON.stringify(staged.preview.headers, null, 2)}</pre></ControlDisclosure>
-      <div><h3 className="mb-2 text-sm font-medium">Report contents</h3><pre className="max-h-96 overflow-auto rounded-[var(--radius-menu,12px)] border border-border bg-muted/20 p-3 text-xs">{staged.preview.body}</pre></div>
+      <ControlDisclosure title={<>Headers</>}><JsonView value={staged.preview.headers} className="mt-2" maxHeight={192} /></ControlDisclosure>
+      <div><h3 className="mb-2 text-sm font-medium">Report contents</h3><JsonView text={staged.preview.body} maxHeight={384} /></div>
       <Check checked={reviewed} onChange={setReviewed} disabled={mutation.isPending}>I reviewed this report and want to send it now (just this once).</Check>
       <div className="flex flex-wrap gap-2"><SubmitButton pending={mutation.isPending && mutation.variables === "send"} disabled={!reviewed || mutation.isPending} onClick={() => mutation.mutate("send")}>Send</SubmitButton><Button variant="outline" disabled={mutation.isPending} onClick={() => mutation.mutate("cancel")}>Don't send</Button></div>
     </section>}

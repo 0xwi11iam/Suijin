@@ -50,7 +50,7 @@ def _db():
 
 
 def _add_intent(text: str, swarm: str = "default") -> str:
-    """Add an intent to a swarm's queue. Returns the intent id."""
+    """Add an intent to a swarm's queue. Returns (intent id, how many are now open in it)."""
     iid = "in_" + hashlib.sha1(f"{swarm}:{text}".encode()).hexdigest()[:12]
     db = _db()
     db.execute(
@@ -926,27 +926,32 @@ def run_swarm_stop_all(args=None) -> int:
     # 4. remove engagement boxes — their agents exited via /cmd/stop;
     # the containers themselves die here (data survives: mounted).
     # The 5-of-10 field bug: pid files only ever knew host agents.
+    # Sandboxes exist only when an engine is listening; with none up there is nothing to remove —
+    # and running docker would start OrbStack (operator 2026-11-28).
+    from suijin.server.box.hypervisor import engine_socket as _engine_socket
+
+    if _engine_socket():
+        _stop_sandboxes(console)
+    console.print("[green]swarm stopped — clean[/green]")
+    return 0
+
+
+def _stop_sandboxes(console) -> None:
+    """``swarm stop``'s box half: remove every agent sandbox and the warm pile."""
     with contextlib.suppress(Exception):
         from suijin.server.box import hypervisor as _hv
 
-        n_boxes = 0
-        for b in _hv.sandbox_ls():
-            if _hv.sandbox_stop(b["name"]):  # agent boxes AND the pile —
-                n_boxes += 1                 # stop means everything dies
-        n_pool = len(_hv.pool_members())
+        removed = 0
+        for box in _hv.sandbox_ls():
+            if _hv.sandbox_stop(box["name"]):  # agent boxes AND the pile — stop means everything dies
+                removed += 1
         for name in _hv.pool_members():
-            with contextlib.suppress(Exception):
-                _hv.sandbox_stop(name)
-                n_pool -= 1
-        if n_boxes:
-            console.print(f"[yellow]{n_boxes} agent box(es) removed[/yellow]")
-        if n_pool < len(_hv.pool_members()) or n_boxes:
-            pass  # counts above already said it
-    # belt for the braces: anything suijin-sbx left standing dies now
+            if _hv.sandbox_stop(name):
+                removed += 1
+        if removed:
+            console.print(f"[yellow]{removed} box(es) removed[/yellow]")
     with contextlib.suppress(Exception):
         subprocess.run(["docker", "rm", "-f"] + [
             n for n in subprocess.run(["docker", "ps", "-aq", "--filter", "name=suijin-sbx"],
                                       capture_output=True, text=True, timeout=15).stdout.split()
         ], capture_output=True, timeout=60)
-    console.print("[green]swarm stopped — clean[/green]")
-    return 0

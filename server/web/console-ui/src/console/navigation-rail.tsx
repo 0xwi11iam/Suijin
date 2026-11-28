@@ -20,13 +20,22 @@ export function ConsoleNavigationRail({ settingsHref, onHistorySlot }: { setting
   const team = useTeamAccess();
   const showAccount = team.enabled && Boolean(team.user);
   const [collapsed, setCollapsed] = usePersistentState("0-console-navigation-collapsed", false);
+  // Collapsing must take at once. The pointer is still on the rail when the button is clicked, and
+  // the rail's hover-preview would keep it drawn open (over the chat) until the pointer left — so a
+  // click looked like it did nothing (operator 2026-11-27). The preview stays off until the pointer
+  // has left the rail once.
+  const [hoverSuppressed, setHoverSuppressed] = useState(false);
+  const togglePin = () => {
+    if (!collapsed) setHoverSuppressed(true);
+    setCollapsed(!collapsed);
+  };
   useEffect(() => {
     const handle = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey && !event.altKey && !event.repeat && event.key.toLowerCase() === "s") { event.preventDefault(); setCollapsed(value => !value); }
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && !event.altKey && !event.repeat && event.key.toLowerCase() === "s") { event.preventDefault(); togglePin(); }
     };
     window.addEventListener("keydown", handle);
     return () => window.removeEventListener("keydown", handle);
-  }, [setCollapsed]);
+  }, [collapsed, setCollapsed]);
   const [hovered, setHovered] = useState(false);
   const [focusWithin, setFocusWithin] = useState(false);
   const rail = useRef<HTMLElement>(null);
@@ -42,7 +51,7 @@ export function ConsoleNavigationRail({ settingsHref, onHistorySlot }: { setting
   };
   useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
 
-  const expanded = !collapsed || hovered || focusWithin;
+  const expanded = !collapsed || focusWithin || (hovered && !hoverSuppressed);
   const compact = !expanded;
   const { getDashboard, client } = useBackendApi();
   const location = useLocation();
@@ -56,15 +65,15 @@ export function ConsoleNavigationRail({ settingsHref, onHistorySlot }: { setting
   const findingCount = dashboard.data?.groups.filter(group => group.latest.triageStatus !== "suppressed").length ?? 0;
   const control = buttonVariants({ variant: "ghost", size: "sm", className: "console-navigation-control w-full justify-start gap-2.5 overflow-hidden px-2.5 font-normal text-muted-foreground" });
   const destinations = WORKSPACE_DESTINATIONS.filter(item => item.to !== "/chats" && item.to !== "/settings");
-  return <div className="console-navigation-slot console-sidebar-surface relative hidden h-full min-h-0 shrink-0 lg:block" data-pinned={!collapsed} onPointerEnter={event => { if (event.pointerType === "mouse") { cancelClose(); setHovered(true); } }} onPointerLeave={event => { if (event.pointerType === "mouse") closePreview(); }}>
+  return <div className="console-navigation-slot console-sidebar-surface relative hidden h-full min-h-0 shrink-0 lg:block" data-pinned={!collapsed} onPointerEnter={event => { if (event.pointerType === "mouse") { cancelClose(); setHovered(true); } }} onPointerLeave={event => { if (event.pointerType === "mouse") { closePreview(); setHoverSuppressed(false); } }}>
     {collapsed && hovered && <div aria-hidden="true" className="absolute inset-y-0 left-0 z-20 w-64" />}
     <nav ref={rail} aria-label="Command Center navigation" data-collapsed={compact} data-floating={collapsed && expanded} onFocus={event => setFocusWithin(event.target.matches(":focus-visible"))} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocusWithin(false); }} className="console-navigation-rail hidden h-full min-h-0 shrink-0 flex-col overflow-x-hidden overflow-y-auto bg-background p-2 lg:flex [scrollbar-width:thin]">
       <div className="relative mb-3 h-10 w-60 shrink-0">
-        <a href={newChatHref} aria-label="Suijin new engagement" className={cn("absolute flex h-8 items-center rounded-[var(--radius-control,8px)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40", compact ? "left-0 top-0 w-8" : "left-1 top-1 w-36")}>
+        <a href={newChatHref} aria-label="Suijin new chat" className={cn("absolute flex h-8 items-center rounded-[var(--radius-control,8px)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40", compact ? "left-0 top-0 w-8" : "left-1 top-1 w-36")}>
           <span aria-hidden={!compact} className={cn("console-navigation-brand-compact pointer-events-none absolute left-1.5 top-1.5 transition-opacity duration-150 motion-reduce:transition-none",compact ? "opacity-100" : "opacity-0")}><BrandMark compact className="size-5" /></span>
           <span aria-hidden={compact} className="console-navigation-label pointer-events-none absolute left-1 w-36"><BrandMark className="w-36" /></span>
         </a>
-        <Tooltip content={collapsed ? "Pin navigation open" : "Unpin navigation"} shortcut="⇧⌘S" side="right"><Button type="button" variant="ghost" size="icon-sm" aria-keyshortcuts="Meta+Shift+S Control+Shift+S" aria-label={collapsed ? "Pin navigation open" : "Unpin navigation"} aria-expanded={expanded} aria-controls="navigation-chat-history" onClick={() => setCollapsed(value => !value)} className="console-navigation-toggle console-navigation-control absolute top-1 flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-control,8px)] text-muted-foreground hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+        <Tooltip content={collapsed ? "Keep sidebar open" : "Collapse sidebar"} shortcut="⇧⌘S" side="right"><Button type="button" variant="ghost" size="icon-sm" aria-keyshortcuts="Meta+Shift+S Control+Shift+S" aria-label={collapsed ? "Keep sidebar open" : "Collapse sidebar"} aria-expanded={expanded} aria-controls="navigation-chat-history" onClick={togglePin} className="console-navigation-toggle console-navigation-control absolute top-1 flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-control,8px)] text-muted-foreground hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
           {collapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
         </Button></Tooltip>
       </div>

@@ -1,4 +1,6 @@
 import { memo, Fragment, useEffect, useState } from "react";
+import { REASONING_CHARS_PER_SECOND, REPLY_CHARS_PER_SECOND } from "./typewriter";
+import { useTypewriter } from "./use-typewriter";
 import { Markdown } from "./markdown";
 import { ToolActivity } from "./tool-activity";
 import { InlineImage, transcriptToolImages } from "./inline-image";
@@ -26,8 +28,20 @@ function turnSignature(turn: ReducedTurn, streaming: boolean): string {
     turn.id, turn.isWorking, turn.startedAt, turn.endedAt, turn.stopReason, turn.error, streaming,
     turn.assistantText?.length ?? 0, turn.reasoningText?.length ?? 0,
     (turn.segments ?? []).map(seg => [seg.type, seg.type === "assistant" || seg.type === "reasoning" ? seg.text.length : (seg.toolIds ?? []).length]),
-    turn.toolCalls.map(call => [call.id, call.name, call.isRunning === true, (call.result ?? "").length, JSON.stringify(call.arguments ?? {}).length]),
+    turn.toolCalls.map(call => [call.id, call.name, call.isRunning === true, JSON.stringify(call.result ?? "").length, JSON.stringify(call.arguments ?? {}).length]),
   ]);
+}
+
+/** A reply that arrived whole still types out when it is fresh (see useTypewriter). */
+function AssistantText({ turnId, text, live }: { turnId: string; text: string; live: boolean }) {
+  const shown = useTypewriter(text, { turnId, live, charsPerSecond: REPLY_CHARS_PER_SECOND });
+  return <Markdown text={shown} streaming={live || shown.length < text.length} />;
+}
+
+/** The model's thinking, typed as it arrives. */
+function ReasoningText({ turnId, text, live }: { turnId: string; text: string; live: boolean }) {
+  const shown = useTypewriter(text, { turnId, live, charsPerSecond: REASONING_CHARS_PER_SECOND });
+  return <ToolActivity calls={[]} reasoning={shown} working={live} />;
 }
 
 /** Render each tool batch beside the commentary that introduced it. */
@@ -42,8 +56,8 @@ export const TurnTimeline = memo(function TurnTimeline({ turn, streaming }: { tu
   return <div className="min-w-0 space-y-4">
     <TurnWorkStatus turn={turn} />
     {segments.map((segment, index) => {
-      if (segment.type === "assistant") return <Markdown key={index} text={segment.text} streaming={streaming && index === segments.length - 1} />;
-      if (segment.type === "reasoning") return <ToolActivity key={index} calls={[]} reasoning={segment.text} working={streaming && index === segments.length - 1} />;
+      if (segment.type === "assistant") return <AssistantText key={index} turnId={turn.id} text={segment.text} live={streaming && index === segments.length - 1} />;
+      if (segment.type === "reasoning") return <ReasoningText key={index} turnId={turn.id} text={segment.text} live={streaming && index === segments.length - 1} />;
       const calls = segment.toolIds.flatMap(id => { const call = callsById.get(id); return call ? [call] : []; });
       return <Fragment key={index}>
         <ToolActivity calls={calls} showLatest={index === latestToolIndex} working={turn.isWorking && index === latestToolIndex} />

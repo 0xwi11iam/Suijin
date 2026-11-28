@@ -1,4 +1,4 @@
-import { memo, useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { Link } from "react-router-dom";
 import { ShieldCheck } from "lucide-react";
 import type { ConsoleSessionSnapshot, ConsoleWorker, DesktopConsoleDecisionResponse } from "@0/engine/shared";
@@ -7,6 +7,7 @@ import { recoveredProviderError } from "./connection-recovery";
 import { consoleErrorMessage, needsProviderSignIn, needsModelSourceReconnect } from "./provider-error";
 import { Markdown } from "./markdown";
 import { TurnTimeline } from "./turn-timeline";
+import { markTranscriptMount, markTurnWorking } from "./typewriter";
 import { InlineImage } from "./inline-image";
 import { ApprovalPanel } from "./approvals";
 import { ActivityRow } from "./activity-row";
@@ -43,7 +44,9 @@ export const TranscriptTurns = memo(function TranscriptTurns({ turns, turnWorker
   onSelectWorker: (id: string | null) => void;
 }) {
   const active = ["working", "waiting", "cancelling"].includes(snapshot.session.status);
-  return <>{turns.length ? turns.map((turn) => <article data-chat-turn={turn.id} id={`chat-${turn.id}`} key={turn.id} className="scroll-mt-6 space-y-5">
+  // What comes with this transcript (on mount, or on switching chats) is history: shown, never typed.
+  useEffect(() => { markTranscriptMount(); }, [snapshot.session.id]);
+  return <>{turns.length ? turns.map((turn) => { if (turn.isWorking) markTurnWorking(turn.id); return <article data-chat-turn={turn.id} id={`chat-${turn.id}`} key={turn.id} className="scroll-mt-6 space-y-5">
             {(turn.user.text || turn.user.attachments?.length) && <div className="ml-auto min-w-0 max-w-[92%] console-message-surface console-user-message px-4 py-3 text-sm break-words [&_p]:whitespace-pre-wrap">{turn.user.author && <p className="mb-1 text-xs text-muted-foreground">{turn.user.author.displayName}</p>}<Markdown text={turn.user.text} />{turn.user.attachments?.filter(item => item.kind === "image").map((item, index) => <InlineImage key={index} src={item.value} alt={item.name || "Attached image"} />)}</div>}
             <TurnTimeline turn={turn} streaming={turn.isWorking && snapshot.session.status === "working"} />
             {turn.decisions.filter((decision) => decision.resolved).map((decision) => <ActivityRow key={decision.id} icon={<ShieldCheck />} title={`${decision.title} · ${decision.approved === undefined ? "closed" : decision.approved ? decision.kind === "operator-question" ? "answered" : "approved" : "declined"}`} status=""><ApprovalPanel decision={decision} busy={workspace.busy || !canWrite} onResolve={(response) => onResolve(decision.id, response)} /></ActivityRow>)}
@@ -53,5 +56,5 @@ export const TranscriptTurns = memo(function TranscriptTurns({ turns, turnWorker
             {(turn.stopReason === "cancelled" || turn.error?.startsWith("Workbench cancelled")) && <p role="status" className="text-xs text-muted-foreground">Stopped</p>}
             {turn.error && !turn.error.startsWith("Workbench cancelled") && !isCancellation(turn.error) && !recoveredProviderError(turn.error, workspace.connectionRecovery) && !(needsModelSourceReconnect(turn.error) && workspace.modelSourceRecovery?.healthy) && <div role="alert" className="rounded-[var(--radius-panel)] border border-destructive/30 bg-destructive/5 p-3 text-sm whitespace-pre-wrap text-destructive">{consoleErrorMessage(turn.error)}{needsModelSourceReconnect(turn.error) && workspace.reconnectModelSource && <Button type="button" variant="default" size="sm" className="mt-3 flex w-fit" disabled={!canWrite || workspace.busy || workspace.modelSourceRecovery?.checking || active} onClick={() => void workspace.reconnectModelSource?.()}>{workspace.modelSourceRecovery?.checking ? "Reconnecting…" : "Reconnect model source"}</Button>}{needsProviderSignIn(turn.error) && <Button asChild variant="default" size="sm" className="mt-3 flex w-fit"><Link to={`/models?session=${snapshot.session.id}&return=${encodeURIComponent(`/chats/${snapshot.session.id}`)}`}>Manage connection</Link></Button>}</div>}
             {turn.isWorking && (turn.notices.some(notice => notice.startsWith("Cancellation requested.")) || snapshot.session.status === "waiting") && <ActivityIndicator waiting={snapshot.session.status === "waiting"} label={turn.notices.some(notice => notice.startsWith("Cancellation requested.")) ? "Stopping…" : snapshot.session.status === "waiting" ? "Waiting for your decision" : turn.toolCalls.some((call) => call.isRunning) ? "Running tools…" : turn.assistantText ? "Responding…" : "Thinking…"} />}
-          </article>) : <div className="py-4 text-center"><BrandMark className="mb-7" /><h2 className="font-heading text-xl">What would you like to hack and fix today?</h2></div>}</>;
+          </article>; }) : <div className="py-4 text-center"><BrandMark className="mb-7" /><h2 className="font-heading text-xl">What would you like to hack and fix today?</h2></div>}</>;
 });

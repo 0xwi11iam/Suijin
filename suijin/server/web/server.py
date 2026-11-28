@@ -30,14 +30,44 @@ app = FastAPI(title="suijin web console")
 # the console UI: the vendored build (server/web/console-ui/dist). The old
 # embedded page stays as fallback when the UI hasn't been built yet.
 from suijin.server.web.console_api import router as _console_router
+from suijin.server.web.data_api import router as _data_router
+from suijin.server.web.ops_api import router as _ops_router
 
+# Every API router is included BEFORE the SPA catch-all below: a route declared after it never
+# matches (the catch-all answers any path first), which is how /api/state and /api/swarms were
+# dead for weeks — they answered the catch-all's 404.
 app.include_router(_console_router)
+app.include_router(_ops_router)
+app.include_router(_data_router)
 
 _UI_DIST = Path(__file__).resolve().parents[3] / "server" / "web" / "console-ui" / "dist"
 
 from suijin.server.web.console_page import CONSOLE_HTML as _PAGE_HTML
 
 PAGE = None  # marker; index() serves the built UI (fallback: _PAGE_HTML)
+
+
+_state_cache: dict = {"at": 0.0, "value": None}
+_STATE_TTL_S = 10.0
+
+
+@app.get("/api/state")
+def state():
+    """One pull: the whole board (the data layer's ``all``). It shells out to docker, so it is
+    served from a short cache — the fallback page polls it."""
+    now = time.time()
+    if _state_cache["value"] is None or now - _state_cache["at"] > _STATE_TTL_S:
+        from suijin.server.data import query
+
+        _state_cache.update(value=query("all"), at=now)
+    return JSONResponse(_state_cache["value"])
+
+
+@app.get("/api/swarms")
+async def swarms():
+    from suijin.server.data import query
+
+    return JSONResponse(query("swarms"))
 
 
 @app.get("/")
@@ -125,26 +155,49 @@ threading.Thread(target=_bus_listener, daemon=True, name="web-bus").start()
 threading.Thread(target=_stats_publisher, daemon=True, name="web-stats").start()
 
 
-def _cleanup_orphan_agents():
-    """Kill agents orphaned by a previous web-server restart (PPID 1,
-    still hunting against a dead coordinator). Runs at web boot."""
-    with contextlib.suppress(Exception):
-        from suijin.server.web.console_api import _root
+def _parent_pid(pid: int) -> int:
+    import subprocess
 
-        p = _root() / "swarm" / "console-agents.pids"
+    with contextlib.suppress(Exception):
+        out = subprocess.run(["ps", "-o", "ppid=", "-p", str(pid)], capture_output=True, text=True, timeout=5).stdout.strip()
+        return int(out) if out else -1
+    return -1
+
+
+def _cleanup_orphan_agents():
+    """At web boot, sweep what a crash left behind (operator ruling 2026-11-17: no orphans).
+
+    An orphan is a tracked agent that is still alive, has been re-parented to launchd (its parent
+    died) AND has no coordinator to answer to any more. Agents whose coordinator is still up are
+    not orphans: they keep working and this console simply picks them up again. Until 2026-11-27
+    this function imported a name that did not exist inside a suppress, so it never ran."""
+    import signal
+
+    with contextlib.suppress(Exception):
+        from suijin.server.mesh.bus import discover_bus
+        from suijin.server.web.console_api import _ws
+
+        time.sleep(3)                       # let the bus settle before judging it
+        p = _ws() / "swarm" / "console-agents.pids"
         if not p.exists():
             return
-        import signal
-
         pids = [int(x) for x in p.read_text().split() if x.strip().isdigit()]
-        killed = 0
+        coordinator_up = bool(discover_bus(verify=True))
+        alive, killed = [], 0
         for pid in pids:
-            with contextlib.suppress(ProcessLookupError, PermissionError):
-                os.kill(pid, signal.SIGKILL)
-                killed += 1
-        p.write_text("")
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                continue                    # already gone
+            if not coordinator_up and _parent_pid(pid) == 1:
+                with contextlib.suppress(ProcessLookupError, PermissionError):
+                    os.kill(pid, signal.SIGKILL)
+                    killed += 1
+            else:
+                alive.append(pid)
+        p.write_text(" ".join(str(x) for x in alive))
         if killed:
-            print(f"  [console] killed {killed} orphaned agent(s) from the previous session")
+            print(f"  [console] swept {killed} orphaned agent(s) left by a crash")
 
 
 def _resume_structured():
@@ -158,21 +211,6 @@ def _resume_structured():
 
 threading.Thread(target=_resume_structured, daemon=True, name="web-structured").start()
 threading.Thread(target=_cleanup_orphan_agents, daemon=True, name="web-orphan-cleanup").start()
-
-
-@app.get("/api/state")
-async def state():
-    """One pull: the whole board (the data layer)."""
-    from suijin.server.data import query
-
-    return JSONResponse(query("all"))
-
-
-@app.get("/api/swarms")
-async def swarms():
-    from suijin.server.data import query
-
-    return JSONResponse(query("swarms"))
 
 
 @app.post("/api/say")

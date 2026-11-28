@@ -75,6 +75,8 @@ export interface DesktopConsoleSession {
   createdAt: string;
   updatedAt: string;
   title?: string;
+  /** Suijin: a "chat" is a conversation with Suijin; an "engagement" is a hunt (the default). */
+  kind?: "chat" | "engagement";
   /** Transcript messages plus queued operator messages; 0 means the conversation is still blank. */
   messageCount?: number;
   runtime?: ConsoleRuntimeSnapshot;
@@ -288,6 +290,8 @@ export interface ConsolePublicMessage {
   author?: ConsoleMessageAuthor;
   content: Array<
     | { type: "text"; text: string }
+    /** Suijin: a finished thought from chat mode, ahead of the reply it produced. */
+    | { type: "reasoning"; text: string }
     | { type: "image"; mediaType: string; data: string; name?: string }
     | { type: "tool_use"; id: string; name: string; input: Record<string, ConsoleJsonValue> }
     | { type: "tool_result"; tool_use_id: string; content: string; is_error?: boolean }

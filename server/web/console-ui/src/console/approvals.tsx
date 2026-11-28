@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { LoadingDots } from "./loading-state";
+import { JsonOrText, JsonView } from "@/console/json-view";
 
 type ApprovalPanelProps = {
   decision: DesktopConsoleDecision & { resolved?: boolean; approved?: boolean };
@@ -78,9 +79,7 @@ function DetailBlock({ label, value }: { label: string; value: unknown }) {
   return (
     <div className="space-y-1.5">
       <h4 className="text-xs font-semibold text-muted-foreground">{label}</h4>
-      <pre className="whitespace-pre-wrap break-all rounded-[var(--radius-panel)] bg-muted/40 p-3 font-mono text-xs text-foreground">
-        {typeof value === "string" ? value : JSON.stringify(value, null, 2) ?? String(value)}
-      </pre>
+      <JsonOrText value={value} maxHeight={280} />
     </div>
   );
 }

@@ -15,7 +15,18 @@ async function localSession(path:string,body:unknown,method:"POST"|"PATCH"):Prom
   return value.session;
 }
 /** Local control creates the server-only relay grant; no credential or grant crosses this UI. */
-export function createChatOnExecutionHost(backendId:string,configuration:ConsoleCreateSessionInput):Promise<DesktopConsoleSession> {
+/** What Suijin adds to a create request on top of 0's contract. */
+export type SuijinSessionInput = ConsoleCreateSessionInput & {
+  /** A chat is a conversation with Suijin and never spawns a hunt; an engagement is a hunt. Default: engagement. */
+  kind?: "chat" | "engagement";
+  /** How far a hunt may go: recon (read-only), exploitation (safe-harbour) or maximum. */
+  permissions?: "recon" | "exploitation" | "maximum";
+  /** What the engagement is for: a paid program, a VDP, a CTF or a pentest. */
+  mode?: "bbp" | "vdp" | "ctf" | "pentest";
+  /** Start the hunt now, or wait for the first message. */
+  spawn?: boolean;
+};
+export function createChatOnExecutionHost(backendId:string,configuration:SuijinSessionInput):Promise<DesktopConsoleSession> {
   return backendId === "local" ? localSession("/api/console/sessions",configuration,"POST") : localSession("/api/console/remote-sessions",{backendId,configuration},"POST");
 }
 export function configureChatRuntime(api:BackendApi,id:string,runtime:ConsoleRuntimeSelection,source:ConsoleRuntimeSnapshot|null|undefined):Promise<DesktopConsoleSession> {

@@ -739,7 +739,9 @@ The console's landing is no longer hand-built. It is **0's own new-thread
 screen**, carried in `server/web/console-ui/zero/` from `0sec-labs/0` @
 `78d453c0` (MIT OR Apache-2.0 — licences kept beside it, `zero/README.md` is
 the provenance record) and adapted for Suijin. 233 upstream files are mirrored
-verbatim apart from four mechanical path rewrites (`MANIFEST.json` lists them).
+verbatim apart from four mechanical path rewrites (`MANIFEST.json` lists them),
+and — since 2026-11-27 — four contained hunks in `provider-icon.tsx` (model
+maker icons) and one type line in the vendored engine's `dist`.
 
 **Why a second document.** 0's landing is a 233-file closure of their source,
 and 65 of those files are ones this console has modified. So the landing runs
@@ -758,13 +760,14 @@ a reload. `console-page.tsx` changed only in its landing slot: `<HeroFrame>`
 replaces the inline form, and the create-at-submit branch reads the selection
 from a ref.
 
-**Mapping, the way 0 itself slots them:** Mode (BBP/VDP/CTF/Pentest) sits in
-0's context row where their project selector is; Permissions
+**Mapping, the way 0 itself slots them:** a Chat | Engagement switch sits in
+0's context row where their project selector is; when it is an engagement, Mode
+(BBP/VDP/CTF/Pentest) sits beside it; Permissions
 (Recon/Exploitation/Maximum) sits in 0's autonomy slot where `YOLO` is; 0's
 prebuilt `ModelCatalog` is fed by `/api/console/available-models` and saves
 through the runtime PATCH. Three Suijin suggestions replace 0's. Composer up
 to 1120px wide, never below 128px tall. Palette measured from 0's own screen
-(`#101010` base, `#1b1b1b` card, amber-inked dither field).
+(`#101010` base, `#1b1b1b` card); the backdrop is asciify's, blue-cyan (below).
 
 **Found by running it for real, and fixed in the backend:**
 - Delete left a folder skeleton per chat, and any intent filed under another
@@ -788,10 +791,222 @@ bound to `session_close` — a helper once took its decorator), one real cold
 start 15/16 (the miss was a bad check: `ps` cannot tell a venv from the system
 interpreter; the proof is the coordinator being a child of the console process).
 
-**Not done / known:** the reasoning typewriter and the conversational chat
-agent are not built (next phase). When the free provider stalls, a session
+**Since built (see the next section):** the reasoning typewriter and chat mode.
+**Known:** when the free provider stalls, a session
 shows `working` with nothing visible for minutes. Agent log/pid files still go
 to the system temp dir (`suijin-agent-*`). 19 pytest failures predate this
 work: 11 stale (CLI providers probe, verb drift `api`, a dangling import in
 `suijin/main.py`, module globals, static prompt 210 tokens over budget, doctor
 rows) and 8 that only fail from test-order leakage in the combined run.
+
+## Chat mode: the landing is a chat by default (2026-11-27)
+
+Operator rulings: *"By default it's new chat not new engagement unless specified"*,
+*"make sure new chat, and new engagement exist"*, *"when shit isnt related to
+engagements then its general"*, *"ensure that it typewriters reasoning."*
+
+**A session has a kind.** `kind: "chat"` is a conversation with Suijin; an
+engagement is the hunt, as before. `sessions_create` takes `kind` and a chat
+ignores `spawn`. Anything not about a target — chats, questions, tool tests,
+no-target runs — files under one sidebar folder, **General**; only sessions with
+a real target (explicit, or a host in the title) get a target folder. The kind is
+deliberately not persisted: the landing is a chat every time it opens, unless the
+link says `?kind=engagement`.
+
+**One turn** (`suijin/server/web/chat_operator.py`, `run_turn`): the leader model
+(`model_1`, what the landing's picker writes) speaks the JSON decision the hunt
+workers already use — `{"thought", "reply", "action": "use_tool" | "done",
+"tool_name", "tool_args"}`. `reply` is the conversation; a tool step runs through
+`dispatch.route_tool` (same guardrails as the hunt) and loops; prose without JSON
+is a valid answer. Two operator tools exist only for a chat turn:
+`start_engagement` (through the same door as the landing) and `suijin_doctor`.
+The prompt's tool list is the catalog's plain "ALL AVAILABLE TOOLS" section —
+never the hunt catalog whole, whose header is hunter doctrine. Everything that
+touches the outside is injected, so the turn is decided by tests without a
+provider. A deliberate exception to the one-loop ruling (`agent-vault/decisions.md`).
+
+**The console around it** (`console_api.py`): records go to `events.jsonl`
+through `EventLog` (new kinds `user.message`, `assistant.reasoning`) and are
+ringed the moment they exist; `_chat_streamed` keeps the poller from ringing them
+again. A message that arrives mid-turn is read before the next step or starts the
+next turn; the running mark is handed over without a gap. Stop sets a cancel flag
+and never publishes `/cmd/pause` for a chat. Two scanner fixes came out of this:
+chats were never listed, and no-target runs vanished once their agents stopped.
+
+**The typewriter** (`src/console/typewriter.ts` + `use-typewriter.ts`): pure,
+tested arithmetic. Reasoning 320 chars/s, replies 700. Text types only when its
+turn is fresh — working now or seen working in the last 1.5 s (a final reply
+lands in the same poll as "done") — and never under reduced motion, never on a
+reload, and never when it appears together with the transcript (opening a chat
+mid-turn must not retype it). A finished thought is a `{ type: "reasoning" }`
+content block, so it survives a reload.
+
+**The landing's look**, from the operator's screenshots: asciify-engine's studio
+background (their template vendored verbatim, MIT; ink `#22d3ee`, opacity 0.35,
+hover-follow off — "kinda hard to read"), the Sui mark beside the wordmark above
+the composer (`zero/entry/sui-mark.png`: the source `sui.png` is a smoothed export;
+its true 20 × 18 grid was recovered, 743 bytes, crisp at 2 px a block), no glow.
+
+**Model maker icons.** 0's table knows 14 brands; Suijin lists 101 makers and 159
+of 626 models fell to one generic chip. `zero/entry/brand-art.ts` adds 27 makers
+with vector artwork generated by `scripts/fetch_brand_art.py` from the libraries 0
+itself uses (Lobe Icons MIT, Simple Icons CC0); the backend sends cached site
+icons and GitHub / Hugging Face avatars for the rest; an initial is the last
+resort. An incomplete model list is no longer cached for five minutes.
+
+**Sidebar collapse.** The button flipped a flag but the rail's hover-preview kept
+it drawn open while the pointer was on it. Measured 48/256 before, 48/48 after.
+
+**Verified:** pytest 59 in `suijin/tests/server` (chat turn 25, console wiring 19,
+models list 1, delete 9, coordinator 9 — minus overlap), `vitest` 19, `tsc` clean
+for the landing entry and exactly the 12 pre-existing errors elsewhere,
+`tests/hero_journey.py` + `tests/hero_layout.py` (both kinds, five window sizes),
+one REAL conversation in a real browser: created as a chat, ran `suijin_doctor`,
+replied, typed out, spawned no agent, filed under General, survived a restart.
+
+**Known:** the free model is slow — that two-step turn took 150 s end to end.
+
+## Everything into the UI: swarm, engagements, data, JSON (2026-11-27 night)
+
+Operator: *"find swarm logic, engagement logic, and all suijin logic, everything, make it
+into a UI … clickable, usable"*; *"all suijin data needs to be available locally through
+organized buses and data flows"*; *"all json needs to be prettified colored"*.
+
+**Four reads came first** — the swarm runtime, the console's API and UI surface, every
+local data store, the box hypervisor and all other subsystems — so the UI was built on what
+the code does, not on what it was assumed to do.
+
+**The data hub** (`suijin/server/web/data_hub.py`, `data_stores.py`, `data_api.py`). One
+registry of every place Suijin keeps data — 41 stores over config, the swarm database,
+engagements, the knowledge graph, tools, the mesh, system and logs — reachable the same
+way from Python (`data_hub.catalog() / read() / kinds() / watch()`), from HTTP
+(`/api/data/catalog`, `/api/data/stores/{id}`, `WS /api/data/stream`) and from the mesh bus
+(`/data/query`, `/data/change`). It is read-only, never fatal, names no machine path, and
+keeps secrets in the process: a key is masked when its whole name, or its last `_`/`-` part,
+is a secret word (`password`, `neo4j_password`, `api_key`, `OPENAI_API_KEY`), while a bare
+lowercase `key` is a name and `max_tokens`, `token_count`, `keyEnv` are settings; strings are
+masked by pattern too. Engagement folders are registered as they appear and forgotten as they
+go. The catalog is polled, so nothing slow runs on a request path: the tool list uses
+`list_route_tools()` (never `get_tool_catalog()`, 14 s), slow sources carry a TTL cache,
+system stats come from a background sampler (`collect()` blocks about two seconds on macOS).
+Catalog 1.3 s cold and 15 ms warm.
+
+**The operations API** (`suijin/server/web/ops_api.py`, `box_status.py`). `GET
+/api/ops/overview` is the whole board — coordinator, agents, intents, fleet, findings, mesh,
+jobs, daemons, browser, system, sessions, boxes — gathered section by section so a failing
+source is named in `errors` and the rest still answers (10 ms). Engagements: every folder
+with its real contents (journal by kind, files, exploits, findings); the agent's userland
+(`home/`, `tmp/`) is not browsable. Control publishes on the bus topics the terminal uses:
+queue work and take it back, pause/resume/stop/steer one agent, one swarm or the fleet,
+start the coordinator, `swarm stop` ("Stop everything", typed confirmation), summon and
+drain the warm pile, stop a sandbox, build the template image. Box state comes from a
+background cache and the engine is probed only when its socket already exists — asking for
+state can never start OrbStack.
+
+**The pages.** `/swarm`: six headline stats and one panel per subsystem — the roster (lane,
+state, heartbeat, uptime; pause, resume, steer, stop, log), the queue, boxes and the warm
+pile, the coordinator, fleet settings, the mesh, this machine, background jobs. `/engagements`
+and `/engagements/:id`: every hunt, chat and legacy run, with Overview / Journal / Files /
+Exploits; a 4,000-record journal pages, filters by kind and searches, and any record opens as
+JSON. `/data`: the registry browsable, with the Python door printed beside it. The old
+`/scope` leads to engagements.
+
+**JSON everywhere** (`src/console/json-pretty.ts`, `json-view.tsx`). Tool output was cut to
+2,000 characters on the server, so no JSON could parse; the cap is 16,000 and the page
+renders a collapsible, coloured tree (fold-all, wrap, copy, secrets masked, at most 200
+children drawn). It is wired into the transcript's tool output, approvals, the tool catalog,
+the inspector, the event timeline, finding evidence, the engagements journal and files, and
+every row of the data browser.
+
+**Twenty defects fixed on the way, each with a test** (`test_ops_api.py`,
+`test_subsystem_truth.py`): a literal route shadowed by `/swarm/{action}` so "Stop
+everything" did nothing; the dead `/api/state` routes; a boot orphan sweep that never ran
+(now only a re-parented pid with no coordinator); a redaction rule that masked four setting
+names and missed `neo4j_password`; `summon N` ignoring N; the doctor's hardcoded facts; the
+engagement index skipping folders without metadata; evidence written one level too deep; a
+hook-order crash on leaving the memory map; and the last twelve TypeScript errors.
+
+**Verified:** `pytest suijin/tests/server` 101, `vitest` 37, `tsc` zero errors, and a browser
+journey that uses the real controls — queues work and takes it back, pauses and resumes the
+fleet, starts the coordinator and stops everything — then leaves no coordinator, no agent, no
+intent and no pause flag behind.
+
+**Known:** the stub routes and the frontend calls to missing endpoints that predate this
+work; the repo-wide lint and format baseline. See the next section for the real test baseline.
+
+## Continuation (2026-11-28): no engine wakes, the rest of the swarm doors, JSON in answers
+
+**Suijin never starts a container engine.** After finding OrbStack running ("turn off the
+fucking orbstack too"): on macOS the docker CLI starts OrbStack whenever it runs, even for a
+read-only probe. The first guard asked only whether a socket file existed, and this machine keeps
+Docker Desktop's socket file while the docker context points at OrbStack — so it let docker
+through and woke OrbStack a second time. Now `hypervisor.engine_socket()` answers only when
+something is **listening on the endpoint docker would actually use** (a connect, not a stat:
+`docker_endpoint()` + `_live_unix_socket()`), and every background path asks it first: the web
+console's box status, the data layer's boxes query, and `swarm stop` (`_docker(wake=False)`,
+`engine_available(wake=False)`). Proven with OrbStack stopped: every route answered and it stayed
+Stopped. An engine is started only by a person, on purpose. Rule and tests:
+`.opencode/wiki/concepts/no-engine-wakes.md`, `test_subsystem_truth.py`.
+
+**Every feature of the terminal control hub is reachable from the Swarm page.** Added: *Start
+agents* (`POST /api/ops/swarm/spawn` — host agents as real processes the way hunts spawn them,
+under the memory guard; boxed agents in sandboxes only when an engine is already listening), *Set
+a mission* for a swarm or one agent (`/api/ops/swarm/mission`, `/api/ops/agents/{id}/mission`),
+*Say on the mesh* (`POST /api/say`), per-swarm pause / resume / stop, *Queue anyway* when the
+prior-work gate refuses (it states its reason), and *Structured teams* (the leader / supervisor /
+worker hierarchy of each engagement, each member marked by whether it still has a heartbeat).
+Literal routes are declared before the parameterised `/swarm/{action}` and `/agents/{id}/{action}`
+— a path parameter declared first swallows every literal under it.
+
+**JSON in answers and thinking.** A paragraph in an assistant message or in the reasoning that is
+nothing but a JSON object or array renders as the same collapsible, coloured tree a tool's output
+gets; prose stays prose; while the text is still streaming it stays text (no flicker on a
+half-arrived object). Reasoning now renders through the shared Markdown renderer. Pinned by
+`server/web/console-ui/test/markdown-json.test.ts` (8 tests).
+
+**Small truths.** A folder counts as an engagement only with metadata or a journal (an empty
+leftover `_default` was being listed). The boxes panel says "not running" when no engine is up and
+"not checked" for an OrbStack machine rather than a confusing "not a container". A chat's overview
+no longer claims agents or hunt settings it does not have.
+
+**The real test baseline.** A bounded run of everything except `suijin/tests/redteam` (239 s,
+nothing left running): **2,984 passed, 128 failed, 37 errors** — 165 failing tests in 44 files,
+none naming code changed in these rounds (stale imports, the prompt budget, a dangling import in
+`suijin/main.py`, environment-dependent doctor checks, order-dependent state). The list is kept at
+`~/.suijin/tmp/gates-baseline/pytest-failed-2026-11-28.txt`.
+
+**How long test runs are made now.** Never detached, never unbounded: a detached full-suite run
+hung in the fuzz-loop tests and leaked to a 43 GB footprint for 11 h 45 min overnight. Each run
+is one directory under a hard wall-clock limit that kills the process tree, the PID is recorded,
+and after any run that is killed, its children are looked for and stopped.
+
+**The namespace unifier leaked for subpackages (fixed).** `suijin.modules.*` and `suijin.server.*`
+are meant to be one module object per file. An aliased parent's search path is the *server* tree,
+so `import suijin.modules.tools.lib` found the server's own `__init__.py`, was taken for "a real
+file, not a shim", and Python built a second object and executed the server package again under
+the modules name — the root of the order-dependent `cannot import name X` failures. The finder now
+aliases everything that is not a real file of the modules tree (packages, namespace packages, and
+the case where nothing exists at the modules path), resolving the twin with
+`importlib.util.find_spec` because an editable install and a zipapp resolve the package through
+another finder. The alias loader also puts the server's own `__spec__` / `__name__` / `__loader__`
+back on the object — the import machinery stamps the alias spec on it, which silently turned
+`importlib.reload()` into a no-op. **Measured (bounded run of everything except
+`suijin/tests/redteam`): 3,077 passed, 83 failed, and not one failure outside the old baseline —
+82 tests that failed before now pass.** A rewrite of the finder that let a missing parent raise
+turned about 160 passing tests red in one run; the bounded whole-suite measurement caught it
+because the proof was repeated after the code changed. After any change to import machinery,
+re-run the whole bounded suite against the baseline list. Pinned by `suijin/tests/platform/test_namespace_unifier.py`
+(fresh interpreter per check, both import orders). Wiki: `.opencode/wiki/concepts/namespace-unifier.md`.
+
+**Diagnostics tells the truth about providers.** `providers()` is built on the provider catalog:
+the active provider first, every provider that has a key, and the last real verify result. The
+page shows three tiers — verified (green), key saved but untested (amber), failing (red) — and
+"All good" only when every configured provider answered a real call. Before, it listed a
+hardcoded Z.ai plus four "unconfigured" names and never showed the provider actually running.
+
+**Read paths no longer write, and nothing is invented.** A session's roster (a GET) used to delete
+the swarm's agent rows with a heartbeat older than ten minutes — the record of stopped agents; it
+deletes nothing now and shows the most recent forty stopped agents (the coordinator's own sweep
+prunes dead rows; the durable history is the engagement's journal). The scan summary's
+`totalAttacks` was findings × 3; it is the number of exploits actually built and run. An unknown
+session action answered 200 with the unchanged session; it is now a 400 that names the action.

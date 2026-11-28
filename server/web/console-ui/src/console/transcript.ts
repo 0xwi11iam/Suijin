@@ -436,6 +436,11 @@ export function reduceConversation(snapshot: ConsoleSessionSnapshot): ReducedTur
     for (const block of message.content) {
       if (message.role === "assistant" && block.type === "text") {
         appendTextSegment(ensureTurn(index), "assistant", block.text);
+      } else if (message.role === "assistant" && block.type === "reasoning") {
+        // A finished thought (chat mode) sits ahead of the reply it produced.
+        const turn = ensureTurn(index);
+        turn.reasoningText += block.text;
+        appendTextSegment(turn, "reasoning", block.text);
       } else if (block.type === "tool_use") {
         const turn = ensureTurn(index);
         const tool = turn.toolCalls.find((candidate) => candidate.id === block.id);

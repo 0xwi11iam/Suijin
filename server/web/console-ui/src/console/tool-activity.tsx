@@ -1,7 +1,6 @@
 import { SourceChip } from "@/components/ui/activity-chip";
 import { useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Markdown } from "./markdown";
 import { ChevronRight, FileSearch, FileText, Globe, Search, Terminal, Wrench, ListChecks, PencilLine, Users, MessageSquare, Clock, Database } from "lucide-react";
 import { ActivityRow } from "./activity-row";
 import { ActivityIndicator, ActivityMark } from "./loading-state";
@@ -10,6 +9,7 @@ import { toolCallStatus } from "./tool-call-status";
 import type { ToolCallState } from "./transcript";
 import "./tool-activity.css";
 import { Disclosure } from "@/components/ui/disclosure";
+import { JsonView } from "@/console/json-view";
 
 function toolKind(name: string) {
   if (/todo|plan|checklist/i.test(name)) return { Icon: ListChecks, label: "Plan" };
@@ -45,19 +45,23 @@ function toolTitle(call: ToolCallState): string {
 function ToolDetails({ call }: { call: ToolCallState }) {
   const view = presentToolCall(call);
   return <div className="space-y-3">
-    {(view.command || view.source || view.output !== undefined) && <div className="overflow-hidden rounded-lg border border-border bg-muted/30 text-xs">
+    {/* The bordered box holds a shell command or a tool's source. An ordinary tool's output is the
+        JSON tree below — an empty "Output" box above it was just noise (seen 2026-11-28). */}
+    {(view.command || view.source) && <div className="overflow-hidden rounded-lg border border-border bg-muted/30 text-xs">
       <div className="px-3 py-2 text-muted-foreground">{view.command ? "Shell" : view.language || "Output"}</div>
       <div className="max-h-80 overflow-auto px-3 pb-3 font-mono text-xs leading-6">
         {view.command && <pre aria-label={`${call.name} command`} className="mb-3 whitespace-pre-wrap break-words">$ {view.command}</pre>}
         {view.source && view.language && <pre aria-label={`${call.name} source`} className="mb-3 whitespace-pre-wrap break-words">{view.source}</pre>}
-        {view.output !== undefined && <pre aria-label={`${call.name} output`} className="whitespace-pre-wrap break-words">{view.output || (call.isRunning ? "Waiting for output…" : "No output.")}</pre>}
+        {view.command && view.output !== undefined && <pre aria-label={`${call.name} output`} className="whitespace-pre-wrap break-words">{view.output || (call.isRunning ? "Waiting for output…" : "No output.")}</pre>}
         {call.isRunning && view.output === undefined && <span className="text-muted-foreground">Waiting for output…</span>}
       </div>
     </div>}
-    {view.input && !view.command && !view.source && <pre aria-label={`${call.name} input`} className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs leading-6">{view.input}</pre>}
+    {/* A tool's own output is JSON as often as not: show it as a readable tree, never a wall of text. */}
+    {view.output !== undefined && !view.command && <JsonView key={`${call.id}-output`} label={`${call.name} output`} text={view.output || (call.isRunning ? "Waiting for output…" : "No output.")} maxHeight={360} />}
+    {view.input && !view.command && !view.source && <JsonView key={`${call.id}-input`} label={`${call.name} input`} text={view.input} maxHeight={256} />}
     {view.metadata.length > 0 && <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">{view.metadata.map(item => <span key={item.label}>{item.label}: {item.value}</span>)}</div>}
     <Disclosure summary="Raw details" triggerClassName="py-1 text-[11px] text-muted-foreground">
-      <div className="space-y-3 pt-2">{view.rawArguments && <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">{view.rawArguments}</pre>}{view.rawResult && <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">{view.rawResult}</pre>}</div>
+      <div className="space-y-3 pt-2">{view.rawArguments && <JsonView text={view.rawArguments} maxHeight={256} />}{view.rawResult && <JsonView text={view.rawResult} maxHeight={360} />}</div>
     </Disclosure>
   </div>;
 }
@@ -95,7 +99,7 @@ export function ToolActivity({ calls, reasoning, working = false, showLatest = f
     </>}>
       <div className="space-y-3 py-2">
         {sources.length > 0 && <div aria-label="Sources" className="flex flex-wrap gap-2">{sources.map(source => <SourceChip key={source} href={source} target="_blank" rel="noopener noreferrer" icon={<Globe aria-hidden="true" />}>{new URL(source).hostname}</SourceChip>)}</div>}
-        {reasoning && <div className="console-tool-reasoning max-h-48 overflow-y-auto break-words text-xs leading-6 text-muted-foreground"><ReactMarkdown remarkPlugins={[remarkGfm]}>{reasoning}</ReactMarkdown></div>}
+        {reasoning && <div data-reasoning="" className="console-tool-reasoning max-h-48 overflow-y-auto break-words text-xs leading-6 text-muted-foreground"><Markdown text={reasoning} /></div>}
         {latest && <ToolDetails call={latest} />}
         {history.length > 0 && <div className="space-y-0.5">{latest && <p className="pb-1 text-[11px] text-muted-foreground">Earlier calls</p>}{history.map(call => <ToolResult key={call.id} call={call} />)}</div>}
       </div>

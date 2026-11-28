@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button";
 import { HighlightedCode, MermaidDiagram } from "./formatted-code";
 import "./markdown.css";
 import { InlineImage, imageSource } from "./inline-image";
+import { parseJsonText } from "./json-pretty";
+import { JsonView } from "./json-view";
 import { streamWordFade } from "./streaming-text";
 
 const StreamingContext = createContext(false);
@@ -129,9 +131,31 @@ function SafeLink({ href, children }: { href?: string; children: ReactNode }) {
   );
 }
 
+/** The plain text of what a paragraph holds. */
+function textOf(children: ReactNode): string {
+  if (children == null || typeof children === "boolean") return "";
+  if (typeof children === "string" || typeof children === "number") return String(children);
+  if (Array.isArray(children)) return children.map(textOf).join("");
+  if (isValidElement<{ children?: ReactNode }>(children)) return textOf(children.props.children);
+  return "";
+}
+
+/** JSON a model pasted into its answer or its thinking: a tree, the way a tool's output is shown. */
+function Paragraph({ children }: { children?: ReactNode }) {
+  const streaming = useContext(StreamingContext);
+  const text = textOf(children);
+  if (!streaming && /^\s*[[{]/.test(text)) {
+    const parsed = parseJsonText(text);
+    if (parsed && text.slice(0, parsed.start).trim() === "" && text.slice(parsed.end).trim() === "") {
+      return <JsonView value={parsed.value} className="my-2" maxHeight={320} />;
+    }
+  }
+  return <div className="my-2 first:mt-0 last:mb-0">{children}</div>;
+}
+
 const components: Components = {
   img: ({ src, alt }) => <InlineImage src={typeof src === "string" ? src : ""} alt={alt || "Screenshot"} />,
-  p: ({ children }) => <div className="my-2 first:mt-0 last:mb-0">{children}</div>,
+  p: ({ children }) => <Paragraph>{children}</Paragraph>,
   a: ({ href, children }) => <SafeLink href={href}>{children}</SafeLink>,
   pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
   code: ({ children, className }) => (

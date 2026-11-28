@@ -1062,7 +1062,7 @@ def _run_auth_session(args) -> int:
     return run_auth_cmd(args)
 
 
-def run_sandbox_cmd(action: str, name: str = "", tail: int = 40) -> int:
+def run_sandbox_cmd(action: str, name: str = "", tail: int = 40, n: int | None = None) -> int:
     """`suijin sandbox …` — the hypervisor verbs."""
     from rich.console import Console
 
@@ -1102,7 +1102,9 @@ def run_sandbox_cmd(action: str, name: str = "", tail: int = 40) -> int:
         return 0
 
     if action == "summon":
-        hv.pool_refill_to(int(name or 4), on_log=console.print)
+        # N has its own argument. It used to be passed as "tail" (the log line count) and dropped,
+        # so every summon refilled to 4 whatever was asked for.
+        hv.pool_refill_to(int(n) if n is not None else 4, on_log=console.print)
         return 0
 
     if action == "destroy-idle":
@@ -3011,7 +3013,7 @@ def main(argv=None):
     )
     summon_p = sbx_sub.add_parser("summon", help="pre-create N idle boxes (no agent, no intent — used by the next engagement)")
     summon_p.add_argument("n", type=int, help="idle boxes to keep in the warm pile")
-    summon_p.set_defaults(func=lambda a: run_sandbox_cmd("summon", "", a.n))
+    summon_p.set_defaults(func=lambda a: run_sandbox_cmd("summon", n=a.n))
     sbx_sub.add_parser("destroy-idle", help="destroy idle boxes (warm pile + stopped; running agents untouched)").set_defaults(
         func=lambda a: run_sandbox_cmd("destroy-idle")
     )

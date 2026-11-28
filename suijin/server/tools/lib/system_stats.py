@@ -112,13 +112,13 @@ def render(d: dict) -> str:
         cores = " ".join(f"{p:>3}" for p in d.get("cpu_per_core", [])[:10])
         la = " ".join(str(x) for x in d.get("load_avg", []))
         L.append(f"  cpu       {d['cpu_percent']:.0f}%  [{cores}]  load {la}")
-    if "mem_used_gib" in d:
+    if "mem_used_gb" in d:
         m = f"  memory    {d['mem_used_gb']}/{d['mem_total_gb']} gb ({d['mem_percent']:.0f}%)"
         if d.get("mem_pressure"):
             m += f"  pressure: {d['mem_pressure']}"
         L.append(m)
-    if "swap_total_gib" in d and d["swap_total_gib"]:
-        L.append(f"  swap      {d['swap_used_gb']}/{d['swap_total_gb']} gib")
+    if "swap_total_gb" in d and d["swap_total_gb"]:
+        L.append(f"  swap      {d['swap_used_gb']}/{d['swap_total_gb']} gb")
     if "disk_read_mbs" in d:
         L.append(f"  disk      ▼{d['disk_read_mbs']} MB/s ▲{d['disk_write_mbs']} MB/s  {d.get('disk_iops', 0)} iops")
     if "net_rx_mbs" in d:

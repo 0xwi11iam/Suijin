@@ -13,9 +13,11 @@
 import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import {
   HERO_DRAFT_KEY,
+  isHeroKind,
   isHeroMode,
   isHeroPermissions,
   parseHeroSubmit,
+  type HeroKind,
   type HeroToChild,
   type HeroMode,
   type HeroPermissions,
@@ -23,7 +25,7 @@ import {
   type HeroToParent,
 } from "../../zero/entry/protocol";
 
-export type { HeroMode, HeroPermissions, HeroSubmitMessage };
+export type { HeroKind, HeroMode, HeroPermissions, HeroSubmitMessage };
 
 /**
  * How the console reports the outcome of a submission. `accept` once a session exists for it;
@@ -40,6 +42,7 @@ const HERO_SRC = "/zero/home.html";
 export interface HeroFrameProps {
   permissions: HeroPermissions;
   mode: HeroMode;
+  kind: HeroKind;
   busy: boolean;
   readOnly: boolean;
   /** The console takes the submission into its create-at-submit path. Must set the draft synchronously. */
@@ -51,18 +54,18 @@ export interface HeroFrameProps {
   /** The frame has no router of its own; in-app links come through as paths. */
   onNavigate: (to: string) => void;
   /** A selector changed on the landing. The console remembers it for the next landing. */
-  onSelect: (selection: { permissions: HeroPermissions; mode: HeroMode }) => void;
+  onSelect: (selection: { permissions: HeroPermissions; mode: HeroMode; kind: HeroKind }) => void;
 }
 
 const isInternalPath = (to: unknown): to is string => typeof to === "string" && /^\/[a-z0-9/_-]*$/i.test(to);
 
-export function HeroFrame({ permissions, mode, busy, readOnly, onSubmit, onHistory, onNavigate, onSelect, bridge }: HeroFrameProps) {
+export function HeroFrame({ permissions, mode, kind, busy, readOnly, onSubmit, onHistory, onNavigate, onSelect, bridge }: HeroFrameProps) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [ready, setReady] = useState(false);
   // Latest callbacks + selectors, read at message time: the listener is installed once, so a
   // message never reaches a stale closure or a stale default.
-  const latest = useRef({ onSubmit, onHistory, onNavigate, onSelect, permissions, mode });
-  latest.current = { onSubmit, onHistory, onNavigate, onSelect, permissions, mode };
+  const latest = useRef({ onSubmit, onHistory, onNavigate, onSelect, permissions, mode, kind });
+  latest.current = { onSubmit, onHistory, onNavigate, onSelect, permissions, mode, kind };
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>) => {
@@ -75,7 +78,7 @@ export function HeroFrame({ permissions, mode, busy, readOnly, onSubmit, onHisto
           setReady(true);
           break;
         case "suijin:hero:submit": {
-          const submission = parseHeroSubmit(data, { permissions: latest.current.permissions, mode: latest.current.mode });
+          const submission = parseHeroSubmit(data, { permissions: latest.current.permissions, mode: latest.current.mode, kind: latest.current.kind });
           if (!submission) return;
           latest.current.onSubmit(submission);
           // The console reports the outcome through the bridge once it knows it.
@@ -88,7 +91,8 @@ export function HeroFrame({ permissions, mode, busy, readOnly, onSubmit, onHisto
           if (isInternalPath(data.to)) latest.current.onNavigate(data.to);
           break;
         case "suijin:hero:select":
-          if (isHeroPermissions(data.permissions) && isHeroMode(data.mode)) latest.current.onSelect({ permissions: data.permissions, mode: data.mode });
+          if (isHeroPermissions(data.permissions) && isHeroMode(data.mode) && isHeroKind(data.kind))
+            latest.current.onSelect({ permissions: data.permissions, mode: data.mode, kind: data.kind });
           break;
         default:
           break;
@@ -100,8 +104,8 @@ export function HeroFrame({ permissions, mode, busy, readOnly, onSubmit, onHisto
 
   useEffect(() => {
     if (!ready) return;
-    frame.current?.contentWindow?.postMessage({ type: "suijin:hero:state", permissions, mode, busy, readOnly }, window.location.origin);
-  }, [ready, permissions, mode, busy, readOnly]);
+    frame.current?.contentWindow?.postMessage({ type: "suijin:hero:state", permissions, mode, kind, busy, readOnly }, window.location.origin);
+  }, [ready, permissions, mode, kind, busy, readOnly]);
 
   useEffect(() => {
     const send = (message: HeroToChild) => frame.current?.contentWindow?.postMessage(message, window.location.origin);
@@ -130,7 +134,7 @@ export function HeroFrame({ permissions, mode, busy, readOnly, onSubmit, onHisto
       <iframe
         ref={frame}
         src={HERO_SRC}
-        title="New engagement"
+        title="New chat"
         data-suijin-hero-frame=""
         className="absolute inset-0 block h-full w-full border-0 bg-transparent"
       />

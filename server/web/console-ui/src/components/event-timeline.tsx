@@ -14,6 +14,7 @@ import type { ScanEventsResponse } from "@/types";
 import { formatTime, summarizePayload } from "@/lib/format";
 import { Card, CardContent, CardEmpty, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { JsonView } from "@/console/json-view";
 
 export function EventTimeline({
   events,
@@ -72,9 +73,7 @@ export function EventTimeline({
                       {event.payload ? (
                         <Disclosure className="rounded-[var(--radius-menu,12px)] border border-border bg-muted/50 p-2 text-sm text-muted-foreground" summary={<> Show </>} triggerClassName="cursor-pointer list-none font-medium text-foreground">
 
-                          <pre className="mt-3 text-xs text-muted-foreground">
-                            {JSON.stringify(event.payload, null, 2)}
-                          </pre>
+                          <JsonView value={event.payload} className="mt-3" />
                         </Disclosure>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>

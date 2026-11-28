@@ -32,6 +32,8 @@ _KNOWN_KINDS = frozenset(
         "iteration",
         "phase.transition",
         "assistant.message",
+        "assistant.reasoning",  # chat mode: one finished thought (deltas are never records)
+        "user.message",         # chat mode: what the operator typed (engagements steer via the bus)
         "tool.call",
         "tool.result",
         "state.snapshot",

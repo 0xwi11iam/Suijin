@@ -1,16 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  HERO_KINDS,
   HERO_MAX_FILES,
   HERO_MAX_TEXT,
   HERO_PERMISSIONS,
+  isHeroKind,
   isHeroMode,
   isHeroPermissions,
   parseHeroSubmit,
+  type HeroKind,
   type HeroMode,
   type HeroPermissions,
 } from "../zero/entry/protocol";
 
-const fallback = { permissions: "exploitation" as HeroPermissions, mode: "vdp" as HeroMode };
+const fallback = { permissions: "exploitation" as HeroPermissions, mode: "vdp" as HeroMode, kind: "chat" as HeroKind };
 
 const file = (name: string) => new File(["scope"], name, { type: "text/markdown" });
 
@@ -19,10 +22,15 @@ describe("parseHeroSubmit", () => {
     const scope = file("scope.md");
     expect(
       parseHeroSubmit(
-        { type: "suijin:hero:submit", text: "  Map example.test  ", permissions: "recon", mode: "pentest", files: [scope] },
+        { type: "suijin:hero:submit", text: "  Map example.test  ", permissions: "recon", mode: "pentest", kind: "engagement", files: [scope] },
         fallback,
       ),
-    ).toEqual({ type: "suijin:hero:submit", text: "Map example.test", permissions: "recon", mode: "pentest", files: [scope] });
+    ).toEqual({ type: "suijin:hero:submit", text: "Map example.test", permissions: "recon", mode: "pentest", kind: "engagement", files: [scope] });
+  });
+
+  it("a submission without a kind is what the console last had selected — a chat by default", () => {
+    expect(parseHeroSubmit({ type: "suijin:hero:submit", text: "hi" }, fallback)?.kind).toBe("chat");
+    expect(parseHeroSubmit({ type: "suijin:hero:submit", text: "hi" }, { ...fallback, kind: "engagement" })?.kind).toBe("engagement");
   });
 
   it("refuses anything that is not a non-empty submission", () => {
@@ -34,8 +42,8 @@ describe("parseHeroSubmit", () => {
   });
 
   it("falls back to the console's own selection when a selector is unknown", () => {
-    const parsed = parseHeroSubmit({ type: "suijin:hero:submit", text: "hi", permissions: "root", mode: "yolo" }, fallback);
-    expect(parsed).toMatchObject({ permissions: "exploitation", mode: "vdp" });
+    const parsed = parseHeroSubmit({ type: "suijin:hero:submit", text: "hi", permissions: "root", mode: "yolo", kind: "swarm" }, fallback);
+    expect(parsed).toMatchObject({ permissions: "exploitation", mode: "vdp", kind: "chat" });
   });
 
   it("clamps an oversized prompt and an oversized file list", () => {
@@ -71,5 +79,8 @@ describe("selector guards", () => {
     expect(isHeroPermissions(undefined)).toBe(false);
     expect(isHeroMode("pentest")).toBe(true);
     for (const value of ["vdp ", "VDP", "", null, 0]) expect(isHeroMode(value)).toBe(false);
+    expect(HERO_KINDS).toEqual(["chat", "engagement"]);
+    expect(isHeroKind("engagement")).toBe(true);
+    for (const value of ["hunt", "Engagement", "", null, 0]) expect(isHeroKind(value)).toBe(false);
   });
 });

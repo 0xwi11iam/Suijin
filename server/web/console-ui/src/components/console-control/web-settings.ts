@@ -10,7 +10,7 @@ export const settingsCategories = [
   { id: "conversation", label: "Engagements" },
   { id: "general", label: "Guards & ledger" },
   { id: "appearance", label: "Appearance" },
-] as const satisfies readonly SettingsCategory[];
+] as const satisfies readonly { id: SettingsCategory; label: string }[];
 const sharedSettings = {
   swarm_autopilot: { category: "agents", label: "Autopilot", description: "Coordinator requeues intents and summons agents on its own." },
   swarm_turn_cap: { category: "agents", label: "Turn cap", description: "Per-agent turn budget for engagements. none = unlimited." },

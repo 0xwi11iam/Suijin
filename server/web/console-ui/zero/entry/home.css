@@ -4,8 +4,8 @@
  * Sits AFTER 0's stylesheet (styles.css) and overrides only the semantic tokens that 0's dark
  * palette owns — the same mechanism 0 uses for its own colour themes: tokens in, geometry and
  * every component untouched. Values are measured from 0's own new-thread screen so the landing
- * reads as the same product: a near-black base, a faint warm glow above the composer, a slightly
- * lighter card with a crisp hairline.
+ * reads as the same product: a near-black base, a blue-cyan atmosphere above the composer, a
+ * slightly lighter card with a crisp hairline.
  */
 
 html[data-suijin-home],
@@ -27,16 +27,41 @@ html[data-suijin-home].dark {
   --card-hover: #222222;
   --popover: #1f1f1f;
   /* 0's own hairline tokens stay as shipped (#303030 over the card, #383838 at its foot). */
-  /* 0's dither field, inked amber: at its native 15% it reads as the warm haze above the composer. */
-  --dither-ink: #f2a65a;
   --sh-composer: 0 18px 54px rgb(0 0 0 / 38%), 0 2px 6px rgb(0 0 0 / 2%);
+  /* The backdrop's ink (see INK in suijin-home.tsx): the glow below is the same colour. */
+  --suijin-ink-rgb: 34 211 238;
 }
 
-/* The atmosphere: a faint amber glow over the top of the surface, gone by about 40% of the height.
-   0's backdrop canvas (the dither field) paints on top of this as its own layer. */
+/* The atmosphere: a faint blue-cyan glow over the top of the surface, gone by about 40% of the height.
+   The studio background canvas paints on top of this as its own layer. */
 html[data-suijin-home] body {
   background:
-    radial-gradient(40% 42% at 46% 0%, rgb(255 150 64 / 7%), rgb(255 150 64 / 0) 100%),
+    radial-gradient(40% 42% at 46% 0%, rgb(var(--suijin-ink-rgb) / 7%), rgb(var(--suijin-ink-rgb) / 0) 100%),
     #101010;
   background-attachment: fixed;
+}
+
+/* ── the mark ───────────────────────────────────────────────────────────────────────────────
+   The Suijin mark (src/assets/sui.png — the same file the sidebar, the tab icon and the README
+   use): a cyan crystal between two leaves on a dark tile, drawn at 40 CSS px beside the wordmark. */
+
+/* The mark sits on the field as it is — no glow behind it (operator 2026-11-27: "why is there a halo"). */
+[data-suijin-home-brand] .brand-glow {
+  position: relative;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-suijin-home-brand] {
+    animation: suijin-mark-in 600ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+  @keyframes suijin-mark-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
 }

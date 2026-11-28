@@ -35,6 +35,25 @@ export function sortSidebarChats(rows: SessionRailRow[], sort: "updated" | "name
   return rows.filter(row => !needle || sidebarChatTitle(row).toLocaleLowerCase().includes(needle)).sort((a, b) => sort === "name" ? sidebarChatTitle(a).localeCompare(sidebarChatTitle(b)) || a.key.localeCompare(b.key) : b.timestamp - a.timestamp || a.key.localeCompare(b.key));
 }
 
+const STATUS_WORDS: Record<string, string> = {
+  ready: "Ready",
+  idle: "Ready", // Suijin's word for a session waiting for its next message; 0's table did not know it, and a same-titled row read "undefined · 6 messages"
+  working: "Responding",
+  cancelling: "Stopping",
+  waiting: "Waiting for you",
+  failed: "Needs attention",
+  closed: "Closed",
+};
+
+/** Where a session files in the sidebar. Not about an engagement — a chat, a question, a tool
+ * test — files together under one folder, General, so it never clutters the target folders
+ * (operator 2026-11-27). Only a run about a target gets a folder of its own. */
+export function sessionFolder(session: { targetKey?: string; targetLabel?: string; target?: string; kind?: string }): { key: string; label: string; general: boolean } {
+  const general = session.kind === "chat" || !String(session.targetKey || "").trim();
+  const label = general ? "General" : String(session.targetLabel || session.target || "Unsorted target");
+  return { key: general ? "general" : String(session.targetKey || label.toLowerCase()), label, general };
+}
+
 /** Equal titles can belong to separate transcripts; retain both and explain which is which. */
 export function sidebarChatDetails(rows: SessionRailRow[]): Map<string, string> {
   const counts = new Map<string, number>();
@@ -45,7 +64,8 @@ export function sidebarChatDetails(rows: SessionRailRow[]): Map<string, string> 
   const details = new Map<string, string>();
   for (const row of rows) {
     if ((counts.get(sidebarChatTitle(row).trim().toLocaleLowerCase()) ?? 0) < 2) continue;
-    const status = row.kind === "saved" ? "Saved" : ({ ready: "Ready", working: "Responding", cancelling: "Stopping", waiting: "Waiting for you", failed: "Needs attention", closed: "Closed" }[row.session.status]);
+    // A status nobody has a word for is shown as it is — never as "undefined".
+    const status = row.kind === "saved" ? "Saved" : (STATUS_WORDS[row.session.status] ?? row.session.status);
     details.set(row.key, `${status} · ${row.session.messageCount ?? 0} messages · ${row.key.slice(0, 8)}`);
   }
   return details;

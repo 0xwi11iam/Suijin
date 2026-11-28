@@ -14,7 +14,7 @@ import { PageHeader } from "@/components/page-header";
 interface ProviderSpec {
   key: string; label: string; baseUrl: string; keyEnv: string;
   defaultModel: string; configured: boolean; local: boolean;
-  schema: { key: string; label: string; kind: string; options?: string[]; placeholder?: string }[];
+  schema: { key: string; label: string; kind: string; options?: string[]; placeholder?: string; default?: string }[];
   apiStyles: string[];
 }
 interface CatalogResponse { providers: ProviderSpec[] }
@@ -69,8 +69,8 @@ export function ModelsPage() {
   };
 
   const catalog = useQuery<CatalogResponse>({ queryKey: ["provider-catalog"], queryFn: () => webFetchJson("/api/console/provider-catalog"), staleTime: Infinity });
-  const providersDev = useQuery({ queryKey: ["models-dev"], queryFn: () => webFetchJson("/api/console/models-dev"), staleTime: 600_000, retry: 1 });
-  const status = useQuery({ queryKey: ["providers-status"], queryFn: () => webFetchJson("/api/console/providers"), refetchInterval: 15000 });
+  const providersDev = useQuery<Record<string, unknown>>({ queryKey: ["models-dev"], queryFn: () => webFetchJson<Record<string, unknown>>("/api/console/models-dev"), staleTime: 600_000, retry: 1 });
+  const status = useQuery<{ providers: { id: string; configured: boolean }[] }>({ queryKey: ["providers-status"], queryFn: () => webFetchJson<{ providers: { id: string; configured: boolean }[] }>("/api/console/providers"), refetchInterval: 15000 });
 
   const spec = useMemo(() => (catalog.data?.providers ?? []).find(p => p.key === selected), [catalog.data, selected]);
   // switching provider invalidates the old model/effort/fetch state and
@@ -209,7 +209,7 @@ export function ModelsPage() {
 
   return <div className="mx-auto w-full max-w-3xl space-y-5 p-6">
     <div className="flex justify-end"><Button variant="ghost" size="sm" onClick={() => { window.history.length > 1 ? window.history.back() : window.location.assign("/chats"); }}>← Back</Button></div>
-    <PageHeader title="Models" description="Pick the model that runs your engagements. Keys stay in your local .env — they never leave this machine." />
+    <PageHeader title="Models" summary="Pick the model that runs your engagements. Keys stay in your local .env — they never leave this machine." />
 
     {/* provider selector */}
     <section className="space-y-2">

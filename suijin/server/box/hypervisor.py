@@ -65,7 +65,64 @@ def _engine_bin() -> str:
     return _engine_binary(detect_engine(interactive=False))
 
 
-def _docker(*args: str, timeout: int = 900, check: bool = False) -> tuple[int, str]:
+def _live_unix_socket(path: str, timeout: float = 0.5) -> bool:
+    """Is something LISTENING at this unix socket? A socket file outlives the engine that made it
+    (Docker Desktop leaves one behind), so existence proves nothing; a connection does."""
+    import socket as _socket
+
+    if not path or not os.path.exists(path):
+        return False
+    client = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+    client.settimeout(timeout)
+    try:
+        client.connect(path)
+        return True
+    except OSError:
+        return False
+    finally:
+        client.close()
+
+
+def docker_endpoint() -> str:
+    """The unix socket the docker CLI would talk to: DOCKER_HOST, else the current context's
+    endpoint, else the default. Empty when it is not a local unix socket."""
+    import json as _json
+    from pathlib import Path as _Path
+
+    env = os.environ.get("DOCKER_HOST", "").strip()
+    if env:
+        return env[len("unix://"):] if env.startswith("unix://") else ""
+    home = _Path.home()
+    with contextlib.suppress(OSError, ValueError):
+        config = _json.loads((home / ".docker" / "config.json").read_text())
+        name = str(config.get("currentContext") or "")
+        if name and name != "default":
+            for meta in (home / ".docker" / "contexts" / "meta").glob("*/meta.json"):
+                data = _json.loads(meta.read_text())
+                if str(data.get("Name") or "") == name:
+                    host = str(((data.get("Endpoints") or {}).get("docker") or {}).get("Host") or "")
+                    return host[len("unix://"):] if host.startswith("unix://") else ""
+            return ""                       # a context that does not resolve: nothing to talk to
+    return "/var/run/docker.sock"
+
+
+def engine_socket() -> str:
+    """The docker endpoint, if an engine is ALREADY listening on it — found by files and one
+    socket connect, never by running docker. On macOS the docker CLI starts OrbStack whenever it
+    runs, so every background path (the web console, the data layer, ``swarm stop``) asks this
+    first and reports "no engine" instead of waking one (operator 2026-11-28).
+
+    It must be the endpoint docker would actually use: a machine can hold a stale socket file
+    from another engine (Docker Desktop's) while its current context — OrbStack's — is down."""
+    endpoint = docker_endpoint()
+    return endpoint if endpoint and _live_unix_socket(endpoint) else ""
+
+
+def _docker(*args: str, timeout: int = 900, check: bool = False, wake: bool = True) -> tuple[int, str]:
+    """Run one docker command. ``wake=False`` is for background callers: with no engine already
+    listening it answers at once instead of starting one."""
+    if not wake and not engine_socket():
+        return 1, "no container engine is running"
     cmd = [_engine_bin(), *args]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
@@ -77,8 +134,9 @@ def _docker(*args: str, timeout: int = 900, check: bool = False) -> tuple[int, s
         return 124, f"timeout: {cmd}"
 
 
-def engine_available() -> bool:
-    rc, _ = _docker("ps", timeout=10)
+def engine_available(wake: bool = True) -> bool:
+    """Is a container engine answering? ``wake=False`` never starts one to find out."""
+    rc, _ = _docker("ps", timeout=10, wake=wake)
     return rc == 0
 
 

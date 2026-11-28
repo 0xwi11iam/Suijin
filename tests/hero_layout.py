@@ -15,6 +15,7 @@ The three popups are checked the same way.
 Exit status is non-zero if any measurement fails. Screenshots land under the temp dir, in
 ``suijin-hero-shots/``.
 """
+
 from __future__ import annotations
 
 import json
@@ -26,12 +27,24 @@ from playwright.sync_api import sync_playwright
 
 BASE = os.environ.get("SUIJIN_WEB_URL", "http://127.0.0.1:8790").rstrip("/")
 SHOTS = os.path.join(tempfile.gettempdir(), "suijin-hero-shots")
-SIZES = [(1920, 1080, "wide"), (1600, 1000, "desktop"), (1280, 720, "short"), (1100, 800, "laptop"), (900, 700, "narrow")]
-MIN_CONTRAST = 4.5
-CONTROLS = [
-    "[data-suijin-home-attach]", "[data-suijin-home-permissions]", "[data-suijin-home-model]",
-    "[data-suijin-home-history]", "[data-suijin-home-submit]", '[aria-label="Mode"]', "[data-suijin-home-suggestion]",
+SIZES = [
+    (1920, 1080, "wide"),
+    (1600, 1000, "desktop"),
+    (1280, 720, "short"),
+    (1100, 800, "laptop"),
+    (900, 700, "narrow"),
 ]
+MIN_CONTRAST = 4.5
+# The landing is a chat by default; Mode and Permissions exist only as an engagement.
+CHAT_CONTROLS = [
+    "[data-suijin-home-attach]",
+    "[data-suijin-home-model]",
+    "[data-suijin-home-history]",
+    "[data-suijin-home-submit]",
+    '[aria-label="Start a"]',
+    "[data-suijin-home-suggestion]",
+]
+ENGAGEMENT_CONTROLS = CHAT_CONTROLS + ["[data-suijin-home-permissions]", '[aria-label="Mode"]']
 
 # Runs inside the landing's document. `root` limits the measurement to one popup when one is open.
 MEASURE = r"""
@@ -91,36 +104,88 @@ def main() -> int:
             # Bind this window's list by default argument: a late event from a closed page must not
             # land in the next window's list.
             page.on("pageerror", lambda error, sink=errors: sink.append(str(error)[:160]))
-            page.on("console", lambda message, sink=errors: sink.append(message.text[:160]) if message.type == "error" else None)
+            page.on(
+                "console",
+                lambda message, sink=errors: sink.append(message.text[:160]) if message.type == "error" else None,
+            )
             page.goto(f"{BASE}/chats", wait_until="networkidle")
-            page.frame_locator("iframe[data-suijin-hero-frame]").locator("[data-suijin-home-textarea]").wait_for(timeout=20000)
+            page.frame_locator("iframe[data-suijin-hero-frame]").locator("[data-suijin-home-textarea]").wait_for(
+                timeout=20000
+            )
             page.keyboard.type("layout probe")
             page.wait_for_timeout(700)
             frame = next(f for f in page.frames if "zero/home.html" in f.url)
-            measure = frame.evaluate(MEASURE, {"selectors": CONTROLS, "root": None})
-            page.screenshot(path=os.path.join(SHOTS, f"layout-{tag}-{width}x{height}.png"))
-            pane = measure["viewport"]
-            card = measure["card"]
-            problems = [key for key in ("horizontalScroll", "overlapping", "covered", "outside", "lowContrast", "tinyText", "offscreenText") if measure[key]]
-            if errors:
-                problems.append("console errors")
-            failures.extend(f"{tag} {key}: {measure[key]}" for key in ("overlapping", "covered", "outside", "lowContrast", "tinyText", "offscreenText") if measure[key])
-            if measure["horizontalScroll"] or errors:
-                failures.append(f"{tag}: horizontal scroll or console errors: {errors[:2]}")
-            print(f"{'FAIL' if problems else 'ok  '} {tag:8s} {width}x{height}  pane {pane['w']}x{pane['h']}  composer {card['w']:.0f}x{card['h']:.0f} "
-                  f"({card['w'] / pane['w'] * 100:.0f}% of the pane, top at {card['y'] / pane['h'] * 100:.0f}%)  control rows {measure['controlRows']}  "
-                  f"worst text contrast {measure['worstContrast']}" + (f"  -> {problems}" if problems else ""), flush=True)
 
-            for name, selector in (("mode", '[aria-label="Mode"]'), ("permissions", "[data-suijin-home-permissions]"), ("model", "[data-suijin-home-model]")):
+            def report(measure, kind, shot, tag=tag, width=width, height=height, page=page, errors=errors):
+                pane, card = measure["viewport"], measure["card"]
+                problems = [
+                    key
+                    for key in (
+                        "horizontalScroll",
+                        "overlapping",
+                        "covered",
+                        "outside",
+                        "lowContrast",
+                        "tinyText",
+                        "offscreenText",
+                    )
+                    if measure[key]
+                ]
+                if errors:
+                    problems.append("console errors")
+                failures.extend(
+                    f"{tag} {kind} {key}: {measure[key]}"
+                    for key in ("overlapping", "covered", "outside", "lowContrast", "tinyText", "offscreenText")
+                    if measure[key]
+                )
+                if measure["horizontalScroll"] or errors:
+                    failures.append(f"{tag} {kind}: horizontal scroll or console errors: {errors[:2]}")
+                print(
+                    f"{'FAIL' if problems else 'ok  '} {tag:8s} {width}x{height}  {kind:11s} pane {pane['w']}x{pane['h']}  composer {card['w']:.0f}x{card['h']:.0f} "
+                    f"({card['w'] / pane['w'] * 100:.0f}% of the pane, top at {card['y'] / pane['h'] * 100:.0f}%)  control rows {measure['controlRows']}  "
+                    f"worst text contrast {measure['worstContrast']}" + (f"  -> {problems}" if problems else ""),
+                    flush=True,
+                )
+                page.screenshot(path=os.path.join(SHOTS, shot))
+
+            # the default: a chat
+            report(
+                frame.evaluate(MEASURE, {"selectors": CHAT_CONTROLS, "root": None}),
+                "chat",
+                f"layout-{tag}-{width}x{height}.png",
+            )
+            hero = page.frame_locator("iframe[data-suijin-hero-frame]")
+            hero.locator('[aria-label="Start a"]').click()
+            page.wait_for_timeout(400)
+            frame.locator("[data-slot=dropdown-menu-item]").get_by_text("Engagement", exact=True).click()
+            page.wait_for_timeout(500)
+            # … and as an engagement
+            report(
+                frame.evaluate(MEASURE, {"selectors": ENGAGEMENT_CONTROLS, "root": None}),
+                "engagement",
+                f"layout-{tag}-engagement-{width}x{height}.png",
+            )
+
+            for name, selector in (
+                ("kind", '[aria-label="Start a"]'),
+                ("mode", '[aria-label="Mode"]'),
+                ("permissions", "[data-suijin-home-permissions]"),
+                ("model", "[data-suijin-home-model]"),
+            ):
                 page.frame_locator("iframe[data-suijin-hero-frame]").locator(selector).click()
                 page.wait_for_timeout(1000 if name == "model" else 400)
                 popup = frame.evaluate(MEASURE, {"selectors": [], "root": "[data-slot=dropdown-menu-content]"})
                 page.screenshot(path=os.path.join(SHOTS, f"layout-{tag}-menu-{name}.png"))
                 issues = [key for key in ("covered", "outside", "lowContrast", "tinyText") if popup[key]]
                 failures.extend(f"{tag} {name} menu {key}: {popup[key]}" for key in issues)
-                popup_size = frame.evaluate("(() => { const r = document.querySelector('[data-slot=dropdown-menu-content]').getBoundingClientRect(); return Math.round(r.width) + 'x' + Math.round(r.height) })()")
-                print(f"     {'FAIL' if issues else 'ok  '} {name:11s} menu {popup_size}  "
-                      f"worst text contrast {popup['worstContrast']}" + (f"  -> {issues}" if issues else ""), flush=True)
+                popup_size = frame.evaluate(
+                    "(() => { const r = document.querySelector('[data-slot=dropdown-menu-content]').getBoundingClientRect(); return Math.round(r.width) + 'x' + Math.round(r.height) })()"
+                )
+                print(
+                    f"     {'FAIL' if issues else 'ok  '} {name:11s} menu {popup_size}  "
+                    f"worst text contrast {popup['worstContrast']}" + (f"  -> {issues}" if issues else ""),
+                    flush=True,
+                )
                 page.keyboard.press("Escape")
                 page.wait_for_timeout(300)
             context.close()

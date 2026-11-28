@@ -88,13 +88,23 @@ inside this tree:
 4. `types.ts`: two engine modules our vendored `@0/engine` does not have (`executed-poc`,
    `reproduction`) are repointed to copies under `src/engine/`.
 
-Everything else is byte-identical to upstream. `MANIFEST.json` lists all 233 files.
+All but one file are byte-identical to upstream once those are undone. `MANIFEST.json` lists all
+233 files.
 
-**Do not hand-edit `src/`.** It is upstream's; a local fix there is lost on the next refresh and
-hides the real divergence. Adapt in `entry/`, or change the console. To take a newer upstream:
-recompute the import closure of `console/conversation.tsx`, `ui/backdrops`, `lib/web-appearance`
-and the three root stylesheets, copy it in, re-apply the four rewrites, update `MANIFEST.json` and
-the commit hash above.
+**The one deliberate divergence — `components/provider-icon.tsx` (2026-11-27).** Five contained
+hunks, each marked `// suijin:`, so the picker draws every model maker's mark instead of one
+shared chip: it consults Suijin's artwork table (`entry/brand-art.ts`), maps `zhipu` to the Z.ai
+logo, resolves a `maker/model` id to its maker, falls back to a site icon, then an initial, and shows
+that initial when the site icon cannot be fetched.
+It lives here rather than in `entry/` for one reason: 0's `ModelCatalog` imports this component
+directly and the brand table is module-private, so there is nothing to adapt from outside. On the
+next refresh, re-apply these five hunks.
+
+**Do not hand-edit `src/` otherwise.** It is upstream's; a local fix there is lost on the next
+refresh and hides the real divergence. Adapt in `entry/`, or change the console. To take a newer
+upstream: recompute the import closure of `console/conversation.tsx`, `ui/backdrops`,
+`lib/web-appearance` and the three root stylesheets, copy it in, re-apply the four rewrites and
+the `provider-icon.tsx` hunks, update `MANIFEST.json` and the commit hash above.
 
 `src/` is deliberately outside the console's `tsconfig` `include` (it typechecks against upstream's
 newer engine); it is compiled by Vite, which reports any import that does not resolve.

@@ -15,6 +15,7 @@ import { Check, ControlCard, Empty, Facts, Feedback, Field, QueryState, SubmitBu
 import { ProviderIcon } from "@/components/provider-icon";
 import type { CheckItem, ChecksResponse, ProjectResponse, Provider, SessionSnapshot, SessionSummary } from "./contracts";
 import { DiagnosticReportControl } from "./diagnostic-report-control";
+import { JsonView } from "@/console/json-view";
 
 export const autonomyDescriptions: Record<string, string> = {
   standard: "Asks you before each action.",
@@ -110,17 +111,23 @@ export function DoctorControl() {
           if (diag.reason === "untested") return { label: "key saved · untested", color: "text-amber-400 bg-amber-900/30 border-amber-500/40" };
           return { label: "not connected", color: "text-muted-foreground bg-muted/50 border-border" };
         };
-        // Any configured provider that hasn't been verified (untested or failing) means the
-        // stack is not truly healthy — "key saved" is not "verified".
-        const unverifiedProviders = data.providers.filter(p => p.configured && p.diagnostics.reason !== "verified");
-        const failingProviders = data.providers.filter(provider => provider.diagnostics.reason === "failing");
+        // Three honest tiers: verified (green), key saved but never tested (amber), failing (red).
+        // "All good" only when every configured provider answered a real call.
+        const configured = data.providers.filter(p => p.configured);
+        const failingProviders = configured.filter(provider => provider.diagnostics.reason === "failing");
+        const untestedProviders = configured.filter(provider => provider.diagnostics.reason === "untested");
         const missing = data.prerequisites.filter(item => item.required && !item.available);
-        const healthy = data.availability.apiRuntime.valid && data.runtime.nodeSupported && unverifiedProviders.length === 0 && missing.length === 0;
+        const healthy = data.availability.apiRuntime.valid && data.runtime.nodeSupported && failingProviders.length === 0 && untestedProviders.length === 0 && missing.length === 0;
         return <>
-          {healthy ? <div role="status" className="flex items-start gap-2 rounded-[var(--radius-menu,12px)] border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-400"><CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0" /><span className="min-w-0 flex-1 break-words">All good · {data.availability.apiRuntime.providerLabel}</span></div> : <>
+          {healthy ? <div role="status" className="flex items-start gap-2 rounded-[var(--radius-menu,12px)] border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-400"><CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0" /><span className="min-w-0 flex-1 break-words">All good · {configured.length} provider{configured.length === 1 ? "" : "s"} verified · {data.availability.apiRuntime.providerLabel}</span></div> : <>
             {!data.availability.apiRuntime.valid && <div className="space-y-2"><Feedback error={data.availability.apiRuntime.error ?? "No provider connected."} /><Link to="/models" className="block text-sm underline">Connect a provider</Link></div>}
             {!data.runtime.nodeSupported && <Feedback error={`Node ${data.runtime.node} is not supported. Install Node 24+.`} />}
-            {unverifiedProviders.map(provider => <Feedback key={provider.id} error={`${provider.label}: ${providerStatus(provider.diagnostics).label}`} />)}
+            {failingProviders.length === 0 && untestedProviders.length > 0 && <div role="status" className="rounded-[var(--radius-menu,12px)] border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-400">{untestedProviders.length} key{untestedProviders.length === 1 ? "" : "s"} saved and not tested yet. "Check again" calls each provider for real.</div>}
+            {configured.map(provider => {
+              const status = providerStatus(provider.diagnostics);
+              const active = Boolean((provider as { active?: boolean }).active);
+              return <div key={provider.id} role={provider.diagnostics.reason === "failing" ? "alert" : "status"} className={`flex items-start gap-2 rounded-[var(--radius-menu,12px)] border p-3 text-sm ${status.color}`}><span className="min-w-0 flex-1 break-words">{provider.label}{active ? " · active" : ""}: {status.label}</span></div>;
+            })}
             {missing.length > 0 && <Feedback error={`Missing: ${missing.map(item => item.id).join(", ")}`} />}
           </>}
           <Button variant="outline" onClick={verifyAll} disabled={doctor.isFetching || verifying.size > 0}><RefreshCcw className="size-4" />{verifying.size > 0 ? "verifying…" : "Check again"}</Button>
@@ -140,10 +147,10 @@ export function ToolsControl({ sessionId }: { sessionId?: string }) {
   const harness = snapshot.data?.harness;
   return <div className="space-y-5">
     <ControlCard title="Chat tools">
-      {sessionId ? <><QueryState pending={snapshot.isPending} error={snapshot.error} retry={snapshot.refetch} />{snapshot.data && (snapshot.data.tools.length ? <ControlDisclosure title={<>{snapshot.data.tools.length} tools loaded</>}><ul className="mt-2 divide-y divide-border">{snapshot.data.tools.map(tool => <li key={tool.name} className="space-y-2 py-3"><h3 className="font-medium text-sm">{tool.name}</h3><p className="text-xs leading-relaxed text-muted-foreground">{tool.description}</p><ControlDisclosure title={<>Input schema</>}><pre className="mt-2 max-h-64 overflow-auto rounded-[var(--radius-menu,12px)] border border-border bg-muted/20 p-3 text-xs">{JSON.stringify(tool.inputSchema, null, 2)}</pre></ControlDisclosure></li>)}</ul></ControlDisclosure> : <Empty>No tools loaded yet.</Empty>)}</> : <Empty>Open a chat to see its tools. <Link to="/chats" className="underline">Go to chat</Link>.</Empty>}
+      {sessionId ? <><QueryState pending={snapshot.isPending} error={snapshot.error} retry={snapshot.refetch} />{snapshot.data && (snapshot.data.tools.length ? <ControlDisclosure title={<>{snapshot.data.tools.length} tools loaded</>}><ul className="mt-2 divide-y divide-border">{snapshot.data.tools.map(tool => <li key={tool.name} className="space-y-2 py-3"><h3 className="font-medium text-sm">{tool.name}</h3><p className="text-xs leading-relaxed text-muted-foreground">{tool.description}</p><ControlDisclosure title={<>Input schema</>}><JsonView value={tool.inputSchema} className="mt-2" maxHeight={256} /></ControlDisclosure></li>)}</ul></ControlDisclosure> : <Empty>No tools loaded yet.</Empty>)}</> : <Empty>Open a chat to see its tools. <Link to="/chats" className="underline">Go to chat</Link>.</Empty>}
     </ControlCard>
     <ControlCard title="Tool setup">
-      {harness ? <><p className="text-sm">{harness.label} · {harness.status}{harness.pendingGenerationId ? " · update pending" : ""}</p>{!harness.trusted && <Feedback error="This tool setup isn't trusted." />}{harness.error && <Feedback error={harness.error} />}<ControlDisclosure title={<>Details</>}><Facts entries={[["Version", harness.generationId ?? "Built-in"], ["Pending update", harness.pendingGenerationId ?? "None"]]} /><ul className="mt-3 space-y-2">{harness.providers.map(provider => <li key={provider.id} className="rounded-[var(--radius-menu,12px)] border border-border p-3 text-sm"><p className="font-medium">{provider.id}</p><p className="mt-1 text-xs text-muted-foreground">{provider.kind} · {provider.services.join(" · ")}</p></li>)}</ul><ControlDisclosure className="mt-3" title={<>Raw</>}><pre className="mt-2 max-h-96 overflow-auto rounded-[var(--radius-menu,12px)] border border-border bg-muted/20 p-3 text-xs">{JSON.stringify(harness, null, 2)}</pre></ControlDisclosure></ControlDisclosure>{sessionId && <Link to={`/chats/${encodeURIComponent(sessionId)}`} className="block text-sm underline">Manage in chat</Link>}</> : <Empty>{sessionId ? "Nothing reported yet." : "Open a chat to see its tool setup."}</Empty>}
+      {harness ? <><p className="text-sm">{harness.label} · {harness.status}{harness.pendingGenerationId ? " · update pending" : ""}</p>{!harness.trusted && <Feedback error="This tool setup isn't trusted." />}{harness.error && <Feedback error={harness.error} />}<ControlDisclosure title={<>Details</>}><Facts entries={[["Version", harness.generationId ?? "Built-in"], ["Pending update", harness.pendingGenerationId ?? "None"]]} /><ul className="mt-3 space-y-2">{harness.providers.map(provider => <li key={provider.id} className="rounded-[var(--radius-menu,12px)] border border-border p-3 text-sm"><p className="font-medium">{provider.id}</p><p className="mt-1 text-xs text-muted-foreground">{provider.kind} · {provider.services.join(" · ")}</p></li>)}</ul><ControlDisclosure className="mt-3" title={<>Raw</>}><JsonView value={harness} className="mt-2" maxHeight={384} /></ControlDisclosure></ControlDisclosure>{sessionId && <Link to={`/chats/${encodeURIComponent(sessionId)}`} className="block text-sm underline">Manage in chat</Link>}</> : <Empty>{sessionId ? "Nothing reported yet." : "Open a chat to see its tool setup."}</Empty>}
     </ControlCard>
     <ControlCard title="All tools">
       <QueryState pending={tools.isPending} error={tools.error} retry={tools.refetch} />

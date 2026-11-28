@@ -15,6 +15,8 @@ import { ScansPage } from "@/pages/scans-page";
 import { ConsolePage } from "@/pages/console-page";
 import { SavedConversationPage } from "@/pages/saved-conversation-page";
 import { EngagementsPage } from "@/pages/engagements-page";
+import { SwarmPage } from "@/pages/swarm-page";
+import { DataPage } from "@/pages/data-page";
 import { WorkflowsPage } from "@/pages/workflows-page";
 import { FindingsApiAccessPage } from "@/pages/findings-api-access-page";
 import { TeamSettingsPage } from "@/pages/team-settings-page";
@@ -32,9 +34,6 @@ function isTypingTarget(target: EventTarget | null): boolean {
 export function OperationsApp() {
   const { client, getDashboard, getScans } = useBackendApi();
   const location = useLocation();
-  // The memory mindmap is a FULLSCREEN takeover — no rail, no header, just a
-  // back button. Rendered before the shell so nothing frames it.
-  if (location.pathname.startsWith("/memory")) return <MemoryMindmapPage />;
   const operationsVisible = /^\/(?:dashboard|operations|threads|findings|runs|scans|live)(?:\/|$)/.test(location.pathname);
   const searchReturnFocus = useRef<HTMLElement | null>(null);
   const rememberSearchFocus = () => { searchReturnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; };
@@ -68,6 +67,10 @@ export function OperationsApp() {
     window.addEventListener("zero:open-search", openSearch);
     return () => { window.removeEventListener("keydown", listener); window.removeEventListener("zero:open-search", openSearch); };
   }, [handleHotkey]);
+  // The memory mindmap is a FULLSCREEN takeover — no rail, no header, just a back button. It is
+  // returned AFTER the hooks above: an early return before them made the hook order depend on the
+  // route, which React refuses to render when leaving the map.
+  if (location.pathname.startsWith("/memory")) return <MemoryMindmapPage />;
 
   const operations = (content: ReactNode) => {
     if (dashboardQuery.isLoading || scansQuery.isLoading) return <LoadingState label="Loading" />;
@@ -106,7 +109,12 @@ export function OperationsApp() {
           <Route path="/plugins/skills" element={<SkillsPage />} />
           <Route path="/learning" element={<Navigate to="/memory" replace />} />
           <Route path="/memory" element={<MemoryMindmapPage />} />
-          <Route path="/scope" element={<EngagementsPage />} />
+          <Route path="/engagements" element={<EngagementsPage />} />
+          <Route path="/engagements/:id" element={<EngagementsPage />} />
+          <Route path="/scope" element={<Navigate to="/engagements" replace />} />
+          <Route path="/scope/:id" element={<Navigate to="/engagements" replace />} />
+          <Route path="/swarm" element={<SwarmPage />} />
+          <Route path="/data" element={<DataPage />} />
           <Route path="/dashboard" element={operations(dashboard ? <OverviewPage data={dashboard} /> : <EmptyState title="Nothing here yet" action={startChat} />)} />
           <Route path="/operations" element={compatibilityPage} />
           <Route path="/threads" element={compatibilityPage} />
@@ -116,8 +124,8 @@ export function OperationsApp() {
           <Route path="/findings/:fingerprint" element={findings} />
           <Route path="/runs" element={operations(<ScansPage scans={scans} />)} />
           <Route path="/runs/:scanId" element={operations(<ScansPage scans={scans} />)} />
-          {["console", "workers", "engagements", "skills"].map(route => <Route key={route} path={`/${route}`} element={compatibilityPage} />)}
-          {["console", "workers", "engagements", "skills"].map(route => <Route key={`${route}-child`} path={`/${route}/*`} element={compatibilityPage} />)}
+          {["console", "workers", "skills"].map(route => <Route key={route} path={`/${route}`} element={compatibilityPage} />)}
+          {["console", "workers", "skills"].map(route => <Route key={`${route}-child`} path={`/${route}/*`} element={compatibilityPage} />)}
           <Route path="/scans" element={compatibilityPage} />
           <Route path="/scans/:scanId" element={compatibilityPage} />
           <Route path="/live" element={<LivePage />} />

@@ -77,12 +77,13 @@ def _q_swarm() -> dict:
 
 
 def _q_boxes() -> dict:
-    out = {"available": False, "boxes": [], "pool_n": 0, "pool_target": 4,
+    out = {"available": False, "boxes": [], "pool_n": 0, "pool_target": 0,
            "image": "", "fresh": None, "engine": "none"}
     with contextlib.suppress(Exception):
         from suijin.server.box import hypervisor as hv
 
-        out["available"] = hv.engine_available()
+        out["pool_target"] = hv.pool_target()        # a config read: right even with the engine off
+        out["available"] = hv.engine_available(wake=False)   # a background path: never starts OrbStack
         if out["available"]:
             out["boxes"] = hv.sandbox_ls()
             out["pool_n"] = len(hv.pool_members())

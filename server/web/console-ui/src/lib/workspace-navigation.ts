@@ -1,9 +1,12 @@
-import { BookOpen, Library, MessageSquare, Plug, Server, Settings, ShieldCheck, Workflow } from "lucide-react";
+import { BookOpen, Crosshair, Database, Library, MessageSquare, Network, Plug, Settings, ShieldCheck, Workflow } from "lucide-react";
 
 /** One destination inventory for desktop and touch navigation. */
 export const WORKSPACE_DESTINATIONS = [
   { to: "/chats", label: "Chat", icon: MessageSquare },
   { to: "/findings", label: "Findings", icon: ShieldCheck },
+  { to: "/engagements", label: "Engagements", icon: Crosshair },
+  { to: "/swarm", label: "Swarm", icon: Network },
+  { to: "/data", label: "Data", icon: Database },
   { to: "/plugins/skills", label: "Skills", icon: Library },
   { to: "/plugins", label: "Plugins", icon: Plug },
   { to: "/memory", label: "Memory", icon: BookOpen },
@@ -12,13 +15,13 @@ export const WORKSPACE_DESTINATIONS = [
 
 /** Compatibility URLs remain accepted, but share one canonical page identity. */
 export function canonicalWorkspacePath(path: string): string {
-  return path.replace(/^\/(operations|threads|scans|workflows|audits|launcher|launch|console|workers|engagements|skills)(?=\/|$)/, (_, name: string) => {
+  return path.replace(/^\/(operations|threads|scans|workflows|audits|launcher|launch|console|workers|scope|skills)(?=\/|$)/, (_, name: string) => {
     if (name === "operations") return "/dashboard";
     if (name === "threads") return "/findings";
     if (name === "scans") return "/runs";
     if (name === "console") return "/chats";
     if (name === "workers") return "/engines";
-    if (name === "engagements") return "/scope";
+    if (name === "scope") return "/engagements";       // the old scope page is the engagements page now
     if (name === "skills") return "/plugins/skills";
     return "/automations";
   });

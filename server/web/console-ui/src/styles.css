@@ -437,7 +437,7 @@
   margin-block:2px;
 }
 .console-navigation-rail :is(.sidebar-history-row, .session-row) > :is(a, button):first-child {
-  height:38px;
+  height:auto;          /* a wrapped title grows its row; a fixed 38px let it spill over the next row */
   min-height:38px;
   padding-right:12px;
 }
@@ -463,3 +463,116 @@
 
 /* Popup/feedback motion shares the same short, non-looping vocabulary. */
 [popover]:popover-open { animation:ui-surface-enter var(--ui-duration-standard) var(--ui-ease-out) both; }
+
+
+/* ── JSON, readable (src/console/json-view.tsx) ─────────────────────────────────────────────
+   A tree: keys, strings, numbers, booleans and null each carry their own colour, containers fold,
+   and long values stay on one line until asked to wrap. */
+.json-view {
+  --json-key: #7dd3fc;
+  --json-string: #86efac;
+  --json-number: #fcd34d;
+  --json-boolean: #c4b5fd;
+  --json-null: var(--muted-foreground);
+  --json-punct: var(--muted-foreground);
+  --json-muted: var(--muted-foreground);
+  container-type: inline-size;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control, 8px);
+  background: color-mix(in oklab, var(--muted) 38%, transparent);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.65;
+}
+html:not(.dark) .json-view {
+  --json-key: #0369a1;
+  --json-string: #15803d;
+  --json-number: #b45309;
+  --json-boolean: #6d28d9;
+}
+.json-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+.json-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--foreground);
+}
+.json-around {
+  padding: 6px 10px 0;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  white-space: pre-wrap;
+  break-words: break-word;
+}
+.json-scroll {
+  overflow: auto;
+  padding: 6px 10px 8px;
+}
+.json-children {
+  margin-left: 14px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+.json-row {
+  display: flex;
+  align-items: baseline;
+  min-height: 20px;
+  white-space: pre;
+}
+[data-json-wrap] .json-row {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.json-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 20px;
+  margin-right: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted-foreground);
+}
+button.json-toggle:hover {
+  color: var(--foreground);
+}
+.json-fold {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.json-key { color: var(--json-key); }
+.json-string { color: var(--json-string); }
+.json-number { color: var(--json-number); }
+.json-boolean { color: var(--json-boolean); }
+.json-null { color: var(--json-null); font-style: italic; }
+.json-punct { color: var(--json-punct); }
+.json-muted { color: var(--json-muted); }
+.json-plain {
+  margin: 0;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control, 8px);
+  background: color-mix(in oklab, var(--muted) 38%, transparent);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { cn } from "@zero/lib/utils";
 import openRouterCloud from "@zero/assets/brands/openrouter-cloud.svg";
 import openRouterInk from "@zero/assets/brands/openrouter-ink.svg";
 import zAiLogo from "@zero/assets/brands/z-ai.svg";
 import { Cpu } from "lucide-react";
 import { PROVIDER_BRAND_PATHS } from "./provider-brand-paths";
+// suijin: Suijin's own maker artwork (the same two libraries as the tables above) lives in the entry.
+import { SUIJIN_BRAND_ALIASES, SUIJIN_BRAND_IMAGES, SUIJIN_BRAND_PATHS, suijinHasBrand } from "../../entry/brand-art";
 
 // Brand paths from Simple Icons (CC0), normalized to its 24 × 24 viewBox.
 // https://github.com/simple-icons/simple-icons
@@ -18,18 +21,35 @@ const BRAND_PATHS: Record<string, string> = {
 };
 const BRAND_ALIASES: Record<string, string> = { "chatgpt-plan": "openai", "chatgpt-codex": "openai", codex: "openai", chatgpt: "openai", xai: "grok", "z-ai": "zai" };
 
+// suijin: a maker with no artwork shows its initial — one tile per maker, never one shared chip.
+function BrandInitial({ maker, className }: { maker: string; className?: string }) {
+  return <span aria-hidden="true" data-provider-icon={`initial-${maker}`} className={cn("inline-flex size-4 shrink-0 items-center justify-center rounded-[4px] bg-foreground/10 text-[9px] font-semibold leading-none text-foreground", className)}>{maker.charAt(0).toUpperCase()}</span>;
+}
+// suijin: a site icon that cannot be fetched falls back to that initial, never a broken image.
+function BrandImage({ maker, src, className }: { maker: string; src: string; className?: string }) {
+  const [failed, setFailed] = useState(false);
+  return failed ? <BrandInitial maker={maker} className={className} />
+    : <img aria-hidden="true" data-provider-icon={maker} src={src} alt="" onError={() => setFailed(true)} className={cn("size-4 shrink-0 rounded-[3px] object-contain", className)} />;
+}
+
 /** Decorative brand mark; the adjacent provider label supplies its accessible name. */
 export function ProviderIcon({ providerId, className }: { providerId: string; className?: string }) {
   const id = providerId.toLowerCase();
   // Preserve official artwork and supplied light/dark colors without recoloring.
   // https://openrouter.ai/brand/ · https://chat.z.ai/ (site icon)
   if (id === "openrouter") return <span aria-hidden="true" data-provider-icon="openrouter" className={cn("inline-flex size-4 shrink-0 items-center justify-center", className)}><img src={openRouterInk} alt="" className="size-full object-contain dark:hidden" /><img src={openRouterCloud} alt="" className="hidden size-full object-contain dark:block" /></span>;
-  if (id === "z-ai" || id === "zai" || id === "glm") return <img aria-hidden="true" data-provider-icon="zai" src={zAiLogo} alt="" className={cn("size-4 shrink-0 object-contain", className)} />;
+  if (id === "z-ai" || id === "zai" || id === "zhipu" || id === "glm") return <img aria-hidden="true" data-provider-icon="zai" src={zAiLogo} alt="" className={cn("size-4 shrink-0 object-contain", className)} />;
   const brand = BRAND_ALIASES[id] ?? id;
-  const paths = PROVIDER_BRAND_PATHS[brand] ?? (BRAND_PATHS[brand] ? [{ d: BRAND_PATHS[brand] }] : undefined);
-  return paths
-    ? <svg aria-hidden="true" data-provider-icon={brand} viewBox="0 0 24 24" fill="currentColor" fillRule={PROVIDER_BRAND_PATHS[brand] ? "evenodd" : undefined} className={cn("size-4 shrink-0", className)}>{paths.map((path, index) => <path key={index} d={path.d} fillOpacity={path.fillOpacity} />)}</svg>
-    : <Cpu aria-hidden="true" data-provider-icon="generic" className={cn("size-4 shrink-0", className)} />;
+  const maker = SUIJIN_BRAND_ALIASES[brand] ?? brand;
+  const art = SUIJIN_BRAND_PATHS[maker];
+  const paths = art?.paths ?? PROVIDER_BRAND_PATHS[maker] ?? (BRAND_PATHS[maker] ? [{ d: BRAND_PATHS[maker] }] : undefined);
+  if (paths)
+    return <svg aria-hidden="true" data-provider-icon={maker} viewBox="0 0 24 24" fill="currentColor" fillRule={art ? art.fillRule : PROVIDER_BRAND_PATHS[maker] ? "evenodd" : undefined} className={cn("size-4 shrink-0", className)}>{paths.map((path, index) => <path key={index} d={path.d} fillOpacity={path.fillOpacity} />)}</svg>;
+  if (!maker) return <Cpu aria-hidden="true" data-provider-icon="generic" className={cn("size-4 shrink-0", className)} />;
+  // suijin: a maker with no vector logo still gets its own mark — its site icon, else its initial — never one shared chip.
+  const image = SUIJIN_BRAND_IMAGES[maker];
+  if (image) return <BrandImage maker={maker} src={image} className={className} />;
+  return <BrandInitial maker={maker} className={className} />;
 }
 
 /** Model maker can differ from its connection provider (for example Claude on OpenRouter). */
@@ -43,6 +63,9 @@ export function modelIconProvider(modelId: string, providerId: string): string {
   if (/(^|\/)kimi(?:[-./]|$)/.test(id) || id.startsWith("moonshotai/")) return "kimi";
   if (/(^|\/)grok(?:[-./]|$)/.test(id)) return "xai";
   if (/(^|\/)glm(?:[-./]|$)/.test(id) || id.startsWith("z-ai/")) return "z-ai";
+  // suijin: a "maker/model" id names its maker — show the maker's own mark whenever we have one.
+  const maker = id.split("/")[0];
+  if (id.includes("/") && suijinHasBrand(SUIJIN_BRAND_ALIASES[maker] ?? maker)) return maker;
   return providerId;
 }
 export function ModelIcon({ modelId, providerId, className }: { modelId: string; providerId: string; className?: string }) {

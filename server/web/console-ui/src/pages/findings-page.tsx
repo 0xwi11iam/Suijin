@@ -53,6 +53,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { formatTime } from "@/lib/format";
 import { usePersistentState } from "@/lib/use-persistent-state";
+import { JsonView } from "@/console/json-view";
+import { Markdown } from "@/console/markdown";
 import type {
   DashboardResponse,
   FindingGroup,
@@ -663,7 +665,7 @@ function FindingFamilyInspector({
               ["Response", data.latest.evidenceResponse],
               ["Analysis", data.latest.evidenceAnalysis],
             ] as const).filter(([, text]) => Boolean(text?.trim())).map(([label, text]) => (
-              <section key={label} className="min-w-0 space-y-3"><h2 className="text-sm font-medium">{label}</h2><pre className="max-h-[36rem] overflow-auto whitespace-pre-wrap break-words rounded-[var(--radius-panel)] border border-border bg-muted/20 p-4 text-xs leading-6 text-muted-foreground">{text}</pre></section>
+              <section key={label} className="min-w-0 space-y-3"><h2 className="text-sm font-medium">{label}</h2><JsonView text={text ?? ""} maxHeight={560} /></section>
             ))}
           </TabsContent>
 
@@ -760,7 +762,7 @@ function ExplainFinding({ findingId }: { findingId: string }) {
             <Button onClick={() => void analyse()} disabled={busy}>{busy ? "Generating…" : "Analyse for me"}</Button>
             {saved ? <p className="break-all text-xs text-muted-foreground">Saved to {saved}</p> : null}
             {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
-            {answer ? <pre className="max-h-[46dvh] overflow-auto whitespace-pre-wrap break-words rounded-[var(--radius-panel)] border border-border bg-muted/20 p-3 text-xs leading-5">{answer}</pre> : null}
+            {answer ? <div className="console-markdown max-h-[46dvh] overflow-auto rounded-[var(--radius-panel)] border border-border bg-muted/20 p-3 text-xs leading-5"><Markdown text={answer} /></div> : null}
           </div>
         </div>
       </DialogContent>
