@@ -1056,3 +1056,56 @@ reader scrolls back (`ReasoningStream`).
 `tests/console_engagement_visibility.py` (28 checks: the real Pause button, a typed message that
 resumes the agent, the folder) and `tests/console_reasoning_follow.py` (the scroll, sampled every
 150 ms). Both spend real model calls and are never collected by pytest.
+
+
+## 2026-11-29 — the swarm is a thing (S0–S6 of the plan)
+
+**The registry** (`suijin/server/swarm/registry.py`). A swarm is one folder:
+`~/.suijin/Targets/<target>/swarms/<id>/` holding `swarm.json` — mission, lanes, host/boxed
+counts, brain, engine (auto/orbstack/docker/podman), permissions, mode, status, the chat that
+started it — plus `inbox/ exploits/ findings/ home/`. Atomic writes, torn-file-tolerant reads.
+`list_swarms` folds the legacy engagement archive in as `status: legacy`;
+`migrate_legacy` moves a real folder into the new layout (both real folders migrated:
+Immutable under `Targets/immutable`, the chat run under `Targets/general`);
+`find_folder(id, legacy_root)` is the ONE resolver — every consumer of an engagement folder
+(`_eng_dir`, catalog scan, ops access, data hub stores, engagement list, sidebar scan) reads
+through it, so nothing hard-codes the old root.
+
+**Define and launch, one path.** `POST /api/ops/swarms` defines; with agents asked and
+`start` it brings the coordinator up, queues the lanes as prioritised intents and spawns via
+the shared spawn core. No agents asked = define only (queuing work for nobody left ghost
+intents and a surprise coordinator — the journey caught it). The dialog sends `start` only
+when the counts say so. GET list/detail; DELETE stops scoped, then removes folder, roster
+rows and definition together (and prunes the empty parents).
+
+**Scoped control.** An agent claims its own swarm's lanes first (unswarmed work stays
+claimable by anyone); `swarm say` accepts `--swarm`; the web pause/resume/stop/steer carry
+the swarm scope. The autopilot judges each swarm's queue on its own — one open intent in
+another swarm no longer freezes every swarm (the overnight-stall bug). A running swarm with
+no work and no live agents is marked **done** in its definition by the coordinator.
+
+**The spawn lesson.** A launched agent died before its first log line: the sandbox HOME hides
+the user-site editable install and a stale copied `suijin/` (no `suijin.server`) in the
+framework site-packages shadows the repo. `_spawn_agent` pins `PYTHONPATH` and `cwd` to the
+repo root. (The stale snapshot needs root to remove; the pin makes it irrelevant to agents.)
+
+**The surfaces.** The Swarm page opens with the registry list and the define dialog; open a
+swarm for the headless view — agents with last-seen, open work, live journal activity, and
+Pause/Say/Stop/Delete scoped to that swarm. The sidebar nests: a target folder lists its
+swarms beneath its chats (live pulse), linking to `/swarm?swarm=<id>` which opens the detail.
+
+**Prompts (from the doctrine research, `agent-vault/research/tool-use-doctrine.md`).** The
+chat dialect gained the explicit escape rule (escape EVERY double quote — the exact breakage
+seen live); the worker dialect gained it plus the payload-to-file rule (over ~20 KB goes to a
+file, the call references the path). Chat rows gained curated labels served by
+`/api/console/tools` (the pack manifests' display names — 265 of 405 tools), with pack action
+suffixes stripped client-side (nmap_scan → nmap).
+
+**Proof.** Registry + scoping tests (`tests/swarm/test_registry.py` 7, `test_swarm_scoping.py` 4);
+backend sweep 511 passed (3 pre-existing `test_cli_v210` providers failures — the blue-team
+excision, none of tonight's files); frontend 71 tests, tsc clean. A REAL swarm ran end to end
+on the machine: define → coordinator up → lane worked (local_sys_info run, note written) →
+scoped pause held it mid-work → resume continued → scoped stop exited it → the coordinator
+marked it done → delete removed everything. Journeys: ops 36/36, chat 41/41, landing 58/58,
+layout clean — nothing left running, OrbStack stopped throughout. Commits `8000c9ae` through
+`e14b3dfa` on `main`.

@@ -230,7 +230,9 @@ def main() -> int:
             hero().locator("[data-suijin-home-submit]").get_attribute("aria-label") == "Send"
             and hero().locator("[data-suijin-home-textarea]").get_attribute("aria-label") == "Ask Suijin anything",
         )
-        check("the mark is on the landing", hero().locator("[data-suijin-home-brand] img").count() == 1)
+        check("the hero's centre is the quote, no mark (2026-11-28 ruling)",
+              "hacking today" in hero().locator("[data-suijin-home-brand] h1").inner_text()
+              and hero().locator("[data-suijin-home-brand] img").count() == 0)
         hero().locator('[aria-label="Start a"]').click()
         page.wait_for_timeout(400)
         check("the kind menu offers Chat / Engagement", options() == ["Chat", "Engagement"], options())
