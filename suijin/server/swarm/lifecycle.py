@@ -349,9 +349,17 @@ def _spawn_agent(port: int, mission: str = "", swarm: str = "") -> tuple[str, in
     # landed the agents' tool events inside the sandbox (console never saw
     # them). Pin the real workspace — boxed agents (no pin) keep their jail.
     env["SUIJIN_WORKSPACE"] = str(_real_cfg)
+    # THE SPAWNED AGENT MUST IMPORT THIS REPO — never an installed snapshot (found live
+    # 2026-11-29: with the sandbox HOME the user-site editable path vanishes and a stale
+    # `suijin/` snapshot in the framework site-packages shadows the repo, so `-m
+    # suijin.server.swarm.agent` died before logging anything). PYTHONPATH pins the tree
+    # the SAME way the server itself imports it.
+    repo_root = str(Path(__file__).resolve().parents[3])  # …/suijin/server/swarm/lifecycle.py → the repo root
+    env["PYTHONPATH"] = repo_root + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
 
     proc = subprocess.Popen(
         argv,
+        cwd=repo_root,
         stdout=open(log_file, "w"),
         stderr=subprocess.STDOUT,
         stdin=subprocess.DEVNULL,

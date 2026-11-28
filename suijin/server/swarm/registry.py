@@ -145,7 +145,14 @@ def delete(swarm_id: str) -> bool:
         return False
     import shutil
 
-    shutil.rmtree(swarm_dir(str(data["target"]), swarm_id), ignore_errors=True)
+    folder = swarm_dir(str(data["target"]), swarm_id)
+    shutil.rmtree(folder, ignore_errors=True)
+    # prune the empty parents left behind (seen live: Targets/local-check/swarms/ empty)
+    parent = folder.parent
+    while str(parent).startswith(str(targets_root())) and parent != targets_root():
+        with contextlib.suppress(OSError):
+            parent.rmdir()
+        parent = parent.parent
     return True
 
 
@@ -242,7 +249,9 @@ def migrate_legacy(swarm_id: str, *, dry_run: bool = False) -> dict | None:
         "mode": str(meta.get("mode") or ""),
         "chat": str(meta.get("chat") or ""),
         "status": "stopped",
-        "created": str(meta.get("created") or meta.get("createdAt") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
+        "created": str(
+            meta.get("created") or meta.get("createdAt") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        ),
         "migrated_from": str(source),
     }
     _atomic_write(destination / "swarm.json", json.dumps(definition, indent=2, ensure_ascii=False) + "\n")
