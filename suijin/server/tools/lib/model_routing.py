@@ -20,7 +20,9 @@ ITSELF per task type. Config:
 from __future__ import annotations
 
 import contextlib
+import json
 import os
+from pathlib import Path
 
 
 def _routing_config() -> dict:
@@ -108,7 +110,11 @@ def _split_provider_model(value: str) -> tuple[str, str]:
 def apply_routing(cfg: dict, task: str = "worker") -> dict:
     """Mutate a provider config dict for the task tier. The worker loop
     calls this before generate(). A 'provider:model' value routes that
-    tier at the OTHER provider (any connected model, any slot)."""
+    tier at the OTHER provider (any connected model, any slot).
+
+    A BARE model id belongs to the provider that lists it. Until 2026-11-28 it was sent to the
+    active provider whatever that was: with Z.ai active and a Numes worker model, every agent
+    call answered `400 Unknown Model` while the leader, on the same provider, worked."""
     model = model_for(task)
     if not model:
         return cfg
@@ -119,6 +125,117 @@ def apply_routing(cfg: dict, task: str = "worker") -> dict:
         cfg[f"{provider}_model"] = wire_model
         cfg["model_1"] = wire_model
         return cfg
-    provider = str(cfg.get("provider") or "")
-    cfg[f"{provider}_model"] = model
+    active = str(cfg.get("provider") or "")
+    owner = _owner_in_config(cfg, model, active) or owner_of(model, active)
+    if owner and owner != active:
+        cfg = dict(cfg)
+        cfg["provider"] = owner
+    cfg[f"{owner or active}_model"] = model
     return cfg
+
+
+def _registered_providers() -> tuple[str, ...]:
+    try:
+        from suijin.server.providers.lib.registry import PROVIDER_REGISTRY
+
+        return tuple(PROVIDER_REGISTRY)
+    except Exception:  # noqa: BLE001
+        return ()
+
+
+def _owner_in_config(cfg: dict, model: str, active: str) -> str:
+    """A ``<provider>_model`` setting in this very config already names the model: that provider
+    is its owner. The active provider wins a tie — no switch is needed then."""
+    model = model.strip()
+    suffix = "_model"
+    providers = [
+        key[: -len(suffix)]
+        for key, value in (cfg or {}).items()
+        if key.endswith(suffix) and str(value).strip() == model
+    ]
+    if active in providers:
+        return active
+    known = _registered_providers()
+    return next((provider for provider in providers if not known or provider in known), "")
+
+
+# ── which provider lists which model ─────────────────────────────────────────────────────────
+# The console sees every configured provider's model list when it builds the model picker. It
+# records that here once per complete listing, and every process that routes a call — console,
+# agent, TUI — reads it. No network, no key, nothing secret: provider names and model ids.
+
+
+def model_owners_path() -> Path:
+    from suijin.modules.platform.lib.workspace import caches_dir  # function-local (boundary law)
+
+    return caches_dir() / "model-owners.json"
+
+
+def remember_model_owners(listings: dict[str, list[str]]) -> None:
+    """Record one COMPLETE listing — every configured provider and the models it offers. It
+    replaces the previous record. Never raises."""
+    owners: dict[str, list[str]] = {}
+    for provider, models in (listings or {}).items():
+        for model in models or []:
+            model = str(model).strip()
+            if model:
+                providers = owners.setdefault(model, [])
+                if provider not in providers:
+                    providers.append(str(provider))
+    with contextlib.suppress(OSError):
+        path = model_owners_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(owners), encoding="utf-8")
+
+
+def model_owners() -> dict[str, list[str]]:
+    """model id → the providers whose last complete listing offered it."""
+    with contextlib.suppress(Exception):
+        data = json.loads(model_owners_path().read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return {
+                str(model): [str(p) for p in providers]
+                for model, providers in data.items()
+                if isinstance(providers, list)
+            }
+    return {}
+
+
+def owner_of(model: str, active: str) -> str:
+    """The provider a bare model id is called on: the active one when it lists the model, else
+    another one that does. '' when no listing knows the model — the active provider is used then,
+    as before, and the error (if there is one) will say so."""
+    providers = model_owners().get(str(model).strip(), [])
+    if active in providers:
+        return active
+    return next((provider for provider in providers if provider), "")
+
+
+def routing_doubt(cfg: dict, task: str) -> str:
+    """Why a route may not work, in one sentence; '' when it looks sound. Call it BEFORE
+    apply_routing, and carry the sentence into any provider error the call then raises."""
+    model = model_for(task)
+    if not model:
+        return ""
+    provider, _wire_model = _split_provider_model(model)
+    if provider:
+        return ""  # said explicitly
+    active = str((cfg or {}).get("provider") or "")
+    target = _owner_in_config(cfg, model, active)
+    owners = model_owners()
+    if not target:
+        if not owners or model in owners:
+            return ""  # no listing has ever been recorded, or a provider that is no longer configured lists it
+        target = owner_of(model, active)
+    if target:
+        return ""  # a provider that lists it: the active one, or the one apply_routing switches to
+    return f"{model} is not in the model list of {active}, the active provider; the call is being made there anyway"
+
+
+def routing_note(cfg: dict, task: str) -> tuple[str, str]:
+    """``(model, provider)`` a task is routed to, for logs and error messages. Read-only."""
+    model = model_for(task)
+    if not model:
+        return "", str((cfg or {}).get("provider") or "")
+    routed = apply_routing(dict(cfg or {}), task)
+    return model, str(routed.get("provider") or "")

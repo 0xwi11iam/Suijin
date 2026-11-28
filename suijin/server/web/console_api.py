@@ -40,6 +40,7 @@ HB_DEAD_S = 30
 # silent 200 that looks like success.
 SESSION_ACTIONS = ("cancel", "pause", "stop", "resume", "force-stop", "clear", "delete")
 ROSTER_STOPPED_CAP = 40  # stopped agents stay visible in a session's roster; a long hunt shows its most recent ones
+REPRUNE_DELAYS_S = (20.0, 90.0)  # Delete prunes again after these delays: an agent mid-call can still write as it exits
 
 # ── workspace paths ──────────────────────────────────────────────
 
@@ -94,6 +95,38 @@ def _cfg_save(update: dict) -> dict:
 def _slug(title: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "-", str(title or "hunt").lower()).strip("-")
     return (s or "hunt")[:48]
+
+
+#: a title longer than this is cut (the first clause, or a word boundary)
+TITLE_CAP = 64
+#: where a sentence may be cut into a clause that stands on its own
+_CLAUSE_BREAK = re.compile(r"[,;:—–]|\s-\s|\s\(")
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"'(])")
+
+
+def _short_title(text: str, cap: int = TITLE_CAP) -> str:
+    """The title a sidebar shows: the first sentence of the text — or its first clause when that
+    sentence runs long — cut at a word boundary and never inside a host or a path.
+
+    The DISPLAY title only. The whole text stays the mission (engagement.json ``description``):
+    an idle agent works the mission, and a title is not one. Until 2026-11-28 the session's title
+    was the whole prompt, and the sidebar showed every word of it."""
+    text = " ".join(str(text or "").split())
+    if not text:
+        return ""
+    sentence = _SENTENCE_END.split(text, maxsplit=1)[0].strip() or text
+    if len(sentence) <= cap:
+        return sentence
+    clause = _CLAUSE_BREAK.search(sentence)
+    if clause and 16 <= clause.start() <= cap:
+        return sentence[: clause.start()].rstrip(" (")
+    head = sentence[:cap]
+    cut = head.rfind(" ")
+    if cut < cap // 2:
+        cut = head.rfind("/")  # a path: its segments are its words
+    if cut < cap // 2:
+        cut = cap  # one long token with no boundary at all
+    return head[:cut].rstrip(" ,;:—-(/") + "…"
 
 
 def _now_iso() -> str:
@@ -674,8 +707,8 @@ def _target_for_meta(meta: dict, session: str = "") -> str:
     if explicit:
         return explicit
     target = (
-        _target_from_text(meta.get("name") or "")
-        or _target_from_text(meta.get("description") or "")
+        _target_from_text(meta.get("description") or "")
+        or _target_from_text(meta.get("name") or "")
     )
     if not target:
         slug = re.sub(r"^\d{8}_\d{6}_", "", session)
@@ -684,13 +717,14 @@ def _target_for_meta(meta: dict, session: str = "") -> str:
 
 
 def _real_target(meta: dict) -> str:
-    """The target a session is ABOUT: the explicit one, else a host in its title. Empty when the
-    session is not about a target at all — a question, a tool test — which files under General."""
+    """The target a session is ABOUT: the explicit one, else a host in its text — the whole text
+    first, then the title. Empty when the session is not about a target at all — a question, a
+    tool test — which files under General."""
     explicit = str((meta or {}).get("target") or (meta or {}).get("scope") or "").strip()
     return (
         explicit
-        or _target_from_text((meta or {}).get("name") or "")
         or _target_from_text((meta or {}).get("description") or "")
+        or _target_from_text((meta or {}).get("name") or "")
     )
 
 
@@ -704,34 +738,46 @@ def _desk_session(session: str) -> dict:
     """DesktopConsoleSession shape."""
     agents = _live_agents(session)
     live = [a for a in agents if not a["dead"]]
-    intents = _intents(session)
-    running = [i for i in intents if i.get("state") == "running"]
-    # LIVE AGENTS = WORKING (field 2026-11-17): title-following agents never
-    # set lanes or claim intents — the old lane-based check reported "idle"
-    # while agents hunted, so the composer showed no Stop control and the
-    # operator couldn't stop a running engagement from the UI.
-    paused = bool(live) and all(str(a.get("status") or "") == "paused" for a in live)
+    # LIVE AGENTS = WORKING (field 2026-11-17: title-following agents never set lanes or claim
+    # intents — the old lane-based check reported "idle" while agents hunted, so the composer
+    # showed no Stop control). But a heartbeat is not work (2026-11-28): an agent failing every
+    # model call, or one that had run out of work, kept its heartbeat, and the session said
+    # "working" forever. What an agent is doing is in its own journal.
+    views = _agent_views(session) if live else {}
+
+    def _in(agent: dict, states: set[str]) -> bool:
+        return str((views.get(agent["id"]) or {}).get("state") or "") in states
+
+    paused = bool(live) and (
+        all(str(a.get("status") or "") == "paused" for a in live)
+        or all(_in(a, {"pausing", "paused"}) for a in live)
+    )
+    waiting = bool(live) and all(_in(a, {"waiting", "pausing", "paused"}) for a in live) and any(
+        _in(a, {"waiting"}) for a in live
+    )
+    working = bool(live) and any(_in(a, {"", "working", "pausing", "retrying"}) for a in live)
     with _chat_lock:
         chatting = session in _chat_running
-    status = "waiting" if paused else "working" if live or chatting else "idle"
-    # THE REAL TITLE (field 2026-11-17: "example.com" displayed as
-    # "example com" — the title was rebuilt from the slug, which ate the
-    # dot). The typed title is stored in engagement.json at create; show it.
+    status = "waiting" if paused or waiting else "working" if working or chatting else "idle"
+    # THE REAL TITLE (field 2026-11-17: "example.com" displayed as "example com" — the title was
+    # rebuilt from the slug, which ate the dot). The typed title is stored in engagement.json.
+    # A session made before short titles (2026-11-28) holds the whole prompt in both `name` and
+    # `description`: it is shown short, and its file is left as it is.
     meta = _session_engagement_meta(session)
-    title = str(meta.get("name") or "").strip() or session.replace("-", " ")
+    name = str(meta.get("name") or "").strip()
+    description = str(meta.get("description") or "").strip()
+    title = (_short_title(name) if name and name == description else name) or session.replace("-", " ")
     # Not about a target — a chat, or a run with no target (a tool test, a question) — files under
     # General with the chats, never in a target folder (operator 2026-11-27: anything not related
-    # to engagements is general). Folders that predate the kind field keep their slug.
-    kind = _session_kind(meta)
-    if kind == "chat" or ("kind" in meta and not _real_target(meta)):
-        target = ""
-    else:
-        target = _target_for_meta(meta, session)[:120]
+    # to engagements is general). A chat that IS about a target — it named a host, or it started
+    # an engagement (_chat_start_engagement) — files with that target (2026-11-28).
+    # Folders that predate the kind field keep their slug.
+    target = "" if "kind" in meta and not _real_target(meta) else _target_for_meta(meta, session)[:120]
     return {
         "id": session,
         "target": target,
         "role": "root",
-        "kind": kind,
+        "kind": _session_kind(meta),
         "targetKey": target.lower(),
         "targetLabel": target,
         "autonomyMode": "standard",
@@ -746,12 +792,108 @@ def _desk_session(session: str) -> dict:
     }
 
 
+def _journal_tail(path: Path, max_bytes: int = 32768) -> list[dict]:
+    """The last records of a journal without reading the whole file (a long hunt writes a lot)."""
+    try:
+        size = path.stat().st_size
+        with path.open("rb") as handle:
+            handle.seek(max(0, size - max_bytes))
+            data = handle.read()
+    except OSError:
+        return []
+    lines = data.decode("utf-8", errors="replace").splitlines()
+    if size > max_bytes and lines:
+        lines = lines[1:]  # the first line arrived cut
+    out = []
+    for line in lines:
+        with contextlib.suppress(Exception):
+            record = json.loads(line)
+            if isinstance(record, dict):
+                out.append(record)
+    return out
+
+
+def _epoch_ms(stamp) -> int:
+    """A journal's UTC stamp as milliseconds since the epoch (a worker turn's `ts`)."""
+    text = str(stamp or "").strip()
+    with contextlib.suppress(Exception):
+        if text:
+            import calendar
+
+            return calendar.timegm(time.strptime(text[:19], "%Y-%m-%dT%H:%M:%S")) * 1000
+    return int(time.time() * 1000)
+
+
+def _agent_views(session: str) -> dict[str, dict]:
+    """What each agent of a session is actually doing, from the records IT wrote.
+
+    An agent with a fresh heartbeat used to be "working" by definition — it stayed that way while
+    failing every model call, and again after it had run out of work — and the roster showed an
+    empty transcript. An agent now journals its state (phase.transition), its failures, and each
+    thought, reasoning piece and tool call as they happen (suijin/server/swarm/agent.py)."""
+    views: dict[str, dict] = {}
+    for r in _journal_tail(_eng_dir(session) / "events.jsonl"):
+        agent = str(r.get("agent") or "")
+        if not agent:
+            continue
+        view = views.setdefault(agent, {"state": "", "text": "", "error": "", "model": "", "turns": [], "_by_turn": {}})
+        if r.get("model"):
+            view["model"] = str(r["model"])
+        kind = r.get("kind")
+        if kind == "phase.transition":
+            view["state"], view["text"] = str(r.get("to") or ""), str(r.get("text") or "")
+            view["model"] = str(r.get("model") or view["model"])
+            if view["state"] not in ("blocked", "retrying"):
+                view["error"] = ""  # it moved on: the failure is history
+            continue
+        if kind == "assistant.message" and r.get("phase") == "error":
+            view["error"] = " ".join(str(r.get("content") or "").split())
+            continue
+        if kind not in ("assistant.reasoning", "assistant.message", "tool.call", "tool.result"):
+            continue
+        turn_no = str(r.get("seq") or 0)
+        key = (str(r.get("pass") or ""), turn_no)
+        turn = view["_by_turn"].get(key)
+        if turn is None:
+            turn = {"turn": len(view["turns"]), "ts": _epoch_ms(r.get("ts")), "tools": []}
+            view["_by_turn"][key] = turn
+            view["turns"].append(turn)
+        if kind == "assistant.reasoning":
+            turn["reasoning_summary"] = (turn.get("reasoning_summary", "") + str(r.get("content") or ""))[-600:]
+        elif kind == "assistant.message":  # phase "thought": the model's summary of that reasoning
+            turn["assistant"] = " ".join(str(r.get("content") or "").split())[:400]
+        elif kind == "tool.call":
+            call_id = str(r.get("id") or "")
+            turn["tools"] = [tool for tool in turn["tools"] if tool["call"]["id"] != call_id] + [
+                {
+                    "callIndex": len(turn["tools"]),
+                    "call": {"id": call_id, "name": str(r.get("name") or "tool"), "arguments": r.get("args") or {}},
+                    "result": None,
+                    "running": True,
+                }
+            ]
+        else:
+            for tool in turn["tools"]:
+                if tool["call"]["id"] == str(r.get("id") or ""):
+                    tool["result"] = " ".join(str(r.get("output") or "").split())[:TOOL_OUTPUT_CAP]
+                    tool["running"] = False
+    for view in views.values():
+        view.pop("_by_turn", None)
+        view["turns"] = view["turns"][-40:]
+        for turn in view["turns"]:
+            if not turn.get("assistant") and turn.get("reasoning_summary"):
+                # reasoning and no summary of it: its first line stands in
+                turn["assistant"] = " ".join(turn["reasoning_summary"].split())[:200]
+    return views
+
+
 def _worker_list(session: str) -> list[dict]:
-    # The roster is a read: it deletes nothing. (It used to delete this swarm's rows with a
-    # heartbeat older than ten minutes — a GET that destroyed the record of stopped agents. The
-    # coordinator's own sweep prunes dead rows; history lives in the engagement's journal.)
-    # Show EVERY agent of the swarm — stopped ones stay visible (the operator must see what they
-    # stopped), stale = status stopped; only the most recent ones, so a long hunt stays readable.
+    """The roster: every agent of the swarm, with what it is doing.
+
+    A read that deletes nothing. (It used to delete this swarm's rows with a heartbeat older than
+    ten minutes — a GET that destroyed the record of stopped agents. The coordinator's own sweep
+    prunes dead rows; history lives in the engagement's journal.) Stopped agents stay visible —
+    the operator must see what they stopped — and a long hunt shows its most recent ones."""
     try:
         conn = sqlite3.connect(str(_swarm_db()), timeout=5)
         statuses = {r[0]: (r[1] or "") for r in conn.execute(
@@ -759,20 +901,37 @@ def _worker_list(session: str) -> list[dict]:
         conn.close()
     except Exception:  # noqa: BLE001
         statuses = {}
+    views = _agent_views(session)
     out = []
     shown_stopped = 0
     for a in _live_agents(session, include_stopped=True):
         st = (statuses.get(a["id"]) or "").lower()
-        status = "stopped" if (st == "stopped" or a["dead"]) else "parked" if st == "paused" else "running"
+        view = views.get(a["id"]) or {}
+        state = str(view.get("state") or "")
+        if st == "stopped" or a["dead"]:
+            status = "stopped"
+        elif st == "paused" or state in ("pausing", "paused"):
+            status = "parked"
+        elif state == "blocked":
+            status = "failed"
+        elif state in ("idle", "waiting"):
+            status = "parked"  # alive and able, with nothing to do until the operator speaks
+        else:
+            status = "running"
         if status == "stopped":
             shown_stopped += 1
             if shown_stopped > ROSTER_STOPPED_CAP:
                 continue
-        out.append({
+        worker = {
             "id": a["id"], "parentId": "", "name": a["id"], "status": status,
-            "task": a["lane"], "transcript": [], "role": "worker",
-            "telemetry": {"hb_age": a["hb_age"], "boxed": a["boxed"]},
-        })
+            "task": view.get("text") or a["lane"], "transcript": view.get("turns") or [], "role": "worker",
+            "telemetry": {"hb_age": a["hb_age"], "boxed": a["boxed"], "state": state or None},
+        }
+        if view.get("error"):
+            worker["error"] = view["error"]
+        if view.get("model"):
+            worker["model"] = view["model"]
+        out.append(worker)
     return out
 
 
@@ -869,10 +1028,27 @@ def _shape_events(session: str, records: list[dict]) -> list[dict]:
     shaped = []
     for r in records:
         kind = r.get("kind")
-        if kind == "assistant.message" and str(r.get("phase") or "") == "error":
+        phase = str(r.get("phase") or "")
+        if kind == "assistant.message" and phase == "error":
             shaped.append({"type": "error", "message": str(r.get("content") or "")})
+        elif kind == "assistant.message" and phase == "thought":
+            # An agent's thought. The record stays assistant.message (the terminal UIs read it
+            # from there); here it is reasoning, shown as such — not as the agent's answer.
+            shaped.append({"type": "reasoning-delta", "text": str(r.get("content") or "")})
         elif kind == "assistant.message":
             shaped.append({"type": "assistant-delta", "text": str(r.get("content") or "")})
+        elif kind == "phase.transition":
+            # An agent's own account of what it is doing (suijin/server/swarm/agent.py). The states
+            # worth a line in the transcript; "working" and "resumed" are not.
+            agent, to, text = str(r.get("agent") or "agent"), str(r.get("to") or ""), str(r.get("text") or "")
+            if to == "waiting":
+                shaped.append({"type": "notice", "text": f"{agent} is waiting for you — {text}"})
+            elif to in ("pausing", "paused", "idle", "stopped"):
+                shaped.append({"type": "notice", "text": f"{agent}: {text}"})
+            else:
+                continue
+        elif kind == "guidance.delivered":
+            shaped.append({"type": "notice", "text": f"message delivered to {r.get('agent') or 'the agent'}"})
         elif kind == "user.message":
             shaped.append({"type": "user", "text": str(r.get("content") or "")})
         elif kind == "assistant.reasoning":
@@ -923,7 +1099,9 @@ def _messages_from(session: str) -> list[dict]:
     out: list[dict] = []
     for r in _ev_records(session):
         kind = r.get("kind")
-        if kind == "assistant.message":
+        if kind == "assistant.message" and str(r.get("phase") or "") == "thought":
+            out.append({"role": "assistant", "content": [{"type": "reasoning", "text": str(r.get("content") or "")}]})
+        elif kind == "assistant.message":
             out.append({"role": "assistant", "content": [{"type": "text", "text": str(r.get("content") or "")}]})
         elif kind == "assistant.reasoning":
             out.append({"role": "assistant", "content": [{"type": "reasoning", "text": str(r.get("content") or "")}]})
@@ -1502,8 +1680,12 @@ PERMISSIONS = ("recon", "exploitation", "maximum")
 MODES = ("bbp", "vdp", "ctf", "pentest")
 
 
-def _mission_with_settings(session: str, title: str) -> str:
+def _mission_with_settings(session: str, text: str | None = None) -> str:
+    """The mission an agent of this session works toward, with the engagement settings appended.
+    The whole text from engagement.json (`description`) unless a text is given: the display title
+    is short, and must never shorten the mission (2026-11-28)."""
     meta = _session_engagement_meta(session)
+    title = str(text or "").strip() or str(meta.get("description") or meta.get("name") or "").strip() or session
     permissions = str(meta.get("permissions") or "exploitation").lower()
     mode = str(meta.get("mode") or "vdp").lower()
     files = [str(f) for f in (meta.get("files") or [])]
@@ -1590,7 +1772,10 @@ def session_files_upload(session_id: str, body: dict = Body(default={})):
 
 @router.post("/api/console/sessions")
 def sessions_create(body: dict = Body(default={})):
-    title = str(body.get("title") or body.get("target") or "").strip() or "new swarm"
+    # THE WHOLE TEXT is the mission; the TITLE is what a sidebar can show. Until 2026-11-28 the
+    # title was the whole prompt — and an idle agent works "the title", so the two are kept apart.
+    full = str(body.get("mission") or body.get("title") or body.get("target") or "").strip()
+    title = _short_title(full) or "new swarm"
     structured = bool(body.get("structured"))
     workers_per_cat = int(body.get("workers") or 2)
     permissions = str(body.get("permissions") or "exploitation").lower()
@@ -1605,7 +1790,8 @@ def sessions_create(body: dict = Body(default={})):
     if kind not in ("chat", "engagement"):
         kind = "engagement"
     if kind == "chat":
-        title = str(body.get("title") or "").strip() or "New chat"
+        full = str(body.get("title") or "").strip()
+        title = _short_title(full) or "New chat"
     # SPAWN GATE (field 2026-11-17: loading the landing page fired three
     # blank creates and each one spawned a live agent hunt — swarms named
     # "new swarm" wandering off to hunt whatever they found in memory).
@@ -1656,14 +1842,20 @@ def sessions_create(body: dict = Body(default={})):
     # is true for every new session — key the metadata write on the FILE,
     # not the folder (field 2026-11-23: explicit targets never persisted).
     if not (d / "engagement.json").is_file():
+        # A NEW session starts clean: whatever is in memory under this name — a ring a deleted chat
+        # of the same name left behind — is not this session's (2026-11-28).
+        with _ring_lock:
+            _rings.pop(name, None)
+            _seqs.pop(name, None)
+            _event_offsets.pop(name, None)
         explicit_target = str(body.get("target") or "").strip()
         (d / "engagement.json").write_text(
             json.dumps(
                 {
                     "name": title,
-                    "description": title,
-                    # a chat is a conversation, not a target: it files under Chats, never in a target folder
-                    "target": "" if kind == "chat" else (explicit_target or _target_from_text(title)),
+                    "description": full[:8000],
+                    # a chat is a conversation, not a target: it files under General until it is about one
+                    "target": "" if kind == "chat" else (explicit_target or _target_from_text(full)),
                     "permissions": permissions,
                     "mode": mode,
                     "kind": kind,
@@ -1699,7 +1891,7 @@ def sessions_create(body: dict = Body(default={})):
             try:
                 from suijin.server.swarm.structured import start_structured
 
-                t = start_structured(title, workers_per_cat=workers_per_cat)
+                t = start_structured(full or title, workers_per_cat=workers_per_cat)
                 if t.get("ok"):
                     _emit(name, {"type": "notice", "text":
                                  f"structured swarm up: 1 leader · "
@@ -1732,11 +1924,12 @@ def sessions_create(body: dict = Body(default={})):
             # single agent per engagement — no swarms by default.
             # swarm=name: agents register under THIS session's id (the
             # uniquified slug), not a re-slug of the title.
-            run_swarm_hunt(_mission_with_settings(name, title), host_n=1, boxed_n=0, swarm=name)
+            run_swarm_hunt(_mission_with_settings(name), host_n=1, boxed_n=0, swarm=name)
     def _release():
         time.sleep(5)
         with contextlib.suppress(Exception):
             _inflight_hunts.discard(name)
+    _record_mission(name, str(_session_engagement_meta(name).get("description") or ""))  # first, before any agent writes
     threading.Thread(target=_release, daemon=True).start()
     threading.Thread(target=_hunt, daemon=True, name=f"hunt-{name}").start()
     s = _desk_session(name)
@@ -1934,6 +2127,26 @@ def _chat_doctor() -> dict:
     }
 
 
+def _record_mission(session: str, mission: str) -> None:
+    """The mission is the engagement's first record: what the operator asked for, in their words —
+    on the page, and still there after a restart (the "Engagement started" line lives in memory).
+    Once: a hunt that is respawned does not repeat it."""
+    mission = str(mission or "").strip()
+    if not mission:
+        return
+    with contextlib.suppress(Exception):
+        from suijin.server.agent.lib.event_log import EventLog
+
+        path = _eng_dir(session) / "events.jsonl"
+        if any(record.get("mission") for record in _journal_tail(path)):
+            return
+        log = EventLog(path)
+        try:
+            log.append("user.message", content=mission[:8000], author="operator", mission=True)
+        finally:
+            log.close()
+
+
 def _chat_start_engagement(session: str, args: dict) -> dict:
     """``start_engagement``: an engagement through the same door the landing uses, so the spawn
     gate, the rate limit and the mission settings all apply."""
@@ -1945,7 +2158,8 @@ def _chat_start_engagement(session: str, args: dict) -> dict:
             "Error: a pentest needs a scope document in its inbox. Start that one from the "
             "landing page with the file attached."
         )
-    body: dict = {"title": mission[:200], "spawn": True, "kind": "engagement"}
+    # The WHOLE mission: it used to be cut at 200 characters here, and the agent never saw the rest.
+    body: dict = {"title": mission, "mission": mission, "spawn": True, "kind": "engagement"}
     for key in ("target", "permissions", "mode"):
         if str(args.get(key) or "").strip():
             body[key] = str(args[key]).strip()
@@ -1953,10 +2167,26 @@ def _chat_start_engagement(session: str, args: dict) -> dict:
     new_id = str(created.get("id") or "")
     if not new_id:
         return "Error: the engagement could not be created."
+    # THE CHAT BELONGS WITH WHAT IT STARTED (2026-11-28): the same folder from now on. The chat
+    # used to stay under General while its engagement sat alone in a target folder.
+    target = ""
+    with contextlib.suppress(Exception):
+        chat_meta = _session_engagement_meta(session)
+        target = str(_session_engagement_meta(new_id).get("target") or "").strip()
+        started = [str(item) for item in (chat_meta.get("started") or []) if item]
+        if new_id not in started:
+            started.append(new_id)
+        (_eng_dir(session) / "engagement.json").write_text(
+            json.dumps({**chat_meta, "started": started, **({"target": target} if target else {})}, indent=2)
+        )
+        from suijin.server.platform.lib.engagement_index import rebuild as _rebuild_index
+
+        _rebuild_index()
     return {
         "ok": True,
         "session_id": new_id,
-        "title": created.get("title") or mission,
+        "title": created.get("title") or _short_title(mission),
+        "target": target,
         "path": f"/chats/{new_id}",
         "next": "Tell the operator it has started and link the path: [Open engagement](path).",
     }
@@ -1996,8 +2226,21 @@ def _chat_turn(session: str, text: str) -> None:
     with _chat_lock:
         cancel = _chat_cancel.setdefault(session, threading.Event())
     log = _chat_log(session)
-    record = _chat_recorder(session, log)
-    next_text = ""
+    write = _chat_recorder(session, log)
+
+    def gone() -> bool:
+        """Delete landed on this chat while the turn ran. Stop is different: a stopped turn
+        finishes its current step and records it; a deleted one winds down in silence. The two are
+        told apart by the flag itself — Stop sets it and leaves it registered, Delete
+        (_chat_forget) sets it and takes it away."""
+        return cancel.is_set() and _chat_cancel.get(session) is not cancel
+
+    def record(kind: str, **fields) -> int:
+        # DELETED MEANS DELETED (2026-11-28): Delete can land while the model call is in flight.
+        # The turn used to go on ringing events and writing records as it wound down — into a fresh
+        # ring under the same session id, which the next chat of that name then opened on.
+        return 0 if gone() else write(kind, **fields)
+
     try:
         history = history_from_records(_ev_records(session))
         _chat_say(session, record, text)
@@ -2007,34 +2250,39 @@ def _chat_turn(session: str, text: str) -> None:
             system_prompt=build_system_prompt(_chat_tool_listing(), state_note=_chat_state_note(session)),
             generate_step=lambda messages, on_delta: _chat_generate(session, messages, on_delta),
             run_tool=lambda name, args: _chat_tool(session, name, args),
-            emit_delta=lambda kind, piece: _emit(
-                session, {"type": "reasoning-delta" if kind == "reasoning" else "assistant-delta", "text": piece}
-            ),
+            emit_delta=lambda kind, piece: None
+            if gone()
+            else _emit(session, {"type": "reasoning-delta" if kind == "reasoning" else "assistant-delta", "text": piece}),
             record=record,
             cancelled=cancel.is_set,
             pending=lambda: _chat_take_pending(session, record),
         )
     except Exception as e:  # noqa: BLE001 — the operator sees it; the console carries on
-        with contextlib.suppress(Exception):
-            record(
-                "assistant.message",
-                phase="error",
-                content=f"I couldn't finish that reply: {type(e).__name__}: {str(e)[:160]}",
-            )
+        if not gone():
+            with contextlib.suppress(Exception):
+                record(
+                    "assistant.message",
+                    phase="error",
+                    content=f"I couldn't finish that reply: {type(e).__name__}: {str(e)[:160]}",
+                )
     finally:
         log.close()
         with _chat_lock:
-            queued = _chat_queue.get(session)
-            next_text = queued.pop(0) if queued else ""
-            if queued is not None and not queued:
-                _chat_queue.pop(session, None)
-            if next_text:
-                # The follow-up turn takes over the "running" mark without a gap, with a fresh
-                # cancel flag — Stop must never slip through the handoff.
-                _chat_cancel[session] = threading.Event()
+            next_text = ""
+            if _chat_cancel.get(session) is not cancel:
+                pass  # the chat was DELETED: whatever owns this name now (it may have been made again) is not this turn's to touch
             else:
-                _chat_running.discard(session)
-                _chat_cancel.pop(session, None)
+                queued = _chat_queue.get(session)
+                next_text = queued.pop(0) if queued else ""
+                if queued is not None and not queued:
+                    _chat_queue.pop(session, None)
+                if next_text:
+                    # The follow-up turn takes over the "running" mark without a gap, with a fresh
+                    # cancel flag — Stop must never slip through the handoff.
+                    _chat_cancel[session] = threading.Event()
+                else:
+                    _chat_running.discard(session)
+                    _chat_cancel.pop(session, None)
     if next_text:
         threading.Thread(target=_chat_turn, args=(session, next_text), daemon=True, name=f"chat-{session}").start()
 
@@ -2068,6 +2316,9 @@ def _chat_forget(session: str) -> None:
         _chat_cancel.pop(session, None)
         _chat_queue.pop(session, None)
         _chat_streamed.pop(session, None)
+        # Not "running" from this moment: its turn winds down in silence, and a chat made again
+        # under this name must not queue its first message behind a deleted one.
+        _chat_running.discard(session)
 
 
 @router.get("/api/console/sessions/{session_id}/events")
@@ -2107,7 +2358,7 @@ def session_message(session_id: str, body: dict = Body(default={})):
         if str(meta.get("mode") or "").lower() == "pentest" and not meta.get("files"):
             _emit(session_id, {"type": "error", "message": "Pentest requires an uploaded text scope document in the inbox."})
             return {"session": s}
-        mission = str(s.get("title") or session_id)
+        mission = str(meta.get("description") or meta.get("name") or "").strip() or session_id  # the whole text, not the short title
         _inflight_hunts.add(session_id)
         # RELEASE THE MARKER (field 2026-11-17: the lazy path added the
         # session to _inflight_hunts and never discarded it — the SECOND
@@ -2126,22 +2377,41 @@ def session_message(session_id: str, body: dict = Body(default={})):
                 from suijin.server.swarm.lifecycle import run_swarm_hunt
 
                 # ONE AGENT — see the spawn-gate comment in sessions_create
-                run_swarm_hunt(_mission_with_settings(session_id, mission), host_n=1, boxed_n=0, swarm=session_id)
+                run_swarm_hunt(_mission_with_settings(session_id), host_n=1, boxed_n=0, swarm=session_id)
+        _record_mission(session_id, mission)  # first, before any agent writes
         threading.Thread(target=_lazy_hunt, daemon=True, name=f"lazyspawn-{session_id}").start()
-        _emit(session_id, {"type": "notice", "text": f"Engagement started: {mission}"})
+        _emit(session_id, {"type": "notice", "text": f"Engagement started: {_short_title(mission) or mission}"})
     if text:
-        # A paused session resumes on the operator's next message.
+        # A paused session — or the one agent a message is addressed to (the agents panel's
+        # composer) — resumes on the operator's message. That agent alone is told; the rest of
+        # the swarm is left alone.
+        agent_id = str(body.get("workerId") or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.\-]{0,159}", agent_id):
+            agent_id = ""  # nothing, or not an id: the message goes to the swarm
         with contextlib.suppress(Exception):
             db = sqlite3.connect(str(_swarm_db()), timeout=5)
-            paused = db.execute(
-                "SELECT COUNT(*) FROM agents WHERE swarm = ? AND status = 'paused'", (session_id,)
-            ).fetchone()[0]
-            if paused:
-                db.execute("UPDATE agents SET status = 'active' WHERE swarm = ? AND status = 'paused'", (session_id,))
-                db.commit()
-                _publish("/cmd/resume", {"swarm": session_id})
+            if agent_id:
+                paused = db.execute(
+                    "SELECT COUNT(*) FROM agents WHERE id = ? AND status = 'paused'", (agent_id,)
+                ).fetchone()[0]
+                if paused:
+                    db.execute("UPDATE agents SET status = 'active' WHERE id = ?", (agent_id,))
+                    db.commit()
+                    _publish("/cmd/resume", {"swarm": session_id, "agent": agent_id})
+            else:
+                paused = db.execute(
+                    "SELECT COUNT(*) FROM agents WHERE swarm = ? AND status = 'paused'", (session_id,)
+                ).fetchone()[0]
+                if paused:
+                    db.execute("UPDATE agents SET status = 'active' WHERE swarm = ? AND status = 'paused'", (session_id,))
+                    db.commit()
+                    _publish("/cmd/resume", {"swarm": session_id})
             db.close()
-        _publish("/cmd/steer", {"message": text[:500], "swarm": session_id})
+        if agent_id:
+            # once: the agent listens on both topics and would read a second copy twice
+            _publish(f"/agent/{agent_id}/steer", {"swarm": session_id, "message": text[:500]})
+        else:
+            _publish("/cmd/steer", {"message": text[:500], "swarm": session_id})
         with contextlib.suppress(Exception):
             from suijin.server.agent.lib.mesh import mesh_dir
 
@@ -2294,6 +2564,8 @@ def _prune_engagement(session_id: str) -> None:
     eng = _eng_dir(session_id)
     if not eng.is_dir():
         return
+    if (eng / "engagement.json").is_file():
+        return  # its metadata is there: the engagement is alive (the same title may have been made again)
     evidence = False
     db = sqlite3.connect(str(_swarm_db()), timeout=5)
     try:
@@ -2348,6 +2620,21 @@ def session_close(session_id: str):
     # …and take the folder with it when nothing of value references the chat.
     with contextlib.suppress(Exception):
         _prune_engagement(session_id)
+    # An agent that was inside a model call when Delete landed can still write as it exits. Prune
+    # again once it has gone (2026-11-28: a deleted engagement came back as a ghost on the
+    # Engagements page). The prune itself leaves any live engagement alone.
+    for delay in REPRUNE_DELAYS_S:
+
+        def _prune_later(delay: float = delay, session: str = session_id) -> None:
+            def _prune() -> None:
+                with contextlib.suppress(Exception):
+                    _prune_engagement(session)
+
+            timer = threading.Timer(delay, _prune)
+            timer.daemon = True
+            timer.start()
+
+        _prune_later()
     with _ring_lock:
         _rings.pop(session_id, None)
         _seqs.pop(session_id, None)
@@ -4475,6 +4762,7 @@ def available_models():
     catalog = provider_catalog()
     models: list[dict] = []
     providers: list[dict] = []
+    listings: dict[str, list[str]] = {}
     # A provider whose list could not be fetched must not be cached as "no models": a failure right
     # after a restart left the picker without that connection for the whole cache window.
     complete = True
@@ -4485,12 +4773,21 @@ def available_models():
         providers.append({"key": key, "label": label})
         ids = _provider_model_ids(key)
         complete = complete and bool(ids)
+        listings[key] = ids
         for mid in ids:
             models.append(
                 {"value": f"{key}:{mid}", "label": mid, "provider": key, "providerLabel": label, "supported": True}
             )
     if complete:
         _available_models_cache.update(at=_t.time(), models=models, providers=providers)
+    with contextlib.suppress(Exception):
+        from suijin.server.tools.lib.model_routing import remember_model_owners
+
+        known = {key: ids for key, ids in listings.items() if ids}
+        if known:
+            # even from an incomplete listing: what IS known is worth recording (a bare model id
+            # is routed to the provider that lists it)
+            remember_model_owners(known)
     return {"models": models, "providers": providers, "cached": False, "icons": _maker_icon_urls()}
 
 

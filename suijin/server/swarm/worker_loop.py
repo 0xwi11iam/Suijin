@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 
 SYSTEM_TEMPLATE = (
     "You are a worker agent on an authorized bug bounty engagement. "
@@ -283,6 +284,56 @@ REprompt_TRUNCATED = (
 )
 
 
+#: a failure no retry can fix: the model id, the key or the account is wrong. Retrying it nine
+#: times behind the operator's back is how an engagement "thought" for nine minutes (2026-11-28).
+_PERMANENT_FAILURE = re.compile(
+    r"\b(?:400|401|403|404)\b"
+    r"|unknown model|invalid api key|incorrect api key|unauthori[sz]ed|forbidden"
+    r"|must be author/model|no such model|does not exist|no api key|missing api key",
+    re.I,
+)
+
+
+def is_permanent_failure(note: str) -> bool:
+    """True when a blocked note describes a failure the OPERATOR must fix (model, key, account):
+    retrying cannot help, so the agent says so once and waits."""
+    return bool(_PERMANENT_FAILURE.search(str(note or "")))
+
+
+def _failure_note(note: str, route: str, doubt: str) -> str:
+    """What the operator reads when the model call failed: the error, who was called, and — when
+    the route itself looks wrong — why."""
+    text = " ".join(str(note or "").split())[:400]
+    if route:
+        text = f"{text} [called {route}]"
+    return f"{text} — {doubt}" if doubt else text
+
+
+def _reasoning_tap(turn: int, on_reasoning):
+    """``on_delta`` for generate(): the model's reasoning, handed to ``on_reasoning`` in pieces as
+    it streams. The reply's own tokens are ignored — the decision is parsed once, whole, after the
+    call. None when nobody is listening, so generate() runs exactly as it did before."""
+    if on_reasoning is None:
+        return None
+    pending: list[str] = []
+
+    def flush() -> None:
+        text = "".join(pending).strip()
+        pending.clear()
+        if text:
+            with contextlib.suppress(Exception):  # showing reasoning must never break the call
+                on_reasoning(turn, text)
+
+    def on_delta(kind, text) -> None:
+        if kind == "reasoning" and text:
+            pending.append(str(text))
+            if sum(len(piece) for piece in pending) >= 240:
+                flush()
+
+    on_delta.flush = flush
+    return on_delta
+
+
 def execute_intent(
     identity: str,
     intent: dict,
@@ -290,6 +341,38 @@ def execute_intent(
     max_turns: int = 0,
     on_event=None,
     on_turn=None,
+    on_decision=None,
+    on_reasoning=None,
+) -> dict:
+    """Work one intent. The result carries ``model`` — "provider:model" of the last call — when
+    a call was made, so the console can show what an agent thinks with."""
+    route: dict = {}
+    result = _work_intent(
+        identity,
+        intent,
+        bus=bus,
+        max_turns=max_turns,
+        on_event=on_event,
+        on_turn=on_turn,
+        on_decision=on_decision,
+        on_reasoning=on_reasoning,
+        _route=route,
+    )
+    if route.get("route"):
+        result["model"] = route["route"]
+    return result
+
+
+def _work_intent(
+    identity: str,
+    intent: dict,
+    bus=None,
+    max_turns: int = 0,
+    on_event=None,
+    on_turn=None,
+    on_decision=None,
+    on_reasoning=None,
+    _route: dict | None = None,
 ) -> dict:
     """Work one intent: LLM → decision → tool → result → repeat.
 
@@ -299,6 +382,14 @@ def execute_intent(
     non-None return is injected into the conversation as an OPERATOR
     INTERJECTION user message (this is how `suijin swarm say` reaches
     agents mid-intent instead of just printing to their log).
+
+    What the operator sees, in the order it happens (2026-11-28 — an agent
+    used to report a turn only once its tool had returned, so a turn that
+    died on the model call reported nothing at all):
+      on_reasoning(turn, text)  the model's own reasoning, in pieces, as it streams
+      on_decision(turn, thought, tool_name, tool_args)  the moment the decision is
+                                parsed and BEFORE the tool runs
+      on_event(turn, tool_name, result, args, thought=)  the tool's result
 
     max_turns=0 → read `swarm_turn_cap` from config. DEFAULT: NO CAP
     (operator ruling, 2026-11-06 — "by default no turn cap"; a cap is an
@@ -392,6 +483,11 @@ def execute_intent(
                     )
 
         # --- model call -------------------------------------------------
+        # Which provider and model this call goes to, and whether the route itself looks wrong.
+        # A failing call says both: "Unknown Model" from Z.ai meant nothing until it read
+        # "[called zai:deepseek/…]" (2026-11-28).
+        route = ""
+        doubt = ""
         try:
             from suijin.modules.platform.lib.config_loader import load_config, load_env
 
@@ -404,7 +500,12 @@ def execute_intent(
             # next call to the frontier model (finding analysis deserves
             # the planner brain). No config = unchanged.
             with contextlib.suppress(Exception):
-                from suijin.server.tools.lib.model_routing import apply_routing, should_escalate
+                from suijin.server.tools.lib.model_routing import (
+                    apply_routing,
+                    routing_doubt,
+                    routing_note,
+                    should_escalate,
+                )
 
                 tier_env = os.environ.get("SUIJIN_TIER")
                 if tier_env:
@@ -413,6 +514,11 @@ def execute_intent(
                     tier = f"tier:{tier_env}"
                 else:
                     tier = "planner" if escalate else "worker"
+                doubt = routing_doubt(cfg, tier)
+                routed_model, routed_provider = routing_note(cfg, tier)
+                route = f"{routed_provider}:{routed_model}" if routed_provider else routed_model
+                if _route is not None:
+                    _route["route"] = route
                 apply_routing(cfg, task=tier)
             cfg["max_tokens_per_request"] = max(
                 int(cfg.get("max_tokens_per_request") or 0), 8000
@@ -422,12 +528,17 @@ def execute_intent(
             cfg["response_format_json"] = True  # proven accepted by z.ai
             # (2026-11-06 probe) — worker replies are always ONE JSON
             # decision; enforcement kills the strike class at the source
-            response = generate(messages, cfg)
+            tap = _reasoning_tap(turn, on_reasoning)
+            try:
+                response = generate(messages, cfg, on_delta=tap)
+            finally:
+                if tap is not None:
+                    tap.flush()  # the reasoning that was still buffered when the call returned
         except Exception as e:  # noqa: BLE001 — provider errors become 'blocked'
-            return {"state": "blocked", "facts": facts, "note": f"provider error: {e}"}
+            return {"state": "blocked", "facts": facts, "note": _failure_note(f"provider error: {e}", route, doubt)}
 
         if not isinstance(response, str) or response.startswith("Error:"):
-            return {"state": "blocked", "facts": facts, "note": str(response)[:200]}
+            return {"state": "blocked", "facts": facts, "note": _failure_note(str(response), route, doubt)}
 
         # --- decision (parsed EXACTLY ONCE, failure ≠ completion) --------
         decision = _parse_decision(response)
@@ -526,6 +637,17 @@ def execute_intent(
             messages.append({"role": "user", "content": REprompt_TOOL})
             continue
 
+        # The decision is in: show it BEFORE the tool runs. A probe that takes minutes is work in
+        # progress, not silence (2026-11-28).
+        if on_decision is not None:
+            with contextlib.suppress(Exception):
+                on_decision(
+                    turn,
+                    str(decision.get("thought") or decision.get("reasoning") or ""),
+                    tool_name,
+                    tool_args,
+                    model=route,
+                )
         # --- execute -----------------------------------------------------
         try:
             from suijin.modules.tools.lib import dispatch

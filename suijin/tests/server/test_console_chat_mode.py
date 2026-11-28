@@ -468,3 +468,81 @@ def test_engagements_still_lazy_spawn_their_hunt(isolated_console, monkeypatch):
             break
         threading.Event().wait(0.02)
     assert len(isolated_console.hunts) == 1 and "recon example.com" in isolated_console.hunts[0]["mission"]
+
+
+# ── delete while answering ──────────────────────────────────────────────────────────────────
+
+
+def test_a_deleted_chat_stops_outputting_even_from_the_call_it_was_in(isolated_console, monkeypatch):
+    """Seen live (2026-11-28): a chat was deleted while it was answering; its turn, still inside the
+    model call, went on emitting into a fresh ring under the same session id — and the next chat of
+    that name opened on the dead chat's reasoning and reply."""
+    release, entered = threading.Event(), threading.Event()
+
+    def generate(session, messages, on_delta):
+        entered.set()
+        release.wait(5)  # a model call still in flight when Delete lands
+        if on_delta:
+            on_delta("reasoning", "the deleted chat is still thinking")
+        return FINAL
+
+    monkeypatch.setattr(console_api, "_chat_generate", generate)
+    first = console_api.sessions_create({"title": "Same first message", "kind": "chat"})["session"]["id"]
+    console_api.session_message(first, {"text": "Same first message"})
+    assert entered.wait(5)
+    console_api.session_close(first)
+    assert first not in console_api._rings
+    release.set()
+    _settle(first)
+    time.sleep(0.2)
+    assert first not in console_api._rings and first not in console_api._seqs  # nothing refilled them
+    assert not (isolated_console.ws / "engagements" / first).exists()  # …nor its folder
+
+
+def test_a_new_chat_never_inherits_the_events_of_a_deleted_one_of_the_same_name(isolated_console, monkeypatch):
+    """Whatever left a ring behind under a name, a session made anew starts clean."""
+    from collections import deque
+
+    console_api._rings["same-first-message"] = deque(
+        [{"type": "reasoning-delta", "sequence": 1, "text": "a dead chat's thought"}], maxlen=console_api.MAX_RING
+    )
+    console_api._seqs["same-first-message"] = 1
+    _script(monkeypatch, [FINAL])
+    made = console_api.sessions_create({"title": "Same first message", "kind": "chat"})["session"]
+    assert made["id"] == "same-first-message"
+    assert console_api.session_snapshot(made["id"])["snapshot"]["events"] == []  # nothing of the old one
+    console_api.session_message(made["id"], {"text": "Same first message"})
+    _settle(made["id"])
+    kinds = [event["type"] for event in console_api.session_snapshot(made["id"])["snapshot"]["events"]]
+    assert kinds[0] == "user" and "a dead chat's thought" not in str(list(console_api._rings[made["id"]]))
+
+
+def test_a_deleted_turn_winding_down_does_not_tear_down_the_chat_made_again_under_its_name(
+    isolated_console, monkeypatch
+):
+    """The same race, the other half: the old turn's closing block used to clear the session's
+    "running" mark and cancel flag — the new chat's, by then."""
+    release, entered = threading.Event(), threading.Event()
+
+    def first_generate(session, messages, on_delta):
+        entered.set()
+        release.wait(5)
+        return FINAL
+
+    monkeypatch.setattr(console_api, "_chat_generate", first_generate)
+    first = console_api.sessions_create({"title": "Same first message", "kind": "chat"})["session"]["id"]
+    console_api.session_message(first, {"text": "Same first message"})
+    assert entered.wait(5)
+    console_api.session_close(first)
+    console_api._deleted_sessions.discard(first)  # the guard has expired
+    console_api._recent_sessions.pop(first, None)
+    monkeypatch.setattr(console_api, "_chat_generate", lambda session, messages, on_delta: FINAL)
+    second = console_api.sessions_create({"title": "Same first message", "kind": "chat"})["session"]["id"]
+    assert second == first  # the same words make the same session
+    console_api.session_message(second, {"text": "Same first message"})
+    release.set()  # the deleted turn now winds down, after the new one started
+    _settle(second)
+    kinds = _record_kinds(second)
+    assert kinds[0] == "user.message" and kinds[-1] == "assistant.message", kinds
+    events = [event["type"] for event in console_api.session_snapshot(second)["snapshot"]["events"]]
+    assert events.count("user") == 1 and "assistant-delta" in events, events
