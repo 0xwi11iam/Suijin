@@ -820,11 +820,15 @@ def ops_swarm_define(body: dict | None = None):
         chat=str(body.get("chat") or ""),
     )
     swarm = definition["id"]
+    start = bool(body.get("start")) and bool(host or boxed)
+    # start=false, or no agents asked: define ONLY — the definition records what was
+    # asked, nothing spawns, no coordinator wakes, no lane queues (the lane is work
+    # FOR agents; queuing it with nobody to work it left ghosts behind, seen in the
+    # journey 2026-11-29). Launch later from the dialog or /swarm/spawn.
+    if not start:
+        return {"ok": True, "swarm": definition,
+                "note": "defined — no agents asked for yet, nothing launched"}
     note_parts: list[str] = []
-    if not (host or boxed) and not body.get("start"):
-        return {"ok": True, "swarm": definition, "note": "defined — no agents asked for yet"}
-    if not (host or boxed):
-        host = 4  # the terminal's own sensible default
     addr = _bus()
     if not addr:
         from suijin.server.swarm import lifecycle

@@ -40,7 +40,8 @@ export function DefineSwarmDialog({ open, onOpenChange }: { open: boolean; onOpe
     const result = await run<{ ok?: boolean; swarm?: OpsSwarm }>("/api/ops/swarms", {
       target, title, lanes: parseLanes(lanes),
       host: Number(host) || 0, boxed: Number(boxed) || 0,
-      engine, permissions, mode, start: true,
+      engine, permissions, mode,
+      start: (Number(host) || 0) + (Number(boxed) || 0) > 0,
     }, { ok: `Swarm defined and launched — folder Targets/${target}/swarms` });
     if (result?.ok) { onOpenChange(false); setTarget(""); setTitle(""); setLanes(""); }
   };
