@@ -42,8 +42,19 @@ html[data-suijin-home] body {
 }
 
 /* ── the mark ───────────────────────────────────────────────────────────────────────────────
-   The Suijin mark (src/assets/sui.png — the same file the sidebar, the tab icon and the README
-   use): a cyan crystal between two leaves on a dark tile, drawn at 40 CSS px beside the wordmark. */
+   The hero shows Sui, the pixel face the product started with (src/assets/sui-mark.png: a 20×18
+   grid of flat blocks, rebuilt crisp from the original artwork). The sidebar, the tab icon and the
+   README keep the newer mark (src/assets/sui.png — a cyan crystal between two leaves on a dark
+   tile). Operator 2026-11-28: "replace the hero page new logo, switch it back to old sui, but in
+   the sidebar keep it as the new logo". */
+
+/* Whole blocks only: 40×36 CSS px is exactly two pixels a block, drawn without smoothing, so the
+   face stays square-edged at any zoom. */
+[data-suijin-home-brand] img {
+  width: 40px;
+  height: 36px;
+  image-rendering: pixelated;
+}
 
 /* The mark sits on the field as it is — no glow behind it (operator 2026-11-27: "why is there a halo"). */
 [data-suijin-home-brand] .brand-glow {

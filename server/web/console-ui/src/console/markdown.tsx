@@ -214,10 +214,14 @@ function useStreamedText(text: string, streaming: boolean): string {
   return streaming && text.startsWith(displayed) ? displayed : text;
 }
 
-export const Markdown = memo(function Markdown({ text, streaming = false }: { text: string; streaming?: boolean }) {
+/**
+ * `muted`: the text takes its size and colour from whatever surrounds it. Reasoning uses it —
+ * the page's own text colour would otherwise turn reasoning into what reads as the answer.
+ */
+export const Markdown = memo(function Markdown({ text, streaming = false, muted = false }: { text: string; streaming?: boolean; muted?: boolean }) {
   const displayed = useStreamedText(text, streaming);
   return (
-    <div data-streaming={streaming || undefined} className="console-markdown min-w-0 break-words text-sm leading-relaxed text-foreground [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:px-3 [&_blockquote]:py-1 [&_blockquote]:text-muted-foreground [&_h1]:my-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:text-base [&_h3]:font-semibold [&_h4]:my-2 [&_h4]:font-semibold [&_h5]:my-2 [&_h5]:font-semibold [&_h6]:my-2 [&_h6]:font-semibold [&_hr]:my-4 [&_hr]:border-border">
+    <div data-streaming={streaming || undefined} className={`console-markdown min-w-0 break-words ${muted ? "" : "text-sm leading-relaxed text-foreground"} [&_p]:my-1.5 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 [&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:px-3 [&_blockquote]:py-1 [&_blockquote]:text-muted-foreground [&_h1]:my-3 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:my-3 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:my-2 [&_h3]:text-base [&_h3]:font-semibold [&_h4]:my-2 [&_h4]:font-semibold [&_h5]:my-2 [&_h5]:font-semibold [&_h6]:my-2 [&_h6]:font-semibold [&_hr]:my-4 [&_hr]:border-border`}>
       <StreamingContext.Provider value={streaming}><ReactMarkdown remarkPlugins={streaming ? streamingPlugins : plugins} components={components} urlTransform={(url, key) => key === "src" ? imageSource(url) || "" : defaultUrlTransform(url)} skipHtml>
         {streaming ? streamingMarkdown(displayed) : text}
       </ReactMarkdown></StreamingContext.Provider>

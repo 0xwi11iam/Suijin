@@ -1010,3 +1010,49 @@ deletes nothing now and shows the most recent forty stopped agents (the coordina
 prunes dead rows; the durable history is the engagement's journal). The scan summary's
 `totalAttacks` was findings × 3; it is the number of exploits actually built and run. An unknown
 session action answered 200 with the unchanged session; it is now a 400 that names the action.
+
+## Continuation (2026-11-28, afternoon): an agent is visible, and called on the right provider
+
+**Field report.** The operator asked the chat to start an engagement. It started one; the
+engagement's agent then failed every model call for nine minutes while the page said "Thinking…".
+
+**Why the calls failed — the route.** `model_routing.apply_routing` sent a **bare** model id to
+the active provider. The worker route held one connection's model id and the active provider was
+another: every agent call answered `400 Unknown Model`, while the leader, on the same provider,
+worked. A bare id now goes to the provider that owns it — a `<provider>_model` setting that names
+it (no lookup), else the record of which configured provider lists which model
+(`caches_dir()/model-owners.json`, written when the console builds the model picker).
+`routing_doubt` says, before a call, when a route cannot be vouched for; a failure note names
+`provider:model`. Verified with the real providers: both routes stream reasoning.
+
+**Why nothing showed — the journal.** An agent wrote to its engagement's journal only when a
+tool call COMPLETED. Now `execute_intent(on_reasoning, on_decision, on_event)`: the model's
+reasoning as it streams (`assistant.reasoning`), the thought and the call BEFORE the tool runs
+(`assistant.message` with `phase: "thought"`, `tool.call`), the result after, and
+`phase.transition` for every state (working · pausing · paused · retrying · blocked · waiting ·
+idle · stopped). A failure the operator must fix (`is_permanent_failure`) is an error in the
+transcript, said once, not retried until they speak. The console builds each agent's state,
+error, model and transcript from those records (`_agent_views`): a heartbeat is no longer "working".
+
+**Messages.** Every path drains the bus through one handler (`_apply_control`): a message that
+arrived mid-turn used to be dropped. A message revives a paused, blocked or spent agent.
+
+**Delete means delete.** An agent never re-creates a missing engagement folder, and Delete prunes
+again after 20 s and 90 s (never a live engagement). A chat deleted while answering winds down in
+silence — Stop stays graceful; the two are told apart by the cancel flag's identity — and a chat
+made again under that name starts clean.
+
+**Titles, folders, marks, reasoning.** A session's title is its first sentence or clause (≤64
+characters); the whole text stays the mission (it was cut at 200 by the chat's `start_engagement`).
+The chat that starts an engagement files in the engagement's folder. The hero shows Sui again
+(`console-ui/src/assets/sui-mark.png`); the sidebar keeps the newer mark. Reasoning is light grey
+(`color-mix(foreground 70%, background)`) in a box that follows its own stream and yields when the
+reader scrolls back (`ReasoningStream`).
+
+**Tests.** New: `suijin/tests/tools/test_model_routing.py` (10),
+`suijin/tests/swarm/test_agent_visibility.py` (15),
+`suijin/tests/server/test_console_engagement_visibility.py` (19), three in
+`test_console_chat_mode.py`; frontend 58. Proven live through the real doors:
+`tests/console_engagement_visibility.py` (28 checks: the real Pause button, a typed message that
+resumes the agent, the folder) and `tests/console_reasoning_follow.py` (the scroll, sampled every
+150 ms). Both spend real model calls and are never collected by pytest.

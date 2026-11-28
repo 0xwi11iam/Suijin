@@ -8,9 +8,14 @@ import type { ConsoleWorker } from "@0/engine/shared";
 
 export const isCancellation = (text?: string) => Boolean(text && /^(?:This operation was aborted\.?|The operation was aborted\.?|AbortError(?::.*)?|Workbench cancelled.*|Turn cancelled by operator.*)$/i.test(text.trim()));
 const active = (worker: ConsoleWorker) => ["running", "queued"].includes(worker.status);
+/** What one agent is doing, in a line: its own account when it has given one, else what its
+ *  transcript shows, else the generic word for its status. An agent that is not running says what
+ *  it is waiting for (Suijin agents journal their state); "Thinking…" is only ever the truth for
+ *  an agent that IS running and has not said anything yet (2026-11-28). */
 export function workerProgress(worker: ConsoleWorker): string {
   if (isCancellation(worker.error)) return "Stopped";
   if (worker.error) return worker.error;
+  if (!active(worker) && worker.task?.trim()) return worker.task.trim().split("\n")[0]!;
   for (const turn of [...worker.transcript].reverse()) {
     const tool = turn.tools?.findLast(tool => tool.running);
     if (worker.status === "running" && tool) return `Using ${tool.call.name.replaceAll("_", " ")}`;
@@ -39,7 +44,7 @@ export function WorkerTree({ workers, sessionId, onSelect, hideHeader = false }:
         return <li key={worker.id} data-agent-status={worker.status} className="relative before:absolute before:-left-4 before:top-4 before:h-px before:w-3 before:bg-border">
           <Button asChild variant="ghost" className="h-auto w-full items-start justify-start whitespace-normal px-2 py-2 text-left font-normal"><Link to={`/chats/${sessionId}?worker=${encodeURIComponent(worker.id)}`} onClick={event => { if (onSelect && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) { event.preventDefault(); onSelect(worker.id); } }} className="flex items-start gap-2 rounded-[var(--radius-control)] px-2 py-2 transition-colors hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring">
             <AgentAvatar index={index} className="mt-0.5" />
-            <div className="min-w-0 flex-1"><div className={`truncate text-[13px] ${worker.status === "completed" ? "text-muted-foreground" : ""}`} title={worker.name}>{worker.name}</div><div className="mt-0.5 truncate text-xs text-muted-foreground">{workerProgress(worker)}</div></div>
+            <div className="min-w-0 flex-1"><div className={`truncate text-[13px] ${worker.status === "completed" ? "text-muted-foreground" : ""}`} title={worker.name}>{worker.name}</div><div className={`mt-0.5 truncate text-xs ${worker.error && !isCancellation(worker.error) ? "text-destructive" : "text-muted-foreground"}`} title={workerProgress(worker)}>{workerProgress(worker)}</div></div>
             <div className="flex shrink-0 items-center gap-1.5 pt-0.5 text-[11px] text-muted-foreground"><span className="hidden sm:inline">{worker.model || String(worker.telemetry?.model ?? "")}</span>{elapsed && <span>{elapsed}</span>}{worker.status === "running" ? <ActivityMark compact /> : worker.status === "completed" ? <Check aria-label="Complete" className="size-3" /> : worker.status === "parked" ? <Circle aria-label="Available" className="size-3" /> : <CirclePause className="size-3" />}</div>
           </Link></Button>
         </li>;

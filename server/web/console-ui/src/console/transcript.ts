@@ -311,8 +311,9 @@ export function reduceTurns(
         break;
       }
       case "error": {
-        const turn = ensureTurn(event.sequence);
-        if (turn.error === undefined) turn.error = event.message;
+        // The LATEST error. An engagement's turn is long, and an agent can fail more than once in
+        // it (a retry, then a give-up): the first error sticking would hide what happened last.
+        ensureTurn(event.sequence).error = event.message;
         break;
       }
       // Worker, queue, state, harness and compaction events have separate views.

@@ -16,9 +16,19 @@ function live(id: string, title: string, extra: Partial<Session> = {}): SessionR
 describe("where a session files", () => {
   const folder = (session: Record<string, unknown>) => sessionFolder(session as never);
 
-  it("files a chat under General, whatever its title says", () => {
+  it("files a chat under General when it is about no target", () => {
     expect(folder({ kind: "chat", targetKey: "", targetLabel: "" })).toMatchObject({ key: "general", label: "General", general: true });
-    expect(folder({ kind: "chat", targetKey: "shop.example", targetLabel: "shop.example" }).general).toBe(true);
+    expect(folder({ kind: "chat", targetKey: "  " }).general).toBe(true);
+  });
+
+  it("files the chat that started an engagement in that engagement's folder", () => {
+    // operator 2026-11-28: it "stayed in general instead of joining or creating a new folder"
+    expect(folder({ kind: "chat", targetKey: "example program", targetLabel: "Example program" })).toEqual({
+      key: "example program",
+      label: "Example program",
+      general: false,
+    });
+    expect(folder({ kind: "chat", targetKey: "shop.example", targetLabel: "shop.example" })).toMatchObject({ general: false, label: "shop.example" });
   });
 
   it("files a run that is not about a target under General too", () => {

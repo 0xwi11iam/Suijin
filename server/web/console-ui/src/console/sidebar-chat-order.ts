@@ -45,11 +45,14 @@ const STATUS_WORDS: Record<string, string> = {
   closed: "Closed",
 };
 
-/** Where a session files in the sidebar. Not about an engagement — a chat, a question, a tool
- * test — files together under one folder, General, so it never clutters the target folders
- * (operator 2026-11-27). Only a run about a target gets a folder of its own. */
+/** Where a session files in the sidebar. Not about a target — a question, a tool test, a chat
+ * that named no host and started no engagement — files together under one folder, General, so it
+ * never clutters the target folders (operator 2026-11-27). Anything about a target files with it,
+ * a chat included: the chat that started an engagement sits in that engagement's folder
+ * (operator 2026-11-28: it "stayed in general instead of joining or creating a new folder").
+ *  The backend decides what a session is about (targetKey); this only groups. */
 export function sessionFolder(session: { targetKey?: string; targetLabel?: string; target?: string; kind?: string }): { key: string; label: string; general: boolean } {
-  const general = session.kind === "chat" || !String(session.targetKey || "").trim();
+  const general = !String(session.targetKey || "").trim();
   const label = general ? "General" : String(session.targetLabel || session.target || "Unsorted target");
   return { key: general ? "general" : String(session.targetKey || label.toLowerCase()), label, general };
 }

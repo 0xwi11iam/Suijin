@@ -3,6 +3,14 @@
 .console-tool-activity .console-tool-details { margin: 0 8px; }
 .console-tool-reasoning p + p { margin-top: 8px; }
 .console-tool-reasoning pre { white-space: pre-wrap; }
+/* Reasoning is light grey — a clear step back from the answer — in either theme. Derived from the
+   theme's own text and page colours, never a colour of its own (operator 2026-11-28: "it needs to
+   be gray, like light gray to show it is reasoning"); text-muted-foreground above is the fallback. */
+@supports (color: color-mix(in oklab, red, blue)) {
+  .console-tool-reasoning { color: color-mix(in oklab, var(--foreground) 70%, var(--background)); }
+}
+.console-tool-reasoning :is(a, code) { color: inherit; }
+.console-tool-reasoning a { text-decoration: underline; text-underline-offset: 3px; }
 .console-live-tool[data-running] .console-live-tool-icon {
   color: var(--primary-text);
 }

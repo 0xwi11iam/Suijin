@@ -1,5 +1,5 @@
 import { SourceChip } from "@/components/ui/activity-chip";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Markdown } from "./markdown";
 import { ChevronRight, FileSearch, FileText, Globe, Search, Terminal, Wrench, ListChecks, PencilLine, Users, MessageSquare, Clock, Database } from "lucide-react";
 import { ActivityRow } from "./activity-row";
@@ -71,6 +71,40 @@ function ToolResult({ call }: { call: ToolCallState }) {
   return <ActivityRow icon={call.isRunning ? <ActivityMark compact /> : <ToolIcon name={call.name} />} title={toolTitle(call)} status={status === "Error" || status === "Stopped" ? status : ""} running={call.isRunning} failed={status === "Error"}><ToolDetails call={call} /></ActivityRow>;
 }
 
+/** How far from the end (px) still counts as "at the end". A few pixels, no more: one line is 24px,
+ *  and a reader who scrolls back by a line has scrolled back (a 24px tolerance pulled them straight
+ *  back down — measured 2026-11-28). */
+const FOLLOW_SLACK = 4;
+
+/**
+ * The model's reasoning, in light grey, following its own stream: the newest line stays in view
+ * while it arrives, and the moment the reader scrolls back the stream waits for them (operator
+ * 2026-11-28: "make the reasoning stream auto scroll as fast as it streams and user can scroll
+ * back if needed"). A finished block opens at its beginning, like any other text.
+ */
+function ReasoningStream({ text, live }: { text: string; live: boolean }) {
+  const box = useRef<HTMLDivElement>(null);
+  const following = useRef(true);
+  useLayoutEffect(() => {
+    const element = box.current;
+    if (element && live && following.current) element.scrollTop = element.scrollHeight;
+  }, [text, live]);
+  return (
+    <div
+      ref={box}
+      data-reasoning=""
+      data-following={live && following.current ? "" : undefined}
+      onScroll={event => {
+        const element = event.currentTarget;
+        following.current = element.scrollHeight - element.scrollTop - element.clientHeight < FOLLOW_SLACK;
+      }}
+      className="console-tool-reasoning max-h-48 overflow-y-auto overscroll-contain break-words text-xs leading-6 text-muted-foreground"
+    >
+      <Markdown text={text} muted />
+    </div>
+  );
+}
+
 /** One activity row per batch combines live status, latest operation and history. */
 export function ToolActivity({ calls, reasoning, working = false, showLatest = false }: { calls: ToolCallState[]; reasoning?: string; working?: boolean; showLatest?: boolean; startedAt?: string; endedAt?: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -99,7 +133,7 @@ export function ToolActivity({ calls, reasoning, working = false, showLatest = f
     </>}>
       <div className="space-y-3 py-2">
         {sources.length > 0 && <div aria-label="Sources" className="flex flex-wrap gap-2">{sources.map(source => <SourceChip key={source} href={source} target="_blank" rel="noopener noreferrer" icon={<Globe aria-hidden="true" />}>{new URL(source).hostname}</SourceChip>)}</div>}
-        {reasoning && <div data-reasoning="" className="console-tool-reasoning max-h-48 overflow-y-auto break-words text-xs leading-6 text-muted-foreground"><Markdown text={reasoning} /></div>}
+        {reasoning && <ReasoningStream text={reasoning} live={active} />}
         {latest && <ToolDetails call={latest} />}
         {history.length > 0 && <div className="space-y-0.5">{latest && <p className="pb-1 text-[11px] text-muted-foreground">Earlier calls</p>}{history.map(call => <ToolResult key={call.id} call={call} />)}</div>}
       </div>
