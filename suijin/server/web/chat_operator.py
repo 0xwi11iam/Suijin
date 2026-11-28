@@ -89,6 +89,7 @@ HOW TO REPLY — every step is ONE JSON object and nothing else:
                                the tool runs, you get a RESULT, and you continue.
 - tool_name and tool_args are left out on "done".
 - The JSON must be valid: escape quotes and newlines, no trailing commas, no comments.
+   Escape EVERY double quote inside a value as \" — a bare quote breaks the object and your answer can be lost.
 
 TOOLS: whenever the answer depends on this machine's real state — engagements, agents, findings,
 skills, files, memory, config — look it up instead of guessing. Do not call a tool that is not

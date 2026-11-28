@@ -41,6 +41,9 @@ SYSTEM_TEMPLATE = (
     'or when THIS intent is fully worked (real tool evidence, intent-scope '
     'only — never "the target is done"):\n'
     '  {{"action": "complete", "reason": "...", "facts": [...]}}\n'
+    "Escape EVERY double quote inside a value as \\\" — a bare quote breaks the object and "
+    "your reply is rejected. Large tool payloads (over ~20 KB) go to a file first "
+    "(write_file), then the call references the path — never inline them.\n"
     "Prose-only replies are errors and will be rejected. Premature "
     '"complete" replies are rejected and returned to you with the next '
     "untested surface named — fire the tool."
