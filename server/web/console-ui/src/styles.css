@@ -243,7 +243,7 @@
 .console-frame { height: 100dvh; border: 0; border-radius: 0; box-shadow: none; background: var(--workspace-canvas); }
 .console-onboarding-frame { background: var(--background); }
 .console-page-workspace { background: var(--workspace-canvas); }
-.console-sidebar-surface { background: var(--background); color: var(--foreground); }
+.console-sidebar-surface { background: #0a0a0b; color: var(--foreground); } /* operator 2026-11-28: the rail proper black — #101011 was the page's own value, so the rail read as tinted */
 .console-sidebar-surface [data-brand-mark="compact"] { color: #fcfaf6; }
 .console-sidebar-surface [data-brand-variant="ink"] { display: none; }
 .console-sidebar-surface [data-brand-variant="white"] { display: block; }

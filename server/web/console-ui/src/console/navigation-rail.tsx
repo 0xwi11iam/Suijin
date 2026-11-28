@@ -40,16 +40,25 @@ export function ConsoleNavigationRail({ settingsHref, onHistorySlot }: { setting
   const [focusWithin, setFocusWithin] = useState(false);
   const rail = useRef<HTMLElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const openTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const cancelClose = () => { if (closeTimer.current) clearTimeout(closeTimer.current); closeTimer.current = undefined; };
+  const cancelOpen = () => { if (openTimer.current) clearTimeout(openTimer.current); openTimer.current = undefined; };
+  /** The preview opens only after a deliberate dwell — a graze across the strip must not
+   *  snap it open (operator 2026-11-28: the sidebar "snapped"). */
+  const armOpen = () => {
+    cancelOpen();
+    openTimer.current = setTimeout(() => setHovered(true), 150);
+  };
   const closePreview = () => {
+    cancelOpen();
     cancelClose();
     closeTimer.current = setTimeout(() => {
       // Portalled menus must keep their anchor stable until they close.
       if (rail.current?.querySelector('[aria-haspopup][aria-expanded="true"]')) { closePreview(); return; }
       setHovered(false);
-    }, 160);
+    }, 400);
   };
-  useEffect(() => () => { if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
+  useEffect(() => () => { cancelOpen(); if (closeTimer.current) clearTimeout(closeTimer.current); }, []);
 
   const expanded = !collapsed || focusWithin || (hovered && !hoverSuppressed);
   const compact = !expanded;
@@ -65,7 +74,7 @@ export function ConsoleNavigationRail({ settingsHref, onHistorySlot }: { setting
   const findingCount = dashboard.data?.groups.filter(group => group.latest.triageStatus !== "suppressed").length ?? 0;
   const control = buttonVariants({ variant: "ghost", size: "sm", className: "console-navigation-control w-full justify-start gap-2.5 overflow-hidden px-2.5 font-normal text-muted-foreground" });
   const destinations = WORKSPACE_DESTINATIONS.filter(item => item.to !== "/chats" && item.to !== "/settings");
-  return <div className="console-navigation-slot console-sidebar-surface relative hidden h-full min-h-0 shrink-0 lg:block" data-pinned={!collapsed} onPointerEnter={event => { if (event.pointerType === "mouse") { cancelClose(); setHovered(true); } }} onPointerLeave={event => { if (event.pointerType === "mouse") { closePreview(); setHoverSuppressed(false); } }}>
+  return <div className="console-navigation-slot console-sidebar-surface relative hidden h-full min-h-0 shrink-0 lg:block" data-pinned={!collapsed} onPointerEnter={event => { if (event.pointerType === "mouse") { cancelClose(); if (collapsed && !hoverSuppressed) armOpen(); } }} onPointerLeave={event => { if (event.pointerType === "mouse") { cancelOpen(); closePreview(); setHoverSuppressed(false); } }}>
     {collapsed && hovered && <div aria-hidden="true" className="absolute inset-y-0 left-0 z-20 w-64" />}
     <nav ref={rail} aria-label="Command Center navigation" data-collapsed={compact} data-floating={collapsed && expanded} onFocus={event => setFocusWithin(event.target.matches(":focus-visible"))} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocusWithin(false); }} className="console-navigation-rail hidden h-full min-h-0 shrink-0 flex-col overflow-x-hidden overflow-y-auto bg-background p-2 lg:flex [scrollbar-width:thin]">
       <div className="relative mb-3 h-10 w-60 shrink-0">

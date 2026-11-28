@@ -46,7 +46,7 @@ import { ModelIcon } from "@zero/components/provider-icon";
 import { registerSuijinBrandImages } from "./brand-art";
 import { LoadingDots } from "@zero/console/loading-state";
 import { mountStudioBackground, type StudioBackgroundOptions } from "./vendor/studio-background";
-import suiMark from "../../src/assets/sui-mark.png";
+import { heroQuote } from "./hero-quotes";
 import {
   HERO_DEFAULT_KIND,
   HERO_DRAFT_KEY,
@@ -516,12 +516,11 @@ export function SuijinHome() {
           {/* suijin: 0's column is 712px; Suijin's composer is the whole surface. The foot padding
               grows by the mark's height so the composer stays where it was and the mark sits above. */}
           <div className="relative flex w-full min-w-0 max-w-[min(1120px,100%)] flex-col pb-[calc(6dvh+6.75rem)]">
-            {/* suijin: the mark — Sui beside the wordmark (operator 2026-11-27: "put the Sui icon here";
-                2026-11-28: the hero keeps Sui, the pixel face, while the sidebar shows the newer mark) */}
-            <header data-suijin-home-brand="" className="mb-8 flex items-center justify-center">
-              <h1 className="brand-glow flex items-center gap-3 font-sans text-[2.5rem] font-semibold leading-none tracking-[-0.045em] text-foreground">
-                <img src={suiMark} alt="" className="shrink-0" />
-                Suijin
+            {/* suijin: the hero's centre is a quote — no mark, no wordmark (operator 2026-11-28:
+                "no more sui, just a big hero in the middle… a quote from a bank of 50") */}
+            <header data-suijin-home-brand="" className="mb-10 flex items-center justify-center px-4">
+              <h1 className="max-w-[21ch] text-balance text-center font-sans text-[3.25rem] font-semibold leading-[1.12] tracking-[-0.03em] text-foreground sm:text-[3.75rem]">
+                {heroQuote()}
               </h1>
             </header>
 
